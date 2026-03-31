@@ -1,0 +1,336 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ──────────────────────────────────────────────────────
+   OpenPCB Design Token System
+   Dark-first, hex-based tokens per UI spec v2.0
+   ────────────────────────────────────────────────────── */
+
+@theme {
+  /* ── Surfaces ── */
+  --color-bg-primary: #1e1e2e;
+  --color-bg-secondary: #191930;
+  --color-bg-tertiary: #141428;
+  --color-bg-elevated: #252540;
+  --color-bg-input: #2a2a4a;
+
+  /* ── Text ── */
+  --color-text-primary: #e0e0e0;
+  --color-text-secondary: #888899;
+  --color-text-tertiary: #6b6b80;
+  --color-text-muted: #555568;
+
+  /* ── Borders ── */
+  --color-border-default: #2a2a3e;
+  --color-border-subtle: #222236;
+  --color-border-strong: #3a3a5a;
+
+  /* ── Brand ── */
+  --color-brand: #7c3aed;
+  --color-brand-light: #a78bfa;
+  --color-brand-bg: rgba(124, 58, 237, 0.15);
+
+  /* ── Icon / Rail ── */
+  --color-icon-muted: #555568;
+  --color-icon-default: #888899;
+  --color-rail-bg: #141428;
+  --color-rail-hover: #1e1e36;
+  --color-rail-active: rgba(124, 58, 237, 0.15);
+
+  /* ── Canvas ── */
+  --color-canvas-bg: #1e1e2e;
+  --color-canvas-grid: #2a2a3e;
+  --color-canvas-wire: #00d4aa;
+  --color-canvas-ref: #ffd700;
+  --color-canvas-value: #00d4aa;
+  --color-canvas-selection: #5b8def;
+  --color-canvas-error: #e24b4a;
+  --color-canvas-warning: #ffaa00;
+  --color-copper-front: #ff4444;
+  --color-copper-back: #4444ff;
+
+  /* ── Semantic ── */
+  --color-success: #44cc88;
+  --color-warning: #ffaa00;
+  --color-danger: #e24b4a;
+  --color-info: #5b8def;
+
+  /* ── shadcn/ui semantic mapping (dark-first) ── */
+  --color-background: #1e1e2e;
+  --color-foreground: #e0e0e0;
+  --color-surface: #191930;
+  --color-surface-muted: #252540;
+  --color-card: #252540;
+  --color-card-foreground: #e0e0e0;
+  --color-text-primary: #e0e0e0;
+  --color-text-muted: #555568;
+
+  --color-primary: #7c3aed;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #252540;
+  --color-secondary-foreground: #e0e0e0;
+  --color-muted: #252540;
+  --color-muted-foreground: #888899;
+  --color-accent: #252540;
+  --color-accent-foreground: #e0e0e0;
+  --color-destructive: #e24b4a;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #2a2a3e;
+  --color-input: #2a2a4a;
+  --color-ring: #7c3aed;
+  --color-popover: #252540;
+  --color-popover-foreground: #e0e0e0;
+
+  /* ── Brand accent colors ── */
+  --color-brand-accent: #7c3aed;
+  --color-brand-accent-hover: #6d28d9;
+  --color-brand-accent-active: #5b21b6;
+  --color-brand-accent-contrast: #ffffff;
+  --color-border-accent: #7c3aed;
+  --color-border-muted: #222236;
+
+  /* ── Violet scale (kept for palette components) ── */
+  --color-violet-50: #f5f3ff;
+  --color-violet-100: #ede9fe;
+  --color-violet-200: #ddd6fe;
+  --color-violet-300: #c4b5fd;
+  --color-violet-400: #a78bfa;
+  --color-violet-500: #8b5cf6;
+  --color-violet-600: #7c3aed;
+  --color-violet-700: #6d28d9;
+  --color-violet-800: #5b21b6;
+  --color-violet-900: #4c1d95;
+  --color-violet-950: #2e1065;
+
+  /* ── Chart ── */
+  --color-chart-1: #7c3aed;
+  --color-chart-2: #44cc88;
+  --color-chart-3: #ffaa00;
+  --color-chart-4: #5b8def;
+  --color-chart-5: #e24b4a;
+
+  /* ── Sidebar ── */
+  --color-sidebar: #191930;
+  --color-sidebar-foreground: #e0e0e0;
+  --color-sidebar-primary: #7c3aed;
+  --color-sidebar-primary-foreground: #ffffff;
+  --color-sidebar-accent: #252540;
+  --color-sidebar-accent-foreground: #e0e0e0;
+  --color-sidebar-border: #2a2a3e;
+  --color-sidebar-ring: #7c3aed;
+
+  /* ── Spacing scale ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ── Radius scale ── */
+  --radius: 0.625rem;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-pill: 9999px;
+
+  /* ── Transitions ── */
+  --transition-fast: 100ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* ── Typography ── */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica,
+    Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code",
+    "Consolas", monospace;
+}
+
+/* ── Dark mode (default) ── */
+:root {
+  color-scheme: dark;
+
+  /* Legacy vars for shadcn/ui compat */
+  --background: #1e1e2e;
+  --foreground: #e0e0e0;
+  --card: #252540;
+  --card-foreground: #e0e0e0;
+  --popover: #252540;
+  --popover-foreground: #e0e0e0;
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #252540;
+  --secondary-foreground: #e0e0e0;
+  --muted: #252540;
+  --muted-foreground: #888899;
+  --accent: #252540;
+  --accent-foreground: #e0e0e0;
+  --destructive: #e24b4a;
+  --border: #2a2a3e;
+  --input: #2a2a4a;
+  --ring: #7c3aed;
+  --chart-1: #7c3aed;
+  --chart-2: #44cc88;
+  --chart-3: #ffaa00;
+  --chart-4: #5b8def;
+  --chart-5: #e24b4a;
+  --sidebar: #191930;
+  --sidebar-foreground: #e0e0e0;
+  --sidebar-primary: #7c3aed;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #252540;
+  --sidebar-accent-foreground: #e0e0e0;
+  --sidebar-border: #2a2a3e;
+  --sidebar-ring: #7c3aed;
+
+  /* Elevation (border-based for dark) */
+  --elevation-1: 0 0 0 1px #2a2a3e;
+  --elevation-2: 0 0 0 1px #3a3a5a;
+  --elevation-3: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px #3a3a5a;
+}
+
+/* ── Light mode ── */
+.light {
+  color-scheme: light;
+
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f8f8fc;
+  --color-bg-tertiary: #f0f0f5;
+  --color-bg-elevated: #ffffff;
+  --color-bg-input: #f0f0f5;
+
+  --color-text-primary: #1a1a2e;
+  --color-text-secondary: #555568;
+  --color-text-tertiary: #888899;
+  --color-text-muted: #aaaabc;
+
+  --color-border-default: #e5e5ea;
+  --color-border-subtle: #f0f0f5;
+  --color-border-strong: #d0d0da;
+
+  --color-brand-bg: rgba(124, 58, 237, 0.08);
+
+  --color-rail-bg: #f0f0f5;
+  --color-rail-hover: #e5e5ea;
+  --color-rail-active: rgba(124, 58, 237, 0.1);
+
+  --color-canvas-bg: #fafafe;
+  --color-canvas-grid: #e8e8f0;
+
+  --color-icon-muted: #888899;
+  --color-icon-default: #555568;
+
+  --color-background: #ffffff;
+  --color-foreground: #1a1a2e;
+  --color-surface: #f8f8fc;
+  --color-surface-muted: #f0f0f5;
+  --color-card: #ffffff;
+  --color-card-foreground: #1a1a2e;
+  --color-primary: #7c3aed;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f0f0f5;
+  --color-secondary-foreground: #1a1a2e;
+  --color-muted: #f0f0f5;
+  --color-muted-foreground: #555568;
+  --color-accent: #f0f0f5;
+  --color-accent-foreground: #1a1a2e;
+  --color-destructive: #e24b4a;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #e5e5ea;
+  --color-input: #f0f0f5;
+  --color-ring: #7c3aed;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1a1a2e;
+
+  --color-sidebar: #f8f8fc;
+  --color-sidebar-foreground: #1a1a2e;
+  --color-sidebar-primary: #7c3aed;
+  --color-sidebar-primary-foreground: #ffffff;
+  --color-sidebar-accent: #f0f0f5;
+  --color-sidebar-accent-foreground: #1a1a2e;
+  --color-sidebar-border: #e5e5ea;
+  --color-sidebar-ring: #7c3aed;
+
+  --color-border-accent: #7c3aed;
+  --color-border-muted: #f0f0f5;
+
+  /* Legacy vars */
+  --background: #ffffff;
+  --foreground: #1a1a2e;
+  --card: #ffffff;
+  --card-foreground: #1a1a2e;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a2e;
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #f0f0f5;
+  --secondary-foreground: #1a1a2e;
+  --muted: #f0f0f5;
+  --muted-foreground: #555568;
+  --accent: #f0f0f5;
+  --accent-foreground: #1a1a2e;
+  --destructive: #e24b4a;
+  --border: #e5e5ea;
+  --input: #f0f0f5;
+  --ring: #7c3aed;
+  --chart-1: #7c3aed;
+  --chart-2: #44cc88;
+  --chart-3: #ffaa00;
+  --chart-4: #5b8def;
+  --chart-5: #e24b4a;
+  --sidebar: #f8f8fc;
+  --sidebar-foreground: #1a1a2e;
+  --sidebar-primary: #7c3aed;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f0f5;
+  --sidebar-accent-foreground: #1a1a2e;
+  --sidebar-border: #e5e5ea;
+  --sidebar-ring: #7c3aed;
+
+  /* Elevation (shadow-based for light) */
+  --elevation-1: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --elevation-2: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --elevation-3: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  *[data-tauri-drag-region] {
+    -webkit-app-region: drag;
+  }
+}
+
+/* Indeterminate progress bar animation */
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.animate-indeterminate {
+  animation: indeterminate 1.5s ease-in-out infinite;
+}

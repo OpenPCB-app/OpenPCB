@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+  "src-tauri",
+  "src-tauri/crates/bridge",
+  "src-tauri/crates/bridge-macros",
+  "src-tauri/crates/bridge-introspect",
+  "src-tauri/crates/common-modules",
+
+]

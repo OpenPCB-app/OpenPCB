@@ -1,0 +1,35 @@
+{
+  "id": "knowledge",
+  "label": "Knowledge",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "namespace": "space.knowledge",
+  "kind": "space",
+  "tags": ["productivity", "notes", "knowledge-base"],
+  "ui": {
+    "moduleEntry": "ts/module.ts",
+    "primarySpace": "react/Space.tsx",
+    "registerAsSpaceInTopBar": true
+  },
+  "db": {
+    "prefix": "knowledge_",
+    "migrations": true
+  },
+  "dependsOn": [],
+  "exports": {
+    "services": [
+      {
+        "id": "knowledge.pages",
+        "kind": "http",
+        "description": "Page CRUD API"
+      },
+      {
+        "id": "knowledge.search",
+        "kind": "http",
+        "description": "Page search API"
+      }
+    ],
+    "widgets": []
+  },
+  "defaultPinned": true
+}

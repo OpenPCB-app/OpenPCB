@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenPCB</title>
+    <script>
+      // Apply saved or system theme before React mounts to avoid FOUC
+      (function applyInitialTheme() {
+        try {
+          const root = document.documentElement;
+          const stored = localStorage.getItem("theme");
+          const prefersDark =
+            typeof window.matchMedia === "function"
+              ? window.matchMedia("(prefers-color-scheme: dark)").matches
+              : false;
+          const hasStoredMode = stored === "light" || stored === "dark";
+          const mode = hasStoredMode ? stored : prefersDark ? "dark" : "light";
+
+          root.classList.remove("light", "dark");
+          root.classList.add(mode);
+          root.dataset.colorMode = mode;
+          root.style.setProperty("color-scheme", mode);
+        } catch (error) {
+          // fail silently
+        }
+      })();
+    </script>
+  </head>
+
+  <body class="bg-surface">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

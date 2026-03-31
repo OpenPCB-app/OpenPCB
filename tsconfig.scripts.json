@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "ES2022",
+    "outDir": "./scripts/.dist",
+    "rootDir": "./scripts",
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "noEmit": false,
+    "types": ["bun-types"]
+  },
+  "include": ["scripts/**/*.ts"],
+  "exclude": ["scripts/generate-openapi.ts"]
+}

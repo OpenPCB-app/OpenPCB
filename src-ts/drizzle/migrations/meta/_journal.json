@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1770915051975,
+      "tag": "0000_common_zaran",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1770930132319,
+      "tag": "0001_outgoing_mikhail_rasputin",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1770931800000,
+      "tag": "0002_cleanup_legacy_tool_messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1770650000000,
+      "tag": "0003_add_writer_module",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1770650000001,
+      "tag": "0004_sync_missing_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1771246191846,
+      "tag": "0005_lovely_dust",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1771430000000,
+      "tag": "0006_backfill_content_edit_tables",
+      "breakpoints": true
+    }
+  ]
+}

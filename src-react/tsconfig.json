@@ -1,0 +1,54 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "useDefineForClassFields": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": [
+      "vite/client"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@shared/generated": [
+        "../src-ts/shared/generated"
+      ],
+      "@shared/generated/*": [
+        "../src-ts/shared/generated/*"
+      ],
+      "@shared/types": [
+        "../src-ts/shared/types"
+      ],
+      "@shared/types/*": [
+        "../src-ts/shared/types/*"
+      ],
+      "@modules/*": [
+        "../modules/*"
+      ],
+      "@shared/sdk": [
+        "../src-ts/shared/sdk/index"
+      ],
+      "@shared/sdk/*": [
+        "../src-ts/shared/sdk/*"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "scripts",
+    "vite.config.ts",
+    "tailwind.config.ts",
+    "../modules/**/*.ts",
+    "../modules/knowledge/react/components/Chat/**/*.tsx"
+  ],
+  "exclude": [
+    "../modules/**/*.test.ts"
+  ]
+}
