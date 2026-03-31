@@ -9,7 +9,7 @@ import { useNavigationStore } from "@/stores/navigation-store";
 
 export function ProjectSection() {
   const { projects, loading, error } = useProjects();
-  const navigateToDesign = useNavigationStore((s) => s.navigateToDesign);
+  const navigateToProject = useNavigationStore((s) => s.navigateToProject);
   const [createOpen, setCreateOpen] = useState(false);
 
   const header = (
@@ -34,7 +34,11 @@ export function ProjectSection() {
         <div className="flex items-center justify-center h-[120px]">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-        <ProjectCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+        <ProjectCreateDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onCreated={(project) => navigateToProject(project.id)}
+        />
       </div>
     );
   }
@@ -44,7 +48,11 @@ export function ProjectSection() {
       <div className="flex flex-col gap-4 px-8 py-4">
         {header}
         <div className="text-sm text-destructive">{error}</div>
-        <ProjectCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+        <ProjectCreateDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onCreated={(project) => navigateToProject(project.id)}
+        />
       </div>
     );
   }
@@ -56,7 +64,11 @@ export function ProjectSection() {
         <div className="flex h-[120px] items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
           No projects yet. Create one to organize your chats.
         </div>
-        <ProjectCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+        <ProjectCreateDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onCreated={(project) => navigateToProject(project.id)}
+        />
       </div>
     );
   }
@@ -87,7 +99,7 @@ export function ProjectSection() {
             <Card
               key={project.id}
               className="group flex flex-col justify-between w-[240px] h-[120px] p-5 cursor-pointer hover:bg-surface-muted transition-colors border-none bg-surface shadow-sm"
-              onClick={() => navigateToDesign(project.id)}
+              onClick={() => navigateToProject(project.id)}
             >
               <div className="flex justify-between items-start">
                 <Briefcase className="h-6 w-6 text-primary/70 group-hover:text-primary transition-colors" />
@@ -110,7 +122,11 @@ export function ProjectSection() {
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
-      <ProjectCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <ProjectCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(project) => navigateToProject(project.id)}
+      />
     </div>
   );
 }

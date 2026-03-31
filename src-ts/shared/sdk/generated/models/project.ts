@@ -5,7 +5,14 @@
  * OpenPCB Bun Backend API - Auto-generated from endpoint schemas
  * OpenAPI spec version: 1.0.0
  */
+import type { ProjectDescription } from './projectDescription';
 import type { ProjectStatus } from './projectStatus';
+import type { ProjectIcon } from './projectIcon';
+import type { ProjectColor } from './projectColor';
+import type { ProjectSortOrder } from './projectSortOrder';
+import type { ProjectAiConfig } from './projectAiConfig';
+import type { ProjectRagConfig } from './projectRagConfig';
+import type { ProjectPreferences } from './projectPreferences';
 import type { ProjectMetadata } from './projectMetadata';
 import type { ProjectDeletedAt } from './projectDeletedAt';
 
@@ -19,8 +26,15 @@ export interface Project {
    * @maxLength 100
    */
   name: string;
+  description?: ProjectDescription;
   /** Project status */
   status: ProjectStatus;
+  icon?: ProjectIcon;
+  color?: ProjectColor;
+  sortOrder?: ProjectSortOrder;
+  aiConfig?: ProjectAiConfig;
+  ragConfig?: ProjectRagConfig;
+  preferences?: ProjectPreferences;
   metadata?: ProjectMetadata;
   /** ISO 8601 datetime string */
   createdAt: string;

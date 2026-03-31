@@ -8,12 +8,12 @@ import { ChevronRight } from "lucide-react";
 
 export function ProjectsSection() {
   const { projects, loading } = useProjects();
-  const navigateToDesign = useNavigationStore((s) => s.navigateToDesign);
+  const navigateToProject = useNavigationStore((s) => s.navigateToProject);
   const navigateToHome = useNavigationStore((s) => s.navigateToHome);
 
   const filteredProjects = useMemo(() => {
     return projects
-      .filter((p) => p.preferences?.showInSidebar === true)
+      .filter((p) => p.preferences?.showInSidebar !== false)
       .sort((a, b) => {
         const orderA = a.sortOrder ?? 0;
         const orderB = b.sortOrder ?? 0;
@@ -44,7 +44,7 @@ export function ProjectsSection() {
               variant="ghost"
               size="sm"
               className="w-full justify-start gap-2.5 px-3 py-1.5 text-sm font-medium hover:bg-surface-muted transition-colors rounded-lg group"
-              onClick={() => navigateToDesign(project.id)}
+              onClick={() => navigateToProject(project.id)}
             >
               <div
                 className="h-2 w-2 rounded-full shrink-0 shadow-xs"

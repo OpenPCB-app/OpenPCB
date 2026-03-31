@@ -12,6 +12,7 @@ export * from "./base";
 // Core entities
 export * from "./workspace";
 export * from "./project";
+export * from "./design";
 export * from "./folder";
 export * from "./chat";
 export * from "./message";

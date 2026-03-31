@@ -8,7 +8,7 @@ import { Briefcase, Loader2, Plus } from "lucide-react";
 
 export function ProjectsListView() {
   const { projects, loading, error } = useProjects();
-  const navigateToDesign = useNavigationStore((s) => s.navigateToDesign);
+  const navigateToProject = useNavigationStore((s) => s.navigateToProject);
   const [createOpen, setCreateOpen] = useState(false);
 
   if (loading) {
@@ -29,7 +29,11 @@ export function ProjectsListView() {
         <div className="flex items-center justify-center h-[240px]">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-        <ProjectCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+        <ProjectCreateDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onCreated={(project) => navigateToProject(project.id)}
+        />
       </div>
     );
   }
@@ -50,7 +54,11 @@ export function ProjectsListView() {
           </Button>
         </div>
         <div className="text-sm text-destructive">{error}</div>
-        <ProjectCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+        <ProjectCreateDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onCreated={(project) => navigateToProject(project.id)}
+        />
       </div>
     );
   }
@@ -85,7 +93,7 @@ export function ProjectsListView() {
             <Card
               key={project.id}
               className="group flex flex-col justify-between p-5 cursor-pointer hover:bg-surface-muted transition-colors border-none bg-surface shadow-sm"
-              onClick={() => navigateToDesign(project.id)}
+              onClick={() => navigateToProject(project.id)}
             >
               <div className="flex justify-between items-start">
                 <Briefcase className="h-6 w-6 text-primary/70 group-hover:text-primary transition-colors" />
@@ -108,7 +116,11 @@ export function ProjectsListView() {
         </div>
       )}
 
-      <ProjectCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <ProjectCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(project) => navigateToProject(project.id)}
+      />
     </div>
   );
 }

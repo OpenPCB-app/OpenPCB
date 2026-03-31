@@ -1,22 +1,42 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useAppStore } from "../stores/app-store";
 import { useBackendURL } from "@/contexts/BackendURLContext";
 import { WorkspaceCreateDialog } from "./workspace/WorkspaceCreateDialog";
+import { ActivationFlow } from "./ActivationFlow";
 
 interface GlobalStateProviderProps {
   children: React.ReactNode;
 }
 
 export function GlobalStateProvider({ children }: GlobalStateProviderProps) {
-  const { isReady, backendURL } = useBackendURL();
-  const { isInitialized, fetchInitialState, isLoading, error, workspaces } =
+  const { isReady, backendURL, startupLicenseState, startupLicenseCode } =
+    useBackendURL();
+  const {
+    isInitialized,
+    fetchInitialState,
+    fetchProjects,
+    activeWorkspaceId,
+    isLoading,
+    error,
+    workspaces,
+  } =
     useAppStore();
+  const [licenseState, setLicenseState] = useState(startupLicenseState);
+
+  useEffect(() => {
+    setLicenseState(startupLicenseState);
+  }, [startupLicenseState]);
 
   useEffect(() => {
     if (!isInitialized && isReady) {
       fetchInitialState();
     }
   }, [isInitialized, isReady, fetchInitialState]);
+
+  useEffect(() => {
+    if (!isInitialized || !isReady) return;
+    void fetchProjects(activeWorkspaceId);
+  }, [activeWorkspaceId, fetchProjects, isInitialized, isReady]);
 
   if (!isReady) {
     return (
@@ -58,6 +78,20 @@ export function GlobalStateProvider({ children }: GlobalStateProviderProps) {
             Retry
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (licenseState === "blocked") {
+    return (
+      <div
+        data-testid="startup-license-blocked"
+        className="flex min-h-screen items-center justify-center bg-background p-6"
+      >
+        <ActivationFlow
+          initialLicenseCode={startupLicenseCode}
+          onActivated={(status) => setLicenseState(status.state)}
+        />
       </div>
     );
   }

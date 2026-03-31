@@ -15,12 +15,20 @@ export class ProjectController {
     async list(ctx: RouteContext): Promise<Response> {
         const url = new URL(ctx.req.url);
         const workspaceId = url.searchParams.get('workspaceId');
+        const status = url.searchParams.get('status') ?? 'active';
 
         if (!workspaceId) {
             return ResponseBuilder.badRequest('Missing workspaceId query parameter');
         }
 
-        const projects = await this.projectService.list(workspaceId);
+        if (!["active", "archived", "all"].includes(status)) {
+            return ResponseBuilder.badRequest("Invalid status query parameter");
+        }
+
+        const projects = await this.projectService.list(
+            workspaceId,
+            status as "active" | "archived" | "all",
+        );
         return ResponseBuilder.success({ projects });
     }
 

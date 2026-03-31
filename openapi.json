@@ -213,6 +213,12 @@
             "maxLength": 100,
             "example": "My Project"
           },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -222,8 +228,99 @@
             "example": "active",
             "description": "Project status"
           },
+          "icon": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sortOrder": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "aiConfig": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "defaultProvider": {
+                "type": "string"
+              },
+              "defaultModel": {
+                "type": "string"
+              },
+              "systemPrompt": {
+                "type": "string"
+              },
+              "systemPromptMode": {
+                "type": "string",
+                "enum": [
+                  "append",
+                  "replace"
+                ]
+              },
+              "temperature": {
+                "type": "number"
+              },
+              "maxTokens": {
+                "type": "integer"
+              }
+            }
+          },
+          "ragConfig": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "contextFileIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "contextNotes": {
+                "type": "string"
+              },
+              "embeddingModel": {
+                "type": "string"
+              }
+            }
+          },
+          "preferences": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "showInSidebar": {
+                "type": "boolean"
+              },
+              "expandedByDefault": {
+                "type": "boolean"
+              },
+              "pinnedChats": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "metadata": {
-            "type": "object",
+            "type": [
+              "object",
+              "null"
+            ],
             "additionalProperties": {}
           },
           "createdAt": {
@@ -283,6 +380,9 @@
             "maxLength": 100,
             "example": "My Project"
           },
+          "description": {
+            "type": "string"
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -291,6 +391,76 @@
             ],
             "example": "active",
             "description": "Project status"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer"
+          },
+          "aiConfig": {
+            "type": "object",
+            "properties": {
+              "defaultProvider": {
+                "type": "string"
+              },
+              "defaultModel": {
+                "type": "string"
+              },
+              "systemPrompt": {
+                "type": "string"
+              },
+              "systemPromptMode": {
+                "type": "string",
+                "enum": [
+                  "append",
+                  "replace"
+                ]
+              },
+              "temperature": {
+                "type": "number"
+              },
+              "maxTokens": {
+                "type": "integer"
+              }
+            }
+          },
+          "ragConfig": {
+            "type": "object",
+            "properties": {
+              "contextFileIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "contextNotes": {
+                "type": "string"
+              },
+              "embeddingModel": {
+                "type": "string"
+              }
+            }
+          },
+          "preferences": {
+            "type": "object",
+            "properties": {
+              "showInSidebar": {
+                "type": "boolean"
+              },
+              "expandedByDefault": {
+                "type": "boolean"
+              },
+              "pinnedChats": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "metadata": {
             "type": "object",
@@ -311,6 +481,12 @@
             "maxLength": 100,
             "example": "Updated Project"
           },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -320,8 +496,99 @@
             "example": "active",
             "description": "Project status"
           },
+          "icon": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sortOrder": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "aiConfig": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "defaultProvider": {
+                "type": "string"
+              },
+              "defaultModel": {
+                "type": "string"
+              },
+              "systemPrompt": {
+                "type": "string"
+              },
+              "systemPromptMode": {
+                "type": "string",
+                "enum": [
+                  "append",
+                  "replace"
+                ]
+              },
+              "temperature": {
+                "type": "number"
+              },
+              "maxTokens": {
+                "type": "integer"
+              }
+            }
+          },
+          "ragConfig": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "contextFileIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "contextNotes": {
+                "type": "string"
+              },
+              "embeddingModel": {
+                "type": "string"
+              }
+            }
+          },
+          "preferences": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "showInSidebar": {
+                "type": "boolean"
+              },
+              "expandedByDefault": {
+                "type": "boolean"
+              },
+              "pinnedChats": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "metadata": {
-            "type": "object",
+            "type": [
+              "object",
+              "null"
+            ],
             "additionalProperties": {}
           }
         }

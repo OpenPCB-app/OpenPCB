@@ -10,6 +10,8 @@ export { ApiSuccessResponse, ApiErrorResponse, wrapResponse, DeletedResponseSche
 // Entity schemas
 export * from './workspace.schema';
 export * from './project.schema';
+export * from './design.schema';
+export * from './pcb-project.schema';
 export * from './chat.schema';
 export * from './task.schema';
 export * from './provider.schema';

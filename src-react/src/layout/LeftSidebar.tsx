@@ -61,7 +61,6 @@ export default function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
       {/* Logo + Tauri drag region */}
       <div className="flex flex-col items-center w-full">
         <button
-          data-tauri-drag-region
           className="flex h-12 w-12 items-center justify-center"
           onClick={navigateToHome}
           aria-label="OpenPCB Home"

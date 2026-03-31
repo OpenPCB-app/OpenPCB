@@ -5,7 +5,14 @@
  * OpenPCB Bun Backend API - Auto-generated from endpoint schemas
  * OpenAPI spec version: 1.0.0
  */
+import type { UpdateProjectInputDescription } from './updateProjectInputDescription';
 import type { UpdateProjectInputStatus } from './updateProjectInputStatus';
+import type { UpdateProjectInputIcon } from './updateProjectInputIcon';
+import type { UpdateProjectInputColor } from './updateProjectInputColor';
+import type { UpdateProjectInputSortOrder } from './updateProjectInputSortOrder';
+import type { UpdateProjectInputAiConfig } from './updateProjectInputAiConfig';
+import type { UpdateProjectInputRagConfig } from './updateProjectInputRagConfig';
+import type { UpdateProjectInputPreferences } from './updateProjectInputPreferences';
 import type { UpdateProjectInputMetadata } from './updateProjectInputMetadata';
 
 export interface UpdateProjectInput {
@@ -14,7 +21,14 @@ export interface UpdateProjectInput {
    * @maxLength 100
    */
   name?: string;
+  description?: UpdateProjectInputDescription;
   /** Project status */
   status?: UpdateProjectInputStatus;
+  icon?: UpdateProjectInputIcon;
+  color?: UpdateProjectInputColor;
+  sortOrder?: UpdateProjectInputSortOrder;
+  aiConfig?: UpdateProjectInputAiConfig;
+  ragConfig?: UpdateProjectInputRagConfig;
+  preferences?: UpdateProjectInputPreferences;
   metadata?: UpdateProjectInputMetadata;
 }

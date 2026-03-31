@@ -1,27 +1,119 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-OpenPCB is a desktop PCB application built as a mixed TypeScript/Rust monorepo. `src-react/` contains the React 19 UI (`src/components`, `src/hooks`, `src/screens`, `src/generated`). `src-ts/` is the Bun sidecar and shared backend logic (`src/domain`, `src/infrastructure`, `src/db`, `shared/`). `src-tauri/` is the Rust desktop shell plus bridge crates. Reusable module definitions live in `modules/`, automation lives in `scripts/`, and end-to-end coverage uses `playwright.config.ts`.
+
+OpenPCB is a desktop PCB application built as a mixed TypeScript/Rust monorepo with Tauri 2, React 19, and Bun. `src-react/` contains the React 19 UI (`src/components`, `src/hooks`, `src/screens`, `src/generated`). `src-ts/` is the Bun sidecar and shared backend logic implementing DDD architecture (`src/domain`, `src/infrastructure`, `src/db`, `shared/`). `src-tauri/` is the Rust desktop shell plus bridge crates. Reusable module definitions live in `modules/`, automation lives in `scripts/`.
+
+## Architecture Overview
+
+**Three-layer runtime:**
+
+1. **Rust Tauri Shell** (`src-tauri/`) - Desktop integration, window management, secrets vault (Stronghold), plugin system
+2. **Bun Sidecar** (`src-ts/`) - HTTP/WebSocket server with Hono, AI providers, task orchestration, Drizzle ORM
+3. **React Frontend** (`src-react/`) - Vite-built UI with Tailwind 4, Radix UI, Tiptap editors
+
+**Communication:** React ↔ HTTP → Bun sidecar (dynamic port discovery). Rust spawns Bun process, monitors stdout for `{"serverPort": N}`, emits `backend-ready` event.
+
+## Entry Points
+
+| Layer    | Entry                    | Role                                            |
+| -------- | ------------------------ | ----------------------------------------------- |
+| Frontend | `src-react/src/main.tsx` | React 19 mount (no App.tsx; Layout.tsx is root) |
+| Frontend | `src-react/index.html`   | HTML shell with theme pre-apply script          |
+| Bun      | `src-ts/src/main.ts`     | Hono HTTP server, DI container, module loader   |
+| Rust     | `src-tauri/src/main.rs`  | Binary entry (calls lib::run)                   |
+| Rust     | `src-tauri/src/lib.rs`   | Tauri builder, plugin setup, sidecar spawn      |
 
 ## Build, Test, and Development Commands
-Use the root scripts unless you are working in a single package:
 
-- `npm run setup` installs root and `src-ts` dependencies, then runs codegen.
-- `npm run dev` starts the Tauri desktop app.
-- `npm run dev:frontend` runs the Vite UI only.
-- `npm run typecheck` runs shared TypeScript builds.
-- `npm run build` compiles the Bun sidecar, frontend, and Tauri app.
-- `npm run gen` regenerates bindings, module registry output, SDK files, and OpenAPI artifacts.
-- `npm run test:ts`, `npm run test:react`, `npm run test:e2e` run Bun, Vitest, and Playwright tests.
+**Setup:**
+
+```bash
+npm run setup          # Install deps, compile Bun, run codegen
+npm run dev            # Start Tauri desktop app
+npm run dev:frontend   # Vite dev server only (port 1420)
+```
+
+**Build:**
+
+```bash
+npm run build          # Full production build
+npm run bun:compile    # Compile Bun sidecar to binary
+npm run gen            # Run all codegen (modules, bindings, bridge, SDK, OpenAPI)
+npm run gen:check      # Verify generated files are committed
+```
+
+**Test:**
+
+```bash
+npm run test:ts        # Bun tests (colocated *.test.ts)
+npm run test:react     # Vitest tests (happy-dom)
+npm run test:e2e       # Playwright (tests/e2e/ not yet created)
+npm run typecheck      # TypeScript strict check all workspaces
+```
 
 ## Coding Style & Naming Conventions
-Follow the existing local style in each package. TypeScript in `src-react/` uses 2-space indentation, double quotes, and trailing commas; React components are PascalCase files such as `Layout.tsx`, hooks use `useFeature.ts`, and tests are `*.test.ts(x)`. Backend TypeScript in `src-ts/` currently uses 4-space indentation and colocated `*.test.ts` files. Rust follows standard `rustfmt` formatting and snake_case modules. Avoid `any`; shared contracts are generated and should be refreshed with `npm run gen`.
+
+| Package      | Indent          | Quotes | Trailing | Naming                        |
+| ------------ | --------------- | ------ | -------- | ----------------------------- |
+| `src-react/` | 2-space         | double | yes      | `Layout.tsx`, `useFeature.ts` |
+| `src-ts/`    | 4-space         | -      | -        | Colocated `*.test.ts`         |
+| `src-tauri/` | rustfmt default | -      | -        | `snake_case` modules          |
+
+**Strict TypeScript:** `strict: true`, `noUncheckedIndexedAccess: true` in `tsconfig.base.json`. Avoid `any`; use generated types.
 
 ## Testing Guidelines
-Frontend tests use Vitest with `happy-dom` and `src/**/*.test.{ts,tsx}` discovery. Backend tests use `bun test`; integration coverage also appears under `src-ts/tests/integration/`. Add tests next to the changed code when practical, and run the smallest relevant command before opening a PR.
+
+**Three test runners:**
+
+1. **Bun Test** (`src-ts/`) - Unit/integration tests colocated as `*.test.ts`
+2. **Vitest** (`src-react/`) - Component tests with `happy-dom`, `@testing-library/react`
+3. **Playwright** - E2E tests (config exists, directory not yet implemented)
+
+**Patterns:**
+
+- Colocated tests preferred (same dir as source)
+- `__tests__/` subdirs for complex modules (tools, oauth)
+- Global setup: `src-ts/test/setup.ts` (sets NODE_ENV, APP_DATA_DIR)
+- Mock factories for dependencies (see `task-executor.test.ts`)
+
+## Code Generation
+
+This project is **codegen-heavy**. After changing:
+
+- **Rust commands**: Run `npm run gen:bindings` (Specta → TypeScript)
+- **Module manifests**: Run `npm run module:codegen`
+- **API routes**: Run `npm run gen:openapi` + `npm run gen:sdk:orval`
+
+**Never edit generated files** marked with `// @generated` or `// @ts-nocheck`.
 
 ## Commit & Pull Request Guidelines
-History is minimal (`Initial commit`), so use short imperative commit subjects, for example `Add module registry validation`. Keep commits focused. PRs should describe user-visible behavior, list verification commands, link issues when applicable, and include screenshots or recordings for UI work.
+
+History is minimal (`Initial commit`). Use short imperative commit subjects, for example `Add module registry validation`. Keep commits focused. PRs should describe user-visible behavior, list verification commands, link issues when applicable, and include screenshots or recordings for UI work.
 
 ## Agent-Specific Instructions
-Always read the nearest `AGENTS.md` before editing inside a subtree. Important examples include `src-ts/AGENTS.md`, `src-tauri/AGENTS.md`, `modules/AGENTS.md`, and focused guides under `src-react/src/` and `src-ts/src/domain/services/`.
+
+Always read the nearest `AGENTS.md` before editing inside a subtree:
+
+| Area                     | AGENTS.md                                                  |
+| ------------------------ | ---------------------------------------------------------- |
+| Bun sidecar architecture | `src-ts/AGENTS.md`                                         |
+| Tauri Rust shell         | `src-tauri/AGENTS.md`                                      |
+| Module/plugin system     | `modules/AGENTS.md`                                        |
+| React hooks              | `src-react/src/hooks/AGENTS.md`                            |
+| AI chat components       | `src-react/src/components/ai-elements/AGENTS.md`           |
+| Tool system              | `src-ts/src/domain/services/tools/AGENTS.md`               |
+| Task execution           | `src-ts/src/domain/services/queue/AGENTS.md`               |
+| AI providers             | `src-ts/src/infrastructure/ai-providers/engines/AGENTS.md` |
+
+## Anti-Patterns
+
+| Forbidden                            | Why                                            |
+| ------------------------------------ | ---------------------------------------------- |
+| Use `as any`                         | Type safety—use discriminated unions           |
+| Empty catch blocks                   | Swallows errors silently                       |
+| Skip `npm run gen` after API changes | Generated types will be stale                  |
+| Hardcode ports                       | Dynamic port assignment required (Bun sidecar) |
+| Remove main.rs pragma                | Breaks Windows console hiding                  |
+| Log API keys                         | Security violation                             |
+| Direct provider calls from queue     | Keep queue provider-agnostic                   |

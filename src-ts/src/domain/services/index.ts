@@ -2,6 +2,7 @@ export * from "./workspace-service";
 export * from "./chat-service";
 export * from "./task-service";
 export * from "./provider-service";
+export * from "./design-service";
 export * from "./mcp-service";
 export * from "./stream-service";
 export * from "./folder-service";

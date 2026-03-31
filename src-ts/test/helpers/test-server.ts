@@ -12,7 +12,7 @@ import { waitForServer } from "../setup";
 export class TestServer {
     private process: Subprocess | null = null;
     private readonly serverPath: string;
-    private readonly port: number;
+    private port: number;
     private readonly kernelToken: string;
 
     constructor(port: number = 3000, kernelToken: string = "") {
@@ -32,30 +32,44 @@ export class TestServer {
             return;
         }
 
-        console.log(`[TestServer] Starting server from ${this.serverPath}...`);
+        const basePort = this.port === 0 ? 3000 : this.port;
+        let lastError: unknown = null;
 
-        // Start server as subprocess
-        this.process = Bun.spawn(["bun", "run", this.serverPath], {
-            env: {
-                ...process.env,
-                NODE_ENV: "test",
-                PORT: this.port.toString(),
-                APP_DATA_DIR: process.env.APP_DATA_DIR || path.join(import.meta.dir, "../../.test-data"),
-                KERNEL_TOKEN: this.kernelToken,
-            },
-            stdout: "inherit", // Inherit stdout for debugging
-            stderr: "inherit", // Inherit stderr for debugging
-        });
+        for (let attempt = 0; attempt < 10; attempt++) {
+            this.port = basePort + attempt;
+            console.log(`[TestServer] Starting server from ${this.serverPath} on port ${this.port}...`);
 
-        // Wait for server to be ready
-        try {
-            // Increase timeout to 90s for server startup (includes migrations, DB init, etc.)
-            await waitForServer(`http://127.0.0.1:${this.port}/api/health`, 90000);
-            console.log(`[TestServer] Server started successfully on port ${this.port}`);
-        } catch (error) {
-            await this.stop();
-            throw new Error(`Failed to start test server: ${error}`);
+            this.process = Bun.spawn(["bun", "run", this.serverPath], {
+                env: {
+                    ...process.env,
+                    NODE_ENV: "test",
+                    PORT: this.port.toString(),
+                    APP_DATA_DIR: process.env.APP_DATA_DIR || path.join(import.meta.dir, "../../.test-data"),
+                    KERNEL_TOKEN: this.kernelToken,
+                },
+                stdout: "inherit",
+                stderr: "inherit",
+            });
+
+            try {
+                const result = await Promise.race([
+                    waitForServer(`http://127.0.0.1:${this.port}/api/health`, 15000).then(() => ({ ready: true as const })),
+                    this.process.exited.then((code) => ({ ready: false as const, code })),
+                ]);
+
+                if (result.ready) {
+                    console.log(`[TestServer] Server started successfully on port ${this.port}`);
+                    return;
+                }
+
+                throw new Error(`Server exited before becoming ready (exit code: ${result.code})`);
+            } catch (error) {
+                lastError = error;
+                await this.stop();
+            }
         }
+
+        throw new Error(`Failed to start test server: ${lastError}`);
     }
 
     /**
@@ -103,6 +117,10 @@ export class TestServer {
      */
     getUrl(): string {
         return `http://127.0.0.1:${this.port}`;
+    }
+
+    getPort(): number {
+        return this.port;
     }
 
     /**

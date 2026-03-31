@@ -3,6 +3,7 @@ import { DatabaseAccess, initializeDatabase } from "../src/db";
 import { runMigrations } from "../src/db/migrate";
 import { ProjectService } from "../src/domain/services/project-service";
 import { cleanTestDatabase } from "../test/setup";
+import { PageRepository } from "../../modules/knowledge/ts/db/repositories/page-repository";
 
 describe("ProjectService", () => {
     let db: DatabaseAccess;
@@ -11,6 +12,7 @@ describe("ProjectService", () => {
 
     beforeAll(async () => {
         await cleanTestDatabase();
+        DatabaseAccess.reset();
         
         db = initializeDatabase();
         
@@ -42,6 +44,13 @@ describe("ProjectService", () => {
         if (!columns.includes("preferences")) {
             rawDb.exec("ALTER TABLE project ADD COLUMN preferences TEXT");
         }
+
+        const knowledgeTables = rawDb.prepare("PRAGMA table_info(module_knowledge_page)").all() as Array<{ name: string }>;
+        const knowledgeColumns = knowledgeTables.map((column) => column.name);
+
+        if (!knowledgeColumns.includes("revision")) {
+            rawDb.exec("ALTER TABLE module_knowledge_page ADD COLUMN revision INTEGER NOT NULL DEFAULT 1");
+        }
         
         service = new ProjectService(db);
     });
@@ -50,6 +59,7 @@ describe("ProjectService", () => {
         if (db) {
             db.close();
         }
+        DatabaseAccess.reset();
         await cleanTestDatabase();
     });
 
@@ -131,6 +141,26 @@ describe("ProjectService", () => {
             expect(projects.every(p => p.workspaceId === workspaceId)).toBe(true);
         });
 
+        it("should filter projects by status", async () => {
+            const active = await service.create({ workspaceId, name: "Active Project" });
+            const archived = await service.create({
+                workspaceId,
+                name: "Archived Project",
+                status: "archived",
+            });
+
+            const activeProjects = await service.list(workspaceId);
+            const archivedProjects = await service.list(workspaceId, "archived");
+            const allProjects = await service.list(workspaceId, "all");
+
+            expect(activeProjects.some((project) => project.id === active.id)).toBe(true);
+            expect(activeProjects.some((project) => project.id === archived.id)).toBe(false);
+            expect(archivedProjects.some((project) => project.id === archived.id)).toBe(true);
+            expect(archivedProjects.some((project) => project.id === active.id)).toBe(false);
+            expect(allProjects.some((project) => project.id === active.id)).toBe(true);
+            expect(allProjects.some((project) => project.id === archived.id)).toBe(true);
+        });
+
         it("should update project name and trim whitespace", async () => {
             const project = await service.create({ workspaceId, name: "Old Name" });
             const updated = await service.update(project.id, { name: "  New Trimmed Name  " });
@@ -148,6 +178,77 @@ describe("ProjectService", () => {
             const raw = await db.projects.findById(project.id);
             expect(raw).not.toBeNull();
             expect(raw?.deletedAt).not.toBeNull();
+        });
+
+        it("should detach related chats, files, notes and soft-delete designs", async () => {
+            const project = await service.create({ workspaceId, name: "Container Project" });
+            const design = await db.designs.create({
+                workspaceId,
+                projectId: project.id,
+                name: "Main Board",
+            });
+            const chat = await db.chats.create({
+                workspaceId,
+                projectId: project.id,
+                title: "Project Chat",
+            });
+            const blob = await db.fileBlobs.create({
+                checksum: `checksum-${project.id}`,
+                sizeBytes: 128,
+                mimeType: "text/plain",
+                storagePath: `files/${project.id}.txt`,
+            });
+            const file = await db.fileRecords.create({
+                blobId: blob.id,
+                originalName: "notes.txt",
+                mimeType: "text/plain",
+                sizeBytes: 128,
+                workspaceId,
+                projectId: project.id,
+            });
+
+            const pageRepository = new PageRepository(db.getDb() as never);
+            const root = await pageRepository.create({
+                workspace_id: workspaceId,
+                project_id: project.id,
+                parent_id: null,
+                is_project_root: true,
+                order_key: "a0",
+                title: "Project Root",
+                content_json: {
+                    engine: "tiptap",
+                    version: 1,
+                    data: { type: "doc", content: [] },
+                },
+            });
+            const child = await pageRepository.create({
+                workspace_id: workspaceId,
+                project_id: project.id,
+                parent_id: root.id,
+                is_project_root: false,
+                order_key: "a1",
+                title: "Project Child",
+                content_json: {
+                    engine: "tiptap",
+                    version: 1,
+                    data: { type: "doc", content: [] },
+                },
+            });
+
+            await service.delete(project.id);
+
+            const deletedDesign = await db.designs.findById(design.id);
+            const detachedChat = await db.chats.findById(chat.id);
+            const detachedFile = await db.fileRecords.findById(file.id);
+            const deletedRoot = await pageRepository.findByIdIncludeDeleted(root.id);
+            const liftedChild = await pageRepository.findById(child.id);
+
+            expect(deletedDesign?.deletedAt).not.toBeNull();
+            expect(detachedChat?.projectId).toBeNull();
+            expect(detachedFile?.projectId).toBeNull();
+            expect(deletedRoot?.deleted_at).not.toBeNull();
+            expect(liftedChild?.project_id).toBeNull();
+            expect(liftedChild?.parent_id).toBeNull();
         });
     });
 

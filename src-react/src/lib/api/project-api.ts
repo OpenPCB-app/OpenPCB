@@ -16,8 +16,9 @@ function unwrapResponse<T>(response: ApiResponse<T>): T {
 
 export async function listProjects(
   workspaceId: string,
+  status: "active" | "archived" | "all" = "active",
 ): Promise<ProjectRecord[]> {
-  const params = new URLSearchParams({ workspaceId });
+  const params = new URLSearchParams({ workspaceId, status });
   const response = await customFetch<
     ApiResponse<{ projects: ProjectRecord[] }>
   >(`/api/projects?${params.toString()}`);

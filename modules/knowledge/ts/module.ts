@@ -69,10 +69,17 @@ export const knowledgeModule = createModuleV2("knowledge", {
     );
 
     try {
-      await ctx.db.execute(
-        "ALTER TABLE $table ADD COLUMN revision INTEGER NOT NULL DEFAULT 1",
+      const pageColumns = await ctx.db.query<{ name?: string }>(
+        "PRAGMA table_info($table)",
         "page",
       );
+      const hasRevision = pageColumns.some((column) => column.name === "revision");
+      if (!hasRevision) {
+        await ctx.db.execute(
+          "ALTER TABLE $table ADD COLUMN revision INTEGER NOT NULL DEFAULT 1",
+          "page",
+        );
+      }
     } catch {}
 
     const db = ctx.db.getRawDb() as BunSQLiteDatabase<Record<string, unknown>>;

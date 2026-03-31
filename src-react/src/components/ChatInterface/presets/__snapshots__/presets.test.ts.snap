@@ -148,44 +148,6 @@ exports[`ChatInterfacePresets > project preset > matches snapshot 1`] = `
 }
 `;
 
-exports[`ChatInterfacePresets main preset matches snapshot 1`] = `
-{
-  "behavior": {
-    "autoFocus": true,
-  },
-  "description": "Full-featured main chat with all capabilities",
-  "features": {
-    "attachments": {
-      "enabled": true,
-      "multiple": true,
-    },
-    "imagePreview": {
-      "enabled": true,
-    },
-    "mentions": {
-      "enabled": true,
-    },
-    "reasoning": {
-      "defaultExpanded": false,
-      "enabled": true,
-    },
-    "tools": {
-      "enabled": true,
-      "toolChoice": "auto",
-    },
-  },
-  "name": "main",
-  "ui": {
-    "bubbleStyle": "default",
-    "density": "comfortable",
-    "mode": "full",
-    "placeholder": "Type your message...",
-    "showAvatars": true,
-    "showTimestamps": false,
-  },
-}
-`;
-
 exports[`ChatInterfacePresets embedded preset matches snapshot 1`] = `
 {
   "behavior": {
@@ -222,12 +184,12 @@ exports[`ChatInterfacePresets embedded preset matches snapshot 1`] = `
 }
 `;
 
-exports[`ChatInterfacePresets project preset matches snapshot 1`] = `
+exports[`ChatInterfacePresets main preset matches snapshot 1`] = `
 {
   "behavior": {
     "autoFocus": true,
   },
-  "description": "Project-scoped chat with back navigation and project badge",
+  "description": "Full-featured main chat with all capabilities",
   "features": {
     "attachments": {
       "enabled": true,
@@ -248,7 +210,7 @@ exports[`ChatInterfacePresets project preset matches snapshot 1`] = `
       "toolChoice": "auto",
     },
   },
-  "name": "project",
+  "name": "main",
   "ui": {
     "bubbleStyle": "default",
     "density": "comfortable",
@@ -291,6 +253,44 @@ exports[`ChatInterfacePresets module preset matches snapshot 1`] = `
     "mode": "embedded",
     "placeholder": "Ask about this...",
     "showAvatars": false,
+    "showTimestamps": false,
+  },
+}
+`;
+
+exports[`ChatInterfacePresets project preset matches snapshot 1`] = `
+{
+  "behavior": {
+    "autoFocus": true,
+  },
+  "description": "Project-scoped chat with back navigation and project badge",
+  "features": {
+    "attachments": {
+      "enabled": true,
+      "multiple": true,
+    },
+    "imagePreview": {
+      "enabled": true,
+    },
+    "mentions": {
+      "enabled": true,
+    },
+    "reasoning": {
+      "defaultExpanded": false,
+      "enabled": true,
+    },
+    "tools": {
+      "enabled": true,
+      "toolChoice": "auto",
+    },
+  },
+  "name": "project",
+  "ui": {
+    "bubbleStyle": "default",
+    "density": "comfortable",
+    "mode": "full",
+    "placeholder": "Type your message...",
+    "showAvatars": true,
     "showTimestamps": false,
   },
 }

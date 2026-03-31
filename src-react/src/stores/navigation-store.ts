@@ -1,12 +1,13 @@
 import { create } from "zustand";
 
-export type Screen = "home" | "design" | "notes" | "chat" | "library";
+export type Screen = "home" | "project" | "design" | "notes" | "chat" | "library";
 export type DesignTab = "schematic" | "pcb" | "3d" | "bom";
 
 interface NavigationState {
   currentScreen: Screen;
   chatId: string | null;
   currentProjectId: string | null;
+  currentDesignId: string | null;
   currentNotePageId: string | null;
   previousScreen: Screen | null;
   designTab: DesignTab;
@@ -14,7 +15,8 @@ interface NavigationState {
 
   setScreen: (screen: Screen) => void;
   navigateToHome: () => void;
-  navigateToDesign: (projectId?: string | null) => void;
+  navigateToProject: (projectId: string | null) => void;
+  navigateToDesign: (projectId?: string | null, designId?: string | null) => void;
   navigateToNotes: (pageId?: string | null) => void;
   navigateToChat: (chatId: string | null) => void;
   navigateToNewChat: () => void;
@@ -42,11 +44,26 @@ function persistSidebarState(collapsed: boolean): void {
   }
 }
 
-function updateUrlHash(screen: Screen, id?: string | null): void {
+function updateUrlHash(
+  screen: Screen,
+  id?: string | null,
+  secondaryId?: string | null,
+): void {
   let hash = "";
   switch (screen) {
+    case "project":
+      hash = id ? `#project-${id}` : "#project";
+      break;
     case "design":
-      hash = id ? `#design-${id}` : "#design";
+      if (secondaryId && id) {
+        hash = `#design-project:${id}:${secondaryId}`;
+      } else if (secondaryId) {
+        hash = `#design-workspace:${secondaryId}`;
+      } else if (id) {
+        hash = `#design-project:${id}`;
+      } else {
+        hash = "#design";
+      }
       break;
     case "notes":
       hash = id ? `#notes-${id}` : "#notes";
@@ -74,6 +91,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   currentScreen: "home",
   chatId: null,
   currentProjectId: null,
+  currentDesignId: null,
   currentNotePageId: null,
   previousScreen: null,
   designTab: "schematic",
@@ -86,18 +104,36 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       currentScreen: "home",
       chatId: null,
       currentProjectId: null,
+      currentDesignId: null,
     });
     updateUrlHash("home");
   },
 
-  navigateToDesign: (projectId) => {
+  navigateToProject: (projectId) => {
+    set({
+      previousScreen: get().currentScreen,
+      currentScreen: "project",
+      currentProjectId: projectId,
+      currentDesignId: null,
+      chatId: null,
+    });
+    updateUrlHash("project", projectId);
+  },
+
+  navigateToDesign: (projectId, designId) => {
+    const nextProjectId =
+      projectId === undefined ? get().currentProjectId : projectId;
+    const nextDesignId =
+      designId === undefined ? get().currentDesignId : designId;
+
     set({
       previousScreen: get().currentScreen,
       currentScreen: "design",
-      currentProjectId: projectId ?? get().currentProjectId,
+      currentProjectId: nextProjectId,
+      currentDesignId: nextDesignId,
       chatId: null,
     });
-    updateUrlHash("design", projectId ?? get().currentProjectId);
+    updateUrlHash("design", nextProjectId, nextDesignId);
   },
 
   navigateToNotes: (pageId) => {
@@ -160,9 +196,24 @@ export function initializeNavigationFromHash(): void {
     useNavigationStore.getState().navigateToChat(chatId);
   } else if (hash.startsWith("#chat")) {
     useNavigationStore.getState().navigateToNewChat();
+  } else if (hash.startsWith("#project-")) {
+    const projectId = hash.substring(9);
+    useNavigationStore.getState().navigateToProject(projectId);
   } else if (hash.startsWith("#design-")) {
-    const projectId = hash.substring(8);
-    useNavigationStore.getState().navigateToDesign(projectId);
+    if (hash.startsWith("#design-project:")) {
+      const payload = hash.substring(16);
+      const [projectId, designId] = payload.split(":");
+      useNavigationStore.getState().navigateToDesign(projectId, designId ?? null);
+    } else if (hash.startsWith("#design-workspace:")) {
+      const designId = hash.substring(18);
+      useNavigationStore.getState().navigateToDesign(null, designId);
+    } else {
+      const payload = hash.substring(8);
+      const [projectId, designId] = payload.split(":");
+      useNavigationStore.getState().navigateToDesign(projectId, designId ?? null);
+    }
+  } else if (hash === "#project") {
+    useNavigationStore.getState().navigateToHome();
   } else if (hash === "#design") {
     useNavigationStore.getState().navigateToDesign();
   } else if (hash.startsWith("#notes-")) {
@@ -195,20 +246,68 @@ export function setupHashChangeListener(): () => void {
           chatId: null,
         });
       }
-    } else if (hash.startsWith("#design-")) {
-      const projectId = hash.substring(8);
+    } else if (hash.startsWith("#project-")) {
+      const projectId = hash.substring(9);
       if (
-        state.currentScreen !== "design" ||
+        state.currentScreen !== "project" ||
         projectId !== state.currentProjectId
       ) {
         useNavigationStore.setState({
-          currentScreen: "design",
+          currentScreen: "project",
           currentProjectId: projectId,
+          currentDesignId: null,
         });
+      }
+    } else if (hash.startsWith("#design-")) {
+      if (hash.startsWith("#design-project:")) {
+        const payload = hash.substring(16);
+        const [projectId, designId] = payload.split(":");
+        if (
+          state.currentScreen !== "design" ||
+          projectId !== state.currentProjectId ||
+          (designId ?? null) !== state.currentDesignId
+        ) {
+          useNavigationStore.setState({
+            currentScreen: "design",
+            currentProjectId: projectId,
+            currentDesignId: designId ?? null,
+          });
+        }
+      } else if (hash.startsWith("#design-workspace:")) {
+        const designId = hash.substring(18);
+        if (
+          state.currentScreen !== "design" ||
+          state.currentProjectId !== null ||
+          designId !== state.currentDesignId
+        ) {
+          useNavigationStore.setState({
+            currentScreen: "design",
+            currentProjectId: null,
+            currentDesignId: designId,
+          });
+        }
+      } else {
+        const payload = hash.substring(8);
+        const [projectId, designId] = payload.split(":");
+        if (
+          state.currentScreen !== "design" ||
+          projectId !== state.currentProjectId ||
+          (designId ?? null) !== state.currentDesignId
+        ) {
+          useNavigationStore.setState({
+            currentScreen: "design",
+            currentProjectId: projectId,
+            currentDesignId: designId ?? null,
+          });
+        }
+      }
+    } else if (hash === "#project") {
+      if (state.currentScreen !== "home") {
+        useNavigationStore.setState({ currentScreen: "home" });
       }
     } else if (hash === "#design") {
       if (state.currentScreen !== "design") {
-        useNavigationStore.setState({ currentScreen: "design" });
+        useNavigationStore.setState({ currentScreen: "design", currentDesignId: null });
       }
     } else if (hash.startsWith("#notes-")) {
       const pageId = hash.substring(7);

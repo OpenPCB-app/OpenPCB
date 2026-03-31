@@ -23,6 +23,7 @@ import {
 import { parseSQLiteError, DatabaseError } from "./errors";
 import { WorkspaceRepository } from "./repositories/workspace";
 import { ProjectRepository } from "./repositories/project";
+import { DesignRepository } from "./repositories/design";
 import { ChatRepository } from "./repositories/chat";
 import { MessageRepository } from "./repositories/message";
 import { TaskRepository } from "./repositories/task";
@@ -104,6 +105,7 @@ export class DatabaseAccess {
   // Repository instances (lazy-initialized)
   private _workspaces?: WorkspaceRepository;
   private _projects?: ProjectRepository;
+  private _designs?: DesignRepository;
   private _chats?: ChatRepository;
   private _messages?: MessageRepository;
   private _tasks?: TaskRepository;
@@ -389,6 +391,13 @@ export class DatabaseAccess {
       this._projects = new ProjectRepository(this.db, this.queryLogger);
     }
     return this._projects;
+  }
+
+  get designs(): DesignRepository {
+    if (!this._designs) {
+      this._designs = new DesignRepository(this.db, this.queryLogger);
+    }
+    return this._designs;
   }
 
   /**

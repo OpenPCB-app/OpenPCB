@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useNavigationStore } from "@/stores/navigation-store";
 import { Plus, Search, Settings } from "lucide-react";
@@ -11,18 +11,6 @@ interface HomeHeaderProps {
 export function HomeHeader({ onOpenSettings }: HomeHeaderProps) {
   const { navigateToNewChat } = useNavigationStore();
   const [searchOpen, setSearchOpen] = useState(false);
-
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-      e.preventDefault();
-      setSearchOpen(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
 
   return (
     <>

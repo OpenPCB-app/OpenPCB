@@ -1,35 +1,9 @@
 import type { ProjectRecord } from "@shared/types";
 import {
   FolderIcon,
-  BoxIcon,
-  BriefcaseIcon,
-  CodeIcon,
-  CpuIcon,
-  DatabaseIcon,
-  FileIcon,
-  GlobeIcon,
-  LayersIcon,
-  LayoutIcon,
-  PackageIcon,
-  TerminalIcon,
   AlertCircleIcon,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-
-const PROJECT_ICON_MAP: Record<string, LucideIcon> = {
-  Box: BoxIcon,
-  Briefcase: BriefcaseIcon,
-  Code: CodeIcon,
-  Cpu: CpuIcon,
-  Database: DatabaseIcon,
-  File: FileIcon,
-  Folder: FolderIcon,
-  Globe: GlobeIcon,
-  Layers: LayersIcon,
-  Layout: LayoutIcon,
-  Package: PackageIcon,
-  Terminal: TerminalIcon,
-};
+import { getProjectIcon } from "@/lib/project-icons";
 
 export interface ProjectBadgeProps {
   project: ProjectRecord | null;
@@ -54,17 +28,15 @@ export function ProjectBadge({ project, error }: ProjectBadgeProps) {
             return <AlertCircleIcon className="h-4 w-4 text-destructive" />;
           }
           if (project?.icon) {
-            const IconComponent = PROJECT_ICON_MAP[project.icon];
-            if (IconComponent) {
-              return (
-                <IconComponent
-                  className="h-4 w-4"
-                  style={{
-                    color: project.color || "var(--color-primary)",
-                  }}
-                />
-              );
-            }
+            const IconComponent = getProjectIcon(project.icon);
+            return (
+              <IconComponent
+                className="h-4 w-4"
+                style={{
+                  color: project.color || "var(--color-primary)",
+                }}
+              />
+            );
           }
           return <FolderIcon className="h-4 w-4 text-primary" />;
         })()}

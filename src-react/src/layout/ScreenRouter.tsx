@@ -5,6 +5,7 @@ import {
   setupHashChangeListener,
 } from "@/stores/navigation-store";
 import { HomeScreen } from "@/screens/HomeScreen";
+import { ProjectScreen } from "@/screens/ProjectScreen";
 import { ChatScreen } from "@/screens/ChatScreen";
 import { DesignScreen } from "@/screens/DesignScreen";
 import { NotesScreen } from "@/screens/NotesScreen";
@@ -21,6 +22,8 @@ export function ScreenRouter() {
   switch (currentScreen) {
     case "home":
       return <HomeScreen />;
+    case "project":
+      return <ProjectScreen />;
     case "design":
       return <DesignScreen />;
     case "notes":

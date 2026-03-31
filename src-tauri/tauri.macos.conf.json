@@ -4,15 +4,9 @@
     "windows": [
       {
         "label": "OpenPCB",
-        "titleBarStyle": "Overlay",
-        "decorations": true,
-        "hiddenTitle": true,
+        "title": "OpenPCB",
         "width": 1500,
         "height": 900,
-        "trafficLightPosition": {
-          "x": 16,
-          "y": 18
-        },
         "tabbingIdentifier": "docs-group"
       }
     ]

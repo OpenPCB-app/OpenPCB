@@ -222,6 +222,54 @@ export class PageRepository {
     }
   }
 
+  async detachProjectPages(
+    workspaceId: string,
+    projectId: string,
+  ): Promise<void> {
+    const now = new Date();
+    const root = await this.findProjectRoot(projectId, workspaceId);
+
+    await this.db
+      .update(knowledge_page)
+      .set({
+        project_id: null,
+        updated_at: now,
+      })
+      .where(
+        and(
+          eq(knowledge_page.workspace_id, workspaceId),
+          eq(knowledge_page.project_id, projectId),
+          isNull(knowledge_page.deleted_at),
+          root ? sql`${knowledge_page.id} != ${root.id}` : sql`1 = 1`,
+        ),
+      );
+
+    if (!root) {
+      return;
+    }
+
+    await this.db
+      .update(knowledge_page)
+      .set({
+        parent_id: null,
+        updated_at: now,
+      })
+      .where(
+        and(
+          eq(knowledge_page.parent_id, root.id),
+          isNull(knowledge_page.deleted_at),
+        ),
+      );
+
+    await this.db
+      .update(knowledge_page)
+      .set({
+        deleted_at: now,
+        updated_at: now,
+      })
+      .where(eq(knowledge_page.id, root.id));
+  }
+
   async restore(id: string): Promise<KnowledgePage> {
     const [page] = await this.db
       .update(knowledge_page)

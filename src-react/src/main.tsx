@@ -10,6 +10,7 @@ import "./styles/globals.css";
 import "./styles/markdown.css";
 import Layout from "@/layout/Layout.tsx";
 import { GlobalStateProvider } from "./components/GlobalStateProvider.tsx";
+import { SidebarButtonsProvider } from "./contexts/SidebarButtonsContext.tsx";
 
 const root = document.getElementById("root");
 if (!root) {
@@ -21,7 +22,9 @@ ReactDOM.createRoot(root).render(
     <BackendURLProvider>
       <ThemeProvider>
         <GlobalStateProvider>
-          <Layout />
+          <SidebarButtonsProvider>
+            <Layout />
+          </SidebarButtonsProvider>
         </GlobalStateProvider>
       </ThemeProvider>
     </BackendURLProvider>

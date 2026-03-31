@@ -18,12 +18,14 @@ interface ProjectDeleteConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   project: ProjectRecord;
+  onDeleted?: () => void;
 }
 
 export function ProjectDeleteConfirmDialog({
   open,
   onOpenChange,
   project,
+  onDeleted,
 }: ProjectDeleteConfirmDialogProps) {
   const { remove } = useProjects();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -39,6 +41,7 @@ export function ProjectDeleteConfirmDialog({
     try {
       await remove(project.id);
       onOpenChange(false);
+      onDeleted?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete project");
       setIsDeleting(false);

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useNavigationStore, type DesignTab } from "@/stores/navigation-store";
 import { cn } from "@/lib/utils";
 
@@ -11,41 +10,32 @@ const TABS: { id: DesignTab; label: string }[] = [
 
 interface DesignHeaderProps {
   projectName?: string;
+  designName?: string;
   onAiToggle?: () => void;
   aiOpen?: boolean;
 }
 
 export function DesignHeader({
   projectName = "Untitled project",
+  designName = "Untitled design",
   onAiToggle,
   aiOpen,
 }: DesignHeaderProps) {
   const designTab = useNavigationStore((s) => s.designTab);
   const setDesignTab = useNavigationStore((s) => s.setDesignTab);
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(projectName);
 
   return (
     <div className="flex h-10 items-center justify-between border-b border-border-default bg-bg-secondary px-3">
       {/* Left: project name */}
       <div className="flex items-center gap-2 min-w-0">
-        {editing ? (
-          <input
-            className="h-6 rounded bg-bg-input px-2 text-sm font-medium text-text-primary border border-border-strong focus:outline-none"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={() => setEditing(false)}
-            onKeyDown={(e) => e.key === "Enter" && setEditing(false)}
-            autoFocus
-          />
-        ) : (
-          <button
-            className="text-sm font-medium text-text-primary truncate hover:text-brand transition-colors"
-            onDoubleClick={() => setEditing(true)}
-          >
-            {name}
-          </button>
-        )}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-text-primary">
+            {designName}
+          </p>
+          <p className="truncate text-[11px] text-text-tertiary">
+            {projectName}
+          </p>
+        </div>
       </div>
 
       {/* Center: tab bar */}

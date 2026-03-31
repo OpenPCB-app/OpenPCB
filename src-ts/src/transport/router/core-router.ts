@@ -6,6 +6,7 @@ import type { Container } from "../../core/di/container";
 import { TOKENS } from "../../core/di/container";
 import type { WorkspaceController } from "../controllers/workspace-controller";
 import type { ProjectController } from "../controllers/project-controller";
+import type { DesignController } from "../controllers/design-controller";
 import type { ChatController } from "../controllers/chat-controller";
 import type { TaskController } from "../controllers/task-controller";
 import type { ProviderController } from "../controllers/provider-controller";
@@ -37,6 +38,10 @@ import {
   ProjectResponseSchema,
   CreateProjectInputSchema,
   UpdateProjectInputSchema,
+  DesignListResponseSchema,
+  DesignResponseSchema,
+  CreateDesignInputSchema,
+  UpdateDesignInputSchema,
   ChatMetadataSchema,
   ChatListResponseSchema,
   ChatResponseSchema,
@@ -78,6 +83,9 @@ export class CoreRouter extends BaseHttpRouter {
     );
     const projectController = this.container.resolve<ProjectController>(
       TOKENS.ProjectController,
+    );
+    const designController = this.container.resolve<DesignController>(
+      TOKENS.DesignController,
     );
     const chatController = this.container.resolve<ChatController>(
       TOKENS.ChatController,
@@ -305,6 +313,68 @@ export class CoreRouter extends BaseHttpRouter {
       operationId: "deleteProject",
       tags: ["Projects"],
       summary: "Delete project by ID",
+      responses: { 200: DeletedResponseSchema },
+    });
+
+    this.get(
+      "/api/projects/:projectId/designs",
+      (ctx) => designController.listByProject(ctx),
+      {
+        operationId: "listDesignsByProject",
+        tags: ["Designs"],
+        summary: "List designs by project ID",
+        responses: { 200: DesignListResponseSchema },
+      },
+    );
+
+    this.post(
+      "/api/projects/:projectId/designs",
+      (ctx) => designController.create(ctx),
+      {
+        operationId: "createDesign",
+        tags: ["Designs"],
+        summary: "Create a design in a project",
+        requestBody: CreateDesignInputSchema.omit({
+          projectId: true,
+        }),
+        responses: { 201: DesignResponseSchema },
+      },
+    );
+
+    this.get("/api/designs", (ctx) => designController.list(ctx), {
+      operationId: "listWorkspaceDesigns",
+      tags: ["Designs"],
+      summary: "List workspace-level designs or filter by project ID",
+      responses: { 200: DesignListResponseSchema },
+    });
+
+    this.post("/api/designs", (ctx) => designController.create(ctx), {
+      operationId: "createWorkspaceDesign",
+      tags: ["Designs"],
+      summary: "Create a workspace-level design or attach one to a project",
+      requestBody: CreateDesignInputSchema,
+      responses: { 201: DesignResponseSchema },
+    });
+
+    this.get("/api/designs/:id", (ctx) => designController.get(ctx), {
+      operationId: "getDesign",
+      tags: ["Designs"],
+      summary: "Get design by ID",
+      responses: { 200: DesignResponseSchema },
+    });
+
+    this.patch("/api/designs/:id", (ctx) => designController.update(ctx), {
+      operationId: "updateDesign",
+      tags: ["Designs"],
+      summary: "Update design by ID",
+      requestBody: UpdateDesignInputSchema,
+      responses: { 200: DesignResponseSchema },
+    });
+
+    this.delete("/api/designs/:id", (ctx) => designController.delete(ctx), {
+      operationId: "deleteDesign",
+      tags: ["Designs"],
+      summary: "Delete design by ID",
       responses: { 200: DeletedResponseSchema },
     });
 

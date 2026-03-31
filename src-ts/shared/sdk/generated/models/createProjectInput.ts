@@ -6,6 +6,9 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { CreateProjectInputStatus } from './createProjectInputStatus';
+import type { CreateProjectInputAiConfig } from './createProjectInputAiConfig';
+import type { CreateProjectInputRagConfig } from './createProjectInputRagConfig';
+import type { CreateProjectInputPreferences } from './createProjectInputPreferences';
 import type { CreateProjectInputMetadata } from './createProjectInputMetadata';
 
 export interface CreateProjectInput {
@@ -16,7 +19,14 @@ export interface CreateProjectInput {
    * @maxLength 100
    */
   name: string;
+  description?: string;
   /** Project status */
   status?: CreateProjectInputStatus;
+  icon?: string;
+  color?: string;
+  sortOrder?: number;
+  aiConfig?: CreateProjectInputAiConfig;
+  ragConfig?: CreateProjectInputRagConfig;
+  preferences?: CreateProjectInputPreferences;
   metadata?: CreateProjectInputMetadata;
 }

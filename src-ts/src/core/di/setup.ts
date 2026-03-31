@@ -6,6 +6,7 @@
 import { Container, TOKENS } from "./container";
 import { WorkspaceService } from "../../domain/services/workspace-service";
 import { ProjectService } from "../../domain/services/project-service";
+import { DesignService } from "../../domain/services/design-service";
 import { ChatService } from "../../domain/services/chat-service";
 import { FolderService } from "../../domain/services/folder-service";
 import { FavoriteService } from "../../domain/services/favorite-service";
@@ -20,6 +21,7 @@ import { McpService } from "../../domain/services/mcp-service";
 import { StreamService } from "../../domain/services/stream-service";
 import { WorkspaceController } from "../../transport/controllers/workspace-controller";
 import { ProjectController } from "../../transport/controllers/project-controller";
+import { DesignController } from "../../transport/controllers/design-controller";
 import { ChatController } from "../../transport/controllers/chat-controller";
 import { FolderController } from "../../transport/controllers/folder-controller";
 import { FavoriteController } from "../../transport/controllers/favorite-controller";
@@ -103,6 +105,11 @@ export function setupDIContainer(options: DISetupOptions): Container {
   container.register(
     TOKENS.ProjectService,
     (c) => new ProjectService(c.resolve(TOKENS.DatabaseAccess)),
+  );
+
+  container.register(
+    TOKENS.DesignService,
+    (c) => new DesignService(c.resolve(TOKENS.DatabaseAccess)),
   );
 
   container.register(
@@ -191,6 +198,11 @@ export function setupDIContainer(options: DISetupOptions): Container {
   container.register(
     TOKENS.ProjectController,
     (c) => new ProjectController(c.resolve(TOKENS.ProjectService)),
+  );
+
+  container.register(
+    TOKENS.DesignController,
+    (c) => new DesignController(c.resolve(TOKENS.DesignService)),
   );
 
   container.register(

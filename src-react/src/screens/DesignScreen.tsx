@@ -7,6 +7,7 @@ import {
 import { PanelLeftOpen, PanelLeftClose } from "lucide-react";
 import { useNavigationStore } from "@/stores/navigation-store";
 import { useAppStore } from "@/stores/app-store";
+import { useDesigns } from "@/hooks/useDesigns";
 import { DesignHeader } from "./design/DesignHeader";
 import { DesignStatusBar } from "./design/DesignStatusBar";
 import { EditorToolbar } from "@/components/pcb/toolbar/EditorToolbar";
@@ -16,8 +17,19 @@ import { ComponentPalette } from "@/components/pcb/palette/ComponentPalette";
 export function DesignScreen() {
   const designTab = useNavigationStore((s) => s.designTab);
   const currentProjectId = useNavigationStore((s) => s.currentProjectId);
+  const currentDesignId = useNavigationStore((s) => s.currentDesignId);
+  const navigateToProject = useNavigationStore((s) => s.navigateToProject);
+  const navigateToHome = useNavigationStore((s) => s.navigateToHome);
   const projects = useAppStore((s) => s.projects);
+  const workspaces = useAppStore((s) => s.workspaces);
+  const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId);
   const project = projects.find((p) => p.id === currentProjectId);
+  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
+  const { designs } = useDesigns({
+    workspaceId: activeWorkspaceId,
+    projectId: currentProjectId,
+  });
+  const design = designs.find((item) => item.id === currentDesignId);
 
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
@@ -26,7 +38,8 @@ export function DesignScreen() {
     <div className="flex h-full flex-col">
       {/* Header with project name + tab bar */}
       <DesignHeader
-        projectName={project?.name ?? "Untitled project"}
+        projectName={project?.name ?? activeWorkspace?.name ?? "Workspace"}
+        designName={design?.name ?? "Untitled design"}
         onAiToggle={() => setAiOpen(!aiOpen)}
         aiOpen={aiOpen}
       />
@@ -99,21 +112,47 @@ export function DesignScreen() {
                 </button>
               )}
 
-              {designTab === "schematic" && <SchematicCanvas />}
+              {!design ? (
+                <div className="flex h-full flex-col items-center justify-center gap-4 text-center text-text-muted">
+                  <p className="text-sm font-medium text-text-primary">
+                    No design selected
+                  </p>
+                  <p className="max-w-sm text-sm text-text-muted">
+                    Open a design from a project or from the workspace designs list before using the editor.
+                  </p>
+                  {project ? (
+                    <button
+                      className="rounded-md border border-border-default px-4 py-2 text-sm text-text-primary hover:bg-bg-input"
+                      onClick={() => navigateToProject(project.id)}
+                    >
+                      Back to Project
+                    </button>
+                  ) : (
+                    <button
+                      className="rounded-md border border-border-default px-4 py-2 text-sm text-text-primary hover:bg-bg-input"
+                      onClick={navigateToHome}
+                    >
+                      Back to Home
+                    </button>
+                  )}
+                </div>
+              ) : designTab === "schematic" ? (
+                <SchematicCanvas />
+              ) : null}
 
-              {designTab === "pcb" && (
+              {design && designTab === "pcb" && (
                 <div className="flex h-full items-center justify-center text-text-muted">
                   PCB layout editor — coming soon
                 </div>
               )}
 
-              {designTab === "3d" && (
+              {design && designTab === "3d" && (
                 <div className="flex h-full items-center justify-center text-text-muted">
                   3D viewer — coming soon
                 </div>
               )}
 
-              {designTab === "bom" && (
+              {design && designTab === "bom" && (
                 <div className="flex h-full items-center justify-center text-text-muted">
                   Bill of Materials — coming soon
                 </div>

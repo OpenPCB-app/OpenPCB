@@ -5,5 +5,6 @@
  * OpenPCB Bun Backend API - Auto-generated from endpoint schemas
  * OpenAPI spec version: 1.0.0
  */
+import type { UpdateProjectInputMetadataAnyOf } from './updateProjectInputMetadataAnyOf';
 
-export type UpdateProjectInputMetadata = {[key: string]: unknown};
+export type UpdateProjectInputMetadata = UpdateProjectInputMetadataAnyOf | null;

@@ -14,8 +14,10 @@ type MockAppState = {
   isInitialized: boolean;
   isLoading: boolean;
   error: string | null;
+  activeWorkspaceId: string | null;
   workspaces: Array<{ id: string; name: string }>;
   fetchInitialState: () => Promise<void>;
+  fetchProjects: (workspaceId: string | null) => Promise<void>;
 };
 
 const mockBackendContext = vi.hoisted<MockBackendContext>(() => ({
@@ -30,8 +32,10 @@ const mockAppState = vi.hoisted<MockAppState>(() => ({
   isInitialized: true,
   isLoading: false,
   error: null,
+  activeWorkspaceId: "ws-1",
   workspaces: [{ id: "ws-1", name: "Main" }],
   fetchInitialState: vi.fn(async () => {}),
+  fetchProjects: vi.fn(async () => {}),
 }));
 
 vi.mock("@/contexts/BackendURLContext", () => ({
@@ -52,6 +56,7 @@ describe("GlobalStateProvider startup license gating", () => {
     mockAppState.isInitialized = true;
     mockAppState.isLoading = false;
     mockAppState.error = null;
+    mockAppState.activeWorkspaceId = "ws-1";
     mockAppState.workspaces = [{ id: "ws-1", name: "Main" }];
   });
 

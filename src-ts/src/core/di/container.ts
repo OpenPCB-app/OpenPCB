@@ -83,6 +83,7 @@ export const TOKENS = {
   ChatService: Symbol("ChatService"),
   MessageService: Symbol("MessageService"),
   ProjectService: Symbol("ProjectService"),
+  DesignService: Symbol("DesignService"),
   WorkspaceService: Symbol("WorkspaceService"),
   TaskService: Symbol("TaskService"),
   ProviderService: Symbol("ProviderService"),
@@ -101,6 +102,7 @@ export const TOKENS = {
 
   ChatController: Symbol("ChatController"),
   ProjectController: Symbol("ProjectController"),
+  DesignController: Symbol("DesignController"),
   WorkspaceController: Symbol("WorkspaceController"),
   TaskController: Symbol("TaskController"),
   ProviderController: Symbol("ProviderController"),

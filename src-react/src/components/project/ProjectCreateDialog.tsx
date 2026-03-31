@@ -1,16 +1,6 @@
 import { useState } from "react";
 import { 
   Briefcase, 
-  Code, 
-  Database, 
-  Folder, 
-  Globe, 
-  Layout, 
-  MessageSquare, 
-  Monitor, 
-  Settings, 
-  Terminal, 
-  Zap,
   ChevronDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,50 +22,25 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useProjects } from "@/hooks/useProjects";
 import { cn } from "@/lib/utils";
-
-const COLORS = [
-  "#ef4444",
-  "#f97316",
-  "#f59e0b",
-  "#84cc16",
-  "#10b981",
-  "#06b6d4",
-  "#3b82f6",
-  "#8b5cf6",
-  "#d946ef",
-  "#f43f5e",
-  "#64748b",
-  "#000000",
-];
-
-const ICONS = [
-  { id: "briefcase", icon: Briefcase },
-  { id: "code", icon: Code },
-  { id: "database", icon: Database },
-  { id: "folder", icon: Folder },
-  { id: "globe", icon: Globe },
-  { id: "layout", icon: Layout },
-  { id: "message-square", icon: MessageSquare },
-  { id: "monitor", icon: Monitor },
-  { id: "settings", icon: Settings },
-  { id: "terminal", icon: Terminal },
-  { id: "zap", icon: Zap },
-];
+import { PROJECT_COLORS, PROJECT_ICON_OPTIONS } from "@/lib/project-icons";
+import type { ProjectRecord } from "@shared/types";
 
 interface ProjectCreateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCreated?: (project: ProjectRecord) => void;
 }
 
 export function ProjectCreateDialog({
   open,
   onOpenChange,
+  onCreated,
 }: ProjectCreateDialogProps) {
   const { create } = useProjects();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [icon, setIcon] = useState("briefcase");
-  const [color, setColor] = useState(COLORS[6]);
+  const [color, setColor] = useState<string>(PROJECT_COLORS[6]!);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,7 +49,7 @@ export function ProjectCreateDialog({
       setName("");
       setDescription("");
       setIcon("briefcase");
-      setColor(COLORS[6]!);
+      setColor(PROJECT_COLORS[6]!);
       setError(null);
     }
     onOpenChange(open);
@@ -100,7 +65,8 @@ export function ProjectCreateDialog({
     setError(null);
 
     try {
-      await create(name.trim(), description.trim(), icon, color);
+      const project = await create(name.trim(), description.trim(), icon, color);
+      onCreated?.(project);
       handleOpenChange(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create project");
@@ -109,7 +75,8 @@ export function ProjectCreateDialog({
     }
   };
 
-  const SelectedIcon = ICONS.find((i) => i.id === icon)?.icon || Briefcase;
+  const SelectedIcon =
+    PROJECT_ICON_OPTIONS.find((i) => i.id === icon)?.icon || Briefcase;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -161,7 +128,7 @@ export function ProjectCreateDialog({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="grid grid-cols-4 gap-1 p-2">
-                  {ICONS.map((item) => {
+                  {PROJECT_ICON_OPTIONS.map((item) => {
                     const Icon = item.icon;
                     return (
                       <Button
@@ -199,7 +166,7 @@ export function ProjectCreateDialog({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="p-2">
                   <div className="grid grid-cols-4 gap-2">
-                    {COLORS.map((c) => (
+                    {PROJECT_COLORS.map((c) => (
                       <button
                         key={c}
                         type="button"

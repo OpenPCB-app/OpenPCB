@@ -8,9 +8,11 @@ import { UpdateChecker } from "@/components/update/UpdateChecker";
 import { UpdateDialog } from "@/components/update/UpdateDialog";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useNavigationStore } from "@/stores/navigation-store";
+import { SearchCommand } from "@/screens/home/SearchCommand";
 
 export default function Layout() {
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [searchOpen, setSearchOpen] = React.useState(false);
 
   const navigateToHome = useNavigationStore((s) => s.navigateToHome);
   const navigateToDesign = useNavigationStore((s) => s.navigateToDesign);
@@ -18,8 +20,12 @@ export default function Layout() {
   const navigateToNewChat = useNavigationStore((s) => s.navigateToNewChat);
   const navigateToLibrary = useNavigationStore((s) => s.navigateToLibrary);
 
-  // Global hotkeys: Ctrl+1-5 for view switching
+  // Global hotkeys: Ctrl/Cmd+1-5 for view switching
   useHotkeys("ctrl+1", () => navigateToHome(), {
+    enableOnFormTags: true,
+    preventDefault: true,
+  });
+  useHotkeys("meta+1", () => navigateToHome(), {
     enableOnFormTags: true,
     preventDefault: true,
   });
@@ -27,7 +33,15 @@ export default function Layout() {
     enableOnFormTags: true,
     preventDefault: true,
   });
+  useHotkeys("meta+2", () => navigateToDesign(), {
+    enableOnFormTags: true,
+    preventDefault: true,
+  });
   useHotkeys("ctrl+3", () => navigateToNotes(), {
+    enableOnFormTags: true,
+    preventDefault: true,
+  });
+  useHotkeys("meta+3", () => navigateToNotes(), {
     enableOnFormTags: true,
     preventDefault: true,
   });
@@ -35,8 +49,26 @@ export default function Layout() {
     enableOnFormTags: true,
     preventDefault: true,
   });
+  useHotkeys("meta+4", () => navigateToNewChat(), {
+    enableOnFormTags: true,
+    preventDefault: true,
+  });
   useHotkeys("ctrl+5", () => navigateToLibrary(), {
     enableOnFormTags: true,
+    preventDefault: true,
+  });
+  useHotkeys("meta+5", () => navigateToLibrary(), {
+    enableOnFormTags: true,
+    preventDefault: true,
+  });
+  useHotkeys("ctrl+k", () => setSearchOpen(true), {
+    enableOnFormTags: true,
+    enableOnContentEditable: true,
+    preventDefault: true,
+  });
+  useHotkeys("meta+k", () => setSearchOpen(true), {
+    enableOnFormTags: true,
+    enableOnContentEditable: true,
     preventDefault: true,
   });
   useHotkeys("ctrl+,", () => setSettingsOpen(true), {
@@ -58,6 +90,7 @@ export default function Layout() {
       </div>
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SearchCommand open={searchOpen} onOpenChange={setSearchOpen} />
       <ReconnectionOverlay />
       <Toaster />
       <UpdateChecker />

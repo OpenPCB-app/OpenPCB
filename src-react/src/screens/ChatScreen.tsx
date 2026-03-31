@@ -25,9 +25,10 @@ import { useToast } from "@/components/ui/use-toast";
 import { ChatMediaSidebar } from "@/components/ChatMediaSidebar";
 
 export function ChatScreen() {
-  const { chatId, navigateToChat } = useNavigationStore();
+  const { chatId, navigateToChat, navigateToProject } = useNavigationStore();
   const { createNewChat } = useChatOperations();
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
+  const projects = useAppStore((state) => state.projects);
 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [activeChat, setActiveChat] = useState<ChatMetadata | null>(null);
@@ -60,6 +61,18 @@ export function ChatScreen() {
     setProjectContext(null);
     setProjectContextError(false);
   }, [chatId]);
+
+  useEffect(() => {
+    if (!activeChat?.projectId) {
+      setProjectContext(null);
+      setProjectContextError(false);
+      return;
+    }
+
+    const project = projects.find((item) => item.id === activeChat.projectId) ?? null;
+    setProjectContext(project);
+    setProjectContextError(project === null);
+  }, [activeChat?.projectId, projects]);
 
   const {
     messages,
@@ -410,7 +423,7 @@ export function ChatScreen() {
             behavior: {
               onSubmit: handleSubmit,
               onStop: abort,
-              onBack: undefined,
+              onBack: activeChat?.projectId ? () => navigateToProject(activeChat.projectId) : undefined,
               onMessageAction: handleMessageAction,
               onBranchChange: () => {
                 if (chatId) {
