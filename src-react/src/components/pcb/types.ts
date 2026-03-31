@@ -1,6 +1,14 @@
 /** Core PCB schematic types for the frontend */
 
-export type Point = { x: number; y: number };
+import type {
+  ProjectPoint,
+  SchematicLabel,
+  SchematicProjectDocument,
+  SchematicSymbol,
+  SchematicWire,
+} from "@shared/types";
+
+export type Point = ProjectPoint;
 export type Rotation = 0 | 90 | 180 | 270;
 export type MirrorAxis = "horizontal" | "vertical";
 
@@ -31,7 +39,9 @@ export interface BaseEntity {
   mirrored: boolean;
 }
 
-export interface SymbolEntity extends BaseEntity {
+export interface SymbolEntity
+  extends BaseEntity,
+    Omit<SchematicSymbol, "position" | "rotation" | "reference"> {
   entityType: "symbol";
   symbolKind: SymbolKind;
   reference: string;
@@ -39,25 +49,21 @@ export interface SymbolEntity extends BaseEntity {
   pinCount?: number;
 }
 
-export interface WireSegment {
-  start: Point;
-  end: Point;
-}
-
-export interface WireEntity extends BaseEntity {
+export interface WireEntity extends BaseEntity, SchematicWire {
   entityType: "wire";
-  segments: WireSegment[];
 }
 
-export interface NetLabelEntity extends BaseEntity {
+export interface NetLabelEntity
+  extends BaseEntity,
+    Omit<SchematicLabel, "position" | "rotation"> {
   entityType: "label";
   text: string;
 }
 
 export type SchematicEntity = SymbolEntity | WireEntity | NetLabelEntity;
 
-export interface SchematicDocument {
-  id: string;
+export interface SchematicDocument
+  extends Omit<SchematicProjectDocument, "symbols" | "wires" | "labels" | "title"> {
   name: string;
   revision: number;
   symbols: SymbolEntity[];

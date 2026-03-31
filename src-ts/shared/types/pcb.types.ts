@@ -45,8 +45,9 @@ export interface SchematicSymbol {
 
 export interface SchematicWire {
   id: string;
-  from: ProjectPoint;
-  to: ProjectPoint;
+  points: ProjectPoint[];
+  sourcePinId: string;
+  targetPinId: string;
   net?: string | null;
 }
 

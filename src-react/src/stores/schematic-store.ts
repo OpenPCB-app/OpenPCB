@@ -31,7 +31,7 @@ interface SchematicState {
   interaction: InteractionState;
 
   // Grid
-  gridSize: number; // in nanometers (default 2.54mm = 2540000nm)
+  gridSize: number;
   showGrid: boolean;
 
   // Actions - viewport
@@ -71,8 +71,7 @@ const INITIAL_INTERACTION: InteractionState = {
   dragOffset: null,
 };
 
-// Default grid: 2.54mm = 2,540,000 nanometers (standard 100mil grid)
-const DEFAULT_GRID_NM = 2_540_000;
+const DEFAULT_GRID_NM = 1_270_000;
 
 export const useSchematicStore = create<SchematicState>((set, get) => ({
   document: null,

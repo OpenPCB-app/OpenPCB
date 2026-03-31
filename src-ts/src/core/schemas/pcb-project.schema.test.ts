@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   ProjectDocumentBundleSchema,
+  SchematicWireSchema,
   SchematicProjectDocumentSchema,
 } from "./pcb-project.schema";
 
@@ -49,6 +50,35 @@ describe("pcb project schema", () => {
     const result = ProjectDocumentBundleSchema.safeParse({
       formatVersion: "pcb.project-document-bundle/v2",
       docs: {},
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("accepts polyline wire with connector attachments", () => {
+    const parsed = SchematicWireSchema.parse({
+      id: "wire-1",
+      points: [
+        { x: 0, y: 0 },
+        { x: 1_270_000, y: 0 },
+        { x: 1_270_000, y: 1_270_000 },
+      ],
+      sourcePinId: "pin-a",
+      targetPinId: "pin-b",
+      net: "N$1",
+    });
+
+    expect(parsed.points).toHaveLength(3);
+    expect(parsed.sourcePinId).toBe("pin-a");
+    expect(parsed.targetPinId).toBe("pin-b");
+  });
+
+  test("rejects deprecated from/to wire shape", () => {
+    const result = SchematicWireSchema.safeParse({
+      id: "wire-1",
+      from: { x: 0, y: 0 },
+      to: { x: 1_270_000, y: 0 },
+      net: "N$1",
     });
 
     expect(result.success).toBe(false);

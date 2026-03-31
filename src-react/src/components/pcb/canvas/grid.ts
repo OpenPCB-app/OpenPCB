@@ -1,6 +1,45 @@
 import type { Viewport } from "../types";
+import { schematicToScreen, screenToSchematic } from "./viewport";
 
-/** Render the schematic grid on a Canvas2D context */
+export interface SchematicBounds {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+export function getVisibleSchematicBounds(
+  width: number,
+  height: number,
+  viewport: Viewport,
+): SchematicBounds {
+  const topLeft = screenToSchematic(0, 0, viewport);
+  const bottomRight = screenToSchematic(width, height, viewport);
+
+  return {
+    left: topLeft.x,
+    top: topLeft.y,
+    right: bottomRight.x,
+    bottom: bottomRight.y,
+  };
+}
+
+export function getGridPixelSpacing(gridSizeNm: number, viewport: Viewport): number {
+  return gridSizeNm * viewport.zoom;
+}
+
+export function getSnappedGridBounds(
+  bounds: SchematicBounds,
+  gridSizeNm: number,
+): SchematicBounds {
+  return {
+    left: Math.floor(bounds.left / gridSizeNm) * gridSizeNm,
+    top: Math.floor(bounds.top / gridSizeNm) * gridSizeNm,
+    right: Math.ceil(bounds.right / gridSizeNm) * gridSizeNm,
+    bottom: Math.ceil(bounds.bottom / gridSizeNm) * gridSizeNm,
+  };
+}
+
 export function renderGrid(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -8,74 +47,64 @@ export function renderGrid(
   viewport: Viewport,
   gridSize: number,
 ): void {
+  if (gridSize <= 0) {
+    throw new RangeError("gridSize must be greater than 0");
+  }
+
   const { offsetX, offsetY, zoom } = viewport;
 
-  // Grid spacing in pixels
-  const gridPx = gridSize * zoom;
-
-  // Don't draw grid if too small
+  const gridPx = getGridPixelSpacing(gridSize, viewport);
   if (gridPx < 4) return;
 
-  // Calculate visible range in schematic coordinates
-  const left = -offsetX / zoom;
-  const top = -offsetY / zoom;
-  const right = (width - offsetX) / zoom;
-  const bottom = (height - offsetY) / zoom;
+  const bounds = getSnappedGridBounds(
+    getVisibleSchematicBounds(width, height, viewport),
+    gridSize,
+  );
 
-  // Snap to grid boundaries
-  const startX = Math.floor(left / gridSize) * gridSize;
-  const startY = Math.floor(top / gridSize) * gridSize;
-  const endX = Math.ceil(right / gridSize) * gridSize;
-  const endY = Math.ceil(bottom / gridSize) * gridSize;
-
-  // Minor grid (dots)
   const dotRadius = Math.max(0.5, zoom * 0.3);
 
   ctx.fillStyle =
     gridPx > 20
-      ? "rgba(148, 163, 184, 0.3)" // visible dots
-      : "rgba(148, 163, 184, 0.15)"; // subtle dots
+      ? "rgba(148, 163, 184, 0.3)"
+      : "rgba(148, 163, 184, 0.15)";
 
-  for (let x = startX; x <= endX; x += gridSize) {
-    for (let y = startY; y <= endY; y += gridSize) {
-      const sx = x * zoom + offsetX;
-      const sy = y * zoom + offsetY;
+  for (let x = bounds.left; x <= bounds.right; x += gridSize) {
+    for (let y = bounds.top; y <= bounds.bottom; y += gridSize) {
+      const screen = schematicToScreen(x, y, viewport);
       ctx.beginPath();
-      ctx.arc(sx, sy, dotRadius, 0, Math.PI * 2);
+      ctx.arc(screen.x, screen.y, dotRadius, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
-  // Major grid lines (every 10 grid units)
   const majorGridSize = gridSize * 10;
-  const majorGridPx = majorGridSize * zoom;
+  const majorGridPx = getGridPixelSpacing(majorGridSize, viewport);
 
   if (majorGridPx > 40) {
-    const majorStartX = Math.floor(left / majorGridSize) * majorGridSize;
-    const majorStartY = Math.floor(top / majorGridSize) * majorGridSize;
-    const majorEndX = Math.ceil(right / majorGridSize) * majorGridSize;
-    const majorEndY = Math.ceil(bottom / majorGridSize) * majorGridSize;
+    const majorBounds = getSnappedGridBounds(
+      getVisibleSchematicBounds(width, height, viewport),
+      majorGridSize,
+    );
 
     ctx.strokeStyle = "rgba(148, 163, 184, 0.08)";
     ctx.lineWidth = 1;
     ctx.beginPath();
 
-    for (let x = majorStartX; x <= majorEndX; x += majorGridSize) {
-      const sx = x * zoom + offsetX;
-      ctx.moveTo(sx, 0);
-      ctx.lineTo(sx, height);
+    for (let x = majorBounds.left; x <= majorBounds.right; x += majorGridSize) {
+      const screen = schematicToScreen(x, 0, viewport);
+      ctx.moveTo(screen.x, 0);
+      ctx.lineTo(screen.x, height);
     }
 
-    for (let y = majorStartY; y <= majorEndY; y += majorGridSize) {
-      const sy = y * zoom + offsetY;
-      ctx.moveTo(0, sy);
-      ctx.lineTo(width, sy);
+    for (let y = majorBounds.top; y <= majorBounds.bottom; y += majorGridSize) {
+      const screen = schematicToScreen(0, y, viewport);
+      ctx.moveTo(0, screen.y);
+      ctx.lineTo(width, screen.y);
     }
 
     ctx.stroke();
   }
 
-  // Origin crosshair
   const ox = offsetX;
   const oy = offsetY;
   if (ox >= -10 && ox <= width + 10 && oy >= -10 && oy <= height + 10) {

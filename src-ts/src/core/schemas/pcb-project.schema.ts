@@ -85,8 +85,9 @@ export const SchematicSymbolSchema = z
 export const SchematicWireSchema = z
   .object({
     id: DocumentIdSchema,
-    from: ProjectPointSchema,
-    to: ProjectPointSchema,
+    points: z.array(ProjectPointSchema).min(2),
+    sourcePinId: DocumentIdSchema,
+    targetPinId: DocumentIdSchema,
     net: z.string().nullable().optional(),
   })
   .strict()
