@@ -91,6 +91,24 @@ export interface DerivedConnectivity {
   junctions: DerivedJunction[];
 }
 
+export interface Bounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+export interface HitTestCache {
+  symbolBounds: Record<string, Bounds>;
+  connectorAnchors: Record<string, Point>;
+}
+
+export interface DerivedSchematicState {
+  connectivity: DerivedConnectivity | null;
+  documentBounds: Bounds | null;
+  hitTestCache: HitTestCache;
+}
+
 export interface Viewport {
   offsetX: number;
   offsetY: number;
@@ -99,17 +117,28 @@ export interface Viewport {
 
 export type ToolMode = "select" | "place" | "wire" | "label";
 
-export interface InteractionState {
-  /** Wire in progress: vertices so far */
-  wireVertices: Point[];
-  /** Component being placed (ghost preview) */
-  placingGhost: {
-    symbolKind: SymbolKind;
-    position: Point;
-    rotation: Rotation;
-  } | null;
-  /** Rubber-band selection box */
-  selectionBox: { start: Point; end: Point } | null;
-  /** Dragging entities */
-  dragOffset: Point | null;
+export interface EditorChromeState {
+  viewport: Viewport;
+  selectedEntityIds: Set<string>;
+  activeTool: ToolMode;
+  popoverEntityId: string | null;
+  gridSize: number;
+  showGrid: boolean;
+  placementRotation: Rotation;
 }
+
+export interface PlacementSession {
+  type: "placement";
+  symbolKind: SymbolKind;
+  rotation: Rotation;
+  previewPosition: Point | null;
+}
+
+export interface WireSession {
+  type: "wire";
+  sourcePinId: string;
+  previewPoints: Point[];
+  targetPinId: string | null;
+}
+
+export type InteractionSession = PlacementSession | WireSession | null;

@@ -2,8 +2,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSchematicStore } from "@/stores/schematic-store";
 
 export function PropertiesPanel() {
-  const selectedIds = useSchematicStore((s) => s.selectedEntityIds);
-  const document = useSchematicStore((s) => s.document);
+  const selectedIds = useSchematicStore((s) => s.chrome.selectedEntityIds);
+  const document = useSchematicStore((s) => s.persisted.document);
 
   if (selectedIds.size === 0) {
     return (

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -9,10 +9,11 @@ import { useNavigationStore } from "@/stores/navigation-store";
 import { useAppStore } from "@/stores/app-store";
 import { useDesigns } from "@/hooks/useDesigns";
 import { DesignHeader } from "./design/DesignHeader";
-import { DesignStatusBar } from "./design/DesignStatusBar";
 import { EditorToolbar } from "@/components/pcb/toolbar/EditorToolbar";
 import { SchematicCanvas } from "@/components/pcb/canvas/SchematicCanvas";
 import { ComponentPalette } from "@/components/pcb/palette/ComponentPalette";
+import { StatusBar } from "@/components/pcb/StatusBar";
+import { useSchematicInteractionController } from "@/components/pcb/useSchematicInteractionController";
 
 export function DesignScreen() {
   const designTab = useNavigationStore((s) => s.designTab);
@@ -33,6 +34,20 @@ export function DesignScreen() {
 
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const controller = useSchematicInteractionController();
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      controller.cancelSession();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [controller]);
 
   return (
     <div className="flex h-full flex-col">
@@ -45,7 +60,9 @@ export function DesignScreen() {
       />
 
       {/* Toolbar — context-sensitive per tab */}
-      {(designTab === "schematic" || designTab === "pcb") && <EditorToolbar />}
+      {(designTab === "schematic" || designTab === "pcb") && (
+        <EditorToolbar controller={controller} />
+      )}
 
       {/* Main area */}
       <div className="relative flex-1 overflow-hidden">
@@ -71,7 +88,7 @@ export function DesignScreen() {
                       <PanelLeftClose className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <ComponentPalette />
+                  <ComponentPalette controller={controller} />
 
                   {/* Layers section */}
                   <div className="border-t border-border-default">
@@ -137,7 +154,7 @@ export function DesignScreen() {
                   )}
                 </div>
               ) : designTab === "schematic" ? (
-                <SchematicCanvas />
+                <SchematicCanvas controller={controller} />
               ) : null}
 
               {design && designTab === "pcb" && (
@@ -202,7 +219,7 @@ export function DesignScreen() {
       </div>
 
       {/* Status Bar */}
-      <DesignStatusBar />
+      <StatusBar />
     </div>
   );
 }

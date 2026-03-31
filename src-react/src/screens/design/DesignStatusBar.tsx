@@ -1,7 +1,7 @@
 import { useSchematicStore } from "@/stores/schematic-store";
 
 export function DesignStatusBar() {
-  const viewport = useSchematicStore((s) => s.viewport);
+  const viewport = useSchematicStore((s) => s.chrome.viewport);
   const zoom = viewport ? Math.round(viewport.zoom * 100) : 100;
 
   return (

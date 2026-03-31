@@ -12,6 +12,10 @@ import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSchematicStore } from "@/stores/schematic-store";
 import type { SymbolKind } from "../types";
+import {
+  useSchematicInteractionController,
+  type SchematicInteractionController,
+} from "../useSchematicInteractionController";
 
 interface ComponentItem {
   kind: SymbolKind;
@@ -61,13 +65,19 @@ const CATEGORIES: ComponentCategory[] = [
   },
 ];
 
-export function ComponentPalette() {
+interface ComponentPaletteProps {
+  controller?: SchematicInteractionController;
+}
+
+export function ComponentPalette({ controller }: ComponentPaletteProps) {
   const [search, setSearch] = useState("");
   const [openCategories, setOpenCategories] = useState<Set<string>>(
     new Set(CATEGORIES.map((c) => c.name)),
   );
-  const placingSymbolKind = useSchematicStore((s) => s.placingSymbolKind);
-  const setPlacingSymbol = useSchematicStore((s) => s.setPlacingSymbol);
+  const fallbackController = useSchematicInteractionController();
+  const interactionController = controller ?? fallbackController;
+  const session = useSchematicStore((s) => s.session);
+  const placingSymbolKind = session?.type === "placement" ? session.symbolKind : null;
 
   const filteredCategories = CATEGORIES.map((cat) => ({
     ...cat,
@@ -85,6 +95,15 @@ export function ComponentPalette() {
       else next.add(name);
       return next;
     });
+  };
+
+  const handleBeginPlacement = (kind: SymbolKind) => {
+    if (placingSymbolKind === kind) {
+      interactionController.cancelSession();
+      return;
+    }
+
+    interactionController.beginPlacement(kind);
   };
 
   return (
@@ -132,12 +151,13 @@ export function ComponentPalette() {
                         placingSymbolKind === item.kind ? "default" : "ghost"
                       }
                       size="sm"
+                      draggable
                       className="h-6 justify-start gap-2 px-2 text-xs"
-                      onClick={() =>
-                        setPlacingSymbol(
-                          placingSymbolKind === item.kind ? null : item.kind,
-                        )
-                      }
+                      onClick={() => handleBeginPlacement(item.kind)}
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = "copy";
+                        interactionController.beginPlacement(item.kind);
+                      }}
                     >
                       <span className="w-4 text-center text-[10px] font-mono text-muted-foreground">
                         {item.prefix}

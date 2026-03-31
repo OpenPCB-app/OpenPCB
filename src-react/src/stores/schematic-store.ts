@@ -1,179 +1,379 @@
 import { create } from "zustand";
 import type {
-  SchematicDocument,
+  Bounds,
   DerivedConnectivity,
-  Viewport,
-  ToolMode,
-  InteractionState,
-  SymbolKind,
+  DerivedSchematicState,
+  EditorChromeState,
+  HitTestCache,
+  InteractionSession,
   Rotation,
+  SchematicDocument,
+  SymbolKind,
+  ToolMode,
+  Viewport,
 } from "@/components/pcb/types";
 
-interface SchematicState {
-  // Document (synced from backend)
+interface PersistedDocumentState {
   document: SchematicDocument | null;
-  connectivity: DerivedConnectivity | null;
   projectId: string | null;
   sheetId: string | null;
+}
 
-  // Viewport
-  viewport: Viewport;
+interface SchematicState {
+  persisted: PersistedDocumentState;
+  derived: DerivedSchematicState;
+  chrome: EditorChromeState;
+  session: InteractionSession;
 
-  // Selection
-  selectedEntityIds: Set<string>;
-
-  // Tool state
-  activeTool: ToolMode;
-  placingSymbolKind: SymbolKind | null;
-  placingRotation: Rotation;
-
-  // Interaction
-  interaction: InteractionState;
-
-  // Grid
-  gridSize: number;
-  showGrid: boolean;
-
-  // Actions - viewport
   setViewport: (viewport: Viewport) => void;
   pan: (dx: number, dy: number) => void;
   zoomAt: (centerX: number, centerY: number, factor: number) => void;
   fitToContent: () => void;
 
-  // Actions - tool
-  setTool: (tool: ToolMode) => void;
-  setPlacingSymbol: (kind: SymbolKind | null) => void;
-  rotatePlacing: () => void;
+  activateTool: (tool: ToolMode) => void;
+  beginPlacement: (kind: SymbolKind) => void;
+  setPlacementPreview: (position: { x: number; y: number } | null) => void;
+  rotatePlacement: () => void;
+  beginWire: (sourcePinId: string) => void;
+  updateWirePreview: (points: Array<{ x: number; y: number }>, targetPinId?: string | null) => void;
+  cancelSession: () => void;
 
-  // Actions - selection
   selectEntities: (ids: string[]) => void;
   addToSelection: (ids: string[]) => void;
   clearSelection: () => void;
   selectAll: () => void;
+  setPopoverTarget: (id: string | null) => void;
 
-  // Actions - interaction
-  updateInteraction: (partial: Partial<InteractionState>) => void;
-  resetInteraction: () => void;
-
-  // Actions - document
   setDocument: (doc: SchematicDocument) => void;
-  setConnectivity: (conn: DerivedConnectivity) => void;
+  setProjectContext: (projectId: string | null, sheetId: string | null) => void;
+  setConnectivity: (conn: DerivedConnectivity | null) => void;
+  setDocumentBounds: (bounds: Bounds | null) => void;
+  setHitTestCache: (cache: HitTestCache) => void;
 
-  // Actions - grid
   setGridSize: (size: number) => void;
   toggleGrid: () => void;
 }
 
-const INITIAL_INTERACTION: InteractionState = {
-  wireVertices: [],
-  placingGhost: null,
-  selectionBox: null,
-  dragOffset: null,
-};
-
 const DEFAULT_GRID_NM = 1_270_000;
 
-export const useSchematicStore = create<SchematicState>((set, get) => ({
-  document: null,
-  connectivity: null,
-  projectId: null,
-  sheetId: null,
+const EMPTY_HIT_TEST_CACHE: HitTestCache = {
+  symbolBounds: {},
+  connectorAnchors: {},
+};
 
+const INITIAL_DERIVED_STATE: DerivedSchematicState = {
+  connectivity: null,
+  documentBounds: null,
+  hitTestCache: EMPTY_HIT_TEST_CACHE,
+};
+
+const INITIAL_CHROME_STATE: EditorChromeState = {
   viewport: { offsetX: 0, offsetY: 0, zoom: 1 },
   selectedEntityIds: new Set(),
-
   activeTool: "select",
-  placingSymbolKind: null,
-  placingRotation: 0,
-
-  interaction: { ...INITIAL_INTERACTION },
-
+  popoverEntityId: null,
   gridSize: DEFAULT_GRID_NM,
   showGrid: true,
+  placementRotation: 0,
+};
 
-  // Viewport
-  setViewport: (viewport) => set({ viewport }),
+function derivePopoverTargetId(
+  document: SchematicDocument | null,
+  ids: Set<string>,
+): string | null {
+  if (ids.size !== 1 || !document) {
+    return null;
+  }
+
+  const selectedId = ids.values().next().value;
+  if (selectedId === undefined) {
+    return null;
+  }
+
+  return document.symbols.some((symbol) => symbol.id === selectedId)
+    ? selectedId
+    : null;
+}
+
+function updateSelection(ids: string[], document: SchematicDocument | null) {
+  const selectedEntityIds = new Set(ids);
+
+  return {
+    selectedEntityIds,
+    popoverEntityId: derivePopoverTargetId(document, selectedEntityIds),
+  };
+}
+
+export const useSchematicStore = create<SchematicState>((set, get) => ({
+  persisted: {
+    document: null,
+    projectId: null,
+    sheetId: null,
+  },
+  derived: INITIAL_DERIVED_STATE,
+  chrome: INITIAL_CHROME_STATE,
+  session: null,
+
+  setViewport: (viewport) =>
+    set((state) => ({
+      chrome: {
+        ...state.chrome,
+        viewport,
+      },
+    })),
 
   pan: (dx, dy) =>
-    set((s) => ({
-      viewport: {
-        ...s.viewport,
-        offsetX: s.viewport.offsetX + dx,
-        offsetY: s.viewport.offsetY + dy,
+    set((state) => ({
+      chrome: {
+        ...state.chrome,
+        viewport: {
+          ...state.chrome.viewport,
+          offsetX: state.chrome.viewport.offsetX + dx,
+          offsetY: state.chrome.viewport.offsetY + dy,
+        },
       },
     })),
 
   zoomAt: (centerX, centerY, factor) =>
-    set((s) => {
-      const newZoom = Math.max(0.05, Math.min(50, s.viewport.zoom * factor));
-      const ratio = newZoom / s.viewport.zoom;
+    set((state) => {
+      const newZoom = Math.max(0.05, Math.min(50, state.chrome.viewport.zoom * factor));
+      const ratio = newZoom / state.chrome.viewport.zoom;
+
       return {
-        viewport: {
-          zoom: newZoom,
-          offsetX: centerX - (centerX - s.viewport.offsetX) * ratio,
-          offsetY: centerY - (centerY - s.viewport.offsetY) * ratio,
+        chrome: {
+          ...state.chrome,
+          viewport: {
+            zoom: newZoom,
+            offsetX: centerX - (centerX - state.chrome.viewport.offsetX) * ratio,
+            offsetY: centerY - (centerY - state.chrome.viewport.offsetY) * ratio,
+          },
         },
       };
     }),
 
-  fitToContent: () => {
-    // Will be implemented when entities exist
-    set({ viewport: { offsetX: 0, offsetY: 0, zoom: 1 } });
-  },
-
-  // Tool
-  setTool: (tool) =>
-    set({
-      activeTool: tool,
-      interaction: { ...INITIAL_INTERACTION },
-      ...(tool !== "place" ? { placingSymbolKind: null } : {}),
-    }),
-
-  setPlacingSymbol: (kind) =>
-    set({
-      activeTool: kind ? "place" : "select",
-      placingSymbolKind: kind,
-      placingRotation: 0,
-      interaction: { ...INITIAL_INTERACTION },
-    }),
-
-  rotatePlacing: () =>
-    set((s) => ({
-      placingRotation: ((s.placingRotation + 90) % 360) as Rotation,
+  fitToContent: () =>
+    set((state) => ({
+      chrome: {
+        ...state.chrome,
+        viewport: { offsetX: 0, offsetY: 0, zoom: 1 },
+      },
     })),
 
-  // Selection
-  selectEntities: (ids) => set({ selectedEntityIds: new Set(ids) }),
+  activateTool: (tool) =>
+    set((state) => ({
+      chrome: {
+        ...state.chrome,
+        activeTool: tool,
+      },
+      session: tool === state.chrome.activeTool ? state.session : null,
+    })),
+
+  beginPlacement: (kind) =>
+    set((state) => ({
+      chrome: {
+        ...state.chrome,
+        activeTool: "place",
+      },
+      session: {
+        type: "placement",
+        symbolKind: kind,
+        rotation: state.chrome.placementRotation,
+        previewPosition: null,
+      },
+    })),
+
+  setPlacementPreview: (position) =>
+    set((state) => {
+      if (state.session?.type !== "placement") {
+        return state;
+      }
+
+      return {
+        session: {
+          ...state.session,
+          previewPosition: position,
+        },
+      };
+    }),
+
+  rotatePlacement: () =>
+    set((state) => {
+      const placementRotation = ((state.chrome.placementRotation + 90) % 360) as Rotation;
+
+      return {
+        chrome: {
+          ...state.chrome,
+          placementRotation,
+        },
+        session:
+          state.session?.type === "placement"
+            ? {
+                ...state.session,
+                rotation: placementRotation,
+              }
+            : state.session,
+      };
+    }),
+
+  beginWire: (sourcePinId) =>
+    set((state) => ({
+      session: {
+        type: "wire",
+        sourcePinId,
+        previewPoints: [],
+        targetPinId: null,
+      },
+      chrome: {
+        ...state.chrome,
+        selectedEntityIds: new Set(),
+        popoverEntityId: null,
+      },
+    })),
+
+  updateWirePreview: (points, targetPinId = null) =>
+    set((state) => {
+      if (state.session?.type !== "wire") {
+        return state;
+      }
+
+      return {
+        session: {
+          ...state.session,
+          previewPoints: points,
+          targetPinId,
+        },
+      };
+    }),
+
+  cancelSession: () =>
+    set((state) => ({
+      chrome: {
+        ...state.chrome,
+        activeTool:
+          state.session?.type === "placement" && state.chrome.activeTool === "place"
+            ? "select"
+            : state.chrome.activeTool,
+      },
+      session: null,
+    })),
+
+  selectEntities: (ids) =>
+    set((state) => ({
+      chrome: {
+        ...state.chrome,
+        ...updateSelection(ids, state.persisted.document),
+      },
+    })),
+
   addToSelection: (ids) =>
-    set((s) => {
-      const next = new Set(s.selectedEntityIds);
-      ids.forEach((id) => next.add(id));
-      return { selectedEntityIds: next };
+    set((state) => {
+      const nextIds = new Set(state.chrome.selectedEntityIds);
+      ids.forEach((id) => nextIds.add(id));
+
+      return {
+        chrome: {
+          ...state.chrome,
+          selectedEntityIds: nextIds,
+          popoverEntityId: derivePopoverTargetId(state.persisted.document, nextIds),
+        },
+      };
     }),
-  clearSelection: () => set({ selectedEntityIds: new Set() }),
+
+  clearSelection: () =>
+    set((state) => ({
+      chrome: {
+        ...state.chrome,
+        selectedEntityIds: new Set(),
+        popoverEntityId: null,
+      },
+    })),
+
   selectAll: () => {
-    const doc = get().document;
-    if (!doc) return;
+    const document = get().persisted.document;
+    if (!document) {
+      return;
+    }
+
     const allIds = [
-      ...doc.symbols.map((s) => s.id),
-      ...doc.wires.map((w) => w.id),
-      ...doc.labels.map((l) => l.id),
+      ...document.symbols.map((symbol) => symbol.id),
+      ...document.wires.map((wire) => wire.id),
+      ...document.labels.map((label) => label.id),
     ];
-    set({ selectedEntityIds: new Set(allIds) });
+
+    set((state) => ({
+      chrome: {
+        ...state.chrome,
+        ...updateSelection(allIds, document),
+      },
+    }));
   },
 
-  // Interaction
-  updateInteraction: (partial) =>
-    set((s) => ({
-      interaction: { ...s.interaction, ...partial },
+  setPopoverTarget: (id) =>
+    set((state) => ({
+      chrome: {
+        ...state.chrome,
+        popoverEntityId: id,
+      },
     })),
-  resetInteraction: () => set({ interaction: { ...INITIAL_INTERACTION } }),
 
-  // Document
-  setDocument: (doc) => set({ document: doc }),
-  setConnectivity: (conn) => set({ connectivity: conn }),
+  setDocument: (document) =>
+    set((state) => ({
+      persisted: {
+        ...state.persisted,
+        document,
+      },
+      chrome: {
+        ...state.chrome,
+        popoverEntityId: derivePopoverTargetId(document, state.chrome.selectedEntityIds),
+      },
+    })),
 
-  // Grid
-  setGridSize: (size) => set({ gridSize: size }),
-  toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
+  setProjectContext: (projectId, sheetId) =>
+    set((state) => ({
+      persisted: {
+        ...state.persisted,
+        projectId,
+        sheetId,
+      },
+    })),
+
+  setConnectivity: (connectivity) =>
+    set((state) => ({
+      derived: {
+        ...state.derived,
+        connectivity,
+      },
+    })),
+
+  setDocumentBounds: (documentBounds) =>
+    set((state) => ({
+      derived: {
+        ...state.derived,
+        documentBounds,
+      },
+    })),
+
+  setHitTestCache: (hitTestCache) =>
+    set((state) => ({
+      derived: {
+        ...state.derived,
+        hitTestCache,
+      },
+    })),
+
+  setGridSize: (gridSize) =>
+    set((state) => ({
+      chrome: {
+        ...state.chrome,
+        gridSize,
+      },
+    })),
+
+  toggleGrid: () =>
+    set((state) => ({
+      chrome: {
+        ...state.chrome,
+        showGrid: !state.chrome.showGrid,
+      },
+    })),
 }));

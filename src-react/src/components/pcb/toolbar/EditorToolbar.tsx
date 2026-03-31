@@ -21,6 +21,10 @@ import {
 } from "@/components/ui/tooltip";
 import { useSchematicStore } from "@/stores/schematic-store";
 import type { ToolMode } from "../types";
+import {
+  useSchematicInteractionController,
+  type SchematicInteractionController,
+} from "../useSchematicInteractionController";
 
 const TOOLS: {
   mode: ToolMode;
@@ -34,10 +38,15 @@ const TOOLS: {
   { mode: "label", icon: Type, label: "Net Label", shortcut: "L" },
 ];
 
-export function EditorToolbar() {
-  const activeTool = useSchematicStore((s) => s.activeTool);
-  const setTool = useSchematicStore((s) => s.setTool);
-  const showGrid = useSchematicStore((s) => s.showGrid);
+interface EditorToolbarProps {
+  controller?: SchematicInteractionController;
+}
+
+export function EditorToolbar({ controller }: EditorToolbarProps) {
+  const fallbackController = useSchematicInteractionController();
+  const interactionController = controller ?? fallbackController;
+  const activeTool = useSchematicStore((s) => s.chrome.activeTool);
+  const showGrid = useSchematicStore((s) => s.chrome.showGrid);
   const toggleGrid = useSchematicStore((s) => s.toggleGrid);
   const zoomAt = useSchematicStore((s) => s.zoomAt);
   const fitToContent = useSchematicStore((s) => s.fitToContent);
@@ -53,7 +62,7 @@ export function EditorToolbar() {
                 <Toggle
                   size="sm"
                   pressed={activeTool === tool.mode}
-                  onPressedChange={() => setTool(tool.mode)}
+                  onPressedChange={() => interactionController.activateTool(tool.mode)}
                   aria-label={tool.label}
                   className="h-7 w-7 p-0"
                 >
