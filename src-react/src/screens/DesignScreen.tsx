@@ -14,6 +14,39 @@ import { SchematicCanvas } from "@/components/pcb/canvas/SchematicCanvas";
 import { ComponentPalette } from "@/components/pcb/palette/ComponentPalette";
 import { StatusBar } from "@/components/pcb/StatusBar";
 import { useSchematicInteractionController } from "@/components/pcb/useSchematicInteractionController";
+import { FloatingPropertiesPopover } from "@/components/pcb/properties/FloatingPropertiesPopover";
+import { useSchematicStore } from "@/stores/schematic-store";
+
+function isTextEntryFocused(activeElement: Element | null): boolean {
+  if (!(activeElement instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (activeElement.isContentEditable) {
+    return true;
+  }
+
+  if (activeElement instanceof HTMLTextAreaElement) {
+    return true;
+  }
+
+  if (!(activeElement instanceof HTMLInputElement)) {
+    return false;
+  }
+
+  return ![
+    "button",
+    "checkbox",
+    "color",
+    "file",
+    "hidden",
+    "image",
+    "radio",
+    "range",
+    "reset",
+    "submit",
+  ].includes(activeElement.type);
+}
 
 export function DesignScreen() {
   const designTab = useNavigationStore((s) => s.designTab);
@@ -35,10 +68,21 @@ export function DesignScreen() {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const controller = useSchematicInteractionController();
+  const popoverEntityId = useSchematicStore((s) => s.chrome.popoverEntityId);
+  const setPopoverTarget = useSchematicStore((s) => s.setPopoverTarget);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") {
+        return;
+      }
+
+      if (popoverEntityId) {
+        if (isTextEntryFocused(globalThis.document.activeElement)) {
+          return;
+        }
+
+        setPopoverTarget(null);
         return;
       }
 
@@ -47,7 +91,7 @@ export function DesignScreen() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [controller]);
+  }, [controller, popoverEntityId, setPopoverTarget]);
 
   return (
     <div className="flex h-full flex-col">
@@ -154,7 +198,10 @@ export function DesignScreen() {
                   )}
                 </div>
               ) : designTab === "schematic" ? (
-                <SchematicCanvas controller={controller} />
+                <div className="relative h-full">
+                  <SchematicCanvas controller={controller} />
+                  <FloatingPropertiesPopover />
+                </div>
               ) : null}
 
               {design && designTab === "pcb" && (

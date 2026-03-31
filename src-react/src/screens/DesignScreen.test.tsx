@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSchematicStore } from "@/stores/schematic-store";
@@ -122,10 +122,28 @@ const TEST_DOCUMENT: SchematicDocument = {
         { id: "pin-1", name: "1", position: { x: 0, y: 0 } },
         { id: "pin-2", name: "2", position: { x: 1_270_000, y: 0 } },
       ],
-      properties: {},
+      properties: {
+        Footprint: "R_0603",
+        Tolerance: "1%",
+      },
     },
   ],
-  wires: [],
+  wires: [
+    {
+      id: "wire-1",
+      entityType: "wire",
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      mirrored: false,
+      points: [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ],
+      sourcePinId: "pin-1",
+      targetPinId: "pin-2",
+      net: "NET1",
+    },
+  ],
   labels: [],
 };
 
@@ -141,15 +159,25 @@ function resetStore() {
       connectivity: null,
       documentBounds: null,
       hitTestCache: {
-        symbolBounds: {},
-        connectorAnchors: {},
+        symbolBounds: {
+          "symbol-1": {
+            minX: 20,
+            minY: 10,
+            maxX: 80,
+            maxY: 30,
+          },
+        },
+        connectorAnchors: {
+          "pin-1": { x: 0, y: 0 },
+          "pin-2": { x: 100, y: 0 },
+        },
       },
     },
     chrome: {
-      viewport: { offsetX: 0, offsetY: 0, zoom: 1 },
-      selectedEntityIds: new Set(["symbol-1"]),
+      viewport: { offsetX: 5, offsetY: 10, zoom: 2 },
+      selectedEntityIds: new Set(),
       activeTool: "select",
-      popoverEntityId: "symbol-1",
+      popoverEntityId: null,
       gridSize: 1_270_000,
       showGrid: true,
       placementRotation: 0,
@@ -215,5 +243,81 @@ describe("DesignScreen schematic shell", () => {
       wires: useSchematicStore.getState().persisted.document?.wires.length ?? 0,
       labels: useSchematicStore.getState().persisted.document?.labels.length ?? 0,
     }).toEqual(documentCountsBefore);
+  });
+
+  it("shows a floating popover for a single selected symbol and reanchors on viewport changes", () => {
+    useSchematicStore.getState().selectEntities(["symbol-1"]);
+
+    render(<DesignScreen />);
+
+    expect(screen.getByRole("dialog", { name: "Symbol properties" })).toBeInTheDocument();
+    expect(screen.getAllByText("R1")).toHaveLength(2);
+    expect(screen.getByText("10k")).toBeInTheDocument();
+    expect(screen.getByText("R_0603")).toBeInTheDocument();
+    expect(screen.getByText("Tolerance")).toBeInTheDocument();
+    expect(screen.getByText("1%")).toBeInTheDocument();
+    expect(screen.getByTestId("floating-properties-popover")).toHaveStyle({
+      left: "177px",
+      top: "50px",
+    });
+
+    act(() => {
+      useSchematicStore.getState().setViewport({ offsetX: 15, offsetY: 20, zoom: 3 });
+    });
+
+    expect(screen.getByTestId("floating-properties-popover")).toHaveStyle({
+      left: "267px",
+      top: "80px",
+    });
+  });
+
+  it("hides the popover for multi-select and empty selection", () => {
+    useSchematicStore.getState().selectEntities(["symbol-1"]);
+    render(<DesignScreen />);
+
+    act(() => {
+      useSchematicStore.getState().selectEntities(["symbol-1", "wire-1"]);
+    });
+    expect(screen.queryByRole("dialog", { name: "Symbol properties" })).not.toBeInTheDocument();
+
+    act(() => {
+      useSchematicStore.getState().clearSelection();
+    });
+    expect(screen.queryByRole("dialog", { name: "Symbol properties" })).not.toBeInTheDocument();
+  });
+
+  it("closes on click-away without clearing selection", async () => {
+    const user = userEvent.setup();
+    useSchematicStore.getState().selectEntities(["symbol-1"]);
+    render(<DesignScreen />);
+
+    await user.click(screen.getByTestId("floating-properties-backdrop"));
+
+    expect(screen.queryByRole("dialog", { name: "Symbol properties" })).not.toBeInTheDocument();
+    expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(new Set(["symbol-1"]));
+    expect(useSchematicStore.getState().chrome.popoverEntityId).toBeNull();
+  });
+
+  it("closes on Escape only when a text field is not focused", () => {
+    useSchematicStore.getState().selectEntities(["symbol-1"]);
+    render(<DesignScreen />);
+
+    const input = globalThis.document.createElement("input");
+    globalThis.document.body.append(input);
+    input.focus();
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(screen.getByRole("dialog", { name: "Symbol properties" })).toBeInTheDocument();
+
+    input.blur();
+    input.remove();
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(screen.queryByRole("dialog", { name: "Symbol properties" })).not.toBeInTheDocument();
+    expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(new Set(["symbol-1"]));
   });
 });
