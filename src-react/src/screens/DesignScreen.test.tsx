@@ -286,16 +286,16 @@ describe("DesignScreen schematic shell", () => {
     expect(screen.queryByRole("dialog", { name: "Symbol properties" })).not.toBeInTheDocument();
   });
 
-  it("closes on click-away without clearing selection", async () => {
+  it("keeps the popover open when the inert backdrop is clicked", async () => {
     const user = userEvent.setup();
     useSchematicStore.getState().selectEntities(["symbol-1"]);
     render(<DesignScreen />);
 
     await user.click(screen.getByTestId("floating-properties-backdrop"));
 
-    expect(screen.queryByRole("dialog", { name: "Symbol properties" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Symbol properties" })).toBeInTheDocument();
     expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(new Set(["symbol-1"]));
-    expect(useSchematicStore.getState().chrome.popoverEntityId).toBeNull();
+    expect(useSchematicStore.getState().chrome.popoverEntityId).toBe("symbol-1");
   });
 
   it("closes on Escape only when a text field is not focused", () => {

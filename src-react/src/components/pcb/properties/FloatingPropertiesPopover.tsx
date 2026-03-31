@@ -74,8 +74,6 @@ export function FloatingPropertiesPopover() {
   const bounds = useSchematicStore((s) =>
     popoverEntityId ? s.derived.hitTestCache.symbolBounds[popoverEntityId] ?? null : null,
   );
-  const setPopoverTarget = useSchematicStore((s) => s.setPopoverTarget);
-
   const symbol = getSelectedSymbol(popoverEntityId, selectedIds, document?.symbols ?? []);
 
   if (!symbol || !bounds) {
@@ -91,18 +89,13 @@ export function FloatingPropertiesPopover() {
       <button
         type="button"
         aria-label="Close symbol properties popover"
-        className="absolute inset-0 cursor-default bg-transparent"
+        className="pointer-events-none absolute inset-0 cursor-default bg-transparent"
         data-testid="floating-properties-backdrop"
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setPopoverTarget(null);
-        }}
       />
       <div
         role="dialog"
         aria-label="Symbol properties"
-        className="absolute w-72 rounded-lg border border-border-default bg-bg-secondary/95 shadow-2xl backdrop-blur"
+        className="pointer-events-auto absolute w-72 rounded-lg border border-border-default bg-bg-secondary/95 shadow-2xl backdrop-blur"
         data-testid="floating-properties-popover"
         style={{
           left: `${position.left}px`,
