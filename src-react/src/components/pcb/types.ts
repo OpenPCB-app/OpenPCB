@@ -4,7 +4,7 @@ import type {
   ProjectPoint,
   SchematicLabel,
   SchematicProjectDocument,
-  SchematicSymbol,
+  SchematicSymbol as SharedSchematicSymbol,
   SchematicWire,
 } from "@shared/types";
 
@@ -35,19 +35,21 @@ export type EntityType = "symbol" | "wire" | "label";
 export interface BaseEntity {
   id: string;
   position: Point;
-  rotation: Rotation;
-  mirrored: boolean;
+  rotation: number;
+  mirrored?: boolean;
 }
 
-export interface SymbolEntity
-  extends BaseEntity,
-    Omit<SchematicSymbol, "position" | "rotation" | "reference"> {
+export type EditorSchematicSymbol = SharedSchematicSymbol & {
   entityType: "symbol";
   symbolKind: SymbolKind;
+  mirrored?: boolean;
   reference: string;
+  rotation: number;
   value: string;
   pinCount?: number;
-}
+};
+
+export type SymbolEntity = EditorSchematicSymbol;
 
 export interface WireEntity extends BaseEntity, SchematicWire {
   entityType: "wire";
@@ -132,6 +134,88 @@ export interface PlacementSession {
   symbolKind: SymbolKind;
   rotation: Rotation;
   previewPosition: Point | null;
+}
+
+function inferSymbolKind(reference: string): SymbolKind {
+  const normalized = reference.trim().toUpperCase();
+
+  if (normalized.startsWith("R")) return "resistor";
+  if (normalized.startsWith("C")) return "capacitor";
+  if (normalized.startsWith("L")) return "inductor";
+  if (normalized.startsWith("D")) return "diode";
+  if (normalized.startsWith("Q")) return "npn";
+  if (normalized.startsWith("U")) return "generic_ic";
+  if (normalized.startsWith("J")) return "connector";
+
+  return "generic_ic";
+}
+
+function normalizeRotationValue(rotation: number | undefined): number {
+  if (typeof rotation !== "number" || !Number.isFinite(rotation)) {
+    return 0;
+  }
+
+  return rotation;
+}
+
+function normalizeReferenceValue(reference: string | null | undefined, fallbackId: string): string {
+  if (typeof reference === "string" && reference.trim().length > 0) {
+    return reference;
+  }
+
+  return fallbackId;
+}
+
+export function normalizeSymbolEntity(symbol: SymbolEntity): SymbolEntity {
+  return {
+    ...symbol,
+    rotation: normalizeRotationValue(symbol.rotation),
+    mirrored: symbol.mirrored ?? false,
+    reference: normalizeReferenceValue(symbol.reference, symbol.id),
+  };
+}
+
+export function toEditorSchematicSymbol(symbol: SharedSchematicSymbol): SymbolEntity {
+  const reference = normalizeReferenceValue(symbol.reference, symbol.id);
+
+  return normalizeSymbolEntity({
+    ...symbol,
+    entityType: "symbol",
+    symbolKind: inferSymbolKind(reference),
+    reference,
+    rotation: normalizeRotationValue(symbol.rotation),
+    mirrored: false,
+    value: symbol.properties?.value ?? "",
+  });
+}
+
+export function toEditorSchematicDocument(document: SchematicProjectDocument): SchematicDocument {
+  return normalizeSchematicDocument({
+    ...document,
+    name: document.title ?? "Untitled schematic",
+    revision: document.version,
+    symbols: document.symbols.map(toEditorSchematicSymbol),
+    wires: document.wires.map((wire) => ({
+      ...wire,
+      entityType: "wire",
+      position: wire.points[0] ?? { x: 0, y: 0 },
+      rotation: 0,
+      mirrored: false,
+    })),
+    labels: document.labels.map((label) => ({
+      ...label,
+      entityType: "label",
+      rotation: normalizeRotationValue(label.rotation),
+      mirrored: false,
+    })),
+  });
+}
+
+export function normalizeSchematicDocument(document: SchematicDocument): SchematicDocument {
+  return {
+    ...document,
+    symbols: document.symbols.map(normalizeSymbolEntity),
+  };
 }
 
 export interface WireSession {

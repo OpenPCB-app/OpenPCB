@@ -194,7 +194,7 @@ function normalizeRotation(rotation: number): 0 | 90 | 180 | 270 {
 }
 
 export function transformSymbolLocalPoint(symbol: SymbolEntity, point: Point): Point {
-    const mirroredPoint = symbol.mirrored ? { x: -point.x, y: point.y } : point;
+    const mirroredPoint = symbol.mirrored === true ? { x: -point.x, y: point.y } : point;
 
     switch (normalizeRotation(symbol.rotation)) {
         case 90:
@@ -252,7 +252,7 @@ function applySymbolTransform(
 
     ctx.translate(origin.x, origin.y);
     ctx.rotate((normalizeRotation(symbol.rotation) * Math.PI) / 180);
-    ctx.scale(viewport.zoom * (symbol.mirrored ? -1 : 1), viewport.zoom);
+    ctx.scale(viewport.zoom * (symbol.mirrored === true ? -1 : 1), viewport.zoom);
     ctx.lineWidth = STROKE_WIDTH_PX / Math.max(viewport.zoom, Number.EPSILON);
     ctx.lineJoin = "round";
     ctx.lineCap = "round";

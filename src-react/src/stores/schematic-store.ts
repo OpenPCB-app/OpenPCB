@@ -1,5 +1,10 @@
 import { create } from "zustand";
 import { createSymbolEntity } from "@/components/pcb/symbol-library";
+import {
+  normalizeSchematicDocument,
+  toEditorSchematicDocument,
+} from "@/components/pcb/types";
+import type { SchematicProjectDocument } from "@shared/types";
 import type {
   Bounds,
   DerivedConnectivity,
@@ -54,7 +59,7 @@ interface SchematicState {
   selectAll: () => void;
   setPopoverTarget: (id: string | null) => void;
 
-  setDocument: (doc: SchematicDocument) => void;
+  setDocument: (doc: SchematicDocument | SchematicProjectDocument) => void;
   setProjectContext: (projectId: string | null, sheetId: string | null) => void;
   setConnectivity: (conn: DerivedConnectivity | null) => void;
   setDocumentBounds: (bounds: Bounds | null) => void;
@@ -448,16 +453,26 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
     })),
 
   setDocument: (document) =>
-    set((state) => ({
+    set((state) => {
+      const normalizedDocument =
+        "name" in document
+          ? normalizeSchematicDocument(document)
+          : toEditorSchematicDocument(document);
+
+      return {
       persisted: {
         ...state.persisted,
-        document,
+        document: normalizedDocument,
       },
       chrome: {
         ...state.chrome,
-        popoverEntityId: derivePopoverTargetId(document, state.chrome.selectedEntityIds),
+        popoverEntityId: derivePopoverTargetId(
+          normalizedDocument,
+          state.chrome.selectedEntityIds,
+        ),
       },
-    })),
+      };
+    }),
 
   setProjectContext: (projectId, sheetId) =>
     set((state) => ({
