@@ -141,6 +141,35 @@ describe("useSchematicStore", () => {
     expect(Math.abs(worldAfter.y - worldBefore.y)).toBeLessThanOrEqual(1e-9);
   });
 
+  it("resetViewport restores the default viewport", () => {
+    const state = useSchematicStore.getState();
+
+    state.setViewport({ offsetX: 120, offsetY: -80, zoom: 3 });
+    state.resetViewport();
+
+    expect(useSchematicStore.getState().chrome.viewport).toEqual({
+      offsetX: 0,
+      offsetY: 0,
+      zoom: 1,
+    });
+  });
+
+  it("rejects invalid viewport zoom values", () => {
+    const state = useSchematicStore.getState();
+
+    expect(() => state.setViewport({ offsetX: 0, offsetY: 0, zoom: 0.049 })).toThrow(RangeError);
+    expect(() => state.setViewport({ offsetX: 0, offsetY: 0, zoom: 50.1 })).toThrow(RangeError);
+    expect(() => state.setViewport({ offsetX: 0, offsetY: 0, zoom: Number.NaN })).toThrow(RangeError);
+  });
+
+  it("rejects invalid grid sizes", () => {
+    const state = useSchematicStore.getState();
+
+    expect(() => state.setGridSize(0)).toThrow(RangeError);
+    expect(() => state.setGridSize(-1)).toThrow(RangeError);
+    expect(() => state.setGridSize(Number.POSITIVE_INFINITY)).toThrow(RangeError);
+  });
+
   it("keeps placement previews ephemeral and clears them through cancelSession", () => {
     const state = useSchematicStore.getState();
     const documentCountsBefore = {

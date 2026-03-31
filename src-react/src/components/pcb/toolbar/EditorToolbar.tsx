@@ -49,7 +49,7 @@ export function EditorToolbar({ controller }: EditorToolbarProps) {
   const showGrid = useSchematicStore((s) => s.chrome.showGrid);
   const toggleGrid = useSchematicStore((s) => s.toggleGrid);
   const zoomAt = useSchematicStore((s) => s.zoomAt);
-  const fitToContent = useSchematicStore((s) => s.fitToContent);
+  const resetViewport = useSchematicStore((s) => s.resetViewport);
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -156,7 +156,7 @@ export function EditorToolbar({ controller }: EditorToolbarProps) {
                 variant="ghost"
                 size="sm"
                 className="h-7 w-7 p-0"
-                onClick={fitToContent}
+                onClick={resetViewport}
               >
                 <Maximize2 className="h-4 w-4" />
               </Button>

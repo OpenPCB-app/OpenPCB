@@ -36,7 +36,7 @@ interface SchematicState {
   setViewport: (viewport: Viewport) => void;
   pan: (dx: number, dy: number) => void;
   zoomAt: (centerX: number, centerY: number, factor: number) => void;
-  fitToContent: () => void;
+  resetViewport: () => void;
 
   activateTool: (tool: ToolMode) => void;
   beginPlacement: (kind: SymbolKind) => void;
@@ -151,13 +151,18 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   chrome: INITIAL_CHROME_STATE,
   session: null,
 
-  setViewport: (viewport) =>
+  setViewport: (viewport) => {
+    if (!Number.isFinite(viewport.zoom) || viewport.zoom < 0.05 || viewport.zoom > 50) {
+      throw new RangeError(`Invalid viewport.zoom: ${viewport.zoom}. Must be between 0.05 and 50.`);
+    }
+
     set((state) => ({
       chrome: {
         ...state.chrome,
         viewport,
       },
-    })),
+    }));
+  },
 
   pan: (dx, dy) =>
     set((state) => ({
@@ -188,7 +193,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       };
     }),
 
-  fitToContent: () =>
+  resetViewport: () =>
     set((state) => ({
       chrome: {
         ...state.chrome,
@@ -487,13 +492,18 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       },
     })),
 
-  setGridSize: (gridSize) =>
+  setGridSize: (gridSize) => {
+    if (!Number.isFinite(gridSize) || gridSize <= 0) {
+      throw new RangeError(`Invalid gridSize: ${gridSize}. Must be positive finite number.`);
+    }
+
     set((state) => ({
       chrome: {
         ...state.chrome,
         gridSize,
       },
-    })),
+    }));
+  },
 
   toggleGrid: () =>
     set((state) => ({
