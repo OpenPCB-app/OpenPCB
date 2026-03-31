@@ -460,6 +460,7 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
   return (
     <div
       ref={containerRef}
+      data-testid="schematic-canvas-surface"
       className="relative h-full w-full overflow-hidden bg-background"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -467,6 +468,7 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
     >
       <canvas
         ref={canvasRef}
+        data-testid="schematic-canvas"
         className="absolute inset-0 cursor-crosshair"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}

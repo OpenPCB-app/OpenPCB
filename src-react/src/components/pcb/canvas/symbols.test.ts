@@ -4,6 +4,7 @@ import {
   getSymbolBodyBounds,
   getWorldConnectorAnchors,
   renderSymbol,
+  transformSymbolLocalPoint,
 } from "./symbols";
 
 function createContextRecorder() {
@@ -113,5 +114,38 @@ describe("symbol helpers", () => {
     expect(arcs).toHaveLength(2);
     expect(arcs[0]).toMatchObject({ x: 0, y: 0 });
     expect(arcs[1]).toMatchObject({ x: 1_270_000, y: 0 });
+  });
+
+  it("transforms mirrored points and normalizes unsupported rotations", () => {
+    expect(
+      transformSymbolLocalPoint(
+        {
+          ...symbol,
+          mirrored: true,
+          rotation: 180,
+        },
+        { x: 100_000, y: 50_000 },
+      ),
+    ).toEqual({ x: 1_370_000, y: 2_490_000 });
+
+    expect(
+      transformSymbolLocalPoint(
+        {
+          ...symbol,
+          rotation: 45 as unknown as 0,
+          mirrored: false,
+        },
+        { x: 100_000, y: 50_000 },
+      ),
+    ).toEqual({ x: 1_370_000, y: 2_590_000 });
+  });
+
+  it("uses preview opacity for ghost symbols", () => {
+    const { ctx, getTransform } = createContextRecorder();
+
+    renderSymbol(ctx, symbol, viewport, { preview: true });
+
+    expect(ctx.globalAlpha).toBe(0.75);
+    expect(getTransform()).toEqual({ x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 });
   });
 });

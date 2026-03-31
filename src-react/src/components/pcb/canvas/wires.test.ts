@@ -4,6 +4,7 @@ import {
   buildOrthogonalWirePath,
   collapseRedundantWirePoints,
   deriveWireJunctions,
+  getWireLength,
 } from "./wires";
 
 describe("wire routing helpers", () => {
@@ -69,5 +70,43 @@ describe("wire routing helpers", () => {
         wireIds: ["wire-a", "wire-b"],
       },
     ]);
+  });
+
+  it("dedupes repeated points and measures orthogonal wire length", () => {
+    const points = collapseRedundantWirePoints([
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 1_270_000, y: 0 },
+      { x: 1_270_000, y: 1_270_000 },
+      { x: 1_270_000, y: 1_270_000 },
+    ]);
+
+    expect(points).toEqual([
+      { x: 0, y: 0 },
+      { x: 1_270_000, y: 0 },
+      { x: 1_270_000, y: 1_270_000 },
+    ]);
+    expect(getWireLength(points)).toBe(2_540_000);
+  });
+
+  it("ignores isolated wire endpoints when deriving junctions", () => {
+    expect(
+      deriveWireJunctions([
+        {
+          id: "wire-a",
+          points: [
+            { x: 0, y: 0 },
+            { x: 1_270_000, y: 0 },
+          ],
+        },
+        {
+          id: "wire-b",
+          points: [
+            { x: 2_540_000, y: 0 },
+            { x: 3_810_000, y: 0 },
+          ],
+        },
+      ]),
+    ).toEqual([]);
   });
 });

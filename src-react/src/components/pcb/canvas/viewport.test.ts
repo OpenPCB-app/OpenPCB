@@ -68,4 +68,24 @@ describe("viewport transforms", () => {
     );
     expect(() => snapToGrid({ x: 0, y: 0 }, 0)).toThrow(/gridSize/);
   });
+
+  it("snaps negative coordinates and enforces tolerance boundaries", () => {
+    expect(snapToGrid({ x: -900_000, y: -1_800_000 }, 1_270_000)).toEqual({
+      x: -1_270_000,
+      y: -1_270_000,
+    });
+
+    expect(
+      isWithinRoundTripTolerance(
+        { x: 10, y: 10 },
+        { x: 10 + SCHEMATIC_ROUND_TRIP_TOLERANCE_NM, y: 10 },
+      ),
+    ).toBe(true);
+    expect(
+      isWithinRoundTripTolerance(
+        { x: 10, y: 10 },
+        { x: 10 + SCHEMATIC_ROUND_TRIP_TOLERANCE_NM * 2, y: 10 },
+      ),
+    ).toBe(false);
+  });
 });

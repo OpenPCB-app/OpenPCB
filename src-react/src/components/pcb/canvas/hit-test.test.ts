@@ -79,4 +79,62 @@ describe("hitTestScreen", () => {
       pinId: "pin-1",
     });
   });
+
+  it("prefers the closest connector when multiple anchors overlap the hit radius", () => {
+    const baseSymbol = symbols[0];
+    if (!baseSymbol) {
+      throw new Error("missing symbol fixture");
+    }
+
+    const crowdedSymbols: SymbolEntity[] = [
+      {
+        ...baseSymbol,
+        id: "symbol-2",
+        position: { x: 0, y: 127_000 },
+        pins: [{ id: "pin-3", name: "1", position: { x: 0, y: 0 } }],
+      },
+      baseSymbol,
+    ];
+    const cache = createHitTestCache(crowdedSymbols);
+    const nearestConnector = schematicToScreen(0, 0, viewport);
+
+    expect(
+      hitTestScreen(
+        nearestConnector.x + 4,
+        nearestConnector.y + 4,
+        crowdedSymbols,
+        viewport,
+        cache,
+      ),
+    ).toEqual({
+      kind: "connector",
+      symbolId: "symbol-1",
+      pinId: "pin-1",
+    });
+  });
+
+  it("prefers the last drawn symbol body when bounds overlap", () => {
+    const baseSymbol = symbols[0];
+    if (!baseSymbol) {
+      throw new Error("missing symbol fixture");
+    }
+
+    const overlappingSymbols: SymbolEntity[] = [
+      baseSymbol,
+      {
+        ...baseSymbol,
+        id: "symbol-2",
+        reference: "R2",
+      },
+    ];
+    const cache = createHitTestCache(overlappingSymbols);
+    const bodyPoint = schematicToScreen(635_000, 0, viewport);
+
+    expect(
+      hitTestScreen(bodyPoint.x, bodyPoint.y + 11, overlappingSymbols, viewport, cache),
+    ).toEqual({
+      kind: "body",
+      symbolId: "symbol-2",
+    });
+  });
 });
