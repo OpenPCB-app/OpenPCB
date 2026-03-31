@@ -10,32 +10,79 @@ import {
 function createContextRecorder() {
   const arcs: Array<{ x: number; y: number; radius: number }> = [];
   const operations: string[] = [];
-  const transformStack: Array<{ x: number; y: number; rotation: number; scaleX: number; scaleY: number }> = [];
-  let currentTransform = { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 };
+  const globalAlphaWrites: number[] = [];
+  const defaultTransform = { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 };
+  type ContextState = {
+    transform: typeof defaultTransform;
+    globalAlpha: number;
+    strokeStyle: string;
+    fillStyle: string;
+    lineWidth: number;
+  };
+  const cloneState = (state: ContextState): ContextState => ({
+    ...state,
+    transform: { ...state.transform },
+  });
+  const stateStack: ContextState[] = [
+    {
+      transform: { ...defaultTransform },
+      globalAlpha: 1,
+      strokeStyle: "",
+      fillStyle: "",
+      lineWidth: 1,
+    },
+  ];
+  const getCurrentState = () => stateStack[stateStack.length - 1]!;
 
   const ctx = {
-    strokeStyle: "",
-    fillStyle: "",
-    lineWidth: 1,
-    globalAlpha: 1,
     save() {
-      transformStack.push({ ...currentTransform });
+      stateStack.push(cloneState(getCurrentState()));
     },
     restore() {
-      currentTransform = transformStack.pop() ?? currentTransform;
+      if (stateStack.length > 1) {
+        stateStack.pop();
+      }
     },
     translate(x: number, y: number) {
-      currentTransform = { ...currentTransform, x: currentTransform.x + x, y: currentTransform.y + y };
+      const state = getCurrentState();
+      state.transform = { ...state.transform, x: state.transform.x + x, y: state.transform.y + y };
     },
     rotate(rotation: number) {
-      currentTransform = { ...currentTransform, rotation: currentTransform.rotation + rotation };
+      const state = getCurrentState();
+      state.transform = { ...state.transform, rotation: state.transform.rotation + rotation };
     },
     scale(scaleX: number, scaleY: number) {
-      currentTransform = {
-        ...currentTransform,
-        scaleX: currentTransform.scaleX * scaleX,
-        scaleY: currentTransform.scaleY * scaleY,
+      const state = getCurrentState();
+      state.transform = {
+        ...state.transform,
+        scaleX: state.transform.scaleX * scaleX,
+        scaleY: state.transform.scaleY * scaleY,
       };
+    },
+    get strokeStyle() {
+      return getCurrentState().strokeStyle;
+    },
+    set strokeStyle(value: string | CanvasGradient | CanvasPattern) {
+      getCurrentState().strokeStyle = String(value);
+    },
+    get fillStyle() {
+      return getCurrentState().fillStyle;
+    },
+    set fillStyle(value: string | CanvasGradient | CanvasPattern) {
+      getCurrentState().fillStyle = String(value);
+    },
+    get lineWidth() {
+      return getCurrentState().lineWidth;
+    },
+    set lineWidth(value: number) {
+      getCurrentState().lineWidth = value;
+    },
+    get globalAlpha() {
+      return getCurrentState().globalAlpha;
+    },
+    set globalAlpha(value: number) {
+      getCurrentState().globalAlpha = value;
+      globalAlphaWrites.push(value);
     },
     beginPath() {
       operations.push("beginPath");
@@ -63,7 +110,13 @@ function createContextRecorder() {
     },
   } as unknown as CanvasRenderingContext2D;
 
-  return { ctx, arcs, operations, getTransform: () => currentTransform };
+  return {
+    ctx,
+    arcs,
+    operations,
+    globalAlphaWrites,
+    getTransform: () => ({ ...getCurrentState().transform }),
+  };
 }
 
 const symbol: SymbolEntity = {
@@ -141,11 +194,42 @@ describe("symbol helpers", () => {
   });
 
   it("uses preview opacity for ghost symbols", () => {
-    const { ctx, getTransform } = createContextRecorder();
+    const { ctx, getTransform, globalAlphaWrites } = createContextRecorder();
 
     renderSymbol(ctx, symbol, viewport, { preview: true });
 
-    expect(ctx.globalAlpha).toBe(0.75);
+    expect(globalAlphaWrites).toContain(0.75);
+    expect(ctx.globalAlpha).toBe(1);
     expect(getTransform()).toEqual({ x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 });
+  });
+
+  it("restores drawing state after save and restore", () => {
+    const { ctx } = createContextRecorder();
+
+    ctx.strokeStyle = "#123456";
+    ctx.fillStyle = "#654321";
+    ctx.lineWidth = 3;
+    ctx.globalAlpha = 0.6;
+
+    ctx.save();
+    ctx.strokeStyle = "#abcdef";
+    ctx.fillStyle = "#fedcba";
+    ctx.lineWidth = 7;
+    ctx.globalAlpha = 0.25;
+    ctx.restore();
+
+    expect(ctx.strokeStyle).toBe("#123456");
+    expect(ctx.fillStyle).toBe("#654321");
+    expect(ctx.lineWidth).toBe(3);
+    expect(ctx.globalAlpha).toBe(0.6);
+  });
+
+  it("does not leak preview drawing state after restore", () => {
+    const { ctx } = createContextRecorder();
+
+    ctx.globalAlpha = 0.4;
+    renderSymbol(ctx, symbol, viewport, { preview: true });
+
+    expect(ctx.globalAlpha).toBe(0.4);
   });
 });
