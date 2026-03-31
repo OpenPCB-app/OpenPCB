@@ -9,10 +9,16 @@ import {
 } from "./viewport";
 import { createHitTestCache, hitTestScreen } from "./hit-test";
 import { renderSymbol } from "./symbols";
+import { buildOrthogonalWirePath, renderJunctions, renderWire } from "./wires";
+import {
+  createPreviewSymbol,
+  PALETTE_SYMBOL_KIND_MIME,
+} from "../symbol-library";
 import {
   useSchematicInteractionController,
   type SchematicInteractionController,
 } from "../useSchematicInteractionController";
+import type { Point, SymbolKind } from "../types";
 
 interface SchematicCanvasProps {
   controller?: SchematicInteractionController;
@@ -34,6 +40,48 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
   const session = useSchematicStore((s) => s.session);
   const setHitTestCache = useSchematicStore((s) => s.setHitTestCache);
   const document = useSchematicStore((s) => s.persisted.document);
+
+  const getSnappedPlacementPosition = useCallback(
+    (clientX: number, clientY: number): Point | null => {
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        return null;
+      }
+
+      const screenPoint = domEventToScreen(
+        clientX,
+        clientY,
+        canvas.getBoundingClientRect(),
+      );
+      const worldPoint = screenToSchematic(screenPoint.x, screenPoint.y, viewport);
+
+      return snapToGrid(worldPoint, gridSize);
+    },
+    [gridSize, viewport],
+  );
+
+  const updatePlacementPreviewFromClient = useCallback(
+    (clientX: number, clientY: number): Point | null => {
+      const snappedPoint = getSnappedPlacementPosition(clientX, clientY);
+      interactionController.updatePlacementPreview(snappedPoint);
+      return snappedPoint;
+    },
+    [getSnappedPlacementPosition, interactionController],
+  );
+
+  const readDraggedSymbolKind = useCallback(
+    (dataTransfer: DataTransfer | null): SymbolKind | null => {
+      const dragKind =
+        dataTransfer?.getData(PALETTE_SYMBOL_KIND_MIME) ||
+        dataTransfer?.getData("text/plain");
+      if (dragKind) {
+        return dragKind as SymbolKind;
+      }
+
+      return session?.type === "placement" ? session.symbolKind : null;
+    },
+    [session],
+  );
 
   // Resize canvas to fill container
   const resizeCanvas = useCallback(() => {
@@ -81,9 +129,38 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
     if (document) {
       const selectedIds = store.chrome.selectedEntityIds;
 
+      for (const wire of document.wires) {
+        renderWire(ctx, wire.points, store.chrome.viewport, {
+          selected: selectedIds.has(wire.id),
+        });
+      }
+
+      if (store.derived.connectivity?.junctions.length) {
+        renderJunctions(ctx, store.derived.connectivity.junctions, store.chrome.viewport);
+      }
+
       for (const symbol of document.symbols) {
         renderSymbol(ctx, symbol, store.chrome.viewport, {
           selected: selectedIds.has(symbol.id),
+        });
+      }
+
+      if (store.session?.type === "placement" && store.session.previewPosition) {
+        renderSymbol(
+          ctx,
+          createPreviewSymbol(
+            store.session.symbolKind,
+            store.session.previewPosition,
+            store.session.rotation,
+          ),
+          store.chrome.viewport,
+          { preview: true },
+        );
+      }
+
+      if (store.session?.type === "wire") {
+        renderWire(ctx, store.session.previewPoints, store.chrome.viewport, {
+          preview: true,
         });
       }
 
@@ -177,6 +254,16 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
         return;
       }
 
+      if (session?.type === "placement") {
+        const snappedPoint = getSnappedPlacementPosition(e.clientX, e.clientY);
+        if (!snappedPoint) {
+          return;
+        }
+
+        interactionController.commitPlacement(snappedPoint);
+        return;
+      }
+
       const canvas = canvasRef.current;
       if (!canvas) {
         return;
@@ -202,12 +289,22 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
         store.derived.hitTestCache,
       );
 
-      if (hit?.kind === "connector" && store.chrome.activeTool === "select") {
+      if (store.session?.type === "wire") {
+        if (hit?.kind === "connector") {
+          interactionController.commitWire(hit.pinId);
+        }
+        return;
+      }
+
+      if (
+        hit?.kind === "connector" &&
+        (store.chrome.activeTool === "select" || store.chrome.activeTool === "wire")
+      ) {
         interactionController.beginWire(hit.pinId);
         return;
       }
 
-      if (hit?.kind === "body") {
+      if (hit?.kind === "body" && store.chrome.activeTool === "select") {
         store.selectEntities([hit.symbolId]);
         return;
       }
@@ -216,7 +313,7 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
         store.clearSelection();
       }
     },
-    [interactionController],
+    [getSnappedPlacementPosition, interactionController, session],
   );
 
   const handleMouseMove = useCallback(
@@ -235,18 +332,52 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
       }
 
       if (session?.type === "placement") {
+        updatePlacementPreviewFromClient(e.clientX, e.clientY);
+        return;
+      }
+
+      if (session?.type === "wire") {
+        const store = useSchematicStore.getState();
+        const document = store.persisted.document;
+        if (!document) {
+          return;
+        }
+
         const screenPoint = domEventToScreen(
           e.clientX,
           e.clientY,
           canvas.getBoundingClientRect(),
         );
-        const worldPoint = screenToSchematic(screenPoint.x, screenPoint.y, viewport);
-        interactionController.updatePlacementPreview(
-          snapToGrid(worldPoint, gridSize),
+        const hoveredHit = hitTestScreen(
+          screenPoint.x,
+          screenPoint.y,
+          document.symbols,
+          store.chrome.viewport,
+          store.derived.hitTestCache,
+        );
+        const sourcePoint = store.derived.hitTestCache.connectorAnchors[session.sourcePinId];
+        if (!sourcePoint) {
+          interactionController.updateWirePreview([], null);
+          return;
+        }
+
+        const cursorPoint = screenToSchematic(screenPoint.x, screenPoint.y, viewport);
+        const targetPinId =
+          hoveredHit?.kind === "connector" && hoveredHit.pinId !== session.sourcePinId
+            ? hoveredHit.pinId
+            : null;
+        const targetPoint =
+          targetPinId && store.derived.hitTestCache.connectorAnchors[targetPinId]
+            ? store.derived.hitTestCache.connectorAnchors[targetPinId]
+            : cursorPoint;
+
+        interactionController.updateWirePreview(
+          buildOrthogonalWirePath(sourcePoint, targetPoint),
+          targetPinId,
         );
       }
     },
-    [gridSize, interactionController, pan, session, viewport],
+    [interactionController, pan, session, updatePlacementPreviewFromClient, viewport],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -259,6 +390,56 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
       interactionController.updatePlacementPreview(null);
     }
   }, [interactionController, session]);
+
+  const handleDragOver = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      const kind = readDraggedSymbolKind(event.dataTransfer);
+      if (!kind) {
+        return;
+      }
+
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      updatePlacementPreviewFromClient(event.clientX, event.clientY);
+    },
+    [readDraggedSymbolKind, updatePlacementPreviewFromClient],
+  );
+
+  const handleDragLeave = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      const nextTarget = event.relatedTarget;
+      if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+        return;
+      }
+
+      interactionController.updatePlacementPreview(null);
+    },
+    [interactionController],
+  );
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      const kind = readDraggedSymbolKind(event.dataTransfer);
+      if (!kind) {
+        return;
+      }
+
+      event.preventDefault();
+      const snappedPoint = getSnappedPlacementPosition(event.clientX, event.clientY);
+      interactionController.updatePlacementPreview(null);
+      if (!snappedPoint) {
+        return;
+      }
+
+      interactionController.beginPlacement(kind);
+      interactionController.commitPlacement(snappedPoint);
+    },
+    [
+      getSnappedPlacementPosition,
+      interactionController,
+      readDraggedSymbolKind,
+    ],
+  );
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
@@ -280,6 +461,9 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
     <div
       ref={containerRef}
       className="relative h-full w-full overflow-hidden bg-background"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       <canvas
         ref={canvasRef}

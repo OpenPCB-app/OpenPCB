@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { createSymbolEntity } from "@/components/pcb/symbol-library";
 import type {
   Bounds,
   DerivedConnectivity,
@@ -11,7 +12,14 @@ import type {
   SymbolKind,
   ToolMode,
   Viewport,
+  WireEntity,
 } from "@/components/pcb/types";
+import {
+  buildOrthogonalWirePath,
+  deriveWireJunctions,
+  getWireLength,
+} from "@/components/pcb/canvas/wires";
+import { transformSymbolLocalPoint } from "@/components/pcb/canvas/symbols";
 
 interface PersistedDocumentState {
   document: SchematicDocument | null;
@@ -33,9 +41,11 @@ interface SchematicState {
   activateTool: (tool: ToolMode) => void;
   beginPlacement: (kind: SymbolKind) => void;
   setPlacementPreview: (position: { x: number; y: number } | null) => void;
+  commitPlacement: (position: { x: number; y: number }) => void;
   rotatePlacement: () => void;
   beginWire: (sourcePinId: string) => void;
   updateWirePreview: (points: Array<{ x: number; y: number }>, targetPinId?: string | null) => void;
+  commitWire: (targetPinId: string) => boolean;
   cancelSession: () => void;
 
   selectEntities: (ids: string[]) => void;
@@ -102,6 +112,33 @@ function updateSelection(ids: string[], document: SchematicDocument | null) {
     selectedEntityIds,
     popoverEntityId: derivePopoverTargetId(document, selectedEntityIds),
   };
+}
+
+function findPinAnchor(
+  document: SchematicDocument,
+  pinId: string,
+): { x: number; y: number } | null {
+  for (const symbol of document.symbols) {
+    const pin = symbol.pins.find((candidate) => candidate.id === pinId);
+    if (!pin) {
+      continue;
+    }
+
+    return transformSymbolLocalPoint(symbol, pin.position);
+  }
+
+  return null;
+}
+
+function deriveConnectivity(document: SchematicDocument): DerivedConnectivity {
+  return {
+    nets: [],
+    junctions: deriveWireJunctions(document.wires),
+  };
+}
+
+function createWireId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `wire-${Date.now()}`;
 }
 
 export const useSchematicStore = create<SchematicState>((set, get) => ({
@@ -196,6 +233,38 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       };
     }),
 
+  commitPlacement: (position) =>
+    set((state) => {
+      const document = state.persisted.document;
+      if (state.session?.type !== "placement" || !document) {
+        return state;
+      }
+
+      const symbol = createSymbolEntity(
+        state.session.symbolKind,
+        position,
+        state.session.rotation,
+        document.symbols,
+      );
+      const nextDocument = {
+        ...document,
+        symbols: [...document.symbols, symbol],
+      };
+
+      return {
+        persisted: {
+          ...state.persisted,
+          document: nextDocument,
+        },
+        chrome: {
+          ...state.chrome,
+          activeTool: "select",
+          ...updateSelection([symbol.id], nextDocument),
+        },
+        session: null,
+      };
+    }),
+
   rotatePlacement: () =>
     set((state) => {
       const placementRotation = ((state.chrome.placementRotation + 90) % 360) as Rotation;
@@ -244,6 +313,63 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         },
       };
     }),
+
+  commitWire: (targetPinId) => {
+    let didCommit = false;
+
+    set((state) => {
+      if (state.session?.type !== "wire") {
+        return state;
+      }
+
+      const document = state.persisted.document;
+      if (!document || state.session.sourcePinId === targetPinId) {
+        return state;
+      }
+
+      const sourcePoint = findPinAnchor(document, state.session.sourcePinId);
+      const targetPoint = findPinAnchor(document, targetPinId);
+      if (!sourcePoint || !targetPoint) {
+        return state;
+      }
+
+      const points = buildOrthogonalWirePath(sourcePoint, targetPoint);
+      if (points.length < 2 || getWireLength(points) <= 0) {
+        return state;
+      }
+
+      const nextWire: WireEntity = {
+        id: createWireId(),
+        entityType: "wire",
+        position: points[0]!,
+        rotation: 0,
+        mirrored: false,
+        points,
+        sourcePinId: state.session.sourcePinId,
+        targetPinId,
+        net: null,
+      };
+      const nextDocument = {
+        ...document,
+        wires: [...document.wires, nextWire],
+      };
+      didCommit = true;
+
+      return {
+        persisted: {
+          ...state.persisted,
+          document: nextDocument,
+        },
+        derived: {
+          ...state.derived,
+          connectivity: deriveConnectivity(nextDocument),
+        },
+        session: null,
+      };
+    });
+
+    return didCommit;
+  },
 
   cancelSession: () =>
     set((state) => ({

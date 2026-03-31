@@ -11,6 +11,7 @@ import {
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSchematicStore } from "@/stores/schematic-store";
+import { PALETTE_SYMBOL_KIND_MIME } from "../symbol-library";
 import type { SymbolKind } from "../types";
 import {
   useSchematicInteractionController,
@@ -156,8 +157,11 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
                       onClick={() => handleBeginPlacement(item.kind)}
                       onDragStart={(event) => {
                         event.dataTransfer.effectAllowed = "copy";
+                        event.dataTransfer.setData(PALETTE_SYMBOL_KIND_MIME, item.kind);
+                        event.dataTransfer.setData("text/plain", item.kind);
                         interactionController.beginPlacement(item.kind);
                       }}
+                      onDragEnd={() => interactionController.cancelSession()}
                     >
                       <span className="w-4 text-center text-[10px] font-mono text-muted-foreground">
                         {item.prefix}

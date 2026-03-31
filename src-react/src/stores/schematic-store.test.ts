@@ -28,6 +28,21 @@ const TEST_DOCUMENT: SchematicDocument = {
       ],
       properties: {},
     },
+    {
+      id: "symbol-2",
+      entityType: "symbol",
+      symbolKind: "connector",
+      reference: "J1",
+      value: "HDR2",
+      position: { x: 1_905_000, y: 635_000 },
+      rotation: 0,
+      mirrored: false,
+      pins: [
+        { id: "pin-3", name: "1", position: { x: 0, y: 635_000 } },
+        { id: "pin-4", name: "2", position: { x: 0, y: -635_000 } },
+      ],
+      properties: {},
+    },
   ],
   wires: [
     {
@@ -155,6 +170,28 @@ describe("useSchematicStore", () => {
     }).toEqual(documentCountsBefore);
   });
 
+  it("commits placement once at the snapped position and exits the session", () => {
+    const state = useSchematicStore.getState();
+
+    state.beginPlacement("capacitor");
+    state.setPlacementPreview({ x: 1_270_000, y: 2_540_000 });
+    state.commitPlacement({ x: 1_270_000, y: 2_540_000 });
+
+    const nextState = useSchematicStore.getState();
+    expect(nextState.session).toBeNull();
+    expect(nextState.chrome.activeTool).toBe("select");
+    expect(nextState.persisted.document?.symbols).toHaveLength(3);
+    expect(nextState.persisted.document?.symbols[2]).toMatchObject({
+      entityType: "symbol",
+      symbolKind: "capacitor",
+      position: { x: 1_270_000, y: 2_540_000 },
+      rotation: 0,
+    });
+    expect(nextState.chrome.selectedEntityIds).toEqual(
+      new Set([nextState.persisted.document?.symbols[2]?.id]),
+    );
+  });
+
   it("starts wire sessions through beginWire without mutating the document", () => {
     const state = useSchematicStore.getState();
     const document = state.persisted.document;
@@ -175,6 +212,91 @@ describe("useSchematicStore", () => {
       targetPinId: null,
     });
     expect(useSchematicStore.getState().persisted.document).toBe(document);
+  });
+
+  it("commits orthogonal wires between connectors and clears the session", () => {
+    const state = useSchematicStore.getState();
+
+    state.beginWire("pin-2");
+
+    expect(state.commitWire("pin-3")).toBe(true);
+
+    const nextState = useSchematicStore.getState();
+    const committedWire = nextState.persisted.document?.wires.at(-1);
+
+    expect(committedWire).toMatchObject({
+      sourcePinId: "pin-2",
+      targetPinId: "pin-3",
+      points: [
+        { x: 1_270_000, y: 0 },
+        { x: 1_905_000, y: 0 },
+        { x: 1_905_000, y: 1_270_000 },
+      ],
+    });
+    expect(nextState.session).toBeNull();
+  });
+
+  it("rejects same-connector and zero-length wire commits", () => {
+    const state = useSchematicStore.getState();
+
+    state.beginWire("pin-1");
+    expect(state.commitWire("pin-1")).toBe(false);
+    expect(useSchematicStore.getState().persisted.document?.wires).toHaveLength(1);
+    expect(useSchematicStore.getState().session).toMatchObject({
+      type: "wire",
+      sourcePinId: "pin-1",
+    });
+
+    useSchematicStore.setState((current) => ({
+      ...current,
+      persisted: {
+        ...current.persisted,
+        document: current.persisted.document
+          ? {
+              ...current.persisted.document,
+              symbols: [
+                ...current.persisted.document.symbols,
+                {
+                  id: "symbol-3",
+                  entityType: "symbol",
+                  symbolKind: "connector",
+                  reference: "J2",
+                  value: "HDR1",
+                  position: { x: 1_270_000, y: 0 },
+                  rotation: 0,
+                  mirrored: false,
+                  pins: [{ id: "pin-5", name: "1", position: { x: 0, y: 0 } }],
+                  properties: {},
+                },
+              ],
+            }
+          : null,
+      },
+    }));
+
+    const nextState = useSchematicStore.getState();
+    nextState.beginWire("pin-2");
+    expect(nextState.commitWire("pin-5")).toBe(false);
+    expect(useSchematicStore.getState().persisted.document?.wires).toHaveLength(1);
+  });
+
+  it("inserts deterministic junction metadata when committed wires share endpoints", () => {
+    const state = useSchematicStore.getState();
+
+    state.beginWire("pin-2");
+    state.commitWire("pin-3");
+
+    expect(useSchematicStore.getState().derived.connectivity).toMatchObject({
+      nets: [],
+      junctions: [
+        {
+          id: "junction:1270000:0",
+          position: { x: 1_270_000, y: 0 },
+          degree: 2,
+          wireIds: expect.arrayContaining(["wire-1"]),
+        },
+      ],
+    });
   });
 
   it("tracks popover targets in editor chrome for single selected symbols", () => {
@@ -199,10 +321,18 @@ describe("useSchematicStore", () => {
           maxX: 990_000,
           maxY: 180_000,
         },
+        "symbol-2": {
+          minX: 1_525_000,
+          minY: -220_000,
+          maxX: 2_285_000,
+          maxY: 1_490_000,
+        },
       },
       connectorAnchors: {
         "pin-1": { x: 0, y: 0 },
         "pin-2": { x: 1_270_000, y: 0 },
+        "pin-3": { x: 1_905_000, y: 1_270_000 },
+        "pin-4": { x: 1_905_000, y: 0 },
       },
     });
   });
