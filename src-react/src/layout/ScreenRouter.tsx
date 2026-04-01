@@ -12,6 +12,7 @@ import { DesignScreen } from "@/screens/DesignScreen";
 import { NotesScreen } from "@/screens/NotesScreen";
 import { LibraryScreen } from "@/screens/LibraryScreen";
 import { ImportWizard } from "@/screens/ImportWizard";
+import { ComponentDetailPage } from "@/components/library/ComponentDetailPage";
 
 export function ScreenRouter() {
   const currentScreen = useNavigationStore((s) => s.currentScreen);
@@ -37,6 +38,8 @@ export function ScreenRouter() {
       return <LibraryScreen />;
     case "import":
       return <ImportWizard />;
+    case "component-detail":
+      return <ComponentDetailPage />;
     default:
       return <HomeScreen />;
   }

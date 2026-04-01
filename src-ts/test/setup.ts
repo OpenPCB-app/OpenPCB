@@ -69,19 +69,20 @@ export async function waitForServer(
 /**
  * Clean test database by removing the test data directory
  */
-export async function cleanTestDatabase(): Promise<void> {
+export async function cleanTestDatabase(targetDir?: string): Promise<void> {
     const fs = await import("fs/promises");
+    const dataDir = targetDir ?? testDataDir;
     try {
-        await fs.rm(testDataDir, { recursive: true, force: true });
-        console.log(`[Test Setup] Cleaned test database: ${testDataDir}`);
+        await fs.rm(dataDir, { recursive: true, force: true });
+        console.log(`[Test Setup] Cleaned test database: ${dataDir}`);
     } catch (error) {
         // Directory might not exist, that's ok
     }
 
     // Recreate the directory for the new test run
     try {
-        await fs.mkdir(testDataDir, { recursive: true });
-        console.log(`[Test Setup] Created test data directory: ${testDataDir}`);
+        await fs.mkdir(dataDir, { recursive: true });
+        console.log(`[Test Setup] Created test data directory: ${dataDir}`);
     } catch (error) {
         console.error(`[Test Setup] Error creating test data directory:`, error);
     }

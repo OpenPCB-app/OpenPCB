@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type Screen = "home" | "project" | "design" | "notes" | "chat" | "library" | "import";
+export type Screen = "home" | "project" | "design" | "notes" | "chat" | "library" | "import" | "component-detail";
 export type DesignTab = "schematic" | "pcb" | "3d" | "bom";
 
 interface NavigationState {
@@ -9,6 +9,7 @@ interface NavigationState {
   currentProjectId: string | null;
   currentDesignId: string | null;
   currentNotePageId: string | null;
+  currentComponentId: string | null;
   previousScreen: Screen | null;
   designTab: DesignTab;
   sidebarCollapsed: boolean;
@@ -22,6 +23,8 @@ interface NavigationState {
   navigateToNewChat: () => void;
   navigateToLibrary: () => void;
   navigateToImport: () => void;
+  navigateToComponentDetail: (componentId: string) => void;
+  navigateBack: () => void;
   setDesignTab: (tab: DesignTab) => void;
   toggleSidebar: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
@@ -78,6 +81,9 @@ function updateUrlHash(
     case "import":
       hash = "#import";
       break;
+    case "component-detail":
+      hash = id ? `#component-${id}` : "#library";
+      break;
     case "home":
     default:
       // Clear hash for home
@@ -97,6 +103,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   currentProjectId: null,
   currentDesignId: null,
   currentNotePageId: null,
+  currentComponentId: null,
   previousScreen: null,
   designTab: "schematic",
   sidebarCollapsed: getPersistedSidebarState(),
@@ -187,6 +194,38 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     updateUrlHash("import");
   },
 
+  navigateToComponentDetail: (componentId: string) => {
+    set({
+      previousScreen: get().currentScreen,
+      currentScreen: "component-detail",
+      currentComponentId: componentId,
+      chatId: null,
+    });
+    updateUrlHash("component-detail", componentId);
+  },
+
+  navigateBack: () => {
+    const { previousScreen } = get();
+    if (previousScreen) {
+      // Navigate to the previous screen
+      switch (previousScreen) {
+        case "library":
+          get().navigateToLibrary();
+          break;
+        case "home":
+          get().navigateToHome();
+          break;
+        case "design":
+          get().navigateToDesign();
+          break;
+        default:
+          get().navigateToHome();
+      }
+    } else {
+      get().navigateToHome();
+    }
+  },
+
   setDesignTab: (tab) => set({ designTab: tab }),
 
   toggleSidebar: () => {
@@ -239,6 +278,9 @@ export function initializeNavigationFromHash(): void {
     useNavigationStore.getState().navigateToLibrary();
   } else if (hash === "#import") {
     useNavigationStore.getState().navigateToImport();
+  } else if (hash.startsWith("#component-")) {
+    const componentId = hash.substring(11);
+    useNavigationStore.getState().navigateToComponentDetail(componentId);
   }
 }
 
@@ -353,6 +395,14 @@ export function setupHashChangeListener(): () => void {
     } else if (hash === "#import") {
       if (state.currentScreen !== "import") {
         useNavigationStore.setState({ currentScreen: "import" });
+      }
+    } else if (hash.startsWith("#component-")) {
+      const componentId = hash.substring(11);
+      if (state.currentScreen !== "component-detail" || state.currentComponentId !== componentId) {
+        useNavigationStore.setState({
+          currentScreen: "component-detail",
+          currentComponentId: componentId,
+        });
       }
     }
   };

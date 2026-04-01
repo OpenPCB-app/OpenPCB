@@ -181,6 +181,8 @@ export interface ImportPreservation {
   sourceFileName: string | null;
   /** Warnings from import */
   warnings: Array<{ code: string; message: string }>;
+  /** Number of symbol units detected in source */
+  unitCount?: number;
   /** Whether graphics are editable or read-only preserved */
   graphicsEditable: boolean;
 }

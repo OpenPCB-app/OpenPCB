@@ -1,8 +1,9 @@
-import { describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { StreamService } from "./stream-service";
 import type { DatabaseAccess } from "../../db";
 import type { TaskOrchestrator } from "./queue/task-orchestrator";
 import type { ExecutionEvent } from "./queue/task-executor";
+import { LicenseUtil } from "./license-util";
 
 /**
  * StreamService Reasoning Persistence Test
@@ -12,6 +13,16 @@ import type { ExecutionEvent } from "./queue/task-executor";
  * This test verifies the event bridge correctly handles reasoning events.
  */
 describe("StreamService Reasoning Events", () => {
+    let enforceAllowedSpy: ReturnType<typeof spyOn>;
+
+    beforeEach(() => {
+        enforceAllowedSpy = spyOn(LicenseUtil, "enforceAllowed").mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+        enforceAllowedSpy.mockRestore();
+    });
+
     it("should emit reasoning SSE events from TaskExecutor events", async () => {
         // Mock database
         const mockDb = {

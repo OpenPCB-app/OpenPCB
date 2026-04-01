@@ -78,6 +78,8 @@ interface SchematicState {
 
   setGridSize: (size: number) => void;
   toggleGrid: () => void;
+
+  updateSymbolValue: (symbolId: string, value: string) => void;
 }
 
 const DEFAULT_GRID_NM = 1_270_000;
@@ -644,4 +646,38 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         showGrid: !state.chrome.showGrid,
       },
     })),
+
+  updateSymbolValue: (symbolId: string, value: string) =>
+    set((state) => {
+      const document = state.persisted.document;
+      if (!document) return state;
+
+      const symbolIndex = document.symbols.findIndex((s) => s.id === symbolId);
+      if (symbolIndex === -1) return state;
+
+      const updatedSymbols = [...document.symbols];
+      const existingSymbol = updatedSymbols[symbolIndex];
+      if (!existingSymbol) return state;
+
+      updatedSymbols[symbolIndex] = {
+        ...existingSymbol,
+        value,
+      };
+
+      const nextDocument = {
+        ...document,
+        symbols: updatedSymbols,
+      };
+
+      return {
+        persisted: {
+          ...state.persisted,
+          document: nextDocument,
+        },
+        derived: {
+          ...state.derived,
+          documentBounds: deriveDocumentBounds(nextDocument),
+        },
+      };
+    }),
 }));

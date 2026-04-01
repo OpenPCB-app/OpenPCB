@@ -13,9 +13,11 @@ import {
   domEventToScreen,
   snapToGrid,
   createCenteredViewport,
+  fitViewportToBounds,
 } from "./viewport";
 import type {
   SymbolPin,
+  SymbolGraphic,
   BodyPreset,
   Viewport,
   Nanometers,
@@ -48,6 +50,10 @@ const COLORS = {
 const PIN_DOT_RADIUS = 4;
 const PIN_LINE_WIDTH = 2;
 const BODY_LINE_WIDTH = 2;
+
+function graphicStrokeWidthPx(strokeWidth: number, viewport: Viewport): number {
+  return Math.max(1, strokeWidth * viewport.zoom);
+}
 
 // ---------------------------------------------------------------------------
 // Grid Rendering
@@ -507,6 +513,124 @@ function renderPin(
   }
 }
 
+function renderLineGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "line" }, viewport: Viewport): void {
+  const start = symbolToScreen(graphic.x1, graphic.y1, viewport);
+  const end = symbolToScreen(graphic.x2, graphic.y2, viewport);
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  ctx.lineTo(end.x, end.y);
+  ctx.stroke();
+}
+
+function renderRectGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "rect" }, viewport: Viewport): void {
+  const topLeft = symbolToScreen(graphic.x, graphic.y + graphic.height, viewport);
+  const bottomRight = symbolToScreen(graphic.x + graphic.width, graphic.y, viewport);
+  ctx.beginPath();
+  ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  if (graphic.filled) ctx.fill();
+  ctx.stroke();
+}
+
+function renderCircleGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "circle" }, viewport: Viewport): void {
+  const center = symbolToScreen(graphic.cx, graphic.cy, viewport);
+  const edge = symbolToScreen(graphic.cx + graphic.radius, graphic.cy, viewport);
+  ctx.beginPath();
+  ctx.arc(center.x, center.y, Math.abs(edge.x - center.x), 0, Math.PI * 2);
+  if (graphic.filled) ctx.fill();
+  ctx.stroke();
+}
+
+function renderArcGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "arc" }, viewport: Viewport): void {
+  const center = symbolToScreen(graphic.cx, graphic.cy, viewport);
+  const edge = symbolToScreen(graphic.cx + graphic.radius, graphic.cy, viewport);
+  const startAngle = (-graphic.startAngle * Math.PI) / 180;
+  const endAngle = (-graphic.endAngle * Math.PI) / 180;
+  ctx.beginPath();
+  ctx.arc(center.x, center.y, Math.abs(edge.x - center.x), startAngle, endAngle, false);
+  ctx.stroke();
+}
+
+function renderPolygonGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "polygon" }, viewport: Viewport): void {
+  if (graphic.points.length < 2) return;
+  const first = symbolToScreen(graphic.points[0]!.x, graphic.points[0]!.y, viewport);
+  ctx.beginPath();
+  ctx.moveTo(first.x, first.y);
+  for (let i = 1; i < graphic.points.length; i++) {
+    const point = graphic.points[i]!;
+    const screen = symbolToScreen(point.x, point.y, viewport);
+    ctx.lineTo(screen.x, screen.y);
+  }
+  if (graphic.closed) ctx.closePath();
+  if (graphic.filled) ctx.fill();
+  ctx.stroke();
+}
+
+function renderBezierGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "bezier" }, viewport: Viewport): void {
+  const [p0, p1, p2, p3] = graphic.points;
+  const s0 = symbolToScreen(p0.x, p0.y, viewport);
+  const s1 = symbolToScreen(p1.x, p1.y, viewport);
+  const s2 = symbolToScreen(p2.x, p2.y, viewport);
+  const s3 = symbolToScreen(p3.x, p3.y, viewport);
+  ctx.beginPath();
+  ctx.moveTo(s0.x, s0.y);
+  ctx.bezierCurveTo(s1.x, s1.y, s2.x, s2.y, s3.x, s3.y);
+  ctx.stroke();
+}
+
+function renderTextGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "text" }, viewport: Viewport): void {
+  const point = symbolToScreen(graphic.x, graphic.y, viewport);
+  const fontSize = Math.max(10, graphic.fontSize * viewport.zoom);
+  const angle = (-graphic.rotation * Math.PI) / 180;
+  ctx.save();
+  ctx.translate(point.x, point.y);
+  ctx.rotate(angle);
+  ctx.font = `${fontSize}px monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = COLORS.pinLabel;
+  ctx.fillText(graphic.content, 0, 0);
+  ctx.restore();
+}
+
+function renderGraphic(
+  ctx: CanvasRenderingContext2D,
+  graphic: SymbolGraphic,
+  viewport: Viewport,
+): void {
+  ctx.save();
+  ctx.strokeStyle = COLORS.bodyStroke;
+  ctx.fillStyle = COLORS.bodyFill;
+  ctx.lineWidth = "strokeWidth" in graphic
+    ? graphicStrokeWidthPx(graphic.strokeWidth, viewport)
+    : 1;
+
+  switch (graphic.type) {
+    case "line":
+      renderLineGraphic(ctx, graphic, viewport);
+      break;
+    case "rect":
+      renderRectGraphic(ctx, graphic, viewport);
+      break;
+    case "circle":
+      renderCircleGraphic(ctx, graphic, viewport);
+      break;
+    case "arc":
+      renderArcGraphic(ctx, graphic, viewport);
+      break;
+    case "polygon":
+      renderPolygonGraphic(ctx, graphic, viewport);
+      break;
+    case "bezier":
+      renderBezierGraphic(ctx, graphic, viewport);
+      break;
+    case "text":
+      renderTextGraphic(ctx, graphic, viewport);
+      break;
+  }
+
+  ctx.restore();
+}
+
 // ---------------------------------------------------------------------------
 // Hit Testing
 // ---------------------------------------------------------------------------
@@ -540,6 +664,145 @@ function findPinAtScreen(
   return null;
 }
 
+function getDraftBounds(draft: ReturnType<typeof useSymbolEditorStore.getState>["draft"]) {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  const addPoint = (x: number, y: number) => {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  };
+
+  addPoint(-draft.body.width / 2, -draft.body.height / 2);
+  addPoint(draft.body.width / 2, draft.body.height / 2);
+
+  for (const pin of draft.pins) {
+    addPoint(pin.position.x, pin.position.y);
+  }
+
+  for (const graphic of draft.graphics) {
+    switch (graphic.type) {
+      case "line":
+        addPoint(graphic.x1, graphic.y1);
+        addPoint(graphic.x2, graphic.y2);
+        break;
+      case "rect":
+        addPoint(graphic.x, graphic.y);
+        addPoint(graphic.x + graphic.width, graphic.y + graphic.height);
+        break;
+      case "circle":
+      case "arc":
+        addPoint(graphic.cx - graphic.radius, graphic.cy - graphic.radius);
+        addPoint(graphic.cx + graphic.radius, graphic.cy + graphic.radius);
+        break;
+      case "polygon":
+      case "bezier":
+        for (const point of graphic.points) addPoint(point.x, point.y);
+        break;
+      case "text":
+        addPoint(graphic.x, graphic.y);
+        break;
+    }
+  }
+
+  if (!Number.isFinite(minX)) {
+    return null;
+  }
+
+  const padding = 1_270_000;
+  return {
+    minX: minX - padding,
+    minY: minY - padding,
+    maxX: maxX + padding,
+    maxY: maxY + padding,
+  };
+}
+
+function getGraphicBounds(graphic: SymbolGraphic) {
+  switch (graphic.type) {
+    case "line":
+      return {
+        minX: Math.min(graphic.x1, graphic.x2),
+        minY: Math.min(graphic.y1, graphic.y2),
+        maxX: Math.max(graphic.x1, graphic.x2),
+        maxY: Math.max(graphic.y1, graphic.y2),
+      };
+    case "rect":
+      return {
+        minX: graphic.x,
+        minY: graphic.y,
+        maxX: graphic.x + graphic.width,
+        maxY: graphic.y + graphic.height,
+      };
+    case "circle":
+    case "arc":
+      return {
+        minX: graphic.cx - graphic.radius,
+        minY: graphic.cy - graphic.radius,
+        maxX: graphic.cx + graphic.radius,
+        maxY: graphic.cy + graphic.radius,
+      };
+    case "polygon":
+    case "bezier":
+      return {
+        minX: Math.min(...graphic.points.map((point) => point.x)),
+        minY: Math.min(...graphic.points.map((point) => point.y)),
+        maxX: Math.max(...graphic.points.map((point) => point.x)),
+        maxY: Math.max(...graphic.points.map((point) => point.y)),
+      };
+    case "text":
+      return {
+        minX: graphic.x,
+        minY: graphic.y,
+        maxX: graphic.x,
+        maxY: graphic.y,
+      };
+  }
+}
+
+function hitTestGraphic(screenX: number, screenY: number, graphic: SymbolGraphic, viewport: Viewport): boolean {
+  const bounds = getGraphicBounds(graphic);
+  const min = symbolToScreen(bounds.minX, bounds.maxY, viewport);
+  const max = symbolToScreen(bounds.maxX, bounds.minY, viewport);
+  return screenX >= Math.min(min.x, max.x) - 8 &&
+    screenX <= Math.max(min.x, max.x) + 8 &&
+    screenY >= Math.min(min.y, max.y) - 8 &&
+    screenY <= Math.max(min.y, max.y) + 8;
+}
+
+function findGraphicAtScreen(screenX: number, screenY: number, graphics: SymbolGraphic[], viewport: Viewport): SymbolGraphic | null {
+  for (let i = graphics.length - 1; i >= 0; i--) {
+    const graphic = graphics[i];
+    if (graphic && hitTestGraphic(screenX, screenY, graphic, viewport)) {
+      return graphic;
+    }
+  }
+  return null;
+}
+
+function translateGraphic(graphic: SymbolGraphic, dx: number, dy: number): SymbolGraphic {
+  switch (graphic.type) {
+    case "line":
+      return { ...graphic, x1: graphic.x1 + dx, y1: graphic.y1 + dy, x2: graphic.x2 + dx, y2: graphic.y2 + dy };
+    case "rect":
+      return { ...graphic, x: graphic.x + dx, y: graphic.y + dy };
+    case "circle":
+      return { ...graphic, cx: graphic.cx + dx, cy: graphic.cy + dy };
+    case "arc":
+      return { ...graphic, cx: graphic.cx + dx, cy: graphic.cy + dy };
+    case "polygon":
+      return { ...graphic, points: graphic.points.map((point) => ({ x: point.x + dx, y: point.y + dy })) };
+    case "bezier":
+      return { ...graphic, points: graphic.points.map((point) => ({ x: point.x + dx, y: point.y + dy })) as typeof graphic.points };
+    case "text":
+      return { ...graphic, x: graphic.x + dx, y: graphic.y + dy };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -552,14 +815,18 @@ export function SymbolEditorCanvas() {
   const lastMouse = useRef({ x: 0, y: 0 });
   const isDraggingPin = useRef(false);
   const draggedPinId = useRef<string | null>(null);
+  const isDraggingGraphic = useRef(false);
+  const draggedGraphicId = useRef<string | null>(null);
 
-  const chrome = useSymbolEditorStore((s) => s.chrome);
+  const draft = useSymbolEditorStore((s) => s.draft);
   const pan = useSymbolEditorStore((s) => s.pan);
   const zoomAt = useSymbolEditorStore((s) => s.zoomAt);
   const setViewport = useSymbolEditorStore((s) => s.setViewport);
   const selectPin = useSymbolEditorStore((s) => s.selectPin);
+  const selectGraphic = useSymbolEditorStore((s) => s.selectGraphic);
   const clearSelection = useSymbolEditorStore((s) => s.clearSelection);
   const movePin = useSymbolEditorStore((s) => s.movePin);
+  const updateGraphic = useSymbolEditorStore((s) => s.updateGraphic);
   const addPin = useSymbolEditorStore((s) => s.addPin);
 
   // Resize canvas to fill container
@@ -597,7 +864,7 @@ export function SymbolEditorCanvas() {
 
     const store = useSymbolEditorStore.getState();
     const { viewport, gridSize, showGrid, selection } = store.chrome;
-    const { body, pins } = store.draft;
+    const { body, pins, graphics } = store.draft;
 
     // Grid
     if (showGrid) {
@@ -606,6 +873,11 @@ export function SymbolEditorCanvas() {
 
     // Body
     renderBody(ctx, body, viewport);
+
+    // Imported/custom graphics
+    for (const graphic of graphics) {
+      renderGraphic(ctx, graphic, viewport);
+    }
 
     // Pins
     for (const pin of pins) {
@@ -642,17 +914,14 @@ export function SymbolEditorCanvas() {
     resizeCanvas();
 
     const observer = new ResizeObserver(() => {
-      resizeCanvas();
-      // Center viewport on resize
-      const rect = container.getBoundingClientRect();
-      setViewport(
-        createCenteredViewport(rect.width, rect.height, chrome.viewport.zoom),
-      );
+      requestAnimationFrame(() => {
+        resizeCanvas();
+      });
     });
     observer.observe(container);
 
     return () => observer.disconnect();
-  }, [resizeCanvas, setViewport, chrome.viewport.zoom]);
+  }, [resizeCanvas]);
 
   // Initial centering
   useEffect(() => {
@@ -662,6 +931,14 @@ export function SymbolEditorCanvas() {
     const rect = container.getBoundingClientRect();
     setViewport(createCenteredViewport(rect.width, rect.height));
   }, [setViewport]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !draft.importPreservation) return;
+
+    const rect = container.getBoundingClientRect();
+    setViewport(fitViewportToBounds(getDraftBounds(draft), rect.width, rect.height));
+  }, [draft.id, draft.importPreservation?.sourceFileName, setViewport]);
 
   // Mouse handlers
   const handleMouseDown = useCallback(
@@ -691,18 +968,33 @@ export function SymbolEditorCanvas() {
         store.draft.pins,
         store.chrome.viewport,
       );
+      const hitGraphic = hitPin
+        ? null
+        : findGraphicAtScreen(
+            screenPoint.x,
+            screenPoint.y,
+            store.draft.graphics,
+            store.chrome.viewport,
+          );
 
       if (hitPin) {
+        store.pushHistory();
         selectPin(hitPin.id, e.ctrlKey || e.metaKey);
         // Start dragging
         isDraggingPin.current = true;
         draggedPinId.current = hitPin.id;
         lastMouse.current = { x: e.clientX, y: e.clientY };
+      } else if (hitGraphic) {
+        store.pushHistory();
+        selectGraphic(hitGraphic.id, e.ctrlKey || e.metaKey);
+        isDraggingGraphic.current = true;
+        draggedGraphicId.current = hitGraphic.id;
+        lastMouse.current = { x: e.clientX, y: e.clientY };
       } else {
         clearSelection();
       }
     },
-    [selectPin, clearSelection],
+    [selectGraphic, selectPin, clearSelection],
   );
 
   const handleMouseMove = useCallback(
@@ -732,21 +1024,49 @@ export function SymbolEditorCanvas() {
         );
         const snappedPoint = snapToGrid(symbolPoint, store.chrome.gridSize);
         movePin(draggedPinId.current, snappedPoint);
+        return;
+      }
+
+      if (isDraggingGraphic.current && draggedGraphicId.current) {
+        const store = useSymbolEditorStore.getState();
+        const previous = domEventToScreen(
+          lastMouse.current.x,
+          lastMouse.current.y,
+          canvas.getBoundingClientRect(),
+        );
+        const current = domEventToScreen(
+          e.clientX,
+          e.clientY,
+          canvas.getBoundingClientRect(),
+        );
+        const previousPoint = screenToSymbol(previous.x, previous.y, store.chrome.viewport);
+        const currentPoint = screenToSymbol(current.x, current.y, store.chrome.viewport);
+        const dx = currentPoint.x - previousPoint.x;
+        const dy = currentPoint.y - previousPoint.y;
+        const graphic = store.draft.graphics.find((entry) => entry.id === draggedGraphicId.current);
+        if (graphic) {
+          updateGraphic(graphic.id, translateGraphic(graphic, dx, dy));
+          lastMouse.current = { x: e.clientX, y: e.clientY };
+        }
       }
     },
-    [pan, movePin],
+    [pan, movePin, updateGraphic],
   );
 
   const handleMouseUp = useCallback(() => {
     isPanning.current = false;
     isDraggingPin.current = false;
     draggedPinId.current = null;
+    isDraggingGraphic.current = false;
+    draggedGraphicId.current = null;
   }, []);
 
   const handleMouseLeave = useCallback(() => {
     isPanning.current = false;
     isDraggingPin.current = false;
     draggedPinId.current = null;
+    isDraggingGraphic.current = false;
+    draggedGraphicId.current = null;
   }, []);
 
   const handleWheel = useCallback(
@@ -771,8 +1091,12 @@ export function SymbolEditorCanvas() {
       if (e.key === "Delete" || e.key === "Backspace") {
         const store = useSymbolEditorStore.getState();
         const selectedIds = [...store.chrome.selection.selectedPinIds];
+        const selectedGraphicIds = [...store.chrome.selection.selectedGraphicIds];
         if (selectedIds.length > 0) {
           store.removePins(selectedIds);
+          e.preventDefault();
+        } else if (selectedGraphicIds.length > 0) {
+          store.removeGraphics(selectedGraphicIds);
           e.preventDefault();
         }
       }

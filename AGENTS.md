@@ -4,6 +4,20 @@
 
 OpenPCB is a desktop PCB application built as a mixed TypeScript/Rust monorepo with Tauri 2, React 19, and Bun. `src-react/` contains the React 19 UI (`src/components`, `src/hooks`, `src/screens`, `src/generated`). `src-ts/` is the Bun sidecar and shared backend logic implementing DDD architecture (`src/domain`, `src/infrastructure`, `src/db`, `shared/`). `src-tauri/` is the Rust desktop shell plus bridge crates. Reusable module definitions live in `modules/`, automation lives in `scripts/`.
 
+## PCB Design Standards (IPC 7351)
+
+**All PCB layout, footprint generation, and component placement must comply with IPC 7351 standard.** This includes:
+
+- **Land pattern calculations:** Toe, heel, and side fillet dimensions per IPC-7351B formulas
+- **Density levels:** N (Nominal), M (Most), L (Least) — default to N unless specified
+- **Naming convention:** `<PackageType><Pitch>P<Length>X<Width>-<PinCount><DensityLevel>` (e.g., `SOIC127P600X175-8N`)
+- **Courtyard:** Component body outline + keepout clearance (typically 0.25mm for N level)
+- **Silkscreen rules:** 0.1mm minimum clearance from pads, no overlap with solder mask openings
+- **Assembly clearance:** Maintain per IPC-7351 Table 3-3 for component-to-component spacing
+- **Thermal relief:** Follow IPC-2221 for power/ground plane connections
+
+When generating or validating footprints, always calculate pad geometry from datasheet body dimensions + tolerances using IPC formulas rather than copying manufacturer-provided patterns.
+
 ## Architecture Overview
 
 **Three-layer runtime:**
@@ -108,12 +122,17 @@ Always read the nearest `AGENTS.md` before editing inside a subtree:
 
 ## Anti-Patterns
 
-| Forbidden                            | Why                                            |
-| ------------------------------------ | ---------------------------------------------- |
-| Use `as any`                         | Type safety—use discriminated unions           |
-| Empty catch blocks                   | Swallows errors silently                       |
-| Skip `npm run gen` after API changes | Generated types will be stale                  |
-| Hardcode ports                       | Dynamic port assignment required (Bun sidecar) |
-| Remove main.rs pragma                | Breaks Windows console hiding                  |
-| Log API keys                         | Security violation                             |
-| Direct provider calls from queue     | Keep queue provider-agnostic                   |
+| Forbidden                            | Why                                                   |
+| ------------------------------------ | ----------------------------------------------------- |
+| Use `as any`                         | Type safety—use discriminated unions                  |
+| Empty catch blocks                   | Swallows errors silently                              |
+| Skip `npm run gen` after API changes | Generated types will be stale                         |
+| Hardcode ports                       | Dynamic port assignment required (Bun sidecar)        |
+| Remove main.rs pragma                | Breaks Windows console hiding                         |
+| Log API keys                         | Security violation                                    |
+| Direct provider calls from queue     | Keep queue provider-agnostic                          |
+| Non-IPC-7351 footprints              | All land patterns must follow IPC-7351 standard       |
+| Arbitrary pad sizes                  | Calculate from body + tolerance using IPC formulas    |
+| Silkscreen over pads                 | Violates IPC-7351 clearance rules (0.1mm min)         |
+| Missing courtyard layer              | Required for assembly clearance validation            |
+| Non-standard footprint naming        | Use IPC-7351 naming convention for interoperability   |

@@ -58,6 +58,7 @@ export * from "./footprint-option";
 export * from "./model-3d-option";
 export * from "./manufacturer-offering";
 export * from "./component-draft";
+export * from "./component-import-job";
 export * from "./component-provenance";
 export * from "./preset-catalog";
 export * from "./preset-variant";

@@ -7,6 +7,17 @@ import type { SchematicDocument } from "./types";
 import { screenToSchematic, snapToGrid } from "./canvas/viewport";
 import { useSchematicStore } from "@/stores/schematic-store";
 
+vi.mock("@/hooks/useComponents", () => ({
+  useComponents: vi.fn(() => ({
+    components: [],
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+    filters: {},
+    setFilters: vi.fn(),
+  })),
+}));
+
 const TEST_DOCUMENT: SchematicDocument = {
   id: "doc-1",
   projectId: "project-1",
@@ -188,30 +199,20 @@ describe("palette drag placement", () => {
     render(<PaletteCanvasHarness />);
 
     expect(screen.getByRole("button", { name: /ground/i })).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /resistor/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /capacitor/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /connector/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /diode/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /op-amp/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /vcc/i })).toBeInTheDocument();
   });
 
   it("ignores palette clicks so placement stays drag-only", () => {
     render(<PaletteCanvasHarness />);
 
-    fireEvent.click(screen.getByRole("button", { name: /resistor/i }));
+    fireEvent.click(screen.getByRole("button", { name: /ground/i }));
 
     expect(useSchematicStore.getState().session).toBeNull();
   });
 
   it("shows snapped ghost preview during resistor drag and commits one symbol on drop", () => {
     const { container } = render(<PaletteCanvasHarness />);
-    const resistorButton = screen.getByRole("button", { name: /resistor/i });
+    const groundButton = screen.getByRole("button", { name: /ground/i });
     const canvas = container.querySelector("canvas");
     expect(canvas).not.toBeNull();
     const canvasSurface = canvas?.parentElement;
@@ -223,7 +224,7 @@ describe("palette drag placement", () => {
       1_270_000,
     );
 
-    dispatchDragEvent(resistorButton, "dragstart", { dataTransfer });
+    dispatchDragEvent(groundButton, "dragstart", { dataTransfer });
     dispatchDragEvent(canvasSurface!, "dragover", {
       dataTransfer,
       clientX: 105,
@@ -232,7 +233,7 @@ describe("palette drag placement", () => {
 
     expect(useSchematicStore.getState().session).toMatchObject({
       type: "placement",
-      symbolKind: "resistor",
+      symbolKind: "gnd",
       previewPosition: expectedPosition,
     });
 
@@ -241,13 +242,13 @@ describe("palette drag placement", () => {
       clientX: 105,
       clientY: 205,
     });
-    dispatchDragEvent(resistorButton, "dragend", { dataTransfer });
+    dispatchDragEvent(groundButton, "dragend", { dataTransfer });
 
     const state = useSchematicStore.getState();
     expect(state.persisted.document?.symbols).toHaveLength(1);
     expect(state.persisted.document?.symbols[0]).toMatchObject({
       entityType: "symbol",
-      symbolKind: "resistor",
+      symbolKind: "gnd",
       position: expectedPosition,
     });
     expect(state.session).toBeNull();
@@ -255,7 +256,7 @@ describe("palette drag placement", () => {
 
   it("uses shared drag state when transfer data is unavailable during dragover and drop", () => {
     const { container } = render(<PaletteCanvasHarness />);
-    const resistorButton = screen.getByRole("button", { name: /resistor/i });
+    const groundButton = screen.getByRole("button", { name: /ground/i });
     const canvas = container.querySelector("canvas");
     expect(canvas).not.toBeNull();
     const canvasSurface = canvas?.parentElement;
@@ -268,7 +269,7 @@ describe("palette drag placement", () => {
       1_270_000,
     );
 
-    dispatchDragEvent(resistorButton, "dragstart", {
+    dispatchDragEvent(groundButton, "dragstart", {
       dataTransfer: startTransfer,
     });
     dispatchDragEvent(canvasSurface!, "dragenter", {
@@ -284,7 +285,7 @@ describe("palette drag placement", () => {
 
     expect(useSchematicStore.getState().session).toMatchObject({
       type: "placement",
-      symbolKind: "resistor",
+      symbolKind: "gnd",
       previewPosition: expectedPosition,
     });
 
@@ -293,14 +294,14 @@ describe("palette drag placement", () => {
       clientX: 105,
       clientY: 205,
     });
-    dispatchDragEvent(resistorButton, "dragend", {
+    dispatchDragEvent(groundButton, "dragend", {
       dataTransfer: startTransfer,
     });
 
     const state = useSchematicStore.getState();
     expect(state.persisted.document?.symbols).toHaveLength(1);
     expect(state.persisted.document?.symbols[0]).toMatchObject({
-      symbolKind: "resistor",
+      symbolKind: "gnd",
       position: expectedPosition,
     });
     expect(state.draggedSymbolKind).toBeNull();
@@ -314,10 +315,10 @@ describe("palette drag placement", () => {
     expect(canvasSurface).not.toBeNull();
 
     useSchematicStore.setState({
-      draggedSymbolKind: "resistor",
+      draggedSymbolKind: "gnd",
       session: {
         type: "placement",
-        symbolKind: "resistor",
+        symbolKind: "gnd",
         rotation: 0,
         previewPosition: null,
       },
@@ -337,14 +338,14 @@ describe("palette drag placement", () => {
 
     expect(useSchematicStore.getState().session).toMatchObject({
       type: "placement",
-      symbolKind: "resistor",
+      symbolKind: "gnd",
       previewPosition: expectedPosition,
     });
   });
 
   it("does not create a symbol when the drag ends outside the canvas", () => {
     const { container } = render(<PaletteCanvasHarness />);
-    const resistorButton = screen.getByRole("button", { name: /resistor/i });
+    const groundButton = screen.getByRole("button", { name: /ground/i });
     const canvas = container.querySelector("canvas");
     expect(canvas).not.toBeNull();
     const canvasSurface = canvas?.parentElement;
@@ -352,7 +353,7 @@ describe("palette drag placement", () => {
 
     const dataTransfer = createDataTransfer();
 
-    dispatchDragEvent(resistorButton, "dragstart", { dataTransfer });
+    dispatchDragEvent(groundButton, "dragstart", { dataTransfer });
     dispatchDragEvent(canvasSurface!, "dragover", {
       dataTransfer,
       clientX: 105,
@@ -362,7 +363,7 @@ describe("palette drag placement", () => {
       dataTransfer,
       relatedTarget: null,
     });
-    dispatchDragEvent(resistorButton, "dragend", { dataTransfer });
+    dispatchDragEvent(groundButton, "dragend", { dataTransfer });
 
     const state = useSchematicStore.getState();
     expect(state.persisted.document?.symbols).toHaveLength(0);

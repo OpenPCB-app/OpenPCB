@@ -737,6 +737,8 @@ export class TaskExecutor {
 
   private classifyError(error: Error): TaskError {
     const message = error.message.toLowerCase();
+    const hasHttpStatus = (code: number): boolean =>
+      new RegExp(`(?:^|\\D)${code}(?:\\D|$)`).test(message);
 
     // Transient errors (retryable)
     if (
@@ -747,11 +749,11 @@ export class TaskExecutor {
       message.includes('socket hang up') ||
       message.includes('network') ||
       message.includes('timeout') ||
-      message.includes('500') ||
-      message.includes('502') ||
-      message.includes('503') ||
-      message.includes('504') ||
-      message.includes('429') ||
+      hasHttpStatus(500) ||
+      hasHttpStatus(502) ||
+      hasHttpStatus(503) ||
+      hasHttpStatus(504) ||
+      hasHttpStatus(429) ||
       message.includes('bad gateway') ||
       message.includes('service unavailable') ||
       message.includes('rate limit')
@@ -768,8 +770,8 @@ export class TaskExecutor {
 
     // Auth errors (not retryable)
     if (
-      message.includes('401') ||
-      message.includes('403') ||
+      hasHttpStatus(401) ||
+      hasHttpStatus(403) ||
       message.includes('unauthorized') ||
       message.includes('forbidden') ||
       message.includes('api key')

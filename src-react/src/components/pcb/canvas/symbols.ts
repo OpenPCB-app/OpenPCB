@@ -169,9 +169,7 @@ export function getSymbolBodyLocalBounds(symbol: SymbolEntity): Bounds {
         }
         case "gnd":
             return getSinglePinBodyLocalBounds(symbol, 480_000, 420_000);
-        case "vcc_3v3":
-        case "vcc_5v":
-        case "vcc_12v":
+        case "vcc":
             return {
                 ...getSinglePinBodyLocalBounds(symbol, 420_000, 360_000),
                 minY: (symbol.pins[0]?.position.y ?? 0) - 360_000,
@@ -189,6 +187,8 @@ export function getSymbolBodyLocalBounds(symbol: SymbolEntity): Bounds {
             const center = getLocalCenter(symbol);
             return expandRect(center.x, center.y, 760_000, 760_000);
         }
+        default:
+            return getRectBodyLocalBounds(symbol);
     }
 }
 
@@ -478,9 +478,7 @@ function renderBody(ctx: CanvasRenderingContext2D, symbol: SymbolEntity): void {
         case "gnd":
             renderGround(ctx, symbol);
             return;
-        case "vcc_3v3":
-        case "vcc_5v":
-        case "vcc_12v":
+        case "vcc":
             renderPower(ctx, symbol);
             return;
         case "npn":
@@ -500,6 +498,9 @@ function renderBody(ctx: CanvasRenderingContext2D, symbol: SymbolEntity): void {
             return;
         case "generic_ic":
         case "connector":
+            renderRectangularSymbol(ctx, symbol);
+            return;
+        default:
             renderRectangularSymbol(ctx, symbol);
             return;
     }
@@ -533,6 +534,10 @@ function getPrimarySymbolLabel(symbol: SymbolEntity): string {
         return getSymbolKindLabel(symbol.symbolKind);
     }
 
+    if (symbol.symbolKind === "vcc") {
+        return symbol.value || getSymbolKindLabel(symbol.symbolKind);
+    }
+
     return symbol.reference;
 }
 
@@ -548,6 +553,13 @@ function getBodyTextAnchors(symbol: SymbolEntity): { primary: Point; secondary: 
     if (symbol.symbolKind === "gnd") {
         return {
             primary: { x: 0, y: 420_000 },
+            secondary: { x: 0, y: 0 },
+        };
+    }
+
+    if (symbol.symbolKind === "vcc") {
+        return {
+            primary: { x: 0, y: -420_000 },
             secondary: { x: 0, y: 0 },
         };
     }

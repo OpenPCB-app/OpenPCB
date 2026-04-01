@@ -15,7 +15,9 @@ interface ApiError extends Error {
 
 function unwrapResponse<T>(response: ApiResponse<T>): T {
   if (!response.ok || !response.data) {
-    const err: ApiError = new Error(response.error?.message || "API request failed");
+    const err: ApiError = new Error(
+      response.error?.message || "API request failed",
+    );
     err.code = response.error?.code;
     err.details = response.error?.details;
     throw err;
@@ -41,9 +43,8 @@ export async function listComponentFamilies(
   const queryString = params.toString();
   const url = `/api/components/families${queryString ? `?${queryString}` : ""}`;
 
-  const response = await customFetch<
-    ApiResponse<{ families: ComponentFamilyType[] }>
-  >(url);
+  const response =
+    await customFetch<ApiResponse<{ families: ComponentFamilyType[] }>>(url);
   return unwrapResponse(response).families;
 }
 
@@ -54,6 +55,66 @@ export async function getComponentFamily(
     ApiResponse<{ family: ComponentFamilyType }>
   >(`/api/components/families/${encodeURIComponent(id)}`);
   return unwrapResponse(response).family;
+}
+
+export interface CategoryNode {
+  path: string;
+  label: string;
+  count: number;
+  children: CategoryNode[];
+}
+
+export async function getComponentCategories(): Promise<CategoryNode[]> {
+  const response = await customFetch<
+    ApiResponse<{ categories: CategoryNode[] }>
+  >("/api/components/categories");
+  return unwrapResponse(response).categories;
+}
+
+export async function updateComponentFamily(
+  id: string,
+  updates: {
+    displayLabel?: string;
+    description?: string;
+    categoryPath?: string;
+    tags?: string[];
+  },
+): Promise<ComponentFamilyType> {
+  const response = await customFetch<
+    ApiResponse<{ family: ComponentFamilyType }>
+  >(`/api/components/families/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+  return unwrapResponse(response).family;
+}
+
+export async function deleteComponentFamily(id: string): Promise<void> {
+  const response = await customFetch<ApiResponse<{ deleted: boolean }>>(
+    `/api/components/families/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+  unwrapResponse(response);
+}
+
+export async function bulkDeleteComponentFamilies(
+  ids: string[],
+): Promise<{ deletedCount: number; skippedCount: number }> {
+  const response = await customFetch<
+    ApiResponse<{
+      deleted: boolean;
+      deletedCount: number;
+      skippedCount: number;
+    }>
+  >("/api/components/families/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+  const result = unwrapResponse(response);
+  return {
+    deletedCount: result.deletedCount,
+    skippedCount: result.skippedCount,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -68,6 +129,72 @@ export interface ComponentDraft {
   warnings: unknown[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface KicadImportWarning {
+  code: string;
+  message: string;
+}
+
+export interface ParsedKicadSymbolPin {
+  name: string;
+  number: string;
+  electricalType: string;
+  direction: string;
+  position: { x: number; y: number };
+  length: number;
+  rotation: number;
+  unit: number;
+  hidden: boolean;
+}
+
+export interface ParsedKicadSymbolGraphic {
+  unit: number;
+  node: unknown[];
+}
+
+export interface ParsedKicadSymbol {
+  name: string;
+  kicadId: string | null;
+  pins: ParsedKicadSymbolPin[];
+  units: number;
+  properties: Record<string, string>;
+  bodyGraphics: ParsedKicadSymbolGraphic[];
+  warnings: KicadImportWarning[];
+  rawSource: string;
+}
+
+export interface ParsedKicadFootprint {
+  name: string;
+  description: string;
+  tags: string[];
+  pads: Array<{
+    number: string;
+    type: "smd" | "thru_hole" | "np_thru_hole" | "connect";
+    shape: "circle" | "rect" | "oval" | "roundrect" | "trapezoid" | "custom";
+    position: { x: number; y: number };
+    size: { width: number; height: number };
+    rotation: number;
+    layers: string[];
+    roundrectRatio?: number;
+    drillDiameter?: number;
+    drillOffset?: { x: number; y: number };
+  }>;
+  graphics: Array<{
+    type: "line" | "rect" | "circle" | "arc" | "poly" | "text";
+    layer: string;
+    data: Record<string, unknown>;
+  }>;
+  model3dRefs: Array<{
+    path: string;
+    resolvedFileName: string;
+    offset: { x: number; y: number; z: number };
+    scale: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+  }>;
+  attributes: { type: "smd" | "through_hole" | "virtual" | "unknown" };
+  warnings: KicadImportWarning[];
+  rawSource: string;
 }
 
 /**
@@ -101,7 +228,10 @@ export async function createComponentDraft(
  */
 export async function patchComponentDraft(
   id: string,
-  updates: { familyId?: string | null; payload?: Partial<ComponentDraftPayload> },
+  updates: {
+    familyId?: string | null;
+    payload?: Partial<ComponentDraftPayload>;
+  },
 ): Promise<ComponentDraft> {
   const response = await customFetch<ApiResponse<{ draft: ComponentDraft }>>(
     `/api/components/drafts/${encodeURIComponent(id)}`,
@@ -131,7 +261,11 @@ export async function validateComponentDraft(
   id: string,
 ): Promise<{ blockers: unknown[]; warnings: unknown[]; canPublish: boolean }> {
   const response = await customFetch<
-    ApiResponse<{ blockers: unknown[]; warnings: unknown[]; canPublish: boolean }>
+    ApiResponse<{
+      blockers: unknown[];
+      warnings: unknown[];
+      canPublish: boolean;
+    }>
   >(`/api/components/drafts/${encodeURIComponent(id)}/validate`, {
     method: "POST",
   });
@@ -149,6 +283,44 @@ export async function publishComponentDraft(
     ApiResponse<{ familyId: string; revision: unknown }>
   >(`/api/components/drafts/${encodeURIComponent(id)}/publish`, {
     method: "POST",
+  });
+  return unwrapResponse(response);
+}
+
+// ---------------------------------------------------------------------------
+// KiCAD wizard import helpers
+// ---------------------------------------------------------------------------
+
+export async function parseKicadSymbolImport(
+  content: string,
+  fileName?: string,
+): Promise<{
+  symbol: ParsedKicadSymbol;
+  availableSymbols: string[];
+  fileName: string | null;
+}> {
+  const response = await customFetch<
+    ApiResponse<{
+      symbol: ParsedKicadSymbol;
+      availableSymbols: string[];
+      fileName: string | null;
+    }>
+  >("/api/components/import/parse-symbol", {
+    method: "POST",
+    body: JSON.stringify({ content, fileName }),
+  });
+  return unwrapResponse(response);
+}
+
+export async function parseKicadFootprintImport(
+  content: string,
+  fileName?: string,
+): Promise<{ footprint: ParsedKicadFootprint; fileName: string | null }> {
+  const response = await customFetch<
+    ApiResponse<{ footprint: ParsedKicadFootprint; fileName: string | null }>
+  >("/api/components/import/parse-footprint", {
+    method: "POST",
+    body: JSON.stringify({ content, fileName }),
   });
   return unwrapResponse(response);
 }

@@ -20,6 +20,7 @@
   "license": "MIT",
   "dependencies": {
     "@types/mdast": "^4.0.4",
+    "adm-zip": "^0.5.17",
     "htmlparser2": "^10.1.0",
     "openai": "^6.1.0",
     "remark-gfm": "^4.0.1",

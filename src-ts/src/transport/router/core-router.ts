@@ -27,6 +27,7 @@ import { LicenseController } from "../controllers/license-controller";
 import type { ComponentFamilyController } from "../controllers/component-family-controller";
 import type { ComponentDraftController } from "../controllers/component-draft-controller";
 import type { ComponentImportController } from "../controllers/component-import-controller";
+import type { ComponentZipImportController } from "../controllers/component-zip-import-controller";
 import type { ComponentPresetController } from "../controllers/component-preset-controller";
 
 // Import schemas
@@ -2033,6 +2034,10 @@ export class CoreRouter extends BaseHttpRouter {
       this.container.resolve<ComponentImportController>(
         TOKENS.ComponentImportController,
       );
+    const componentZipImportController =
+      this.container.resolve<ComponentZipImportController>(
+        TOKENS.ComponentZipImportController,
+      );
     const componentPresetController =
       this.container.resolve<ComponentPresetController>(
         TOKENS.ComponentPresetController,
@@ -2067,7 +2072,7 @@ export class CoreRouter extends BaseHttpRouter {
       },
     );
 
-this.get(
+    this.get(
       "/api/components/families/:id/full",
       (ctx) => componentFamilyController.getFull(ctx),
       {
@@ -2092,7 +2097,8 @@ this.get(
       {
         operationId: "getComponentCategories",
         tags: ["Components"],
-        summary: "Get category tree derived from component family category paths",
+        summary:
+          "Get category tree derived from component family category paths",
         responses: {
           200: z.object({
             categories: z.array(
@@ -2103,6 +2109,66 @@ this.get(
                 children: z.array(z.any()),
               }),
             ),
+          }),
+        },
+      },
+    );
+
+    this.patch(
+      "/api/components/families/:id",
+      (ctx) => componentFamilyController.update(ctx),
+      {
+        operationId: "updateComponentFamily",
+        tags: ["Components"],
+        summary: "Update component family metadata",
+        requestBody: z.object({
+          displayLabel: z.string().optional(),
+          description: z.string().optional(),
+          categoryPath: z.string().optional(),
+          tags: z.array(z.string()).optional(),
+        }),
+        responses: {
+          200: z.object({ family: z.any() }),
+          403: z.object({
+            code: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    );
+
+    this.delete(
+      "/api/components/families/:id",
+      (ctx) => componentFamilyController.delete(ctx),
+      {
+        operationId: "deleteComponentFamily",
+        tags: ["Components"],
+        summary: "Delete component family (soft delete)",
+        responses: {
+          200: z.object({ deleted: z.boolean() }),
+          403: z.object({
+            code: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    );
+
+    this.post(
+      "/api/components/families/bulk-delete",
+      (ctx) => componentFamilyController.bulkDelete(ctx),
+      {
+        operationId: "bulkDeleteComponentFamilies",
+        tags: ["Components"],
+        summary: "Bulk delete component families",
+        requestBody: z.object({
+          ids: z.array(z.string()),
+        }),
+        responses: {
+          200: z.object({
+            deleted: z.boolean(),
+            deletedCount: z.number(),
+            skippedCount: z.number(),
           }),
         },
       },
@@ -2193,6 +2259,49 @@ this.get(
     );
 
     this.post(
+      "/api/components/import/parse-symbol",
+      (ctx) => componentImportController.parseSymbol(ctx),
+      {
+        operationId: "parseKicadSymbol",
+        tags: ["Components"],
+        summary: "Parse KiCAD symbol file for wizard import",
+        requestBody: z.object({
+          content: z.string(),
+          fileName: z.string().optional(),
+        }),
+        responses: {
+          200: z.object({
+            symbol: z.any(),
+            availableSymbols: z.array(z.string()),
+            fileName: z.string().nullable(),
+          }),
+          400: z.object({ code: z.string(), message: z.string() }),
+        },
+      },
+    );
+
+    this.post(
+      "/api/components/import/parse-footprint",
+      (ctx) => componentImportController.parseFootprint(ctx),
+      {
+        operationId: "parseKicadFootprint",
+        tags: ["Components"],
+        summary: "Parse KiCAD footprint file for wizard import",
+        requestBody: z.object({
+          content: z.string(),
+          fileName: z.string().optional(),
+        }),
+        responses: {
+          200: z.object({
+            footprint: z.any(),
+            fileName: z.string().nullable(),
+          }),
+          400: z.object({ code: z.string(), message: z.string() }),
+        },
+      },
+    );
+
+    this.post(
       "/api/components/import/preview",
       (ctx) => componentImportController.previewImport(ctx),
       {
@@ -2211,23 +2320,29 @@ this.get(
         tags: ["Components"],
         summary: "Confirm and execute component import",
         requestBody: z.object({
-          files: z.array(z.object({
-            fileName: z.string(),
-            content: z.string(),
-          })),
-          groups: z.array(z.object({
-            familyLabel: z.string(),
-            canonicalKey: z.string(),
-            categoryPath: z.string().optional(),
-            symbolFileName: z.string().nullable(),
-            variants: z.array(z.object({
-              canonicalCode: z.string(),
-              humanLabel: z.string(),
-              mountType: z.enum(["smd", "through_hole", "virtual"]),
-              footprintFileNames: z.array(z.string()),
-              model3dFileNames: z.array(z.string()),
-            })),
-          })),
+          files: z.array(
+            z.object({
+              fileName: z.string(),
+              content: z.string(),
+            }),
+          ),
+          groups: z.array(
+            z.object({
+              familyLabel: z.string(),
+              canonicalKey: z.string(),
+              categoryPath: z.string().optional(),
+              symbolFileName: z.string().nullable(),
+              variants: z.array(
+                z.object({
+                  canonicalCode: z.string(),
+                  humanLabel: z.string(),
+                  mountType: z.enum(["smd", "through_hole", "virtual"]),
+                  footprintFileNames: z.array(z.string()),
+                  model3dFileNames: z.array(z.string()),
+                }),
+              ),
+            }),
+          ),
         }),
         responses: {
           200: z.object({
@@ -2235,6 +2350,100 @@ this.get(
             message: z.string(),
           }),
           400: z.object({ code: z.string(), message: z.string() }),
+          500: z.object({ code: z.string(), message: z.string() }),
+        },
+      },
+    );
+
+    // Unified ZIP Import routes
+    this.post(
+      "/api/components/import-zip",
+      (ctx) => componentZipImportController.uploadZip(ctx),
+      {
+        operationId: "uploadComponentZip",
+        tags: ["Components"],
+        summary: "Upload a ZIP file for unified component import",
+        requestBody: z.any(), // FormData with file
+        responses: {
+          200: z.object({ job: z.any() }),
+          400: z.object({ code: z.string(), message: z.string() }),
+        },
+      },
+    );
+
+    this.get(
+      "/api/components/import-zip/:jobId/status",
+      (ctx) => componentZipImportController.getStatus(ctx),
+      {
+        operationId: "getComponentZipImportStatus",
+        tags: ["Components"],
+        summary: "Get ZIP import job status",
+        responses: {
+          200: z.object({ status: z.any() }),
+          500: z.object({ code: z.string(), message: z.string() }),
+        },
+      },
+    );
+
+    this.get(
+      "/api/components/import-zip/:jobId/preview",
+      (ctx) => componentZipImportController.getPreview(ctx),
+      {
+        operationId: "getComponentZipImportPreview",
+        tags: ["Components"],
+        summary: "Get ZIP import preview data",
+        responses: {
+          200: z.object({ preview: z.any() }),
+          500: z.object({ code: z.string(), message: z.string() }),
+        },
+      },
+    );
+
+    this.post(
+      "/api/components/import-zip/:jobId/resolve",
+      (ctx) => componentZipImportController.resolveConflict(ctx),
+      {
+        operationId: "resolveComponentZipImportConflict",
+        tags: ["Components"],
+        summary: "Resolve import conflict",
+        requestBody: z.object({
+          resolution: z.enum(["create_new", "update_existing", "skip"]),
+        }),
+        responses: {
+          200: z.object({ message: z.string() }),
+          500: z.object({ code: z.string(), message: z.string() }),
+        },
+      },
+    );
+
+    this.post(
+      "/api/components/import-zip/:jobId/approve",
+      (ctx) => componentZipImportController.approve(ctx),
+      {
+        operationId: "approveComponentZipImport",
+        tags: ["Components"],
+        summary: "Approve and save component import",
+        requestBody: z.object({ metadata: z.any().optional() }),
+        responses: {
+          200: z.object({
+            familyId: z.string().optional(),
+            componentName: z.string().optional(),
+            message: z.string(),
+          }),
+          500: z.object({ code: z.string(), message: z.string() }),
+        },
+      },
+    );
+
+    this.post(
+      "/api/components/import-zip/:jobId/cancel",
+      (ctx) => componentZipImportController.cancel(ctx),
+      {
+        operationId: "cancelComponentZipImport",
+        tags: ["Components"],
+        summary: "Cancel import job",
+        responses: {
+          200: z.object({ message: z.string() }),
           500: z.object({ code: z.string(), message: z.string() }),
         },
       },

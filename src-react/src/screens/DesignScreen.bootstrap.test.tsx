@@ -85,6 +85,17 @@ vi.mock("@/components/pcb/StatusBar", () => ({
   StatusBar: () => <div>PCB Status</div>,
 }));
 
+vi.mock("@/hooks/useComponents", () => ({
+  useComponents: vi.fn(() => ({
+    components: [],
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+    filters: {},
+    setFilters: vi.fn(),
+  })),
+}));
+
 function createMockContext(): CanvasRenderingContext2D {
   return {
     save: vi.fn(),
@@ -269,11 +280,11 @@ describe("DesignScreen real schematic bootstrap", () => {
       expect(useSchematicStore.getState().persisted.document?.id).toBe("design-1"),
     );
 
-    const resistorButton = screen.getByRole("button", { name: /resistor/i });
+    const groundButton = screen.getByRole("button", { name: /ground/i });
     const canvasSurface = screen.getByTestId("schematic-canvas-surface");
     const dataTransfer = createDataTransfer();
 
-    dispatchDragEvent(resistorButton, "dragstart", { dataTransfer });
+    dispatchDragEvent(groundButton, "dragstart", { dataTransfer });
     dispatchDragEvent(canvasSurface, "dragenter", {
       dataTransfer,
       clientX: 520,
@@ -287,7 +298,7 @@ describe("DesignScreen real schematic bootstrap", () => {
 
     expect(useSchematicStore.getState().session).toMatchObject({
       type: "placement",
-      symbolKind: "resistor",
+      symbolKind: "gnd",
     });
 
     dispatchDragEvent(canvasSurface, "drop", {
@@ -295,13 +306,13 @@ describe("DesignScreen real schematic bootstrap", () => {
       clientX: 520,
       clientY: 320,
     });
-    dispatchDragEvent(resistorButton, "dragend", { dataTransfer });
+    dispatchDragEvent(groundButton, "dragend", { dataTransfer });
 
     await waitFor(() =>
       expect(useSchematicStore.getState().persisted.document?.symbols).toHaveLength(1),
     );
     expect(useSchematicStore.getState().persisted.document?.symbols[0]).toMatchObject({
-      symbolKind: "resistor",
+      symbolKind: "gnd",
     });
   });
 });

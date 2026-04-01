@@ -35,6 +35,9 @@ function validPayload(): ComponentDraftPayload {
         { name: "2", electricalType: "passive" },
       ],
       properties: {},
+      unitCount: 1,
+      bodyGraphics: [],
+      rawKicadSource: null,
     },
     packageVariants: [
       {
@@ -114,6 +117,19 @@ function createDraftRepo(): ComponentDraftRepository {
 
 function createFamilyRepo(): ComponentFamilyRepository {
   return {
+    createFamilyWithHierarchy: mock(async (data: Record<string, unknown>) => ({
+      family: {
+        id: "fam-new",
+        ...(data.family as Record<string, unknown>),
+      },
+      variants: [
+        {
+          id: "var-1",
+        },
+      ],
+      footprints: [],
+      models: [],
+    })),
     create: mock(async (data: Record<string, unknown>) => ({
       id: "fam-new",
       ...data,
@@ -137,20 +153,23 @@ function createValidationService(
   canPublish = true,
 ): IComponentValidationService {
   return {
-    validateForPublish: mock(() => ({
-      blockers: canPublish
-        ? []
-        : [
-            {
-              code: "no_default_variant",
-              message: "No default",
-              entityId: null,
-              entityType: "family",
-            },
-          ],
-      warnings: [],
-      canPublish,
-    })),
+    validateForPublish: mock(
+      () =>
+        ({
+          blockers: canPublish
+            ? []
+            : [
+                {
+                  code: "import_ambiguity",
+                  message: "No default",
+                  entityId: null,
+                  entityType: "family",
+                },
+              ],
+          warnings: [],
+          canPublish,
+        }) as unknown as ReturnType<IComponentValidationService["validateForPublish"]>,
+    ) as IComponentValidationService["validateForPublish"],
   };
 }
 

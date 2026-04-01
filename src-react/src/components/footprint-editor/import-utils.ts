@@ -1,319 +1,346 @@
 /**
  * KiCAD Footprint Import Utilities
  *
- * Parse .kicad_mod files and convert to FootprintDraft.
+ * Convert backend-parsed `.kicad_mod` content into editable FootprintDraft data.
  */
 
+import {
+  parseKicadFootprintImport,
+  type ParsedKicadFootprint,
+} from "@/lib/api/component-api";
 import type {
+  ArcGraphic,
+  CircleGraphic,
   FootprintDraft,
-  PadDefinition,
   FootprintGraphic,
-  PadShape,
-  PadType,
+  GraphicLayer,
+  LineGraphic,
+  PadDefinition,
+  PadLayer,
+  Point,
+  PolygonGraphic,
+  RectGraphic,
+  TextGraphic,
 } from "./types";
-import { createPad, createEmptyDraft } from "./types";
+import { createEmptyDraft, createPad } from "./types";
 
-// ---------------------------------------------------------------------------
-// KiCAD S-Expression Parser (simplified)
-// ---------------------------------------------------------------------------
+type LayerName = GraphicLayer | PadLayer;
 
-interface SExpr {
-  name: string;
-  children: SExpr[];
-  value?: string | number;
+const SUPPORTED_GRAPHIC_LAYERS = new Set<GraphicLayer>([
+  "F.Cu",
+  "B.Cu",
+  "F.SilkS",
+  "B.SilkS",
+  "F.Fab",
+  "B.Fab",
+  "F.CrtYd",
+  "B.CrtYd",
+]);
+
+const SUPPORTED_PAD_LAYERS = new Set<PadLayer>([
+  "F.Cu",
+  "B.Cu",
+  "F.Mask",
+  "B.Mask",
+  "F.Paste",
+  "B.Paste",
+  "*.Cu",
+  "*.Mask",
+]);
+
+function toLayerName(value: string, fallback: LayerName): LayerName {
+  if (SUPPORTED_GRAPHIC_LAYERS.has(value as GraphicLayer)) {
+    return value as GraphicLayer;
+  }
+  if (SUPPORTED_PAD_LAYERS.has(value as PadLayer)) {
+    return value as PadLayer;
+  }
+  return fallback;
 }
 
-function parseSExprSimple(source: string): SExpr | null {
-  const tokens = tokenize(source);
-  let pos = 0;
-  return parseExpr();
+function toPoint(value: unknown): Point {
+  if (Array.isArray(value)) {
+    return {
+      x: toNumber(value[0]),
+      y: toNumber(value[1]),
+    };
+  }
 
-  function tokenize(src: string): (string | number)[] {
-    const result: (string | number)[] = [];
-    let i = 0;
-    while (i < src.length) {
-      const ch = src[i]!;
-      if (ch === "(" || ch === ")") {
-        result.push(ch);
-        i++;
-      } else if (ch === '"') {
-        // String literal
-        i++;
-        let str = "";
-        while (i < src.length && src[i] !== '"') {
-          if (src[i] === "\\") {
-            str += src[i + 1] ?? "";
-            i += 2;
-          } else {
-            str += src[i];
-            i++;
-          }
-        }
-        i++; // Skip closing quote
-        result.push(str);
-      } else if (/\s/.test(ch)) {
-        i++;
-      } else {
-        // Symbol or number
-        let token = "";
-        while (i < src.length && !/[\s()"']/.test(src[i]!)) {
-          token += src[i];
-          i++;
-        }
-        const num = parseFloat(token);
-        result.push(isNaN(num) ? token : num);
-      }
+  const record = value as Record<string, unknown>;
+  return {
+    x: typeof record.x === "number" ? record.x : 0,
+    y: typeof record.y === "number" ? record.y : 0,
+  };
+}
+
+function getStrokeWidth(data: Record<string, unknown>, fallback = 0.12): number {
+  const width = data.width;
+  if (typeof width === "number" && Number.isFinite(width)) {
+    return width;
+  }
+
+  const stroke = data.stroke;
+  if (Array.isArray(stroke)) {
+    if (typeof stroke[0] === "number") {
+      return toNumber(stroke[0], fallback);
     }
-    return result;
-  }
-
-  function parseExpr(): SExpr | null {
-    if (pos >= tokens.length || tokens[pos] !== "(") return null;
-    pos++; // Skip (
-    const name = tokens[pos];
-    if (typeof name !== "string" || name === "(" || name === ")") return null;
-    pos++;
-    const children: SExpr[] = [];
-    while (pos < tokens.length && tokens[pos] !== ")") {
-      if (tokens[pos] === "(") {
-        const child = parseExpr();
-        if (child) children.push(child);
-      } else {
-        const value = tokens[pos];
-        if (typeof value === "string" || typeof value === "number") {
-          children.push({ name: String(value), children: [], value });
-        }
-        pos++;
-      }
+    if (Array.isArray(stroke[0]) && stroke[0][0] === "width") {
+      return toNumber(stroke[0][1], fallback);
     }
-    if (tokens[pos] === ")") pos++; // Skip )
-    return { name, children };
-  }
-}
-
-function findChild(expr: SExpr, name: string): SExpr | undefined {
-  return expr.children.find((c) => c.name === name);
-}
-
-function findChildren(expr: SExpr, name: string): SExpr[] {
-  return expr.children.filter((c) => c.name === name);
-}
-
-function getString(expr: SExpr, index = 0): string | undefined {
-  const child = expr.children[index];
-  if (child && typeof child.value === "string") return child.value;
-  if (child && child.children.length === 0) return child.name;
-  return undefined;
-}
-
-function getNumber(expr: SExpr, index = 0): number | undefined {
-  const child = expr.children[index];
-  if (child && typeof child.value === "number") return child.value;
-  if (child) {
-    const num = parseFloat(child.name);
-    if (!isNaN(num)) return num;
-  }
-  return undefined;
-}
-
-// ---------------------------------------------------------------------------
-// KiCAD to FootprintDraft Conversion
-// ---------------------------------------------------------------------------
-
-const PAD_SHAPE_MAP: Record<string, PadShape> = {
-  rect: "rect",
-  circle: "circle",
-  oval: "oval",
-  roundrect: "roundrect",
-  trapezoid: "trapezoid",
-};
-
-const PAD_TYPE_MAP: Record<string, PadType> = {
-  smd: "smd",
-  thru_hole: "thru_hole",
-  np_thru_hole: "np_thru_hole",
-  connect: "connect",
-};
-
-function convertKiCadPad(padExpr: SExpr, id: string): PadDefinition | null {
-  const number = getString(padExpr, 0);
-  const type = getString(padExpr, 1);
-  const shape = getString(padExpr, 2);
-  
-  if (!number || !type || !shape) return null;
-
-  const atExpr = findChild(padExpr, "at");
-  const sizeExpr = findChild(padExpr, "size");
-  const layersExpr = findChild(padExpr, "layers");
-  const drillExpr = findChild(padExpr, "drill");
-  const rrExpr = findChild(padExpr, "roundrect_rratio");
-
-  const x = atExpr ? (getNumber(atExpr, 0) ?? 0) : 0;
-  const y = atExpr ? (getNumber(atExpr, 1) ?? 0) : 0;
-  const rotation = atExpr ? (getNumber(atExpr, 2) ?? 0) : 0;
-
-  const width = sizeExpr ? (getNumber(sizeExpr, 0) ?? 1) : 1;
-  const height = sizeExpr ? (getNumber(sizeExpr, 1) ?? 1) : 1;
-
-  const layers: string[] = [];
-  if (layersExpr) {
-    for (let i = 0; i < layersExpr.children.length; i++) {
-      const layer = getString(layersExpr, i);
-      if (layer) layers.push(layer);
+    if (Array.isArray(stroke[1]) && stroke[1][0] === "width") {
+      return toNumber(stroke[1][1], fallback);
     }
   }
 
-  const drillDiameter = drillExpr ? getNumber(drillExpr, 0) : undefined;
+  return fallback;
+}
 
-  const roundrectRatio = rrExpr ? getNumber(rrExpr, 0) : undefined;
+function getFill(data: Record<string, unknown>): boolean {
+  const fill = data.fill;
+  if (typeof fill === "string") {
+    return fill !== "none";
+  }
 
-  return createPad(id, {
-    number,
+  if (Array.isArray(fill)) {
+    const typeNode = fill.find((entry) => Array.isArray(entry) && entry[0] === "type") as
+      | unknown[]
+      | undefined;
+    return toStringValue(typeNode?.[1], "none") !== "none";
+  }
+
+  return false;
+}
+
+function toNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function toStringValue(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function solveArcCenter(start: Point, mid: Point, end: Point): { center: Point; radius: number } | null {
+  const d = 2 * (
+    start.x * (mid.y - end.y) +
+    mid.x * (end.y - start.y) +
+    end.x * (start.y - mid.y)
+  );
+  if (Math.abs(d) < 1e-9) return null;
+
+  const ux =
+    ((start.x * start.x + start.y * start.y) * (mid.y - end.y) +
+      (mid.x * mid.x + mid.y * mid.y) * (end.y - start.y) +
+      (end.x * end.x + end.y * end.y) * (start.y - mid.y)) /
+    d;
+  const uy =
+    ((start.x * start.x + start.y * start.y) * (end.x - mid.x) +
+      (mid.x * mid.x + mid.y * mid.y) * (start.x - end.x) +
+      (end.x * end.x + end.y * end.y) * (mid.x - start.x)) /
+    d;
+
+  return {
+    center: { x: ux, y: uy },
+    radius: Math.hypot(start.x - ux, start.y - uy),
+  };
+}
+
+function convertPad(pad: ParsedKicadFootprint["pads"][number]): PadDefinition {
+  return createPad(crypto.randomUUID(), {
+    number: pad.number,
     name: "",
-    type: PAD_TYPE_MAP[type] ?? "smd",
-    shape: PAD_SHAPE_MAP[shape] ?? "rect",
-    position: { x, y },
-    size: { width, height },
-    rotation,
-    roundrectRatio,
-    layers: layers.length > 0 ? layers as PadDefinition["layers"] : ["F.Cu", "F.Mask"],
-    drillDiameter,
+    type: pad.type,
+    shape: pad.shape === "custom" ? "rect" : pad.shape,
+    position: { ...pad.position },
+    size: { ...pad.size },
+    rotation: pad.rotation,
+    roundrectRatio: pad.roundrectRatio,
+    layers: (pad.layers.map((layer) => toLayerName(layer, "F.Cu")) as PadLayer[]),
+    drillDiameter: pad.drillDiameter,
+    drillOffset: pad.drillOffset ? { ...pad.drillOffset } : undefined,
   });
 }
 
-function convertKiCadGraphic(expr: SExpr, layer: string, id: string): FootprintGraphic | null {
-  const strokeWidthExpr = findChild(expr, "width");
-  const strokeWidth = strokeWidthExpr ? getNumber(strokeWidthExpr, 0) ?? 0.12 : 0.12;
-
-  const startExpr = findChild(expr, "start");
-  const endExpr = findChild(expr, "end");
-  const centerExpr = findChild(expr, "center");
-
-  switch (expr.name) {
-    case "fp_line":
-      if (!startExpr || !endExpr) return null;
-      return {
-        id,
-        type: "line",
-        layer: layer as FootprintGraphic["layer"],
-        strokeWidth,
-        start: {
-          x: getNumber(startExpr, 0) ?? 0,
-          y: getNumber(startExpr, 1) ?? 0,
-        },
-        end: {
-          x: getNumber(endExpr, 0) ?? 0,
-          y: getNumber(endExpr, 1) ?? 0,
-        },
-      };
-
-    case "fp_rect":
-      if (!startExpr || !endExpr) return null;
-      return {
-        id,
-        type: "rect",
-        layer: layer as FootprintGraphic["layer"],
-        strokeWidth,
-        position: {
-          x: ((getNumber(startExpr, 0) ?? 0) + (getNumber(endExpr, 0) ?? 0)) / 2,
-          y: ((getNumber(startExpr, 1) ?? 0) + (getNumber(endExpr, 1) ?? 0)) / 2,
-        },
-        width: Math.abs((getNumber(endExpr, 0) ?? 0) - (getNumber(startExpr, 0) ?? 0)),
-        height: Math.abs((getNumber(endExpr, 1) ?? 0) - (getNumber(startExpr, 1) ?? 0)),
-        filled: false,
-      };
-
-    case "fp_circle":
-      if (!centerExpr || !endExpr) return null;
-      return {
-        id,
-        type: "circle",
-        layer: layer as FootprintGraphic["layer"],
-        strokeWidth,
-        center: {
-          x: getNumber(centerExpr, 0) ?? 0,
-          y: getNumber(centerExpr, 1) ?? 0,
-        },
-        radius: Math.sqrt(
-          Math.pow((getNumber(endExpr, 0) ?? 0) - (getNumber(centerExpr, 0) ?? 0), 2) +
-          Math.pow((getNumber(endExpr, 1) ?? 0) - (getNumber(centerExpr, 1) ?? 0), 2)
-        ),
-        filled: false,
-      };
-
-    case "fp_arc":
-      // Arc parsing is complex, skip for now
-      return null;
-
-    case "fp_poly":
-      // Polygon parsing is complex, skip for now
-      return null;
-
-    default:
-      return null;
-  }
+function convertLineGraphic(layer: GraphicLayer, data: Record<string, unknown>): LineGraphic {
+  return {
+    id: crypto.randomUUID(),
+    type: "line",
+    layer,
+    strokeWidth: getStrokeWidth(data),
+    start: toPoint(data.start),
+    end: toPoint(data.end),
+  };
 }
 
-// ---------------------------------------------------------------------------
-// Main Import Function
-// ---------------------------------------------------------------------------
+function convertRectGraphic(layer: GraphicLayer, data: Record<string, unknown>): RectGraphic {
+  const start = toPoint(data.start);
+  const end = toPoint(data.end);
+  return {
+    id: crypto.randomUUID(),
+    type: "rect",
+    layer,
+    strokeWidth: getStrokeWidth(data),
+    position: {
+      x: (start.x + end.x) / 2,
+      y: (start.y + end.y) / 2,
+    },
+    width: Math.abs(end.x - start.x),
+    height: Math.abs(end.y - start.y),
+    filled: getFill(data),
+  };
+}
 
-/**
- * Parse a KiCAD .kicad_mod file and convert to a FootprintDraft.
- */
-export function parseKicadModFile(source: string, fileName?: string): FootprintDraft {
-  const expr = parseSExprSimple(source);
-  if (!expr || expr.name !== "footprint") {
-    throw new Error("Invalid KiCAD footprint file: missing (footprint ...) root");
+function convertCircleGraphic(layer: GraphicLayer, data: Record<string, unknown>): CircleGraphic {
+  const center = toPoint(data.center);
+  const end = toPoint(data.end);
+  return {
+    id: crypto.randomUUID(),
+    type: "circle",
+    layer,
+    strokeWidth: getStrokeWidth(data),
+    center,
+    radius: Math.hypot(end.x - center.x, end.y - center.y),
+    filled: getFill(data),
+  };
+}
+
+function convertArcGraphic(layer: GraphicLayer, data: Record<string, unknown>): ArcGraphic | null {
+  const start = toPoint(data.start);
+  const mid = toPoint(data.mid);
+  const end = toPoint(data.end);
+  const solved = solveArcCenter(start, mid, end);
+  if (!solved) return null;
+
+  return {
+    id: crypto.randomUUID(),
+    type: "arc",
+    layer,
+    strokeWidth: getStrokeWidth(data),
+    center: solved.center,
+    radius: solved.radius,
+    startAngle: (Math.atan2(start.y - solved.center.y, start.x - solved.center.x) * 180) / Math.PI,
+    endAngle: (Math.atan2(end.y - solved.center.y, end.x - solved.center.x) * 180) / Math.PI,
+  };
+}
+
+function convertPolygonGraphic(layer: GraphicLayer, data: Record<string, unknown>): PolygonGraphic | null {
+  const pts = (data.pts as unknown[] | undefined) ?? [];
+  const points = pts
+    .map((entry) => {
+      if (!Array.isArray(entry) || entry[0] !== "xy") return null;
+      return {
+        x: toNumber(entry[1]),
+        y: toNumber(entry[2]),
+      };
+    })
+    .filter((point): point is Point => point !== null);
+
+  if (points.length < 2) return null;
+
+  return {
+    id: crypto.randomUUID(),
+    type: "polygon",
+    layer,
+    strokeWidth: getStrokeWidth(data),
+    points,
+    filled: getFill(data),
+  };
+}
+
+function convertTextGraphic(layer: GraphicLayer, data: Record<string, unknown>): TextGraphic {
+  const args = Array.isArray(data.__args) ? data.__args : [];
+  const at = Array.isArray(data.at) ? data.at : [];
+  const effects = Array.isArray(data.effects) ? data.effects : [];
+  const font = effects.find((entry) => Array.isArray(entry) && entry[0] === "font") as
+    | unknown[]
+    | undefined;
+  const size = Array.isArray(font)
+    ? (font.find((entry) => Array.isArray(entry) && entry[0] === "size") as unknown[] | undefined)
+    : undefined;
+  const content = toStringValue(args[1], toStringValue(args[0]));
+
+  return {
+    id: crypto.randomUUID(),
+    type: "text",
+    layer,
+    strokeWidth: getStrokeWidth(data),
+    position: {
+      x: toNumber(at[0]),
+      y: toNumber(at[1]),
+    },
+    content,
+    fontSize: toNumber(size?.[1], 1),
+    rotation: toNumber(at[2]),
+  };
+}
+
+function convertGraphic(graphic: ParsedKicadFootprint["graphics"][number]): FootprintGraphic | null {
+  const layer = toLayerName(graphic.layer, "F.Fab");
+  if (!SUPPORTED_GRAPHIC_LAYERS.has(layer as GraphicLayer)) {
+    return null;
   }
 
-  const name = getString(expr, 0) ?? "Unknown";
+  if (graphic.type === "line") return convertLineGraphic(layer as GraphicLayer, graphic.data);
+  if (graphic.type === "rect") return convertRectGraphic(layer as GraphicLayer, graphic.data);
+  if (graphic.type === "circle") return convertCircleGraphic(layer as GraphicLayer, graphic.data);
+  if (graphic.type === "arc") return convertArcGraphic(layer as GraphicLayer, graphic.data);
+  if (graphic.type === "poly") return convertPolygonGraphic(layer as GraphicLayer, graphic.data);
+  if (graphic.type === "text") return convertTextGraphic(layer as GraphicLayer, graphic.data);
+  return null;
+}
+
+export function convertParsedKicadFootprintToDraft(
+  parsed: ParsedKicadFootprint,
+  fileName: string,
+): FootprintDraft {
   const draft = createEmptyDraft(crypto.randomUUID());
   draft.preset = "import";
-  draft.config = { kind: "import", sourceFileName: fileName ?? "" };
-  draft.metadata.name = name;
-  draft.metadata.reference = name.split("_")[0] ?? "";
+  draft.config = { kind: "import", sourceFileName: fileName };
+  draft.metadata.name = parsed.name;
+  draft.metadata.reference = parsed.name;
+  draft.metadata.description = parsed.description;
 
-  const warnings: { code: string; message: string }[] = [];
+  draft.pads = parsed.pads.map(convertPad);
 
-  // Parse pads
-  const padExprs = findChildren(expr, "pad");
-  for (const padExpr of padExprs) {
-    const pad = convertKiCadPad(padExpr, crypto.randomUUID());
-    if (pad) {
-      draft.pads.push(pad);
-    } else {
-      warnings.push({ code: "pad_parse_failed", message: `Failed to parse pad` });
-    }
-  }
+  let droppedGraphics = 0;
+  let droppedCustomPads = 0;
+  draft.graphics = parsed.graphics
+    .map((graphic) => {
+      const converted = convertGraphic(graphic);
+      if (!converted) droppedGraphics += 1;
+      return converted;
+    })
+    .filter((graphic): graphic is FootprintGraphic => graphic !== null);
 
-  // Parse graphics
-  const graphicTags = ["fp_line", "fp_rect", "fp_circle", "fp_arc", "fp_poly"];
-  for (const tag of graphicTags) {
-    const graphicExprs = findChildren(expr, tag);
-    for (const graphicExpr of graphicExprs) {
-      const layerExpr = findChild(graphicExpr, "layer");
-      const layer = layerExpr ? getString(layerExpr, 0) ?? "F.Fab" : "F.Fab";
-      const graphic = convertKiCadGraphic(graphicExpr, layer, crypto.randomUUID());
-      if (graphic) {
-        draft.graphics.push(graphic);
-      }
-    }
+  for (const pad of parsed.pads) {
+    if (pad.shape === "custom") droppedCustomPads += 1;
   }
 
   draft.importPreservation = {
-    rawSource: source,
-    sourceFileName: fileName ?? "",
-    warnings,
+    rawSource: parsed.rawSource,
+    sourceFileName: fileName,
+    warnings: [
+      ...parsed.warnings,
+      ...(droppedGraphics > 0
+        ? [{ code: "graphics_dropped", message: `${droppedGraphics} unsupported graphics were skipped` }]
+        : []),
+      ...(droppedCustomPads > 0
+        ? [{ code: "custom_pad_degraded", message: `${droppedCustomPads} custom pads were downgraded to rect pads` }]
+        : []),
+    ],
+    model3dReferences: parsed.model3dRefs.map((ref) => ({
+      ...ref,
+      offset: { ...ref.offset },
+      scale: { ...ref.scale },
+      rotation: { ...ref.rotation },
+    })),
+    attributes: parsed.attributes,
   };
 
   return draft;
 }
 
-/**
- * Import file handler for drag-drop or file input.
- */
 export async function importFootprintFile(file: File): Promise<FootprintDraft> {
   const content = await file.text();
-  return parseKicadModFile(content, file.name);
+  const parsed = await parseKicadFootprintImport(content, file.name);
+  return convertParsedKicadFootprintToDraft(parsed.footprint, parsed.fileName ?? file.name);
 }

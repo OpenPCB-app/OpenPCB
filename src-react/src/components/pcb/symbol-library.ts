@@ -1,18 +1,19 @@
-import type { Point, Rotation, SymbolEntity, SymbolKind } from "./types";
+import type { Point, Rotation, SymbolEntity } from "./types";
+import type { ComponentFamilyType } from "@/../../src-ts/src/core/schemas/component-library.schema";
+
+export const PALETTE_SYMBOL_KIND_MIME = "application/x-openpcb-symbol-kind";
 
 const GRID_STEP_NM = 1_270_000;
 const HALF_GRID_STEP_NM = GRID_STEP_NM / 2;
 
-export const PALETTE_SYMBOL_KIND_MIME = "application/x-openpcb-symbol-kind";
-
-interface SymbolTemplate {
+interface LegacySymbolTemplate {
   label: string;
   prefix: string | null;
   value: string;
   pins: Array<{ name: string; position: Point }>;
 }
 
-const SYMBOL_TEMPLATES: Record<SymbolKind, SymbolTemplate> = {
+const LEGACY_TEMPLATES: Record<string, LegacySymbolTemplate> = {
   resistor: {
     label: "Resistor",
     prefix: "R",
@@ -58,28 +59,16 @@ const SYMBOL_TEMPLATES: Record<SymbolKind, SymbolTemplate> = {
       { name: "K", position: { x: GRID_STEP_NM, y: 0 } },
     ],
   },
-  gnd: {
-    label: "GND",
+gnd: {
+    label: "Ground",
     prefix: null,
     value: "GND",
     pins: [{ name: "GND", position: { x: 0, y: 0 } }],
   },
-  vcc_3v3: {
-    label: "VCC 3.3V",
+  vcc: {
+    label: "VCC",
     prefix: null,
-    value: "3.3V",
-    pins: [{ name: "VCC", position: { x: 0, y: 0 } }],
-  },
-  vcc_5v: {
-    label: "VCC 5V",
-    prefix: null,
-    value: "5V",
-    pins: [{ name: "VCC", position: { x: 0, y: 0 } }],
-  },
-  vcc_12v: {
-    label: "VCC 12V",
-    prefix: null,
-    value: "12V",
+    value: "VCC",
     pins: [{ name: "VCC", position: { x: 0, y: 0 } }],
   },
   npn: {
@@ -156,34 +145,67 @@ const SYMBOL_TEMPLATES: Record<SymbolKind, SymbolTemplate> = {
   },
 };
 
+function generatePinPositions(pinCount: number): Point[] {
+  const positions: Point[] = [];
+  for (let i = 0; i < pinCount; i++) {
+    const col = Math.floor(i / 2);
+    positions.push({
+      x: col * GRID_STEP_NM,
+      y: i % 2 === 0 ? -HALF_GRID_STEP_NM : HALF_GRID_STEP_NM,
+    });
+  }
+  return positions;
+}
+
 function getNextReference(prefix: string, symbols: SymbolEntity[]): string {
   const matcher = new RegExp(`^${prefix}(\\d+)$`);
   let nextIndex = 1;
-
   for (const symbol of symbols) {
     const match = symbol.reference.match(matcher);
-    if (!match) {
-      continue;
-    }
-
+    if (!match) continue;
     const value = Number.parseInt(match[1] ?? "0", 10);
     if (Number.isFinite(value)) {
       nextIndex = Math.max(nextIndex, value + 1);
     }
   }
-
   return `${prefix}${nextIndex}`;
 }
 
-function instantiateSymbol(
-  kind: SymbolKind,
+function createSymbolFromFamily(
+  family: ComponentFamilyType,
   position: Point,
   rotation: Rotation,
   id: string,
   reference: string,
 ): SymbolEntity {
-  const template = SYMBOL_TEMPLATES[kind];
+  const pinDefinitions = family.symbolData.pinDefinitions;
+  const pinPositions = generatePinPositions(pinDefinitions.length);
+  return {
+    id,
+    entityType: "symbol",
+    symbolKind: family.id,
+    reference,
+    value: family.symbolData.properties?.value ?? family.displayLabel,
+    position,
+    rotation,
+    mirrored: false,
+    pins: pinDefinitions.map((pin, index) => ({
+      id: `${id}-pin-${index + 1}`,
+      name: pin.name,
+      position: pinPositions[index] ?? { x: 0, y: 0 },
+    })),
+    properties: { ...family.symbolData.properties },
+  };
+}
 
+function createLegacySymbol(
+  kind: string,
+  position: Point,
+  rotation: Rotation,
+  id: string,
+  reference: string,
+): SymbolEntity {
+  const template = LEGACY_TEMPLATES[kind] ?? LEGACY_TEMPLATES.generic_ic!;
   return {
     id,
     entityType: "symbol",
@@ -203,25 +225,52 @@ function instantiateSymbol(
 }
 
 export function createSymbolEntity(
-  kind: SymbolKind,
+  kindOrFamily: string | ComponentFamilyType,
   position: Point,
   rotation: Rotation,
   symbols: SymbolEntity[],
 ): SymbolEntity {
-  const template = SYMBOL_TEMPLATES[kind];
-  const reference = template.prefix
-    ? getNextReference(template.prefix, symbols)
-    : template.label;
-
-  return instantiateSymbol(kind, position, rotation, crypto.randomUUID(), reference);
+  if (typeof kindOrFamily === "string") {
+    const legacyTemplate = LEGACY_TEMPLATES[kindOrFamily];
+    if (legacyTemplate) {
+      const reference = legacyTemplate.prefix
+        ? getNextReference(legacyTemplate.prefix, symbols)
+        : legacyTemplate.label;
+      return createLegacySymbol(kindOrFamily, position, rotation, crypto.randomUUID(), reference);
+    }
+    return createLegacySymbol("generic_ic", position, rotation, crypto.randomUUID(), `U${symbols.length + 1}`);
+  }
+  const family = kindOrFamily;
+  const prefix = family.symbolData.referencePrefix || "U";
+  const reference = getNextReference(prefix, symbols);
+  return createSymbolFromFamily(family, position, rotation, crypto.randomUUID(), reference);
 }
 
 export function createPreviewSymbol(
-  kind: SymbolKind,
+  kindOrFamily: string | ComponentFamilyType,
   position: Point,
   rotation: Rotation,
 ): SymbolEntity {
-  const template = SYMBOL_TEMPLATES[kind];
+  if (typeof kindOrFamily === "string") {
+    const legacyTemplate = LEGACY_TEMPLATES[kindOrFamily] ?? LEGACY_TEMPLATES.generic_ic!;
+    return createLegacySymbol(kindOrFamily, position, rotation, "__placement-preview__", legacyTemplate.label);
+  }
+  const family = kindOrFamily;
+  return createSymbolFromFamily(family, position, rotation, "__placement-preview__", family.displayLabel);
+}
 
-  return instantiateSymbol(kind, position, rotation, "__placement-preview__", template.label);
+export function getSymbolLabel(kindOrFamily: string | ComponentFamilyType): string {
+  if (typeof kindOrFamily === "string") {
+    const legacyTemplate = LEGACY_TEMPLATES[kindOrFamily];
+    return legacyTemplate?.label ?? kindOrFamily;
+  }
+  return kindOrFamily.displayLabel;
+}
+
+export function getSymbolPrefix(kindOrFamily: string | ComponentFamilyType): string | null {
+  if (typeof kindOrFamily === "string") {
+    const legacyTemplate = LEGACY_TEMPLATES[kindOrFamily];
+    return legacyTemplate?.prefix ?? null;
+  }
+  return kindOrFamily.symbolData.referencePrefix || null;
 }

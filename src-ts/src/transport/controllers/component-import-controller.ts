@@ -28,11 +28,68 @@ interface ConfirmedImportVariant {
     model3dFileNames: string[];
 }
 
+interface ParseKicadRequest {
+    content: string;
+    fileName?: string;
+}
+
 export class ComponentImportController {
     constructor(
         private importService: ComponentImportService,
         private db: DatabaseAccess,
     ) {}
+
+    async parseSymbol(ctx: RouteContext): Promise<Response> {
+        try {
+            const body = await ctx.req.json() as ParseKicadRequest;
+            if (typeof body?.content !== "string" || body.content.trim().length === 0) {
+                return ResponseBuilder.badRequest("Missing KiCAD symbol content");
+            }
+
+            const parsed = parseKicadSymbolLib(body.content);
+            if (parsed.symbols.length === 0) {
+                return ResponseBuilder.badRequest("No symbols found in .kicad_sym file");
+            }
+            if (parsed.symbols.length > 1) {
+                return ResponseBuilder.badRequest(
+                    `Multiple symbols found in .kicad_sym file (${parsed.symbols.map((s) => s.name).join(", ")}). Please import a file containing exactly one symbol.`,
+                );
+            }
+
+            return ResponseBuilder.success({
+                symbol: parsed.symbols[0],
+                availableSymbols: parsed.symbols.map((s) => s.name),
+                fileName: body.fileName ?? null,
+            });
+        } catch (err) {
+            return ResponseBuilder.error(
+                "KICAD_SYMBOL_PARSE_FAILED",
+                err instanceof Error ? err.message : "Failed to parse KiCAD symbol",
+                400,
+            );
+        }
+    }
+
+    async parseFootprint(ctx: RouteContext): Promise<Response> {
+        try {
+            const body = await ctx.req.json() as ParseKicadRequest;
+            if (typeof body?.content !== "string" || body.content.trim().length === 0) {
+                return ResponseBuilder.badRequest("Missing KiCAD footprint content");
+            }
+
+            const footprint = parseKicadFootprint(body.content);
+            return ResponseBuilder.success({
+                footprint,
+                fileName: body.fileName ?? null,
+            });
+        } catch (err) {
+            return ResponseBuilder.error(
+                "KICAD_FOOTPRINT_PARSE_FAILED",
+                err instanceof Error ? err.message : "Failed to parse KiCAD footprint",
+                400,
+            );
+        }
+    }
 
     async previewImport(ctx: RouteContext): Promise<Response> {
         try {

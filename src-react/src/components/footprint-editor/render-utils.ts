@@ -184,20 +184,27 @@ function drawRoundRect(
   width: number,
   height: number,
   radius: number,
+  rotation = 0,
 ): void {
   const hw = width / 2;
   const hh = height / 2;
+  ctx.save();
+  ctx.translate(x, y);
+  if (rotation !== 0) {
+    ctx.rotate((rotation * Math.PI) / 180);
+  }
   ctx.beginPath();
-  ctx.moveTo(x - hw + radius, y - hh);
-  ctx.lineTo(x + hw - radius, y - hh);
-  ctx.arcTo(x + hw, y - hh, x + hw, y - hh + radius, radius);
-  ctx.lineTo(x + hw, y + hh - radius);
-  ctx.arcTo(x + hw, y + hh, x + hw - radius, y + hh, radius);
-  ctx.lineTo(x - hw + radius, y + hh);
-  ctx.arcTo(x - hw, y + hh, x - hw, y + hh - radius, radius);
-  ctx.lineTo(x - hw, y - hh + radius);
-  ctx.arcTo(x - hw, y - hh, x - hw + radius, y - hh, radius);
+  ctx.moveTo(-hw + radius, -hh);
+  ctx.lineTo(hw - radius, -hh);
+  ctx.arcTo(hw, -hh, hw, -hh + radius, radius);
+  ctx.lineTo(hw, hh - radius);
+  ctx.arcTo(hw, hh, hw - radius, hh, radius);
+  ctx.lineTo(-hw + radius, hh);
+  ctx.arcTo(-hw, hh, -hw, hh - radius, radius);
+  ctx.lineTo(-hw, -hh + radius);
+  ctx.arcTo(-hw, -hh, -hw + radius, -hh, radius);
   ctx.closePath();
+  ctx.restore();
 }
 
 export function renderPad(
@@ -218,17 +225,17 @@ export function renderPad(
     // roundrect: roundrectRatio is 0-0.5, representing fraction of smaller dimension
     const smallerDim = Math.min(screenWidth, screenHeight);
     const radius = (pad.roundrectRatio * smallerDim) / 2;
-    drawRoundRect(ctx, screen.x, screen.y, screenWidth, screenHeight, radius);
+    drawRoundRect(ctx, screen.x, screen.y, screenWidth, screenHeight, radius, pad.rotation);
   } else if (pad.shape === "circle") {
     const radius = Math.min(screenWidth, screenHeight) / 2;
     ctx.beginPath();
     ctx.arc(screen.x, screen.y, radius, 0, Math.PI * 2);
   } else if (pad.shape === "oval") {
-    // Oval: rx and ry based on half dimensions
+    const rotation = (pad.rotation * Math.PI) / 180;
     const hw = screenWidth / 2;
     const hh = screenHeight / 2;
     ctx.beginPath();
-    ctx.ellipse(screen.x, screen.y, hw, hh, 0, 0, Math.PI * 2);
+    ctx.ellipse(screen.x, screen.y, hw, hh, rotation, 0, Math.PI * 2);
   } else {
     // Default: rect or trapezoid (trapezoid rendered as rect for now)
     drawRotatedRect(ctx, screen.x, screen.y, screenWidth, screenHeight, pad.rotation);

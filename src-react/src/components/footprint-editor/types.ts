@@ -340,6 +340,16 @@ export interface ImportPreservation {
   rawSource: string;
   sourceFileName: string;
   warnings: Array<{ code: string; message: string }>;
+  model3dReferences: Array<{
+    path: string;
+    resolvedFileName: string;
+    offset: { x: number; y: number; z: number };
+    scale: { x: number; y: number; z: number };
+    rotation: { x: number; y: number; z: number };
+  }>;
+  attributes?: {
+    type: "smd" | "through_hole" | "virtual" | "unknown";
+  };
 }
 
 /** Complete footprint draft for Step 2 */

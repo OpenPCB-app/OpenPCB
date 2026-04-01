@@ -55,8 +55,14 @@ interface SymbolEditorState {
   removePins: (ids: string[]) => void;
   movePin: (id: string, position: Point) => void;
 
+  // Graphic actions
+  setGraphics: (graphics: SymbolDraft["graphics"]) => void;
+  updateGraphic: (id: string, graphic: SymbolDraft["graphics"][number]) => void;
+  removeGraphics: (ids: string[]) => void;
+
   // Selection actions
   selectPin: (id: string, additive?: boolean) => void;
+  selectGraphic: (id: string, additive?: boolean) => void;
   selectPins: (ids: string[]) => void;
   clearSelection: () => void;
   selectAllPins: () => void;
@@ -125,7 +131,7 @@ function createHistorySnapshot(draft: SymbolDraft): SymbolDraft {
     metadata: { ...draft.metadata },
     body: { ...draft.body },
     pins: draft.pins.map((p) => ({ ...p, position: { ...p.position } })),
-    graphics: draft.graphics.map((g) => ({ ...g })),
+    graphics: draft.graphics.map(cloneGraphic),
     importPreservation: draft.importPreservation
       ? {
           ...draft.importPreservation,
@@ -133,6 +139,19 @@ function createHistorySnapshot(draft: SymbolDraft): SymbolDraft {
         }
       : null,
   };
+}
+
+function cloneGraphic(graphic: SymbolDraft["graphics"][number]): SymbolDraft["graphics"][number] {
+  if (graphic.type === "polygon") {
+    return { ...graphic, points: graphic.points.map((point) => ({ ...point })) };
+  }
+  if (graphic.type === "bezier") {
+    return {
+      ...graphic,
+      points: graphic.points.map((point) => ({ ...point })) as typeof graphic.points,
+    };
+  }
+  return { ...graphic };
 }
 
 // ---------------------------------------------------------------------------
@@ -153,6 +172,7 @@ export function createSymbolEditorStore(initialDraftId?: string) {
     setDraft: (draft) => {
       set({
         draft,
+        chrome: createDefaultChrome(),
         isDirty: false,
         history: createDefaultHistory(),
       });
@@ -286,11 +306,49 @@ export function createSymbolEditorStore(initialDraftId?: string) {
       const pinIndex = state.draft.pins.findIndex((p) => p.id === id);
       if (pinIndex === -1) return;
 
-      state.pushHistory();
       const newPins = [...state.draft.pins];
       newPins[pinIndex] = { ...newPins[pinIndex]!, position };
       set({
         draft: { ...state.draft, pins: newPins },
+        isDirty: true,
+      });
+    },
+
+    setGraphics: (graphics) => {
+      const state = get();
+      state.pushHistory();
+      set({
+        draft: { ...state.draft, graphics: graphics.map(cloneGraphic) },
+        isDirty: true,
+      });
+    },
+
+    updateGraphic: (id, graphic) => {
+      const state = get();
+      const graphics = state.draft.graphics.map((entry) =>
+        entry.id === id ? cloneGraphic(graphic) : cloneGraphic(entry),
+      );
+      set({ draft: { ...state.draft, graphics }, isDirty: true });
+    },
+
+    removeGraphics: (ids) => {
+      const state = get();
+      const idSet = new Set(ids);
+      state.pushHistory();
+      set({
+        draft: {
+          ...state.draft,
+          graphics: state.draft.graphics.filter((graphic) => !idSet.has(graphic.id)),
+        },
+        chrome: {
+          ...state.chrome,
+          selection: {
+            ...state.chrome.selection,
+            selectedGraphicIds: new Set(
+              [...state.chrome.selection.selectedGraphicIds].filter((gid) => !idSet.has(gid)),
+            ),
+          },
+        },
         isDirty: true,
       });
     },
@@ -310,6 +368,22 @@ export function createSymbolEditorStore(initialDraftId?: string) {
           selection: {
             ...state.chrome.selection,
             selectedPinIds: newSelection,
+          },
+        },
+      });
+    },
+
+    selectGraphic: (id, additive = false) => {
+      const state = get();
+      const newSelection = additive
+        ? new Set([...state.chrome.selection.selectedGraphicIds, id])
+        : new Set([id]);
+      set({
+        chrome: {
+          ...state.chrome,
+          selection: {
+            ...state.chrome.selection,
+            selectedGraphicIds: newSelection,
           },
         },
       });

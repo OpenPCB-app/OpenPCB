@@ -12,6 +12,17 @@ OpenPCB is a desktop PCB design application — a mixed TypeScript/Rust monorepo
 
 Communication: React → HTTP → Bun sidecar (dynamic port). Rust spawns Bun, reads `{"serverPort": N}` from stdout, emits `backend-ready` event.
 
+## PCB Design Standards
+
+**IPC 7351 Compliance:** All component footprints, land patterns, and PCB layout work must conform to IPC 7351 standard ("Generic Requirements for Surface Mount Design and Land Pattern Standard").
+
+- **Land pattern naming:** Follow IPC-7351 naming convention (e.g., `SOIC127P600X175-8N`)
+- **Density levels:** Support N (Nominal), M (Most), L (Least) producibility levels
+- **Pad geometry:** Toe, heel, side fillet calculations per IPC-7351B formulas
+- **Courtyard:** Include component body + clearance zone
+- **Silkscreen:** Must not overlap pads; 0.1mm minimum clearance
+- **Reference designators:** Place outside component courtyard
+
 ## Commands
 
 ```bash
@@ -124,6 +135,8 @@ React (Vite :1420) ──HTTP──▶ Bun Sidecar (dynamic port) ◀──IPC�
 - **Don't remove `main.rs` pragma** — breaks Windows console hiding
 - **Don't skip Stronghold for secrets** — no env vars for API keys
 - **Don't log API keys**
+- **No non-IPC-7351 footprints** — all land patterns must follow IPC-7351 standard
+- **No arbitrary pad dimensions** — calculate from component body + tolerance using IPC formulas
 
 ## Subtree AGENTS.md Files
 

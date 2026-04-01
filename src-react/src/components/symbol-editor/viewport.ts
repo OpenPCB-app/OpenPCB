@@ -74,7 +74,10 @@ export function snapToGrid(point: Point, gridSize: Nanometers): Point {
 /**
  * Snap a single value to the nearest grid line.
  */
-export function snapValueToGrid(value: Nanometers, gridSize: Nanometers): Nanometers {
+export function snapValueToGrid(
+  value: Nanometers,
+  gridSize: Nanometers,
+): Nanometers {
   return Math.round(value / gridSize) * gridSize;
 }
 
@@ -118,6 +121,7 @@ export function fitViewportToBounds(
   canvasWidth: number,
   canvasHeight: number,
   padding = 50,
+  zoomLimits?: { min?: number; max?: number },
 ): Viewport {
   if (!bounds) {
     return createCenteredViewport(canvasWidth, canvasHeight);
@@ -134,9 +138,13 @@ export function fitViewportToBounds(
   const availableWidth = canvasWidth - padding * 2;
   const availableHeight = canvasHeight - padding * 2;
 
-  const scaleX = boundsWidth > 0 ? availableWidth / (boundsWidth / 1_000_000) : Infinity;
-  const scaleY = boundsHeight > 0 ? availableHeight / (boundsHeight / 1_000_000) : Infinity;
-  const zoom = clampZoom(Math.min(scaleX, scaleY));
+  const scaleX =
+    boundsWidth > 0 ? availableWidth / (boundsWidth / 1_000_000) : Infinity;
+  const scaleY =
+    boundsHeight > 0 ? availableHeight / (boundsHeight / 1_000_000) : Infinity;
+  const minZ = zoomLimits?.min ?? MIN_ZOOM;
+  const maxZ = zoomLimits?.max ?? MAX_ZOOM;
+  const zoom = Math.min(maxZ, Math.max(minZ, Math.min(scaleX, scaleY)));
 
   // Center on bounds
   const centerX = (bounds.minX + bounds.maxX) / 2;

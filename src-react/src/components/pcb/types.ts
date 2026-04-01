@@ -12,23 +12,7 @@ export type Point = ProjectPoint;
 export type Rotation = 0 | 90 | 180 | 270;
 export type MirrorAxis = "horizontal" | "vertical";
 
-export type SymbolKind =
-  | "resistor"
-  | "capacitor"
-  | "inductor"
-  | "diode"
-  | "led"
-  | "gnd"
-  | "vcc_3v3"
-  | "vcc_5v"
-  | "vcc_12v"
-  | "npn"
-  | "pnp"
-  | "nmos"
-  | "pmos"
-  | "opamp"
-  | "generic_ic"
-  | "connector";
+export type SymbolKind = string;
 
 export type EntityType = "symbol" | "wire" | "label";
 

@@ -9,7 +9,12 @@ const API_URL = `${BASE_URL}/api/mcp/servers`;
 const ALLOWED_ORIGIN = "http://localhost:1420";
 const DENIED_ORIGIN = "https://evil.example";
 
-const testServer = new TestServer(PORT, TOKEN);
+const testServer = new TestServer(PORT, TOKEN, {
+  env: {
+    OPENPCB_STARTUP_LICENSE_STATE: "active",
+    OPENPCB_STARTUP_LICENSE_CODE: "TOKEN_VALID",
+  },
+});
 
 function authHeaders(contentType = true): Record<string, string> {
   const headers: Record<string, string> = {
@@ -119,13 +124,13 @@ describe("MCP API endpoints", () => {
   let serverId = "";
 
   beforeAll(async () => {
-    await cleanTestDatabase();
+    await cleanTestDatabase(testServer.getDataDir());
     await testServer.start();
   }, { timeout: 120000 });
 
   afterAll(async () => {
     await testServer.stop();
-    await cleanTestDatabase();
+    await cleanTestDatabase(testServer.getDataDir());
   }, { timeout: 120000 });
 
   it("enforces X-OpenPCB-Token auth", async () => {

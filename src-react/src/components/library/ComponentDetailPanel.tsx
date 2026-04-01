@@ -16,7 +16,7 @@ export function ComponentDetailPanel({
   onClose,
 }: ComponentDetailPanelProps) {
   // Group variants by size/dimensions
-  const variantsBySize = groupVariantsBySize(component.packageVariants);
+  const variantsBySize = groupVariantsBySize(component.packageVariants || []);
 
   return (
     <div className="fixed inset-y-0 right-0 w-[480px] border-l border-border-default bg-bg-secondary shadow-xl flex flex-col z-50">
@@ -75,7 +75,7 @@ export function ComponentDetailPanel({
         <section className="border-b border-border-default p-4">
           <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-text-primary">
             <Package className="h-4 w-4" />
-            Package Variants ({component.packageVariants.length})
+            Package Variants ({component.packageVariants?.length || 0})
           </h3>
           <Accordion.Root type="single" collapsible>
             {Object.entries(variantsBySize).map(([sizeKey, variants]) => (
@@ -121,14 +121,14 @@ export function ComponentDetailPanel({
         </section>
 
         {/* MPN Table */}
-        {component.packageVariants.some((v) => v.offerings.length > 0) && (
+        {component.packageVariants?.some((v) => v.offerings?.length > 0) && (
           <section className="p-4">
             <h3 className="mb-3 text-sm font-medium text-text-primary">
               Manufacturer Part Numbers
             </h3>
             <div className="space-y-2">
-              {component.packageVariants.map((variant) =>
-                variant.offerings.map((offering) => (
+              {component.packageVariants?.map((variant) =>
+                variant.offerings?.map((offering) => (
                   <OfferingCard
                     key={offering.id}
                     offering={offering}

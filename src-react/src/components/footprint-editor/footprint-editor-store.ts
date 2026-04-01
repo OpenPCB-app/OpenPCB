@@ -40,10 +40,13 @@ interface FootprintEditorState {
   history: HistoryState;
   /** Whether draft has unsaved changes */
   isDirty: boolean;
+  /** Imported footprint preset lock until explicit replace */
+  isImportedPresetLocked: boolean;
 
   // Draft actions
   setDraft: (draft: FootprintDraft) => void;
   resetDraft: (id?: string) => void;
+  unlockImportedPreset: () => void;
   updateMetadata: (updates: Partial<FootprintDraft["metadata"]>) => void;
   setPreset: (kind: FootprintPresetKind, config: PresetConfig) => void;
   updateConfig: (updates: Partial<PresetConfig>) => void;
@@ -62,10 +65,13 @@ interface FootprintEditorState {
   // Graphics actions
   setGraphics: (graphics: FootprintGraphic[]) => void;
   addGraphic: (graphic: FootprintGraphic) => void;
+  updateGraphic: (id: string, graphic: FootprintGraphic) => void;
   removeGraphic: (id: string) => void;
+  removeGraphics: (ids: string[]) => void;
 
   // Selection actions
   selectPad: (id: string, additive?: boolean) => void;
+  selectGraphic: (id: string, additive?: boolean) => void;
   selectPads: (ids: string[]) => void;
   clearSelection: () => void;
   selectAllPads: () => void;
@@ -112,14 +118,39 @@ function createHistorySnapshot(draft: FootprintDraft): FootprintDraft {
       size: { ...p.size },
       layers: [...p.layers],
     })),
-    graphics: draft.graphics.map((g) => ({ ...g })),
+    graphics: draft.graphics.map(cloneGraphic),
     importPreservation: draft.importPreservation
       ? {
           ...draft.importPreservation,
           warnings: [...draft.importPreservation.warnings],
+          model3dReferences: draft.importPreservation.model3dReferences.map(
+            (ref) => ({
+              ...ref,
+              offset: { ...ref.offset },
+              scale: { ...ref.scale },
+              rotation: { ...ref.rotation },
+            }),
+          ),
         }
       : null,
   };
+}
+
+function cloneGraphic(graphic: FootprintGraphic): FootprintGraphic {
+  switch (graphic.type) {
+    case "line":
+      return { ...graphic, start: { ...graphic.start }, end: { ...graphic.end } };
+    case "rect":
+      return { ...graphic, position: { ...graphic.position } };
+    case "circle":
+      return { ...graphic, center: { ...graphic.center } };
+    case "arc":
+      return { ...graphic, center: { ...graphic.center } };
+    case "polygon":
+      return { ...graphic, points: graphic.points.map((point) => ({ ...point })) };
+    case "text":
+      return { ...graphic, position: { ...graphic.position } };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +163,7 @@ export function createFootprintEditorStore(initialDraftId?: string) {
     chrome: createDefaultChrome(),
     history: createDefaultHistory(),
     isDirty: false,
+    isImportedPresetLocked: false,
 
     // -------------------------------------------------------------------------
     // Draft Actions
@@ -140,8 +172,10 @@ export function createFootprintEditorStore(initialDraftId?: string) {
     setDraft: (draft) => {
       set({
         draft,
+        chrome: createDefaultChrome(),
         isDirty: false,
         history: createDefaultHistory(),
+        isImportedPresetLocked: draft.preset === "import" && draft.importPreservation !== null,
       });
     },
 
@@ -151,7 +185,12 @@ export function createFootprintEditorStore(initialDraftId?: string) {
         chrome: createDefaultChrome(),
         history: createDefaultHistory(),
         isDirty: false,
+        isImportedPresetLocked: false,
       });
+    },
+
+    unlockImportedPreset: () => {
+      set({ isImportedPresetLocked: false });
     },
 
     updateMetadata: (updates) => {
@@ -174,8 +213,10 @@ export function createFootprintEditorStore(initialDraftId?: string) {
           ...state.draft,
           preset: kind,
           config,
+          importPreservation: kind === "import" ? state.draft.importPreservation : null,
         },
         isDirty: true,
+        isImportedPresetLocked: kind === "import" && state.draft.importPreservation !== null,
       });
     },
 
@@ -291,7 +332,6 @@ export function createFootprintEditorStore(initialDraftId?: string) {
       const padIndex = state.draft.pads.findIndex((p) => p.id === id);
       if (padIndex === -1) return;
 
-      state.pushHistory();
       const newPads = [...state.draft.pads];
       newPads[padIndex] = { ...newPads[padIndex]!, position };
       set({
@@ -342,7 +382,20 @@ export function createFootprintEditorStore(initialDraftId?: string) {
       set({
         draft: {
           ...state.draft,
-          graphics: [...state.draft.graphics, graphic],
+          graphics: [...state.draft.graphics, cloneGraphic(graphic)],
+        },
+        isDirty: true,
+      });
+    },
+
+    updateGraphic: (id, graphic) => {
+      const state = get();
+      set({
+        draft: {
+          ...state.draft,
+          graphics: state.draft.graphics.map((entry) =>
+            entry.id === id ? cloneGraphic(graphic) : cloneGraphic(entry),
+          ),
         },
         isDirty: true,
       });
@@ -371,6 +424,28 @@ export function createFootprintEditorStore(initialDraftId?: string) {
       });
     },
 
+    removeGraphics: (ids) => {
+      const state = get();
+      const idSet = new Set(ids);
+      state.pushHistory();
+      set({
+        draft: {
+          ...state.draft,
+          graphics: state.draft.graphics.filter((graphic) => !idSet.has(graphic.id)),
+        },
+        chrome: {
+          ...state.chrome,
+          selection: {
+            ...state.chrome.selection,
+            selectedGraphicIds: new Set(
+              [...state.chrome.selection.selectedGraphicIds].filter((gid) => !idSet.has(gid)),
+            ),
+          },
+        },
+        isDirty: true,
+      });
+    },
+
     // -------------------------------------------------------------------------
     // Selection Actions// -------------------------------------------------------------------------
 
@@ -385,6 +460,22 @@ export function createFootprintEditorStore(initialDraftId?: string) {
           selection: {
             ...state.chrome.selection,
             selectedPadIds: newSelection,
+          },
+        },
+      });
+    },
+
+    selectGraphic: (id, additive = false) => {
+      const state = get();
+      const newSelection = additive
+        ? new Set([...state.chrome.selection.selectedGraphicIds, id])
+        : new Set([id]);
+      set({
+        chrome: {
+          ...state.chrome,
+          selection: {
+            ...state.chrome.selection,
+            selectedGraphicIds: newSelection,
           },
         },
       });

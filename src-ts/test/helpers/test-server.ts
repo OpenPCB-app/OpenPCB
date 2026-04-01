@@ -7,19 +7,33 @@
 
 import { Subprocess } from "bun";
 import path from "path";
+import { mkdir, rm } from "fs/promises";
 import { waitForServer } from "../setup";
+
+interface TestServerOptions {
+    appDataDir?: string;
+    env?: Record<string, string | undefined>;
+}
 
 export class TestServer {
     private process: Subprocess | null = null;
     private readonly serverPath: string;
     private port: number;
     private readonly kernelToken: string;
+    private readonly appDataDir?: string;
+    private readonly envOverrides: Record<string, string | undefined>;
 
-    constructor(port: number = 3000, kernelToken: string = "") {
+    constructor(port: number = 3000, kernelToken: string = "", options?: TestServerOptions) {
         this.port = port;
         this.kernelToken = kernelToken;
+        this.appDataDir = options?.appDataDir;
+        this.envOverrides = options?.env ?? {};
         // Path to main.ts relative to test/helpers directory
         this.serverPath = path.join(import.meta.dir, "../../src/main.ts");
+    }
+
+    private resolveAppDataDir(): string {
+        return this.appDataDir ?? path.join(import.meta.dir, `../../.test-data-${this.port}`);
     }
 
     /**
@@ -39,12 +53,17 @@ export class TestServer {
             this.port = basePort + attempt;
             console.log(`[TestServer] Starting server from ${this.serverPath} on port ${this.port}...`);
 
+            const appDataDir = this.resolveAppDataDir();
+            await rm(appDataDir, { recursive: true, force: true });
+            await mkdir(appDataDir, { recursive: true });
+
             this.process = Bun.spawn(["bun", "run", this.serverPath], {
                 env: {
                     ...process.env,
+                    ...this.envOverrides,
                     NODE_ENV: "test",
                     PORT: this.port.toString(),
-                    APP_DATA_DIR: process.env.APP_DATA_DIR || path.join(import.meta.dir, "../../.test-data"),
+                    APP_DATA_DIR: appDataDir,
                     KERNEL_TOKEN: this.kernelToken,
                 },
                 stdout: "inherit",
@@ -128,6 +147,10 @@ export class TestServer {
      */
     getApiUrl(): string {
         return `${this.getUrl()}/api`;
+    }
+
+    getDataDir(): string {
+        return this.resolveAppDataDir();
     }
 }
 

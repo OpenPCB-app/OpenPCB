@@ -53,6 +53,8 @@ function createTestDb() {
       label TEXT NOT NULL,
       is_default INTEGER NOT NULL DEFAULT 0,
       kicad_payload TEXT,
+      density_level TEXT,
+      ipc_name TEXT,
       default_model_3d_option_id TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
@@ -65,6 +67,8 @@ function createTestDb() {
       file_name TEXT NOT NULL,
       is_default INTEGER NOT NULL DEFAULT 0,
       link_status TEXT NOT NULL,
+      step_asset_path TEXT,
+      gltf_preview_path TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );

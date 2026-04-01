@@ -66,6 +66,7 @@ describe("KiCad symbol parser", () => {
     const unit3Pins = sym.pins.filter((p) => p.unit === 3);
     expect(unit3Pins.length).toBe(2);
     expect(unit3Pins.some((p) => p.electricalType === "power_in")).toBe(true);
+    expect(sym.bodyGraphics.every((graphic) => graphic.unit >= 0)).toBe(true);
   });
 
   test("warns on unsupported graphic construct", () => {
@@ -93,6 +94,19 @@ describe("KiCad symbol parser", () => {
     expect(sym.rawSource).toBeTruthy();
     expect(sym.rawSource).toContain("symbol");
     expect(sym.rawSource).toContain("pin");
+  });
+
+  test("detects hidden pins in real multi-unit symbol", () => {
+    const content = readFileSync(
+      join(import.meta.dir, "../../../../../data/S32K376NHT1MJBST/S32K376NHT1MJBST.kicad_sym"),
+      "utf-8",
+    );
+    const result = parseKicadSymbolLib(content);
+    const sym = result.symbols[0]!;
+
+    expect(sym.units).toBe(3);
+    expect(sym.pins.some((pin) => pin.hidden)).toBe(true);
+    expect(sym.bodyGraphics.some((graphic) => graphic.unit === 3)).toBe(true);
   });
 
   test("extracts version and generator", () => {

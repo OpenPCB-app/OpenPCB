@@ -6,12 +6,14 @@
  */
 
 import { create } from "zustand";
+import type { SymbolDraft } from "@/components/symbol-editor/types";
+import type { FootprintDraft } from "@/components/footprint-editor/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type WizardStep = "preset" | "symbol" | "footprint" | "model" | "specs";
+export type WizardStep = "symbol" | "footprint" | "model" | "specs";
 
 export interface ValidationResult {
   canPublish: boolean;
@@ -26,8 +28,8 @@ export interface ValidationMessage {
 }
 
 /**
- * Frontend wizard payload - flexible structure for editing.
- * Transformed to backend ComponentDraftPayload before save/publish.
+ * Frontend wizard payload - durable editor-native structure.
+ * Transformed to backend ComponentDraftPayload before persistence/publish.
  */
 export interface WizardDraftPayload {
   // Core fields
@@ -35,50 +37,17 @@ export interface WizardDraftPayload {
   description: string;
   
   // Symbol data (from symbol editor)
-  symbolData: {
-    id?: string;
-    referencePrefix?: string;
-    body?: {
-      kind: string;
-      width: number;
-      height: number;
-    };
-    pins?: Array<{
-      id: string;
-      name: string;
-      number: string;
-      electricalType: string;
-      side: string;
-      position: { x: number; y: number };
-      length: number;
-    }>;
-    graphics?: unknown[];
-    metadata?: {
-      name: string;
-      referencePrefix: string;
-      description: string;
-    };
-  } | null;
+  symbolData: SymbolDraft | null;
   
   // Footprint data (from footprint editor)
-  footprintData?: {
-    id?: string;
-    preset?: string;
-    config?: Record<string, unknown>;
-    pads?: Array<{
-      id: string;
-      number: string;
-      shape: string;
-      position: { x: number; y: number };
-      size: { width: number; height: number };
-      layers: string[];
-    }>;
-    graphics?: unknown[];
-  } | null;
+  footprintData: FootprintDraft | null;
   
   // 3D model data (step 3)
   modelData?: {
-    stepFile?: File | null;
+    fileId?: string | null;
+    stepFileName?: string | null;
+    stepAssetPath?: string | null;
+    gltfPreviewPath?: string | null;
   } | null;
   
   // Specs data (step 4)
@@ -150,7 +119,7 @@ interface ComponentWizardState {
 // Step Order & Helpers
 // ---------------------------------------------------------------------------
 
-const STEP_ORDER: WizardStep[] = ["preset", "symbol", "footprint", "model", "specs"];
+const STEP_ORDER: WizardStep[] = ["symbol", "footprint", "model", "specs"];
 
 function getStepIndex(step: WizardStep): number {
   return STEP_ORDER.indexOf(step);
@@ -189,7 +158,7 @@ export const useComponentWizardStore = create<ComponentWizardState>((set, get) =
   isDirty: false,
   isSaving: false,
   lastSavedAt: null,
-  currentStep: "preset",
+  currentStep: "symbol",
   completedSteps: new Set<WizardStep>(),
   validation: null,
   isValidating: false,
@@ -200,7 +169,7 @@ export const useComponentWizardStore = create<ComponentWizardState>((set, get) =
       draftId: draftId ?? crypto.randomUUID(),
       draft: createEmptyDraft(),
       isDirty: false,
-      currentStep: "preset",
+      currentStep: "symbol",
       completedSteps: new Set<WizardStep>(),
       validation: null,
       lastSavedAt: null,
@@ -287,7 +256,7 @@ export const useComponentWizardStore = create<ComponentWizardState>((set, get) =
       isDirty: false,
       isSaving: false,
       lastSavedAt: null,
-      currentStep: "preset",
+       currentStep: "symbol",
       completedSteps: new Set<WizardStep>(),
       validation: null,
       isValidating: false,

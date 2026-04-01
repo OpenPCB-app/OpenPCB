@@ -1,63 +1,38 @@
-import type { SymbolKind } from "./types";
+export type SymbolCategory = "power" | "passive" | "discrete" | "ic" | "connectors" | "other";
 
-export type SymbolCategory =
-  | "power"
-  | "passive"
-  | "discrete"
-  | "ic"
-  | "connectors";
-
-export interface DesignerComponentDefinition {
-  kind: SymbolKind;
-  badge: string | null;
-  category: SymbolCategory;
-}
-
-export const SYMBOL_CATEGORIES: readonly {
-  key: SymbolCategory;
-  label: string;
-}[] = [
+export const SYMBOL_CATEGORIES: readonly {key: SymbolCategory;label: string;}[] = [
   { key: "power", label: "Power" },
-  { key: "passive", label: "Passive" },
+  { key: "passive", label: "Passives" },
   { key: "discrete", label: "Discrete" },
   { key: "ic", label: "IC" },
   { key: "connectors", label: "Connectors" },
+  { key: "other", label: "Other" },
 ];
 
-export const DESIGNER_COMPONENTS: readonly DesignerComponentDefinition[] = [
-  // Power
-  { kind: "gnd", badge: "GND", category: "power" },
-  { kind: "vcc_3v3", badge: "3V3", category: "power" },
-  { kind: "vcc_5v", badge: "5V", category: "power" },
-  { kind: "vcc_12v", badge: "12V", category: "power" },
-  // Passive
-  { kind: "resistor", badge: "R", category: "passive" },
-  { kind: "capacitor", badge: "C", category: "passive" },
-  { kind: "inductor", badge: "L", category: "passive" },
-  // Discrete
-  { kind: "diode", badge: "D", category: "discrete" },
-  { kind: "led", badge: "LED", category: "discrete" },
-  { kind: "npn", badge: "Q", category: "discrete" },
-  { kind: "pnp", badge: "Q", category: "discrete" },
-  { kind: "nmos", badge: "Q", category: "discrete" },
-  { kind: "pmos", badge: "Q", category: "discrete" },
-  // IC
-  { kind: "opamp", badge: "U", category: "ic" },
-  { kind: "generic_ic", badge: "U", category: "ic" },
-  // Connectors
-  { kind: "connector", badge: "J", category: "connectors" },
-];
+const CATEGORY_PATH_PREFIX_MAP: Record<string, SymbolCategory> = {
+  Power: "power",
+  Passives: "passive",
+  Discrete: "discrete",
+  IC: "ic",
+  "Integrated Circuits": "ic",
+  Connectors: "connectors",
+};
 
-const SYMBOL_KIND_LABELS: Record<SymbolKind, string> = {
+export function mapCategoryPathToCategory(categoryPath: string | null): SymbolCategory {
+  if (!categoryPath) return "other";
+  const firstSegment = categoryPath.split("/")[0];
+  if (!firstSegment) return "other";
+  return CATEGORY_PATH_PREFIX_MAP[firstSegment] ?? "other";
+}
+
+const LEGACY_SYMBOL_KIND_LABELS: Record<string, string> = {
   resistor: "Resistor",
   capacitor: "Capacitor",
   inductor: "Inductor",
   diode: "Diode",
   led: "LED",
   gnd: "Ground",
-  vcc_3v3: "VCC 3.3V",
-  vcc_5v: "VCC 5V",
-  vcc_12v: "VCC 12V",
+  vcc: "VCC",
   npn: "NPN Transistor",
   pnp: "PNP Transistor",
   nmos: "N-MOSFET",
@@ -67,6 +42,6 @@ const SYMBOL_KIND_LABELS: Record<SymbolKind, string> = {
   connector: "Connector",
 };
 
-export function getSymbolKindLabel(kind: SymbolKind): string {
-  return SYMBOL_KIND_LABELS[kind];
+export function getSymbolKindLabel(kind: string): string {
+  return LEGACY_SYMBOL_KIND_LABELS[kind] ?? kind;
 }

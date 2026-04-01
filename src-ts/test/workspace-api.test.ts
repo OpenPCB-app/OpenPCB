@@ -3,7 +3,12 @@ import { TestServer } from "./helpers/test-server";
 import { cleanTestDatabase } from "./setup";
 
 const PORT = 3002;
-const testServer = new TestServer(PORT);
+const testServer = new TestServer(PORT, "", {
+  env: {
+    OPENPCB_STARTUP_LICENSE_STATE: "active",
+    OPENPCB_STARTUP_LICENSE_CODE: "TOKEN_VALID",
+  },
+});
 const BASE_URL = `http://127.0.0.1:${PORT}/api/workspaces`;
 
 describe("Workspace API", () => {
@@ -11,7 +16,7 @@ describe("Workspace API", () => {
 
   beforeAll(async () => {
     // Clean test database before starting
-    await cleanTestDatabase();
+    await cleanTestDatabase(testServer.getDataDir());
     // Start the test server
     await testServer.start();
   }, { timeout: 120000 });
@@ -20,7 +25,7 @@ describe("Workspace API", () => {
     // Stop the test server
     await testServer.stop();
     // Clean up test database
-    await cleanTestDatabase();
+    await cleanTestDatabase(testServer.getDataDir());
   }, { timeout: 120000 });
 
   it("should create a new workspace", async () => {

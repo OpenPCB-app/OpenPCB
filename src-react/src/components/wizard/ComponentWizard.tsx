@@ -8,7 +8,7 @@
  * and publishes on "Save Component".
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ArrowLeft, Loader2, Save, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
@@ -22,9 +22,16 @@ import {
   publishComponentDraft,
 } from "@/lib/api/component-api";
 import { useSymbolEditorStore } from "@/components/symbol-editor";
-import { PresetSelector } from "./PresetSelector";
 import { SpecsStep } from "./SpecsStep";
-import { transformWizardToBackendPayload } from "./transformers";
+import { ModelStep } from "./ModelStep";
+import {
+  createEmptyBackendPayload,
+  transformFootprintDraftToWizard,
+  transformSymbolDraftToWizard,
+  transformWizardToBackendPayload,
+  transformWizardToFootprintDraft,
+  transformWizardToSymbolDraft,
+} from "./transformers";
 import {
   SymbolEditorCanvas,
   PinPalette,
@@ -33,8 +40,9 @@ import {
   SymbolEditorToolbar,
   SymbolMetadataEditor,
 } from "@/components/symbol-editor";
-import { FootprintEditorStep } from "@/components/footprint-editor";
-import type { BodyPresetKind } from "@/components/symbol-editor/types";
+import type { SymbolDraft } from "@/components/symbol-editor/types";
+import type { FootprintDraft } from "@/components/footprint-editor/types";
+import { FootprintEditorStep, useFootprintEditorStore } from "@/components/footprint-editor";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,15 +58,18 @@ interface ComponentWizardProps {
 // ---------------------------------------------------------------------------
 
 const WIZARD_STEPS: { id: WizardStep; label: string; number: number }[] = [
-  { id: "preset", label: "Preset", number: 1 },
-  { id: "symbol", label: "Symbol", number: 2 },
-  { id: "footprint", label: "Footprint", number: 3 },
-  { id: "model", label: "3D Model", number: 4 },
-  { id: "specs", label: "Specs", number: 5 },
+  { id: "symbol", label: "Symbol", number: 1 },
+  { id: "footprint", label: "Footprint", number: 2 },
+  { id: "model", label: "3D Model", number: 3 },
+  { id: "specs", label: "Specs", number: 4 },
 ];
 
 function getStepNumber(step: WizardStep): number {
   return WIZARD_STEPS.find((s) => s.id === step)?.number ?? 1;
+}
+
+function areJsonEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 // ---------------------------------------------------------------------------
@@ -80,12 +91,18 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
   // Symbol editor store
   const symbolDraft = useSymbolEditorStore((s) => s.draft);
   const resetSymbolDraft = useSymbolEditorStore((s) => s.resetDraft);
-  const setBodyPreset = useSymbolEditorStore((s) => s.setBodyPreset);
+  const setSymbolDraft = useSymbolEditorStore((s) => s.setDraft);
+  const footprintDraft = useFootprintEditorStore((s) => s.draft);
+  const setFootprintDraft = useFootprintEditorStore((s) => s.setDraft);
+  const resetFootprintDraft = useFootprintEditorStore((s) => s.resetDraft);
 
   // Local state
   const [isInitializing, setIsInitializing] = useState(true);
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressSymbolSyncRef = useRef(false);
+  const suppressFootprintSyncRef = useRef(false);
 
   // Initialize draft on mount
   useEffect(() => {
@@ -97,15 +114,15 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
 
       try {
         // Create backend draft
-        const backendDraft = await createComponentDraft({});
+        const backendDraft = await createComponentDraft(createEmptyBackendPayload());
 
         if (!mounted) return;
 
         // Initialize wizard store with draft ID
         initDraft(backendDraft.id);
 
-        // Reset symbol editor
         resetSymbolDraft();
+        resetFootprintDraft();
       } catch (err) {
         if (!mounted) return;
         console.error("Failed to create draft:", err);
@@ -122,24 +139,65 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
     return () => {
       mounted = false;
     };
-  }, [initDraft, resetSymbolDraft]);
+  }, [initDraft, resetFootprintDraft, resetSymbolDraft]);
+
+  useEffect(() => {
+    if (!draft) return;
+
+    if (currentStep === "symbol" && draft.symbolData) {
+      const currentSymbolPayload = transformSymbolDraftToWizard(symbolDraft);
+      if (areJsonEqual(currentSymbolPayload, draft.symbolData)) {
+        suppressSymbolSyncRef.current = false;
+      } else {
+        suppressSymbolSyncRef.current = true;
+        setSymbolDraft(transformWizardToSymbolDraft(draft.symbolData));
+      }
+    }
+
+    if (currentStep === "footprint" && draft.footprintData) {
+      const currentFootprintPayload = transformFootprintDraftToWizard(footprintDraft);
+      if (areJsonEqual(currentFootprintPayload, draft.footprintData)) {
+        suppressFootprintSyncRef.current = false;
+      } else {
+        suppressFootprintSyncRef.current = true;
+        setFootprintDraft(transformWizardToFootprintDraft(draft.footprintData));
+      }
+    }
+  }, [
+    currentStep,
+    draft?.symbolData,
+    draft?.footprintData,
+    setFootprintDraft,
+    setSymbolDraft,
+  ]);
 
   // Sync symbol editor changes to wizard store
   useEffect(() => {
     if (!symbolDraft || currentStep !== "symbol") return;
+    if (suppressSymbolSyncRef.current) {
+      suppressSymbolSyncRef.current = false;
+      return;
+    }
 
     updateDraft({
       displayLabel: symbolDraft.metadata.name,
       description: symbolDraft.metadata.description,
-      symbolData: {
-        id: symbolDraft.id,
-        body: symbolDraft.body,
-        pins: symbolDraft.pins,
-        graphics: symbolDraft.graphics,
-        metadata: symbolDraft.metadata,
-      },
+      symbolData: transformSymbolDraftToWizard(symbolDraft),
     });
   }, [symbolDraft, currentStep, updateDraft]);
+
+  // Sync footprint editor changes to wizard store
+  useEffect(() => {
+    if (!footprintDraft || currentStep !== "footprint") return;
+    if (suppressFootprintSyncRef.current) {
+      suppressFootprintSyncRef.current = false;
+      return;
+    }
+
+    updateDraft({
+      footprintData: transformFootprintDraftToWizard(footprintDraft),
+    });
+  }, [footprintDraft, currentStep, updateDraft]);
 
   // Auto-save debounced (when wizard store is dirty)
   const isDirty = useComponentWizardStore((s) => s.isDirty);
@@ -148,10 +206,12 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
   useEffect(() => {
     if (!isDirty || !draftId || !draft) return;
 
-    const timeout = setTimeout(async () => {
+    autosaveTimeoutRef.current = setTimeout(async () => {
       try {
         setSaving(true);
-        await patchComponentDraft(draftId, { payload: draft as never });
+        await patchComponentDraft(draftId, {
+          payload: transformWizardToBackendPayload(draft),
+        });
         markClean();
       } catch (err) {
         console.error("Auto-save failed:", err);
@@ -161,21 +221,17 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
       }
     }, 1500);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+        autosaveTimeoutRef.current = null;
+      }
+    };
   }, [isDirty, draftId, draft, setSaving, markClean]);
-
-  // Handle preset selection
-  const handlePresetSelect = useCallback(
-    (preset: BodyPresetKind) => {
-      setBodyPreset(preset);
-      setStep("symbol");
-    },
-    [setBodyPreset, setStep],
-  );
 
   // Handle step navigation
   const handleBack = useCallback(() => {
-    const stepOrder: WizardStep[] = ["preset", "symbol", "footprint", "model", "specs"];
+    const stepOrder: WizardStep[] = ["symbol", "footprint", "model", "specs"];
     const currentIdx = stepOrder.indexOf(currentStep);
     if (currentIdx > 0) {
       setStep(stepOrder[currentIdx - 1]!);
@@ -183,7 +239,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
   }, [currentStep, setStep]);
 
   const handleNext = useCallback(() => {
-    const stepOrder: WizardStep[] = ["preset", "symbol", "footprint", "model", "specs"];
+    const stepOrder: WizardStep[] = ["symbol", "footprint", "model", "specs"];
     const currentIdx = stepOrder.indexOf(currentStep);
     if (currentIdx < stepOrder.length - 1) {
       setStep(stepOrder[currentIdx + 1]!);
@@ -194,7 +250,13 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
   const handleClose = useCallback(async () => {
     if (draftId && draft) {
       try {
-        await patchComponentDraft(draftId, { payload: draft as never });
+        if (autosaveTimeoutRef.current) {
+          clearTimeout(autosaveTimeoutRef.current);
+          autosaveTimeoutRef.current = null;
+        }
+        await patchComponentDraft(draftId, {
+          payload: transformWizardToBackendPayload(draft),
+        });
       } catch {
         // Silent fail for draft save on close
       }
@@ -211,6 +273,11 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
     setError(null);
 
     try {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+        autosaveTimeoutRef.current = null;
+      }
+
       // Transform wizard draft to backend format
       const backendPayload = transformWizardToBackendPayload(draft);
       
@@ -242,6 +309,28 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
     }
   }, [draftId, draft, reset, onPublished, onClose]);
 
+  const handleImportedSymbolDraft = useCallback(
+    (importedDraft: SymbolDraft) => {
+      setSymbolDraft(importedDraft);
+      updateDraft({
+        displayLabel: importedDraft.metadata.name,
+        description: importedDraft.metadata.description,
+        symbolData: transformSymbolDraftToWizard(importedDraft),
+      });
+    },
+    [setSymbolDraft, updateDraft],
+  );
+
+  const handleImportedFootprintDraft = useCallback(
+    (importedDraft: FootprintDraft) => {
+      setFootprintDraft(importedDraft);
+      updateDraft({
+        footprintData: transformFootprintDraftToWizard(importedDraft),
+      });
+    },
+    [setFootprintDraft, updateDraft],
+  );
+
   // Loading state
   if (isInitializing) {
     return (
@@ -253,7 +342,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
   }
 
   const stepNumber = getStepNumber(currentStep);
-  const isFirstStep = currentStep === "preset";
+  const isFirstStep = currentStep === "symbol";
   const isLastStep = currentStep === "specs";
 
   return (
@@ -317,11 +406,12 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
 
       {/* Step content */}
       <div className="flex-1 overflow-hidden">
-        {currentStep === "preset" && (
-          <PresetSelector onSelect={handlePresetSelect} />
+        {currentStep === "symbol" && (
+          <SymbolEditorStepContent onImportedDraft={handleImportedSymbolDraft} />
         )}
-        {currentStep === "symbol" && <SymbolEditorStepContent />}
-        {currentStep === "footprint" && <FootprintEditorStep />}
+        {currentStep === "footprint" && (
+          <FootprintEditorStep onImportedDraft={handleImportedFootprintDraft} />
+        )}
         {currentStep === "model" && <ModelStep />}
         {currentStep === "specs" && <SpecsStep />}
       </div>
@@ -362,7 +452,6 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
             <button
               className="h-9 rounded-md bg-brand px-4 text-sm font-medium text-white hover:opacity-90 transition-opacity"
               onClick={handleNext}
-              disabled={isFirstStep} // Preset step uses card clicks
             >
               Next
             </button>
@@ -377,13 +466,17 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
 // Step Content Components
 // ---------------------------------------------------------------------------
 
-function SymbolEditorStepContent() {
+function SymbolEditorStepContent({
+  onImportedDraft,
+}: {
+  onImportedDraft: (draft: SymbolDraft) => void;
+}) {
   const selection = useSymbolEditorStore((s) => s.chrome.selection);
   const hasSelection = selection.selectedPinIds.size > 0;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden h-full">
-      <SymbolEditorToolbar />
+      <SymbolEditorToolbar onImportedDraft={onImportedDraft} />
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar */}
         <div className="w-56 flex-shrink-0 overflow-y-auto border-r border-border-default bg-bg-secondary p-3 space-y-4">
@@ -414,36 +507,6 @@ function SymbolEditorStepContent() {
                 </p>
               </div>
             )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ModelStep() {
-  return (
-    <div className="flex-1 overflow-auto p-6">
-      <div className="mx-auto max-w-[800px]">
-        <div className="grid grid-cols-2 gap-6">
-          {/* Preview area */}
-          <div className="rounded-lg border border-border-default bg-bg-input p-4 min-h-[300px] flex items-center justify-center">
-            <p className="text-sm text-text-muted">3D model preview</p>
-          </div>
-
-          {/* Config panel */}
-          <div className="space-y-4">
-            <p className="text-sm text-text-secondary">
-              Upload a STEP file or generate from footprint dimensions.
-            </p>
-            <div className="rounded-lg border-2 border-dashed border-border-default p-8 text-center">
-              <p className="text-sm text-text-muted">
-                Drag & drop .step/.stp file
-              </p>
-            </div>
-            <p className="text-xs text-text-tertiary">
-              3D models are optional. You can add one later.
-            </p>
           </div>
         </div>
       </div>

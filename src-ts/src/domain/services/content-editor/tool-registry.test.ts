@@ -21,7 +21,8 @@ describe("content editor tool definitions", () => {
       expect(EDIT_CONTENT_TOOL.function.name).toBe("edit_content");
       expect(editParameters.type).toBe("object");
 
-      expect(editParameters.required).toEqual(["mode", "content"]);
+      expect(editParameters.required).toEqual(["mode"]);
+      expect(editParameters).toHaveProperty("anyOf");
       expect(editParameters.properties.mode.enum).toEqual([
         "replace",
         "append",
@@ -34,6 +35,7 @@ describe("content editor tool definitions", () => {
       expect(editParameters.properties.target_type.enum).toEqual([
         "knowledge.page",
         "brainstorming.node",
+        "writer.document",
       ]);
       expect(editParameters.properties.content).toBeDefined();
       expect(editParameters.properties.instruction).toBeDefined();

@@ -35,9 +35,14 @@ describe("ComponentFamilySchema", () => {
         { name: "2", electricalType: "passive" },
       ],
       properties: {},
+      unitCount: 1,
+      bodyGraphics: [],
+      rawKicadSource: null,
     },
     packageVariants: [],
     defaultPackageVariantId: null,
+    categoryPath: null,
+    tags: [],
   };
 
   test("accepts valid family", () => {
@@ -159,6 +164,9 @@ describe("ComponentDraftSchema", () => {
           { name: "2", electricalType: "passive" },
         ],
         properties: {},
+        unitCount: 1,
+        bodyGraphics: [],
+        rawKicadSource: null,
       },
       packageVariants: [],
       defaultPackageVariantId: null,

@@ -3,7 +3,12 @@ import { TestServer } from "./helpers/test-server";
 import { cleanTestDatabase } from "./setup";
 
 const PORT = 3002;
-const testServer = new TestServer(PORT);
+const testServer = new TestServer(PORT, "", {
+  env: {
+    OPENPCB_STARTUP_LICENSE_STATE: "active",
+    OPENPCB_STARTUP_LICENSE_CODE: "TOKEN_VALID",
+  },
+});
 const WORKSPACE_URL = `http://127.0.0.1:${PORT}/api/workspaces`;
 const CHAT_URL = `http://127.0.0.1:${PORT}/api/chats`;
 
@@ -12,7 +17,7 @@ describe("Chat API", () => {
   let chatId: string;
 
   beforeAll(async () => {
-    await cleanTestDatabase();
+    await cleanTestDatabase(testServer.getDataDir());
     await testServer.start();
 
     // Create a workspace first
@@ -27,7 +32,7 @@ describe("Chat API", () => {
 
   afterAll(async () => {
     await testServer.stop();
-    await cleanTestDatabase();
+    await cleanTestDatabase(testServer.getDataDir());
   }, { timeout: 120000 });
 
   it("should create a new chat", async () => {

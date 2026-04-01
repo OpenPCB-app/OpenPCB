@@ -48,6 +48,8 @@ import { ComponentImportService } from "../../domain/services/component-import-s
 import { ComponentFamilyController } from "../../transport/controllers/component-family-controller";
 import { ComponentDraftController } from "../../transport/controllers/component-draft-controller";
 import { ComponentImportController } from "../../transport/controllers/component-import-controller";
+import { ComponentZipImportController } from "../../transport/controllers/component-zip-import-controller";
+import { ComponentZipImportService } from "../../domain/services/component-zip-import-service";
 import { ComponentPresetController } from "../../transport/controllers/component-preset-controller";
 import { FileService } from "../../domain/services/file-service";
 import { FileStorage } from "../../infrastructure/storage/file-storage";
@@ -354,6 +356,25 @@ export function setupDIContainer(options: DISetupOptions): Container {
         c.resolve(TOKENS.ComponentImportService),
         c.resolve<DatabaseAccess>(TOKENS.DatabaseAccess),
       ),
+  );
+
+  container.register(
+    TOKENS.ComponentZipImportController,
+    (c) => {
+      const db = c.resolve<DatabaseAccess>(TOKENS.DatabaseAccess);
+      const logger = db.getLogger();
+      const drizzleDb = db.getDb();
+      return new ComponentZipImportController(
+        new ComponentZipImportService(
+          db.componentImportJobs,
+          db.componentFamilies,
+          db.fileRecords,
+          db.fileBlobs,
+          drizzleDb,
+          process.env.APP_DATA_DIR || ".",
+        ),
+      );
+    },
   );
 
   container.register(

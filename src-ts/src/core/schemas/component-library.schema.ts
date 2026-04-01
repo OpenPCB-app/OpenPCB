@@ -80,6 +80,9 @@ export const SymbolDataSchema = z
     referencePrefix: z.string().min(1).max(5),
     pinDefinitions: z.array(PinDefinitionSchema),
     properties: z.record(z.string(), z.string()),
+    unitCount: z.number().int().min(1).default(1),
+    bodyGraphics: z.array(z.any()).optional(),
+    rawKicadSource: z.string().nullable().optional(),
   })
   .strict()
   .openapi("SymbolData");
@@ -102,6 +105,8 @@ export const Model3DOptionSchema = z
     id: UUIDv7Schema,
     footprintOptionId: UUIDv7Schema,
     fileName: z.string().min(1),
+    stepAssetPath: z.string().nullable(),
+    gltfPreviewPath: z.string().nullable(),
     isDefault: z.boolean(),
     linkStatus: Model3DLinkStatusSchema,
   })
@@ -167,6 +172,8 @@ export const ComponentFamilySchema = z
     symbolData: SymbolDataSchema,
     packageVariants: z.array(PackageVariantSchema),
     defaultPackageVariantId: UUIDv7Schema.nullable(),
+    categoryPath: z.string().nullable(),
+    tags: z.array(z.string()).default([]),
   })
   .strict()
   .openapi("ComponentFamily");

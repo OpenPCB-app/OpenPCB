@@ -27,8 +27,11 @@ export interface ParsedPad {
   shape: "circle" | "rect" | "oval" | "roundrect" | "trapezoid" | "custom";
   position: { x: number; y: number };
   size: { width: number; height: number };
+  rotation: number;
   layers: string[];
   roundrectRatio?: number;
+  drillDiameter?: number;
+  drillOffset?: { x: number; y: number };
 }
 
 export interface ParsedGraphic {
@@ -105,6 +108,7 @@ function extractLayers(node: SExpr[]): string[] {
 
 function nodeToRecord(node: SExpr[]): Record<string, unknown> {
   const rec: Record<string, unknown> = {};
+  const args: Array<string | number> = [];
   for (let i = 1; i < node.length; i++) {
     const child = node[i];
     if (Array.isArray(child) && typeof child[0] === "string") {
@@ -114,7 +118,12 @@ function nodeToRecord(node: SExpr[]): Record<string, unknown> {
       } else {
         rec[tag] = child.slice(1);
       }
+    } else if (typeof child === "string" || typeof child === "number") {
+      args.push(child);
     }
+  }
+  if (args.length > 0) {
+    rec.__args = args;
   }
   return rec;
 }
@@ -179,6 +188,7 @@ export function parseKicadFootprint(source: string): ParsedKicadFootprint {
     const atNode = findNode(padNode, "at");
     const sizeNode = findNode(padNode, "size");
     const rrNode = findNode(padNode, "roundrect_rratio");
+    const drillNode = findNode(padNode, "drill");
 
     const pad: ParsedPad = {
       number: padNum,
@@ -188,6 +198,7 @@ export function parseKicadFootprint(source: string): ParsedKicadFootprint {
         x: atNode ? getNumberValue(atNode, 1) ?? 0 : 0,
         y: atNode ? getNumberValue(atNode, 2) ?? 0 : 0,
       },
+      rotation: atNode ? getNumberValue(atNode, 3) ?? 0 : 0,
       size: {
         width: sizeNode ? getNumberValue(sizeNode, 1) ?? 0 : 0,
         height: sizeNode ? getNumberValue(sizeNode, 2) ?? 0 : 0,
@@ -197,6 +208,24 @@ export function parseKicadFootprint(source: string): ParsedKicadFootprint {
 
     if (rrNode) {
       pad.roundrectRatio = getNumberValue(rrNode) ?? undefined;
+    }
+
+    if (drillNode) {
+      pad.drillDiameter = getNumberValue(drillNode, 1) ?? getNumberValue(drillNode) ?? undefined;
+      const offsetNode = findNode(drillNode, "offset");
+      if (offsetNode) {
+        pad.drillOffset = {
+          x: getNumberValue(offsetNode, 1) ?? 0,
+          y: getNumberValue(offsetNode, 2) ?? 0,
+        };
+      }
+    }
+
+    if (!PAD_TYPES.has(rawType)) {
+      warnings.push({ code: "unsupported_pad_type", message: `Unsupported pad type "${rawType}" defaulted to smd` });
+    }
+    if (!PAD_SHAPES.has(rawShape)) {
+      warnings.push({ code: "unsupported_pad_shape", message: `Unsupported pad shape "${rawShape}" defaulted to rect` });
     }
 
     pads.push(pad);
@@ -218,8 +247,9 @@ export function parseKicadFootprint(source: string): ParsedKicadFootprint {
   const model3dRefs: Model3DRef[] = [];
   for (const modelNode of findNodes(tree, "model")) {
     const path = getStringValue(modelNode) ?? "";
-    const lastSlash = path.lastIndexOf("/");
-    const resolvedFileName = lastSlash >= 0 ? path.slice(lastSlash + 1) : path;
+    const normalizedPath = path.replace(/\\/g, "/");
+    const lastSlash = normalizedPath.lastIndexOf("/");
+    const resolvedFileName = lastSlash >= 0 ? normalizedPath.slice(lastSlash + 1) : normalizedPath;
 
     const offsetNode = findNode(modelNode, "offset");
     const scaleNode = findNode(modelNode, "scale");

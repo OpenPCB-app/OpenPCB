@@ -5,7 +5,7 @@
  * Convention: Y-axis points UP in footprint space (standard PCB convention).
  */
 
-import type { Viewport, Point, Millimeters } from "./types";
+import type { Viewport, Point, Millimeters, Bounds } from "./types";
 
 /** Pixels per millimeter at zoom level 1 */
 const PIXELS_PER_MM = 50;
@@ -74,6 +74,37 @@ export function createCenteredViewport(
   return {
     offsetX: canvasWidth / 2,
     offsetY: canvasHeight / 2,
+    zoom,
+  };
+}
+
+export function fitViewportToBounds(
+  bounds: Bounds | null,
+  canvasWidth: number,
+  canvasHeight: number,
+  paddingPx = 50,
+): Viewport {
+  if (!bounds) {
+    return createCenteredViewport(canvasWidth, canvasHeight);
+  }
+
+  const boundsWidth = bounds.maxX - bounds.minX;
+  const boundsHeight = bounds.maxY - bounds.minY;
+  if (boundsWidth <= 0 && boundsHeight <= 0) {
+    return createCenteredViewport(canvasWidth, canvasHeight);
+  }
+
+  const availableWidth = Math.max(1, canvasWidth - paddingPx * 2);
+  const availableHeight = Math.max(1, canvasHeight - paddingPx * 2);
+  const zoomX = boundsWidth > 0 ? availableWidth / (boundsWidth * PIXELS_PER_MM) : Infinity;
+  const zoomY = boundsHeight > 0 ? availableHeight / (boundsHeight * PIXELS_PER_MM) : Infinity;
+  const zoom = Math.max(0.1, Math.min(zoomX, zoomY, 20));
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+
+  return {
+    offsetX: canvasWidth / 2 - centerX * PIXELS_PER_MM * zoom,
+    offsetY: canvasHeight / 2 + centerY * PIXELS_PER_MM * zoom,
     zoom,
   };
 }

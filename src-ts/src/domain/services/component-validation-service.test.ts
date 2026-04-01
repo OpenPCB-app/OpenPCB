@@ -28,6 +28,8 @@ function footprint(overrides: Partial<FootprintOption> = {}): FootprintOption {
         id: "m-1",
         footprintOptionId: "fp-1",
         fileName: "model.step",
+        stepAssetPath: null,
+        gltfPreviewPath: null,
         isDefault: true,
         linkStatus: "valid",
       },
@@ -63,7 +65,14 @@ function variant(overrides: Partial<PackageVariant> = {}): PackageVariant {
 }
 
 function symbolData(pins: PinDefinition[] = [pin("1"), pin("2")]): SymbolData {
-  return { referencePrefix: "C", pinDefinitions: pins, properties: {} };
+  return {
+    referencePrefix: "C",
+    pinDefinitions: pins,
+    properties: {},
+    unitCount: 1,
+    bodyGraphics: [],
+    rawKicadSource: null,
+  };
 }
 
 function validPayload(

@@ -35,17 +35,20 @@ describe("edit-content-tool handler", () => {
         target_id: "page-1",
         mode: "replace",
         content: "# Updated",
+        workspace_id: "ws-1",
+        project_id: "proj-1",
       }),
-      {
+      expect.objectContaining({
         workspaceId: "ws-1",
         projectId: "proj-1",
         activeTarget: undefined,
         selection: undefined,
-      },
-      {
+      }),
+      expect.objectContaining({
         provider: "ollama",
         model: "qwen3:8b",
-      },
+        taskId: "task-1",
+      }),
     );
     expect(result).toEqual({
       success: true,
@@ -120,10 +123,11 @@ describe("edit-content-tool handler", () => {
           targetId: "doc-1",
         },
       }),
-      {
+      expect.objectContaining({
         provider: "openai",
         model: "gpt-4o",
-      },
+        taskId: "task-live-1",
+      }),
     );
     expect(result).toEqual({
       success: true,

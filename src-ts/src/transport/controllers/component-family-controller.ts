@@ -5,6 +5,88 @@ import { ResponseBuilder } from "../../core/utils/response-builder";
 export class ComponentFamilyController {
   constructor(private repo: ComponentFamilyRepository) {}
 
+  async delete(ctx: RouteContext): Promise<Response> {
+    const id = ctx.params.getOrThrow("id");
+
+    const family = await this.repo.findById(id);
+    if (!family) {
+      return ResponseBuilder.notFound("Component family");
+    }
+
+    if (family.scope !== "workspace") {
+      return ResponseBuilder.error(
+        "CANNOT_DELETE_BUILT_IN",
+        "Built-in components cannot be deleted",
+        403,
+      );
+    }
+
+    await this.repo.softDelete(id);
+    return ResponseBuilder.success({ deleted: true });
+  }
+
+  async bulkDelete(ctx: RouteContext): Promise<Response> {
+    const body = (await ctx.req.json()) as { ids: string[] };
+    const ids = body?.ids ?? [];
+
+    if (ids.length === 0) {
+      return ResponseBuilder.error("NO_IDS", "No component IDs provided", 400);
+    }
+
+    const deletableIds: string[] = [];
+    for (const id of ids) {
+      const family = await this.repo.findById(id);
+      if (family && family.scope === "workspace") {
+        deletableIds.push(id);
+      }
+    }
+
+    for (const id of deletableIds) {
+      await this.repo.softDelete(id);
+    }
+
+    return ResponseBuilder.success({
+      deleted: true,
+      deletedCount: deletableIds.length,
+      skippedCount: ids.length - deletableIds.length,
+    });
+  }
+
+  async update(ctx: RouteContext): Promise<Response> {
+    const id = ctx.params.getOrThrow("id");
+    const body = (await ctx.req.json()) as {
+      displayLabel?: string;
+      description?: string;
+      categoryPath?: string;
+      tags?: string[];
+    };
+
+    const family = await this.repo.findById(id);
+    if (!family) {
+      return ResponseBuilder.notFound("Component family");
+    }
+
+    if (family.scope !== "workspace") {
+      return ResponseBuilder.error(
+        "CANNOT_EDIT_BUILT_IN",
+        "Built-in components cannot be edited",
+        403,
+      );
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (body.displayLabel !== undefined)
+      updateData.displayLabel = body.displayLabel;
+    if (body.description !== undefined)
+      updateData.description = body.description;
+    if (body.categoryPath !== undefined)
+      updateData.categoryPath = body.categoryPath;
+    if (body.tags !== undefined) updateData.tags = body.tags;
+
+    const updated = await this.repo.update(id, updateData);
+    return ResponseBuilder.success({ family: updated });
+  }
+
   async list(ctx: RouteContext): Promise<Response> {
     const scope = ctx.query.get("scope") ?? undefined;
     const categoryPath = ctx.query.get("categoryPath") ?? undefined;
@@ -32,9 +114,24 @@ export class ComponentFamilyController {
 
   async get(ctx: RouteContext): Promise<Response> {
     const id = ctx.params.getOrThrow("id");
-    const family = await this.repo.findByIdOrThrow(id);
-    const variants = await this.repo.findVariantsByFamily(id);
-    return ResponseBuilder.success({ family: { ...family, variants } });
+    const { family, variants, footprints, models, offerings } =
+      await this.repo.findByIdWithRelations(id);
+
+    // Nest footprints, models, and offerings into variants
+    const packageVariants = variants.map((v) => ({
+      ...v,
+      footprintOptions: footprints
+        .filter((fp) => fp.variantId === v.id)
+        .map((fp) => ({
+          ...fp,
+          model3dOptions: models.filter((m) => m.footprintOptionId === fp.id),
+        })),
+      offerings: offerings.filter((o) => o.variantId === v.id),
+    }));
+
+    return ResponseBuilder.success({
+      family: { ...family, packageVariants },
+    });
   }
 
   async getFull(ctx: RouteContext): Promise<Response> {
@@ -45,14 +142,17 @@ export class ComponentFamilyController {
 
   async getCategories(ctx: RouteContext): Promise<Response> {
     const families = await this.repo.findActive();
-    
+
     // Build category tree from categoryPath values
-    const categoryMap = new Map<string, { path: string; label: string; count: number }>();
-    
+    const categoryMap = new Map<
+      string,
+      { path: string; label: string; count: number }
+    >();
+
     for (const family of families) {
       const path = family.categoryPath;
       if (!path) continue;
-      
+
       // Count each path segment
       const parts = path.split("/");
       let currentPath = "";
@@ -70,10 +170,10 @@ export class ComponentFamilyController {
         }
       }
     }
-    
+
     // Convert to tree structure
     const categories = buildCategoryTree(Array.from(categoryMap.values()));
-    
+
     return ResponseBuilder.success({ categories });
   }
 }
@@ -90,10 +190,10 @@ function buildCategoryTree(
 ): CategoryNode[] {
   const root: CategoryNode[] = [];
   const nodeMap = new Map<string, CategoryNode>();
-  
+
   // Sort by path to ensure parents come before children
   items.sort((a, b) => a.path.localeCompare(b.path));
-  
+
   for (const item of items) {
     const node: CategoryNode = {
       path: item.path,
@@ -102,7 +202,7 @@ function buildCategoryTree(
       children: [],
     };
     nodeMap.set(item.path, node);
-    
+
     // Find parent
     const parts = item.path.split("/");
     if (parts.length === 1) {
@@ -115,6 +215,6 @@ function buildCategoryTree(
       }
     }
   }
-  
+
   return root;
 }

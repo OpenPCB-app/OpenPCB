@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from "react";
 import { schematicToScreen } from "@/components/pcb/canvas/viewport";
 import type { Bounds, SymbolEntity, Viewport } from "@/components/pcb/types";
 import { getSymbolKindLabel } from "@/components/pcb/symbol-display";
@@ -67,6 +68,89 @@ function PropertyRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function EditableValueRow({
+  label,
+  value,
+  symbolId,
+  isPowerSymbol,
+}: {
+  label: string;
+  value: string;
+  symbolId: string;
+  isPowerSymbol: boolean;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const updateSymbolValue = useSchematicStore((s) => s.updateSymbolValue);
+
+  useEffect(() => {
+    setEditValue(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleSubmit = () => {
+    const trimmedValue = editValue.trim();
+    if (trimmedValue && trimmedValue !== value) {
+      updateSymbolValue(symbolId, trimmedValue);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSubmit();
+    } else if (e.key === "Escape") {
+      setEditValue(value);
+      setIsEditing(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div className="space-y-1">
+        <p className="text-[10px] font-medium tracking-wide text-text-muted uppercase">
+          {label}
+        </p>
+        <input
+          ref={inputRef}
+          type="text"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={handleSubmit}
+          onKeyDown={handleKeyDown}
+          className="w-full rounded border border-border-default bg-bg-input px-1.5 py-0.5 text-xs text-text-primary focus:border-border-strong focus:outline-none"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <p className="text-[10px] font-medium tracking-wide text-text-muted uppercase">
+        {label}
+      </p>
+      <button
+        type="button"
+        onClick={() => isPowerSymbol && setIsEditing(true)}
+        className={`w-full rounded border border-transparent px-1.5 py-0.5 text-left text-xs ${
+          isPowerSymbol
+            ? "cursor-text text-text-primary hover:border-border-default hover:bg-bg-input"
+            : "cursor-default text-text-primary"
+        }`}
+      >
+        {value || "—"}
+      </button>
+    </div>
+  );
+}
+
 export function FloatingPropertiesPopover() {
   const document = useSchematicStore((s) => s.persisted.document);
   const selectedIds = useSchematicStore((s) => s.chrome.selectedEntityIds);
@@ -84,6 +168,8 @@ export function FloatingPropertiesPopover() {
   const footprintEntry = getFootprintEntry(symbol);
   const propertyEntries = getPropertyEntries(symbol, footprintEntry?.[0] ?? null);
   const position = getFloatingPopoverPosition(bounds, viewport);
+
+  const isPowerSymbol = symbol.symbolKind === "gnd" || symbol.symbolKind === "vcc";
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20" data-testid="floating-properties-layer">
@@ -113,7 +199,12 @@ export function FloatingPropertiesPopover() {
         </div>
         <div className="max-h-80 space-y-3 overflow-y-auto px-3 py-3">
           <PropertyRow label="Reference" value={symbol.reference} />
-          <PropertyRow label="Value" value={symbol.value || "—"} />
+          <EditableValueRow
+            label="Value"
+            value={symbol.value || ""}
+            symbolId={symbol.id}
+            isPowerSymbol={isPowerSymbol}
+          />
           <PropertyRow label="Footprint" value={footprintEntry?.[1] || "—"} />
           {propertyEntries.length > 0 && (
             <div className="space-y-3 border-t border-border-default pt-3">

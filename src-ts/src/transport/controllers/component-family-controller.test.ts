@@ -133,6 +133,113 @@ describe("ComponentFamilyController", () => {
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.data.family.id).toBe("fam-1");
-    expect(body.data.family.variants).toHaveLength(1);
+    expect(body.data.family.packageVariants).toHaveLength(1);
+  });
+
+  it("deletes workspace component", async () => {
+    const repo = createRepoMock();
+    repo.softDelete = mock(async () => {});
+    repo.findById = mock(async (id: string) => {
+      const families = [
+        { id: "fam-1", scope: "built_in" },
+        { id: "fam-2", scope: "workspace" },
+      ];
+      return (families.find((f) => f.id === id) || null) as unknown as Awaited<
+        ReturnType<ComponentFamilyRepository["findById"]>
+      >;
+    });
+    const ctrl = new ComponentFamilyController(repo);
+    const res = await ctrl.delete(createContext({ id: "fam-2" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.deleted).toBe(true);
+  });
+
+  it("prevents deleting built-in components", async () => {
+    const repo = createRepoMock();
+    repo.findById = mock(async (id: string) => {
+      const families = [
+        { id: "fam-1", scope: "built_in" },
+        { id: "fam-2", scope: "workspace" },
+      ];
+      return (families.find((f) => f.id === id) || null) as unknown as Awaited<
+        ReturnType<ComponentFamilyRepository["findById"]>
+      >;
+    });
+    const ctrl = new ComponentFamilyController(repo);
+    const res = await ctrl.delete(createContext({ id: "fam-1" }));
+    expect(res.status).toBe(403);
+  });
+
+  it("updates workspace component", async () => {
+    const repo = createRepoMock();
+    repo.findById = mock(
+      async (id: string) =>
+        ({
+          id,
+          scope: "workspace",
+          displayLabel: "Old Name",
+        }) as unknown as Awaited<
+          ReturnType<ComponentFamilyRepository["findById"]>
+        >,
+    );
+    repo.update = mock(
+      async (id: string, data: unknown) =>
+        ({
+          id,
+          ...data,
+        }) as Awaited<ReturnType<ComponentFamilyRepository["update"]>>,
+    );
+    const ctrl = new ComponentFamilyController(repo);
+    const res = await ctrl.update(
+      createMockContextWithBody({ id: "fam-2" }, { displayLabel: "New Name" }),
+    );
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.family.displayLabel).toBe("New Name");
+  });
+
+  it("bulk deletes workspace components", async () => {
+    const repo = createRepoMock();
+    repo.softDelete = mock(async () => {});
+    repo.findById = mock(async (id: string) => {
+      const families = [
+        { id: "fam-1", scope: "built_in" },
+        { id: "fam-2", scope: "workspace" },
+      ];
+      return (families.find((f) => f.id === id) || null) as unknown as Awaited<
+        ReturnType<ComponentFamilyRepository["findById"]>
+      >;
+    });
+    const ctrl = new ComponentFamilyController(repo);
+    const res = await ctrl.bulkDelete(
+      createMockContextWithBody({}, { ids: ["fam-1", "fam-2"] }),
+    );
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.deletedCount).toBe(1);
+    expect(body.data.skippedCount).toBe(1);
   });
 });
+
+function createMockContextWithBody(
+  opts: { id?: string; query?: Record<string, string> },
+  body: unknown,
+): RouteContext {
+  const query = new URLSearchParams(opts.query ?? {});
+  return {
+    req: {
+      url: "http://localhost/api/components/families",
+      json: async () => body,
+    } as Request,
+    params: {
+      getOrThrow: (key: string) => {
+        if (key === "id" && opts.id) return opts.id;
+        throw new Error(`Missing param: ${key}`);
+      },
+      get: (key: string) => (key === "id" ? opts.id : undefined),
+    } as RouteContext["params"],
+    query,
+    url: new URL("http://localhost/api/components/families"),
+  };
+}

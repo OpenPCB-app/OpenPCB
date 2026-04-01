@@ -4,19 +4,28 @@
  * Toolbar with undo/redo, grid controls, and view actions.
  */
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
+import { toast } from "@/components/ui/use-toast";
 import { useSymbolEditorStore, useCanUndo, useCanRedo } from "./symbol-editor-store";
 import { GRID_SIZES, type GridSizeKey } from "./types";
+import { importKicadSymbolFile } from "./kicad-import";
+import type { SymbolDraft } from "./types";
+
+interface SymbolEditorToolbarProps {
+  onImportedDraft?: (draft: SymbolDraft) => void;
+}
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function SymbolEditorToolbar() {
+export function SymbolEditorToolbar({ onImportedDraft }: SymbolEditorToolbarProps) {
   const undo = useSymbolEditorStore((s) => s.undo);
   const redo = useSymbolEditorStore((s) => s.redo);
+  const setDraft = useSymbolEditorStore((s) => s.setDraft);
   const canUndo = useCanUndo();
   const canRedo = useCanRedo();
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const gridSize = useSymbolEditorStore((s) => s.chrome.gridSize);
   const showGrid = useSymbolEditorStore((s) => s.chrome.showGrid);
@@ -39,8 +48,63 @@ export function SymbolEditorToolbar() {
     return "normal";
   };
 
+  const handleImportClick = useCallback(() => {
+    importInputRef.current?.click();
+  }, []);
+
+  const handleImportChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+
+        try {
+          const imported = await importKicadSymbolFile(file);
+          onImportedDraft?.(imported);
+          if (!onImportedDraft) {
+            setDraft(imported);
+          }
+          const warningCount = imported.importPreservation?.warnings.length ?? 0;
+
+        toast({
+          title: "Symbol imported",
+          description:
+            warningCount > 0
+              ? imported.importPreservation?.warnings.map((warning) => warning.message).join(" • ")
+              : `Imported ${file.name}`,
+        });
+      } catch (error) {
+        toast({
+          title: "Import failed",
+          description:
+            error instanceof Error ? error.message : "Unable to parse KiCAD symbol",
+          variant: "destructive",
+        });
+      }
+    },
+    [onImportedDraft, setDraft],
+  );
+
   return (
     <div className="flex items-center gap-2 border-b border-border bg-card px-3 py-2">
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".kicad_sym"
+        onChange={handleImportChange}
+        className="hidden"
+      />
+
+      <button
+        onClick={handleImportClick}
+        className="rounded p-1.5 text-sm transition-colors hover:bg-accent"
+        title="Import KiCAD Symbol (.kicad_sym)"
+      >
+        <UploadIcon />
+      </button>
+
+      <div className="h-4 w-px bg-border" />
+
       {/* Undo/Redo */}
       <div className="flex items-center gap-1">
         <button
@@ -104,6 +168,16 @@ export function SymbolEditorToolbar() {
         Shift+drag to pan | Scroll to zoom | Del to delete
       </span>
     </div>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 16V4" />
+      <path d="M7 9l5-5 5 5" />
+      <path d="M4 20h16" />
+    </svg>
   );
 }
 

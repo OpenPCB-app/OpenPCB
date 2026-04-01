@@ -6,7 +6,7 @@ import { parseKicadFootprint } from "./kicad-footprint-parser";
 const FIXTURES_DIR = join(import.meta.dir, "__fixtures__");
 const DATA_DIR = join(
   import.meta.dir,
-  "../../../../../data/kicad-footprints-master-Capacitor_SMD.pretty/Capacitor_SMD.pretty",
+  "../../../../../data/S32K376NHT1MJBST",
 );
 
 function loadFixture(name: string): string {
@@ -126,13 +126,13 @@ describe("kicad-footprint-parser", () => {
 
   test("parses real data file from data/ directory", () => {
     const source = readFileSync(
-      join(DATA_DIR, "C_0805_2012Metric.kicad_mod"),
+      join(DATA_DIR, "BGA289C80P17X17_1400X1400X152N.kicad_mod"),
       "utf-8",
     );
     const fp = parseKicadFootprint(source);
-    expect(fp.name).toBe("C_0805_2012Metric");
-    expect(fp.pads.length).toBeGreaterThanOrEqual(2);
-    expect(fp.model3dRefs.length).toBeGreaterThanOrEqual(1);
+    expect(fp.name).toBe("BGA289C80P17X17_1400X1400X152N");
+    expect(fp.pads.length).toBeGreaterThanOrEqual(289);
+    expect(fp.graphics.length).toBeGreaterThanOrEqual(20);
     expect(fp.attributes.type).toBe("smd");
   });
 });

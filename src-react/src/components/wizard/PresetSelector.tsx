@@ -7,7 +7,6 @@
 
 import { useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { useComponentWizardStore } from "@/stores/component-wizard-store";
 import type { BodyPresetKind } from "../symbol-editor/types";
 
 // ---------------------------------------------------------------------------
@@ -132,21 +131,11 @@ interface PresetSelectorProps {
 }
 
 export function PresetSelector({ onSelect }: PresetSelectorProps) {
-  const updateDraft = useComponentWizardStore((s) => s.updateDraft);
-
   const handleSelect = useCallback(
     (kind: BodyPresetKind) => {
-      // Update draft with selected preset - store body kind for symbol editor
-      updateDraft({
-        symbolData: {
-          body: { kind, width: 0, height: 0 }, // Dimensions set by symbol editor
-        },
-      });
-
-      // Notify parent
       onSelect(kind);
     },
-    [updateDraft, onSelect],
+    [onSelect],
   );
 
   return (

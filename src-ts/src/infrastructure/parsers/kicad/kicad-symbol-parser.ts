@@ -21,9 +21,14 @@ export interface ParsedKicadSymbol {
   pins: ParsedPin[];
   units: number;
   properties: Record<string, string>;
-  bodyGraphics: SExpr[];
+  bodyGraphics: ParsedBodyGraphic[];
   warnings: ParsedWarning[];
   rawSource: string;
+}
+
+export interface ParsedBodyGraphic {
+  unit: number;
+  node: SExpr[];
 }
 
 export interface ParsedPin {
@@ -35,6 +40,7 @@ export interface ParsedPin {
   length: number;
   rotation: number;
   unit: number;
+  hidden: boolean;
 }
 
 export interface ParsedWarning {
@@ -108,7 +114,7 @@ function parseSymbol(node: SExpr[], fullSource: string): ParsedKicadSymbol {
   // Count units and parse pins/graphics from sub-symbols
   const subSymbols = findNodes(node, "symbol");
   const pins: ParsedPin[] = [];
-  const bodyGraphics: SExpr[] = [];
+  const bodyGraphics: ParsedBodyGraphic[] = [];
   const unitSet = new Set<number>();
 
   for (const sub of subSymbols) {
@@ -130,17 +136,17 @@ function parseSymbol(node: SExpr[], fullSource: string): ParsedKicadSymbol {
       const tag = child[0];
       if (typeof tag !== "string") continue;
 
-      if (KNOWN_GRAPHIC_TYPES.has(tag)) {
-        bodyGraphics.push(child);
-      } else if (tag !== "pin" && tag !== "symbol") {
+        if (KNOWN_GRAPHIC_TYPES.has(tag)) {
+          bodyGraphics.push({ unit, node: child });
+        } else if (tag !== "pin" && tag !== "symbol") {
         // Unknown graphic element
         warnings.push({
           code: "unsupported_construct",
           message: `Unknown graphic element "${tag}" in sub-symbol`,
         });
-        bodyGraphics.push(child); // preserve it
+          bodyGraphics.push({ unit, node: child }); // preserve it
+        }
       }
-    }
   }
 
   // Filter out unit 0 (shared graphics) from unit count
@@ -187,5 +193,6 @@ function parsePin(node: SExpr[], unit: number): ParsedPin | null {
     length: lengthNode ? getNumberValue(lengthNode) ?? 0 : 0,
     rotation: getNumberValue(atNode, 3) ?? 0,
     unit,
+    hidden: node.includes("hide"),
   };
 }

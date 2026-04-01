@@ -14,10 +14,7 @@ export class ComponentValidationService implements IComponentValidationService {
     const blockers: ValidationIssue[] = [];
     const warnings: ValidationIssue[] = [];
 
-    // MVP: Only require displayLabel and symbolData existence
-    // Relaxed from full validation to allow minimal components
-
-    // Missing symbol data (still required, but pins optional for MVP)
+    // Missing symbol data
     if (!payload.symbolData) {
       blockers.push(
         this.issue(
@@ -41,9 +38,9 @@ export class ComponentValidationService implements IComponentValidationService {
       );
     }
 
-    // Warning for no pins (not a blocker for MVP)
+    // Missing renderable symbol pins is a publish blocker
     if (payload.symbolData && payload.symbolData.pinDefinitions.length === 0) {
-      warnings.push(
+      blockers.push(
         this.issue(
           "missing_symbol_data",
           "Symbol has no pin definitions",
@@ -53,9 +50,9 @@ export class ComponentValidationService implements IComponentValidationService {
       );
     }
 
-    // Warning for zero package variants (not a blocker for MVP)
+    // Publishing without a package variant creates an unusable component
     if (payload.packageVariants.length === 0) {
-      warnings.push(
+      blockers.push(
         this.issue(
           "zero_package_variants",
           "Family has no package variants - component will have no footprint",
@@ -81,7 +78,16 @@ export class ComponentValidationService implements IComponentValidationService {
       }
 
       // Check defaultPackageVariantId matches
-      if (payload.defaultPackageVariantId) {
+      if (!payload.defaultPackageVariantId) {
+        blockers.push(
+          this.issue(
+            "no_default_variant",
+            "defaultPackageVariantId must reference the default package variant",
+            null,
+            "family",
+          ),
+        );
+      } else {
         const exists = payload.packageVariants.some(
           (v) => v.id === payload.defaultPackageVariantId,
         );
@@ -169,6 +175,15 @@ export class ComponentValidationService implements IComponentValidationService {
               this.issue(
                 "missing_3d_model",
                 `Footprint "${fp.label}" in variant ${variant.canonicalCode} has no 3D model`,
+                fp.id,
+                "footprint",
+              ),
+            );
+          } else if (fp.model3dOptions.some((model) => model.linkStatus !== "valid")) {
+            warnings.push(
+              this.issue(
+                "missing_3d_model",
+                `Footprint "${fp.label}" in variant ${variant.canonicalCode} has unresolved 3D model links`,
                 fp.id,
                 "footprint",
               ),

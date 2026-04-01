@@ -87,12 +87,18 @@ export function FootprintPresetSelector({
   onSelect,
 }: FootprintPresetSelectorProps) {
   const currentPreset = useFootprintEditorStore((s) => s.draft.preset);
+  const isImportedPresetLocked = useFootprintEditorStore((s) => s.isImportedPresetLocked);
   const setPreset = useFootprintEditorStore((s) => s.setPreset);
   const setPads = useFootprintEditorStore((s) => s.setPads);
   const setGraphics = useFootprintEditorStore((s) => s.setGraphics);
+  const unlockImportedPreset = useFootprintEditorStore((s) => s.unlockImportedPreset);
 
   const handleSelect = useCallback(
     (kind: FootprintPresetKind) => {
+      if (isImportedPresetLocked) {
+        return;
+      }
+
       const config = DEFAULT_PRESET_CONFIGS[kind];
       setPreset(kind, config);
 
@@ -104,12 +110,24 @@ export function FootprintPresetSelector({
 
       onSelect?.(kind);
     },
-    [setPreset, setPads, setGraphics, onSelect],
+    [isImportedPresetLocked, setPreset, setPads, setGraphics, onSelect],
   );
 
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-medium text-text-primary">Package Type</h3>
+      {isImportedPresetLocked && (
+        <div className="rounded-md border border-border-default bg-bg-input p-2 text-xs text-text-secondary">
+          <p>Imported footprint locked. Replace to choose a preset.</p>
+          <button
+            type="button"
+            onClick={unlockImportedPreset}
+            className="mt-2 rounded bg-bg-elevated px-2 py-1 text-xs font-medium text-text-primary hover:bg-bg-secondary"
+          >
+            Replace imported footprint
+          </button>
+        </div>
+      )}
       {PRESET_CATEGORIES.map((category) => (
         <div key={category.label}>
           <div className="mb-1.5 px-0.5">
@@ -121,11 +139,14 @@ export function FootprintPresetSelector({
             {category.presets.map((preset) => (
               <button
                 key={preset.kind}
+                type="button"
                 onClick={() => handleSelect(preset.kind)}
+                disabled={isImportedPresetLocked}
                 className={cn(
                   "group relative flex flex-col items-start gap-0.5 rounded-md border px-2.5 py-2 transition-all text-left",
                   "border-border-default bg-bg-elevated hover:border-brand hover:bg-bg-secondary",
                   "focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1",
+                  isImportedPresetLocked && "cursor-not-allowed opacity-50 hover:border-border-default hover:bg-bg-elevated",
                   currentPreset === preset.kind &&
                     "border-brand bg-bg-secondary ring-1 ring-brand/30",
                 )}

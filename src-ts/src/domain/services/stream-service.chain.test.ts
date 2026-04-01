@@ -1,9 +1,10 @@
-import { describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { StreamService } from "./stream-service";
 import type { DatabaseAccess } from "../../db";
 import type { TaskOrchestrator } from "./queue/task-orchestrator";
 import type { ExecutionEvent } from "./queue/task-executor";
 import type { ToolRegistry } from "./tools/tool-registry";
+import { LicenseUtil } from "./license-util";
 
 function createMessageTask(taskId: string, status: string) {
   return {
@@ -48,6 +49,16 @@ function createDefaultOrchestrator(overrides?: Record<string, unknown>): TaskOrc
 }
 
 describe("StreamService tool-chain continuity", () => {
+  let enforceAllowedSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    enforceAllowedSpy = spyOn(LicenseUtil, "enforceAllowed").mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    enforceAllowedSpy.mockRestore();
+  });
+
   it("keeps SSE open across tool follow-up tasks and emits done only for final completion", async () => {
     const taskById = new Map<string, ReturnType<typeof createMessageTask>>([
       ["task-1", createMessageTask("task-1", "streaming")],

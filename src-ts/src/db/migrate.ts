@@ -14,6 +14,120 @@ import { DatabaseAccess } from './index';
 import { existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 
+// ---------------------------------------------------------------------------
+// Schema Validation & Repair
+// ---------------------------------------------------------------------------
+
+/**
+ * Expected schema definition for validation.
+ * Maps table names to required columns with their default values.
+ */
+const EXPECTED_SCHEMA: Record<string, Array<{ name: string; type: string; defaultValue?: string }>> = {
+  component_family: [
+    { name: 'id', type: 'TEXT' },
+    { name: 'canonical_key', type: 'TEXT' },
+    { name: 'display_label', type: 'TEXT' },
+    { name: 'description', type: 'TEXT' },
+    { name: 'scope', type: 'TEXT' },
+    { name: 'symbol_data', type: 'TEXT' },
+    { name: 'default_package_variant_id', type: 'TEXT' },
+    { name: 'category_path', type: 'TEXT' },
+    { name: 'tags', type: 'TEXT', defaultValue: "'[]'" },
+    { name: 'created_at', type: 'INTEGER' },
+    { name: 'updated_at', type: 'INTEGER' },
+    { name: 'deleted_at', type: 'INTEGER' },
+  ],
+  model_3d_option: [
+    { name: 'id', type: 'TEXT' },
+    { name: 'footprint_option_id', type: 'TEXT' },
+    { name: 'file_name', type: 'TEXT' },
+    { name: 'is_default', type: 'INTEGER' },
+    { name: 'link_status', type: 'TEXT' },
+    { name: 'step_asset_path', type: 'TEXT' },
+    { name: 'gltf_preview_path', type: 'TEXT' },
+    { name: 'created_at', type: 'INTEGER' },
+    { name: 'updated_at', type: 'INTEGER' },
+  ],
+  footprint_option: [
+    { name: 'id', type: 'TEXT' },
+    { name: 'variant_id', type: 'TEXT' },
+    { name: 'label', type: 'TEXT' },
+    { name: 'is_default', type: 'INTEGER', defaultValue: '0' },
+    { name: 'kicad_payload', type: 'TEXT' },
+    { name: 'density_level', type: 'TEXT' },
+    { name: 'ipc_name', type: 'TEXT' },
+    { name: 'default_model_3d_option_id', type: 'TEXT' },
+    { name: 'created_at', type: 'INTEGER' },
+    { name: 'updated_at', type: 'INTEGER' },
+    { name: 'deleted_at', type: 'INTEGER' },
+  ],
+};
+
+interface ColumnInfo {
+  cid: number;
+  name: string;
+  type: string;
+  notnull: number;
+  dflt_value: string | null;
+  pk: number;
+}
+
+/**
+ * Get existing columns for a table
+ */
+function getTableColumns(db: ReturnType<DatabaseAccess['getRawDb']>, tableName: string): Map<string, ColumnInfo> {
+  const columns = new Map<string, ColumnInfo>();
+  try {
+    const result = db.query<ColumnInfo, []>(`PRAGMA table_info(${tableName})`).all();
+    for (const col of result) {
+      columns.set(col.name, col);
+    }
+  } catch {
+    // Table doesn't exist
+  }
+  return columns;
+}
+
+/**
+ * Validate and repair schema by adding missing columns.
+ * This runs AFTER drizzle migrations to catch any silently failed ALTER TABLE statements.
+ */
+export async function validateAndRepairSchema(): Promise<void> {
+  const db = DatabaseAccess.getInstance();
+  const rawDb = db.getRawDb();
+  
+  let repaired = 0;
+  
+  for (const [tableName, expectedColumns] of Object.entries(EXPECTED_SCHEMA)) {
+    const existingColumns = getTableColumns(rawDb, tableName);
+    
+    // Skip if table doesn't exist (will be created by migrations)
+    if (existingColumns.size === 0) {
+      continue;
+    }
+    
+    for (const col of expectedColumns) {
+      if (!existingColumns.has(col.name)) {
+        // Column is missing - add it
+        const defaultClause = col.defaultValue ? ` DEFAULT ${col.defaultValue}` : '';
+        const sql = `ALTER TABLE ${tableName} ADD COLUMN ${col.name} ${col.type}${defaultClause}`;
+        
+        try {
+          rawDb.exec(sql);
+          console.log(`[Schema Repair] Added missing column: ${tableName}.${col.name}`);
+          repaired++;
+        } catch (err) {
+          console.error(`[Schema Repair] Failed to add column ${tableName}.${col.name}:`, err);
+        }
+      }
+    }
+  }
+  
+  if (repaired > 0) {
+    console.log(`[Schema Repair] ✓ Repaired ${repaired} missing column(s)`);
+  }
+}
+
 /**
  * Migration configuration
  */
@@ -139,6 +253,7 @@ export async function hasPendingMigrations(): Promise<boolean> {
  * Run migrations if needed (safe startup check)
  *
  * Checks for pending migrations and applies them if necessary.
+ * Also validates schema and repairs any missing columns.
  * Safe to call on every startup.
  */
 export async function runMigrationsIfNeeded(
@@ -146,4 +261,8 @@ export async function runMigrationsIfNeeded(
 ): Promise<void> {
   console.log('[Migrations] Checking for pending migrations...');
   await runMigrations(config);
+  
+  // Validate and repair schema after migrations
+  // This catches any silently failed ALTER TABLE statements
+  await validateAndRepairSchema();
 }

@@ -5,8 +5,18 @@ import { cleanTestDatabase } from "./setup";
 const BLOCKED_PORT = 3011;
 const ACTIVE_PORT = 3012;
 
-const blockedServer = new TestServer(BLOCKED_PORT);
-const activeServer = new TestServer(ACTIVE_PORT);
+const blockedServer = new TestServer(BLOCKED_PORT, "", {
+  env: {
+    OPENPCB_STARTUP_LICENSE_STATE: "blocked",
+    OPENPCB_STARTUP_LICENSE_CODE: "ACCESS_BLOCKED",
+  },
+});
+const activeServer = new TestServer(ACTIVE_PORT, "", {
+  env: {
+    OPENPCB_STARTUP_LICENSE_STATE: "active",
+    OPENPCB_STARTUP_LICENSE_CODE: "TOKEN_VALID",
+  },
+});
 
 const originalState = process.env.OPENPCB_STARTUP_LICENSE_STATE;
 const originalCode = process.env.OPENPCB_STARTUP_LICENSE_CODE;
@@ -27,14 +37,9 @@ const restoreEnv = () => {
 
 describe("License API contract", () => {
   beforeAll(async () => {
-    await cleanTestDatabase();
-
-    process.env.OPENPCB_STARTUP_LICENSE_STATE = "blocked";
-    process.env.OPENPCB_STARTUP_LICENSE_CODE = "ACCESS_BLOCKED";
+    await cleanTestDatabase(blockedServer.getDataDir());
+    await cleanTestDatabase(activeServer.getDataDir());
     await blockedServer.start();
-
-    process.env.OPENPCB_STARTUP_LICENSE_STATE = "active";
-    process.env.OPENPCB_STARTUP_LICENSE_CODE = "TOKEN_VALID";
     await activeServer.start();
   }, { timeout: 180000 });
 
@@ -42,7 +47,8 @@ describe("License API contract", () => {
     await blockedServer.stop();
     await activeServer.stop();
     restoreEnv();
-    await cleanTestDatabase();
+    await cleanTestDatabase(blockedServer.getDataDir());
+    await cleanTestDatabase(activeServer.getDataDir());
   }, { timeout: 180000 });
 
   it("GET /api/license/status returns deterministic blocked status envelope", async () => {

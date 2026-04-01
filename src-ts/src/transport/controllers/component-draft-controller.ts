@@ -85,14 +85,69 @@ export class ComponentDraftController {
     // Determine family ID: existing or create new
     let familyId = draft.familyId;
     if (!familyId) {
-      const family = await this.familyRepo.create({
-        canonicalKey: payload.displayLabel.toLowerCase().replace(/\s+/g, "_"),
-        displayLabel: payload.displayLabel,
-        description: payload.description,
-        scope: "workspace",
-        symbolData: payload.symbolData as unknown as Record<string, unknown>,
-        defaultPackageVariantId: payload.defaultPackageVariantId,
+      const { family, variants } = await this.familyRepo.createFamilyWithHierarchy({
+        family: {
+          canonicalKey: payload.displayLabel.toLowerCase().replace(/\s+/g, "_"),
+          displayLabel: payload.displayLabel,
+          description: payload.description,
+          scope: "workspace",
+          symbolData: payload.symbolData as unknown as Record<string, unknown>,
+          defaultPackageVariantId: payload.defaultPackageVariantId,
+          categoryPath:
+            typeof payload.symbolData.properties.__openpcbCategoryPath === "string"
+              ? payload.symbolData.properties.__openpcbCategoryPath
+              : null,
+          tags: [],
+        },
+        variants: payload.packageVariants.map((variant) => ({
+          variant: {
+            canonicalCode: variant.canonicalCode,
+            humanLabel: variant.humanLabel,
+            imperialAlias: variant.imperialAlias,
+            metricAlias: variant.metricAlias,
+            mountType: variant.mountType,
+            dimensions: variant.dimensions,
+            isDefault: variant.isDefault,
+            pinRemapTable: variant.pinRemapTable,
+            defaultFootprintOptionId: variant.defaultFootprintOptionId,
+            deletedAt: null,
+          },
+          footprints: variant.footprintOptions.map((footprint) => ({
+            footprint: {
+              label: footprint.label,
+              isDefault: footprint.isDefault,
+              kicadPayload: footprint.kicadPayload as Record<string, unknown>,
+              densityLevel: footprint.densityLevel ?? null,
+              ipcName: footprint.ipcName ?? null,
+              defaultModel3dOptionId: footprint.defaultModel3dOptionId,
+              deletedAt: null,
+            },
+            models: footprint.model3dOptions.map((model) => ({
+              fileName: model.fileName,
+              stepAssetPath: model.stepAssetPath,
+              gltfPreviewPath: model.gltfPreviewPath,
+              isDefault: model.isDefault,
+              linkStatus: model.linkStatus,
+            })),
+          })),
+        })),
       });
+
+      for (let i = 0; i < payload.packageVariants.length; i++) {
+        const variant = payload.packageVariants[i];
+        const createdVariant = variants[i];
+        if (!variant || !createdVariant) continue;
+
+        for (const offering of variant.offerings) {
+          await this.familyRepo.createOffering({
+            variantId: createdVariant.id,
+            mpn: offering.mpn,
+            manufacturer: offering.manufacturer,
+            datasheetUrl: offering.datasheetUrl,
+          });
+        }
+      }
+
       familyId = family.id;
     } else {
       await this.familyRepo.update(familyId, {
@@ -100,6 +155,10 @@ export class ComponentDraftController {
         description: payload.description,
         symbolData: payload.symbolData as unknown as Record<string, unknown>,
         defaultPackageVariantId: payload.defaultPackageVariantId,
+        categoryPath:
+          typeof payload.symbolData.properties.__openpcbCategoryPath === "string"
+            ? payload.symbolData.properties.__openpcbCategoryPath
+            : null,
       });
     }
 
