@@ -39,6 +39,10 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
   const gridSize = useSchematicStore((s) => s.chrome.gridSize);
   const session = useSchematicStore((s) => s.session);
   const setHitTestCache = useSchematicStore((s) => s.setHitTestCache);
+  const setPaletteDragSymbolKind = useSchematicStore(
+    (s) => s.setPaletteDragSymbolKind,
+  );
+  const resetViewport = useSchematicStore((s) => s.resetViewport);
   const document = useSchematicStore((s) => s.persisted.document);
 
   const getSnappedPlacementPosition = useCallback(
@@ -78,9 +82,39 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
         return dragKind as SymbolKind;
       }
 
-      return session?.type === "placement" ? session.symbolKind : null;
+      const state = useSchematicStore.getState();
+      if (state.draggedSymbolKind) {
+        return state.draggedSymbolKind;
+      }
+
+      return state.session?.type === "placement"
+        ? state.session.symbolKind
+        : null;
     },
-    [session],
+    [],
+  );
+
+  const syncDragPlacementSession = useCallback(
+    (kind: SymbolKind) => {
+      const currentSession = useSchematicStore.getState().session;
+      if (
+        currentSession?.type === "placement" &&
+        currentSession.symbolKind === kind
+      ) {
+        return;
+      }
+
+      interactionController.beginPlacement(kind);
+    },
+    [interactionController],
+  );
+
+  const updateDragPreviewFromEvent = useCallback(
+    (kind: SymbolKind, clientX: number, clientY: number) => {
+      syncDragPlacementSession(kind);
+      updatePlacementPreviewFromClient(clientX, clientY);
+    },
+    [syncDragPlacementSession, updatePlacementPreviewFromClient],
   );
 
   // Resize canvas to fill container
@@ -234,6 +268,16 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
 
     return () => observer.disconnect();
   }, [resizeCanvas]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !document?.id) {
+      return;
+    }
+
+    const rect = container.getBoundingClientRect();
+    resetViewport(rect.width, rect.height);
+  }, [document?.id, resetViewport]);
 
   useEffect(() => {
     setHitTestCache(createHitTestCache(document?.symbols ?? []));
@@ -400,9 +444,22 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
 
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
-      updatePlacementPreviewFromClient(event.clientX, event.clientY);
+      updateDragPreviewFromEvent(kind, event.clientX, event.clientY);
     },
-    [readDraggedSymbolKind, updatePlacementPreviewFromClient],
+    [readDraggedSymbolKind, updateDragPreviewFromEvent],
+  );
+
+  const handleDragEnter = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      const kind = readDraggedSymbolKind(event.dataTransfer);
+      if (!kind) {
+        return;
+      }
+
+      event.preventDefault();
+      updateDragPreviewFromEvent(kind, event.clientX, event.clientY);
+    },
+    [readDraggedSymbolKind, updateDragPreviewFromEvent],
   );
 
   const handleDragLeave = useCallback(
@@ -425,19 +482,24 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
       }
 
       event.preventDefault();
+      syncDragPlacementSession(kind);
       const snappedPoint = getSnappedPlacementPosition(event.clientX, event.clientY);
       interactionController.updatePlacementPreview(null);
       if (!snappedPoint) {
+        setPaletteDragSymbolKind(null);
+        interactionController.cancelSession();
         return;
       }
 
-      interactionController.beginPlacement(kind);
       interactionController.commitPlacement(snappedPoint);
+      setPaletteDragSymbolKind(null);
     },
     [
       getSnappedPlacementPosition,
       interactionController,
       readDraggedSymbolKind,
+      setPaletteDragSymbolKind,
+      syncDragPlacementSession,
     ],
   );
 
@@ -462,6 +524,7 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
       ref={containerRef}
       data-testid="schematic-canvas-surface"
       className="relative h-full w-full overflow-hidden bg-background"
+      onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

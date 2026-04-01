@@ -1,16 +1,21 @@
 import type { ProjectRecord } from "@shared/types";
-import {
-  FolderIcon,
-  AlertCircleIcon,
-} from "lucide-react";
-import { getProjectIcon } from "@/lib/project-icons";
+// Projects feature is temporarily disabled
+// import {
+//   FolderIcon,
+//   AlertCircleIcon,
+// } from "lucide-react";
+// import { getProjectIcon } from "@/lib/project-icons";
 
 export interface ProjectBadgeProps {
   project: ProjectRecord | null;
   error?: boolean;
 }
 
-export function ProjectBadge({ project, error }: ProjectBadgeProps) {
+export function ProjectBadge(_props: ProjectBadgeProps) {
+  // Projects feature is temporarily disabled
+  return null;
+  /*
+  const { project, error } = _props;
   if (!project && !error) return null;
 
   return (
@@ -46,4 +51,5 @@ export function ProjectBadge({ project, error }: ProjectBadgeProps) {
       </div>
     </div>
   );
+  */
 }

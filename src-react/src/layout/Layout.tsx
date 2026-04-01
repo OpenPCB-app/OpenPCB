@@ -79,7 +79,7 @@ export default function Layout() {
 
   return (
     <>
-      <div className="grid h-screen grid-cols-[48px_1fr] grid-rows-[1fr]">
+      <div className="grid h-screen grid-cols-[80px_1fr] grid-rows-[1fr]">
         {/* Left icon rail */}
         <LeftSidebar onSettingsClick={() => setSettingsOpen(true)} />
 

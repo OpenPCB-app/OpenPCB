@@ -24,6 +24,7 @@
     "openai": "^6.1.0",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
+    "s-expression.js": "^0.6.4",
     "unified": "^11.0.5"
   },
   "devDependencies": {

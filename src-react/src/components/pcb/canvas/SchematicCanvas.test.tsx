@@ -1,9 +1,10 @@
 import { fireEvent, render } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SchematicDocument } from "../types";
-import { schematicToScreen } from "./viewport";
+import { buildOrthogonalWirePath } from "./wires";
 import { createHitTestCache } from "./hit-test";
 import { SchematicCanvas } from "./SchematicCanvas";
+import { schematicToScreen, screenToSchematic } from "./viewport";
 import { useSchematicStore } from "@/stores/schematic-store";
 
 const TEST_DOCUMENT: SchematicDocument = {
@@ -109,12 +110,16 @@ beforeAll(() => {
       rotate: vi.fn(),
       setLineDash: vi.fn(),
       closePath: vi.fn(),
+      fillText: vi.fn(),
       fillStyle: "",
       strokeStyle: "",
       lineWidth: 1,
       lineJoin: "round",
       lineCap: "round",
       globalAlpha: 1,
+      font: "",
+      textAlign: "start",
+      textBaseline: "alphabetic",
     };
 
     return context as unknown as CanvasRenderingContext2D;
@@ -160,9 +165,10 @@ describe("SchematicCanvas wiring flow", () => {
       throw new Error("canvas missing");
     }
 
-    const source = schematicToScreen(1_270_000, 0, viewport);
+    const activeViewport = useSchematicStore.getState().chrome.viewport;
+    const source = schematicToScreen(1_270_000, 0, activeViewport);
     const hoverPoint = { x: 160, y: 90 };
-    const target = schematicToScreen(1_905_000, 1_270_000, viewport);
+    const target = schematicToScreen(1_905_000, 1_270_000, activeViewport);
 
     fireEvent.mouseDown(canvas, {
       button: 0,
@@ -182,11 +188,10 @@ describe("SchematicCanvas wiring flow", () => {
 
     expect(useSchematicStore.getState().session).toMatchObject({
       type: "wire",
-      previewPoints: [
+      previewPoints: buildOrthogonalWirePath(
         { x: 1_270_000, y: 0 },
-        { x: 1_600_000, y: 0 },
-        { x: 1_600_000, y: 900_000 },
-      ],
+        screenToSchematic(hoverPoint.x, hoverPoint.y, activeViewport),
+      ),
       targetPinId: null,
     });
 

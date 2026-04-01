@@ -4,6 +4,7 @@ import type {
   DesignRecord,
   UpdateDesignInput,
 } from "@shared/types";
+import type { SchematicProjectDocument } from "@shared/types/pcb.types";
 
 interface ApiResponse<T> {
   ok: boolean;
@@ -79,4 +80,50 @@ export async function deleteDesign(id: string): Promise<void> {
     },
   );
   unwrapResponse(response);
+}
+
+export interface SheetContentResponse {
+  sheet: {
+    id: string;
+    designId: string;
+    sheetIndex: number;
+    title: string;
+    contentHash: string | null;
+  } | null;
+  content: SchematicProjectDocument | null;
+}
+
+export async function getSheetContent(
+  designId: string,
+  sheetIndex: number,
+): Promise<SheetContentResponse> {
+  const response = await customFetch<ApiResponse<SheetContentResponse>>(
+    `/api/designs/${encodeURIComponent(designId)}/sheets/${sheetIndex}/content`,
+  );
+  return unwrapResponse(response);
+}
+
+export interface SaveSheetContentResponse {
+  sheet: {
+    id: string;
+    designId: string;
+    sheetIndex: number;
+    title: string;
+    contentHash: string | null;
+  };
+}
+
+export async function saveSheetContent(
+  designId: string,
+  sheetIndex: number,
+  content: SchematicProjectDocument,
+): Promise<SaveSheetContentResponse> {
+  const response = await customFetch<ApiResponse<SaveSheetContentResponse>>(
+    `/api/designs/${encodeURIComponent(designId)}/sheets/${sheetIndex}/content`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ content }),
+    },
+  );
+  return unwrapResponse(response);
 }

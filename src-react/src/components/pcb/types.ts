@@ -65,7 +65,10 @@ export interface NetLabelEntity
 export type SchematicEntity = SymbolEntity | WireEntity | NetLabelEntity;
 
 export interface SchematicDocument
-  extends Omit<SchematicProjectDocument, "symbols" | "wires" | "labels" | "title"> {
+  extends Omit<
+    SchematicProjectDocument,
+    "symbols" | "wires" | "labels" | "title"
+  > {
   name: string;
   revision: number;
   symbols: SymbolEntity[];
@@ -158,7 +161,10 @@ function normalizeRotationValue(rotation: number | undefined): number {
   return rotation;
 }
 
-function normalizeReferenceValue(reference: string | null | undefined, fallbackId: string): string {
+function normalizeReferenceValue(
+  reference: string | null | undefined,
+  fallbackId: string,
+): string {
   if (typeof reference === "string" && reference.trim().length > 0) {
     return reference;
   }
@@ -175,7 +181,9 @@ export function normalizeSymbolEntity(symbol: SymbolEntity): SymbolEntity {
   };
 }
 
-export function toEditorSchematicSymbol(symbol: SharedSchematicSymbol): SymbolEntity {
+export function toEditorSchematicSymbol(
+  symbol: SharedSchematicSymbol,
+): SymbolEntity {
   const reference = normalizeReferenceValue(symbol.reference, symbol.id);
 
   return normalizeSymbolEntity({
@@ -189,7 +197,9 @@ export function toEditorSchematicSymbol(symbol: SharedSchematicSymbol): SymbolEn
   });
 }
 
-export function toEditorSchematicDocument(document: SchematicProjectDocument): SchematicDocument {
+export function toEditorSchematicDocument(
+  document: SchematicProjectDocument,
+): SchematicDocument {
   return normalizeSchematicDocument({
     ...document,
     name: document.title ?? "Untitled schematic",
@@ -211,10 +221,51 @@ export function toEditorSchematicDocument(document: SchematicProjectDocument): S
   });
 }
 
-export function normalizeSchematicDocument(document: SchematicDocument): SchematicDocument {
+export function normalizeSchematicDocument(
+  document: SchematicDocument,
+): SchematicDocument {
   return {
     ...document,
     symbols: document.symbols.map(normalizeSymbolEntity),
+  };
+}
+
+export function toSchematicProjectDocument(
+  doc: SchematicDocument,
+): SchematicProjectDocument {
+  return {
+    id: doc.id,
+    projectId: doc.projectId,
+    updatedAt: doc.updatedAt,
+    version: doc.revision,
+    formatVersion: doc.formatVersion,
+    title: doc.name,
+    symbols: doc.symbols.map((s) => ({
+      id: s.id,
+      libraryPartId: s.libraryPartId,
+      reference: s.reference,
+      position: s.position,
+      rotation: s.rotation,
+      pins: s.pins,
+      properties: {
+        ...s.properties,
+        ...(s.value ? { value: s.value } : {}),
+      },
+    })),
+    wires: doc.wires.map((w) => ({
+      id: w.id,
+      points: w.points,
+      sourcePinId: w.sourcePinId,
+      targetPinId: w.targetPinId,
+      net: w.net,
+    })),
+    labels: doc.labels.map((l) => ({
+      id: l.id,
+      text: l.text,
+      position: l.position,
+      rotation: l.rotation,
+      net: l.net,
+    })),
   };
 }
 

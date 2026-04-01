@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_SCHEMATIC_ZOOM,
   SCHEMATIC_ROUND_TRIP_TOLERANCE_NM,
   canvasToScreen,
+  createCenteredViewport,
   domEventToScreen,
+  fitViewportToBounds,
   isWithinRoundTripTolerance,
   mmToNm,
   nmToMm,
@@ -87,5 +90,40 @@ describe("viewport transforms", () => {
         { x: 10 + SCHEMATIC_ROUND_TRIP_TOLERANCE_NM * 2, y: 10 },
       ),
     ).toBe(false);
+  });
+
+  it("creates a schematic-safe centered viewport for empty documents", () => {
+    expect(createCenteredViewport()).toEqual({
+      offsetX: 400,
+      offsetY: 300,
+      zoom: DEFAULT_SCHEMATIC_ZOOM,
+    });
+  });
+
+  it("fits non-empty bounds into the viewport with padding", () => {
+    const fitted = fitViewportToBounds(
+      {
+        minX: 0,
+        minY: 0,
+        maxX: 2_540_000,
+        maxY: 2_540_000,
+      },
+      800,
+      600,
+    );
+
+    expect(fitted.zoom).toBeGreaterThan(0);
+    expect(fitted.zoom).toBeLessThan(1);
+    expect(schematicToScreen(1_270_000, 1_270_000, fitted)).toEqual({
+      x: 400,
+      y: 300,
+    });
+
+    const minScreen = schematicToScreen(0, 0, fitted);
+    const maxScreen = schematicToScreen(2_540_000, 2_540_000, fitted);
+    expect(minScreen.x).toBeGreaterThanOrEqual(80);
+    expect(minScreen.y).toBeGreaterThanOrEqual(80);
+    expect(maxScreen.x).toBeLessThanOrEqual(720);
+    expect(maxScreen.y).toBeLessThanOrEqual(520);
   });
 });

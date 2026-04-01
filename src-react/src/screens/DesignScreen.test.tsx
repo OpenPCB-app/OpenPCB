@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSchematicStore } from "@/stores/schematic-store";
@@ -7,6 +7,22 @@ import type { SchematicDocument } from "@/components/pcb/types";
 import { DesignScreen } from "./DesignScreen";
 
 let designTab: "schematic" | "pcb" | "3d" | "bom" = "schematic";
+const navigateToProject = vi.fn();
+const navigateToHome = vi.fn();
+const navigateToDesign = vi.fn();
+const createDesign = vi.fn();
+let currentProjectId: string | null = "project-1";
+let currentDesignId: string | null = "design-1";
+let designs = [
+  {
+    id: "design-1",
+    workspaceId: "workspace-1",
+    projectId: "project-1",
+    name: "Main schematic",
+    createdAt: "2026-03-31T00:00:00Z",
+    updatedAt: "2026-03-31T00:00:00Z",
+  },
+];
 
 vi.mock("@/components/ui/resizable", () => ({
   ResizablePanelGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -18,18 +34,20 @@ vi.mock("@/stores/navigation-store", () => ({
   useNavigationStore: (
     selector: (state: {
       designTab: typeof designTab;
-      currentProjectId: string;
-      currentDesignId: string;
-      navigateToProject: ReturnType<typeof vi.fn>;
-      navigateToHome: ReturnType<typeof vi.fn>;
+      currentProjectId: string | null;
+      currentDesignId: string | null;
+      navigateToDesign: typeof navigateToDesign;
+      navigateToProject: typeof navigateToProject;
+      navigateToHome: typeof navigateToHome;
     }) => unknown,
   ) =>
     selector({
       designTab,
-      currentProjectId: "project-1",
-      currentDesignId: "design-1",
-      navigateToProject: vi.fn(),
-      navigateToHome: vi.fn(),
+      currentProjectId,
+      currentDesignId,
+      navigateToDesign,
+      navigateToProject,
+      navigateToHome,
     }),
 }));
 
@@ -50,7 +68,8 @@ vi.mock("@/stores/app-store", () => ({
 
 vi.mock("@/hooks/useDesigns", () => ({
   useDesigns: () => ({
-    designs: [{ id: "design-1", name: "Main schematic" }],
+    designs,
+    create: createDesign,
   }),
 }));
 
@@ -69,16 +88,15 @@ vi.mock("@/components/pcb/palette/ComponentPalette", () => ({
     controller,
   }: {
     controller: {
-      beginPlacement: (kind: "resistor" | "capacitor") => void;
+      beginPlacement: (kind: "resistor" | "gnd") => void;
     };
   }) => (
     <div>
-      <button onClick={() => controller.beginPlacement("resistor")}>Begin placement</button>
-      <button
-        draggable
-        onDragStart={() => controller.beginPlacement("capacitor")}
-      >
-        Drag placement
+      <button draggable onDragStart={() => controller.beginPlacement("gnd")}>
+        Ground
+      </button>
+      <button draggable onDragStart={() => controller.beginPlacement("resistor")}>
+        Resistor
       </button>
     </div>
   ),
@@ -101,7 +119,7 @@ vi.mock("@/components/pcb/StatusBar", () => ({
 }));
 
 const TEST_DOCUMENT: SchematicDocument = {
-  id: "doc-1",
+  id: "design-1",
   projectId: "project-1",
   updatedAt: "2026-03-31T00:00:00Z",
   version: 1,
@@ -189,32 +207,85 @@ function resetStore() {
 describe("DesignScreen schematic shell", () => {
   beforeEach(() => {
     designTab = "schematic";
+    currentProjectId = "project-1";
+    currentDesignId = "design-1";
+    designs = [
+      {
+        id: "design-1",
+        workspaceId: "workspace-1",
+        projectId: "project-1",
+        name: "Main schematic",
+        createdAt: "2026-03-31T00:00:00Z",
+        updatedAt: "2026-03-31T00:00:00Z",
+      },
+    ];
+    navigateToDesign.mockReset();
+    navigateToProject.mockReset();
+    navigateToHome.mockReset();
+    createDesign.mockReset();
     resetStore();
+  });
+
+  it("creates and opens a workspace draft when design editor opens without project or design", async () => {
+    currentProjectId = null;
+    currentDesignId = null;
+    designs = [];
+    createDesign.mockResolvedValue({ id: "design-new", name: "Untitled design" });
+
+    render(<DesignScreen />);
+
+    expect(screen.getByText("Creating design draft")).toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(createDesign).toHaveBeenCalledWith({ name: "Untitled design" }),
+    );
+    await waitFor(() =>
+      expect(navigateToDesign).toHaveBeenCalledWith(null, "design-new"),
+    );
+  });
+
+  it("shows retry state when workspace draft bootstrap fails", async () => {
+    const user = userEvent.setup();
+    currentProjectId = null;
+    currentDesignId = null;
+    designs = [];
+    createDesign.mockRejectedValueOnce(new Error("boom"));
+    createDesign.mockResolvedValueOnce({ id: "design-retry", name: "Untitled design" });
+
+    render(<DesignScreen />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Draft creation failed")).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Retry draft creation" }));
+
+    await waitFor(() => expect(createDesign).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(navigateToDesign).toHaveBeenCalledWith(null, "design-retry"),
+    );
   });
 
   it("mounts schematic interactions through DesignScreen", () => {
     render(<DesignScreen />);
 
     expect(screen.getByText("Mock Toolbar")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Begin placement" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ground" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resistor" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Begin wire" })).toBeInTheDocument();
     expect(screen.getByText("PCB Status")).toBeInTheDocument();
   });
 
-  it("routes palette click and drag starts through the shared placement controller", async () => {
-    const user = userEvent.setup();
+  it("routes palette drag starts through the shared placement controller", () => {
     render(<DesignScreen />);
 
-    await user.click(screen.getByRole("button", { name: "Begin placement" }));
-    expect(useSchematicStore.getState().session).toMatchObject({
-      type: "placement",
-      symbolKind: "resistor",
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Resistor" }));
+    expect(useSchematicStore.getState().session).toBeNull();
 
-    fireEvent.dragStart(screen.getByRole("button", { name: "Drag placement" }));
+    fireEvent.dragStart(screen.getByRole("button", { name: "Ground" }));
     expect(useSchematicStore.getState().session).toMatchObject({
       type: "placement",
-      symbolKind: "capacitor",
+      symbolKind: "gnd",
     });
   });
 

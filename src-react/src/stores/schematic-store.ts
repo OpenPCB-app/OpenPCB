@@ -5,6 +5,7 @@ import {
   toEditorSchematicDocument,
 } from "@/components/pcb/types";
 import type { SchematicProjectDocument } from "@shared/types";
+import { createHitTestCache } from "@/components/pcb/canvas/hit-test";
 import type {
   Bounds,
   DerivedConnectivity,
@@ -12,6 +13,7 @@ import type {
   EditorChromeState,
   HitTestCache,
   InteractionSession,
+  Point,
   Rotation,
   SchematicDocument,
   SymbolKind,
@@ -24,7 +26,14 @@ import {
   deriveWireJunctions,
   getWireLength,
 } from "@/components/pcb/canvas/wires";
-import { transformSymbolLocalPoint } from "@/components/pcb/canvas/symbols";
+import { getSymbolBodyBounds, transformSymbolLocalPoint } from "@/components/pcb/canvas/symbols";
+import {
+  clampViewportZoom,
+  createCenteredViewport,
+  fitViewportToBounds,
+  MAX_VIEWPORT_ZOOM,
+  MIN_VIEWPORT_ZOOM,
+} from "@/components/pcb/canvas/viewport";
 
 interface PersistedDocumentState {
   document: SchematicDocument | null;
@@ -37,11 +46,12 @@ interface SchematicState {
   derived: DerivedSchematicState;
   chrome: EditorChromeState;
   session: InteractionSession;
+  draggedSymbolKind: SymbolKind | null;
 
   setViewport: (viewport: Viewport) => void;
   pan: (dx: number, dy: number) => void;
   zoomAt: (centerX: number, centerY: number, factor: number) => void;
-  resetViewport: () => void;
+  resetViewport: (canvasWidth?: number, canvasHeight?: number) => void;
 
   activateTool: (tool: ToolMode) => void;
   beginPlacement: (kind: SymbolKind) => void;
@@ -51,6 +61,7 @@ interface SchematicState {
   beginWire: (sourcePinId: string) => void;
   updateWirePreview: (points: Array<{ x: number; y: number }>, targetPinId?: string | null) => void;
   commitWire: (targetPinId: string) => boolean;
+  setPaletteDragSymbolKind: (kind: SymbolKind | null) => void;
   cancelSession: () => void;
 
   selectEntities: (ids: string[]) => void;
@@ -83,7 +94,7 @@ const INITIAL_DERIVED_STATE: DerivedSchematicState = {
 };
 
 const INITIAL_CHROME_STATE: EditorChromeState = {
-  viewport: { offsetX: 0, offsetY: 0, zoom: 1 },
+  viewport: createCenteredViewport(),
   selectedEntityIds: new Set(),
   activeTool: "select",
   popoverEntityId: null,
@@ -142,6 +153,79 @@ function deriveConnectivity(document: SchematicDocument): DerivedConnectivity {
   };
 }
 
+function includePointInBounds(
+  bounds: Bounds | null,
+  point: Point,
+): Bounds {
+  if (!bounds) {
+    return {
+      minX: point.x,
+      minY: point.y,
+      maxX: point.x,
+      maxY: point.y,
+    };
+  }
+
+  return {
+    minX: Math.min(bounds.minX, point.x),
+    minY: Math.min(bounds.minY, point.y),
+    maxX: Math.max(bounds.maxX, point.x),
+    maxY: Math.max(bounds.maxY, point.y),
+  };
+}
+
+function includeBounds(
+  current: Bounds | null,
+  next: Bounds,
+): Bounds {
+  if (!current) {
+    return next;
+  }
+
+  return {
+    minX: Math.min(current.minX, next.minX),
+    minY: Math.min(current.minY, next.minY),
+    maxX: Math.max(current.maxX, next.maxX),
+    maxY: Math.max(current.maxY, next.maxY),
+  };
+}
+
+function deriveDocumentBounds(document: SchematicDocument | null): Bounds | null {
+  if (!document) {
+    return null;
+  }
+
+  let bounds: Bounds | null = null;
+
+  for (const symbol of document.symbols) {
+    bounds = includeBounds(bounds, getSymbolBodyBounds(symbol));
+  }
+
+  for (const wire of document.wires) {
+    for (const point of wire.points) {
+      bounds = includePointInBounds(bounds, point);
+    }
+  }
+
+  for (const label of document.labels) {
+    bounds = includePointInBounds(bounds, label.position);
+  }
+
+  return bounds;
+}
+
+function getResetViewport(
+  document: SchematicDocument | null,
+  canvasWidth?: number,
+  canvasHeight?: number,
+): Viewport {
+  return fitViewportToBounds(
+    deriveDocumentBounds(document),
+    canvasWidth,
+    canvasHeight,
+  );
+}
+
 function createWireId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `wire-${Date.now()}`;
 }
@@ -155,10 +239,17 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   derived: INITIAL_DERIVED_STATE,
   chrome: INITIAL_CHROME_STATE,
   session: null,
+  draggedSymbolKind: null,
 
   setViewport: (viewport) => {
-    if (!Number.isFinite(viewport.zoom) || viewport.zoom < 0.05 || viewport.zoom > 50) {
-      throw new RangeError(`Invalid viewport.zoom: ${viewport.zoom}. Must be between 0.05 and 50.`);
+    if (
+      !Number.isFinite(viewport.zoom) ||
+      viewport.zoom < MIN_VIEWPORT_ZOOM ||
+      viewport.zoom > MAX_VIEWPORT_ZOOM
+    ) {
+      throw new RangeError(
+        `Invalid viewport.zoom: ${viewport.zoom}. Must be between ${MIN_VIEWPORT_ZOOM} and ${MAX_VIEWPORT_ZOOM}.`,
+      );
     }
 
     set((state) => ({
@@ -183,7 +274,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
   zoomAt: (centerX, centerY, factor) =>
     set((state) => {
-      const newZoom = Math.max(0.05, Math.min(50, state.chrome.viewport.zoom * factor));
+      const newZoom = clampViewportZoom(state.chrome.viewport.zoom * factor);
       const ratio = newZoom / state.chrome.viewport.zoom;
 
       return {
@@ -198,11 +289,15 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       };
     }),
 
-  resetViewport: () =>
+  resetViewport: (canvasWidth, canvasHeight) =>
     set((state) => ({
       chrome: {
         ...state.chrome,
-        viewport: { offsetX: 0, offsetY: 0, zoom: 1 },
+        viewport: getResetViewport(
+          state.persisted.document,
+          canvasWidth,
+          canvasHeight,
+        ),
       },
     })),
 
@@ -265,6 +360,12 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         persisted: {
           ...state.persisted,
           document: nextDocument,
+        },
+        derived: {
+          ...state.derived,
+          connectivity: deriveConnectivity(nextDocument),
+          documentBounds: deriveDocumentBounds(nextDocument),
+          hitTestCache: createHitTestCache(nextDocument.symbols),
         },
         chrome: {
           ...state.chrome,
@@ -373,6 +474,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         derived: {
           ...state.derived,
           connectivity: deriveConnectivity(nextDocument),
+          documentBounds: deriveDocumentBounds(nextDocument),
+          hitTestCache: createHitTestCache(nextDocument.symbols),
         },
         session: null,
       };
@@ -380,6 +483,11 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
     return didCommit;
   },
+
+  setPaletteDragSymbolKind: (draggedSymbolKind) =>
+    set(() => ({
+      draggedSymbolKind,
+    })),
 
   cancelSession: () =>
     set((state) => ({
@@ -391,6 +499,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
             : state.chrome.activeTool,
       },
       session: null,
+      draggedSymbolKind: null,
     })),
 
   selectEntities: (ids) =>
@@ -460,17 +569,25 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
           : toEditorSchematicDocument(document);
 
       return {
-      persisted: {
-        ...state.persisted,
-        document: normalizedDocument,
-      },
-      chrome: {
-        ...state.chrome,
-        popoverEntityId: derivePopoverTargetId(
-          normalizedDocument,
-          state.chrome.selectedEntityIds,
-        ),
-      },
+        persisted: {
+          ...state.persisted,
+          document: normalizedDocument,
+        },
+        derived: {
+          ...state.derived,
+          connectivity: deriveConnectivity(normalizedDocument),
+          documentBounds: deriveDocumentBounds(normalizedDocument),
+          hitTestCache: createHitTestCache(normalizedDocument.symbols),
+        },
+        chrome: {
+          ...state.chrome,
+          viewport: getResetViewport(normalizedDocument),
+          selectedEntityIds: new Set(),
+          activeTool: "select",
+          popoverEntityId: null,
+        },
+        session: null,
+        draggedSymbolKind: null,
       };
     }),
 

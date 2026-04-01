@@ -1,4 +1,5 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { getSymbolKindLabel } from "@/components/pcb/symbol-display";
 import { useSchematicStore } from "@/stores/schematic-store";
 
 export function PropertiesPanel() {
@@ -85,7 +86,7 @@ export function PropertiesPanel() {
                 Symbol
               </h3>
               <p className="text-sm capitalize">
-                {entity.symbolKind.replace(/_/g, " ")}
+                {getSymbolKindLabel(entity.symbolKind)}
               </p>
             </div>
           </>

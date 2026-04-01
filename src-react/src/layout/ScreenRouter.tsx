@@ -5,11 +5,13 @@ import {
   setupHashChangeListener,
 } from "@/stores/navigation-store";
 import { HomeScreen } from "@/screens/HomeScreen";
-import { ProjectScreen } from "@/screens/ProjectScreen";
+// Projects feature is temporarily disabled
+// import { ProjectScreen } from "@/screens/ProjectScreen";
 import { ChatScreen } from "@/screens/ChatScreen";
 import { DesignScreen } from "@/screens/DesignScreen";
 import { NotesScreen } from "@/screens/NotesScreen";
 import { LibraryScreen } from "@/screens/LibraryScreen";
+import { ImportWizard } from "@/screens/ImportWizard";
 
 export function ScreenRouter() {
   const currentScreen = useNavigationStore((s) => s.currentScreen);
@@ -22,8 +24,9 @@ export function ScreenRouter() {
   switch (currentScreen) {
     case "home":
       return <HomeScreen />;
+    // Projects feature is temporarily disabled - redirect to home
     case "project":
-      return <ProjectScreen />;
+      return <HomeScreen />;
     case "design":
       return <DesignScreen />;
     case "notes":
@@ -32,6 +35,8 @@ export function ScreenRouter() {
       return <ChatScreen />;
     case "library":
       return <LibraryScreen />;
+    case "import":
+      return <ImportWizard />;
     default:
       return <HomeScreen />;
   }

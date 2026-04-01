@@ -57,14 +57,16 @@ describe("ChatHeader", () => {
     expect(screen.queryByRole("button", { name: "Back to project" })).not.toBeInTheDocument();
   });
 
-  it("renders ProjectBadge when projectContext provided", () => {
-    render(<ChatHeader projectContext={makeProject({ name: "My Project" })} />);
-    expect(screen.getByText("My Project")).toBeInTheDocument();
+  // ProjectBadge is temporarily disabled - always returns null
+  it("does NOT render ProjectBadge even when projectContext provided (feature disabled)", () => {
+    const { container } = render(<ChatHeader projectContext={makeProject({ name: "My Project" })} />);
+    expect(container.innerHTML).toBe("");
   });
 
-  it("renders ProjectBadge when projectContextError is true", () => {
-    render(<ChatHeader projectContextError />);
-    expect(screen.getByText("Unknown Project")).toBeInTheDocument();
+  // ProjectBadge is temporarily disabled - always returns null
+  it("does NOT render ProjectBadge even when projectContextError is true (feature disabled)", () => {
+    const { container } = render(<ChatHeader projectContextError />);
+    expect(container.innerHTML).toBe("");
   });
 
   it("renders ModelBadge when modelName provided and no projectContext", () => {
@@ -72,15 +74,16 @@ describe("ChatHeader", () => {
     expect(screen.getByText("gpt-4o")).toBeInTheDocument();
   });
 
-  it("does NOT render ModelBadge when projectContext is present", () => {
-    render(
+  // ProjectBadge is temporarily disabled, but ChatHeader still checks for projectContext
+  // before rendering ModelBadge. When projectContext is present, neither badge renders.
+  it("renders nothing when projectContext is present (ProjectBadge disabled, ModelBadge blocked)", () => {
+    const { container } = render(
       <ChatHeader
         modelName="gpt-4o"
         projectContext={makeProject({ name: "Project" })}
       />,
     );
-    expect(screen.queryByTestId("model-loading-badge")).not.toBeInTheDocument();
-    expect(screen.getByText("Project")).toBeInTheDocument();
+    expect(container.innerHTML).toBe("");
   });
 
   it("renders empty when no props provided", () => {

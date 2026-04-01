@@ -1,5 +1,6 @@
 import { schematicToScreen } from "@/components/pcb/canvas/viewport";
 import type { Bounds, SymbolEntity, Viewport } from "@/components/pcb/types";
+import { getSymbolKindLabel } from "@/components/pcb/symbol-display";
 import { useSchematicStore } from "@/stores/schematic-store";
 
 const POPOVER_OFFSET_PX = 12;
@@ -85,7 +86,7 @@ export function FloatingPropertiesPopover() {
   const position = getFloatingPopoverPosition(bounds, viewport);
 
   return (
-    <div className="absolute inset-0 z-20" data-testid="floating-properties-layer">
+    <div className="pointer-events-none absolute inset-0 z-20" data-testid="floating-properties-layer">
       <button
         type="button"
         aria-label="Close symbol properties popover"
@@ -107,7 +108,7 @@ export function FloatingPropertiesPopover() {
         <div className="border-b border-border-default px-3 py-2">
           <p className="text-xs font-semibold text-text-primary">{symbol.reference}</p>
           <p className="text-[11px] text-text-muted capitalize">
-            {symbol.symbolKind.replace(/_/g, " ")}
+            {getSymbolKindLabel(symbol.symbolKind)}
           </p>
         </div>
         <div className="max-h-80 space-y-3 overflow-y-auto px-3 py-3">

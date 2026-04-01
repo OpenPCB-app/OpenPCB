@@ -10,6 +10,7 @@
         "openai": "^6.1.0",
         "remark-gfm": "^4.0.1",
         "remark-parse": "^11.0.0",
+        "s-expression.js": "^0.6.4",
         "unified": "^11.0.5",
       },
       "devDependencies": {
@@ -153,6 +154,8 @@
     "remark-parse": ["remark-parse@11.0.0", "", { "dependencies": { "@types/mdast": "^4.0.0", "mdast-util-from-markdown": "^2.0.0", "micromark-util-types": "^2.0.0", "unified": "^11.0.0" } }, "sha512-FCxlKLNGknS5ba/1lmpYijMUzX2esxW5xQqjWxw2eHFfS2MSdaHVINFmhjo+qN1WhZhNimq0dZATN9pH0IDrpA=="],
 
     "remark-stringify": ["remark-stringify@11.0.0", "", { "dependencies": { "@types/mdast": "^4.0.0", "mdast-util-to-markdown": "^2.0.0", "unified": "^11.0.0" } }, "sha512-1OSmLd3awB/t8qdoEOMazZkNsfVTeY4fTsgzcQFdXNq8ToTN4ZGwrMnlda4K6smTFKD+GRV6O48i6Z4iKgPPpw=="],
+
+    "s-expression.js": ["s-expression.js@0.6.4", "", {}, "sha512-3HEtulxAMlwfNQW9LVGy57u5VrAooZXXoX2QyBD5BIragTIapDSTcTBWrzY0fzwfEiTFBivmQBaX+iOBqdFjzQ=="],
 
     "trough": ["trough@2.2.0", "", {}, "sha512-tmMpK00BjZiUyVyvrBK7knerNgmgvcV/KLVyuma/SC+TQN167GrMRciANTz09+k3zW8L8t60jWO1GpfkZdjTaw=="],
 

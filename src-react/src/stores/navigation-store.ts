@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type Screen = "home" | "project" | "design" | "notes" | "chat" | "library";
+export type Screen = "home" | "project" | "design" | "notes" | "chat" | "library" | "import";
 export type DesignTab = "schematic" | "pcb" | "3d" | "bom";
 
 interface NavigationState {
@@ -21,6 +21,7 @@ interface NavigationState {
   navigateToChat: (chatId: string | null) => void;
   navigateToNewChat: () => void;
   navigateToLibrary: () => void;
+  navigateToImport: () => void;
   setDesignTab: (tab: DesignTab) => void;
   toggleSidebar: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
@@ -74,6 +75,9 @@ function updateUrlHash(
     case "library":
       hash = "#library";
       break;
+    case "import":
+      hash = "#import";
+      break;
     case "home":
     default:
       // Clear hash for home
@@ -109,15 +113,16 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     updateUrlHash("home");
   },
 
-  navigateToProject: (projectId) => {
+  navigateToProject: (_projectId) => {
+    // Projects feature is temporarily disabled - redirect to home
     set({
       previousScreen: get().currentScreen,
-      currentScreen: "project",
-      currentProjectId: projectId,
+      currentScreen: "home",
+      currentProjectId: null,
       currentDesignId: null,
       chatId: null,
     });
-    updateUrlHash("project", projectId);
+    updateUrlHash("home");
   },
 
   navigateToDesign: (projectId, designId) => {
@@ -173,6 +178,15 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     updateUrlHash("library");
   },
 
+  navigateToImport: () => {
+    set({
+      previousScreen: get().currentScreen,
+      currentScreen: "import",
+      chatId: null,
+    });
+    updateUrlHash("import");
+  },
+
   setDesignTab: (tab) => set({ designTab: tab }),
 
   toggleSidebar: () => {
@@ -197,8 +211,8 @@ export function initializeNavigationFromHash(): void {
   } else if (hash.startsWith("#chat")) {
     useNavigationStore.getState().navigateToNewChat();
   } else if (hash.startsWith("#project-")) {
-    const projectId = hash.substring(9);
-    useNavigationStore.getState().navigateToProject(projectId);
+    // Projects feature is temporarily disabled - redirect to home
+    useNavigationStore.getState().navigateToHome();
   } else if (hash.startsWith("#design-")) {
     if (hash.startsWith("#design-project:")) {
       const payload = hash.substring(16);
@@ -215,7 +229,7 @@ export function initializeNavigationFromHash(): void {
   } else if (hash === "#project") {
     useNavigationStore.getState().navigateToHome();
   } else if (hash === "#design") {
-    useNavigationStore.getState().navigateToDesign();
+    useNavigationStore.getState().navigateToDesign(null, null);
   } else if (hash.startsWith("#notes-")) {
     const pageId = hash.substring(7);
     useNavigationStore.getState().navigateToNotes(pageId);
@@ -223,6 +237,8 @@ export function initializeNavigationFromHash(): void {
     useNavigationStore.getState().navigateToNotes();
   } else if (hash === "#library") {
     useNavigationStore.getState().navigateToLibrary();
+  } else if (hash === "#import") {
+    useNavigationStore.getState().navigateToImport();
   }
 }
 
@@ -247,14 +263,11 @@ export function setupHashChangeListener(): () => void {
         });
       }
     } else if (hash.startsWith("#project-")) {
-      const projectId = hash.substring(9);
-      if (
-        state.currentScreen !== "project" ||
-        projectId !== state.currentProjectId
-      ) {
+      // Projects feature is temporarily disabled - redirect to home
+      if (state.currentScreen !== "home") {
         useNavigationStore.setState({
-          currentScreen: "project",
-          currentProjectId: projectId,
+          currentScreen: "home",
+          currentProjectId: null,
           currentDesignId: null,
         });
       }
@@ -302,12 +315,21 @@ export function setupHashChangeListener(): () => void {
         }
       }
     } else if (hash === "#project") {
+      // Projects feature is temporarily disabled - redirect to home
       if (state.currentScreen !== "home") {
         useNavigationStore.setState({ currentScreen: "home" });
       }
     } else if (hash === "#design") {
-      if (state.currentScreen !== "design") {
-        useNavigationStore.setState({ currentScreen: "design", currentDesignId: null });
+      if (
+        state.currentScreen !== "design" ||
+        state.currentProjectId !== null ||
+        state.currentDesignId !== null
+      ) {
+        useNavigationStore.setState({
+          currentScreen: "design",
+          currentProjectId: null,
+          currentDesignId: null,
+        });
       }
     } else if (hash.startsWith("#notes-")) {
       const pageId = hash.substring(7);
@@ -327,6 +349,10 @@ export function setupHashChangeListener(): () => void {
     } else if (hash === "#library") {
       if (state.currentScreen !== "library") {
         useNavigationStore.setState({ currentScreen: "library" });
+      }
+    } else if (hash === "#import") {
+      if (state.currentScreen !== "import") {
+        useNavigationStore.setState({ currentScreen: "import" });
       }
     }
   };

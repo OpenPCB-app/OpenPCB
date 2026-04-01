@@ -1,5 +1,7 @@
 import type { Bounds, Point, SymbolEntity, Viewport } from "../types";
 import { schematicToScreen } from "./viewport";
+import { DEFAULT_SCHEMATIC_ZOOM } from "./viewport";
+import { getSymbolKindLabel } from "../symbol-display";
 
 const DEFAULT_PIN_SPAN = 1_270_000;
 const TWO_TERMINAL_LEAD_INSET = 280_000;
@@ -10,6 +12,8 @@ const MIN_RECT_WIDTH = 760_000;
 const MIN_RECT_HEIGHT = 760_000;
 const CONNECTOR_RADIUS_PX = 5;
 const STROKE_WIDTH_PX = 1.75;
+const BODY_LABEL_OFFSET_NM = 420_000;
+const PIN_LABEL_OFFSET_NM = 220_000;
 
 interface SymbolRenderOptions {
     selected?: boolean;
@@ -31,6 +35,11 @@ interface TwoTerminalMetrics {
     bodyRight: number;
     bodyTop: number;
     bodyBottom: number;
+}
+
+interface SymbolTextLabel {
+    text: string;
+    point: Point;
 }
 
 function getPinExtents(symbol: SymbolEntity): PinExtents | null {
@@ -514,6 +523,106 @@ function renderPins(
     }
 }
 
+function getLabelFontSizePx(viewport: Viewport): number {
+    const zoomScale = viewport.zoom / DEFAULT_SCHEMATIC_ZOOM;
+    return Math.max(10, Math.min(16, 11 + Math.log2(Math.max(zoomScale, 0.25))));
+}
+
+function getPrimarySymbolLabel(symbol: SymbolEntity): string {
+    if (symbol.symbolKind === "gnd") {
+        return getSymbolKindLabel(symbol.symbolKind);
+    }
+
+    return symbol.reference;
+}
+
+function getSecondarySymbolLabel(symbol: SymbolEntity): string | null {
+    if (!symbol.value || symbol.value === symbol.reference) {
+        return null;
+    }
+
+    return symbol.value;
+}
+
+function getBodyTextAnchors(symbol: SymbolEntity): { primary: Point; secondary: Point } {
+    if (symbol.symbolKind === "gnd") {
+        return {
+            primary: { x: 0, y: 420_000 },
+            secondary: { x: 0, y: 0 },
+        };
+    }
+
+    const metrics = getTwoTerminalMetrics(symbol);
+    return {
+        primary: { x: (metrics.startX + metrics.endX) / 2, y: metrics.bodyTop - BODY_LABEL_OFFSET_NM },
+        secondary: { x: (metrics.startX + metrics.endX) / 2, y: metrics.bodyBottom + BODY_LABEL_OFFSET_NM },
+    };
+}
+
+function getPinTextAnchor(symbol: SymbolEntity, pinIndex: number): Point {
+    const pin = symbol.pins[pinIndex];
+    if (!pin) {
+        return { x: 0, y: 0 };
+    }
+
+    if (symbol.pins.length === 1) {
+        return { x: pin.position.x, y: pin.position.y - PIN_LABEL_OFFSET_NM };
+    }
+
+    return {
+        x: pin.position.x,
+        y: pin.position.y + (pinIndex === 0 ? -PIN_LABEL_OFFSET_NM : PIN_LABEL_OFFSET_NM),
+    };
+}
+
+function getSymbolTextLabels(symbol: SymbolEntity): SymbolTextLabel[] {
+    const bodyAnchors = getBodyTextAnchors(symbol);
+    const labels: SymbolTextLabel[] = [
+        {
+            text: getPrimarySymbolLabel(symbol),
+            point: transformSymbolLocalPoint(symbol, bodyAnchors.primary),
+        },
+    ];
+    const secondary = getSecondarySymbolLabel(symbol);
+
+    if (secondary) {
+        labels.push({
+            text: secondary,
+            point: transformSymbolLocalPoint(symbol, bodyAnchors.secondary),
+        });
+    }
+
+    for (const [index, pin] of symbol.pins.entries()) {
+        labels.push({
+            text: pin.name,
+            point: transformSymbolLocalPoint(symbol, getPinTextAnchor(symbol, index)),
+        });
+    }
+
+    return labels;
+}
+
+function renderSymbolLabels(
+    ctx: CanvasRenderingContext2D,
+    symbol: SymbolEntity,
+    viewport: Viewport,
+): void {
+    const fontSizePx = getLabelFontSizePx(viewport);
+
+    ctx.save();
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = `${fontSizePx}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    for (const label of getSymbolTextLabels(symbol)) {
+        const screenPoint = schematicToScreen(label.point.x, label.point.y, viewport);
+        ctx.fillText(label.text, screenPoint.x, screenPoint.y);
+    }
+
+    ctx.restore();
+}
+
 export function renderSymbol(
     ctx: CanvasRenderingContext2D,
     symbol: SymbolEntity,
@@ -527,4 +636,8 @@ export function renderSymbol(
     renderBody(ctx, symbol);
     renderPins(ctx, symbol, viewport, options.selected ?? false);
     ctx.restore();
+
+    if (!options.preview) {
+        renderSymbolLabels(ctx, symbol, viewport);
+    }
 }

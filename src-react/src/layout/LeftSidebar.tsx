@@ -19,9 +19,9 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { screen: "home", icon: LayoutDashboard, label: "Home" },
   { screen: "design", icon: PenTool, label: "Design" },
-  { screen: "notes", icon: FileText, label: "Notes" },
-  { screen: "chat", icon: MessageSquare, label: "Chat" },
   { screen: "library", icon: Package, label: "Library" },
+  { screen: "chat", icon: MessageSquare, label: "Chat" },
+  { screen: "notes", icon: FileText, label: "Notes" },
 ];
 
 interface LeftSidebarProps {
@@ -57,17 +57,17 @@ export default function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
   };
 
   return (
-    <aside className="col-start-1 row-start-1 flex w-12 flex-col items-center justify-between bg-rail-bg border-r border-border-subtle">
+    <aside className="col-start-1 row-start-1 flex w-20 flex-col items-center justify-between bg-rail-bg border-r border-border-subtle">
       {/* Logo + Tauri drag region */}
       <div className="flex flex-col items-center w-full">
         <button
-          className="flex h-12 w-12 items-center justify-center"
+          className="flex h-16 w-16 items-center justify-center"
           onClick={navigateToHome}
           aria-label="OpenPCB Home"
         >
           <svg
-            width="24"
-            height="24"
+            width="32"
+            height="32"
             viewBox="0 0 24 24"
             fill="none"
             className="text-brand"
@@ -97,14 +97,14 @@ export default function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
         </button>
 
         {/* Navigation items */}
-        <nav className="flex flex-col items-center gap-1 mt-1">
+        <nav className="flex flex-col items-center gap-2 mt-2">
           {NAV_ITEMS.map((item) => {
             const isActive = currentScreen === item.screen;
             return (
               <button
                 key={item.screen}
                 className={cn(
-                  "flex flex-col items-center justify-center w-10 rounded-xl py-1.5 transition-colors",
+                  "flex flex-col items-center justify-center w-16 rounded-xl py-2 transition-colors",
                   isActive
                     ? "bg-rail-active text-brand"
                     : "text-icon-muted hover:bg-rail-hover hover:text-icon-default",
@@ -112,10 +112,10 @@ export default function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
                 aria-label={item.label}
                 onClick={() => navigate(item.screen)}
               >
-                <item.icon className="h-5 w-5" strokeWidth={1.5} />
+                <item.icon className="h-6 w-6" strokeWidth={1.5} />
                 <span
                   className={cn(
-                    "mt-0.5 text-[7px] leading-tight",
+                    "mt-1 text-xs leading-tight",
                     isActive ? "font-medium text-brand" : "text-text-tertiary",
                   )}
                 >
@@ -128,20 +128,20 @@ export default function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
       </div>
 
       {/* Bottom actions */}
-      <div className="flex flex-col items-center gap-1 pb-2">
+      <div className="flex flex-col items-center gap-2 pb-3">
         <button
-          className="flex flex-col items-center justify-center w-10 rounded-xl py-1.5 text-icon-muted hover:bg-rail-hover hover:text-icon-default transition-colors"
+          className="flex flex-col items-center justify-center w-16 rounded-xl py-2 text-icon-muted hover:bg-rail-hover hover:text-icon-default transition-colors"
           aria-label="Settings"
           onClick={onSettingsClick}
         >
-          <Settings className="h-5 w-5" strokeWidth={1.5} />
-          <span className="mt-0.5 text-[7px] leading-tight text-text-tertiary">
+          <Settings className="h-6 w-6" strokeWidth={1.5} />
+          <span className="mt-1 text-xs leading-tight text-text-tertiary">
             Settings
           </span>
         </button>
 
         {/* User avatar placeholder */}
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-input text-text-secondary text-[10px] font-medium">
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-bg-input text-text-secondary text-sm font-medium">
           U
         </div>
       </div>

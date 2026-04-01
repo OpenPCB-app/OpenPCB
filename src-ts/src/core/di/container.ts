@@ -97,7 +97,7 @@ export const TOKENS = {
   UsageService: Symbol("UsageService"),
   FileService: Symbol("FileService"),
   FileStorage: Symbol("FileStorage"),
- 
+
   // Controllers
 
   ChatController: Symbol("ChatController"),
@@ -119,6 +119,15 @@ export const TOKENS = {
   MentionController: Symbol("MentionController"),
   ContentEditorController: Symbol("ContentEditorController"),
   MessageActionController: Symbol("MessageActionController"),
+
+  // Component Library
+  ComponentFamilyController: Symbol("ComponentFamilyController"),
+  ComponentDraftController: Symbol("ComponentDraftController"),
+  ComponentImportController: Symbol("ComponentImportController"),
+  ComponentPresetController: Symbol("ComponentPresetController"),
+  ComponentValidationService: Symbol("ComponentValidationService"),
+  PackageSwitchService: Symbol("PackageSwitchService"),
+  ComponentImportService: Symbol("ComponentImportService"),
 
   // Content Editor
   ContentEditorService: Symbol("ContentEditorService"),

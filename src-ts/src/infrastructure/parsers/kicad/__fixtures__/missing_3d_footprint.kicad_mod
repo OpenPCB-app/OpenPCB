@@ -1,0 +1,17 @@
+(footprint "C_Missing3D"
+  (version 20240108)
+  (generator "openpcb_test")
+  (layer "F.Cu")
+  (descr "Test footprint with missing 3D model")
+  (tags "test missing3d")
+  (property "Reference" "REF**" (at 0 -1.68 0) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))
+  (property "Value" "C_Missing3D" (at 0 1.68 0) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))
+  (attr smd)
+  (pad "1" smd roundrect (at -0.775 0) (size 0.9 0.95) (layers "F.Cu" "F.Mask" "F.Paste") (roundrect_rratio 0.25))
+  (pad "2" smd roundrect (at 0.775 0) (size 0.9 0.95) (layers "F.Cu" "F.Mask" "F.Paste") (roundrect_rratio 0.25))
+  (model "${KICAD10_3DMODEL_DIR}/Capacitor_SMD.3dshapes/DOES_NOT_EXIST.step"
+    (offset (xyz 0 0 0))
+    (scale (xyz 1 1 1))
+    (rotate (xyz 0 0 0))
+  )
+)

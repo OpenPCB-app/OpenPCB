@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createHitTestCache } from "@/components/pcb/canvas/hit-test";
-import { screenToSchematic } from "@/components/pcb/canvas/viewport";
+import {
+  MAX_VIEWPORT_ZOOM,
+  MIN_VIEWPORT_ZOOM,
+  fitViewportToBounds,
+  screenToSchematic,
+} from "@/components/pcb/canvas/viewport";
 import type { SchematicDocument } from "@/components/pcb/types";
 import { useSchematicStore } from "./schematic-store";
 
@@ -145,20 +150,31 @@ describe("useSchematicStore", () => {
     const state = useSchematicStore.getState();
 
     state.setViewport({ offsetX: 120, offsetY: -80, zoom: 3 });
-    state.resetViewport();
+    state.resetViewport(800, 600);
 
-    expect(useSchematicStore.getState().chrome.viewport).toEqual({
-      offsetX: 0,
-      offsetY: 0,
-      zoom: 1,
-    });
+    expect(useSchematicStore.getState().chrome.viewport).toEqual(
+      fitViewportToBounds(
+        {
+          minX: 0,
+          minY: -220_000,
+          maxX: 2_285_000,
+          maxY: 1_490_000,
+        },
+        800,
+        600,
+      ),
+    );
   });
 
   it("rejects invalid viewport zoom values", () => {
     const state = useSchematicStore.getState();
 
-    expect(() => state.setViewport({ offsetX: 0, offsetY: 0, zoom: 0.049 })).toThrow(RangeError);
-    expect(() => state.setViewport({ offsetX: 0, offsetY: 0, zoom: 50.1 })).toThrow(RangeError);
+    expect(() =>
+      state.setViewport({ offsetX: 0, offsetY: 0, zoom: MIN_VIEWPORT_ZOOM / 2 }),
+    ).toThrow(RangeError);
+    expect(() =>
+      state.setViewport({ offsetX: 0, offsetY: 0, zoom: MAX_VIEWPORT_ZOOM + 0.1 }),
+    ).toThrow(RangeError);
     expect(() => state.setViewport({ offsetX: 0, offsetY: 0, zoom: Number.NaN })).toThrow(RangeError);
   });
 

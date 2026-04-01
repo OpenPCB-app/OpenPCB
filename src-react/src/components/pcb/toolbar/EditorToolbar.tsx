@@ -53,7 +53,7 @@ export function EditorToolbar({ controller }: EditorToolbarProps) {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex h-10 items-center gap-1 border-b border-border bg-surface px-2">
+      <div className="flex h-9 items-center gap-1 rounded-lg border border-border-default bg-bg-secondary/90 px-2 shadow-lg backdrop-blur-sm">
         {/* Tool group */}
         <div className="flex items-center gap-0.5">
           {TOOLS.map((tool) => (
@@ -62,7 +62,9 @@ export function EditorToolbar({ controller }: EditorToolbarProps) {
                 <Toggle
                   size="sm"
                   pressed={activeTool === tool.mode}
-                  onPressedChange={() => interactionController.activateTool(tool.mode)}
+                  onPressedChange={() =>
+                    interactionController.activateTool(tool.mode)
+                  }
                   aria-label={tool.label}
                   className="h-7 w-7 p-0"
                 >
@@ -156,7 +158,7 @@ export function EditorToolbar({ controller }: EditorToolbarProps) {
                 variant="ghost"
                 size="sm"
                 className="h-7 w-7 p-0"
-                onClick={resetViewport}
+                onClick={() => resetViewport()}
               >
                 <Maximize2 className="h-4 w-4" />
               </Button>

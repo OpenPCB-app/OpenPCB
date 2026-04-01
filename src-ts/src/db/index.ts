@@ -49,6 +49,11 @@ import { MentionRepository } from "./repositories/mention";
 import { ContentEditSnapshotRepository } from "./repositories/content-edit-snapshot";
 import { ContentEditLockRepository } from "./repositories/content-edit-lock";
 import { McpServerRepository } from "./repositories/mcp-server";
+import { ComponentFamilyRepository } from "./repositories/component-family-repository";
+import { ComponentDraftRepository } from "./repositories/component-draft-repository";
+import { PresetCatalogRepository } from "./repositories/preset-catalog-repository";
+import { ComponentProvenanceRepository } from "./repositories/component-provenance-repository";
+import { DesignSheetRepository } from "./repositories/design-sheet";
 
 /**
  * Database configuration interface
@@ -128,6 +133,11 @@ export class DatabaseAccess {
   private _contentEditSnapshots?: ContentEditSnapshotRepository;
   private _contentEditLocks?: ContentEditLockRepository;
   private _mcpServers?: McpServerRepository;
+  private _componentFamilies?: ComponentFamilyRepository;
+  private _componentDrafts?: ComponentDraftRepository;
+  private _presetCatalogs?: PresetCatalogRepository;
+  private _componentProvenance?: ComponentProvenanceRepository;
+  private _designSheets?: DesignSheetRepository;
 
   /**
    * Private constructor - use getInstance()
@@ -473,14 +483,20 @@ export class DatabaseAccess {
 
   get uploadSessions(): UploadSessionRepository {
     if (!this._uploadSessions) {
-      this._uploadSessions = new UploadSessionRepository(this.db, this.queryLogger);
+      this._uploadSessions = new UploadSessionRepository(
+        this.db,
+        this.queryLogger,
+      );
     }
     return this._uploadSessions;
   }
 
   get retentionPolicies(): FileRetentionPolicyRepository {
     if (!this._retentionPolicies) {
-      this._retentionPolicies = new FileRetentionPolicyRepository(this.db, this.queryLogger);
+      this._retentionPolicies = new FileRetentionPolicyRepository(
+        this.db,
+        this.queryLogger,
+      );
     }
     return this._retentionPolicies;
   }
@@ -556,14 +572,20 @@ export class DatabaseAccess {
 
   get contentEditSnapshots(): ContentEditSnapshotRepository {
     if (!this._contentEditSnapshots) {
-      this._contentEditSnapshots = new ContentEditSnapshotRepository(this.db, this.queryLogger);
+      this._contentEditSnapshots = new ContentEditSnapshotRepository(
+        this.db,
+        this.queryLogger,
+      );
     }
     return this._contentEditSnapshots;
   }
 
   get contentEditLocks(): ContentEditLockRepository {
     if (!this._contentEditLocks) {
-      this._contentEditLocks = new ContentEditLockRepository(this.db, this.queryLogger);
+      this._contentEditLocks = new ContentEditLockRepository(
+        this.db,
+        this.queryLogger,
+      );
     }
     return this._contentEditLocks;
   }
@@ -573,6 +595,53 @@ export class DatabaseAccess {
       this._mcpServers = new McpServerRepository(this.db, this.queryLogger);
     }
     return this._mcpServers;
+  }
+
+  get componentFamilies(): ComponentFamilyRepository {
+    if (!this._componentFamilies) {
+      this._componentFamilies = new ComponentFamilyRepository(
+        this.db,
+        this.queryLogger,
+      );
+    }
+    return this._componentFamilies;
+  }
+
+  get componentDrafts(): ComponentDraftRepository {
+    if (!this._componentDrafts) {
+      this._componentDrafts = new ComponentDraftRepository(
+        this.db,
+        this.queryLogger,
+      );
+    }
+    return this._componentDrafts;
+  }
+
+  get presetCatalogs(): PresetCatalogRepository {
+    if (!this._presetCatalogs) {
+      this._presetCatalogs = new PresetCatalogRepository(
+        this.db,
+        this.queryLogger,
+      );
+    }
+    return this._presetCatalogs;
+  }
+
+  get designSheets(): DesignSheetRepository {
+    if (!this._designSheets) {
+      this._designSheets = new DesignSheetRepository(this.db, this.queryLogger);
+    }
+    return this._designSheets;
+  }
+
+  get componentProvenance(): ComponentProvenanceRepository {
+    if (!this._componentProvenance) {
+      this._componentProvenance = new ComponentProvenanceRepository(
+        this.db,
+        this.queryLogger,
+      );
+    }
+    return this._componentProvenance;
   }
 
   public getModuleHandle(moduleId: string): ModuleDbHandle {

@@ -31,39 +31,5 @@ exports[`ChatHeader > matches snapshot with all features 1`] = `
       </svg>
     </button>
   </div>
-  <div
-    class="absolute top-4 left-1/2 -translate-x-1/2 z-10"
-  >
-    <div
-      class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-muted/50 backdrop-blur-sm border shadow-sm"
-      style="border-color: #3b82f640;"
-    >
-      <svg
-        class="lucide lucide-code h-4 w-4"
-        fill="none"
-        height="24"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        style="color: #3b82f6;"
-        viewBox="0 0 24 24"
-        width="24"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <polyline
-          points="16 18 22 12 16 6"
-        />
-        <polyline
-          points="8 6 2 12 8 18"
-        />
-      </svg>
-      <span
-        class="text-sm font-medium text-foreground"
-      >
-        Full Header
-      </span>
-    </div>
-  </div>
 </div>
 `;

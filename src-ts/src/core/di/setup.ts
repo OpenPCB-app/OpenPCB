@@ -37,8 +37,18 @@ import { McpController } from "../../transport/controllers/mcp-controller";
 import { StreamController } from "../../transport/controllers/stream-controller";
 import { ContentEditorController } from "../../transport/controllers/content-editor-controller";
 import { MessageActionController } from "../../transport/controllers/message-action-controller";
-import { ContentEditorService, initializeContentTargetRegistry } from "../../domain/services/content-editor";
+import {
+  ContentEditorService,
+  initializeContentTargetRegistry,
+} from "../../domain/services/content-editor";
 import { ToolRegistry } from "../../domain/services/tools/tool-registry";
+import { ComponentValidationService } from "../../domain/services/component-validation-service";
+import { PackageSwitchService } from "../../domain/services/package-switch-service";
+import { ComponentImportService } from "../../domain/services/component-import-service";
+import { ComponentFamilyController } from "../../transport/controllers/component-family-controller";
+import { ComponentDraftController } from "../../transport/controllers/component-draft-controller";
+import { ComponentImportController } from "../../transport/controllers/component-import-controller";
+import { ComponentPresetController } from "../../transport/controllers/component-preset-controller";
 import { FileService } from "../../domain/services/file-service";
 import { FileStorage } from "../../infrastructure/storage/file-storage";
 import * as path from "path";
@@ -152,7 +162,11 @@ export function setupDIContainer(options: DISetupOptions): Container {
 
   container.register(
     TOKENS.FileService,
-    (c) => new FileService(c.resolve(TOKENS.DatabaseAccess), c.resolve(TOKENS.FileStorage)),
+    (c) =>
+      new FileService(
+        c.resolve(TOKENS.DatabaseAccess),
+        c.resolve(TOKENS.FileStorage),
+      ),
   );
 
   container.register(
@@ -272,15 +286,11 @@ export function setupDIContainer(options: DISetupOptions): Container {
   container.register(TOKENS.MentionController, () => new MentionController());
 
   // Content Editor
-  container.registerSingleton(
-    TOKENS.ContentTargetRegistry,
-    () => initializeContentTargetRegistry()
+  container.registerSingleton(TOKENS.ContentTargetRegistry, () =>
+    initializeContentTargetRegistry(),
   );
 
-  container.registerSingleton(
-    TOKENS.ToolRegistry,
-    () => new ToolRegistry(),
-  );
+  container.registerSingleton(TOKENS.ToolRegistry, () => new ToolRegistry());
 
   container.register(
     TOKENS.ContentEditorService,
@@ -290,18 +300,68 @@ export function setupDIContainer(options: DISetupOptions): Container {
         c.resolve(TOKENS.ProviderRegistry),
         c.resolve(TOKENS.ContentTargetRegistry),
         c.resolve<DatabaseAccess>(TOKENS.DatabaseAccess).contentEditSnapshots,
-        c.resolve<DatabaseAccess>(TOKENS.DatabaseAccess).contentEditLocks
-      )
+        c.resolve<DatabaseAccess>(TOKENS.DatabaseAccess).contentEditLocks,
+      ),
   );
 
   container.register(
     TOKENS.ContentEditorController,
-    (c) => new ContentEditorController(c.resolve(TOKENS.ContentEditorService))
+    (c) => new ContentEditorController(c.resolve(TOKENS.ContentEditorService)),
   );
 
   container.register(
     TOKENS.MessageActionController,
     (c) => new MessageActionController(c.resolve(TOKENS.MessageService)),
+  );
+
+  // Component Library
+  container.register(
+    TOKENS.ComponentValidationService,
+    () => new ComponentValidationService(),
+  );
+
+  container.register(
+    TOKENS.PackageSwitchService,
+    () => new PackageSwitchService(),
+  );
+
+  container.register(
+    TOKENS.ComponentFamilyController,
+    (c) =>
+      new ComponentFamilyController(
+        c.resolve<DatabaseAccess>(TOKENS.DatabaseAccess).componentFamilies,
+      ),
+  );
+
+  container.register(TOKENS.ComponentDraftController, (c) => {
+    const db = c.resolve<DatabaseAccess>(TOKENS.DatabaseAccess);
+    return new ComponentDraftController(
+      db.componentDrafts,
+      db.componentFamilies,
+      c.resolve(TOKENS.ComponentValidationService),
+    );
+  });
+
+  container.register(
+    TOKENS.ComponentImportService,
+    () => new ComponentImportService(),
+  );
+
+  container.register(
+    TOKENS.ComponentImportController,
+    (c) =>
+      new ComponentImportController(
+        c.resolve(TOKENS.ComponentImportService),
+        c.resolve<DatabaseAccess>(TOKENS.DatabaseAccess),
+      ),
+  );
+
+  container.register(
+    TOKENS.ComponentPresetController,
+    (c) =>
+      new ComponentPresetController(
+        c.resolve<DatabaseAccess>(TOKENS.DatabaseAccess).presetCatalogs,
+      ),
   );
 
   console.log("[DI] Container initialized with all services and controllers");

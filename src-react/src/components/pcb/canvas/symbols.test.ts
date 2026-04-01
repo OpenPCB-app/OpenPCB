@@ -10,6 +10,7 @@ import {
 function createContextRecorder() {
   const arcs: Array<{ x: number; y: number; radius: number }> = [];
   const operations: string[] = [];
+  const textWrites: Array<{ text: string; x: number; y: number }> = [];
   const globalAlphaWrites: number[] = [];
   const defaultTransform = { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 };
   type ContextState = {
@@ -18,6 +19,9 @@ function createContextRecorder() {
     strokeStyle: string;
     fillStyle: string;
     lineWidth: number;
+    font: string;
+    textAlign: CanvasTextAlign;
+    textBaseline: CanvasTextBaseline;
   };
   const cloneState = (state: ContextState): ContextState => ({
     ...state,
@@ -30,6 +34,9 @@ function createContextRecorder() {
       strokeStyle: "",
       fillStyle: "",
       lineWidth: 1,
+      font: "",
+      textAlign: "start",
+      textBaseline: "alphabetic",
     },
   ];
   const getCurrentState = () => stateStack[stateStack.length - 1]!;
@@ -84,6 +91,24 @@ function createContextRecorder() {
       getCurrentState().globalAlpha = value;
       globalAlphaWrites.push(value);
     },
+    get font() {
+      return getCurrentState().font;
+    },
+    set font(value: string) {
+      getCurrentState().font = value;
+    },
+    get textAlign() {
+      return getCurrentState().textAlign;
+    },
+    set textAlign(value: CanvasTextAlign) {
+      getCurrentState().textAlign = value;
+    },
+    get textBaseline() {
+      return getCurrentState().textBaseline;
+    },
+    set textBaseline(value: CanvasTextBaseline) {
+      getCurrentState().textBaseline = value;
+    },
     beginPath() {
       operations.push("beginPath");
     },
@@ -108,12 +133,16 @@ function createContextRecorder() {
     fill() {
       operations.push("fill");
     },
+    fillText(text: string, x: number, y: number) {
+      textWrites.push({ text, x, y });
+    },
   } as unknown as CanvasRenderingContext2D;
 
   return {
     ctx,
     arcs,
     operations,
+    textWrites,
     globalAlphaWrites,
     getTransform: () => ({ ...getCurrentState().transform }),
   };
@@ -159,7 +188,7 @@ describe("symbol helpers", () => {
   });
 
   it("renders symbol bodies and connector circles", () => {
-    const { ctx, arcs, operations } = createContextRecorder();
+    const { ctx, arcs, operations, textWrites } = createContextRecorder();
 
     renderSymbol(ctx, symbol, viewport, { selected: true });
 
@@ -167,6 +196,7 @@ describe("symbol helpers", () => {
     expect(arcs).toHaveLength(2);
     expect(arcs[0]).toMatchObject({ x: 0, y: 0 });
     expect(arcs[1]).toMatchObject({ x: 1_270_000, y: 0 });
+    expect(textWrites.map((entry) => entry.text)).toEqual(["R1", "10k", "1", "2"]);
   });
 
   it("transforms mirrored points and normalizes unsupported rotations", () => {
@@ -194,13 +224,14 @@ describe("symbol helpers", () => {
   });
 
   it("uses preview opacity for ghost symbols", () => {
-    const { ctx, getTransform, globalAlphaWrites } = createContextRecorder();
+    const { ctx, getTransform, globalAlphaWrites, textWrites } = createContextRecorder();
 
     renderSymbol(ctx, symbol, viewport, { preview: true });
 
     expect(globalAlphaWrites).toContain(0.75);
     expect(ctx.globalAlpha).toBe(1);
     expect(getTransform()).toEqual({ x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 });
+    expect(textWrites).toEqual([]);
   });
 
   it("restores drawing state after save and restore", () => {
@@ -231,5 +262,25 @@ describe("symbol helpers", () => {
     renderSymbol(ctx, symbol, viewport, { preview: true });
 
     expect(ctx.globalAlpha).toBe(0.4);
+  });
+
+  it("renders Ground with a visible label and pin text", () => {
+    const { ctx, operations, textWrites } = createContextRecorder();
+
+    renderSymbol(
+      ctx,
+      {
+        ...symbol,
+        symbolKind: "gnd",
+        reference: "GND",
+        value: "GND",
+        rotation: 0,
+        pins: [{ id: "pin-gnd", name: "GND", position: { x: 0, y: 0 } }],
+      },
+      viewport,
+    );
+
+    expect(operations).toContain("stroke");
+    expect(textWrites.map((entry) => entry.text)).toEqual(["Ground", "GND"]);
   });
 });

@@ -1,3 +1,9 @@
+// Projects feature is temporarily disabled
+export function ProjectSection() {
+  return null;
+}
+
+/* Original implementation - disabled temporarily
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -130,3 +136,4 @@ export function ProjectSection() {
     </div>
   );
 }
+*/

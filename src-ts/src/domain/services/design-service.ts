@@ -1,10 +1,19 @@
 import type { DatabaseAccess } from "../../db";
 import type { Design } from "../../db/schema/design";
+import type { DesignSheetRow } from "../../db/schema/design-sheet";
 import { NotFoundError, ValidationError } from "../../core/errors";
 import type {
   CreateDesignInput,
   UpdateDesignInput,
 } from "@shared/types/design.types";
+import type { SchematicProjectDocument } from "@shared/types/pcb.types";
+
+const MAX_CONTENT_SIZE_BYTES = 5 * 1024 * 1024; // 5MB hard limit
+
+export interface SheetContentResult {
+  sheet: Omit<DesignSheetRow, "content">;
+  content: SchematicProjectDocument;
+}
 
 export interface IDesignService {
   listByScope(workspaceId: string, projectId: string | null): Promise<Design[]>;
@@ -13,6 +22,15 @@ export interface IDesignService {
   create(input: CreateDesignInput): Promise<Design>;
   update(id: string, input: UpdateDesignInput): Promise<Design>;
   delete(id: string): Promise<void>;
+  getSheetContent(
+    designId: string,
+    sheetIndex: number,
+  ): Promise<SheetContentResult | null>;
+  saveSheetContent(
+    designId: string,
+    sheetIndex: number,
+    content: SchematicProjectDocument,
+  ): Promise<Omit<DesignSheetRow, "content">>;
 }
 
 export class DesignService implements IDesignService {
@@ -58,7 +76,9 @@ export class DesignService implements IDesignService {
       }
 
       if (project.workspaceId !== input.workspaceId) {
-        throw new ValidationError("Design workspace must match project workspace");
+        throw new ValidationError(
+          "Design workspace must match project workspace",
+        );
       }
     }
 
@@ -87,5 +107,55 @@ export class DesignService implements IDesignService {
   async delete(id: string): Promise<void> {
     await this.get(id);
     await this.db.designs.softDelete(id);
+  }
+
+  async getSheetContent(
+    designId: string,
+    sheetIndex: number,
+  ): Promise<SheetContentResult | null> {
+    await this.get(designId);
+    const sheet = await this.db.designSheets.findByDesignAndIndex(
+      designId,
+      sheetIndex,
+    );
+    if (!sheet) {
+      return null;
+    }
+    const { content, ...meta } = sheet;
+    return { sheet: meta, content };
+  }
+
+  async saveSheetContent(
+    designId: string,
+    sheetIndex: number,
+    content: SchematicProjectDocument,
+  ): Promise<Omit<DesignSheetRow, "content">> {
+    await this.get(designId);
+
+    const serialized = JSON.stringify(content);
+    if (serialized.length > MAX_CONTENT_SIZE_BYTES) {
+      throw new ValidationError(
+        `Sheet content exceeds 5MB limit (${(serialized.length / 1024 / 1024).toFixed(1)}MB)`,
+      );
+    }
+
+    const encoder = new TextEncoder();
+    const hashBuffer = await crypto.subtle.digest(
+      "SHA-256",
+      encoder.encode(serialized),
+    );
+    const contentHash = Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    const sheet = await this.db.designSheets.upsertContent(
+      designId,
+      sheetIndex,
+      content,
+      contentHash,
+    );
+
+    const { content: _content, ...meta } = sheet;
+    return meta;
   }
 }

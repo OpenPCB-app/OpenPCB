@@ -25,17 +25,21 @@ import { useToast } from "@/components/ui/use-toast";
 import { ChatMediaSidebar } from "@/components/ChatMediaSidebar";
 
 export function ChatScreen() {
-  const { chatId, navigateToChat, navigateToProject } = useNavigationStore();
+  const { chatId, navigateToChat } = useNavigationStore();
+  // Projects feature is temporarily disabled
+  // const navigateToProject = useNavigationStore((s) => s.navigateToProject);
   const { createNewChat } = useChatOperations();
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
-  const projects = useAppStore((state) => state.projects);
+  // Projects feature is temporarily disabled
+  // const projects = useAppStore((state) => state.projects);
 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [activeChat, setActiveChat] = useState<ChatMetadata | null>(null);
-  const [projectContext, setProjectContext] = useState<ProjectRecord | null>(
+  // Projects feature is temporarily disabled
+  const [projectContext, _setProjectContext] = useState<ProjectRecord | null>(
     null,
   );
-  const [projectContextError, setProjectContextError] = useState(false);
+  const [projectContextError, _setProjectContextError] = useState(false);
   const [toolsEnabled, setToolsEnabled] = useState(false);
   const { toast } = useToast();
   const [isMediaSidebarOpen, setIsMediaSidebarOpen] = useState(false);
@@ -57,22 +61,22 @@ export function ChatScreen() {
     }
   }, [chatId]);
 
-  useEffect(() => {
-    setProjectContext(null);
-    setProjectContextError(false);
-  }, [chatId]);
+  // Projects feature is temporarily disabled
+  // useEffect(() => {
+  //   setProjectContext(null);
+  //   setProjectContextError(false);
+  // }, [chatId]);
 
-  useEffect(() => {
-    if (!activeChat?.projectId) {
-      setProjectContext(null);
-      setProjectContextError(false);
-      return;
-    }
-
-    const project = projects.find((item) => item.id === activeChat.projectId) ?? null;
-    setProjectContext(project);
-    setProjectContextError(project === null);
-  }, [activeChat?.projectId, projects]);
+  // useEffect(() => {
+  //   if (!activeChat?.projectId) {
+  //     setProjectContext(null);
+  //     setProjectContextError(false);
+  //     return;
+  //   }
+  //   const project = projects.find((item) => item.id === activeChat.projectId) ?? null;
+  //   setProjectContext(project);
+  //   setProjectContextError(project === null);
+  // }, [activeChat?.projectId, projects]);
 
   const {
     messages,
@@ -423,7 +427,8 @@ export function ChatScreen() {
             behavior: {
               onSubmit: handleSubmit,
               onStop: abort,
-              onBack: activeChat?.projectId ? () => navigateToProject(activeChat.projectId) : undefined,
+              // Projects feature is temporarily disabled
+              onBack: undefined,
               onMessageAction: handleMessageAction,
               onBranchChange: () => {
                 if (chatId) {

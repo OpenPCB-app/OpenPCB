@@ -24,6 +24,10 @@ import type { MentionController } from "../controllers/mention-controller";
 import type { ContentEditorController } from "../controllers/content-editor-controller";
 import { DiagnosticsController } from "../controllers/diagnostics-controller";
 import { LicenseController } from "../controllers/license-controller";
+import type { ComponentFamilyController } from "../controllers/component-family-controller";
+import type { ComponentDraftController } from "../controllers/component-draft-controller";
+import type { ComponentImportController } from "../controllers/component-import-controller";
+import type { ComponentPresetController } from "../controllers/component-preset-controller";
 
 // Import schemas
 import { z } from "../../core/schemas";
@@ -120,18 +124,20 @@ export class CoreRouter extends BaseHttpRouter {
     const branchController = this.container.resolve<BranchController>(
       TOKENS.BranchController,
     );
-    const messageActionController = this.container.resolve<MessageActionController>(
-      TOKENS.MessageActionController,
-    );
+    const messageActionController =
+      this.container.resolve<MessageActionController>(
+        TOKENS.MessageActionController,
+      );
     const usageController = this.container.resolve<UsageController>(
       TOKENS.UsageController,
     );
     const mentionController = this.container.resolve<MentionController>(
       TOKENS.MentionController,
     );
-    const contentEditorController = this.container.resolve<ContentEditorController>(
-      TOKENS.ContentEditorController,
-    );
+    const contentEditorController =
+      this.container.resolve<ContentEditorController>(
+        TOKENS.ContentEditorController,
+      );
     const licenseController = new LicenseController();
 
     // =====================================================================
@@ -169,31 +175,35 @@ export class CoreRouter extends BaseHttpRouter {
       },
     });
 
-    this.post("/api/license/activate", (ctx) => licenseController.activate(ctx), {
-      operationId: "activateLicense",
-      tags: ["License"],
-      summary: "Activate license key",
-      requestBody: z.object({ key: z.string().min(1) }),
-      responses: {
-        200: z.object({
-          success: z.boolean(),
-          license: z.object({
-            state: z.enum(["active", "grace", "restricted", "blocked"]),
-            expiresAt: z.string().nullable(),
-            features: z.array(z.string()),
-            reason: z.string().optional(),
-          }),
-          devices: z.array(
-            z.object({
-              id: z.string(),
-              name: z.string(),
-              lastActive: z.string(),
+    this.post(
+      "/api/license/activate",
+      (ctx) => licenseController.activate(ctx),
+      {
+        operationId: "activateLicense",
+        tags: ["License"],
+        summary: "Activate license key",
+        requestBody: z.object({ key: z.string().min(1) }),
+        responses: {
+          200: z.object({
+            success: z.boolean(),
+            license: z.object({
+              state: z.enum(["active", "grace", "restricted", "blocked"]),
+              expiresAt: z.string().nullable(),
+              features: z.array(z.string()),
+              reason: z.string().optional(),
             }),
-          ),
-          requiresReplacement: z.boolean(),
-        }),
+            devices: z.array(
+              z.object({
+                id: z.string(),
+                name: z.string(),
+                lastActive: z.string(),
+              }),
+            ),
+            requiresReplacement: z.boolean(),
+          }),
+        },
       },
-    });
+    );
 
     this.post(
       "/api/license/replace-device",
@@ -377,6 +387,28 @@ export class CoreRouter extends BaseHttpRouter {
       summary: "Delete design by ID",
       responses: { 200: DeletedResponseSchema },
     });
+
+    this.get(
+      "/api/designs/:id/sheets/:sheetIndex/content",
+      (ctx) => designController.getSheetContent(ctx),
+      {
+        operationId: "getDesignSheetContent",
+        tags: ["Designs"],
+        summary: "Get schematic sheet content for a design",
+        responses: { 200: z.object({ sheet: z.any(), content: z.any() }) },
+      },
+    );
+
+    this.put(
+      "/api/designs/:id/sheets/:sheetIndex/content",
+      (ctx) => designController.saveSheetContent(ctx),
+      {
+        operationId: "saveDesignSheetContent",
+        tags: ["Designs"],
+        summary: "Save schematic sheet content for a design",
+        responses: { 200: z.object({ sheet: z.any() }) },
+      },
+    );
 
     // =====================================================================
     // Folders
@@ -658,19 +690,27 @@ export class CoreRouter extends BaseHttpRouter {
       responses: { 200: z.object({ file: z.any() }) },
     });
 
-    this.get("/api/files/:id/content", (ctx) => fileController.getContent(ctx), {
-      operationId: "getFileContent",
-      tags: ["Files"],
-      summary: "Stream file content",
-      responses: { 200: z.any() },
-    });
+    this.get(
+      "/api/files/:id/content",
+      (ctx) => fileController.getContent(ctx),
+      {
+        operationId: "getFileContent",
+        tags: ["Files"],
+        summary: "Stream file content",
+        responses: { 200: z.any() },
+      },
+    );
 
-    this.patch("/api/files/:id/metadata", (ctx) => fileController.updateMetadata(ctx), {
-      operationId: "updateFileMetadata",
-      tags: ["Files"],
-      summary: "Update file metadata",
-      responses: { 200: z.object({ file: z.any() }) },
-    });
+    this.patch(
+      "/api/files/:id/metadata",
+      (ctx) => fileController.updateMetadata(ctx),
+      {
+        operationId: "updateFileMetadata",
+        tags: ["Files"],
+        summary: "Update file metadata",
+        responses: { 200: z.object({ file: z.any() }) },
+      },
+    );
 
     this.delete("/api/files/:id", (ctx) => fileController.softDelete(ctx), {
       operationId: "softDeleteFile",
@@ -686,80 +726,120 @@ export class CoreRouter extends BaseHttpRouter {
       responses: { 200: z.object({ file: z.any() }) },
     });
 
-    this.post("/api/files/trash/empty", (ctx) => fileController.emptyTrash(ctx), {
-      operationId: "emptyTrash",
-      tags: ["Files"],
-      summary: "Empty trash (hard delete)",
-      responses: { 200: z.object({ deletedCount: z.number(), freedBytes: z.number() }) },
-    });
+    this.post(
+      "/api/files/trash/empty",
+      (ctx) => fileController.emptyTrash(ctx),
+      {
+        operationId: "emptyTrash",
+        tags: ["Files"],
+        summary: "Empty trash (hard delete)",
+        responses: {
+          200: z.object({ deletedCount: z.number(), freedBytes: z.number() }),
+        },
+      },
+    );
 
     // File Versioning
-    this.post("/api/files/:id/versions", (ctx) => fileController.uploadVersion(ctx), {
-      operationId: "uploadFileVersion",
-      tags: ["Files", "Versions"],
-      summary: "Upload a new version of a file",
-      responses: { 201: z.object({ version: z.any(), file: z.any() }) },
-    });
+    this.post(
+      "/api/files/:id/versions",
+      (ctx) => fileController.uploadVersion(ctx),
+      {
+        operationId: "uploadFileVersion",
+        tags: ["Files", "Versions"],
+        summary: "Upload a new version of a file",
+        responses: { 201: z.object({ version: z.any(), file: z.any() }) },
+      },
+    );
 
-    this.get("/api/files/:id/versions", (ctx) => fileController.listVersions(ctx), {
-      operationId: "listFileVersions",
-      tags: ["Files", "Versions"],
-      summary: "List all versions of a file",
-      responses: { 200: z.object({ versions: z.array(z.any()) }) },
-    });
+    this.get(
+      "/api/files/:id/versions",
+      (ctx) => fileController.listVersions(ctx),
+      {
+        operationId: "listFileVersions",
+        tags: ["Files", "Versions"],
+        summary: "List all versions of a file",
+        responses: { 200: z.object({ versions: z.array(z.any()) }) },
+      },
+    );
 
-    this.get("/api/files/:id/versions/:version", (ctx) => fileController.getVersion(ctx), {
-      operationId: "getFileVersion",
-      tags: ["Files", "Versions"],
-      summary: "Get a specific version of a file",
-      responses: { 200: z.object({ version: z.any() }) },
-    });
+    this.get(
+      "/api/files/:id/versions/:version",
+      (ctx) => fileController.getVersion(ctx),
+      {
+        operationId: "getFileVersion",
+        tags: ["Files", "Versions"],
+        summary: "Get a specific version of a file",
+        responses: { 200: z.object({ version: z.any() }) },
+      },
+    );
 
-    this.get("/api/files/:id/versions/:version/content", (ctx) => fileController.getVersionContent(ctx), {
-      operationId: "getFileVersionContent",
-      tags: ["Files", "Versions"],
-      summary: "Stream content of a specific version",
-      responses: { 200: z.any() },
-    });
+    this.get(
+      "/api/files/:id/versions/:version/content",
+      (ctx) => fileController.getVersionContent(ctx),
+      {
+        operationId: "getFileVersionContent",
+        tags: ["Files", "Versions"],
+        summary: "Stream content of a specific version",
+        responses: { 200: z.any() },
+      },
+    );
 
-    this.post("/api/files/:id/versions/:version/restore", (ctx) => fileController.restoreVersion(ctx), {
-      operationId: "restoreFileVersion",
-      tags: ["Files", "Versions"],
-      summary: "Restore a previous version as current",
-      responses: { 200: z.object({ file: z.any() }) },
-    });
+    this.post(
+      "/api/files/:id/versions/:version/restore",
+      (ctx) => fileController.restoreVersion(ctx),
+      {
+        operationId: "restoreFileVersion",
+        tags: ["Files", "Versions"],
+        summary: "Restore a previous version as current",
+        responses: { 200: z.object({ file: z.any() }) },
+      },
+    );
 
-    this.delete("/api/files/:id/versions/:version", (ctx) => fileController.deleteVersion(ctx), {
-      operationId: "deleteFileVersion",
-      tags: ["Files", "Versions"],
-      summary: "Delete a specific version",
-      responses: { 200: z.object({ deleted: z.boolean() }) },
-    });
+    this.delete(
+      "/api/files/:id/versions/:version",
+      (ctx) => fileController.deleteVersion(ctx),
+      {
+        operationId: "deleteFileVersion",
+        tags: ["Files", "Versions"],
+        summary: "Delete a specific version",
+        responses: { 200: z.object({ deleted: z.boolean() }) },
+      },
+    );
 
     // File Processing
-    this.post("/api/files/:id/process", (ctx) => fileController.processFile(ctx), {
-      operationId: "processFile",
-      tags: ["Files", "Processing"],
-      summary: "Process file (generate thumbnail, extract metadata)",
-      requestBody: z.object({
-        generateThumbnail: z.boolean().optional(),
-        optimize: z.boolean().optional(),
-      }).optional(),
-      responses: {
-        200: z.object({
-          processed: z.boolean(),
-          hasThumbnail: z.boolean(),
-          metadata: z.any(),
-        }),
+    this.post(
+      "/api/files/:id/process",
+      (ctx) => fileController.processFile(ctx),
+      {
+        operationId: "processFile",
+        tags: ["Files", "Processing"],
+        summary: "Process file (generate thumbnail, extract metadata)",
+        requestBody: z
+          .object({
+            generateThumbnail: z.boolean().optional(),
+            optimize: z.boolean().optional(),
+          })
+          .optional(),
+        responses: {
+          200: z.object({
+            processed: z.boolean(),
+            hasThumbnail: z.boolean(),
+            metadata: z.any(),
+          }),
+        },
       },
-    });
+    );
 
-    this.get("/api/files/:id/thumbnail", (ctx) => fileController.getThumbnail(ctx), {
-      operationId: "getFileThumbnail",
-      tags: ["Files", "Processing"],
-      summary: "Get file thumbnail",
-      responses: { 200: z.any() },
-    });
+    this.get(
+      "/api/files/:id/thumbnail",
+      (ctx) => fileController.getThumbnail(ctx),
+      {
+        operationId: "getFileThumbnail",
+        tags: ["Files", "Processing"],
+        summary: "Get file thumbnail",
+        responses: { 200: z.any() },
+      },
+    );
 
     // =====================================================================
     // Bookmarks
@@ -982,7 +1062,8 @@ export class CoreRouter extends BaseHttpRouter {
       {
         operationId: "regenerateMessage",
         tags: ["Messages", "Actions"],
-        summary: "Regenerate an alternative assistant response (creates new branch)",
+        summary:
+          "Regenerate an alternative assistant response (creates new branch)",
         responses: {
           200: z.object({
             newMessageId: z.string(),
@@ -1047,13 +1128,17 @@ export class CoreRouter extends BaseHttpRouter {
       },
     });
 
-    this.post("/api/chats/bulk-delete", (ctx) => chatController.bulkDelete(ctx), {
-      operationId: "bulkDeleteChats",
-      tags: ["Chats"],
-      summary: "Bulk delete chats",
-      requestBody: z.object({ ids: z.array(z.string()) }),
-      responses: { 200: DeletedResponseSchema },
-    });
+    this.post(
+      "/api/chats/bulk-delete",
+      (ctx) => chatController.bulkDelete(ctx),
+      {
+        operationId: "bulkDeleteChats",
+        tags: ["Chats"],
+        summary: "Bulk delete chats",
+        requestBody: z.object({ ids: z.array(z.string()) }),
+        responses: { 200: DeletedResponseSchema },
+      },
+    );
 
     this.get(
       "/api/chats/:id/messages",
@@ -1277,30 +1362,38 @@ export class CoreRouter extends BaseHttpRouter {
       responses: { 200: z.object({ server: z.any() }) },
     });
 
-    this.patch("/api/mcp/servers/:id", (ctx) => mcpController.updateServer(ctx), {
-      operationId: "updateMcpServer",
-      tags: ["MCP"],
-      summary: "Update MCP server",
-      requestBody: z.object({
-        alias: z.string().optional(),
-        displayName: z.string().nullable().optional(),
-        transport: z.enum(["stdio", "http"]).optional(),
-        command: z.string().nullable().optional(),
-        args: z.array(z.string()).nullable().optional(),
-        env: z.record(z.string(), z.string()).nullable().optional(),
-        url: z.string().nullable().optional(),
-        headers: z.record(z.string(), z.string()).nullable().optional(),
-        enabled: z.boolean().optional(),
-      }),
-      responses: { 200: z.object({ server: z.any() }) },
-    });
+    this.patch(
+      "/api/mcp/servers/:id",
+      (ctx) => mcpController.updateServer(ctx),
+      {
+        operationId: "updateMcpServer",
+        tags: ["MCP"],
+        summary: "Update MCP server",
+        requestBody: z.object({
+          alias: z.string().optional(),
+          displayName: z.string().nullable().optional(),
+          transport: z.enum(["stdio", "http"]).optional(),
+          command: z.string().nullable().optional(),
+          args: z.array(z.string()).nullable().optional(),
+          env: z.record(z.string(), z.string()).nullable().optional(),
+          url: z.string().nullable().optional(),
+          headers: z.record(z.string(), z.string()).nullable().optional(),
+          enabled: z.boolean().optional(),
+        }),
+        responses: { 200: z.object({ server: z.any() }) },
+      },
+    );
 
-    this.delete("/api/mcp/servers/:id", (ctx) => mcpController.deleteServer(ctx), {
-      operationId: "deleteMcpServer",
-      tags: ["MCP"],
-      summary: "Delete MCP server",
-      responses: { 200: z.object({ deleted: z.boolean() }) },
-    });
+    this.delete(
+      "/api/mcp/servers/:id",
+      (ctx) => mcpController.deleteServer(ctx),
+      {
+        operationId: "deleteMcpServer",
+        tags: ["MCP"],
+        summary: "Delete MCP server",
+        responses: { 200: z.object({ deleted: z.boolean() }) },
+      },
+    );
 
     this.post(
       "/api/mcp/servers/:id/connect",
@@ -1335,12 +1428,16 @@ export class CoreRouter extends BaseHttpRouter {
       },
     );
 
-    this.get("/api/mcp/servers/:id/tools", (ctx) => mcpController.listTools(ctx), {
-      operationId: "listMcpServerTools",
-      tags: ["MCP"],
-      summary: "List MCP server tools",
-      responses: { 200: z.object({ tools: z.array(z.any()) }) },
-    });
+    this.get(
+      "/api/mcp/servers/:id/tools",
+      (ctx) => mcpController.listTools(ctx),
+      {
+        operationId: "listMcpServerTools",
+        tags: ["MCP"],
+        summary: "List MCP server tools",
+        responses: { 200: z.object({ tools: z.array(z.any()) }) },
+      },
+    );
 
     this.post(
       "/api/mcp/servers/:id/test-call",
@@ -1358,145 +1455,214 @@ export class CoreRouter extends BaseHttpRouter {
     );
 
     // OAuth routes
-    this.post("/api/oauth/:provider/start", async (ctx) => {
-      const { OAuthController } = await import("../controllers/oauth-controller");
-      const { OAuthService } = await import("../../infrastructure/oauth/oauth-service");
-      const { ProviderOAuthRepository } = await import("../../db/repositories/provider-oauth");
-      const { QueryLogger } = await import("../../db/query-logger");
-      const { getDb } = await import("../../db");
-      const oauthRepository = new ProviderOAuthRepository(getDb(), new QueryLogger());
-      const oauthService = new OAuthService(oauthRepository);
-      const oauthController = new OAuthController(oauthService);
-      return oauthController.start(ctx);
-    }, {
-      operationId: "startOAuthFlow",
-      tags: ["OAuth"],
-      summary: "Start OAuth flow for provider",
-      description: "Initiates OAuth flow (PKCE for Codex, Device Code for GitHub Copilot)",
-      requestBody: z.object({ projectId: z.string().optional() }).optional(),
-      responses: {
-        200: z.object({
-          success: z.boolean(),
-          provider: z.string(),
-          url: z.string().optional(),
-          verifier: z.string().optional(),
-          state: z.string().optional(),
-          redirectUri: z.string().optional(),
-          deviceCode: z.string().optional(),
-          userCode: z.string().optional(),
-          verificationUri: z.string().optional(),
-          interval: z.number().optional(),
-          expiresIn: z.number().optional(),
-        }),
+    this.post(
+      "/api/oauth/:provider/start",
+      async (ctx) => {
+        const { OAuthController } = await import(
+          "../controllers/oauth-controller"
+        );
+        const { OAuthService } = await import(
+          "../../infrastructure/oauth/oauth-service"
+        );
+        const { ProviderOAuthRepository } = await import(
+          "../../db/repositories/provider-oauth"
+        );
+        const { QueryLogger } = await import("../../db/query-logger");
+        const { getDb } = await import("../../db");
+        const oauthRepository = new ProviderOAuthRepository(
+          getDb(),
+          new QueryLogger(),
+        );
+        const oauthService = new OAuthService(oauthRepository);
+        const oauthController = new OAuthController(oauthService);
+        return oauthController.start(ctx);
       },
-    });
+      {
+        operationId: "startOAuthFlow",
+        tags: ["OAuth"],
+        summary: "Start OAuth flow for provider",
+        description:
+          "Initiates OAuth flow (PKCE for Codex, Device Code for GitHub Copilot)",
+        requestBody: z.object({ projectId: z.string().optional() }).optional(),
+        responses: {
+          200: z.object({
+            success: z.boolean(),
+            provider: z.string(),
+            url: z.string().optional(),
+            verifier: z.string().optional(),
+            state: z.string().optional(),
+            redirectUri: z.string().optional(),
+            deviceCode: z.string().optional(),
+            userCode: z.string().optional(),
+            verificationUri: z.string().optional(),
+            interval: z.number().optional(),
+            expiresIn: z.number().optional(),
+          }),
+        },
+      },
+    );
 
-    this.get("/api/oauth/:provider/callback", async (ctx) => {
-      const { OAuthController } = await import("../controllers/oauth-controller");
-      const { OAuthService } = await import("../../infrastructure/oauth/oauth-service");
-      const { ProviderOAuthRepository } = await import("../../db/repositories/provider-oauth");
-      const { QueryLogger } = await import("../../db/query-logger");
-      const { getDb } = await import("../../db");
-      const oauthRepository = new ProviderOAuthRepository(getDb(), new QueryLogger());
-      const oauthService = new OAuthService(oauthRepository);
-      const oauthController = new OAuthController(oauthService);
-      return oauthController.callback(ctx);
-    }, {
-      operationId: "oauthCallback",
-      tags: ["OAuth"],
-      summary: "OAuth callback endpoint (Codex)",
-      description: "Public callback for Codex PKCE flow - use /complete endpoint instead",
-      responses: {
-        200: z.object({
-          message: z.string(),
-          code: z.string(),
-          state: z.string(),
-          nextStep: z.string(),
-        }),
+    this.get(
+      "/api/oauth/:provider/callback",
+      async (ctx) => {
+        const { OAuthController } = await import(
+          "../controllers/oauth-controller"
+        );
+        const { OAuthService } = await import(
+          "../../infrastructure/oauth/oauth-service"
+        );
+        const { ProviderOAuthRepository } = await import(
+          "../../db/repositories/provider-oauth"
+        );
+        const { QueryLogger } = await import("../../db/query-logger");
+        const { getDb } = await import("../../db");
+        const oauthRepository = new ProviderOAuthRepository(
+          getDb(),
+          new QueryLogger(),
+        );
+        const oauthService = new OAuthService(oauthRepository);
+        const oauthController = new OAuthController(oauthService);
+        return oauthController.callback(ctx);
       },
-    });
+      {
+        operationId: "oauthCallback",
+        tags: ["OAuth"],
+        summary: "OAuth callback endpoint (Codex)",
+        description:
+          "Public callback for Codex PKCE flow - use /complete endpoint instead",
+        responses: {
+          200: z.object({
+            message: z.string(),
+            code: z.string(),
+            state: z.string(),
+            nextStep: z.string(),
+          }),
+        },
+      },
+    );
 
-    this.post("/api/oauth/:provider/complete", async (ctx) => {
-      const { OAuthController } = await import("../controllers/oauth-controller");
-      const { OAuthService } = await import("../../infrastructure/oauth/oauth-service");
-      const { ProviderOAuthRepository } = await import("../../db/repositories/provider-oauth");
-      const { QueryLogger } = await import("../../db/query-logger");
-      const { getDb } = await import("../../db");
-      const oauthRepository = new ProviderOAuthRepository(getDb(), new QueryLogger());
-      const oauthService = new OAuthService(oauthRepository);
-      const oauthController = new OAuthController(oauthService);
-      return oauthController.complete(ctx);
-    }, {
-      operationId: "completeOAuthFlow",
-      tags: ["OAuth"],
-      summary: "Complete OAuth flow",
-      description: "Finalize OAuth (Codex: PKCE token exchange, GitHub: Device code polling)",
-      requestBody: z.union([
-        z.object({
-          code: z.string(),
-          state: z.string(),
-          verifier: z.string(),
-          redirectUri: z.string(),
-        }),
-        z.object({
-          deviceCode: z.string(),
-          interval: z.number(),
-        }),
-      ]),
-      responses: {
-        200: z.object({
-          provider: z.string(),
-          success: z.boolean(),
-        }),
+    this.post(
+      "/api/oauth/:provider/complete",
+      async (ctx) => {
+        const { OAuthController } = await import(
+          "../controllers/oauth-controller"
+        );
+        const { OAuthService } = await import(
+          "../../infrastructure/oauth/oauth-service"
+        );
+        const { ProviderOAuthRepository } = await import(
+          "../../db/repositories/provider-oauth"
+        );
+        const { QueryLogger } = await import("../../db/query-logger");
+        const { getDb } = await import("../../db");
+        const oauthRepository = new ProviderOAuthRepository(
+          getDb(),
+          new QueryLogger(),
+        );
+        const oauthService = new OAuthService(oauthRepository);
+        const oauthController = new OAuthController(oauthService);
+        return oauthController.complete(ctx);
       },
-    });
+      {
+        operationId: "completeOAuthFlow",
+        tags: ["OAuth"],
+        summary: "Complete OAuth flow",
+        description:
+          "Finalize OAuth (Codex: PKCE token exchange, GitHub: Device code polling)",
+        requestBody: z.union([
+          z.object({
+            code: z.string(),
+            state: z.string(),
+            verifier: z.string(),
+            redirectUri: z.string(),
+          }),
+          z.object({
+            deviceCode: z.string(),
+            interval: z.number(),
+          }),
+        ]),
+        responses: {
+          200: z.object({
+            provider: z.string(),
+            success: z.boolean(),
+          }),
+        },
+      },
+    );
 
-    this.get("/api/oauth/:provider/status", async (ctx) => {
-      const { OAuthController } = await import("../controllers/oauth-controller");
-      const { OAuthService } = await import("../../infrastructure/oauth/oauth-service");
-      const { ProviderOAuthRepository } = await import("../../db/repositories/provider-oauth");
-      const { QueryLogger } = await import("../../db/query-logger");
-      const { getDb } = await import("../../db");
-      const oauthRepository = new ProviderOAuthRepository(getDb(), new QueryLogger());
-      const oauthService = new OAuthService(oauthRepository);
-      const oauthController = new OAuthController(oauthService);
-      return oauthController.status(ctx);
-    }, {
-      operationId: "getOAuthStatus",
-      tags: ["OAuth"],
-      summary: "Get OAuth status for provider",
-      description: "Check if provider has OAuth credentials and expiry status (read-only, no refresh)",
-      responses: {
-        200: z.object({
-          provider: z.string(),
-          hasCredentials: z.boolean(),
-          isExpired: z.boolean(),
-        }),
+    this.get(
+      "/api/oauth/:provider/status",
+      async (ctx) => {
+        const { OAuthController } = await import(
+          "../controllers/oauth-controller"
+        );
+        const { OAuthService } = await import(
+          "../../infrastructure/oauth/oauth-service"
+        );
+        const { ProviderOAuthRepository } = await import(
+          "../../db/repositories/provider-oauth"
+        );
+        const { QueryLogger } = await import("../../db/query-logger");
+        const { getDb } = await import("../../db");
+        const oauthRepository = new ProviderOAuthRepository(
+          getDb(),
+          new QueryLogger(),
+        );
+        const oauthService = new OAuthService(oauthRepository);
+        const oauthController = new OAuthController(oauthService);
+        return oauthController.status(ctx);
       },
-    });
+      {
+        operationId: "getOAuthStatus",
+        tags: ["OAuth"],
+        summary: "Get OAuth status for provider",
+        description:
+          "Check if provider has OAuth credentials and expiry status (read-only, no refresh)",
+        responses: {
+          200: z.object({
+            provider: z.string(),
+            hasCredentials: z.boolean(),
+            isExpired: z.boolean(),
+          }),
+        },
+      },
+    );
 
-    this.delete("/api/oauth/:provider", async (ctx) => {
-      const { OAuthController } = await import("../controllers/oauth-controller");
-      const { OAuthService } = await import("../../infrastructure/oauth/oauth-service");
-      const { ProviderOAuthRepository } = await import("../../db/repositories/provider-oauth");
-      const { QueryLogger } = await import("../../db/query-logger");
-      const { getDb } = await import("../../db");
-      const oauthRepository = new ProviderOAuthRepository(getDb(), new QueryLogger());
-      const oauthService = new OAuthService(oauthRepository);
-      const oauthController = new OAuthController(oauthService);
-      return oauthController.revoke(ctx);
-    }, {
-      operationId: "revokeOAuth",
-      tags: ["OAuth"],
-      summary: "Revoke OAuth credentials",
-      description: "Delete stored OAuth credentials for provider",
-      responses: {
-        200: z.object({
-          provider: z.string(),
-          success: z.boolean(),
-        }),
+    this.delete(
+      "/api/oauth/:provider",
+      async (ctx) => {
+        const { OAuthController } = await import(
+          "../controllers/oauth-controller"
+        );
+        const { OAuthService } = await import(
+          "../../infrastructure/oauth/oauth-service"
+        );
+        const { ProviderOAuthRepository } = await import(
+          "../../db/repositories/provider-oauth"
+        );
+        const { QueryLogger } = await import("../../db/query-logger");
+        const { getDb } = await import("../../db");
+        const oauthRepository = new ProviderOAuthRepository(
+          getDb(),
+          new QueryLogger(),
+        );
+        const oauthService = new OAuthService(oauthRepository);
+        const oauthController = new OAuthController(oauthService);
+        return oauthController.revoke(ctx);
       },
-    });
+      {
+        operationId: "revokeOAuth",
+        tags: ["OAuth"],
+        summary: "Revoke OAuth credentials",
+        description: "Delete stored OAuth credentials for provider",
+        responses: {
+          200: z.object({
+            provider: z.string(),
+            success: z.boolean(),
+          }),
+        },
+      },
+    );
 
     // =====================================================================
     // Stream
@@ -1749,7 +1915,7 @@ export class CoreRouter extends BaseHttpRouter {
         responses: {
           200: z.any(), // SSE stream
         },
-      }
+      },
     );
 
     this.post(
@@ -1765,7 +1931,7 @@ export class CoreRouter extends BaseHttpRouter {
             rolledBack: z.boolean(),
           }),
         },
-      }
+      },
     );
 
     this.post(
@@ -1782,7 +1948,7 @@ export class CoreRouter extends BaseHttpRouter {
             partialContent: z.string().optional(),
           }),
         },
-      }
+      },
     );
 
     this.post(
@@ -1801,7 +1967,7 @@ export class CoreRouter extends BaseHttpRouter {
         responses: {
           200: z.any(),
         },
-      }
+      },
     );
 
     this.get(
@@ -1818,12 +1984,14 @@ export class CoreRouter extends BaseHttpRouter {
                 targetType: z.string(),
                 label: z.string(),
                 description: z.string().optional(),
-                supportedModes: z.array(z.enum(["replace", "append", "selection", "generate"])),
-              })
+                supportedModes: z.array(
+                  z.enum(["replace", "append", "selection", "generate"]),
+                ),
+              }),
             ),
           }),
         },
-      }
+      },
     );
 
     this.get(
@@ -1843,11 +2011,263 @@ export class CoreRouter extends BaseHttpRouter {
                 instruction: z.string(),
                 status: z.string(),
                 createdAt: z.date(),
-              })
+              }),
             ),
           }),
         },
-      }
+      },
+    );
+
+    // =====================================================================
+    // Component Library
+    // =====================================================================
+    const componentFamilyController =
+      this.container.resolve<ComponentFamilyController>(
+        TOKENS.ComponentFamilyController,
+      );
+    const componentDraftController =
+      this.container.resolve<ComponentDraftController>(
+        TOKENS.ComponentDraftController,
+      );
+    const componentImportController =
+      this.container.resolve<ComponentImportController>(
+        TOKENS.ComponentImportController,
+      );
+    const componentPresetController =
+      this.container.resolve<ComponentPresetController>(
+        TOKENS.ComponentPresetController,
+      );
+
+    this.get(
+      "/api/components/families",
+      (ctx) => componentFamilyController.list(ctx),
+      {
+        operationId: "listComponentFamilies",
+        tags: ["Components"],
+        summary: "List component families",
+        queryParams: z.object({
+          scope: z.string().optional(),
+          categoryPath: z.string().optional(),
+          tags: z.string().optional(),
+          mountType: z.string().optional(),
+          search: z.string().optional(),
+        }),
+        responses: { 200: z.object({ families: z.array(z.any()) }) },
+      },
+    );
+
+    this.get(
+      "/api/components/families/:id",
+      (ctx) => componentFamilyController.get(ctx),
+      {
+        operationId: "getComponentFamily",
+        tags: ["Components"],
+        summary: "Get component family by ID with variants",
+        responses: { 200: z.object({ family: z.any() }) },
+      },
+    );
+
+this.get(
+      "/api/components/families/:id/full",
+      (ctx) => componentFamilyController.getFull(ctx),
+      {
+        operationId: "getComponentFamilyFull",
+        tags: ["Components"],
+        summary: "Get complete component family aggregate with all nested data",
+        responses: {
+          200: z.object({
+            family: z.any(),
+            variants: z.array(z.any()),
+            footprints: z.array(z.any()),
+            models: z.array(z.any()),
+            offerings: z.array(z.any()),
+          }),
+        },
+      },
+    );
+
+    this.get(
+      "/api/components/categories",
+      (ctx) => componentFamilyController.getCategories(ctx),
+      {
+        operationId: "getComponentCategories",
+        tags: ["Components"],
+        summary: "Get category tree derived from component family category paths",
+        responses: {
+          200: z.object({
+            categories: z.array(
+              z.object({
+                path: z.string(),
+                label: z.string(),
+                count: z.number(),
+                children: z.array(z.any()),
+              }),
+            ),
+          }),
+        },
+      },
+    );
+
+    this.post(
+      "/api/components/drafts",
+      (ctx) => componentDraftController.create(ctx),
+      {
+        operationId: "createComponentDraft",
+        tags: ["Components"],
+        summary: "Create a new component draft",
+        requestBody: z.object({
+          familyId: z.string().nullable().optional(),
+          payload: z.any(),
+        }),
+        responses: { 201: z.object({ draft: z.any() }) },
+      },
+    );
+
+    this.patch(
+      "/api/components/drafts/:id",
+      (ctx) => componentDraftController.patch(ctx),
+      {
+        operationId: "patchComponentDraft",
+        tags: ["Components"],
+        summary: "Partial update to component draft (auto-save)",
+        requestBody: z.any(),
+        responses: { 200: z.object({ draft: z.any() }) },
+      },
+    );
+
+    this.delete(
+      "/api/components/drafts/:id",
+      (ctx) => componentDraftController.discard(ctx),
+      {
+        operationId: "discardComponentDraft",
+        tags: ["Components"],
+        summary: "Discard (soft-delete) a component draft",
+        responses: { 200: z.object({ deleted: z.boolean() }) },
+      },
+    );
+
+    this.post(
+      "/api/components/drafts/:id/validate",
+      (ctx) => componentDraftController.validate(ctx),
+      {
+        operationId: "validateComponentDraft",
+        tags: ["Components"],
+        summary: "Validate a component draft",
+        responses: {
+          200: z.object({
+            blockers: z.array(z.any()),
+            warnings: z.array(z.any()),
+            canPublish: z.boolean(),
+          }),
+        },
+      },
+    );
+
+    this.post(
+      "/api/components/drafts/:id/publish",
+      (ctx) => componentDraftController.publish(ctx),
+      {
+        operationId: "publishComponentDraft",
+        tags: ["Components"],
+        summary: "Validate and publish a draft as a new revision",
+        responses: {
+          200: z.object({ familyId: z.string(), revision: z.any() }),
+          422: z.object({
+            code: z.string(),
+            message: z.string(),
+            details: z.any(),
+          }),
+        },
+      },
+    );
+
+    this.post(
+      "/api/components/import/preview",
+      (ctx) => componentImportController.previewImport(ctx),
+      {
+        operationId: "previewComponentImport",
+        tags: ["Components"],
+        summary: "Preview a component import (not yet implemented)",
+        responses: { 501: z.object({ code: z.string(), message: z.string() }) },
+      },
+    );
+
+    this.post(
+      "/api/components/import/confirm",
+      (ctx) => componentImportController.confirmImport(ctx),
+      {
+        operationId: "confirmComponentImport",
+        tags: ["Components"],
+        summary: "Confirm and execute component import",
+        requestBody: z.object({
+          files: z.array(z.object({
+            fileName: z.string(),
+            content: z.string(),
+          })),
+          groups: z.array(z.object({
+            familyLabel: z.string(),
+            canonicalKey: z.string(),
+            categoryPath: z.string().optional(),
+            symbolFileName: z.string().nullable(),
+            variants: z.array(z.object({
+              canonicalCode: z.string(),
+              humanLabel: z.string(),
+              mountType: z.enum(["smd", "through_hole", "virtual"]),
+              footprintFileNames: z.array(z.string()),
+              model3dFileNames: z.array(z.string()),
+            })),
+          })),
+        }),
+        responses: {
+          200: z.object({
+            familyIds: z.array(z.string()),
+            message: z.string(),
+          }),
+          400: z.object({ code: z.string(), message: z.string() }),
+          500: z.object({ code: z.string(), message: z.string() }),
+        },
+      },
+    );
+
+    this.get(
+      "/api/components/presets",
+      (ctx) => componentPresetController.list(ctx),
+      {
+        operationId: "listComponentPresets",
+        tags: ["Components"],
+        summary: "List preset catalogs with variants",
+        queryParams: z.object({ scope: z.string().optional() }),
+        responses: { 200: z.object({ presets: z.array(z.any()) }) },
+      },
+    );
+
+    this.post(
+      "/api/components/presets/:id/duplicate",
+      (ctx) => componentPresetController.duplicate(ctx),
+      {
+        operationId: "duplicateComponentPreset",
+        tags: ["Components"],
+        summary: "Duplicate a preset catalog to workspace scope",
+        requestBody: z.object({ name: z.string().optional() }),
+        responses: { 201: z.object({ catalog: z.any() }) },
+      },
+    );
+
+    this.post(
+      "/api/components/instances/switch-preview",
+      async (_ctx) => {
+        return ResponseBuilder.error(
+          "NOT_IMPLEMENTED",
+          "Switch preview not yet wired",
+          501,
+        );
+      },
+      {
+        operationId: "previewComponentSwitch",
+        tags: ["Components"],
+        summary: "Preview package variant switch (stub)",
+        responses: { 501: z.object({ code: z.string(), message: z.string() }) },
+      },
     );
 
     // =====================================================================
@@ -1855,48 +2275,78 @@ export class CoreRouter extends BaseHttpRouter {
     // =====================================================================
     const diagnosticsController = new DiagnosticsController();
 
-    this.get("/api/logs", async (ctx) => {
-      const query = ctx.query as { minutes?: string; count?: string; level?: string | string[] };
-      const result = await diagnosticsController.getLogs({
-        minutes: query.minutes ? parseInt(query.minutes, 10) : undefined,
-        count: query.count ? parseInt(query.count, 10) : undefined,
-        level: query.level,
-      });
-      return ResponseBuilder.success(result);
-    }, {
-      operationId: "getLogs",
-      tags: ["Diagnostics"],
-      summary: "Get recent backend logs",
-      description: "Query params: minutes (default 5), count, level (log|info|warn|error|debug)",
-      responses: { 200: z.object({ logs: z.array(z.any()), count: z.number(), timeRange: z.object({ from: z.string(), to: z.string() }) }) },
-    });
+    this.get(
+      "/api/logs",
+      async (ctx) => {
+        const query = ctx.query as {
+          minutes?: string;
+          count?: string;
+          level?: string | string[];
+        };
+        const result = await diagnosticsController.getLogs({
+          minutes: query.minutes ? parseInt(query.minutes, 10) : undefined,
+          count: query.count ? parseInt(query.count, 10) : undefined,
+          level: query.level,
+        });
+        return ResponseBuilder.success(result);
+      },
+      {
+        operationId: "getLogs",
+        tags: ["Diagnostics"],
+        summary: "Get recent backend logs",
+        description:
+          "Query params: minutes (default 5), count, level (log|info|warn|error|debug)",
+        responses: {
+          200: z.object({
+            logs: z.array(z.any()),
+            count: z.number(),
+            timeRange: z.object({ from: z.string(), to: z.string() }),
+          }),
+        },
+      },
+    );
 
-    this.get("/api/diagnostics", async () => {
-      const result = await diagnosticsController.getDiagnostics();
-      return ResponseBuilder.success(result);
-    }, {
-      operationId: "getDiagnostics",
-      tags: ["Diagnostics"],
-      summary: "Get system diagnostics snapshot",
-      description: "Returns logs, database metrics, and telemetry",
-      responses: { 200: z.object({ logs: z.any(), database: z.any(), metrics: z.any(), timestamp: z.string() }) },
-    });
+    this.get(
+      "/api/diagnostics",
+      async () => {
+        const result = await diagnosticsController.getDiagnostics();
+        return ResponseBuilder.success(result);
+      },
+      {
+        operationId: "getDiagnostics",
+        tags: ["Diagnostics"],
+        summary: "Get system diagnostics snapshot",
+        description: "Returns logs, database metrics, and telemetry",
+        responses: {
+          200: z.object({
+            logs: z.any(),
+            database: z.any(),
+            metrics: z.any(),
+            timestamp: z.string(),
+          }),
+        },
+      },
+    );
 
-    this.get("/api/logs/text", async (ctx) => {
-      const query = ctx.query as { minutes?: string };
-      const text = await diagnosticsController.getLogsAsText({
-        minutes: query.minutes ? parseInt(query.minutes, 10) : undefined,
-      });
-      return new Response(text, {
-        headers: { "Content-Type": "text/plain" },
-      });
-    }, {
-      operationId: "getLogsAsText",
-      tags: ["Diagnostics"],
-      summary: "Get logs as plain text",
-      description: "Query params: minutes (default 5)",
-      responses: { 200: z.string() },
-    });
+    this.get(
+      "/api/logs/text",
+      async (ctx) => {
+        const query = ctx.query as { minutes?: string };
+        const text = await diagnosticsController.getLogsAsText({
+          minutes: query.minutes ? parseInt(query.minutes, 10) : undefined,
+        });
+        return new Response(text, {
+          headers: { "Content-Type": "text/plain" },
+        });
+      },
+      {
+        operationId: "getLogsAsText",
+        tags: ["Diagnostics"],
+        summary: "Get logs as plain text",
+        description: "Query params: minutes (default 5)",
+        responses: { 200: z.string() },
+      },
+    );
   }
 
   /**

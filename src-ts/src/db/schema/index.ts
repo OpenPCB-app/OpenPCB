@@ -13,6 +13,7 @@ export * from "./base";
 export * from "./workspace";
 export * from "./project";
 export * from "./design";
+export * from "./design-sheet";
 export * from "./folder";
 export * from "./chat";
 export * from "./message";
@@ -49,5 +50,14 @@ export * from "./mention";
 export * from "./content-edit-snapshot";
 export * from "./content-edit-lock";
 
-// Modules
-// (writer module removed — PCB modules will be added here)
+// Component Library
+export * from "./component-family";
+export * from "./component-revision";
+export * from "./package-variant";
+export * from "./footprint-option";
+export * from "./model-3d-option";
+export * from "./manufacturer-offering";
+export * from "./component-draft";
+export * from "./component-provenance";
+export * from "./preset-catalog";
+export * from "./preset-variant";
