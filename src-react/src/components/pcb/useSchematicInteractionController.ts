@@ -12,6 +12,15 @@ export interface SchematicInteractionController {
   updateWirePreview: (points: Point[], targetPinId?: string | null) => void;
   commitWire: (targetPinId: string) => boolean;
   cancelSession: () => void;
+  addWireWaypoint: (point: Point) => void;
+  beginDragMove: (
+    symbolIds: string[],
+    anchorSymbolId: string,
+    startPointer: Point,
+  ) => void;
+  updateDragMove: (delta: Point) => void;
+  commitDragMove: () => void;
+  deleteSelectedEntities: () => void;
 }
 
 export function useSchematicInteractionController(): SchematicInteractionController {
@@ -28,6 +37,13 @@ export function useSchematicInteractionController(): SchematicInteractionControl
   );
   const commitWire = useSchematicStore((state) => state.commitWire);
   const cancelSession = useSchematicStore((state) => state.cancelSession);
+  const addWireWaypoint = useSchematicStore((state) => state.addWireWaypoint);
+  const beginDragMove = useSchematicStore((state) => state.beginDragMove);
+  const updateDragMove = useSchematicStore((state) => state.updateDragMove);
+  const commitDragMove = useSchematicStore((state) => state.commitDragMove);
+  const deleteSelectedEntities = useSchematicStore(
+    (state) => state.deleteSelectedEntities,
+  );
 
   return useMemo(
     () => ({
@@ -40,6 +56,11 @@ export function useSchematicInteractionController(): SchematicInteractionControl
       updateWirePreview,
       commitWire,
       cancelSession,
+      addWireWaypoint,
+      beginDragMove,
+      updateDragMove,
+      commitDragMove,
+      deleteSelectedEntities,
     }),
     [
       activateTool,
@@ -51,6 +72,11 @@ export function useSchematicInteractionController(): SchematicInteractionControl
       updateWirePreview,
       commitWire,
       cancelSession,
+      addWireWaypoint,
+      beginDragMove,
+      updateDragMove,
+      commitDragMove,
+      deleteSelectedEntities,
     ],
   );
 }

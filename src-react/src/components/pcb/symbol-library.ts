@@ -1,4 +1,4 @@
-import type { Point, Rotation, SymbolEntity } from "./types";
+import type { Point, Rotation, SymbolEntity, SymbolTemplate } from "./types";
 import type { ComponentFamilyType } from "@/../../src-ts/src/core/schemas/component-library.schema";
 
 export const PALETTE_SYMBOL_KIND_MIME = "application/x-openpcb-symbol-kind";
@@ -6,142 +6,32 @@ export const PALETTE_SYMBOL_KIND_MIME = "application/x-openpcb-symbol-kind";
 const GRID_STEP_NM = 1_270_000;
 const HALF_GRID_STEP_NM = GRID_STEP_NM / 2;
 
-interface LegacySymbolTemplate {
+interface EmbeddedSymbolDef {
   label: string;
   prefix: string | null;
   value: string;
+  symbolTemplate: SymbolTemplate;
   pins: Array<{ name: string; position: Point }>;
 }
 
-const LEGACY_TEMPLATES: Record<string, LegacySymbolTemplate> = {
-  resistor: {
-    label: "Resistor",
-    prefix: "R",
-    value: "10k",
-    pins: [
-      { name: "1", position: { x: 0, y: 0 } },
-      { name: "2", position: { x: GRID_STEP_NM, y: 0 } },
-    ],
-  },
-  capacitor: {
-    label: "Capacitor",
-    prefix: "C",
-    value: "100nF",
-    pins: [
-      { name: "1", position: { x: 0, y: 0 } },
-      { name: "2", position: { x: GRID_STEP_NM, y: 0 } },
-    ],
-  },
-  inductor: {
-    label: "Inductor",
-    prefix: "L",
-    value: "10uH",
-    pins: [
-      { name: "1", position: { x: 0, y: 0 } },
-      { name: "2", position: { x: GRID_STEP_NM, y: 0 } },
-    ],
-  },
-  diode: {
-    label: "Diode",
-    prefix: "D",
-    value: "1N4148",
-    pins: [
-      { name: "A", position: { x: 0, y: 0 } },
-      { name: "K", position: { x: GRID_STEP_NM, y: 0 } },
-    ],
-  },
-  led: {
-    label: "LED",
-    prefix: "D",
-    value: "LED",
-    pins: [
-      { name: "A", position: { x: 0, y: 0 } },
-      { name: "K", position: { x: GRID_STEP_NM, y: 0 } },
-    ],
-  },
-gnd: {
+/**
+ * Embedded net-defining symbols (GND/VCC only).
+ * All physical components are loaded from the Component Library database.
+ */
+const EMBEDDED_SYMBOLS: Record<string, EmbeddedSymbolDef> = {
+  gnd: {
     label: "Ground",
     prefix: null,
     value: "GND",
+    symbolTemplate: "connector",
     pins: [{ name: "GND", position: { x: 0, y: 0 } }],
   },
   vcc: {
     label: "VCC",
     prefix: null,
     value: "VCC",
+    symbolTemplate: "connector",
     pins: [{ name: "VCC", position: { x: 0, y: 0 } }],
-  },
-  npn: {
-    label: "NPN Transistor",
-    prefix: "Q",
-    value: "NPN",
-    pins: [
-      { name: "B", position: { x: 0, y: 0 } },
-      { name: "C", position: { x: GRID_STEP_NM, y: -HALF_GRID_STEP_NM } },
-      { name: "E", position: { x: GRID_STEP_NM, y: HALF_GRID_STEP_NM } },
-    ],
-  },
-  pnp: {
-    label: "PNP Transistor",
-    prefix: "Q",
-    value: "PNP",
-    pins: [
-      { name: "B", position: { x: 0, y: 0 } },
-      { name: "C", position: { x: GRID_STEP_NM, y: -HALF_GRID_STEP_NM } },
-      { name: "E", position: { x: GRID_STEP_NM, y: HALF_GRID_STEP_NM } },
-    ],
-  },
-  nmos: {
-    label: "N-MOSFET",
-    prefix: "Q",
-    value: "NMOS",
-    pins: [
-      { name: "G", position: { x: 0, y: 0 } },
-      { name: "D", position: { x: GRID_STEP_NM, y: -HALF_GRID_STEP_NM } },
-      { name: "S", position: { x: GRID_STEP_NM, y: HALF_GRID_STEP_NM } },
-    ],
-  },
-  pmos: {
-    label: "P-MOSFET",
-    prefix: "Q",
-    value: "PMOS",
-    pins: [
-      { name: "G", position: { x: 0, y: 0 } },
-      { name: "D", position: { x: GRID_STEP_NM, y: -HALF_GRID_STEP_NM } },
-      { name: "S", position: { x: GRID_STEP_NM, y: HALF_GRID_STEP_NM } },
-    ],
-  },
-  opamp: {
-    label: "Op-Amp",
-    prefix: "U",
-    value: "OpAmp",
-    pins: [
-      { name: "+", position: { x: 0, y: -HALF_GRID_STEP_NM } },
-      { name: "-", position: { x: 0, y: HALF_GRID_STEP_NM } },
-      { name: "OUT", position: { x: GRID_STEP_NM, y: 0 } },
-    ],
-  },
-  generic_ic: {
-    label: "Generic IC",
-    prefix: "U",
-    value: "IC",
-    pins: [
-      { name: "1", position: { x: 0, y: -HALF_GRID_STEP_NM } },
-      { name: "2", position: { x: 0, y: HALF_GRID_STEP_NM } },
-      { name: "3", position: { x: GRID_STEP_NM, y: -HALF_GRID_STEP_NM } },
-      { name: "4", position: { x: GRID_STEP_NM, y: HALF_GRID_STEP_NM } },
-    ],
-  },
-  connector: {
-    label: "Connector",
-    prefix: "J",
-    value: "Conn",
-    pins: [
-      { name: "1", position: { x: 0, y: -HALF_GRID_STEP_NM } },
-      { name: "2", position: { x: 0, y: HALF_GRID_STEP_NM } },
-      { name: "3", position: { x: GRID_STEP_NM, y: -HALF_GRID_STEP_NM } },
-      { name: "4", position: { x: GRID_STEP_NM, y: HALF_GRID_STEP_NM } },
-    ],
   },
 };
 
@@ -184,6 +74,7 @@ function createSymbolFromFamily(
     id,
     entityType: "symbol",
     symbolKind: family.id,
+    symbolTemplate: family.symbolData.symbolTemplate,
     reference,
     value: family.symbolData.properties?.value ?? family.displayLabel,
     position,
@@ -198,24 +89,25 @@ function createSymbolFromFamily(
   };
 }
 
-function createLegacySymbol(
+function createEmbeddedSymbol(
   kind: string,
   position: Point,
   rotation: Rotation,
   id: string,
   reference: string,
 ): SymbolEntity {
-  const template = LEGACY_TEMPLATES[kind] ?? LEGACY_TEMPLATES.generic_ic!;
+  const def = EMBEDDED_SYMBOLS[kind]!;
   return {
     id,
     entityType: "symbol",
     symbolKind: kind,
+    symbolTemplate: def.symbolTemplate,
     reference,
-    value: template.value,
+    value: def.value,
     position,
     rotation,
     mirrored: false,
-    pins: template.pins.map((pin, index) => ({
+    pins: def.pins.map((pin, index) => ({
       id: `${id}-pin-${index + 1}`,
       name: pin.name,
       position: { ...pin.position },
@@ -231,19 +123,33 @@ export function createSymbolEntity(
   symbols: SymbolEntity[],
 ): SymbolEntity {
   if (typeof kindOrFamily === "string") {
-    const legacyTemplate = LEGACY_TEMPLATES[kindOrFamily];
-    if (legacyTemplate) {
-      const reference = legacyTemplate.prefix
-        ? getNextReference(legacyTemplate.prefix, symbols)
-        : legacyTemplate.label;
-      return createLegacySymbol(kindOrFamily, position, rotation, crypto.randomUUID(), reference);
+    const embeddedDef = EMBEDDED_SYMBOLS[kindOrFamily];
+    if (embeddedDef) {
+      const reference = embeddedDef.prefix
+        ? getNextReference(embeddedDef.prefix, symbols)
+        : embeddedDef.label;
+      return createEmbeddedSymbol(
+        kindOrFamily,
+        position,
+        rotation,
+        crypto.randomUUID(),
+        reference,
+      );
     }
-    return createLegacySymbol("generic_ic", position, rotation, crypto.randomUUID(), `U${symbols.length + 1}`);
+    throw new Error(
+      `Unknown embedded symbol kind: ${kindOrFamily}. Use ComponentFamilyType for library components.`,
+    );
   }
   const family = kindOrFamily;
   const prefix = family.symbolData.referencePrefix || "U";
   const reference = getNextReference(prefix, symbols);
-  return createSymbolFromFamily(family, position, rotation, crypto.randomUUID(), reference);
+  return createSymbolFromFamily(
+    family,
+    position,
+    rotation,
+    crypto.randomUUID(),
+    reference,
+  );
 }
 
 export function createPreviewSymbol(
@@ -252,25 +158,46 @@ export function createPreviewSymbol(
   rotation: Rotation,
 ): SymbolEntity {
   if (typeof kindOrFamily === "string") {
-    const legacyTemplate = LEGACY_TEMPLATES[kindOrFamily] ?? LEGACY_TEMPLATES.generic_ic!;
-    return createLegacySymbol(kindOrFamily, position, rotation, "__placement-preview__", legacyTemplate.label);
+    const embeddedDef = EMBEDDED_SYMBOLS[kindOrFamily];
+    if (!embeddedDef) {
+      throw new Error(
+        `Unknown embedded symbol kind: ${kindOrFamily}. Use ComponentFamilyType for library components.`,
+      );
+    }
+    return createEmbeddedSymbol(
+      kindOrFamily,
+      position,
+      rotation,
+      "__placement-preview__",
+      embeddedDef.label,
+    );
   }
   const family = kindOrFamily;
-  return createSymbolFromFamily(family, position, rotation, "__placement-preview__", family.displayLabel);
+  return createSymbolFromFamily(
+    family,
+    position,
+    rotation,
+    "__placement-preview__",
+    family.displayLabel,
+  );
 }
 
-export function getSymbolLabel(kindOrFamily: string | ComponentFamilyType): string {
+export function getSymbolLabel(
+  kindOrFamily: string | ComponentFamilyType,
+): string {
   if (typeof kindOrFamily === "string") {
-    const legacyTemplate = LEGACY_TEMPLATES[kindOrFamily];
-    return legacyTemplate?.label ?? kindOrFamily;
+    const embeddedDef = EMBEDDED_SYMBOLS[kindOrFamily];
+    return embeddedDef?.label ?? kindOrFamily;
   }
   return kindOrFamily.displayLabel;
 }
 
-export function getSymbolPrefix(kindOrFamily: string | ComponentFamilyType): string | null {
+export function getSymbolPrefix(
+  kindOrFamily: string | ComponentFamilyType,
+): string | null {
   if (typeof kindOrFamily === "string") {
-    const legacyTemplate = LEGACY_TEMPLATES[kindOrFamily];
-    return legacyTemplate?.prefix ?? null;
+    const embeddedDef = EMBEDDED_SYMBOLS[kindOrFamily];
+    return embeddedDef?.prefix ?? null;
   }
   return kindOrFamily.symbolData.referencePrefix || null;
 }

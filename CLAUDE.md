@@ -2,6 +2,64 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Development Environment Policy
+
+**Browser-first development is mandatory.** Always develop against browser target, not Tauri desktop.
+
+### Preferred Dev Commands
+
+| Task          | Command                | Notes                                              |
+| ------------- | ---------------------- | -------------------------------------------------- |
+| **Primary**   | `npm run dev`          | Browser dev mode - backend + frontend concurrently |
+| Desktop only  | `npm run dev:desktop`  | Tauri desktop app (use for native features)        |
+| Backend only  | `npm run dev:backend`  | Bun sidecar on port 3000                           |
+| Frontend only | `npm run dev:frontend` | Vite dev server on port 1420                       |
+
+### Playwright Verification (REQUIRED)
+
+**Every UI change MUST be verified via Playwright.** Manual browser testing is not sufficient.
+
+```bash
+# Start development servers
+npm run dev
+
+# In another terminal - run Playwright in UI mode for manual verification
+npx playwright test --ui
+
+# Or run specific tests
+npx playwright test tests/e2e/your-feature.spec.ts
+```
+
+**Requirements:**
+
+- Use Playwright's trace viewer and screenshots to verify changes
+- Test responsive behavior at multiple viewports
+- Verify both light and dark themes
+- Check accessibility with Playwright's axe integration
+
+## Development Mode Guidelines
+
+**This is active development - v0.1.0. No backward compatibility required.**
+
+### Refactoring Rules
+
+- **Delete old code immediately** when refactoring - do not keep legacy compatibility layers
+- **No deprecation periods** - breaking changes are acceptable
+- **Remove unused exports** aggressively
+- **Update all callers** when changing APIs - no overloads for backward compat
+- **Clean imports** - remove dead imports immediately
+
+### Code Removal Checklist
+
+When replacing functionality:
+
+1. Implement new version
+2. Migrate all usages
+3. Delete old implementation
+4. Delete old tests
+5. Update imports/exports
+6. Run full test suite
+
 ## Project Overview
 
 OpenPCB is a desktop PCB design application — a mixed TypeScript/Rust monorepo with three runtime layers:
@@ -28,8 +86,10 @@ Communication: React → HTTP → Bun sidecar (dynamic port). Rust spawns Bun, r
 ```bash
 # Setup & Dev
 npm run setup              # Install all deps, compile Bun sidecar, run codegen
-npm run dev                # Launch full Tauri desktop app
+npm run dev                # Browser dev mode (RECOMMENDED) - backend + frontend
+npm run dev:desktop        # Launch full Tauri desktop app
 npm run dev:frontend       # Vite dev server only (port 1420)
+npm run dev:backend        # Bun sidecar only (port 3000)
 
 # Build
 npm run build              # Full production build (Bun + React + Tauri)
@@ -137,6 +197,9 @@ React (Vite :1420) ──HTTP──▶ Bun Sidecar (dynamic port) ◀──IPC�
 - **Don't log API keys**
 - **No non-IPC-7351 footprints** — all land patterns must follow IPC-7351 standard
 - **No arbitrary pad dimensions** — calculate from component body + tolerance using IPC formulas
+- **Don't use Tauri desktop for development** — always use browser-based `npm run dev`
+- **Don't skip Playwright verification** — UI changes require automated verification
+- **Don't keep legacy code during refactor** — delete old code immediately
 
 ## Subtree AGENTS.md Files
 

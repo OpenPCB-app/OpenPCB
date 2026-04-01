@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createSymbolEntity } from "@/components/pcb/symbol-library";
 import {
+  GRID_PRESETS,
   normalizeSchematicDocument,
   toEditorSchematicDocument,
 } from "@/components/pcb/types";
@@ -11,6 +12,7 @@ import type {
   DerivedConnectivity,
   DerivedSchematicState,
   EditorChromeState,
+  DragSession,
   HitTestCache,
   InteractionSession,
   Point,
@@ -22,11 +24,14 @@ import type {
   WireEntity,
 } from "@/components/pcb/types";
 import {
-  buildOrthogonalWirePath,
+  buildOrthogonalWirePathWithWaypoints,
   deriveWireJunctions,
   getWireLength,
 } from "@/components/pcb/canvas/wires";
-import { getSymbolBodyBounds, transformSymbolLocalPoint } from "@/components/pcb/canvas/symbols";
+import {
+  getSymbolBodyBounds,
+  transformSymbolLocalPoint,
+} from "@/components/pcb/canvas/symbols";
 import {
   clampViewportZoom,
   createCenteredViewport,
@@ -59,8 +64,19 @@ interface SchematicState {
   commitPlacement: (position: { x: number; y: number }) => void;
   rotatePlacement: () => void;
   beginWire: (sourcePinId: string) => void;
-  updateWirePreview: (points: Array<{ x: number; y: number }>, targetPinId?: string | null) => void;
+  addWireWaypoint: (point: Point) => void;
+  updateWirePreview: (
+    points: Array<{ x: number; y: number }>,
+    targetPinId?: string | null,
+  ) => void;
   commitWire: (targetPinId: string) => boolean;
+  beginDragMove: (
+    symbolIds: string[],
+    anchorSymbolId: string,
+    startPointer: Point,
+  ) => void;
+  updateDragMove: (delta: Point) => void;
+  commitDragMove: () => void;
   setPaletteDragSymbolKind: (kind: SymbolKind | null) => void;
   cancelSession: () => void;
 
@@ -69,6 +85,7 @@ interface SchematicState {
   clearSelection: () => void;
   selectAll: () => void;
   setPopoverTarget: (id: string | null) => void;
+  deleteSelectedEntities: () => void;
 
   setDocument: (doc: SchematicDocument | SchematicProjectDocument) => void;
   setProjectContext: (projectId: string | null, sheetId: string | null) => void;
@@ -78,11 +95,12 @@ interface SchematicState {
 
   setGridSize: (size: number) => void;
   toggleGrid: () => void;
+  setGridPreset: (presetId: string) => void;
 
   updateSymbolValue: (symbolId: string, value: string) => void;
 }
 
-const DEFAULT_GRID_NM = 1_270_000;
+const DEFAULT_GRID_NM = 508_000; // 0.508mm (20 mils) - smaller default grid
 
 const EMPTY_HIT_TEST_CACHE: HitTestCache = {
   symbolBounds: {},
@@ -103,6 +121,7 @@ const INITIAL_CHROME_STATE: EditorChromeState = {
   gridSize: DEFAULT_GRID_NM,
   showGrid: true,
   placementRotation: 0,
+  gridPresetId: "small",
 };
 
 function derivePopoverTargetId(
@@ -155,10 +174,22 @@ function deriveConnectivity(document: SchematicDocument): DerivedConnectivity {
   };
 }
 
-function includePointInBounds(
-  bounds: Bounds | null,
-  point: Point,
-): Bounds {
+function collectConnectedWireIds(
+  wires: WireEntity[],
+  deletedPinIds: Set<string>,
+): Set<string> {
+  return new Set(
+    wires
+      .filter(
+        (wire) =>
+          deletedPinIds.has(wire.sourcePinId) ||
+          deletedPinIds.has(wire.targetPinId),
+      )
+      .map((wire) => wire.id),
+  );
+}
+
+function includePointInBounds(bounds: Bounds | null, point: Point): Bounds {
   if (!bounds) {
     return {
       minX: point.x,
@@ -176,10 +207,7 @@ function includePointInBounds(
   };
 }
 
-function includeBounds(
-  current: Bounds | null,
-  next: Bounds,
-): Bounds {
+function includeBounds(current: Bounds | null, next: Bounds): Bounds {
   if (!current) {
     return next;
   }
@@ -192,7 +220,9 @@ function includeBounds(
   };
 }
 
-function deriveDocumentBounds(document: SchematicDocument | null): Bounds | null {
+function deriveDocumentBounds(
+  document: SchematicDocument | null,
+): Bounds | null {
   if (!document) {
     return null;
   }
@@ -230,6 +260,30 @@ function getResetViewport(
 
 function createWireId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `wire-${Date.now()}`;
+}
+
+function getUpdatedSymbolPositions(
+  document: SchematicDocument,
+  symbolIds: string[],
+  positions: Record<string, Point>,
+  delta: Point,
+): SchematicDocument {
+  const movedSymbolIds = new Set(symbolIds);
+
+  return {
+    ...document,
+    symbols: document.symbols.map((symbol) =>
+      movedSymbolIds.has(symbol.id)
+        ? {
+            ...symbol,
+            position: {
+              x: (positions[symbol.id]?.x ?? symbol.position.x) + delta.x,
+              y: (positions[symbol.id]?.y ?? symbol.position.y) + delta.y,
+            },
+          }
+        : symbol,
+    ),
+  };
 }
 
 export const useSchematicStore = create<SchematicState>((set, get) => ({
@@ -284,8 +338,10 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
           ...state.chrome,
           viewport: {
             zoom: newZoom,
-            offsetX: centerX - (centerX - state.chrome.viewport.offsetX) * ratio,
-            offsetY: centerY - (centerY - state.chrome.viewport.offsetY) * ratio,
+            offsetX:
+              centerX - (centerX - state.chrome.viewport.offsetX) * ratio,
+            offsetY:
+              centerY - (centerY - state.chrome.viewport.offsetY) * ratio,
           },
         },
       };
@@ -380,7 +436,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
   rotatePlacement: () =>
     set((state) => {
-      const placementRotation = ((state.chrome.placementRotation + 90) % 360) as Rotation;
+      const placementRotation = ((state.chrome.placementRotation + 90) %
+        360) as Rotation;
 
       return {
         chrome: {
@@ -402,6 +459,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       session: {
         type: "wire",
         sourcePinId,
+        waypoints: [],
         previewPoints: [],
         targetPinId: null,
       },
@@ -411,6 +469,89 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         popoverEntityId: null,
       },
     })),
+
+  beginDragMove: (symbolIds, anchorSymbolId, startPointer) =>
+    set((state) => {
+      const document = state.persisted.document;
+      if (!document) {
+        return state;
+      }
+
+      const initialPositions = Object.fromEntries(
+        symbolIds.map((symbolId) => [
+          symbolId,
+          document.symbols.find((symbol) => symbol.id === symbolId)
+            ?.position ?? {
+            x: 0,
+            y: 0,
+          },
+        ]),
+      ) as Record<string, Point>;
+
+      return {
+        session: {
+          type: "drag",
+          symbolIds,
+          anchorSymbolId,
+          startPointer,
+          lastSnappedDelta: { x: 0, y: 0 },
+          initialPositions,
+        } satisfies DragSession,
+      };
+    }),
+
+  updateDragMove: (delta) =>
+    set((state) => {
+      if (state.session?.type !== "drag") {
+        return state;
+      }
+
+      const document = state.persisted.document;
+      if (!document) {
+        return state;
+      }
+
+      if (
+        delta.x === state.session.lastSnappedDelta.x &&
+        delta.y === state.session.lastSnappedDelta.y
+      ) {
+        return state;
+      }
+
+      const nextDocument = getUpdatedSymbolPositions(
+        document,
+        state.session.symbolIds,
+        state.session.initialPositions,
+        delta,
+      );
+
+      return {
+        persisted: {
+          ...state.persisted,
+          document: nextDocument,
+        },
+        derived: {
+          ...state.derived,
+          documentBounds: deriveDocumentBounds(nextDocument),
+          hitTestCache: createHitTestCache(nextDocument.symbols),
+        },
+        session: {
+          ...state.session,
+          lastSnappedDelta: delta,
+        },
+      };
+    }),
+
+  commitDragMove: () =>
+    set((state) => {
+      if (state.session?.type !== "drag") {
+        return state;
+      }
+
+      return {
+        session: null,
+      };
+    }),
 
   updateWirePreview: (points, targetPinId = null) =>
     set((state) => {
@@ -423,6 +564,29 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
           ...state.session,
           previewPoints: points,
           targetPinId,
+        },
+      };
+    }),
+
+  addWireWaypoint: (point) =>
+    set((state) => {
+      if (state.session?.type !== "wire") {
+        return state;
+      }
+
+      const lastWaypoint = state.session.waypoints.at(-1);
+      if (
+        lastWaypoint &&
+        lastWaypoint.x === point.x &&
+        lastWaypoint.y === point.y
+      ) {
+        return state;
+      }
+
+      return {
+        session: {
+          ...state.session,
+          waypoints: [...state.session.waypoints, point],
         },
       };
     }),
@@ -446,7 +610,11 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         return state;
       }
 
-      const points = buildOrthogonalWirePath(sourcePoint, targetPoint);
+      const points = buildOrthogonalWirePathWithWaypoints(
+        sourcePoint,
+        state.session.waypoints,
+        targetPoint,
+      );
       if (points.length < 2 || getWireLength(points) <= 0) {
         return state;
       }
@@ -496,7 +664,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       chrome: {
         ...state.chrome,
         activeTool:
-          state.session?.type === "placement" && state.chrome.activeTool === "place"
+          state.session?.type === "placement" &&
+          state.chrome.activeTool === "place"
             ? "select"
             : state.chrome.activeTool,
       },
@@ -515,13 +684,18 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   addToSelection: (ids) =>
     set((state) => {
       const nextIds = new Set(state.chrome.selectedEntityIds);
-      ids.forEach((id) => nextIds.add(id));
+      for (const id of ids) {
+        nextIds.add(id);
+      }
 
       return {
         chrome: {
           ...state.chrome,
           selectedEntityIds: nextIds,
-          popoverEntityId: derivePopoverTargetId(state.persisted.document, nextIds),
+          popoverEntityId: derivePopoverTargetId(
+            state.persisted.document,
+            nextIds,
+          ),
         },
       };
     }),
@@ -562,6 +736,76 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         popoverEntityId: id,
       },
     })),
+
+  deleteSelectedEntities: () =>
+    set((state) => {
+      const document = state.persisted.document;
+      const selectedEntityIds = state.chrome.selectedEntityIds;
+
+      if (!document || selectedEntityIds.size === 0) {
+        return state;
+      }
+
+      const symbolIds = new Set(
+        document.symbols
+          .filter((symbol) => selectedEntityIds.has(symbol.id))
+          .map((symbol) => symbol.id),
+      );
+      const wireIds = new Set(
+        document.wires
+          .filter((wire) => selectedEntityIds.has(wire.id))
+          .map((wire) => wire.id),
+      );
+      const labelIds = new Set(
+        document.labels
+          .filter((label) => selectedEntityIds.has(label.id))
+          .map((label) => label.id),
+      );
+
+      const deletedPinIds = new Set<string>();
+      for (const symbol of document.symbols) {
+        if (!symbolIds.has(symbol.id)) {
+          continue;
+        }
+
+        for (const pin of symbol.pins) {
+          deletedPinIds.add(pin.id);
+        }
+      }
+
+      const wireIdsToDelete = new Set(wireIds);
+      for (const wireId of collectConnectedWireIds(
+        document.wires,
+        deletedPinIds,
+      )) {
+        wireIdsToDelete.add(wireId);
+      }
+
+      const nextDocument = {
+        ...document,
+        symbols: document.symbols.filter((symbol) => !symbolIds.has(symbol.id)),
+        wires: document.wires.filter((wire) => !wireIdsToDelete.has(wire.id)),
+        labels: document.labels.filter((label) => !labelIds.has(label.id)),
+      };
+
+      return {
+        persisted: {
+          ...state.persisted,
+          document: nextDocument,
+        },
+        derived: {
+          ...state.derived,
+          connectivity: deriveConnectivity(nextDocument),
+          documentBounds: deriveDocumentBounds(nextDocument),
+          hitTestCache: createHitTestCache(nextDocument.symbols),
+        },
+        chrome: {
+          ...state.chrome,
+          selectedEntityIds: new Set(),
+          popoverEntityId: null,
+        },
+      };
+    }),
 
   setDocument: (document) =>
     set((state) => {
@@ -628,7 +872,9 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
   setGridSize: (gridSize) => {
     if (!Number.isFinite(gridSize) || gridSize <= 0) {
-      throw new RangeError(`Invalid gridSize: ${gridSize}. Must be positive finite number.`);
+      throw new RangeError(
+        `Invalid gridSize: ${gridSize}. Must be positive finite number.`,
+      );
     }
 
     set((state) => ({
@@ -646,6 +892,19 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         showGrid: !state.chrome.showGrid,
       },
     })),
+
+  setGridPreset: (presetId: string) =>
+    set((state) => {
+      const preset = GRID_PRESETS.find((p) => p.id === presetId);
+      if (!preset) return state;
+      return {
+        chrome: {
+          ...state.chrome,
+          gridPresetId: presetId,
+          gridSize: preset.size,
+        },
+      };
+    }),
 
   updateSymbolValue: (symbolId: string, value: string) =>
     set((state) => {

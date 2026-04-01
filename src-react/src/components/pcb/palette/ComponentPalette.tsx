@@ -126,7 +126,11 @@ function LegacyItem({
   );
 }
 
-const LEGACY_SYMBOLS: Array<{
+/**
+ * Embedded net-defining symbols (GND/VCC only).
+ * All physical components come from the Component Library.
+ */
+const EMBEDDED_SYMBOLS: Array<{
   kind: string;
   label: string;
   badge: string;
@@ -134,8 +138,6 @@ const LEGACY_SYMBOLS: Array<{
 }> = [
   { kind: "gnd", label: "Ground", badge: "GND", category: "power" },
   { kind: "vcc", label: "VCC", badge: "VCC", category: "power" },
-  { kind: "resistor", label: "Resistor", badge: "R", category: "passive" },
-  { kind: "capacitor", label: "Capacitor", badge: "C", category: "passive" },
 ];
 
 function EmptyState() {
@@ -173,7 +175,7 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
     () => groupFamiliesByCategory(components, scope),
     [components, scope],
   );
-  const hasComponents = components.length > 0 || LEGACY_SYMBOLS.length > 0;
+  const hasComponents = components.length > 0 || EMBEDDED_SYMBOLS.length > 0;
   const handleLegacyDragStart = (kind: string) => {
     setPaletteDragSymbolKind(kind);
     interactionController.beginPlacement(kind);
@@ -251,10 +253,10 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
           <div className="flex flex-col gap-1 p-2">
             {SYMBOL_CATEGORIES.map((category) => {
               const families = groupedFamilies.get(category.key) ?? [];
-              const legacyItems = LEGACY_SYMBOLS.filter(
+              const embeddedItems = EMBEDDED_SYMBOLS.filter(
                 (item) => item.category === category.key,
               );
-              if (families.length === 0 && legacyItems.length === 0)
+              if (families.length === 0 && embeddedItems.length === 0)
                 return null;
 
               return (
@@ -264,7 +266,7 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
                       {category.label}
                     </span>
                   </div>
-                  {legacyItems.map((item) => (
+                  {embeddedItems.map((item) => (
                     <LegacyItem
                       key={item.kind}
                       kind={item.kind}

@@ -61,7 +61,10 @@ function isTextEntryFocused(activeElement: Element | null): boolean {
     return false;
   }
 
-  if (activeElement.isContentEditable || activeElement instanceof HTMLTextAreaElement) {
+  if (
+    activeElement.isContentEditable ||
+    activeElement instanceof HTMLTextAreaElement
+  ) {
     return true;
   }
 
@@ -104,12 +107,19 @@ function resetHarnessStore() {
       gridSize: 1_270_000,
       showGrid: true,
       placementRotation: 0,
+      gridPresetId: "small",
     },
     session: null,
   }));
 }
 
-function DebugValue({ label, value }: { label: string; value: string | number }) {
+function DebugValue({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
   return (
     <div className="flex items-center justify-between gap-3 text-xs text-slate-200">
       <span className="text-slate-400">{label}</span>
@@ -123,8 +133,12 @@ function DebugValue({ label, value }: { label: string; value: string | number })
 function E2EDebugPanel() {
   const document = useSchematicStore((state) => state.persisted.document);
   const session = useSchematicStore((state) => state.session);
-  const selectedIds = useSchematicStore((state) => state.chrome.selectedEntityIds);
-  const popoverEntityId = useSchematicStore((state) => state.chrome.popoverEntityId);
+  const selectedIds = useSchematicStore(
+    (state) => state.chrome.selectedEntityIds,
+  );
+  const popoverEntityId = useSchematicStore(
+    (state) => state.chrome.popoverEntityId,
+  );
 
   const sessionSummary = useMemo(() => {
     if (!session) {
@@ -135,7 +149,11 @@ function E2EDebugPanel() {
       return `placement:${session.symbolKind}`;
     }
 
-    return `wire:${session.sourcePinId}:${session.targetPinId ?? "pending"}`;
+    if ("sourcePinId" in session) {
+      return `wire:${session.sourcePinId}:${session.targetPinId ?? "pending"}`;
+    }
+
+    return `drag:${session.anchorSymbolId}`;
   }, [session]);
 
   return (
@@ -152,7 +170,10 @@ function E2EDebugPanel() {
       </div>
       <DebugValue label="symbols" value={document?.symbols.length ?? 0} />
       <DebugValue label="wires" value={document?.wires.length ?? 0} />
-      <DebugValue label="selected" value={[...selectedIds].join(",") || "none"} />
+      <DebugValue
+        label="selected"
+        value={[...selectedIds].join(",") || "none"}
+      />
       <DebugValue label="session" value={sessionSummary} />
       <DebugValue label="popover" value={popoverEntityId ?? "none"} />
     </div>
@@ -161,7 +182,9 @@ function E2EDebugPanel() {
 
 export function SchematicEditorE2EHarness() {
   const controller = useSchematicInteractionController();
-  const popoverEntityId = useSchematicStore((state) => state.chrome.popoverEntityId);
+  const popoverEntityId = useSchematicStore(
+    (state) => state.chrome.popoverEntityId,
+  );
   const setPopoverTarget = useSchematicStore((state) => state.setPopoverTarget);
 
   useEffect(() => {

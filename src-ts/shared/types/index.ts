@@ -29,6 +29,7 @@ export * from "./usage.types";
 export * from "./file.types";
 export * from "./stream.types";
 export * from "./pcb.types";
+export * from "./component-library.types";
 export * from "./api.types";
 export * from "./auth.types";
 export * from "./mention";

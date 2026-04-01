@@ -102,10 +102,15 @@ vi.mock("@/components/pcb/palette/ComponentPalette", () => ({
     };
   }) => (
     <div>
-      <button draggable onDragStart={() => controller.beginPlacement("gnd")}>
+      <button
+        type="button"
+        draggable
+        onDragStart={() => controller.beginPlacement("gnd")}
+      >
         Ground
       </button>
       <button
+        type="button"
         draggable
         onDragStart={() => controller.beginPlacement("resistor")}
       >
@@ -123,7 +128,9 @@ vi.mock("@/components/pcb/canvas/SchematicCanvas", () => ({
       beginWire: (sourcePinId: string) => void;
     };
   }) => (
-    <button onClick={() => controller.beginWire("pin-1")}>Begin wire</button>
+    <button type="button" onClick={() => controller.beginWire("pin-1")}>
+      Begin wire
+    </button>
   ),
 }));
 
@@ -212,6 +219,7 @@ function resetStore() {
       gridSize: 1_270_000,
       showGrid: true,
       placementRotation: 0,
+      gridPresetId: "small",
     },
     session: null,
   }));
@@ -345,6 +353,99 @@ describe("DesignScreen schematic shell", () => {
       labels:
         useSchematicStore.getState().persisted.document?.labels.length ?? 0,
     }).toEqual(documentCountsBefore);
+  });
+
+  it("deletes selected entities with Delete", () => {
+    useSchematicStore.getState().selectEntities(["symbol-1"]);
+    render(<DesignScreen />);
+
+    act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Delete", cancelable: true }),
+      );
+    });
+
+    expect(useSchematicStore.getState().persisted.document?.symbols).toEqual(
+      [],
+    );
+    expect(useSchematicStore.getState().persisted.document?.wires).toEqual([]);
+    expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(
+      new Set(),
+    );
+  });
+
+  it("deletes selected entities with Backspace and prevents navigation", () => {
+    useSchematicStore.getState().selectEntities(["symbol-1"]);
+    render(<DesignScreen />);
+
+    const event = new KeyboardEvent("keydown", {
+      key: "Backspace",
+      cancelable: true,
+    });
+
+    act(() => {
+      window.dispatchEvent(event);
+    });
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(useSchematicStore.getState().persisted.document?.symbols).toEqual(
+      [],
+    );
+    expect(useSchematicStore.getState().persisted.document?.wires).toEqual([]);
+  });
+
+  it("ignores Delete and Backspace when a text field is focused", () => {
+    useSchematicStore.getState().selectEntities(["symbol-1"]);
+    render(<DesignScreen />);
+
+    const input = globalThis.document.createElement("input");
+    globalThis.document.body.append(input);
+    input.focus();
+
+    act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Delete", cancelable: true }),
+      );
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Backspace", cancelable: true }),
+      );
+    });
+
+    expect(
+      useSchematicStore.getState().persisted.document?.symbols,
+    ).toHaveLength(1);
+    expect(useSchematicStore.getState().persisted.document?.wires).toHaveLength(
+      1,
+    );
+    expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(
+      new Set(["symbol-1"]),
+    );
+
+    input.blur();
+    input.remove();
+  });
+
+  it("does nothing for Delete and Backspace when nothing is selected", () => {
+    render(<DesignScreen />);
+
+    act(() => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Delete", cancelable: true }),
+      );
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Backspace", cancelable: true }),
+      );
+    });
+
+    expect(
+      useSchematicStore.getState().persisted.document?.symbols,
+    ).toHaveLength(1);
+    expect(useSchematicStore.getState().persisted.document?.wires).toHaveLength(
+      1,
+    );
+    expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(
+      new Set(),
+    );
   });
 
   it("shows a floating popover for a single selected symbol and reanchors on viewport changes", () => {

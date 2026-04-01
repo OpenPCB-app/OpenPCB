@@ -23,8 +23,12 @@ let designs = [
 ];
 
 vi.mock("@/components/ui/resizable", () => ({
-  ResizablePanelGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  ResizablePanel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ResizablePanelGroup: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  ResizablePanel: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
   ResizableHandle: () => <div data-testid="resize-handle" />,
 }));
 
@@ -197,6 +201,7 @@ function resetStore() {
       gridSize: 1_270_000,
       showGrid: true,
       placementRotation: 0,
+      gridPresetId: "small",
     },
     session: null,
     draggedSymbolKind: null,
@@ -213,12 +218,17 @@ describe("DesignScreen real schematic bootstrap", () => {
         unobserve() {}
       },
     );
-    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 0));
-    vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
-      (((contextId: string) =>
-        contextId === "2d" ? createMockContext() : null) as unknown) as HTMLCanvasElement["getContext"],
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 0),
     );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(((
+      contextId: string,
+    ) =>
+      contextId === "2d"
+        ? createMockContext()
+        : null) as unknown as HTMLCanvasElement["getContext"]);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
       () =>
         ({
@@ -278,7 +288,9 @@ describe("DesignScreen real schematic bootstrap", () => {
     render(<DesignScreen />);
 
     await waitFor(() =>
-      expect(useSchematicStore.getState().persisted.document?.id).toBe("design-1"),
+      expect(useSchematicStore.getState().persisted.document?.id).toBe(
+        "design-1",
+      ),
     );
 
     const groundButton = screen.getByRole("button", { name: /ground/i });
@@ -310,9 +322,13 @@ describe("DesignScreen real schematic bootstrap", () => {
     dispatchDragEvent(groundButton, "dragend", { dataTransfer });
 
     await waitFor(() =>
-      expect(useSchematicStore.getState().persisted.document?.symbols).toHaveLength(1),
+      expect(
+        useSchematicStore.getState().persisted.document?.symbols,
+      ).toHaveLength(1),
     );
-    expect(useSchematicStore.getState().persisted.document?.symbols[0]).toMatchObject({
+    expect(
+      useSchematicStore.getState().persisted.document?.symbols[0],
+    ).toMatchObject({
       symbolKind: "gnd",
     });
   });

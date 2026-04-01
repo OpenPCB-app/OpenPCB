@@ -14,13 +14,20 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Toggle } from "@/components/ui/toggle";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip";
 import { useSchematicStore } from "@/stores/schematic-store";
-import type { ToolMode } from "../types";
+import { GRID_PRESETS, type ToolMode } from "../types";
 import {
   useSchematicInteractionController,
   type SchematicInteractionController,
@@ -48,6 +55,8 @@ export function EditorToolbar({ controller }: EditorToolbarProps) {
   const activeTool = useSchematicStore((s) => s.chrome.activeTool);
   const showGrid = useSchematicStore((s) => s.chrome.showGrid);
   const toggleGrid = useSchematicStore((s) => s.toggleGrid);
+  const gridPresetId = useSchematicStore((s) => s.chrome.gridPresetId);
+  const setGridPreset = useSchematicStore((s) => s.setGridPreset);
   const zoomAt = useSchematicStore((s) => s.zoomAt);
   const resetViewport = useSchematicStore((s) => s.resetViewport);
 
@@ -182,6 +191,33 @@ export function EditorToolbar({ controller }: EditorToolbarProps) {
               Toggle Grid
             </TooltipContent>
           </Tooltip>
+
+          <Separator orientation="vertical" className="mx-1 h-5" />
+
+          {/* Grid Preset Selector */}
+          <Select
+            value={gridPresetId}
+            onValueChange={setGridPreset}
+            disabled={!showGrid}
+          >
+            <SelectTrigger
+              className="h-7 w-32 px-2 text-xs border border-border-default rounded bg-bg-secondary hover:bg-bg-input data-[state=open]:bg-bg-input"
+              aria-label="Grid preset"
+            >
+              <SelectValue placeholder="Select grid..." />
+            </SelectTrigger>
+            <SelectContent>
+              {GRID_PRESETS.map((preset) => (
+                <SelectItem
+                  key={preset.id}
+                  value={preset.id}
+                  className="text-xs"
+                >
+                  {preset.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Spacer */}

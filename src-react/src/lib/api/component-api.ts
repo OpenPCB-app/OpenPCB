@@ -1,6 +1,9 @@
 import { customFetch } from "@/../../src-ts/shared/sdk/mutator";
+import type {
+  ComponentWorkspaceRecord as SharedComponentWorkspaceRecord,
+  MountType,
+} from "@shared/types/component-library.types";
 import type { ComponentFamilyType } from "@/../../src-ts/src/core/schemas/component-library.schema";
-import type { ComponentDraftPayload } from "@/../../src-ts/src/core/schemas/component-semantics";
 
 interface ApiResponse<T> {
   ok: boolean;
@@ -26,7 +29,10 @@ function unwrapResponse<T>(response: ApiResponse<T>): T {
 }
 
 export type ComponentScope = "built_in" | "workspace";
-export type MountType = "smd" | "through_hole" | "virtual";
+export type ComponentType = ComponentFamilyType;
+export type ComponentWorkspaceRecord = SharedComponentWorkspaceRecord;
+export type ComponentDraft = ComponentWorkspaceRecord;
+export type { MountType };
 
 // ---------------------------------------------------------------------------
 // Component Families
@@ -35,7 +41,7 @@ export type MountType = "smd" | "through_hole" | "virtual";
 export async function listComponentFamilies(
   scope?: ComponentScope,
   search?: string,
-): Promise<ComponentFamilyType[]> {
+): Promise<ComponentType[]> {
   const params = new URLSearchParams();
   if (scope) params.set("scope", scope);
   if (search) params.set("search", search);
@@ -44,15 +50,15 @@ export async function listComponentFamilies(
   const url = `/api/components/families${queryString ? `?${queryString}` : ""}`;
 
   const response =
-    await customFetch<ApiResponse<{ families: ComponentFamilyType[] }>>(url);
+    await customFetch<ApiResponse<{ families: ComponentType[] }>>(url);
   return unwrapResponse(response).families;
 }
 
 export async function getComponentFamily(
   id: string,
-): Promise<ComponentFamilyType> {
+): Promise<ComponentType> {
   const response = await customFetch<
-    ApiResponse<{ family: ComponentFamilyType }>
+    ApiResponse<{ family: ComponentType }>
   >(`/api/components/families/${encodeURIComponent(id)}`);
   return unwrapResponse(response).family;
 }
@@ -79,9 +85,9 @@ export async function updateComponentFamily(
     categoryPath?: string;
     tags?: string[];
   },
-): Promise<ComponentFamilyType> {
+): Promise<ComponentType> {
   const response = await customFetch<
-    ApiResponse<{ family: ComponentFamilyType }>
+    ApiResponse<{ family: ComponentType }>
   >(`/api/components/families/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(updates),
@@ -115,20 +121,6 @@ export async function bulkDeleteComponentFamilies(
     deletedCount: result.deletedCount,
     skippedCount: result.skippedCount,
   };
-}
-
-// ---------------------------------------------------------------------------
-// Component Drafts
-// ---------------------------------------------------------------------------
-
-export interface ComponentDraft {
-  id: string;
-  familyId: string | null;
-  wizardStep: number;
-  payload: ComponentDraftPayload;
-  warnings: unknown[];
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface KicadImportWarning {
@@ -200,8 +192,12 @@ export interface ParsedKicadFootprint {
 /**
  * List all active (non-deleted) component drafts
  */
-export async function listComponentDrafts(): Promise<ComponentDraft[]> {
-  const response = await customFetch<ApiResponse<{ drafts: ComponentDraft[] }>>(
+export async function listWorkspaceComponentRecords(): Promise<
+  ComponentWorkspaceRecord[]
+> {
+  const response = await customFetch<
+    ApiResponse<{ drafts: ComponentWorkspaceRecord[] }>
+  >(
     "/api/components/drafts",
   );
   return unwrapResponse(response).drafts;
@@ -210,10 +206,12 @@ export async function listComponentDrafts(): Promise<ComponentDraft[]> {
 /**
  * Create a new component draft
  */
-export async function createComponentDraft(
-  payload?: Partial<ComponentDraftPayload>,
-): Promise<ComponentDraft> {
-  const response = await customFetch<ApiResponse<{ draft: ComponentDraft }>>(
+export async function createWorkspaceComponentRecord(
+  payload?: Partial<ComponentType>,
+): Promise<ComponentWorkspaceRecord> {
+  const response = await customFetch<
+    ApiResponse<{ draft: ComponentWorkspaceRecord }>
+  >(
     "/api/components/drafts",
     {
       method: "POST",
@@ -226,14 +224,16 @@ export async function createComponentDraft(
 /**
  * Patch (partial update) a component draft - used for auto-save
  */
-export async function patchComponentDraft(
+export async function patchWorkspaceComponentRecord(
   id: string,
   updates: {
     familyId?: string | null;
-    payload?: Partial<ComponentDraftPayload>;
+    payload?: Partial<ComponentType>;
   },
-): Promise<ComponentDraft> {
-  const response = await customFetch<ApiResponse<{ draft: ComponentDraft }>>(
+): Promise<ComponentWorkspaceRecord> {
+  const response = await customFetch<
+    ApiResponse<{ draft: ComponentWorkspaceRecord }>
+  >(
     `/api/components/drafts/${encodeURIComponent(id)}`,
     {
       method: "PATCH",
@@ -246,7 +246,7 @@ export async function patchComponentDraft(
 /**
  * Discard (soft-delete) a component draft
  */
-export async function discardComponentDraft(id: string): Promise<void> {
+export async function discardWorkspaceComponentRecord(id: string): Promise<void> {
   const response = await customFetch<ApiResponse<{ deleted: boolean }>>(
     `/api/components/drafts/${encodeURIComponent(id)}`,
     { method: "DELETE" },
@@ -257,7 +257,7 @@ export async function discardComponentDraft(id: string): Promise<void> {
 /**
  * Validate a component draft before publishing
  */
-export async function validateComponentDraft(
+export async function validateWorkspaceComponentRecord(
   id: string,
 ): Promise<{ blockers: unknown[]; warnings: unknown[]; canPublish: boolean }> {
   const response = await customFetch<
@@ -276,7 +276,7 @@ export async function validateComponentDraft(
  * Publish a component draft as a new revision
  * Creates the component family if it doesn't exist
  */
-export async function publishComponentDraft(
+export async function publishWorkspaceComponentRecord(
   id: string,
 ): Promise<{ familyId: string; revision: unknown }> {
   const response = await customFetch<
@@ -285,6 +285,42 @@ export async function publishComponentDraft(
     method: "POST",
   });
   return unwrapResponse(response);
+}
+
+export async function listComponentDrafts(): Promise<ComponentDraft[]> {
+  return listWorkspaceComponentRecords();
+}
+
+export async function createComponentDraft(
+  payload?: Partial<ComponentType>,
+): Promise<ComponentDraft> {
+  return createWorkspaceComponentRecord(payload);
+}
+
+export async function patchComponentDraft(
+  id: string,
+  updates: {
+    familyId?: string | null;
+    payload?: Partial<ComponentType>;
+  },
+): Promise<ComponentDraft> {
+  return patchWorkspaceComponentRecord(id, updates);
+}
+
+export async function discardComponentDraft(id: string): Promise<void> {
+  return discardWorkspaceComponentRecord(id);
+}
+
+export async function validateComponentDraft(
+  id: string,
+): Promise<{ blockers: unknown[]; warnings: unknown[]; canPublish: boolean }> {
+  return validateWorkspaceComponentRecord(id);
+}
+
+export async function publishComponentDraft(
+  id: string,
+): Promise<{ familyId: string; revision: unknown }> {
+  return publishWorkspaceComponentRecord(id);
 }
 
 // ---------------------------------------------------------------------------

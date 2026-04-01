@@ -5,17 +5,20 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { listComponentDrafts, type ComponentDraft } from "@/lib/api/component-api";
+import {
+  listWorkspaceComponentRecords,
+  type ComponentWorkspaceRecord,
+} from "@/lib/api/component-api";
 
 export interface UseDraftsReturn {
-  drafts: ComponentDraft[];
+  drafts: ComponentWorkspaceRecord[];
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 }
 
 export function useDrafts(): UseDraftsReturn {
-  const [drafts, setDrafts] = useState<ComponentDraft[]>([]);
+  const [drafts, setDrafts] = useState<ComponentWorkspaceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,7 +27,7 @@ export function useDrafts(): UseDraftsReturn {
     setError(null);
 
     try {
-      const results = await listComponentDrafts();
+      const results = await listWorkspaceComponentRecords();
       setDrafts(results);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch drafts";

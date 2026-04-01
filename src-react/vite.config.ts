@@ -42,18 +42,49 @@ export default defineConfig({
     // Bind explicitly to IPv4 to avoid ::1 EPERM issues in some environments
     host: "127.0.0.1",
     fs: {
-      allow: [
-        path.resolve(__dirname),
-        path.resolve(__dirname, ".."),
+      allow: [path.resolve(__dirname), path.resolve(__dirname, "..")],
+    },
+    // Proxy API and WebSocket requests to Bun sidecar for browser-first dev mode
+    // In Tauri mode, BackendURLContext uses dynamic port discovery; proxy is ignored
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:3000",
+        changeOrigin: true,
+      },
+      "/ws": {
+        target: "ws://127.0.0.1:3000",
+        ws: true,
+        changeOrigin: true,
+      },
+    },
+    // HMR with overlay disabled to prevent error spam during dev
+    hmr: {
+      overlay: false,
+    },
+    watch: {
+      // Ignore unnecessary directories to reduce CPU usage
+      ignored: [
+        "**/src-tauri/**",
+        "**/node_modules/**",
+        "**/.git/**",
+        "**/dist/**",
+        "**/target/**",
       ],
     },
-    // No proxy - frontend makes direct requests to Bun using dynamic URL from BackendURLContext
-    // HMR left as default (undefined) — no env-driven host configuration
-    hmr: undefined,
-    watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
-    },
+  },
+  optimizeDeps: {
+    // Pre-bundle common heavy dependencies for faster dev startup
+    include: [
+      "react",
+      "react-dom",
+      "react-dom/client",
+      "zustand",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-dropdown-menu",
+      "lucide-react",
+    ],
+    // Exclude native Tauri modules from bundling
+    exclude: ["@tauri-apps/api", "@tauri-apps/plugin-opener"],
   },
   build: {
     // Align generated bundles with the runtime engines shipped with Tauri

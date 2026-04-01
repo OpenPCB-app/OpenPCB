@@ -23,9 +23,12 @@ export interface BaseEntity {
   mirrored?: boolean;
 }
 
+export type SymbolTemplate = string;
+
 export type EditorSchematicSymbol = SharedSchematicSymbol & {
   entityType: "symbol";
   symbolKind: SymbolKind;
+  symbolTemplate?: SymbolTemplate | null;
   mirrored?: boolean;
   reference: string;
   rotation: number;
@@ -106,6 +109,22 @@ export interface Viewport {
 
 export type ToolMode = "select" | "place" | "wire" | "label";
 
+export type GridStyle = "dots" | "lines" | "cross";
+
+export interface GridPreset {
+  id: string;
+  name: string;
+  size: number;
+  style: GridStyle;
+}
+
+export const GRID_PRESETS: GridPreset[] = [
+  { id: "fine", name: "Fine (0.25mm)", size: 254_000, style: "dots" },
+  { id: "small", name: "Small (0.5mm)", size: 508_000, style: "dots" },
+  { id: "medium", name: "Medium (1.27mm)", size: 1_270_000, style: "lines" },
+  { id: "large", name: "Large (2.54mm)", size: 2_540_000, style: "lines" },
+];
+
 export interface EditorChromeState {
   viewport: Viewport;
   selectedEntityIds: Set<string>;
@@ -114,6 +133,7 @@ export interface EditorChromeState {
   gridSize: number;
   showGrid: boolean;
   placementRotation: Rotation;
+  gridPresetId: string;
 }
 
 export interface PlacementSession {
@@ -256,8 +276,22 @@ export function toSchematicProjectDocument(
 export interface WireSession {
   type: "wire";
   sourcePinId: string;
+  waypoints: Point[];
   previewPoints: Point[];
   targetPinId: string | null;
 }
 
-export type InteractionSession = PlacementSession | WireSession | null;
+export interface DragSession {
+  type: "drag";
+  symbolIds: string[];
+  anchorSymbolId: string;
+  startPointer: Point;
+  lastSnappedDelta: Point;
+  initialPositions: Record<string, Point>;
+}
+
+export type InteractionSession =
+  | PlacementSession
+  | WireSession
+  | DragSession
+  | null;

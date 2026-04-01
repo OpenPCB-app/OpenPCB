@@ -15,6 +15,7 @@ import { ModuleLoader } from "./modules/ModuleLoader";
 import path from "path";
 import { initializeDatabase, DatabaseAccess } from "./db";
 import { runMigrationsIfNeeded } from "./db/migrate";
+import { ComponentFamilyService } from "./domain/services/component-family-service";
 import { initializeKernel } from "./kernel/init";
 import { setupDIContainer } from "./core/di/setup";
 import { TOKENS } from "./core/di/container";
@@ -131,7 +132,9 @@ const ALLOW_UNAUTHENTICATED_API =
 const STARTUP_CONTRACT_VERSION = resolveStartupContractVersion();
 const STARTUP_LICENSE_STATE = resolveStartupLicenseState();
 const STARTUP_LICENSE_CODE = resolveStartupLicenseCode();
-const HAS_WEB_DIST = await Bun.file(path.join(WEB_DIST_DIR, "index.html")).exists();
+const HAS_WEB_DIST = await Bun.file(
+  path.join(WEB_DIST_DIR, "index.html"),
+).exists();
 
 function resolveStaticAssetPath(pathname: string): string | null {
   const requestedPath = pathname === "/" ? "/index.html" : pathname;
@@ -155,6 +158,10 @@ const db = initializeDatabase({
 
 //Run migrations if needed
 await runMigrationsIfNeeded();
+
+const componentFamilyService = new ComponentFamilyService(db.componentFamilies);
+await componentFamilyService.seedBuiltIns();
+
 console.log("[Database] Database ready");
 
 // =============================================================================

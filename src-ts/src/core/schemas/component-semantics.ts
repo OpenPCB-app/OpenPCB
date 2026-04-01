@@ -95,7 +95,10 @@ export interface SymbolData {
   unitCount: number; // number of units for multi-unit symbols (default: 1)
   bodyGraphics: SymbolGraphic[]; // converted graphics primitives
   rawKicadSource: string | null; // preserve original for round-trip export
+  symbolTemplate?: SymbolTemplate | null;
 }
+
+export type SymbolTemplate = string;
 
 export interface PinDefinition {
   name: string;

@@ -50,6 +50,7 @@ import { ContentEditSnapshotRepository } from "./repositories/content-edit-snaps
 import { ContentEditLockRepository } from "./repositories/content-edit-lock";
 import { McpServerRepository } from "./repositories/mcp-server";
 import { ComponentFamilyRepository } from "./repositories/component-family-repository";
+import { ComponentRepository } from "./repositories/component-repository";
 import { ComponentDraftRepository } from "./repositories/component-draft-repository";
 import { ComponentImportJobRepository } from "./repositories/component-import-job-repository";
 import { PresetCatalogRepository } from "./repositories/preset-catalog-repository";
@@ -135,6 +136,7 @@ export class DatabaseAccess {
   private _contentEditLocks?: ContentEditLockRepository;
   private _mcpServers?: McpServerRepository;
   private _componentFamilies?: ComponentFamilyRepository;
+  private _components?: ComponentRepository;
   private _componentDrafts?: ComponentDraftRepository;
   private _presetCatalogs?: PresetCatalogRepository;
   private _componentProvenance?: ComponentProvenanceRepository;
@@ -607,6 +609,13 @@ export class DatabaseAccess {
       );
     }
     return this._componentFamilies;
+  }
+
+  get components(): ComponentRepository {
+    if (!this._components) {
+      this._components = new ComponentRepository(this.db, this.queryLogger);
+    }
+    return this._components;
   }
 
   get componentDrafts(): ComponentDraftRepository {

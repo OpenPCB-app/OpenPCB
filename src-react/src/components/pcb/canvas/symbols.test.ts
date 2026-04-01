@@ -52,11 +52,18 @@ function createContextRecorder() {
     },
     translate(x: number, y: number) {
       const state = getCurrentState();
-      state.transform = { ...state.transform, x: state.transform.x + x, y: state.transform.y + y };
+      state.transform = {
+        ...state.transform,
+        x: state.transform.x + x,
+        y: state.transform.y + y,
+      };
     },
     rotate(rotation: number) {
       const state = getCurrentState();
-      state.transform = { ...state.transform, rotation: state.transform.rotation + rotation };
+      state.transform = {
+        ...state.transform,
+        rotation: state.transform.rotation + rotation,
+      };
     },
     scale(scaleX: number, scaleY: number) {
       const state = getCurrentState();
@@ -152,6 +159,7 @@ const symbol: SymbolEntity = {
   id: "symbol-1",
   entityType: "symbol",
   symbolKind: "resistor",
+  symbolTemplate: "resistor",
   reference: "R1",
   value: "10k",
   position: { x: 1_270_000, y: 2_540_000 },
@@ -196,7 +204,12 @@ describe("symbol helpers", () => {
     expect(arcs).toHaveLength(2);
     expect(arcs[0]).toMatchObject({ x: 0, y: 0 });
     expect(arcs[1]).toMatchObject({ x: 1_270_000, y: 0 });
-    expect(textWrites.map((entry) => entry.text)).toEqual(["R1", "10k", "1", "2"]);
+    expect(textWrites.map((entry) => entry.text)).toEqual([
+      "R1",
+      "10k",
+      "1",
+      "2",
+    ]);
   });
 
   it("transforms mirrored points and normalizes unsupported rotations", () => {
@@ -224,13 +237,20 @@ describe("symbol helpers", () => {
   });
 
   it("uses preview opacity for ghost symbols", () => {
-    const { ctx, getTransform, globalAlphaWrites, textWrites } = createContextRecorder();
+    const { ctx, getTransform, globalAlphaWrites, textWrites } =
+      createContextRecorder();
 
     renderSymbol(ctx, symbol, viewport, { preview: true });
 
     expect(globalAlphaWrites).toContain(0.75);
     expect(ctx.globalAlpha).toBe(1);
-    expect(getTransform()).toEqual({ x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 });
+    expect(getTransform()).toEqual({
+      x: 0,
+      y: 0,
+      rotation: 0,
+      scaleX: 1,
+      scaleY: 1,
+    });
     expect(textWrites).toEqual([]);
   });
 
@@ -272,6 +292,7 @@ describe("symbol helpers", () => {
       {
         ...symbol,
         symbolKind: "gnd",
+        symbolTemplate: "connector",
         reference: "GND",
         value: "GND",
         rotation: 0,

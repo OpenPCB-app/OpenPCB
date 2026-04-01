@@ -41,11 +41,28 @@ export function collapseRedundantWirePoints(points: Point[]): Point[] {
 }
 
 export function buildOrthogonalWirePath(source: Point, target: Point): Point[] {
-  return collapseRedundantWirePoints([
-    source,
-    { x: target.x, y: source.y },
-    target,
-  ]);
+  return buildOrthogonalWirePathWithWaypoints(source, [], target);
+}
+
+export function buildOrthogonalWirePathWithWaypoints(
+  source: Point,
+  waypoints: Point[],
+  target: Point,
+): Point[] {
+  const points: Point[] = [source];
+
+  for (const point of [...waypoints, target]) {
+    const lastPoint = points[points.length - 1];
+
+    if (!lastPoint) {
+      continue;
+    }
+
+    points.push({ x: point.x, y: lastPoint.y });
+    points.push(point);
+  }
+
+  return collapseRedundantWirePoints(points);
 }
 
 export function getWireLength(points: Point[]): number {

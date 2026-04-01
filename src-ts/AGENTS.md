@@ -2,6 +2,29 @@
 
 Bun HTTP/WebSocket kernel implementing DDD architecture. Handles AI chat streaming, task orchestration, database persistence.
 
+## Development Mode Guidelines
+
+**This is active development - v0.1.0. No backward compatibility required.**
+
+### Refactoring Rules
+
+- **Delete old code immediately** when refactoring - do not keep legacy compatibility layers
+- **No deprecation periods** - breaking changes are acceptable
+- **Remove unused exports** aggressively
+- **Update all callers** when changing APIs - no overloads for backward compat
+- **Clean imports** - remove dead imports immediately
+
+### Code Removal Checklist
+
+When replacing functionality:
+
+1. Implement new version
+2. Migrate all usages
+3. Delete old implementation
+4. Delete old tests
+5. Update imports/exports
+6. Run full test suite
+
 ## Structure
 
 ```
@@ -33,21 +56,22 @@ src-ts/
 
 ## Where to Look
 
-| Task | File | Notes |
-|------|------|-------|
-| Task state machine | `domain/services/task-system.ts` | 9 states, dependency graph |
-| Task execution | `domain/services/queue/task-executor.ts` | Provider streaming, error classification |
-| Queue management | `domain/services/queue/task-queue-manager.ts` | Per-provider priority queues |
-| Orchestration | `domain/services/queue/task-orchestrator.ts` | Wire all components, chat lock |
-| SSE streaming | `domain/services/stream-service.ts` | Event bridge to frontend |
-| Chat context | `domain/services/chat-manager.ts` | Load messages, chat state |
-| OpenAI provider | `infrastructure/ai-providers/engines/openai.ts` | Vision, tools, reasoning |
-| Ollama provider | `infrastructure/ai-providers/engines/ollama.ts` | Local models, tag parsing |
-| Module loading | `modules/ModuleLoader.ts` | Discover, register, lifecycle |
+| Task               | File                                            | Notes                                    |
+| ------------------ | ----------------------------------------------- | ---------------------------------------- |
+| Task state machine | `domain/services/task-system.ts`                | 9 states, dependency graph               |
+| Task execution     | `domain/services/queue/task-executor.ts`        | Provider streaming, error classification |
+| Queue management   | `domain/services/queue/task-queue-manager.ts`   | Per-provider priority queues             |
+| Orchestration      | `domain/services/queue/task-orchestrator.ts`    | Wire all components, chat lock           |
+| SSE streaming      | `domain/services/stream-service.ts`             | Event bridge to frontend                 |
+| Chat context       | `domain/services/chat-manager.ts`               | Load messages, chat state                |
+| OpenAI provider    | `infrastructure/ai-providers/engines/openai.ts` | Vision, tools, reasoning                 |
+| Ollama provider    | `infrastructure/ai-providers/engines/ollama.ts` | Local models, tag parsing                |
+| Module loading     | `modules/ModuleLoader.ts`                       | Discover, register, lifecycle            |
 
 ## Task System Architecture
 
 **Three layers:**
+
 1. **Kernel** (`kernel/tasks/`): TaskStore (cache + SQLite), TaskManager (lifecycle)
 2. **Domain** (`domain/services/`): TaskSystem (state machine, dependencies)
 3. **Execution** (`domain/services/queue/`): Orchestrator, Executor, QueueManager
@@ -55,6 +79,7 @@ src-ts/
 **Task states:** pending → queued → waiting → running → streaming → completed/failed/cancelled
 
 **Key patterns:**
+
 - Per-chat serialization via ChatTaskLock
 - LoadTask dependency for model loading
 - Priority aging prevents starvation
@@ -69,6 +94,7 @@ bun test src/domain         # Specific directory
 ```
 
 **Test locations:**
+
 - Unit tests: colocated as `*.test.ts`
 - Integration: `test/` and `tests/integration/`
 - Preload: `test/setup.ts` (sets NODE_ENV, APP_DATA_DIR)
@@ -82,12 +108,13 @@ bun test src/domain         # Specific directory
 
 ## Anti-Patterns
 
-| Forbidden | Why |
-|-----------|-----|
-| Direct provider calls from queue | Keep queue provider-agnostic |
-| Skip chat context loading | Spec violation: MessageTask needs full history |
-| Use `as any` for tool calls | Type safety—use discriminated unions |
-| Empty catch blocks | Swallows errors silently |
+| Forbidden                        | Why                                            |
+| -------------------------------- | ---------------------------------------------- |
+| Direct provider calls from queue | Keep queue provider-agnostic                   |
+| Skip chat context loading        | Spec violation: MessageTask needs full history |
+| Use `as any` for tool calls      | Type safety—use discriminated unions           |
+| Empty catch blocks               | Swallows errors silently                       |
+| Keep legacy code during refactor | Delete old code immediately                    |
 
 ## Tool System
 

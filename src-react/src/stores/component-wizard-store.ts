@@ -8,6 +8,14 @@
 import { create } from "zustand";
 import type { SymbolDraft } from "@/components/symbol-editor/types";
 import type { FootprintDraft } from "@/components/footprint-editor/types";
+import type {
+  Component as ComponentEntity,
+  ComponentReference,
+  ComponentVariant,
+} from "@shared/types/component-library.types";
+
+export type Component = ComponentEntity;
+export type { ComponentVariant, ComponentReference };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,10 +35,6 @@ export interface ValidationMessage {
   severity: "error" | "warning";
 }
 
-/**
- * Frontend wizard payload - durable editor-native structure.
- * Transformed to backend ComponentDraftPayload before persistence/publish.
- */
 export interface WizardDraftPayload {
   // Core fields
   displayLabel: string;
@@ -61,9 +65,12 @@ export interface WizardDraftPayload {
   
   // Package variant (for full publish)
   defaultPackageVariantId: string | null;
+  variants?: ComponentVariant[];
+  componentReference?: ComponentReference | null;
+  componentId?: Component["id"] | null;
 }
 
-export interface ComponentDraft {
+export interface ComponentWorkspaceRecord {
   id: string;
   payload: WizardDraftPayload;
   familyId?: string | null;

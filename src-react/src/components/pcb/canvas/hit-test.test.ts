@@ -14,6 +14,7 @@ const symbols: SymbolEntity[] = [
     id: "symbol-1",
     entityType: "symbol",
     symbolKind: "resistor",
+    symbolTemplate: "resistor",
     reference: "R1",
     value: "10k",
     position: { x: 0, y: 0 },
@@ -32,7 +33,9 @@ describe("hitTestScreen", () => {
     const cache = createHitTestCache(symbols);
     const connector = schematicToScreen(0, 0, viewport);
 
-    expect(hitTestScreen(connector.x + 3, connector.y + 2, symbols, viewport, cache)).toEqual({
+    expect(
+      hitTestScreen(connector.x + 3, connector.y + 2, symbols, viewport, cache),
+    ).toEqual({
       kind: "connector",
       symbolId: "symbol-1",
       pinId: "pin-1",
@@ -43,7 +46,9 @@ describe("hitTestScreen", () => {
     const cache = createHitTestCache(symbols);
     const bodyPoint = schematicToScreen(635_000, 0, viewport);
 
-    expect(hitTestScreen(bodyPoint.x, bodyPoint.y, symbols, viewport, cache)).toEqual({
+    expect(
+      hitTestScreen(bodyPoint.x, bodyPoint.y, symbols, viewport, cache),
+    ).toEqual({
       kind: "body",
       symbolId: "symbol-1",
     });
@@ -72,7 +77,13 @@ describe("hitTestScreen", () => {
     const rotatedConnector = schematicToScreen(2_540_000, 0, viewport);
 
     expect(
-      hitTestScreen(rotatedConnector.x, rotatedConnector.y, [rotatedSymbol], viewport, cache),
+      hitTestScreen(
+        rotatedConnector.x,
+        rotatedConnector.y,
+        [rotatedSymbol],
+        viewport,
+        cache,
+      ),
     ).toEqual({
       kind: "connector",
       symbolId: "symbol-2",
@@ -131,7 +142,13 @@ describe("hitTestScreen", () => {
     const bodyPoint = schematicToScreen(635_000, 0, viewport);
 
     expect(
-      hitTestScreen(bodyPoint.x, bodyPoint.y + 11, overlappingSymbols, viewport, cache),
+      hitTestScreen(
+        bodyPoint.x,
+        bodyPoint.y + 11,
+        overlappingSymbols,
+        viewport,
+        cache,
+      ),
     ).toEqual({
       kind: "body",
       symbolId: "symbol-2",

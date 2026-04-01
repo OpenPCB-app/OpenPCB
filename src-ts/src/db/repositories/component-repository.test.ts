@@ -1,0 +1,259 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import * as schema from "../schema";
+import { QueryLogger } from "../query-logger";
+import { DbConflictError } from "../errors";
+import { ComponentRepository } from "./component-repository";
+
+function createTestDb() {
+  const sqlite = new Database(":memory:");
+  sqlite.exec("PRAGMA foreign_keys = ON;");
+  const db = drizzle(sqlite, { schema });
+
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS components (
+      id TEXT PRIMARY KEY,
+      canonical_key TEXT NOT NULL,
+      display_label TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      scope TEXT NOT NULL DEFAULT 'workspace',
+      symbol_data TEXT NOT NULL,
+      default_variant_id TEXT,
+      category_path TEXT,
+      tags TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_components_scope_canonical_key
+      ON components(scope, canonical_key);
+
+    CREATE TABLE IF NOT EXISTS component_variants (
+      id TEXT PRIMARY KEY,
+      component_id TEXT NOT NULL REFERENCES components(id) ON DELETE CASCADE,
+      canonical_code TEXT NOT NULL,
+      human_label TEXT NOT NULL,
+      imperial_alias TEXT,
+      metric_alias TEXT,
+      mount_type TEXT NOT NULL,
+      dimensions TEXT,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      pin_remap_table TEXT,
+      footprint_payload TEXT,
+      default_footprint_id TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_component_variants_component_code
+      ON component_variants(component_id, canonical_code);
+
+    CREATE TABLE IF NOT EXISTS component_usage (
+      id TEXT PRIMARY KEY,
+      component_id TEXT NOT NULL REFERENCES components(id) ON DELETE CASCADE,
+      design_id TEXT NOT NULL,
+      variant_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_component_usage_design_component_variant
+      ON component_usage(design_id, component_id, variant_id);
+  `);
+
+  return { db, sqlite };
+}
+
+function variant(code: string, label: string, isDefault = false) {
+  return {
+    canonicalCode: code,
+    humanLabel: label,
+    imperialAlias: null,
+    metricAlias: null,
+    mountType: "smd" as const,
+    dimensions: { lengthMm: 1.6, widthMm: 0.8, heightMm: null },
+    isDefault,
+    pinRemapTable: null,
+    footprintPayload: { name: `${code}-footprint` },
+    defaultFootprintId: null,
+  };
+}
+
+describe("ComponentRepository", () => {
+  let sqlite: Database;
+  let repo: ComponentRepository;
+
+  beforeEach(() => {
+    const testDb = createTestDb();
+    sqlite = testDb.sqlite;
+    repo = new ComponentRepository(
+      testDb.db,
+      new QueryLogger({ enableLogging: false }),
+    );
+  });
+
+  afterEach(() => {
+    sqlite.close();
+  });
+
+  test("createComponent + getComponent persist canonical data and variants", async () => {
+    const created = await repo.createComponent({
+      canonicalKey: "resistor",
+      displayLabel: "Resistor",
+      description: "Generic resistor",
+      symbolData: { referencePrefix: "R", pinDefinitions: [], properties: {} },
+      categoryPath: "passives/resistors",
+      tags: ["passive", "resistor"],
+      variants: [variant("0603", "0603"), variant("0805", "0805", true)],
+    });
+
+    expect(created.component.scope).toBe("workspace");
+    expect(created.variants.length).toBe(2);
+
+    const defaultVariant = created.variants.find((item) => item.isDefault);
+    expect(defaultVariant).toBeTruthy();
+    expect(created.component.defaultVariantId).toBe(defaultVariant!.id);
+
+    const loaded = await repo.getComponent(created.component.id);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.component.canonicalKey).toBe("resistor");
+    expect(loaded!.variants.length).toBe(2);
+  });
+
+  test("updateComponent + setDefaultVariant update default selection", async () => {
+    const created = await repo.createComponent({
+      canonicalKey: "capacitor",
+      displayLabel: "Capacitor",
+      symbolData: { referencePrefix: "C", pinDefinitions: [], properties: {} },
+      variants: [variant("0402", "0402", true), variant("0603", "0603")],
+    });
+
+    const nextDefault = created.variants.find((item) => item.canonicalCode === "0603")!;
+
+    const updated = await repo.updateComponent(created.component.id, {
+      displayLabel: "Ceramic Capacitor",
+      defaultVariantId: nextDefault.id,
+    });
+
+    expect(updated.component.displayLabel).toBe("Ceramic Capacitor");
+    expect(updated.component.defaultVariantId).toBe(nextDefault.id);
+    expect(updated.variants.find((item) => item.id === nextDefault.id)!.isDefault).toBe(
+      true,
+    );
+  });
+
+  test("listComponents supports search and mountType filters", async () => {
+    await repo.createComponent({
+      canonicalKey: "res-1k",
+      displayLabel: "Resistor 1k",
+      symbolData: { referencePrefix: "R", pinDefinitions: [], properties: {} },
+      variants: [variant("0603", "0603", true)],
+    });
+
+    await repo.createComponent({
+      canonicalKey: "hdr-2x1",
+      displayLabel: "Header 2x1",
+      symbolData: { referencePrefix: "J", pinDefinitions: [], properties: {} },
+      variants: [
+        {
+          ...variant("TH-2", "TH-2", true),
+          mountType: "through_hole" as const,
+        },
+      ],
+    });
+
+    const bySearch = await repo.listComponents({ search: "Resistor" });
+    expect(bySearch.length).toBe(1);
+    expect(bySearch[0]!.component.canonicalKey).toBe("res-1k");
+
+    const byMountType = await repo.listComponents({ mountType: "through_hole" });
+    expect(byMountType.length).toBe(1);
+    expect(byMountType[0]!.component.canonicalKey).toBe("hdr-2x1");
+  });
+
+  test("variant repository supports add/update/remove/setDefaultFootprint", async () => {
+    const created = await repo.createComponent({
+      canonicalKey: "inductor",
+      displayLabel: "Inductor",
+      symbolData: { referencePrefix: "L", pinDefinitions: [], properties: {} },
+      variants: [variant("0805", "0805", true)],
+    });
+
+    const newVariant = await repo.variants.addVariant(
+      created.component.id,
+      variant("1206", "1206", false),
+    );
+
+    const withFootprint = await repo.variants.setDefaultFootprint(
+      newVariant.id,
+      "fp-1206-default",
+    );
+    expect(withFootprint.defaultFootprintId).toBe("fp-1206-default");
+
+    const updatedVariant = await repo.variants.updateVariant(newVariant.id, {
+      humanLabel: "1206 metric",
+      isDefault: true,
+    });
+    expect(updatedVariant.humanLabel).toBe("1206 metric");
+    expect(updatedVariant.isDefault).toBe(true);
+
+    const refreshed = await repo.getComponent(created.component.id);
+    expect(refreshed!.component.defaultVariantId).toBe(newVariant.id);
+
+    const oldDefault = refreshed!.variants.find((item) => item.canonicalCode === "0805")!;
+    await repo.variants.removeVariant(oldDefault.id);
+
+    const afterRemove = await repo.getComponent(created.component.id);
+    expect(afterRemove!.variants.length).toBe(1);
+
+    await expect(repo.variants.removeVariant(afterRemove!.variants[0]!.id)).rejects.toThrow(
+      "Cannot remove the only variant",
+    );
+  });
+
+  test("recordUsage + getUsageCount + deleteComponent blocking", async () => {
+    const created = await repo.createComponent({
+      canonicalKey: "ferrite-bead",
+      displayLabel: "Ferrite Bead",
+      symbolData: { referencePrefix: "FB", pinDefinitions: [], properties: {} },
+      variants: [variant("0603", "0603", true)],
+    });
+
+    const defaultVariantId = created.component.defaultVariantId!;
+
+    await repo.recordUsage({
+      componentId: created.component.id,
+      designId: "design-a",
+      variantId: defaultVariantId,
+    });
+
+    await repo.recordUsage({
+      componentId: created.component.id,
+      designId: "design-a",
+      variantId: defaultVariantId,
+    });
+
+    await repo.recordUsage({
+      componentId: created.component.id,
+      designId: "design-b",
+      variantId: defaultVariantId,
+    });
+
+    expect(await repo.getUsageCount(created.component.id)).toBe(2);
+
+    try {
+      await repo.deleteComponent(created.component.id);
+      throw new Error("delete should have failed");
+    } catch (error) {
+      expect(error).toBeInstanceOf(DbConflictError);
+      expect((error as Error).message).toContain("in use by 2 design(s)");
+    }
+
+    expect(await repo.getComponent(created.component.id)).not.toBeNull();
+
+    await repo.removeUsage({ componentId: created.component.id, designId: "design-a" });
+    await repo.removeUsage({ componentId: created.component.id, designId: "design-b" });
+    expect(await repo.getUsageCount(created.component.id)).toBe(0);
+
+    await repo.deleteComponent(created.component.id);
+    expect(await repo.getComponent(created.component.id)).toBeNull();
+  });
+});

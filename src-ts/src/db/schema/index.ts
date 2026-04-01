@@ -51,6 +51,8 @@ export * from "./content-edit-snapshot";
 export * from "./content-edit-lock";
 
 // Component Library
+export * from "./component";
+export * from "./component-variant";
 export * from "./component-family";
 export * from "./component-revision";
 export * from "./package-variant";

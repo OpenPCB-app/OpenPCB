@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WireEntity } from "../types";
 import {
   buildOrthogonalWirePath,
+  buildOrthogonalWirePathWithWaypoints,
   collapseRedundantWirePoints,
   deriveWireJunctions,
   getWireLength,
@@ -19,6 +20,81 @@ describe("wire routing helpers", () => {
       { x: 1_270_000, y: 0 },
       { x: 1_270_000, y: 2_540_000 },
     ]);
+  });
+
+  it("builds orthogonal paths with no waypoints", () => {
+    expect(
+      buildOrthogonalWirePathWithWaypoints(
+        { x: 0, y: 0 },
+        [],
+        { x: 1_270_000, y: 2_540_000 },
+      ),
+    ).toEqual([
+      { x: 0, y: 0 },
+      { x: 1_270_000, y: 0 },
+      { x: 1_270_000, y: 2_540_000 },
+    ]);
+  });
+
+  it("builds orthogonal paths with an empty waypoints array", () => {
+    expect(
+      buildOrthogonalWirePathWithWaypoints(
+        { x: 0, y: 0 },
+        [],
+        { x: 0, y: 2_540_000 },
+      ),
+    ).toEqual([
+      { x: 0, y: 0 },
+      { x: 0, y: 2_540_000 },
+    ]);
+  });
+
+  it("builds orthogonal paths through a single waypoint", () => {
+    expect(
+      buildOrthogonalWirePathWithWaypoints(
+        { x: 0, y: 0 },
+        [{ x: 1_270_000, y: 1_270_000 }],
+        { x: 2_540_000, y: 0 },
+      ),
+    ).toEqual([
+      { x: 0, y: 0 },
+      { x: 1_270_000, y: 0 },
+      { x: 1_270_000, y: 1_270_000 },
+      { x: 2_540_000, y: 1_270_000 },
+      { x: 2_540_000, y: 0 },
+    ]);
+  });
+
+  it("builds orthogonal paths through multiple waypoints", () => {
+    expect(
+      buildOrthogonalWirePathWithWaypoints(
+        { x: 0, y: 0 },
+        [
+          { x: 1_270_000, y: 1_270_000 },
+          { x: 2_540_000, y: 1_270_000 },
+        ],
+        { x: 3_810_000, y: 0 },
+      ),
+    ).toEqual([
+      { x: 0, y: 0 },
+      { x: 1_270_000, y: 0 },
+      { x: 1_270_000, y: 1_270_000 },
+      { x: 3_810_000, y: 1_270_000 },
+      { x: 3_810_000, y: 0 },
+    ]);
+  });
+
+  it("collapses redundant collinear waypoint segments", () => {
+    expect(
+      buildOrthogonalWirePathWithWaypoints(
+        { x: 0, y: 0 },
+        [
+          { x: 1_270_000, y: 0 },
+          { x: 2_540_000, y: 0 },
+        ],
+        { x: 3_810_000, y: 0 },
+      ),
+    ).toEqual([{ x: 0, y: 0 }, { x: 3_810_000, y: 0 }]);
   });
 
   it("collapses redundant points for aligned routes", () => {

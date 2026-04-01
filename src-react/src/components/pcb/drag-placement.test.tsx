@@ -140,6 +140,7 @@ function resetStore() {
       gridSize: 1_270_000,
       showGrid: true,
       placementRotation: 0,
+      gridPresetId: "small",
     },
     session: null,
   }));
@@ -176,10 +177,12 @@ describe("palette drag placement", () => {
       vi.fn(() => 0),
     );
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
-      (((contextId: string) =>
-        contextId === "2d" ? createMockContext() : null) as unknown) as HTMLCanvasElement["getContext"],
-    );
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(((
+      contextId: string,
+    ) =>
+      contextId === "2d"
+        ? createMockContext()
+        : null) as unknown as HTMLCanvasElement["getContext"]);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
       () =>
         ({

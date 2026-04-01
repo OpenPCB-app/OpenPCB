@@ -2,6 +2,31 @@
 
 Tauri 2 app lifecycle, Bun sidecar spawning, secrets vault, bridge IPC. Window management and native integration.
 
+## Development Mode Guidelines
+
+**This is active development - v0.1.0. No backward compatibility required.**
+
+**Browser-first development is mandatory.** Always develop against browser target (`npm run dev`), not Tauri desktop (`npm run dev:desktop`).
+
+### Refactoring Rules
+
+- **Delete old code immediately** when refactoring - do not keep legacy compatibility layers
+- **No deprecation periods** - breaking changes are acceptable
+- **Remove unused exports** aggressively
+- **Update all callers** when changing APIs - no overloads for backward compat
+- **Clean imports** - remove dead imports immediately
+
+### Code Removal Checklist
+
+When replacing functionality:
+
+1. Implement new version
+2. Migrate all usages
+3. Delete old implementation
+4. Delete old tests
+5. Update imports/exports
+6. Run full test suite
+
 ## Structure
 
 ```
@@ -26,17 +51,18 @@ src-tauri/
 
 ## Where to Look
 
-| Task | File | Notes |
-|------|------|-------|
-| App initialization | `lib.rs` | Plugins, setup handler, async spawn |
-| Bun sidecar spawn | `sidecar/bun_ts/bun_runtime.rs` | Port discovery, health checks |
-| Bridge commands | `crates/bridge/src/lib.rs` | Namespace routing, error mapping |
-| Secrets storage | `secrets.rs` | Stronghold vault for API keys |
-| Type generation | `lib.rs` | Specta export in debug builds |
+| Task               | File                            | Notes                               |
+| ------------------ | ------------------------------- | ----------------------------------- |
+| App initialization | `lib.rs`                        | Plugins, setup handler, async spawn |
+| Bun sidecar spawn  | `sidecar/bun_ts/bun_runtime.rs` | Port discovery, health checks       |
+| Bridge commands    | `crates/bridge/src/lib.rs`      | Namespace routing, error mapping    |
+| Secrets storage    | `secrets.rs`                    | Stronghold vault for API keys       |
+| Type generation    | `lib.rs`                        | Specta export in debug builds       |
 
 ## Sidecar Communication
 
 **Startup sequence:**
+
 1. Tauri spawns Bun: `bun --watch src-ts/src/main.ts` (dev) or `bun-backend` binary (prod)
 2. Bun logs JSON to stdout: `{"serverPort": <PORT>}`
 3. Rust reads stdout, extracts port
@@ -66,12 +92,14 @@ BridgeRequest { namespace: "space.hello", action: "greet", payload }
 
 ## Anti-Patterns
 
-| Forbidden | Why |
-|-----------|-----|
-| Remove main.rs pragma | Breaks Windows console hiding |
-| Skip stronghold for secrets | Security: no env vars for API keys |
-| Log API keys | Security violation |
-| Hardcode port | Dynamic port assignment required |
+| Forbidden                         | Why                                     |
+| --------------------------------- | --------------------------------------- |
+| Remove main.rs pragma             | Breaks Windows console hiding           |
+| Skip stronghold for secrets       | Security: no env vars for API keys      |
+| Log API keys                      | Security violation                      |
+| Hardcode port                     | Dynamic port assignment required        |
+| Use Tauri desktop for development | Use browser-based `npm run dev` instead |
+| Keep legacy code during refactor  | Delete old code immediately             |
 
 ## Build
 

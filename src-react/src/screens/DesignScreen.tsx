@@ -100,7 +100,7 @@ export function DesignScreen() {
     }
 
     let cancelled = false;
-    const requestKey = `workspace:${activeWorkspaceId}`;
+    const requestKey = `workspace:${activeWorkspaceId}:retry:${draftBootstrapAttempt}`;
     const existingRequest = autoDraftRequests.get(requestKey);
     const request =
       existingRequest ??
@@ -188,20 +188,36 @@ export function DesignScreen() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
+      if (event.key === "Escape") {
+        if (popoverEntityId) {
+          if (isTextEntryFocused(globalThis.document.activeElement)) {
+            return;
+          }
+
+          setPopoverTarget(null);
+          return;
+        }
+
+        controller.cancelSession();
         return;
       }
 
-      if (popoverEntityId) {
+      if (event.key === "Delete" || event.key === "Backspace") {
         if (isTextEntryFocused(globalThis.document.activeElement)) {
           return;
         }
 
-        setPopoverTarget(null);
-        return;
-      }
+        const store = useSchematicStore.getState();
+        const selectedIds = store.chrome.selectedEntityIds;
 
-      controller.cancelSession();
+        if (selectedIds.size > 0) {
+          if (event.key === "Backspace") {
+            event.preventDefault();
+          }
+
+          store.deleteSelectedEntities();
+        }
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -236,6 +252,7 @@ export function DesignScreen() {
                       Components
                     </span>
                     <button
+                      type="button"
                       className="h-5 w-5 flex items-center justify-center text-text-tertiary hover:text-text-secondary"
                       onClick={() => setLeftCollapsed(true)}
                     >
@@ -274,8 +291,9 @@ export function DesignScreen() {
           {/* Canvas area */}
           <ResizablePanel defaultSize={leftCollapsed ? 100 : 85}>
             <div className="relative h-full">
-              {leftCollapsed && (
+                {leftCollapsed && (
                 <button
+                  type="button"
                   className="absolute left-1 top-1 z-10 h-6 w-6 flex items-center justify-center rounded text-text-tertiary hover:bg-bg-input"
                   onClick={() => setLeftCollapsed(false)}
                 >
@@ -326,6 +344,7 @@ export function DesignScreen() {
                   )}
                   {isCreatingDraft ? null : draftBootstrapError && !project ? (
                     <button
+                      type="button"
                       className="rounded-md border border-border-default px-4 py-2 text-sm text-text-primary hover:bg-bg-input"
                       onClick={() =>
                         setDraftBootstrapAttempt((value) => value + 1)
@@ -335,6 +354,7 @@ export function DesignScreen() {
                     </button>
                   ) : (
                     <button
+                      type="button"
                       className="rounded-md border border-border-default px-4 py-2 text-sm text-text-primary hover:bg-bg-input"
                       onClick={navigateToHome}
                     >
@@ -385,6 +405,7 @@ export function DesignScreen() {
                       AI Copilot
                     </span>
                     <button
+                      type="button"
                       className="text-text-tertiary hover:text-text-secondary text-xs"
                       onClick={() => setAiOpen(false)}
                     >

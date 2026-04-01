@@ -1,9 +1,8 @@
-import { X, Package, Ruler, Box, FileText, ExternalLink } from "lucide-react";
+import { X, Package, Ruler, FileText } from "lucide-react";
 import * as Accordion from "@radix-ui/react-accordion";
 import type {
   ComponentFamilyType,
   PackageVariantType,
-  ManufacturerOfferingType,
 } from "@/../../src-ts/src/core/schemas/component-library.schema";
 
 interface ComponentDetailPanelProps {
@@ -39,6 +38,7 @@ export function ComponentDetailPanel({
           </div>
         </div>
         <button
+          type="button"
           onClick={onClose}
           className="rounded-md p-1 text-text-tertiary hover:bg-bg-elevated hover:text-text-secondary"
         >
@@ -89,6 +89,7 @@ export function ComponentDetailPanel({
                     {sizeKey} ({variants.length})
                   </span>
                   <svg
+                    aria-hidden="true"
                     className="h-4 w-4 transition-transform duration-200 [[data-state=open]>&]:rotate-180"
                     fill="none"
                     stroke="currentColor"
@@ -120,25 +121,6 @@ export function ComponentDetailPanel({
           </Accordion.Root>
         </section>
 
-        {/* MPN Table */}
-        {component.packageVariants?.some((v) => v.offerings?.length > 0) && (
-          <section className="p-4">
-            <h3 className="mb-3 text-sm font-medium text-text-primary">
-              Manufacturer Part Numbers
-            </h3>
-            <div className="space-y-2">
-              {component.packageVariants?.map((variant) =>
-                variant.offerings?.map((offering) => (
-                  <OfferingCard
-                    key={offering.id}
-                    offering={offering}
-                    variantLabel={variant.humanLabel}
-                  />
-                )),
-              )}
-            </div>
-          </section>
-        )}
       </div>
     </div>
   );
@@ -206,48 +188,6 @@ function VariantCard({
           ))}
         </div>
       )}
-
-      {/* 3D Model Info */}
-      {variant.footprintOptions.some((fp) => fp.model3dOptions.length > 0) && (
-        <div className="mt-2 border-t border-border-default pt-2">
-          <p className="flex items-center gap-1 text-xs text-text-secondary">
-            <Box className="h-3 w-3" />
-            3D model available
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function OfferingCard({
-  offering,
-  variantLabel,
-}: {
-  offering: ManufacturerOfferingType;
-  variantLabel: string;
-}) {
-  return (
-    <div className="rounded-md border border-border-default bg-bg-elevated p-2.5">
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <p className="text-sm font-medium font-mono text-text-primary">
-            {offering.mpn}
-          </p>
-          <p className="text-xs text-text-muted">{offering.manufacturer}</p>
-          <p className="mt-0.5 text-xs text-text-tertiary">{variantLabel}</p>
-        </div>
-        {offering.datasheetUrl && (
-          <a
-            href={offering.datasheetUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-brand hover:text-brand-dark"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </a>
-        )}
-      </div>
     </div>
   );
 }
