@@ -70,6 +70,7 @@ function FamilyItem({
         event.dataTransfer.setData(PALETTE_SYMBOL_KIND_MIME, family.id);
         event.dataTransfer.setData("text/plain", family.id);
       }}
+      onClick={onDragStart}
       onDragEnd={onDragEnd}
     >
       <GripVertical className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -111,6 +112,7 @@ function LegacyItem({
         event.dataTransfer.setData(PALETTE_SYMBOL_KIND_MIME, kind);
         event.dataTransfer.setData("text/plain", kind);
       }}
+      onClick={onDragStart}
       onDragEnd={onDragEnd}
     >
       <GripVertical className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -132,6 +134,8 @@ const LEGACY_SYMBOLS: Array<{
 }> = [
   { kind: "gnd", label: "Ground", badge: "GND", category: "power" },
   { kind: "vcc", label: "VCC", badge: "VCC", category: "power" },
+  { kind: "resistor", label: "Resistor", badge: "R", category: "passive" },
+  { kind: "capacitor", label: "Capacitor", badge: "C", category: "passive" },
 ];
 
 function EmptyState() {

@@ -1,0 +1,69 @@
+- generic:
+  - generic:
+    - generic:
+      - complementary:
+        - generic:
+          - button:
+            - img
+          - navigation:
+            - button:
+              - img
+              - generic: Home
+            - button:
+              - img
+              - generic: Design
+            - button:
+              - img
+              - generic: Library
+            - button:
+              - img
+              - generic: Chat
+            - button:
+              - img
+              - generic: Notes
+        - generic:
+          - button:
+            - img
+            - generic: Settings
+          - generic: U
+      - main:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - heading [level=1]: Home
+                  - paragraph: Your hardware workspace
+                  - generic:
+                    - heading [level=2]: Quick actions
+                    - generic:
+                      - button [disabled]:
+                        - img
+                        - text: New design
+                      - button: New component
+                      - button: New from template
+                      - button: Import KiCad
+                  - generic:
+                    - generic:
+                      - heading [level=2]: Recent designs
+                      - paragraph: Standalone designs for simple boards and single-part work.
+                    - generic: No workspace designs yet.
+                  - generic:
+                    - generic:
+                      - heading [level=2]: Recent notes
+                      - generic:
+                        - paragraph: No notes yet
+                    - generic:
+                      - heading [level=2]: Recent chats
+                      - generic:
+                        - paragraph: No chats yet
+    - list
+  - dialog "Create New Workspace" [ref=e8]:
+    - generic [ref=e9]:
+      - heading "Create New Workspace" [level=2] [ref=e10]
+      - paragraph [ref=e11]: Welcome! You need to create a workspace to get started.
+    - generic [ref=e13]:
+      - generic [ref=e14]: Workspace Name
+      - textbox "Workspace Name" [active] [ref=e15]:
+        - /placeholder: e.g., Personal, Work, Team
+    - button "Create Workspace" [ref=e17] [cursor=pointer]

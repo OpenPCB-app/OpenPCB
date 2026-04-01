@@ -1,0 +1,75 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - paragraph [ref=e8]: Drag To Canvas
+          - button "Refresh components" [ref=e9] [cursor=pointer]:
+            - img
+        - generic [ref=e10]:
+          - button "All" [ref=e11] [cursor=pointer]
+          - button "Built-in" [ref=e12] [cursor=pointer]
+          - button "Workspace" [ref=e13] [cursor=pointer]
+      - paragraph [ref=e15]: "[SDK] Backend URL not initialized. This usually means the BackendURLContext has not finished discovering the dynamic port. Please ensure the app has fully loaded."
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - generic [ref=e21]: Power
+          - button "Ground GND" [ref=e22] [cursor=pointer]:
+            - img
+            - generic [ref=e24]: Ground
+            - generic [ref=e25]: GND
+          - button "VCC VCC" [ref=e26] [cursor=pointer]:
+            - img
+            - generic [ref=e28]: VCC
+            - generic [ref=e29]: VCC
+        - generic [ref=e30]:
+          - generic [ref=e31]: Passives
+          - button "Resistor R" [ref=e32] [cursor=pointer]:
+            - img
+            - generic [ref=e34]: Resistor
+            - generic [ref=e35]: R
+          - button "Capacitor C" [ref=e36] [cursor=pointer]:
+            - img
+            - generic [ref=e38]: Capacitor
+            - generic [ref=e39]: C
+  - main [ref=e40]:
+    - generic [ref=e41]:
+      - generic [ref=e42]:
+        - paragraph [ref=e43]: Schematic E2E
+        - button "Reset" [ref=e44]
+      - generic [ref=e45]:
+        - generic [ref=e46]: symbols
+        - generic [ref=e47]: "2"
+      - generic [ref=e48]:
+        - generic [ref=e49]: wires
+        - generic [ref=e50]: "0"
+      - generic [ref=e51]:
+        - generic [ref=e52]: selected
+        - generic [ref=e53]: symbol-2
+      - generic [ref=e54]:
+        - generic [ref=e55]: session
+        - generic [ref=e56]: none
+      - generic [ref=e57]:
+        - generic [ref=e58]: popover
+        - generic [ref=e59]: symbol-2
+    - generic [ref=e60]:
+      - generic:
+        - button "Close symbol properties popover"
+        - dialog "Symbol properties" [ref=e63]:
+          - generic [ref=e64]:
+            - paragraph [ref=e65]: J1
+            - paragraph [ref=e66]: Connector
+          - generic [ref=e67]:
+            - generic [ref=e68]:
+              - paragraph [ref=e69]: Reference
+              - paragraph [ref=e70]: J1
+            - generic [ref=e71]:
+              - paragraph [ref=e72]: Value
+              - button "HDR2" [ref=e73]
+            - generic [ref=e74]:
+              - paragraph [ref=e75]: Footprint
+              - paragraph [ref=e76]: PinHeader_1x02
+```

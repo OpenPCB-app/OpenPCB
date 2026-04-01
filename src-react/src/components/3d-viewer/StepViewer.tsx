@@ -94,6 +94,12 @@ export function StepViewer({
 
   const containerClasses = `relative flex items-center justify-center rounded-lg border bg-muted/30 overflow-hidden min-h-[300px] w-full ${className}`;
 
+  // Compute controls target unconditionally to satisfy React hooks rules
+  const controlsTarget = useMemo(() => {
+    if (meshes.length === 0) return new THREE.Vector3();
+    return computeBounds(meshes).center;
+  }, [meshes]);
+
   if (!hasWebGL) {
     return (
       <div className={containerClasses}>
@@ -144,11 +150,6 @@ export function StepViewer({
       </div>
     );
   }
-
-  const controlsTarget = useMemo(() => {
-    if (meshes.length === 0) return new THREE.Vector3();
-    return computeBounds(meshes).center;
-  }, [meshes]);
 
   return (
     <div className={containerClasses}>

@@ -4,6 +4,10 @@ import { relaunch } from "@tauri-apps/plugin-process";
 
 let pendingUpdate: Update | null = null;
 
+function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI__" in window;
+}
+
 interface UpdateState {
   updateAvailable: boolean;
   version: string | null;
@@ -37,6 +41,10 @@ export const useUpdateStore = create<UpdateState>((set) => ({
   dismissed: false,
 
   checkForUpdate: async () => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
     try {
       const update = await check();
       if (update) {
@@ -55,6 +63,10 @@ export const useUpdateStore = create<UpdateState>((set) => ({
   },
 
   downloadAndInstall: async () => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
     if (!pendingUpdate) return;
 
     set({ downloading: true, error: null, downloadProgress: 0 });

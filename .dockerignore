@@ -1,0 +1,16 @@
+.git
+.sisyphus
+node_modules
+src-react/node_modules
+src-ts/node_modules
+dist
+coverage
+test-results
+npm-debug.log*
+src-tauri/target
+.DS_Store
+data
+.opencode
+.claude
+.vscode
+target

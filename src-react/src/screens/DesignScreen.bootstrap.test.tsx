@@ -216,7 +216,8 @@ describe("DesignScreen real schematic bootstrap", () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn(() => 0));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
-      () => createMockContext(),
+      (((contextId: string) =>
+        contextId === "2d" ? createMockContext() : null) as unknown) as HTMLCanvasElement["getContext"],
     );
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
       () =>

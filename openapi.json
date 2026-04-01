@@ -46,28 +46,19 @@
   ],
   "components": {
     "schemas": {
-      "WorkspaceSettings": {
+      "WorkspaceListResponse": {
         "type": "object",
         "properties": {
-          "theme": {
-            "type": "string",
-            "enum": [
-              "light",
-              "dark",
-              "system"
-            ]
-          },
-          "language": {
-            "type": "string"
-          },
-          "defaultProvider": {
-            "type": "string"
-          },
-          "defaultModel": {
-            "type": "string"
+          "workspaces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Workspace"
+            }
           }
         },
-        "additionalProperties": {}
+        "required": [
+          "workspaces"
+        ]
       },
       "Workspace": {
         "type": "object",
@@ -108,19 +99,28 @@
           "settings"
         ]
       },
-      "WorkspaceListResponse": {
+      "WorkspaceSettings": {
         "type": "object",
         "properties": {
-          "workspaces": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Workspace"
-            }
+          "theme": {
+            "type": "string",
+            "enum": [
+              "light",
+              "dark",
+              "system"
+            ]
+          },
+          "language": {
+            "type": "string"
+          },
+          "defaultProvider": {
+            "type": "string"
+          },
+          "defaultModel": {
+            "type": "string"
           }
         },
-        "required": [
-          "workspaces"
-        ]
+        "additionalProperties": {}
       },
       "WorkspaceResponse": {
         "type": "object",
@@ -176,6 +176,20 @@
         },
         "required": [
           "deleted"
+        ]
+      },
+      "ProjectListResponse": {
+        "type": "object",
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Project"
+            }
+          }
+        },
+        "required": [
+          "projects"
         ]
       },
       "Project": {
@@ -338,20 +352,6 @@
           "status",
           "createdAt",
           "updatedAt"
-        ]
-      },
-      "ProjectListResponse": {
-        "type": "object",
-        "properties": {
-          "projects": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Project"
-            }
-          }
-        },
-        "required": [
-          "projects"
         ]
       },
       "ProjectResponse": {
@@ -593,93 +593,18 @@
           }
         }
       },
-      "ChatConfig": {
+      "ChatListResponse": {
         "type": "object",
         "properties": {
-          "provider": {
-            "type": "string",
-            "enum": [
-              "openai",
-              "openrouter",
-              "ollama",
-              "anthropic",
-              "groq",
-              "local"
-            ],
-            "example": "openai",
-            "description": "AI provider identifier"
-          },
-          "model": {
-            "type": "string",
-            "example": "gpt-4o"
-          },
-          "systemPrompt": {
-            "type": [
-              "string",
-              "null"
-            ]
+          "chats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMetadata"
+            }
           }
         },
         "required": [
-          "provider",
-          "model",
-          "systemPrompt"
-        ]
-      },
-      "ChatIcon": {
-        "type": [
-          "object",
-          "null"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": [
-              "message-square",
-              "bot",
-              "terminal",
-              "book-open",
-              "sparkles",
-              "lightbulb"
-            ]
-          },
-          "color": {
-            "type": "string",
-            "enum": [
-              "sky",
-              "violet",
-              "amber",
-              "emerald",
-              "rose",
-              "slate"
-            ]
-          }
-        },
-        "required": [
-          "name",
-          "color"
-        ]
-      },
-      "ChatContextRef": {
-        "type": [
-          "object",
-          "null"
-        ],
-        "properties": {
-          "type": {
-            "type": "string",
-            "example": "knowledge_page"
-          },
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "example": "01935c4a-1b2d-7e3f-8c9d-0e1f2a3b4c5d",
-            "description": "UUIDv7 identifier"
-          }
-        },
-        "required": [
-          "type",
-          "id"
+          "chats"
         ]
       },
       "ChatMetadata": {
@@ -786,18 +711,93 @@
           "projectId"
         ]
       },
-      "ChatListResponse": {
+      "ChatConfig": {
         "type": "object",
         "properties": {
-          "chats": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ChatMetadata"
-            }
+          "provider": {
+            "type": "string",
+            "enum": [
+              "openai",
+              "openrouter",
+              "ollama",
+              "anthropic",
+              "groq",
+              "local"
+            ],
+            "example": "openai",
+            "description": "AI provider identifier"
+          },
+          "model": {
+            "type": "string",
+            "example": "gpt-4o"
+          },
+          "systemPrompt": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
-          "chats"
+          "provider",
+          "model",
+          "systemPrompt"
+        ]
+      },
+      "ChatIcon": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "message-square",
+              "bot",
+              "terminal",
+              "book-open",
+              "sparkles",
+              "lightbulb"
+            ]
+          },
+          "color": {
+            "type": "string",
+            "enum": [
+              "sky",
+              "violet",
+              "amber",
+              "emerald",
+              "rose",
+              "slate"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "color"
+        ]
+      },
+      "ChatContextRef": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "example": "knowledge_page"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "01935c4a-1b2d-7e3f-8c9d-0e1f2a3b4c5d",
+            "description": "UUIDv7 identifier"
+          }
+        },
+        "required": [
+          "type",
+          "id"
         ]
       },
       "ChatResponse": {
@@ -847,27 +847,13 @@
             }
           },
           "icon": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ChatIcon"
-              },
-              {
-                "type": "object"
-              }
-            ]
+            "$ref": "#/components/schemas/ChatIcon"
           },
           "category": {
             "type": "string"
           },
           "contextRef": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ChatContextRef"
-              },
-              {
-                "type": "object"
-              }
-            ]
+            "$ref": "#/components/schemas/ChatContextRef"
           }
         }
       },
@@ -949,6 +935,20 @@
           }
         }
       },
+      "TaskListResponse": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskMeta"
+            }
+          }
+        },
+        "required": [
+          "tasks"
+        ]
+      },
       "TaskMeta": {
         "type": "object",
         "properties": {
@@ -1018,20 +1018,6 @@
           "createdAt"
         ]
       },
-      "TaskListResponse": {
-        "type": "object",
-        "properties": {
-          "tasks": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TaskMeta"
-            }
-          }
-        },
-        "required": [
-          "tasks"
-        ]
-      },
       "TaskResponse": {
         "type": "object",
         "properties": {
@@ -1052,6 +1038,20 @@
         },
         "required": [
           "meta"
+        ]
+      },
+      "ProviderListResponse": {
+        "type": "object",
+        "properties": {
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderInfo"
+            }
+          }
+        },
+        "required": [
+          "providers"
         ]
       },
       "ProviderInfo": {
@@ -1088,37 +1088,22 @@
           "requiresApiKey"
         ]
       },
-      "ProviderListResponse": {
+      "ProviderResponse": {
         "type": "object",
         "properties": {
-          "providers": {
+          "provider": {
+            "$ref": "#/components/schemas/ProviderInfo"
+          },
+          "models": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ProviderInfo"
+              "$ref": "#/components/schemas/ModelInfo"
             }
           }
         },
         "required": [
-          "providers"
-        ]
-      },
-      "ModelCapabilities": {
-        "type": "object",
-        "properties": {
-          "supportsVision": {
-            "type": "boolean"
-          },
-          "supportsStreaming": {
-            "type": "boolean"
-          },
-          "supportsReasoning": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "supportsVision",
-          "supportsStreaming",
-          "supportsReasoning"
+          "provider",
+          "models"
         ]
       },
       "ModelInfo": {
@@ -1166,22 +1151,23 @@
           "capabilities"
         ]
       },
-      "ProviderResponse": {
+      "ModelCapabilities": {
         "type": "object",
         "properties": {
-          "provider": {
-            "$ref": "#/components/schemas/ProviderInfo"
+          "supportsVision": {
+            "type": "boolean"
           },
-          "models": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ModelInfo"
-            }
+          "supportsStreaming": {
+            "type": "boolean"
+          },
+          "supportsReasoning": {
+            "type": "boolean"
           }
         },
         "required": [
-          "provider",
-          "models"
+          "supportsVision",
+          "supportsStreaming",
+          "supportsReasoning"
         ]
       },
       "StreamStartResponse": {

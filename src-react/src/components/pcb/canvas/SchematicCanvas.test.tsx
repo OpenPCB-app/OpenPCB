@@ -92,7 +92,10 @@ beforeAll(() => {
         toJSON: () => ({}),
       }) as DOMRect,
   );
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation((((contextId: string) => {
+    if (contextId !== "2d") {
+      return null;
+    }
     const context = {
       save: vi.fn(),
       restore: vi.fn(),
@@ -123,7 +126,7 @@ beforeAll(() => {
     };
 
     return context as unknown as CanvasRenderingContext2D;
-  });
+  }) as unknown) as HTMLCanvasElement["getContext"]);
 });
 
 function resetStore() {

@@ -176,8 +176,9 @@ describe("palette drag placement", () => {
       vi.fn(() => 0),
     );
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() =>
-      createMockContext(),
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+      (((contextId: string) =>
+        contextId === "2d" ? createMockContext() : null) as unknown) as HTMLCanvasElement["getContext"],
     );
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
       () =>
@@ -202,12 +203,17 @@ describe("palette drag placement", () => {
     expect(screen.getByRole("button", { name: /vcc/i })).toBeInTheDocument();
   });
 
-  it("ignores palette clicks so placement stays drag-only", () => {
+  it("starts placement session on palette click", () => {
     render(<PaletteCanvasHarness />);
 
     fireEvent.click(screen.getByRole("button", { name: /ground/i }));
 
-    expect(useSchematicStore.getState().session).toBeNull();
+    const session = useSchematicStore.getState().session;
+    expect(session).not.toBeNull();
+    expect(session?.type).toBe("placement");
+    if (session?.type === "placement") {
+      expect(session.symbolKind).toBe("gnd");
+    }
   });
 
   it("shows snapped ghost preview during resistor drag and commits one symbol on drop", () => {

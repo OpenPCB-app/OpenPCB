@@ -6,13 +6,16 @@
 const DEFAULT_ALLOWED_ORIGINS = [
   "http://localhost:1420",
   "http://127.0.0.1:1420",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
   "tauri://localhost",
   "https://tauri.localhost",
 ];
 
 const CORS_BASE_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-OpenPCB-Token, If-Unmodified-Since, X-Request-Id",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, X-OpenPCB-Token, If-Unmodified-Since, X-Request-Id",
 };
 
 const VARY_ORIGIN = "Origin";
@@ -61,7 +64,10 @@ function buildCorsHeaders(origin: string | null): Record<string, string> {
   };
 }
 
-export function withCorsHeaders(response: Response, origin: string | null): Response {
+export function withCorsHeaders(
+  response: Response,
+  origin: string | null,
+): Response {
   const headers = new Headers(response.headers);
   const corsHeaders = buildCorsHeaders(origin);
 
@@ -80,8 +86,8 @@ export function withCorsHeaders(response: Response, origin: string | null): Resp
  * Create a CORS preflight response
  */
 export function corsPreflightResponse(origin: string | null): Response {
-    return new Response(null, {
-        status: 204,
-        headers: buildCorsHeaders(origin),
-    });
+  return new Response(null, {
+    status: 204,
+    headers: buildCorsHeaders(origin),
+  });
 }

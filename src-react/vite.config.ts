@@ -3,7 +3,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import * as path from "node:path";
 import tailwind from "@tailwindcss/vite";
-import tsconfigPaths from "vite-tsconfig-paths";
 import mdx from "@mdx-js/rollup";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,13 +16,17 @@ export default defineConfig({
       jsxImportSource: "react",
     }),
     tailwind(),
-    tsconfigPaths(),
   ],
   resolve: {
     extensions: [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx", ".json", ".mdx"],
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@shared/types": path.resolve(__dirname, "../src-ts/shared/types"),
+      "@shared/generated": path.resolve(
+        __dirname,
+        "../src-ts/shared/generated",
+      ),
+      "@shared/sdk": path.resolve(__dirname, "../src-ts/shared/sdk"),
       "@modules": path.resolve(__dirname, "../modules"),
     },
   },

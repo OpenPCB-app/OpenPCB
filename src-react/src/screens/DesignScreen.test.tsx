@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSchematicStore } from "@/stores/schematic-store";
@@ -25,8 +31,12 @@ let designs = [
 ];
 
 vi.mock("@/components/ui/resizable", () => ({
-  ResizablePanelGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  ResizablePanel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ResizablePanelGroup: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  ResizablePanel: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
   ResizableHandle: () => <div data-testid="resize-handle" />,
 }));
 
@@ -95,7 +105,10 @@ vi.mock("@/components/pcb/palette/ComponentPalette", () => ({
       <button draggable onDragStart={() => controller.beginPlacement("gnd")}>
         Ground
       </button>
-      <button draggable onDragStart={() => controller.beginPlacement("resistor")}>
+      <button
+        draggable
+        onDragStart={() => controller.beginPlacement("resistor")}
+      >
         Resistor
       </button>
     </div>
@@ -230,7 +243,10 @@ describe("DesignScreen schematic shell", () => {
     currentProjectId = null;
     currentDesignId = null;
     designs = [];
-    createDesign.mockResolvedValue({ id: "design-new", name: "Untitled design" });
+    createDesign.mockResolvedValue({
+      id: "design-new",
+      name: "Untitled design",
+    });
 
     render(<DesignScreen />);
 
@@ -250,7 +266,10 @@ describe("DesignScreen schematic shell", () => {
     currentDesignId = null;
     designs = [];
     createDesign.mockRejectedValueOnce(new Error("boom"));
-    createDesign.mockResolvedValueOnce({ id: "design-retry", name: "Untitled design" });
+    createDesign.mockResolvedValueOnce({
+      id: "design-retry",
+      name: "Untitled design",
+    });
 
     render(<DesignScreen />);
 
@@ -258,7 +277,9 @@ describe("DesignScreen schematic shell", () => {
       expect(screen.getByText("Draft creation failed")).toBeInTheDocument(),
     );
 
-    await user.click(screen.getByRole("button", { name: "Retry draft creation" }));
+    await user.click(
+      screen.getByRole("button", { name: "Retry draft creation" }),
+    );
 
     await waitFor(() => expect(createDesign).toHaveBeenCalledTimes(2));
     await waitFor(() =>
@@ -271,8 +292,12 @@ describe("DesignScreen schematic shell", () => {
 
     expect(screen.getByText("Mock Toolbar")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ground" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Resistor" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Begin wire" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Resistor" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Begin wire" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("PCB Status")).toBeInTheDocument();
   });
 
@@ -294,9 +319,11 @@ describe("DesignScreen schematic shell", () => {
     render(<DesignScreen />);
 
     const documentCountsBefore = {
-      symbols: useSchematicStore.getState().persisted.document?.symbols.length ?? 0,
+      symbols:
+        useSchematicStore.getState().persisted.document?.symbols.length ?? 0,
       wires: useSchematicStore.getState().persisted.document?.wires.length ?? 0,
-      labels: useSchematicStore.getState().persisted.document?.labels.length ?? 0,
+      labels:
+        useSchematicStore.getState().persisted.document?.labels.length ?? 0,
     };
 
     await user.click(screen.getByRole("button", { name: "Begin wire" }));
@@ -308,11 +335,15 @@ describe("DesignScreen schematic shell", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 
     expect(useSchematicStore.getState().session).toBeNull();
-    expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(new Set());
+    expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(
+      new Set(),
+    );
     expect({
-      symbols: useSchematicStore.getState().persisted.document?.symbols.length ?? 0,
+      symbols:
+        useSchematicStore.getState().persisted.document?.symbols.length ?? 0,
       wires: useSchematicStore.getState().persisted.document?.wires.length ?? 0,
-      labels: useSchematicStore.getState().persisted.document?.labels.length ?? 0,
+      labels:
+        useSchematicStore.getState().persisted.document?.labels.length ?? 0,
     }).toEqual(documentCountsBefore);
   });
 
@@ -321,7 +352,9 @@ describe("DesignScreen schematic shell", () => {
 
     render(<DesignScreen />);
 
-    expect(screen.getByRole("dialog", { name: "Symbol properties" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Symbol properties" }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("R1")).toHaveLength(2);
     expect(screen.getByText("10k")).toBeInTheDocument();
     expect(screen.getByText("R_0603")).toBeInTheDocument();
@@ -333,7 +366,9 @@ describe("DesignScreen schematic shell", () => {
     });
 
     act(() => {
-      useSchematicStore.getState().setViewport({ offsetX: 15, offsetY: 20, zoom: 3 });
+      useSchematicStore
+        .getState()
+        .setViewport({ offsetX: 15, offsetY: 20, zoom: 3 });
     });
 
     expect(screen.getByTestId("floating-properties-popover")).toHaveStyle({
@@ -349,24 +384,32 @@ describe("DesignScreen schematic shell", () => {
     act(() => {
       useSchematicStore.getState().selectEntities(["symbol-1", "wire-1"]);
     });
-    expect(screen.queryByRole("dialog", { name: "Symbol properties" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Symbol properties" }),
+    ).not.toBeInTheDocument();
 
     act(() => {
       useSchematicStore.getState().clearSelection();
     });
-    expect(screen.queryByRole("dialog", { name: "Symbol properties" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Symbol properties" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("keeps the popover open when the inert backdrop is clicked", async () => {
+  it("closes the popover when the backdrop is clicked while preserving selection", async () => {
     const user = userEvent.setup();
     useSchematicStore.getState().selectEntities(["symbol-1"]);
     render(<DesignScreen />);
 
     await user.click(screen.getByTestId("floating-properties-backdrop"));
 
-    expect(screen.getByRole("dialog", { name: "Symbol properties" })).toBeInTheDocument();
-    expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(new Set(["symbol-1"]));
-    expect(useSchematicStore.getState().chrome.popoverEntityId).toBe("symbol-1");
+    expect(
+      screen.queryByRole("dialog", { name: "Symbol properties" }),
+    ).not.toBeInTheDocument();
+    expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(
+      new Set(["symbol-1"]),
+    );
+    expect(useSchematicStore.getState().chrome.popoverEntityId).toBeNull();
   });
 
   it("closes on Escape only when a text field is not focused", () => {
@@ -380,7 +423,9 @@ describe("DesignScreen schematic shell", () => {
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
-    expect(screen.getByRole("dialog", { name: "Symbol properties" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Symbol properties" }),
+    ).toBeInTheDocument();
 
     input.blur();
     input.remove();
@@ -388,7 +433,11 @@ describe("DesignScreen schematic shell", () => {
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
-    expect(screen.queryByRole("dialog", { name: "Symbol properties" })).not.toBeInTheDocument();
-    expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(new Set(["symbol-1"]));
+    expect(
+      screen.queryByRole("dialog", { name: "Symbol properties" }),
+    ).not.toBeInTheDocument();
+    expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(
+      new Set(["symbol-1"]),
+    );
   });
 });

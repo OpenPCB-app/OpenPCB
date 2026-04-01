@@ -155,29 +155,44 @@ export function FloatingPropertiesPopover() {
   const document = useSchematicStore((s) => s.persisted.document);
   const selectedIds = useSchematicStore((s) => s.chrome.selectedEntityIds);
   const popoverEntityId = useSchematicStore((s) => s.chrome.popoverEntityId);
+  const setPopoverTarget = useSchematicStore((s) => s.setPopoverTarget);
   const viewport = useSchematicStore((s) => s.chrome.viewport);
   const bounds = useSchematicStore((s) =>
-    popoverEntityId ? s.derived.hitTestCache.symbolBounds[popoverEntityId] ?? null : null,
+    popoverEntityId
+      ? s.derived.hitTestCache.symbolBounds[popoverEntityId] ?? null
+      : null,
   );
-  const symbol = getSelectedSymbol(popoverEntityId, selectedIds, document?.symbols ?? []);
+  const symbol = getSelectedSymbol(
+    popoverEntityId,
+    selectedIds,
+    document?.symbols ?? [],
+  );
 
   if (!symbol || !bounds) {
     return null;
   }
 
   const footprintEntry = getFootprintEntry(symbol);
-  const propertyEntries = getPropertyEntries(symbol, footprintEntry?.[0] ?? null);
+  const propertyEntries = getPropertyEntries(
+    symbol,
+    footprintEntry?.[0] ?? null,
+  );
   const position = getFloatingPopoverPosition(bounds, viewport);
 
-  const isPowerSymbol = symbol.symbolKind === "gnd" || symbol.symbolKind === "vcc";
+  const isPowerSymbol =
+    symbol.symbolKind === "gnd" || symbol.symbolKind === "vcc";
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-20" data-testid="floating-properties-layer">
+    <div
+      className="pointer-events-none absolute inset-0 z-20"
+      data-testid="floating-properties-layer"
+    >
       <button
         type="button"
         aria-label="Close symbol properties popover"
-        className="pointer-events-none absolute inset-0 cursor-default bg-transparent"
+        className="absolute inset-0 cursor-default bg-transparent"
         data-testid="floating-properties-backdrop"
+        onClick={() => setPopoverTarget(null)}
       />
       <div
         role="dialog"
@@ -192,7 +207,9 @@ export function FloatingPropertiesPopover() {
         onClick={(event) => event.stopPropagation()}
       >
         <div className="border-b border-border-default px-3 py-2">
-          <p className="text-xs font-semibold text-text-primary">{symbol.reference}</p>
+          <p className="text-xs font-semibold text-text-primary">
+            {symbol.reference}
+          </p>
           <p className="text-[11px] text-text-muted capitalize">
             {getSymbolKindLabel(symbol.symbolKind)}
           </p>

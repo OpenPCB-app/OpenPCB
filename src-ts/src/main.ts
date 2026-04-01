@@ -121,12 +121,27 @@ initializeLogBuffer();
 // =============================================================================
 
 const PORT = parseInt(process.env.PORT || "0", 10);
+const HOST = process.env.HOST || "127.0.0.1";
 const NODE_ENV = process.env.NODE_ENV || "development";
 const REPO_ROOT = path.resolve(import.meta.dir, "../..");
 const APP_DATA_DIR = process.env.APP_DATA_DIR || path.join(REPO_ROOT, "data");
+const WEB_DIST_DIR = path.join(REPO_ROOT, "src-react", "dist");
+const ALLOW_UNAUTHENTICATED_API =
+  process.env.OPENPCB_ALLOW_UNAUTHENTICATED_API === "true";
 const STARTUP_CONTRACT_VERSION = resolveStartupContractVersion();
 const STARTUP_LICENSE_STATE = resolveStartupLicenseState();
 const STARTUP_LICENSE_CODE = resolveStartupLicenseCode();
+const HAS_WEB_DIST = await Bun.file(path.join(WEB_DIST_DIR, "index.html")).exists();
+
+function resolveStaticAssetPath(pathname: string): string | null {
+  const requestedPath = pathname === "/" ? "/index.html" : pathname;
+  const normalized = path.normalize(requestedPath).replace(/^\.+/, "");
+  const absolutePath = path.join(WEB_DIST_DIR, normalized);
+  if (!absolutePath.startsWith(WEB_DIST_DIR)) {
+    return null;
+  }
+  return absolutePath;
+}
 
 // =============================================================================
 // Database Initialization
@@ -350,7 +365,7 @@ function safeTokenCompare(a: string, b: string): boolean {
 
 const server = Bun.serve({
   port: PORT,
-  hostname: "127.0.0.1",
+  hostname: HOST,
   fetch: async (req, server) => {
     const url = new URL(req.url);
     const origin = req.headers.get("Origin");
@@ -399,7 +414,11 @@ const server = Bun.serve({
     }
 
     // Authentication
-    if (url.pathname.startsWith("/api/") && url.pathname !== "/api/health") {
+    if (
+      !ALLOW_UNAUTHENTICATED_API &&
+      url.pathname.startsWith("/api/") &&
+      url.pathname !== "/api/health"
+    ) {
       const token = req.headers.get("X-OpenPCB-Token");
       const kernelToken = process.env.KERNEL_TOKEN;
       if (!kernelToken) {
@@ -442,6 +461,26 @@ const server = Bun.serve({
       const coreResponse = await coreRouter.handle(req);
       if (coreResponse.status !== 404) {
         return withRequestCors(coreResponse);
+      }
+    }
+
+    if (
+      HAS_WEB_DIST &&
+      req.method === "GET" &&
+      !url.pathname.startsWith("/ws/") &&
+      !url.pathname.startsWith("/api")
+    ) {
+      const staticAssetPath = resolveStaticAssetPath(url.pathname);
+      if (staticAssetPath) {
+        const assetFile = Bun.file(staticAssetPath);
+        if (await assetFile.exists()) {
+          return new Response(assetFile as unknown as BodyInit);
+        }
+      }
+
+      const indexFile = Bun.file(path.join(WEB_DIST_DIR, "index.html"));
+      if (await indexFile.exists()) {
+        return new Response(indexFile as unknown as BodyInit);
       }
     }
 
