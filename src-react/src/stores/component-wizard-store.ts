@@ -25,25 +25,61 @@ export interface ValidationMessage {
   severity: "error" | "warning";
 }
 
-export interface ComponentDraftPayload {
-  // Symbol data
+/**
+ * Frontend wizard payload - flexible structure for editing.
+ * Transformed to backend ComponentDraftPayload before save/publish.
+ */
+export interface WizardDraftPayload {
+  // Core fields
   displayLabel: string;
   description: string;
-  symbolData: unknown;
-  defaultPackageVariantId: string | null;
   
-  // Footprint data (step 2)
+  // Symbol data (from symbol editor)
+  symbolData: {
+    id?: string;
+    referencePrefix?: string;
+    body?: {
+      kind: string;
+      width: number;
+      height: number;
+    };
+    pins?: Array<{
+      id: string;
+      name: string;
+      number: string;
+      electricalType: string;
+      side: string;
+      position: { x: number; y: number };
+      length: number;
+    }>;
+    graphics?: unknown[];
+    metadata?: {
+      name: string;
+      referencePrefix: string;
+      description: string;
+    };
+  } | null;
+  
+  // Footprint data (from footprint editor)
   footprintData?: {
-    padShape?: string;
-    width?: string;
-    height?: string;
-    pitch?: string;
-  };
+    id?: string;
+    preset?: string;
+    config?: Record<string, unknown>;
+    pads?: Array<{
+      id: string;
+      number: string;
+      shape: string;
+      position: { x: number; y: number };
+      size: { width: number; height: number };
+      layers: string[];
+    }>;
+    graphics?: unknown[];
+  } | null;
   
   // 3D model data (step 3)
   modelData?: {
     stepFile?: File | null;
-  };
+  } | null;
   
   // Specs data (step 4)
   specs?: {
@@ -52,12 +88,15 @@ export interface ComponentDraftPayload {
     mpn?: string;
     manufacturer?: string;
     datasheetUrl?: string;
-  };
+  } | null;
+  
+  // Package variant (for full publish)
+  defaultPackageVariantId: string | null;
 }
 
 export interface ComponentDraft {
   id: string;
-  payload: ComponentDraftPayload;
+  payload: WizardDraftPayload;
   familyId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -70,7 +109,7 @@ export interface ComponentDraft {
 interface ComponentWizardState {
   // Draft state
   draftId: string | null;
-  draft: ComponentDraftPayload | null;
+  draft: WizardDraftPayload | null;
   isDirty: boolean;
   isSaving: boolean;
   lastSavedAt: number | null;
@@ -85,8 +124,8 @@ interface ComponentWizardState {
   
   // Actions
   initDraft: (draftId?: string) => void;
-  setDraft: (draft: ComponentDraftPayload) => void;
-  updateDraft: (updates: Partial<ComponentDraftPayload>) => void;
+  setDraft: (draft: WizardDraftPayload) => void;
+  updateDraft: (updates: Partial<WizardDraftPayload>) => void;
   markDirty: () => void;
   markClean: () => void;
   setSaving: (saving: boolean) => void;
@@ -127,15 +166,15 @@ function getPreviousStep(current: WizardStep): WizardStep | null {
   return idx > 0 ? STEP_ORDER[idx - 1]! : null;
 }
 
-function createEmptyDraft(): ComponentDraftPayload {
+function createEmptyDraft(): WizardDraftPayload {
   return {
     displayLabel: "",
     description: "",
     symbolData: null,
     defaultPackageVariantId: null,
-    footprintData: {},
-    modelData: {},
-    specs: {},
+    footprintData: null,
+    modelData: null,
+    specs: null,
   };
 }
 

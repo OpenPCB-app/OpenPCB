@@ -412,6 +412,6 @@ export function canEditPreset(preset: PresetCatalog): boolean {
   return !preset.isImmutable;
 }
 
-export function canDuplicatePreset(preset: PresetCatalog): boolean {
+export function canDuplicatePreset(_preset: PresetCatalog): boolean {
   return true; // any preset can be duplicated
 }

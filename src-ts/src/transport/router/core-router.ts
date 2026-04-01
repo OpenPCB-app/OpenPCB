@@ -2123,6 +2123,17 @@ this.get(
       },
     );
 
+    this.get(
+      "/api/components/drafts",
+      (ctx) => componentDraftController.list(ctx),
+      {
+        operationId: "listComponentDrafts",
+        tags: ["Components"],
+        summary: "List active (non-deleted) component drafts",
+        responses: { 200: z.object({ drafts: z.array(z.any()) }) },
+      },
+    );
+
     this.patch(
       "/api/components/drafts/:id",
       (ctx) => componentDraftController.patch(ctx),

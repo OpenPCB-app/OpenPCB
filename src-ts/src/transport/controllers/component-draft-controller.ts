@@ -12,6 +12,11 @@ export class ComponentDraftController {
     private validationService: IComponentValidationService,
   ) {}
 
+  async list(_ctx: RouteContext): Promise<Response> {
+    const drafts = await this.draftRepo.findActive();
+    return ResponseBuilder.success({ drafts });
+  }
+
   async create(ctx: RouteContext): Promise<Response> {
     const body = await ctx.req.json();
     const draft = await this.draftRepo.create(body);

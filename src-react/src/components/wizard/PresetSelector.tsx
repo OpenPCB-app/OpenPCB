@@ -136,9 +136,11 @@ export function PresetSelector({ onSelect }: PresetSelectorProps) {
 
   const handleSelect = useCallback(
     (kind: BodyPresetKind) => {
-      // Update draft with selected preset
+      // Update draft with selected preset - store body kind for symbol editor
       updateDraft({
-        symbolData: { bodyPreset: kind },
+        symbolData: {
+          body: { kind, width: 0, height: 0 }, // Dimensions set by symbol editor
+        },
       });
 
       // Notify parent
