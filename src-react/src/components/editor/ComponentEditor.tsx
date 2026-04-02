@@ -10,6 +10,7 @@ import {
 import {
   useComponentDetail,
   useComponentMutations,
+  useComponents,
 } from "@/hooks/useComponents";
 import {
   BodyPresetSelector,
@@ -27,6 +28,8 @@ import {
   useIsDirty as useFootprintEditorIsDirty,
 } from "@/components/footprint-editor";
 import { useNavigationStore } from "@/stores/navigation-store";
+import { useSchematicStore } from "@/stores/schematic-store";
+import { toast } from "@/components/ui/use-toast";
 import { ComponentVariantManager } from "./ComponentVariantManager";
 import {
   createFootprintDraftFromVariant,
@@ -96,7 +99,9 @@ function parseTags(value: string): string[] {
     .filter((tag) => tag.length > 0);
 }
 
-function getServerVariants(component: ComponentType): ComponentType["packageVariants"] {
+function getServerVariants(
+  component: ComponentType,
+): ComponentType["packageVariants"] {
   if (component.packageVariants.length > 0) {
     return component.packageVariants;
   }
@@ -129,8 +134,12 @@ function ComponentSymbolEditor() {
               <PinPropertiesPanel />
             ) : (
               <div className="text-sm text-text-muted">
-                <p className="mb-2 font-medium text-text-secondary">Pin Properties</p>
-                <p className="text-xs italic">Select a pin to edit its properties</p>
+                <p className="mb-2 font-medium text-text-secondary">
+                  Pin Properties
+                </p>
+                <p className="text-xs italic">
+                  Select a pin to edit its properties
+                </p>
               </div>
             )}
           </div>
@@ -141,9 +150,16 @@ function ComponentSymbolEditor() {
 }
 
 export function ComponentEditor({ componentId }: ComponentEditorProps) {
-  const navigateToLibrary = useNavigationStore((state) => state.navigateToLibrary);
-  const { createComponent, creating, error: createError, clearError: clearCreateError } =
-    useComponentMutations();
+  const navigateToLibrary = useNavigationStore(
+    (state) => state.navigateToLibrary,
+  );
+  const { refetchAndPropagate } = useComponents();
+  const {
+    createComponent,
+    creating,
+    error: createError,
+    clearError: clearCreateError,
+  } = useComponentMutations();
   const {
     component,
     loading,
@@ -153,7 +169,8 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
     updateComponent,
     clearMutationError,
   } = useComponentDetail(componentId ?? null);
-  const [formState, setFormState] = useState<ComponentEditorFormState>(EMPTY_FORM_STATE);
+  const [formState, setFormState] =
+    useState<ComponentEditorFormState>(EMPTY_FORM_STATE);
   const [symbolWarning, setSymbolWarning] = useState<string | null>(null);
   const [symbolLoading, setSymbolLoading] = useState(false);
   const symbolDraft = useSymbolEditorStore((state) => state.draft);
@@ -162,12 +179,16 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
   const symbolIsDirty = useSymbolEditorIsDirty();
   const footprintDraft = useFootprintEditorStore((state) => state.draft);
   const setFootprintDraft = useFootprintEditorStore((state) => state.setDraft);
-  const resetFootprintDraft = useFootprintEditorStore((state) => state.resetDraft);
+  const resetFootprintDraft = useFootprintEditorStore(
+    (state) => state.resetDraft,
+  );
   const footprintIsDirty = useFootprintEditorIsDirty();
   const [variants, setVariants] = useState<EditableComponentVariant[]>([
     createNewEditableVariant([]),
   ]);
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
+    null,
+  );
   const [variantsDirty, setVariantsDirty] = useState(false);
   const suppressFootprintSyncRef = useRef(false);
   const isCreating = !componentId;
@@ -188,7 +209,9 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
     const initialVariants = createInitialEditableVariants(component);
     const defaultVariantId = getDefaultVariantId(initialVariants);
     const selectedId =
-      defaultVariantId ?? initialVariants[0]?.id ?? createNewEditableVariant([]).id;
+      defaultVariantId ??
+      initialVariants[0]?.id ??
+      createNewEditableVariant([]).id;
 
     setVariants(initialVariants);
     setSelectedVariantId(selectedId);
@@ -225,7 +248,8 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
       setSymbolLoading(true);
 
       try {
-        const { draft, warning } = await loadSymbolDraftFromComponent(component);
+        const { draft, warning } =
+          await loadSymbolDraftFromComponent(component);
         if (cancelled) {
           return;
         }
@@ -346,7 +370,9 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
   const handleUpdateVariant = useCallback(
     (
       variantId: string,
-      updates: Partial<Pick<EditableComponentVariant, "humanLabel" | "mountType">>,
+      updates: Partial<
+        Pick<EditableComponentVariant, "humanLabel" | "mountType">
+      >,
     ) => {
       setVariants((current) =>
         current.map((variant) =>
@@ -411,10 +437,14 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
           await Promise.all(
             serverVariants
               .filter((variant) => !localVariantById.has(variant.id))
-              .map((variant) => removeComponentVariant(component.id, variant.id)),
+              .map((variant) =>
+                removeComponentVariant(component.id, variant.id),
+              ),
           );
 
-          const serverVariantIds = new Set(serverVariants.map((variant) => variant.id));
+          const serverVariantIds = new Set(
+            serverVariants.map((variant) => variant.id),
+          );
           for (const variant of normalizedVariants) {
             if (serverVariantIds.has(variant.id)) {
               await updateComponentVariant(
@@ -434,13 +464,46 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
           }
 
           const defaultLocalVariantId =
-            getDefaultVariantId(normalizedVariants) ?? normalizedVariants[0]?.id ?? null;
+            getDefaultVariantId(normalizedVariants) ??
+            normalizedVariants[0]?.id ??
+            null;
           if (defaultLocalVariantId) {
             const defaultServerVariantId =
-              localToServerVariantId.get(defaultLocalVariantId) ?? defaultLocalVariantId;
-            await setDefaultComponentVariant(component.id, defaultServerVariantId);
+              localToServerVariantId.get(defaultLocalVariantId) ??
+              defaultLocalVariantId;
+            await setDefaultComponentVariant(
+              component.id,
+              defaultServerVariantId,
+            );
           }
         }
+      }
+
+      await refetchAndPropagate();
+
+      if (!isCreating && component?.id) {
+        const persisted = useSchematicStore.getState().persisted;
+        const affectedCount =
+          persisted.document?.symbols.filter(
+            (s) => s.componentId === component.id,
+          ).length ?? 0;
+
+        if (affectedCount > 0) {
+          toast({
+            title: "Component updated",
+            description: `${affectedCount} instance${affectedCount === 1 ? "" : "s"} in open designs refreshed.`,
+          });
+        } else {
+          toast({
+            title: "Component saved",
+            description: "Successfully updated component.",
+          });
+        }
+      } else {
+        toast({
+          title: "Component created",
+          description: "Successfully created new component.",
+        });
       }
 
       navigateToLibrary();
@@ -489,10 +552,13 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
           <div className="h-6 w-px bg-border-default" />
           <div>
             <h1 className="text-xl font-semibold text-text-primary">
-              {isCreating ? "New Component" : formState.displayLabel || "Edit Component"}
+              {isCreating
+                ? "New Component"
+                : formState.displayLabel || "Edit Component"}
             </h1>
             <p className="text-sm text-text-secondary">
-              Edit canonical component metadata and save directly to the library.
+              Edit canonical component metadata and save directly to the
+              library.
             </p>
           </div>
         </div>
@@ -508,7 +574,9 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
           <button
             type="button"
             onClick={() => void handleSave()}
-            disabled={isSubmitting || formState.displayLabel.trim().length === 0}
+            disabled={
+              isSubmitting || formState.displayLabel.trim().length === 0
+            }
             className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting ? (
@@ -542,9 +610,12 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
 
         <section className="rounded-lg border border-border-default bg-bg-elevated">
           <div className="border-b border-border-default px-5 py-4">
-            <h2 className="text-sm font-medium text-text-primary">Component Metadata</h2>
+            <h2 className="text-sm font-medium text-text-primary">
+              Component Metadata
+            </h2>
             <p className="mt-1 text-sm text-text-secondary">
-              Core library fields used by search, organization, and future editor integrations.
+              Core library fields used by search, organization, and future
+              editor integrations.
             </p>
           </div>
 
@@ -560,7 +631,9 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
                 id="component-display-label"
                 type="text"
                 value={formState.displayLabel}
-                onChange={(event) => handleFieldChange("displayLabel", event.target.value)}
+                onChange={(event) =>
+                  handleFieldChange("displayLabel", event.target.value)
+                }
                 placeholder="Enter component name"
                 className="w-full rounded-md border border-border-default bg-bg-input px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
               />
@@ -577,7 +650,9 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
                 id="component-description"
                 rows={4}
                 value={formState.description}
-                onChange={(event) => handleFieldChange("description", event.target.value)}
+                onChange={(event) =>
+                  handleFieldChange("description", event.target.value)
+                }
                 placeholder="Describe this component"
                 className="w-full resize-none rounded-md border border-border-default bg-bg-input px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
               />
@@ -594,7 +669,9 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
                 id="component-category-path"
                 type="text"
                 value={formState.categoryPath}
-                onChange={(event) => handleFieldChange("categoryPath", event.target.value)}
+                onChange={(event) =>
+                  handleFieldChange("categoryPath", event.target.value)
+                }
                 placeholder="e.g. Passives/Resistors"
                 className="w-full rounded-md border border-border-default bg-bg-input px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
               />
@@ -611,7 +688,9 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
                 id="component-tags"
                 type="text"
                 value={formState.tags}
-                onChange={(event) => handleFieldChange("tags", event.target.value)}
+                onChange={(event) =>
+                  handleFieldChange("tags", event.target.value)
+                }
                 placeholder="comma, separated, tags"
                 className="w-full rounded-md border border-border-default bg-bg-input px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
               />
@@ -624,14 +703,19 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
             <div>
               <h2 className="text-sm font-medium text-text-primary">Symbol</h2>
               <p className="mt-1 text-sm text-text-secondary">
-                Edit symbol geometry, metadata, and pin definitions for this component.
+                Edit symbol geometry, metadata, and pin definitions for this
+                component.
               </p>
             </div>
             <span
               data-testid="symbol-dirty-indicator"
               className="rounded-full bg-bg-input px-2.5 py-1 text-xs text-text-tertiary"
             >
-              {symbolLoading ? "Loading…" : symbolIsDirty ? "Modified" : "Saved"}
+              {symbolLoading
+                ? "Loading…"
+                : symbolIsDirty
+                  ? "Modified"
+                  : "Saved"}
             </span>
           </div>
 

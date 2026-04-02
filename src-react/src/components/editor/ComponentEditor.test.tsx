@@ -4,6 +4,7 @@ import { ComponentEditor } from "./ComponentEditor";
 
 const useComponentDetailMock = vi.fn();
 const useComponentMutationsMock = vi.fn();
+const refetchAndPropagateMock = vi.fn();
 
 const navigationState = {
   navigateToLibrary: vi.fn(),
@@ -19,6 +20,26 @@ const loadSymbolDraftFromComponentMock = vi.fn();
 const transformSymbolDraftToComponentSymbolDataMock = vi.fn();
 const setFootprintDraftMock = vi.fn();
 const resetFootprintDraftMock = vi.fn();
+
+const toastMock = vi.fn();
+
+vi.mock("@/components/ui/use-toast", () => ({
+  toast: (...args: unknown[]) => toastMock(...args),
+}));
+
+const mockSchematicDocument = {
+  symbols: [] as any[],
+};
+
+vi.mock("@/stores/schematic-store", () => ({
+  useSchematicStore: {
+    getState: () => ({
+      persisted: {
+        document: mockSchematicDocument,
+      },
+    }),
+  },
+}));
 
 const addComponentVariantMock = vi.fn();
 const updateComponentVariantApiMock = vi.fn();
@@ -114,7 +135,11 @@ const existingComponent = {
 
 vi.mock("@/hooks/useComponents", () => ({
   useComponentDetail: (...args: unknown[]) => useComponentDetailMock(...args),
-  useComponentMutations: (...args: unknown[]) => useComponentMutationsMock(...args),
+  useComponentMutations: (...args: unknown[]) =>
+    useComponentMutationsMock(...args),
+  useComponents: () => ({
+    refetchAndPropagate: refetchAndPropagateMock,
+  }),
 }));
 
 vi.mock("@/stores/navigation-store", () => ({
@@ -123,13 +148,14 @@ vi.mock("@/stores/navigation-store", () => ({
 }));
 
 vi.mock("@/lib/api/component-api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/api/component-api")>(
-    "@/lib/api/component-api",
-  );
+  const actual = await vi.importActual<
+    typeof import("@/lib/api/component-api")
+  >("@/lib/api/component-api");
 
   return {
     ...actual,
-    addComponentVariant: (...args: unknown[]) => addComponentVariantMock(...args),
+    addComponentVariant: (...args: unknown[]) =>
+      addComponentVariantMock(...args),
     updateComponentVariant: (...args: unknown[]) =>
       updateComponentVariantApiMock(...args),
     removeComponentVariant: (...args: unknown[]) =>
@@ -147,12 +173,19 @@ vi.mock("@/components/symbol-editor", () => ({
   SymbolMetadataEditor: () => <div data-testid="symbol-editor-metadata" />,
   PinPropertiesPanel: () => <div data-testid="symbol-editor-pin-properties" />,
   useIsDirty: () => symbolIsDirty,
-  useSymbolEditorStore: (selector: (state: {
-    draft: typeof symbolDraft;
-    setDraft: typeof setSymbolDraftMock;
-    resetDraft: typeof resetSymbolDraftMock;
-    chrome: { selection: { selectedPinIds: Set<string>; selectedGraphicIds: Set<string> } };
-  }) => unknown) =>
+  useSymbolEditorStore: (
+    selector: (state: {
+      draft: typeof symbolDraft;
+      setDraft: typeof setSymbolDraftMock;
+      resetDraft: typeof resetSymbolDraftMock;
+      chrome: {
+        selection: {
+          selectedPinIds: Set<string>;
+          selectedGraphicIds: Set<string>;
+        };
+      };
+    }) => unknown,
+  ) =>
     selector({
       draft: symbolDraft,
       setDraft: setSymbolDraftMock,
@@ -167,11 +200,13 @@ vi.mock("@/components/symbol-editor", () => ({
 }));
 
 vi.mock("@/components/footprint-editor", () => ({
-  useFootprintEditorStore: (selector: (state: {
-    draft: ReturnType<typeof createMockFootprintDraft>;
-    setDraft: typeof setFootprintDraftMock;
-    resetDraft: typeof resetFootprintDraftMock;
-  }) => unknown) =>
+  useFootprintEditorStore: (
+    selector: (state: {
+      draft: ReturnType<typeof createMockFootprintDraft>;
+      setDraft: typeof setFootprintDraftMock;
+      resetDraft: typeof resetFootprintDraftMock;
+    }) => unknown,
+  ) =>
     selector({
       draft: footprintDraftState,
       setDraft: setFootprintDraftMock,
@@ -209,10 +244,15 @@ describe("ComponentEditor", () => {
     updateComponentVariantApiMock.mockReset();
     removeComponentVariantApiMock.mockReset();
     setDefaultComponentVariantApiMock.mockReset();
+    refetchAndPropagateMock.mockReset();
+    toastMock.mockReset();
+    mockSchematicDocument.symbols = [];
 
-    setFootprintDraftMock.mockImplementation((draft: ReturnType<typeof createMockFootprintDraft>) => {
-      footprintDraftState = draft;
-    });
+    setFootprintDraftMock.mockImplementation(
+      (draft: ReturnType<typeof createMockFootprintDraft>) => {
+        footprintDraftState = draft;
+      },
+    );
 
     loadSymbolDraftFromComponentMock.mockResolvedValue({
       draft: symbolDraft,
@@ -249,7 +289,9 @@ describe("ComponentEditor", () => {
     render(<ComponentEditor componentId="component-1" />);
 
     expect(screen.getByLabelText("Name")).toHaveValue("Resistor 0603");
-    expect(screen.getByLabelText("Description")).toHaveValue("Generic resistor");
+    expect(screen.getByLabelText("Description")).toHaveValue(
+      "Generic resistor",
+    );
     expect(screen.getByLabelText("Category Path")).toHaveValue(
       "Passives/Resistors",
     );
@@ -259,12 +301,18 @@ describe("ComponentEditor", () => {
     expect(screen.getByTestId("symbol-editor-canvas")).toBeInTheDocument();
     expect(screen.getByText("Footprints / Variants")).toBeInTheDocument();
     expect(screen.getByText("Variant 1")).toBeInTheDocument();
-    expect(screen.getByTestId("component-footprint-editor")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("component-footprint-editor"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("footprint-editor-step")).toBeInTheDocument();
-    expect(screen.getByTestId("variant-dirty-indicator")).toHaveTextContent("Saved");
+    expect(screen.getByTestId("variant-dirty-indicator")).toHaveTextContent(
+      "Saved",
+    );
 
     await waitFor(() => {
-      expect(loadSymbolDraftFromComponentMock).toHaveBeenCalledWith(existingComponent);
+      expect(loadSymbolDraftFromComponentMock).toHaveBeenCalledWith(
+        existingComponent,
+      );
       expect(setSymbolDraftMock).toHaveBeenCalledWith(symbolDraft);
       expect(screen.getByTestId("symbol-dirty-indicator")).toHaveTextContent(
         "Saved",
@@ -294,7 +342,9 @@ describe("ComponentEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Variant" }));
 
     expect(screen.getByText("Variant 2")).toBeInTheDocument();
-    expect(screen.getByTestId("variant-dirty-indicator")).toHaveTextContent("Modified");
+    expect(screen.getByTestId("variant-dirty-indicator")).toHaveTextContent(
+      "Modified",
+    );
   });
 
   it("sets a new default variant", async () => {
@@ -361,9 +411,14 @@ describe("ComponentEditor", () => {
           canonicalKey: expect.stringMatching(/^voltage-regulator-/),
         }),
       );
-      expect(transformSymbolDraftToComponentSymbolDataMock).toHaveBeenCalledWith(
-        symbolDraft,
-        undefined,
+      expect(
+        transformSymbolDraftToComponentSymbolDataMock,
+      ).toHaveBeenCalledWith(symbolDraft, undefined);
+      expect(refetchAndPropagateMock).toHaveBeenCalledTimes(1);
+      expect(toastMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Component created",
+        }),
       );
       expect(navigationState.navigateToLibrary).toHaveBeenCalledTimes(1);
     });
@@ -428,6 +483,11 @@ describe("ComponentEditor", () => {
   it("updates an existing component and returns to the library", async () => {
     updateComponentMock.mockResolvedValue(existingComponent);
 
+    mockSchematicDocument.symbols = [
+      { id: "sym-1", componentId: "component-1" },
+      { id: "sym-2", componentId: "component-1" },
+    ];
+
     render(<ComponentEditor componentId="component-1" />);
 
     fireEvent.change(screen.getByLabelText("Description"), {
@@ -446,9 +506,15 @@ describe("ComponentEditor", () => {
         tags: ["passive", "precision"],
         symbolData: transformedSymbolData,
       });
-      expect(transformSymbolDraftToComponentSymbolDataMock).toHaveBeenCalledWith(
-        symbolDraft,
-        existingComponent.symbolData,
+      expect(
+        transformSymbolDraftToComponentSymbolDataMock,
+      ).toHaveBeenCalledWith(symbolDraft, existingComponent.symbolData);
+      expect(refetchAndPropagateMock).toHaveBeenCalledTimes(1);
+      expect(toastMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Component updated",
+          description: "2 instances in open designs refreshed.",
+        }),
       );
       expect(navigationState.navigateToLibrary).toHaveBeenCalledTimes(1);
     });
@@ -458,7 +524,9 @@ describe("ComponentEditor", () => {
     render(<ComponentEditor componentId="component-1" />);
 
     await waitFor(() => {
-      expect(loadSymbolDraftFromComponentMock).toHaveBeenCalledWith(existingComponent);
+      expect(loadSymbolDraftFromComponentMock).toHaveBeenCalledWith(
+        existingComponent,
+      );
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));

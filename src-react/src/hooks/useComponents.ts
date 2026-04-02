@@ -8,6 +8,7 @@ import {
   type ComponentType,
   updateComponent as updateComponentRecord,
 } from "@/lib/api/component-api";
+import { useSchematicStore } from "@/stores/schematic-store";
 
 export interface UseComponentsFilters {
   search?: string;
@@ -21,6 +22,7 @@ export interface UseComponentsReturn {
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  refetchAndPropagate: () => Promise<void>;
   filters: UseComponentsFilters;
   setFilters: (filters: UseComponentsFilters) => void;
 }
@@ -39,10 +41,7 @@ export interface UseComponentMutationsReturn {
   deleteComponent: (id: string) => Promise<void>;
 }
 
-function toErrorMessage(
-  error: unknown,
-  fallback: string,
-): string {
+function toErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
@@ -70,6 +69,23 @@ export function useComponents(
     }
   }, [filters]);
 
+  const refetchAndPropagate = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const results = await listComponents(filters);
+      setComponents(results);
+      useSchematicStore.getState().setComponentLibrary(results);
+    } catch (err) {
+      const message = toErrorMessage(err, "Failed to fetch components");
+      setError(message);
+      console.error("Failed to fetch and propagate components:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
+
   useEffect(() => {
     void fetchComponents();
   }, [fetchComponents]);
@@ -79,6 +95,7 @@ export function useComponents(
     loading,
     error,
     refetch: fetchComponents,
+    refetchAndPropagate,
     filters,
     setFilters,
   };
@@ -170,7 +187,9 @@ export interface UseComponentDetailReturn {
   deleteComponent: () => Promise<void>;
 }
 
-export function useComponentDetail(id?: string | null): UseComponentDetailReturn {
+export function useComponentDetail(
+  id?: string | null,
+): UseComponentDetailReturn {
   const [component, setComponent] = useState<ComponentType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
