@@ -266,19 +266,29 @@ export class ComponentImportService implements IComponentImportService {
     );
     const remainingSymbols = [...symbols];
     const suggestions = groupFootprints(
-      footprints.map(({ sourceFileName, footprint }) => ({
-        fileName: sourceFileName,
-        name: footprint.name,
-        model3dFileNames: footprint.model3dRefs.map((ref) => ref.resolvedFileName),
-      } satisfies FootprintFileInfo)),
+      footprints.map(
+        ({ sourceFileName, footprint }) =>
+          ({
+            fileName: sourceFileName,
+            name: footprint.name,
+            model3dFileNames: footprint.model3dRefs.map(
+              (ref) => ref.resolvedFileName,
+            ),
+          }) satisfies FootprintFileInfo,
+      ),
     );
 
     const plans = suggestions.map((suggestion) => {
-      const matchedSymbol = this.pickSymbolForGroup(suggestion, remainingSymbols);
-      const variants = this.buildVariantsFromSuggestion(suggestion, footprintLookup);
-      const primaryFootprint = (variants[0]?.footprintPayload ?? null) as
-        | Record<string, unknown>
-        | null;
+      const matchedSymbol = this.pickSymbolForGroup(
+        suggestion,
+        remainingSymbols,
+      );
+      const variants = this.buildVariantsFromSuggestion(
+        suggestion,
+        footprintLookup,
+      );
+      const primaryFootprint = (variants[0]?.footprintOptions?.[0]
+        ?.kicadPayload ?? null) as Record<string, unknown> | null;
 
       if (!matchedSymbol) {
         warnings.push({
@@ -291,11 +301,15 @@ export class ComponentImportService implements IComponentImportService {
 
       return {
         displayLabel:
-          suggestion.suggestedFamilyLabel || matchedSymbol?.symbol.name || "Imported Component",
+          suggestion.suggestedFamilyLabel ||
+          matchedSymbol?.symbol.name ||
+          "Imported Component",
         canonicalKey:
           suggestion.suggestedCanonicalKey ||
           generateCanonicalKey(
-            suggestion.suggestedFamilyLabel || matchedSymbol?.symbol.name || "component",
+            suggestion.suggestedFamilyLabel ||
+              matchedSymbol?.symbol.name ||
+              "component",
           ),
         description:
           getSymbolDescription(matchedSymbol?.symbol) ||
@@ -307,7 +321,9 @@ export class ComponentImportService implements IComponentImportService {
         variants,
         sourceFileNames: uniqueStrings([
           ...(matchedSymbol ? [matchedSymbol.sourceFileName] : []),
-          ...suggestion.variants.flatMap((variant) => variant.footprintFileNames),
+          ...suggestion.variants.flatMap(
+            (variant) => variant.footprintFileNames,
+          ),
         ]),
       } satisfies ImportPlan;
     });
@@ -338,8 +354,8 @@ export class ComponentImportService implements IComponentImportService {
           dimensions: null,
           isDefault: true,
           pinRemapTable: null,
-          footprintPayload: null,
-          defaultFootprintId: null,
+          footprintOptions: [],
+          defaultFootprintOptionId: null,
         },
       ],
       sourceFileNames: [symbol.sourceFileName],
@@ -355,11 +371,14 @@ export class ComponentImportService implements IComponentImportService {
     for (const suggestedVariant of suggestion.variants) {
       const matchedFootprints = suggestedVariant.footprintFileNames
         .map((fileName) => footprintLookup.get(fileName))
-        .filter((footprint): footprint is ParsedImportFootprint => Boolean(footprint));
+        .filter((footprint): footprint is ParsedImportFootprint =>
+          Boolean(footprint),
+        );
 
       for (let index = 0; index < matchedFootprints.length; index += 1) {
         const matchedFootprint = matchedFootprints[index]!;
         const suffix = matchedFootprints.length > 1 ? `${index + 1}` : "";
+        const footprintOptionId = crypto.randomUUID();
         variants.push({
           canonicalCode: buildVariantCode(
             suggestedVariant.suggestedCanonicalCode,
@@ -369,7 +388,9 @@ export class ComponentImportService implements IComponentImportService {
           humanLabel: buildVariantLabel(
             suggestedVariant.suggestedHumanLabel,
             matchedFootprint.footprint.name,
-            matchedFootprints.length > 1 ? matchedFootprint.footprint.name : undefined,
+            matchedFootprints.length > 1
+              ? matchedFootprint.footprint.name
+              : undefined,
           ),
           imperialAlias: null,
           metricAlias: null,
@@ -377,8 +398,18 @@ export class ComponentImportService implements IComponentImportService {
           dimensions: null,
           isDefault: variants.length === 0,
           pinRemapTable: null,
-          footprintPayload: buildFootprintPayload(matchedFootprint),
-          defaultFootprintId: null,
+          footprintOptions: [
+            {
+              id: footprintOptionId,
+              label: "Default",
+              isDefault: true,
+              kicadPayload: buildFootprintPayload(matchedFootprint),
+              model3dOptions: [],
+              densityLevel: null,
+              ipcName: null,
+            },
+          ],
+          defaultFootprintOptionId: footprintOptionId,
         });
       }
     }
@@ -404,7 +435,9 @@ export class ComponentImportService implements IComponentImportService {
         importProvenance: {
           source: "footprint-only",
           importedFromFiles:
-            suggestion?.variants.flatMap((variant) => variant.footprintFileNames) ?? [],
+            suggestion?.variants.flatMap(
+              (variant) => variant.footprintFileNames,
+            ) ?? [],
         },
       };
     }
@@ -412,7 +445,10 @@ export class ComponentImportService implements IComponentImportService {
     return {
       referencePrefix:
         symbol.symbol.properties.Reference ||
-        inferReferencePrefix(symbol.symbol.name, suggestion?.suggestedFamilyLabel),
+        inferReferencePrefix(
+          symbol.symbol.name,
+          suggestion?.suggestedFamilyLabel,
+        ),
       pinDefinitions: symbol.symbol.pins.map((pin) => ({
         number: pin.number,
         name: pin.name,
@@ -515,17 +551,27 @@ export class ComponentImportService implements IComponentImportService {
   }
 }
 
-function buildVariantCode(baseCode: string, fallbackName: string, suffix: string): string {
+function buildVariantCode(
+  baseCode: string,
+  fallbackName: string,
+  suffix: string,
+): string {
   const base = generateCanonicalKey(baseCode || fallbackName || "default");
   return suffix ? `${base}-${suffix}` : base;
 }
 
-function buildVariantLabel(baseLabel: string, fallbackName: string, extraLabel?: string): string {
+function buildVariantLabel(
+  baseLabel: string,
+  fallbackName: string,
+  extraLabel?: string,
+): string {
   const label = baseLabel || fallbackName || "Default";
   return extraLabel ? `${label} (${extraLabel})` : label;
 }
 
-function buildFootprintPayload(footprint: ParsedImportFootprint): Record<string, unknown> {
+function buildFootprintPayload(
+  footprint: ParsedImportFootprint,
+): Record<string, unknown> {
   return {
     name: footprint.footprint.name,
     description: footprint.footprint.description,
@@ -547,9 +593,14 @@ function buildFootprintPayload(footprint: ParsedImportFootprint): Record<string,
   };
 }
 
-function scoreSymbolForGroup(symbol: ParsedKicadSymbol, suggestionText: string): number {
+function scoreSymbolForGroup(
+  symbol: ParsedKicadSymbol,
+  suggestionText: string,
+): number {
   const normalizedSuggestion = normalizeTokens(suggestionText);
-  const normalizedSymbol = normalizeTokens(`${symbol.name} ${symbol.kicadId ?? ""}`);
+  const normalizedSymbol = normalizeTokens(
+    `${symbol.name} ${symbol.kicadId ?? ""}`,
+  );
   let score = 0;
 
   for (const token of normalizedSymbol) {
@@ -620,7 +671,10 @@ function generateCanonicalKey(input: string): string {
   return normalized || `component-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-function ensureBatchUnique(canonicalKey: string, usedCanonicalKeys: Set<string>): string {
+function ensureBatchUnique(
+  canonicalKey: string,
+  usedCanonicalKeys: Set<string>,
+): string {
   if (!usedCanonicalKeys.has(canonicalKey)) {
     return canonicalKey;
   }
@@ -641,7 +695,9 @@ function hashContent(content: string): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
-function inferReferencePrefix(...values: Array<string | undefined | null>): string {
+function inferReferencePrefix(
+  ...values: Array<string | undefined | null>
+): string {
   const text = values.join(" ").toLowerCase();
 
   if (text.includes("capacitor")) return "C";

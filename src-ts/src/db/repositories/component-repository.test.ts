@@ -38,8 +38,8 @@ function createTestDb() {
       dimensions TEXT,
       is_default INTEGER NOT NULL DEFAULT 0,
       pin_remap_table TEXT,
-      footprint_payload TEXT,
-      default_footprint_id TEXT,
+      footprint_options TEXT NOT NULL DEFAULT '[]',
+      default_footprint_option_id TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -95,8 +95,19 @@ function variant(code: string, label: string, isDefault = false) {
     dimensions: { lengthMm: 1.6, widthMm: 0.8, heightMm: null },
     isDefault,
     pinRemapTable: null,
-    footprintPayload: { name: `${code}-footprint` },
-    defaultFootprintId: null,
+    footprintOptions: [
+      {
+        id: `fp-${code}`,
+        variantId: "",
+        label: "Default",
+        isDefault: true,
+        kicadPayload: { name: `${code}-footprint` },
+        model3dOptions: [],
+        densityLevel: null,
+        ipcName: null,
+      },
+    ],
+    defaultFootprintOptionId: `fp-${code}`,
   };
 }
 
@@ -145,7 +156,11 @@ describe("ComponentRepository", () => {
       description: "Thin film resistor",
       categoryPath: "passives/resistors/thin-film",
       tags: ["precision", "passive"],
-      symbolData: { referencePrefix: "R", pinDefinitions: [], properties: { tolerance: "1%" } },
+      symbolData: {
+        referencePrefix: "R",
+        pinDefinitions: [],
+        properties: { tolerance: "1%" },
+      },
     });
 
     expect(updated.component.displayLabel).toBe("Precision Resistor");
@@ -188,11 +203,15 @@ describe("ComponentRepository", () => {
     expect(bySearch.length).toBe(1);
     expect(bySearch[0]!.component.canonicalKey).toBe("res-1k");
 
-    const byMountType = await repo.listComponents({ mountType: "through_hole" });
+    const byMountType = await repo.listComponents({
+      mountType: "through_hole",
+    });
     expect(byMountType.length).toBe(1);
     expect(byMountType[0]!.component.canonicalKey).toBe("hdr-2x1");
 
-    const byCategoryPath = await repo.listComponents({ categoryPath: "passives/resistors" });
+    const byCategoryPath = await repo.listComponents({
+      categoryPath: "passives/resistors",
+    });
     expect(byCategoryPath.length).toBe(1);
     expect(byCategoryPath[0]!.component.canonicalKey).toBe("res-1k");
   });
@@ -212,10 +231,10 @@ describe("ComponentRepository", () => {
 
     const updatedVariant = await repo.variants.updateVariant(newVariant.id, {
       humanLabel: "1206 metric",
-      defaultFootprintId: "fp-1206-default",
+      defaultFootprintOptionId: "fp-1206-default",
     });
     expect(updatedVariant.humanLabel).toBe("1206 metric");
-    expect(updatedVariant.defaultFootprintId).toBe("fp-1206-default");
+    expect(updatedVariant.defaultFootprintOptionId).toBe("fp-1206-default");
 
     const defaultVariant = await repo.variants.setDefaultVariant(
       created.component.id,
@@ -227,15 +246,17 @@ describe("ComponentRepository", () => {
     const refreshed = await repo.getComponent(created.component.id);
     expect(refreshed!.component.defaultVariantId).toBe(newVariant.id);
 
-    const oldDefault = refreshed!.variants.find((item) => item.canonicalCode === "0805")!;
+    const oldDefault = refreshed!.variants.find(
+      (item) => item.canonicalCode === "0805",
+    )!;
     await repo.variants.removeVariant(oldDefault.id);
 
     const afterRemove = await repo.getComponent(created.component.id);
     expect(afterRemove!.variants.length).toBe(1);
 
-    await expect(repo.variants.removeVariant(afterRemove!.variants[0]!.id)).rejects.toThrow(
-      "Cannot remove the only variant",
-    );
+    await expect(
+      repo.variants.removeVariant(afterRemove!.variants[0]!.id),
+    ).rejects.toThrow("Cannot remove the only variant");
   });
 
   test("getDeleteImpact returns usage count and design names", async () => {

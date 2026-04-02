@@ -8,6 +8,7 @@ import {
   type UpdateComponentInput,
   type UpdateVariantInput,
 } from "../../db/repositories/component-repository";
+import type { FootprintOption } from "../../db/schema/component-variant";
 import {
   DbConflictError,
   DbNotFoundError,
@@ -29,11 +30,15 @@ type ComponentRequestVariant = {
   } | null;
   isDefault?: boolean;
   pinRemapTable?: Record<string, string> | null;
-  footprintPayload?: Record<string, unknown> | null;
   footprintOptions?: Array<{
-    id?: string;
+    id: string;
+    variantId?: string;
+    label?: string;
     isDefault?: boolean;
     kicadPayload?: Record<string, unknown> | null;
+    model3dOptions?: unknown[];
+    densityLevel?: "most" | "nominal" | "least" | null;
+    ipcName?: string | null;
   }>;
   defaultFootprintOptionId?: string | null;
 };
@@ -58,13 +63,16 @@ export class ComponentController {
         search: ctx.query.get("search") ?? undefined,
         categoryPath: ctx.query.get("categoryPath") ?? undefined,
         mountType:
-          (ctx.query.get("mountType") as ComponentListFilters["mountType"]) ?? undefined,
+          (ctx.query.get("mountType") as ComponentListFilters["mountType"]) ??
+          undefined,
         tags: ctx.query.get("tags")?.split(",").filter(Boolean),
       };
 
       const components = await this.repo.listComponents(filters);
       return ResponseBuilder.success({
-        components: components.map((component) => serializeComponent(component)),
+        components: components.map((component) =>
+          serializeComponent(component),
+        ),
       });
     } catch (error) {
       return this.handleRepositoryError(error, "Component");
@@ -80,7 +88,9 @@ export class ComponentController {
         return ResponseBuilder.notFound("Component", id);
       }
 
-      return ResponseBuilder.success({ component: serializeComponent(component) });
+      return ResponseBuilder.success({
+        component: serializeComponent(component),
+      });
     } catch (error) {
       return this.handleRepositoryError(error, "Component", id);
     }
@@ -89,8 +99,12 @@ export class ComponentController {
   async createComponent(ctx: RouteContext): Promise<Response> {
     try {
       const body = (await ctx.req.json()) as ComponentRequestBody;
-      const component = await this.repo.createComponent(parseCreateComponentInput(body));
-      return ResponseBuilder.created({ component: serializeComponent(component) });
+      const component = await this.repo.createComponent(
+        parseCreateComponentInput(body),
+      );
+      return ResponseBuilder.created({
+        component: serializeComponent(component),
+      });
     } catch (error) {
       return this.handleRepositoryError(error, "Component");
     }
@@ -101,8 +115,13 @@ export class ComponentController {
 
     try {
       const body = (await ctx.req.json()) as ComponentRequestBody;
-      const component = await this.repo.updateComponent(id, parseUpdateComponentInput(body));
-      return ResponseBuilder.success({ component: serializeComponent(component) });
+      const component = await this.repo.updateComponent(
+        id,
+        parseUpdateComponentInput(body),
+      );
+      return ResponseBuilder.success({
+        component: serializeComponent(component),
+      });
     } catch (error) {
       return this.handleRepositoryError(error, "Component", id);
     }
@@ -272,8 +291,13 @@ export class ComponentController {
         return ResponseBuilder.badRequest("variantId is required");
       }
 
-      const component = await this.repo.setDefaultVariant(componentId, body.variantId);
-      return ResponseBuilder.success({ component: serializeComponent(component) });
+      const component = await this.repo.setDefaultVariant(
+        componentId,
+        body.variantId,
+      );
+      return ResponseBuilder.success({
+        component: serializeComponent(component),
+      });
     } catch (error) {
       return this.handleRepositoryError(error, "Component", componentId);
     }
@@ -285,10 +309,16 @@ export class ComponentController {
   ): Promise<void> {
     const component = await this.repo.getComponent(componentId);
     if (!component) {
-      throw new DbNotFoundError("Component not found", "Component", componentId);
+      throw new DbNotFoundError(
+        "Component not found",
+        "Component",
+        componentId,
+      );
     }
 
-    const belongsToComponent = component.variants.some((variant) => variant.id === variantId);
+    const belongsToComponent = component.variants.some(
+      (variant) => variant.id === variantId,
+    );
     if (!belongsToComponent) {
       throw new DbNotFoundError(
         "Variant not found for component",
@@ -307,7 +337,10 @@ export class ComponentController {
       return ResponseBuilder.notFound(error.entity ?? resource, error.id ?? id);
     }
 
-    if (error instanceof DbConflictError || error instanceof UniqueConstraintError) {
+    if (
+      error instanceof DbConflictError ||
+      error instanceof UniqueConstraintError
+    ) {
       return ResponseBuilder.conflict(error.message, {
         resource,
         id,
@@ -318,22 +351,30 @@ export class ComponentController {
   }
 }
 
-function parseCreateComponentInput(body: ComponentRequestBody): CreateComponentInput {
+function parseCreateComponentInput(
+  body: ComponentRequestBody,
+): CreateComponentInput {
   const displayLabel = body.displayLabel?.trim() || "Untitled Component";
   const variants = getRequestVariants(body);
 
   return {
-    canonicalKey: body.canonicalKey?.trim() || generateCanonicalKey(displayLabel),
+    canonicalKey:
+      body.canonicalKey?.trim() || generateCanonicalKey(displayLabel),
     displayLabel,
     description: body.description ?? "",
     symbolData: body.symbolData ?? createEmptySymbolData(),
     categoryPath: resolveCategoryPath(body.categoryPath, body.symbolData),
     tags: body.tags ?? [],
-    variants: variants.length > 0 ? variants.map(parseCreateVariantInput) : [createPlaceholderVariant(displayLabel)],
+    variants:
+      variants.length > 0
+        ? variants.map(parseCreateVariantInput)
+        : [createPlaceholderVariant(displayLabel)],
   };
 }
 
-function parseUpdateComponentInput(body: ComponentRequestBody): UpdateComponentInput {
+function parseUpdateComponentInput(
+  body: ComponentRequestBody,
+): UpdateComponentInput {
   const updates: UpdateComponentInput = {};
 
   if (body.canonicalKey !== undefined) updates.canonicalKey = body.canonicalKey;
@@ -341,7 +382,10 @@ function parseUpdateComponentInput(body: ComponentRequestBody): UpdateComponentI
   if (body.description !== undefined) updates.description = body.description;
   if (body.symbolData !== undefined) updates.symbolData = body.symbolData;
   if (body.categoryPath !== undefined || body.symbolData !== undefined) {
-    updates.categoryPath = resolveCategoryPath(body.categoryPath, body.symbolData);
+    updates.categoryPath = resolveCategoryPath(
+      body.categoryPath,
+      body.symbolData,
+    );
   }
   if (body.tags !== undefined) updates.tags = body.tags;
 
@@ -352,7 +396,15 @@ function parseUpdateComponentInput(body: ComponentRequestBody): UpdateComponentI
   return updates;
 }
 
-function parseCreateVariantInput(variant: ComponentRequestVariant): CreateVariantInput {
+function parseCreateVariantInput(
+  variant: ComponentRequestVariant,
+): CreateVariantInput {
+  const footprintOptions = getVariantFootprintOptions(variant);
+  const defaultFootprintOptionId = getVariantDefaultFootprintOptionId(
+    variant,
+    footprintOptions,
+  );
+
   return {
     canonicalCode: variant.canonicalCode?.trim() || "default",
     humanLabel: variant.humanLabel?.trim() || "Default",
@@ -362,40 +414,43 @@ function parseCreateVariantInput(variant: ComponentRequestVariant): CreateVarian
     dimensions: variant.dimensions ?? null,
     isDefault: variant.isDefault ?? false,
     pinRemapTable: variant.pinRemapTable ?? null,
-    footprintPayload: getVariantFootprintPayload(variant),
-    defaultFootprintId: getVariantDefaultFootprintId(variant),
+    footprintOptions,
+    defaultFootprintOptionId,
   };
 }
 
-function parseUpdateVariantInput(variant: ComponentRequestVariant): UpdateVariantInput {
+function parseUpdateVariantInput(
+  variant: ComponentRequestVariant,
+): UpdateVariantInput {
   const updates: UpdateVariantInput = {};
 
-  if (variant.canonicalCode !== undefined) updates.canonicalCode = variant.canonicalCode;
+  if (variant.canonicalCode !== undefined)
+    updates.canonicalCode = variant.canonicalCode;
   if (variant.humanLabel !== undefined) updates.humanLabel = variant.humanLabel;
-  if (variant.imperialAlias !== undefined) updates.imperialAlias = variant.imperialAlias;
-  if (variant.metricAlias !== undefined) updates.metricAlias = variant.metricAlias;
+  if (variant.imperialAlias !== undefined)
+    updates.imperialAlias = variant.imperialAlias;
+  if (variant.metricAlias !== undefined)
+    updates.metricAlias = variant.metricAlias;
   if (variant.mountType !== undefined) updates.mountType = variant.mountType;
   if (variant.dimensions !== undefined) updates.dimensions = variant.dimensions;
   if (variant.isDefault !== undefined) updates.isDefault = variant.isDefault;
-  if (variant.pinRemapTable !== undefined) updates.pinRemapTable = variant.pinRemapTable;
-  if (
-    variant.footprintPayload !== undefined ||
-    variant.footprintOptions !== undefined
-  ) {
-    updates.footprintPayload = getVariantFootprintPayload(variant);
-  }
-  if (
-    variant.defaultFootprintOptionId !== undefined ||
-    variant.footprintOptions !== undefined
-  ) {
-    updates.defaultFootprintId = getVariantDefaultFootprintId(variant);
+  if (variant.pinRemapTable !== undefined)
+    updates.pinRemapTable = variant.pinRemapTable;
+  if (variant.footprintOptions !== undefined) {
+    updates.footprintOptions = getVariantFootprintOptions(variant);
+    updates.defaultFootprintOptionId = getVariantDefaultFootprintOptionId(
+      variant,
+      updates.footprintOptions,
+    );
   }
 
   return updates;
 }
 
 function serializeComponent(component: ComponentWithVariants) {
-  const variants = component.variants.map((variant) => serializeVariant(variant));
+  const variants = component.variants.map((variant) =>
+    serializeVariant(variant),
+  );
 
   return {
     ...component.component,
@@ -404,72 +459,45 @@ function serializeComponent(component: ComponentWithVariants) {
   };
 }
 
-function serializeVariant(
-  variant: ComponentWithVariants["variants"][number],
-) {
-  const footprint = serializeFootprint(variant);
-  const footprints = footprint ? [footprint] : [];
-  const {
-    footprintPayload: _footprintPayload,
-    defaultFootprintId: _defaultFootprintId,
-    ...variantWithoutLegacyFields
-  } = variant;
-
+function serializeVariant(variant: ComponentWithVariants["variants"][number]) {
   return {
-    ...variantWithoutLegacyFields,
-    footprintOptions: footprints,
-    defaultFootprintOptionId: variant.defaultFootprintId ?? footprint?.id ?? null,
+    ...variant,
+    footprintOptions: variant.footprintOptions ?? [],
+    defaultFootprintOptionId: variant.defaultFootprintOptionId ?? null,
   };
 }
 
-function serializeFootprint(variant: ComponentWithVariants["variants"][number]) {
-  if (!variant.footprintPayload && !variant.defaultFootprintId) {
-    return null;
-  }
-
-  const id = variant.defaultFootprintId ?? variant.id;
-  return {
-    id,
-    variantId: variant.id,
-    label: "Default",
-    isDefault: true,
-    kicadPayload: variant.footprintPayload,
-    model3dOptions: [],
-    densityLevel: null,
-    ipcName: null,
-  };
-}
-
-function getRequestVariants(body: ComponentRequestBody): ComponentRequestVariant[] {
+function getRequestVariants(
+  body: ComponentRequestBody,
+): ComponentRequestVariant[] {
   return body.variants ?? [];
 }
 
-function getVariantFootprintPayload(
+function getVariantFootprintOptions(
   variant: ComponentRequestVariant,
-): Record<string, unknown> | null {
-  if (variant.footprintPayload !== undefined) {
-    return variant.footprintPayload;
-  }
-
-  const footprint = variant.footprintOptions?.find(
-    (entry) => entry.isDefault,
-  ) ?? variant.footprintOptions?.[0];
-
-  return footprint?.kicadPayload ?? null;
+): FootprintOption[] {
+  return (variant.footprintOptions ?? []).map((opt) => ({
+    id: opt.id,
+    variantId: opt.variantId ?? "",
+    label: opt.label ?? "Default",
+    isDefault: opt.isDefault ?? false,
+    kicadPayload: opt.kicadPayload ?? null,
+    model3dOptions: opt.model3dOptions ?? [],
+    densityLevel: opt.densityLevel ?? null,
+    ipcName: opt.ipcName ?? null,
+  }));
 }
 
-function getVariantDefaultFootprintId(
+function getVariantDefaultFootprintOptionId(
   variant: ComponentRequestVariant,
+  footprintOptions: FootprintOption[],
 ): string | null {
   if (variant.defaultFootprintOptionId !== undefined) {
     return variant.defaultFootprintOptionId;
   }
 
-  const footprint = variant.footprintOptions?.find(
-    (entry) => entry.isDefault,
-  ) ?? variant.footprintOptions?.[0];
-
-  return footprint?.id ?? null;
+  const defaultOption = footprintOptions.find((opt) => opt.isDefault);
+  return defaultOption?.id ?? footprintOptions[0]?.id ?? null;
 }
 
 function createEmptySymbolData(): Record<string, unknown> {
@@ -493,8 +521,8 @@ function createPlaceholderVariant(displayLabel: string): CreateVariantInput {
     dimensions: null,
     isDefault: true,
     pinRemapTable: null,
-    footprintPayload: null,
-    defaultFootprintId: null,
+    footprintOptions: [],
+    defaultFootprintOptionId: null,
   };
 }
 

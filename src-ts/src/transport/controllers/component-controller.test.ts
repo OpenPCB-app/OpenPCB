@@ -30,7 +30,9 @@ function createContext(opts: {
       },
     } as RouteContext["params"],
     query,
-    url: new URL(`http://localhost/api/components${query.toString() ? `?${query}` : ""}`),
+    url: new URL(
+      `http://localhost/api/components${query.toString() ? `?${query}` : ""}`,
+    ),
   };
 }
 
@@ -65,8 +67,19 @@ function createAggregate(overrides?: {
         dimensions: null,
         isDefault: true,
         pinRemapTable: null,
-        footprintPayload: { name: "R_0603" },
-        defaultFootprintId: "footprint-1",
+        footprintOptions: [
+          {
+            id: "footprint-1",
+            variantId: "variant-1",
+            label: "Default",
+            isDefault: true,
+            kicadPayload: { name: "R_0603" },
+            model3dOptions: [],
+            densityLevel: null,
+            ipcName: null,
+          },
+        ],
+        defaultFootprintOptionId: "footprint-1",
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -88,15 +101,28 @@ function createRepoMock(): ComponentRepository {
     dimensions: null,
     isDefault: false,
     pinRemapTable: null,
-    footprintPayload: { name: "R_0805" },
-    defaultFootprintId: "footprint-2",
+    footprintOptions: [
+      {
+        id: "footprint-2",
+        variantId: "variant-2",
+        label: "Default",
+        isDefault: true,
+        kicadPayload: { name: "R_0805" },
+        model3dOptions: [],
+        densityLevel: null,
+        ipcName: null,
+      },
+    ],
+    defaultFootprintOptionId: "footprint-2",
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 
   return {
     listComponents: mock(async () => [aggregate]),
-    getComponent: mock(async (id: string) => (id === "component-1" ? aggregate : null)),
+    getComponent: mock(async (id: string) =>
+      id === "component-1" ? aggregate : null,
+    ),
     createComponent: mock(async () => aggregate),
     updateComponent: mock(async (_id: string, input: Record<string, unknown>) =>
       createAggregate({ component: input }),
@@ -122,14 +148,18 @@ function createRepoMock(): ComponentRepository {
     ),
     variants: {
       addVariant: mock(async () => secondVariant),
-      updateVariant: mock(async (variantId: string, input: Record<string, unknown>) => ({
-        ...secondVariant,
-        id: variantId,
-        ...input,
-      })),
+      updateVariant: mock(
+        async (variantId: string, input: Record<string, unknown>) => ({
+          ...secondVariant,
+          id: variantId,
+          ...input,
+        }),
+      ),
       removeVariant: mock(async (variantId: string) => {
         if (variantId === "variant-only") {
-          throw new DbConflictError("Cannot remove the only variant of a component");
+          throw new DbConflictError(
+            "Cannot remove the only variant of a component",
+          );
         }
       }),
     },
@@ -140,7 +170,9 @@ describe("ComponentController", () => {
   it("lists workspace components with v1 filters", async () => {
     const repo = createRepoMock();
     const ctrl = new ComponentController(repo);
-    const res = await ctrl.listComponents(createContext({ query: { search: "Resistor" } }));
+    const res = await ctrl.listComponents(
+      createContext({ query: { search: "Resistor" } }),
+    );
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -171,14 +203,20 @@ describe("ComponentController", () => {
       createContext({
         body: {
           displayLabel: "Resistor",
-          symbolData: { referencePrefix: "R", pinDefinitions: [], properties: {} },
+          symbolData: {
+            referencePrefix: "R",
+            pinDefinitions: [],
+            properties: {},
+          },
           variants: [
             {
               canonicalCode: "0603",
               humanLabel: "0603",
               mountType: "smd",
               isDefault: true,
-              footprintOptions: [{ id: "footprint-1", isDefault: true, kicadPayload: {} }],
+              footprintOptions: [
+                { id: "footprint-1", isDefault: true, kicadPayload: {} },
+              ],
             },
           ],
         },
@@ -198,8 +236,10 @@ describe("ComponentController", () => {
             humanLabel: "0603",
             mountType: "smd",
             isDefault: true,
-            defaultFootprintId: "footprint-1",
-            footprintPayload: {},
+            defaultFootprintOptionId: "footprint-1",
+            footprintOptions: [
+              expect.objectContaining({ id: "footprint-1", isDefault: true }),
+            ],
           }),
         ],
       }),
@@ -231,7 +271,9 @@ describe("ComponentController", () => {
   it("deletes an unused component", async () => {
     const repo = createRepoMock();
     const ctrl = new ComponentController(repo);
-    const res = await ctrl.deleteComponent(createContext({ id: "component-1" }));
+    const res = await ctrl.deleteComponent(
+      createContext({ id: "component-1" }),
+    );
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -242,7 +284,9 @@ describe("ComponentController", () => {
   it("returns conflict when deleting used component", async () => {
     const repo = createRepoMock();
     const ctrl = new ComponentController(repo);
-    const res = await ctrl.deleteComponent(createContext({ id: "component-used" }));
+    const res = await ctrl.deleteComponent(
+      createContext({ id: "component-used" }),
+    );
     const body = await res.json();
 
     expect(res.status).toBe(409);
@@ -273,7 +317,9 @@ describe("ComponentController", () => {
           canonicalCode: "0805",
           humanLabel: "0805",
           mountType: "smd",
-          footprintOptions: [{ id: "footprint-2", isDefault: true, kicadPayload: {} }],
+          footprintOptions: [
+            { id: "footprint-2", isDefault: true, kicadPayload: {} },
+          ],
         },
       }),
     );
@@ -287,8 +333,10 @@ describe("ComponentController", () => {
         canonicalCode: "0805",
         humanLabel: "0805",
         mountType: "smd",
-        defaultFootprintId: "footprint-2",
-        footprintPayload: {},
+        defaultFootprintOptionId: "footprint-2",
+        footprintOptions: [
+          expect.objectContaining({ id: "footprint-2", isDefault: true }),
+        ],
       }),
     );
   });
@@ -343,8 +391,8 @@ describe("ComponentController", () => {
                 dimensions: null,
                 isDefault: true,
                 pinRemapTable: null,
-                footprintPayload: {},
-                defaultFootprintId: null,
+                footprintOptions: [],
+                defaultFootprintOptionId: null,
                 createdAt: new Date(),
                 updatedAt: new Date(),
               },

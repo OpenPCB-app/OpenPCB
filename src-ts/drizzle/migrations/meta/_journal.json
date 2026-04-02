@@ -99,6 +99,13 @@
       "when": 1774100000003,
       "tag": "0013_add_v1_component_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1774100000004,
+      "tag": "0014_footprint_options_array",
+      "breakpoints": true
     }
   ]
 }

@@ -53,10 +53,7 @@ export interface UpdateComponentInput {
 }
 
 export type UpdateVariantInput = Partial<
-  Omit<
-    NewComponentVariantRow,
-    "id" | "componentId" | "createdAt" | "updatedAt"
-  >
+  Omit<NewComponentVariantRow, "id" | "componentId" | "createdAt" | "updatedAt">
 >;
 
 export interface ComponentListFilters {
@@ -92,116 +89,142 @@ export class ComponentVariantRepository extends BaseRepository<
     componentId: string,
     input: CreateVariantInput,
   ): Promise<ComponentVariantRow> {
-    return withQueryLogging(this.logger, this.entityName, "addVariant", async () => {
-      await this.ensureComponentExists(componentId);
-      const variantId = generateUUIDv7();
-      const now = new Date();
+    return withQueryLogging(
+      this.logger,
+      this.entityName,
+      "addVariant",
+      async () => {
+        await this.ensureComponentExists(componentId);
+        const variantId = generateUUIDv7();
+        const now = new Date();
 
-      const hasVariants = await this.getVariantCount(componentId);
-      const shouldBeDefault = input.isDefault || hasVariants === 0;
+        const hasVariants = await this.getVariantCount(componentId);
+        const shouldBeDefault = input.isDefault || hasVariants === 0;
 
-      await this.db.transaction(async (tx) => {
-        if (shouldBeDefault) {
-          await this.clearDefaultForComponent(componentId, tx as unknown as DbExecutor);
-        }
+        await this.db.transaction(async (tx) => {
+          if (shouldBeDefault) {
+            await this.clearDefaultForComponent(
+              componentId,
+              tx as unknown as DbExecutor,
+            );
+          }
 
-        await tx.insert(componentVariant).values({
-          ...input,
-          id: variantId,
-          componentId,
-          isDefault: shouldBeDefault,
-          createdAt: now,
-          updatedAt: now,
+          await tx.insert(componentVariant).values({
+            ...input,
+            id: variantId,
+            componentId,
+            isDefault: shouldBeDefault,
+            createdAt: now,
+            updatedAt: now,
+          });
+
+          if (shouldBeDefault) {
+            await tx
+              .update(component)
+              .set({ defaultVariantId: variantId, updatedAt: now })
+              .where(eq(component.id, componentId));
+          }
         });
 
-        if (shouldBeDefault) {
-          await tx
-            .update(component)
-            .set({ defaultVariantId: variantId, updatedAt: now })
-            .where(eq(component.id, componentId));
-        }
-      });
-
-      return this.findByIdOrThrow(variantId);
-    });
+        return this.findByIdOrThrow(variantId);
+      },
+    );
   }
 
   async updateVariant(
     variantId: string,
     input: UpdateVariantInput,
   ): Promise<ComponentVariantRow> {
-    return withQueryLogging(this.logger, this.entityName, "updateVariant", async () => {
-      const current = await this.findByIdOrThrow(variantId);
-      const { isDefault, ...rest } = input;
+    return withQueryLogging(
+      this.logger,
+      this.entityName,
+      "updateVariant",
+      async () => {
+        const current = await this.findByIdOrThrow(variantId);
+        const { isDefault, ...rest } = input;
 
-      await this.db
-        .update(componentVariant)
-        .set({ ...rest, updatedAt: new Date() })
-        .where(eq(componentVariant.id, variantId));
+        await this.db
+          .update(componentVariant)
+          .set({ ...rest, updatedAt: new Date() })
+          .where(eq(componentVariant.id, variantId));
 
-      if (isDefault === true) {
-        await this.setDefaultVariant(current.componentId, variantId);
-      }
-
-      if (isDefault === false && current.isDefault) {
-        const fallback = await this.findFirstNonDefaultVariant(
-          current.componentId,
-          variantId,
-        );
-        if (!fallback) {
-          throw new DbConflictError("At least one default variant is required");
+        if (isDefault === true) {
+          await this.setDefaultVariant(current.componentId, variantId);
         }
-        await this.setDefaultVariant(current.componentId, fallback.id);
-      }
 
-      return this.findByIdOrThrow(variantId);
-    });
+        if (isDefault === false && current.isDefault) {
+          const fallback = await this.findFirstNonDefaultVariant(
+            current.componentId,
+            variantId,
+          );
+          if (!fallback) {
+            throw new DbConflictError(
+              "At least one default variant is required",
+            );
+          }
+          await this.setDefaultVariant(current.componentId, fallback.id);
+        }
+
+        return this.findByIdOrThrow(variantId);
+      },
+    );
   }
 
   async removeVariant(variantId: string): Promise<void> {
-    return withQueryLogging(this.logger, this.entityName, "removeVariant", async () => {
-      const existing = await this.findByIdOrThrow(variantId);
-      const count = await this.getVariantCount(existing.componentId);
+    return withQueryLogging(
+      this.logger,
+      this.entityName,
+      "removeVariant",
+      async () => {
+        const existing = await this.findByIdOrThrow(variantId);
+        const count = await this.getVariantCount(existing.componentId);
 
-      if (count <= 1) {
-        throw new DbConflictError("Cannot remove the only variant of a component");
-      }
-
-      await this.db.transaction(async (tx) => {
-        await tx.delete(componentVariant).where(eq(componentVariant.id, variantId));
-
-        if (existing.isDefault) {
-          const fallback = await tx
-            .select({ id: componentVariant.id })
-            .from(componentVariant)
-            .where(eq(componentVariant.componentId, existing.componentId))
-            .limit(1);
-
-          const fallbackId = fallback[0]?.id;
-          if (!fallbackId) {
-            throw new DbConflictError("Component must retain at least one variant");
-          }
-
-          await this.clearDefaultForComponent(
-            existing.componentId,
-            tx as unknown as DbExecutor,
+        if (count <= 1) {
+          throw new DbConflictError(
+            "Cannot remove the only variant of a component",
           );
-          await tx
-            .update(componentVariant)
-            .set({ isDefault: true, updatedAt: new Date() })
-            .where(eq(componentVariant.id, fallbackId));
-          await tx
-            .update(component)
-            .set({ defaultVariantId: fallbackId, updatedAt: new Date() })
-            .where(eq(component.id, existing.componentId));
         }
-      });
-    });
+
+        await this.db.transaction(async (tx) => {
+          await tx
+            .delete(componentVariant)
+            .where(eq(componentVariant.id, variantId));
+
+          if (existing.isDefault) {
+            const fallback = await tx
+              .select({ id: componentVariant.id })
+              .from(componentVariant)
+              .where(eq(componentVariant.componentId, existing.componentId))
+              .limit(1);
+
+            const fallbackId = fallback[0]?.id;
+            if (!fallbackId) {
+              throw new DbConflictError(
+                "Component must retain at least one variant",
+              );
+            }
+
+            await this.clearDefaultForComponent(
+              existing.componentId,
+              tx as unknown as DbExecutor,
+            );
+            await tx
+              .update(componentVariant)
+              .set({ isDefault: true, updatedAt: new Date() })
+              .where(eq(componentVariant.id, fallbackId));
+            await tx
+              .update(component)
+              .set({ defaultVariantId: fallbackId, updatedAt: new Date() })
+              .where(eq(component.id, existing.componentId));
+          }
+        });
+      },
+    );
   }
 
   async setDefaultFootprint(
     variantId: string,
-    defaultFootprintId: string | null,
+    defaultFootprintOptionId: string | null,
   ): Promise<ComponentVariantRow> {
     return withQueryLogging(
       this.logger,
@@ -211,7 +234,7 @@ export class ComponentVariantRepository extends BaseRepository<
         await this.findByIdOrThrow(variantId);
         await this.db
           .update(componentVariant)
-          .set({ defaultFootprintId, updatedAt: new Date() })
+          .set({ defaultFootprintOptionId, updatedAt: new Date() })
           .where(eq(componentVariant.id, variantId));
         return this.findByIdOrThrow(variantId);
       },
@@ -230,7 +253,10 @@ export class ComponentVariantRepository extends BaseRepository<
         await this.ensureVariantBelongsToComponent(componentId, variantId);
 
         await this.db.transaction(async (tx) => {
-          await this.clearDefaultForComponent(componentId, tx as unknown as DbExecutor);
+          await this.clearDefaultForComponent(
+            componentId,
+            tx as unknown as DbExecutor,
+          );
           await tx
             .update(componentVariant)
             .set({ isDefault: true, updatedAt: new Date() })
@@ -253,7 +279,11 @@ export class ComponentVariantRepository extends BaseRepository<
       .where(eq(component.id, componentId))
       .limit(1);
     if (!found[0]) {
-      throw new DbNotFoundError("Component not found", "Component", componentId);
+      throw new DbNotFoundError(
+        "Component not found",
+        "Component",
+        componentId,
+      );
     }
   }
 
@@ -331,264 +361,317 @@ export class ComponentRepository extends BaseRepository<
     this.variantsRepo = new ComponentVariantRepository(db, logger);
   }
 
-  async createComponent(input: CreateComponentInput): Promise<ComponentWithVariants> {
-    return withQueryLogging(this.logger, this.entityName, "createComponent", async () => {
-      if (input.variants.length === 0) {
-        throw new DbConflictError("Component must include at least one variant");
-      }
+  async createComponent(
+    input: CreateComponentInput,
+  ): Promise<ComponentWithVariants> {
+    return withQueryLogging(
+      this.logger,
+      this.entityName,
+      "createComponent",
+      async () => {
+        if (input.variants.length === 0) {
+          throw new DbConflictError(
+            "Component must include at least one variant",
+          );
+        }
 
-      const componentId = generateUUIDv7();
-      const now = new Date();
-      const defaultIndex = Math.max(
-        0,
-        input.variants.findIndex((variant) => variant.isDefault),
-      );
+        const componentId = generateUUIDv7();
+        const now = new Date();
+        const defaultIndex = Math.max(
+          0,
+          input.variants.findIndex((variant) => variant.isDefault),
+        );
 
-      await this.db.transaction(async (tx) => {
-        await tx.insert(component).values({
-          id: componentId,
-          canonicalKey: input.canonicalKey,
-          displayLabel: input.displayLabel,
-          description: input.description ?? "",
-          scope: "workspace",
-          symbolData: input.symbolData,
-          categoryPath: input.categoryPath ?? null,
-          tags: input.tags ?? [],
-          defaultVariantId: null,
-          createdAt: now,
-          updatedAt: now,
-        });
-
-        let defaultVariantId: string | null = null;
-        for (let i = 0; i < input.variants.length; i += 1) {
-          const variant = input.variants[i]!;
-          const variantId = generateUUIDv7();
-          const isDefault = i === defaultIndex;
-
-          await tx.insert(componentVariant).values({
-            ...variant,
-            id: variantId,
-            componentId,
-            isDefault,
+        await this.db.transaction(async (tx) => {
+          await tx.insert(component).values({
+            id: componentId,
+            canonicalKey: input.canonicalKey,
+            displayLabel: input.displayLabel,
+            description: input.description ?? "",
+            scope: "workspace",
+            symbolData: input.symbolData,
+            categoryPath: input.categoryPath ?? null,
+            tags: input.tags ?? [],
+            defaultVariantId: null,
             createdAt: now,
             updatedAt: now,
           });
 
-          if (isDefault) {
-            defaultVariantId = variantId;
+          let defaultVariantId: string | null = null;
+          for (let i = 0; i < input.variants.length; i += 1) {
+            const variant = input.variants[i]!;
+            const variantId = generateUUIDv7();
+            const isDefault = i === defaultIndex;
+
+            await tx.insert(componentVariant).values({
+              ...variant,
+              id: variantId,
+              componentId,
+              isDefault,
+              createdAt: now,
+              updatedAt: now,
+            });
+
+            if (isDefault) {
+              defaultVariantId = variantId;
+            }
           }
-        }
 
-        await tx
-          .update(component)
-          .set({ defaultVariantId, updatedAt: new Date() })
-          .where(eq(component.id, componentId));
-      });
+          await tx
+            .update(component)
+            .set({ defaultVariantId, updatedAt: new Date() })
+            .where(eq(component.id, componentId));
+        });
 
-      return this.getComponentOrThrow(componentId);
-    });
+        return this.getComponentOrThrow(componentId);
+      },
+    );
   }
 
-  async getComponent(componentId: string): Promise<ComponentWithVariants | null> {
-    return withQueryLogging(this.logger, this.entityName, "getComponent", async () => {
-      return this.getComponentById(componentId);
-    });
+  async getComponent(
+    componentId: string,
+  ): Promise<ComponentWithVariants | null> {
+    return withQueryLogging(
+      this.logger,
+      this.entityName,
+      "getComponent",
+      async () => {
+        return this.getComponentById(componentId);
+      },
+    );
   }
 
   async updateComponent(
     componentId: string,
     input: UpdateComponentInput,
   ): Promise<ComponentWithVariants> {
-    return withQueryLogging(this.logger, this.entityName, "updateComponent", async () => {
-      await this.findByIdOrThrow(componentId);
-      const { defaultVariantId, ...componentUpdates } = input;
+    return withQueryLogging(
+      this.logger,
+      this.entityName,
+      "updateComponent",
+      async () => {
+        await this.findByIdOrThrow(componentId);
+        const { defaultVariantId, ...componentUpdates } = input;
 
-      if (Object.keys(componentUpdates).length > 0) {
-        await this.db
-          .update(component)
-          .set({ ...componentUpdates, updatedAt: new Date() })
-          .where(eq(component.id, componentId));
-      }
+        if (Object.keys(componentUpdates).length > 0) {
+          await this.db
+            .update(component)
+            .set({ ...componentUpdates, updatedAt: new Date() })
+            .where(eq(component.id, componentId));
+        }
 
-      if (defaultVariantId) {
-        await this.setDefaultVariant(componentId, defaultVariantId);
-      }
+        if (defaultVariantId) {
+          await this.setDefaultVariant(componentId, defaultVariantId);
+        }
 
-      return this.getComponentOrThrow(componentId);
-    });
+        return this.getComponentOrThrow(componentId);
+      },
+    );
   }
 
   async deleteComponent(componentId: string): Promise<void> {
-    return withQueryLogging(this.logger, this.entityName, "deleteComponent", async () => {
-      await this.findByIdOrThrow(componentId);
-      await this.db.delete(component).where(eq(component.id, componentId));
-    });
+    return withQueryLogging(
+      this.logger,
+      this.entityName,
+      "deleteComponent",
+      async () => {
+        await this.findByIdOrThrow(componentId);
+        await this.db.delete(component).where(eq(component.id, componentId));
+      },
+    );
   }
 
   async getDeleteImpact(componentId: string): Promise<ComponentDeleteImpact> {
-    return withQueryLogging(this.logger, this.entityName, "getDeleteImpact", async () => {
-      await this.findByIdOrThrow(componentId);
+    return withQueryLogging(
+      this.logger,
+      this.entityName,
+      "getDeleteImpact",
+      async () => {
+        await this.findByIdOrThrow(componentId);
 
-      const usageRows = await this.db
-        .select({
-          designId: design.id,
-          designName: design.name,
-          content: designSheet.content,
-        })
-        .from(designSheet)
-        .innerJoin(
-          design,
-          and(eq(design.id, designSheet.designId), isNull(design.deletedAt)),
-        )
-        .where(isNull(designSheet.deletedAt));
+        const usageRows = await this.db
+          .select({
+            designId: design.id,
+            designName: design.name,
+            content: designSheet.content,
+          })
+          .from(designSheet)
+          .innerJoin(
+            design,
+            and(eq(design.id, designSheet.designId), isNull(design.deletedAt)),
+          )
+          .where(isNull(designSheet.deletedAt));
 
-      const designNames = new Set<string>();
+        const designNames = new Set<string>();
 
-      for (const row of usageRows) {
-        const symbols = row.content?.symbols;
-        if (!Array.isArray(symbols)) {
-          continue;
-        }
-
-        const hasReference = symbols.some((symbol) => {
-          if (!symbol || typeof symbol !== "object") {
-            return false;
+        for (const row of usageRows) {
+          const symbols = row.content?.symbols;
+          if (!Array.isArray(symbols)) {
+            continue;
           }
 
-          const candidate = symbol as {
-            libraryPartId?: unknown;
-            properties?: Record<string, unknown>;
-          };
+          const hasReference = symbols.some((symbol) => {
+            if (!symbol || typeof symbol !== "object") {
+              return false;
+            }
 
-          const properties = candidate.properties;
-          const propertyComponentId =
-            typeof properties?.component_id === "string"
-              ? properties.component_id
-              : typeof properties?.componentId === "string"
-                ? properties.componentId
-                : null;
+            const candidate = symbol as {
+              libraryPartId?: unknown;
+              properties?: Record<string, unknown>;
+            };
 
-          return (
-            candidate.libraryPartId === componentId || propertyComponentId === componentId
-          );
-        });
+            const properties = candidate.properties;
+            const propertyComponentId =
+              typeof properties?.component_id === "string"
+                ? properties.component_id
+                : typeof properties?.componentId === "string"
+                  ? properties.componentId
+                  : null;
 
-        if (hasReference) {
-          designNames.add(row.designName);
+            return (
+              candidate.libraryPartId === componentId ||
+              propertyComponentId === componentId
+            );
+          });
+
+          if (hasReference) {
+            designNames.add(row.designName);
+          }
         }
-      }
 
-      return {
-        usageCount: designNames.size,
-        designNames: Array.from(designNames).sort((a, b) => a.localeCompare(b)),
-      };
-    });
+        return {
+          usageCount: designNames.size,
+          designNames: Array.from(designNames).sort((a, b) =>
+            a.localeCompare(b),
+          ),
+        };
+      },
+    );
   }
 
   async listComponents(
     filters: ComponentListFilters = {},
   ): Promise<ComponentWithVariants[]> {
-    return withQueryLogging(this.logger, this.entityName, "listComponents", async () => {
-      const conditions = [eq(component.scope, "workspace")];
+    return withQueryLogging(
+      this.logger,
+      this.entityName,
+      "listComponents",
+      async () => {
+        const conditions = [eq(component.scope, "workspace")];
 
-      if (filters.search) {
-        conditions.push(
-          or(
-            like(component.displayLabel, `%${filters.search}%`),
-            like(component.canonicalKey, `%${filters.search}%`),
-            like(component.description, `%${filters.search}%`),
-          )!,
-        );
-      }
-
-      if (filters.categoryPath) {
-        conditions.push(like(component.categoryPath, `${filters.categoryPath}%`));
-      }
-
-      if (filters.tags && filters.tags.length > 0) {
-        const tagConditions = filters.tags.map((tag) =>
-          like(component.tags, `%"${tag}"%`),
-        );
-        conditions.push(or(...tagConditions)!);
-      }
-
-      if (filters.mountType) {
-        const ids = await this.db
-          .selectDistinct({ id: component.id })
-          .from(component)
-          .innerJoin(
-            componentVariant,
-            eq(componentVariant.componentId, component.id),
-          )
-          .where(
-            and(
-              eq(component.scope, "workspace"),
-              eq(componentVariant.mountType, filters.mountType),
-            ),
+        if (filters.search) {
+          conditions.push(
+            or(
+              like(component.displayLabel, `%${filters.search}%`),
+              like(component.canonicalKey, `%${filters.search}%`),
+              like(component.description, `%${filters.search}%`),
+            )!,
           );
-
-        if (ids.length === 0) {
-          return [];
         }
 
-        const idPredicates = ids.map((row) => eq(component.id, row.id));
-        conditions.push(or(...idPredicates)!);
-      }
+        if (filters.categoryPath) {
+          conditions.push(
+            like(component.categoryPath, `${filters.categoryPath}%`),
+          );
+        }
 
-      const components = await this.db
-        .select()
-        .from(component)
-        .where(and(...conditions));
+        if (filters.tags && filters.tags.length > 0) {
+          const tagConditions = filters.tags.map((tag) =>
+            like(component.tags, `%"${tag}"%`),
+          );
+          conditions.push(or(...tagConditions)!);
+        }
 
-      const result = await Promise.all(
-        components.map(async (row) => this.getComponentOrThrow(row.id)),
-      );
+        if (filters.mountType) {
+          const ids = await this.db
+            .selectDistinct({ id: component.id })
+            .from(component)
+            .innerJoin(
+              componentVariant,
+              eq(componentVariant.componentId, component.id),
+            )
+            .where(
+              and(
+                eq(component.scope, "workspace"),
+                eq(componentVariant.mountType, filters.mountType),
+              ),
+            );
 
-      return result;
-    });
+          if (ids.length === 0) {
+            return [];
+          }
+
+          const idPredicates = ids.map((row) => eq(component.id, row.id));
+          conditions.push(or(...idPredicates)!);
+        }
+
+        const components = await this.db
+          .select()
+          .from(component)
+          .where(and(...conditions));
+
+        const result = await Promise.all(
+          components.map(async (row) => this.getComponentOrThrow(row.id)),
+        );
+
+        return result;
+      },
+    );
   }
 
   async setDefaultVariant(
     componentId: string,
     variantId: string,
   ): Promise<ComponentWithVariants> {
-    return withQueryLogging(this.logger, this.entityName, "setDefaultVariant", async () => {
-      await this.variantsRepo.setDefaultVariant(componentId, variantId);
-      return this.getComponentOrThrow(componentId);
-    });
+    return withQueryLogging(
+      this.logger,
+      this.entityName,
+      "setDefaultVariant",
+      async () => {
+        await this.variantsRepo.setDefaultVariant(componentId, variantId);
+        return this.getComponentOrThrow(componentId);
+      },
+    );
   }
 
   async recordUsage(input: ComponentUsageInput): Promise<void> {
-    return withQueryLogging(this.logger, this.entityName, "recordUsage", async () => {
-      await this.findByIdOrThrow(input.componentId);
+    return withQueryLogging(
+      this.logger,
+      this.entityName,
+      "recordUsage",
+      async () => {
+        await this.findByIdOrThrow(input.componentId);
 
-      const variant = await this.variantsRepo.findByIdOrThrow(input.variantId);
-      if (variant.componentId !== input.componentId) {
-        throw new DbConflictError(
-          "Variant does not belong to component",
-          "ComponentVariant",
+        const variant = await this.variantsRepo.findByIdOrThrow(
           input.variantId,
         );
-      }
+        if (variant.componentId !== input.componentId) {
+          throw new DbConflictError(
+            "Variant does not belong to component",
+            "ComponentVariant",
+            input.variantId,
+          );
+        }
 
-      await this.db
-        .insert(componentUsage)
-        .values({
-          id: generateUUIDv7(),
-          componentId: input.componentId,
-          designId: input.designId,
-          variantId: input.variantId,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .onConflictDoNothing({
-          target: [
-            componentUsage.designId,
-            componentUsage.componentId,
-            componentUsage.variantId,
-          ],
-        });
-    });
+        await this.db
+          .insert(componentUsage)
+          .values({
+            id: generateUUIDv7(),
+            componentId: input.componentId,
+            designId: input.designId,
+            variantId: input.variantId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .onConflictDoNothing({
+            target: [
+              componentUsage.designId,
+              componentUsage.componentId,
+              componentUsage.variantId,
+            ],
+          });
+      },
+    );
   }
 
   async removeUsage(input: {
@@ -596,20 +679,25 @@ export class ComponentRepository extends BaseRepository<
     designId: string;
     variantId?: string;
   }): Promise<void> {
-    return withQueryLogging(this.logger, this.entityName, "removeUsage", async () => {
-      const whereCondition = input.variantId
-        ? and(
-            eq(componentUsage.componentId, input.componentId),
-            eq(componentUsage.designId, input.designId),
-            eq(componentUsage.variantId, input.variantId),
-          )
-        : and(
-            eq(componentUsage.componentId, input.componentId),
-            eq(componentUsage.designId, input.designId),
-          );
+    return withQueryLogging(
+      this.logger,
+      this.entityName,
+      "removeUsage",
+      async () => {
+        const whereCondition = input.variantId
+          ? and(
+              eq(componentUsage.componentId, input.componentId),
+              eq(componentUsage.designId, input.designId),
+              eq(componentUsage.variantId, input.variantId),
+            )
+          : and(
+              eq(componentUsage.componentId, input.componentId),
+              eq(componentUsage.designId, input.designId),
+            );
 
-      await this.db.delete(componentUsage).where(whereCondition!);
-    });
+        await this.db.delete(componentUsage).where(whereCondition!);
+      },
+    );
   }
 
   async getUsageCount(componentId: string): Promise<number> {
@@ -648,7 +736,11 @@ export class ComponentRepository extends BaseRepository<
   ): Promise<ComponentWithVariants> {
     const result = await this.getComponentById(componentId);
     if (!result) {
-      throw new DbNotFoundError("Component not found", "Component", componentId);
+      throw new DbNotFoundError(
+        "Component not found",
+        "Component",
+        componentId,
+      );
     }
     return result;
   }

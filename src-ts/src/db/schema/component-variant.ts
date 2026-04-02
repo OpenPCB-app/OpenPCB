@@ -10,6 +10,17 @@ import { component } from "./component";
 
 const MOUNT_TYPES = ["smd", "through_hole", "virtual"] as const;
 
+export interface FootprintOption {
+  id: string;
+  variantId?: string; // Optional in input; populated by repository on insert
+  label: string;
+  isDefault: boolean;
+  kicadPayload: Record<string, unknown> | null;
+  model3dOptions?: unknown[];
+  densityLevel?: "most" | "nominal" | "least" | null;
+  ipcName?: string | null;
+}
+
 export const componentVariant = sqliteTable(
   "component_variants",
   {
@@ -30,17 +41,21 @@ export const componentVariant = sqliteTable(
     isDefault: integer("is_default", { mode: "boolean" })
       .notNull()
       .default(false),
-    pinRemapTable: text("pin_remap_table", { mode: "json" }).$type<
-      Record<string, string> | null
-    >(),
-    footprintPayload: text("footprint_payload", { mode: "json" }).$type<
-      Record<string, unknown> | null
-    >(),
-    defaultFootprintId: text("default_footprint_id"),
+    pinRemapTable: text("pin_remap_table", { mode: "json" }).$type<Record<
+      string,
+      string
+    > | null>(),
+    footprintOptions: text("footprint_options", { mode: "json" })
+      .$type<FootprintOption[]>()
+      .notNull()
+      .default([]),
+    defaultFootprintOptionId: text("default_footprint_option_id"),
     ...timestamps,
   },
   (table) => ({
-    componentIdx: index("idx_component_variants_component").on(table.componentId),
+    componentIdx: index("idx_component_variants_component").on(
+      table.componentId,
+    ),
     defaultIdx: index("idx_component_variants_default").on(
       table.componentId,
       table.isDefault,

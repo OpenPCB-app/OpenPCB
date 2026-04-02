@@ -12,22 +12,31 @@ const server = new TestServer(PORT, "", {
   },
 });
 const BASE_URL = `http://127.0.0.1:${PORT}/api/components/import`;
-const FIXTURES_DIR = join(import.meta.dir, "../src/infrastructure/parsers/kicad/__fixtures__");
+const FIXTURES_DIR = join(
+  import.meta.dir,
+  "../src/infrastructure/parsers/kicad/__fixtures__",
+);
 
 function readFixture(name: string): string {
   return readFileSync(join(FIXTURES_DIR, name), "utf-8");
 }
 
 describe("Component import API", () => {
-  beforeAll(async () => {
-    await cleanTestDatabase(server.getDataDir());
-    await server.start();
-  }, { timeout: 120000 });
+  beforeAll(
+    async () => {
+      await cleanTestDatabase(server.getDataDir());
+      await server.start();
+    },
+    { timeout: 120000 },
+  );
 
-  afterAll(async () => {
-    await server.stop();
-    await cleanTestDatabase(server.getDataDir());
-  }, { timeout: 120000 });
+  afterAll(
+    async () => {
+      await server.stop();
+      await cleanTestDatabase(server.getDataDir());
+    },
+    { timeout: 120000 },
+  );
 
   it("parses symbol and footprint files over HTTP", async () => {
     const symbolRes = await fetch(`${BASE_URL}/parse-symbol`, {
@@ -38,7 +47,7 @@ describe("Component import API", () => {
         fileName: "simple_resistor.kicad_sym",
       }),
     });
-    const symbolJson = await symbolRes.json() as any;
+    const symbolJson = (await symbolRes.json()) as any;
     expect(symbolRes.status).toBe(200);
     expect(symbolJson.data.symbol.name).toBe("R");
 
@@ -50,7 +59,7 @@ describe("Component import API", () => {
         fileName: "C_0603_1608Metric.kicad_mod",
       }),
     });
-    const footprintJson = await footprintRes.json() as any;
+    const footprintJson = (await footprintRes.json()) as any;
     expect(footprintRes.status).toBe(200);
     expect(footprintJson.data.footprint.name).toBe("C_0603_1608Metric");
   });
@@ -59,11 +68,17 @@ describe("Component import API", () => {
     const formData = new FormData();
     formData.append(
       "symbol",
-      new File([readFixture("simple_capacitor.kicad_sym")], "simple_capacitor.kicad_sym"),
+      new File(
+        [readFixture("simple_capacitor.kicad_sym")],
+        "simple_capacitor.kicad_sym",
+      ),
     );
     formData.append(
       "footprint",
-      new File([readFixture("C_0603_1608Metric.kicad_mod")], "C_0603_1608Metric.kicad_mod"),
+      new File(
+        [readFixture("C_0603_1608Metric.kicad_mod")],
+        "C_0603_1608Metric.kicad_mod",
+      ),
     );
     formData.append("model", new File(["step"], "C_0603_1608Metric.step"));
 
@@ -71,24 +86,29 @@ describe("Component import API", () => {
       method: "POST",
       body: formData,
     });
-    const importJson = await importRes.json() as any;
+    const importJson = (await importRes.json()) as any;
 
     expect(importRes.status).toBe(201);
     expect(importJson.data.import.components).toHaveLength(1);
     expect(importJson.data.import.components[0]).toMatchObject({
       displayLabel: expect.stringContaining("Capacitor"),
       variantCount: 1,
-      sourceFileNames: ["simple_capacitor.kicad_sym", "C_0603_1608Metric.kicad_mod"],
+      sourceFileNames: [
+        "simple_capacitor.kicad_sym",
+        "C_0603_1608Metric.kicad_mod",
+      ],
     });
 
     const listRes = await fetch("http://127.0.0.1:3003/api/components");
-    const listJson = await listRes.json() as any;
+    const listJson = (await listRes.json()) as any;
 
     expect(listRes.status).toBe(200);
     expect(listJson.data.components).toHaveLength(1);
     expect(listJson.data.components[0]).toMatchObject({
       displayLabel: expect.stringContaining("Capacitor"),
-      packageVariants: [expect.objectContaining({ canonicalCode: expect.any(String) })],
+      variants: [
+        expect.objectContaining({ canonicalCode: expect.any(String) }),
+      ],
     });
   });
 });
