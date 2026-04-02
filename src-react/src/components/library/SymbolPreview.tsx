@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useCanvasColors, type CanvasColors } from "@/lib/canvas-theme";
 import type { ComponentFamilyType } from "../../../../src-ts/src/core/schemas/component-library.schema";
 import type { SymbolGraphic as BackendSymbolGraphic } from "../../../../src-ts/src/core/schemas/component-semantics";
 import { parseKicadSymbolImport } from "../../lib/api/component-api";
@@ -15,19 +16,6 @@ import { symbolToScreen, fitViewportToBounds } from "../symbol-editor/viewport";
 interface SymbolPreviewProps {
   symbolData?: ComponentFamilyType["symbolData"];
 }
-
-// Colors matching the symbol editor
-const COLORS = {
-  background: "#1a1b26",
-  gridLine: "#2a2b36",
-  bodyStroke: "#94a3b8",
-  bodyFill: "#1e293b",
-  pinLine: "#94a3b8",
-  pinDot: "#38bdf8",
-  pinLabel: "#e2e8f0",
-  pinNumber: "#64748b",
-  refLabel: "#e0af68",
-};
 
 const PIN_DOT_RADIUS = 3;
 const PIN_LINE_WIDTH = 1.5;
@@ -185,8 +173,9 @@ function renderGrid(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
+  colors: CanvasColors,
 ) {
-  ctx.strokeStyle = COLORS.gridLine;
+  ctx.strokeStyle = colors.gridMajorLine;
   ctx.lineWidth = 1;
   const gridSize = 20;
   for (let x = 0; x < width; x += gridSize) {
@@ -211,10 +200,11 @@ function renderGraphic(
   ctx: CanvasRenderingContext2D,
   graphic: SymbolGraphic,
   viewport: Viewport,
+  colors: CanvasColors,
 ) {
   ctx.save();
-  ctx.strokeStyle = COLORS.bodyStroke;
-  ctx.fillStyle = COLORS.bodyFill;
+  ctx.strokeStyle = colors.bodyStroke;
+  ctx.fillStyle = colors.bodyFill;
   ctx.lineWidth =
     "strokeWidth" in graphic
       ? graphicStrokeWidthPx(graphic.strokeWidth, viewport)
@@ -327,7 +317,7 @@ function renderGraphic(
       ctx.font = `${fontSize}px monospace`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillStyle = COLORS.pinLabel;
+      ctx.fillStyle = colors.pinLabel;
       ctx.fillText(graphic.content, 0, 0);
       ctx.restore();
       break;
@@ -340,6 +330,7 @@ function renderPin(
   ctx: CanvasRenderingContext2D,
   pin: SymbolPin,
   viewport: Viewport,
+  colors: CanvasColors,
 ) {
   let bodyEnd: Point;
   switch (pin.side) {
@@ -361,7 +352,7 @@ function renderPin(
   const bodyScreen = symbolToScreen(bodyEnd.x, bodyEnd.y, viewport);
 
   // Pin line
-  ctx.strokeStyle = COLORS.pinLine;
+  ctx.strokeStyle = colors.pinLine;
   ctx.lineWidth = PIN_LINE_WIDTH;
   ctx.beginPath();
   ctx.moveTo(tipScreen.x, tipScreen.y);
@@ -369,7 +360,7 @@ function renderPin(
   ctx.stroke();
 
   // Connection dot
-  ctx.fillStyle = COLORS.pinDot;
+  ctx.fillStyle = colors.pinDot;
   ctx.beginPath();
   ctx.arc(tipScreen.x, tipScreen.y, PIN_DOT_RADIUS, 0, Math.PI * 2);
   ctx.fill();
@@ -381,7 +372,7 @@ function renderPin(
 
   // Pin name (near body end)
   if (pin.name) {
-    ctx.fillStyle = COLORS.pinLabel;
+    ctx.fillStyle = colors.pinLabel;
     const labelPadding = 4;
     switch (pin.side) {
       case "left":
@@ -413,7 +404,7 @@ function renderPin(
 
   // Pin number (near tip)
   if (pin.number) {
-    ctx.fillStyle = COLORS.pinNumber;
+    ctx.fillStyle = colors.pinNumber;
     const numberPadding = PIN_DOT_RADIUS + 4;
     switch (pin.side) {
       case "left":
@@ -549,6 +540,7 @@ export function SymbolPreview({ symbolData }: SymbolPreviewProps) {
     graphics: SymbolGraphic[];
   } | null>(null);
   const [viewportState, setViewportState] = useState<Viewport | null>(null);
+  const canvasColors = useCanvasColors();
   const isPanningRef = useRef(false);
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const initialFitRef = useRef<Viewport | null>(null);
@@ -613,20 +605,20 @@ export function SymbolPreview({ symbolData }: SymbolPreviewProps) {
     canvas.width = width;
     canvas.height = height;
 
-    ctx.fillStyle = COLORS.background;
+    ctx.fillStyle = canvasColors.background;
     ctx.fillRect(0, 0, width, height);
-    renderGrid(ctx, width, height);
+    renderGrid(ctx, width, height, canvasColors);
 
     const { pins, graphics } = resolvedData();
 
-    for (const g of graphics) renderGraphic(ctx, g, viewportState);
-    for (const pin of pins) renderPin(ctx, pin, viewportState);
+    for (const g of graphics) renderGraphic(ctx, g, viewportState, canvasColors);
+    for (const pin of pins) renderPin(ctx, pin, viewportState, canvasColors);
 
-    ctx.fillStyle = COLORS.refLabel;
+    ctx.fillStyle = canvasColors.refLabel;
     ctx.font = "bold 12px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(symbolData.referencePrefix || "U", width / 2, 16);
-  }, [symbolData, draft, viewportState, resolvedData]);
+  }, [symbolData, draft, viewportState, resolvedData, canvasColors]);
 
   const handleZoomIn = useCallback(() => {
     setViewportState((prev) => {

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useMemo } from "react";
 import { useSchematicStore } from "@/stores/schematic-store";
 import { renderGrid } from "./grid";
 import {
@@ -23,6 +23,12 @@ import {
   type SchematicInteractionController,
 } from "../useSchematicInteractionController";
 import { GRID_PRESETS, type Point, type SymbolKind } from "../types";
+import {
+  getGridColors,
+  getSymbolColors,
+  getWireColors,
+  useCanvasColors,
+} from "@/lib/canvas-theme";
 
 interface SchematicCanvasProps {
   controller?: SchematicInteractionController;
@@ -56,6 +62,10 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
   );
   const resetViewport = useSchematicStore((s) => s.resetViewport);
   const document = useSchematicStore((s) => s.persisted.document);
+  const canvasColors = useCanvasColors();
+  const gridColors = useMemo(() => getGridColors(canvasColors), [canvasColors]);
+  const symbolColors = useMemo(() => getSymbolColors(canvasColors), [canvasColors]);
+  const wireColors = useMemo(() => getWireColors(canvasColors), [canvasColors]);
 
   const getPlacementPosition = useCallback(
     (clientX: number, clientY: number): Point | null => {
@@ -164,10 +174,7 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
     ctx.scale(dpr, dpr);
 
     // Clear
-    ctx.fillStyle = "var(--color-background, #0f172a)";
-    ctx.fillRect(0, 0, width, height);
-    // Use a solid dark background for canvas
-    ctx.fillStyle = "#0f172a";
+    ctx.fillStyle = canvasColors.background;
     ctx.fillRect(0, 0, width, height);
 
     // Grid
@@ -183,6 +190,7 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
         store.chrome.viewport,
         store.chrome.gridSize,
         currentPreset?.style ?? "dots",
+        gridColors,
       );
     }
 
@@ -193,6 +201,7 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
       for (const wire of document.wires) {
         renderWire(ctx, wire.points, store.chrome.viewport, {
           selected: selectedIds.has(wire.id),
+          colors: wireColors,
         });
       }
 
@@ -201,12 +210,14 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
           ctx,
           store.derived.connectivity.junctions,
           store.chrome.viewport,
+          wireColors,
         );
       }
 
       for (const symbol of document.symbols) {
         renderSymbol(ctx, symbol, store.chrome.viewport, {
           selected: selectedIds.has(symbol.id),
+          colors: symbolColors,
         });
       }
 
@@ -222,13 +233,14 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
             store.session.rotation,
           ),
           store.chrome.viewport,
-          { preview: true },
+          { preview: true, colors: symbolColors },
         );
       }
 
       if (store.session?.type === "wire") {
         renderWire(ctx, store.session.previewPoints, store.chrome.viewport, {
           preview: true,
+          colors: wireColors,
         });
       }
 
@@ -250,8 +262,8 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
         );
 
         ctx.save();
-        ctx.strokeStyle = "#38bdf8";
-        ctx.fillStyle = "rgba(56, 189, 248, 0.08)";
+        ctx.strokeStyle = canvasColors.selectionStroke;
+        ctx.fillStyle = canvasColors.selectionFill;
         ctx.lineWidth = 1.5;
         ctx.fillRect(
           Math.min(screenMin.x, screenMax.x) - 6,
@@ -270,7 +282,7 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
     }
 
     ctx.restore();
-  }, []);
+  }, [canvasColors, gridColors, symbolColors, wireColors]);
 
   // Animation loop
   useEffect(() => {

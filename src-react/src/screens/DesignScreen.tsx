@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -16,13 +16,18 @@ import { StatusBar } from "@/components/pcb/StatusBar";
 import { useSchematicInteractionController } from "@/components/pcb/useSchematicInteractionController";
 import { FloatingPropertiesPopover } from "@/components/pcb/properties/FloatingPropertiesPopover";
 import { useSchematicStore } from "@/stores/schematic-store";
-import { createEmptySchematicDocument } from "@/components/pcb/schematic-document";
-import { getSheetContent } from "@/lib/api/design-api";
-import { toEditorSchematicDocument } from "@/components/pcb/types";
+import {
+  createEmptySchematicDocument,
+  createUnsavedSchematicDraft,
+  hasSchematicCanvasContent,
+} from "@/components/pcb/schematic-document";
+import { getSheetContent, saveSheetContent } from "@/lib/api/design-api";
+import {
+  toEditorSchematicDocument,
+  toSchematicProjectDocument,
+} from "@/components/pcb/types";
 
 const AUTO_DRAFT_NAME = "Untitled design";
-const autoDraftRequests = new Map<string, Promise<string>>();
-const AUTO_DRAFT_ERROR = "Failed to create a new workspace draft.";
 
 function isTextEntryFocused(activeElement: Element | null): boolean {
   if (!(activeElement instanceof HTMLElement)) {
@@ -78,72 +83,39 @@ export function DesignScreen() {
 
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
-  const [isCreatingDraft, setIsCreatingDraft] = useState(false);
-  const [draftBootstrapAttempt, setDraftBootstrapAttempt] = useState(0);
-  const [draftBootstrapError, setDraftBootstrapError] = useState<string | null>(
-    null,
-  );
+  const [isSaving, setIsSaving] = useState(false);
   const controller = useSchematicInteractionController();
   const popoverEntityId = useSchematicStore((s) => s.chrome.popoverEntityId);
+  const currentDocument = useSchematicStore((s) => s.persisted.document);
+  const currentSheetId = useSchematicStore((s) => s.persisted.sheetId);
   const currentDocumentId = useSchematicStore(
     (s) => s.persisted.document?.id ?? null,
   );
   const setDocument = useSchematicStore((s) => s.setDocument);
+  const clearDocument = useSchematicStore((s) => s.clearDocument);
   const setProjectContext = useSchematicStore((s) => s.setProjectContext);
   const setPopoverTarget = useSchematicStore((s) => s.setPopoverTarget);
+  const isUnsavedDraft = currentDocument !== null && currentSheetId === null;
 
   useEffect(() => {
     if (!activeWorkspaceId || currentProjectId || currentDesignId) {
-      setIsCreatingDraft(false);
-      setDraftBootstrapError(null);
       return;
     }
 
-    let cancelled = false;
-    const requestKey = `workspace:${activeWorkspaceId}:retry:${draftBootstrapAttempt}`;
-    const existingRequest = autoDraftRequests.get(requestKey);
-    const request =
-      existingRequest ??
-      create({ name: AUTO_DRAFT_NAME })
-        .then((createdDesign) => createdDesign.id)
-        .finally(() => {
-          autoDraftRequests.delete(requestKey);
-        });
-
-    if (!existingRequest) {
-      autoDraftRequests.set(requestKey, request);
+    if (currentDocument && currentSheetId === null) {
+      return;
     }
 
-    setIsCreatingDraft(true);
-    setDraftBootstrapError(null);
-
-    void request
-      .then((createdDesignId) => {
-        if (!cancelled) {
-          navigateToDesign(null, createdDesignId);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDraftBootstrapError(AUTO_DRAFT_ERROR);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsCreatingDraft(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    setProjectContext(null, null);
+    setDocument(createUnsavedSchematicDraft(activeWorkspaceId));
   }, [
     activeWorkspaceId,
-    create,
+    currentDocument,
     currentDesignId,
     currentProjectId,
-    draftBootstrapAttempt,
-    navigateToDesign,
+    currentSheetId,
+    setDocument,
+    setProjectContext,
   ]);
 
   useEffect(() => {
@@ -185,6 +157,109 @@ export function DesignScreen() {
     setDocument,
     setProjectContext,
   ]);
+
+  useEffect(() => {
+    return () => {
+      const state = useSchematicStore.getState();
+      const doc = state.persisted.document;
+
+      if (
+        state.persisted.sheetId === null &&
+        doc &&
+        !hasSchematicCanvasContent(doc)
+      ) {
+        state.clearDocument();
+      }
+    };
+  }, []);
+
+  const saveCurrentDocument = useCallback(async (): Promise<boolean> => {
+    const state = useSchematicStore.getState();
+    const doc = state.persisted.document;
+    if (!doc) {
+      return false;
+    }
+
+    const isPersistedDesign = state.persisted.sheetId !== null;
+    if (!isPersistedDesign && !hasSchematicCanvasContent(doc)) {
+      return false;
+    }
+
+    setIsSaving(true);
+    try {
+      if (state.persisted.sheetId) {
+        await saveSheetContent(
+          state.persisted.sheetId,
+          0,
+          toSchematicProjectDocument(doc),
+        );
+        return true;
+      }
+
+      if (!activeWorkspaceId) {
+        return false;
+      }
+
+      const createdDesign = await create({ name: AUTO_DRAFT_NAME });
+      const savedDoc = {
+        ...doc,
+        id: createdDesign.id,
+        name: createdDesign.name,
+        projectId: createdDesign.projectId ?? createdDesign.workspaceId,
+        updatedAt: createdDesign.updatedAt,
+      };
+
+      setProjectContext(createdDesign.projectId, createdDesign.id);
+      setDocument(savedDoc);
+      await saveSheetContent(
+        createdDesign.id,
+        0,
+        toSchematicProjectDocument(savedDoc),
+      );
+      navigateToDesign(createdDesign.projectId, createdDesign.id);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [activeWorkspaceId, create, navigateToDesign, setDocument, setProjectContext]);
+
+  const closeDesigner = useCallback(async () => {
+    const state = useSchematicStore.getState();
+    const doc = state.persisted.document;
+    const isUnsaved = state.persisted.sheetId === null;
+
+    if (isUnsaved && doc && hasSchematicCanvasContent(doc)) {
+      const shouldSave = window.confirm(
+        "Save draft before closing? Select Cancel to choose discard.",
+      );
+
+      if (shouldSave) {
+        const saved = await saveCurrentDocument();
+        if (!saved) {
+          return;
+        }
+        navigateToHome();
+        return;
+      }
+
+      const shouldDiscard = window.confirm("Discard this unsaved draft?");
+      if (!shouldDiscard) {
+        return;
+      }
+
+      clearDocument();
+      navigateToHome();
+      return;
+    }
+
+    if (isUnsaved) {
+      clearDocument();
+    }
+
+    navigateToHome();
+  }, [clearDocument, navigateToHome, saveCurrentDocument]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -229,9 +304,17 @@ export function DesignScreen() {
       {/* Header with project name + tab bar */}
       <DesignHeader
         projectName={project?.name ?? activeWorkspace?.name ?? "Workspace"}
-        designName={design?.name ?? "Untitled design"}
+        designName={design?.name ?? currentDocument?.name ?? "Untitled design"}
         onAiToggle={() => setAiOpen(!aiOpen)}
         aiOpen={aiOpen}
+        onSave={() => {
+          void saveCurrentDocument();
+        }}
+        onClose={() => {
+          void closeDesigner();
+        }}
+        saveDisabled={!currentDocument || (!design && !hasSchematicCanvasContent(currentDocument))}
+        isSaving={isSaving}
       />
 
       {/* Main area */}
@@ -302,7 +385,8 @@ export function DesignScreen() {
               )}
 
               {/* Floating toolbar — overlays canvas */}
-              {design && (designTab === "schematic" || designTab === "pcb") && (
+              {(design || isUnsavedDraft) &&
+                (designTab === "schematic" || designTab === "pcb") && (
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center px-4 pt-2">
                   <div className="pointer-events-auto">
                     <EditorToolbar controller={controller} />
@@ -310,57 +394,22 @@ export function DesignScreen() {
                 </div>
               )}
 
-              {!design ? (
+              {!design && !isUnsavedDraft ? (
                 <div className="flex h-full flex-col items-center justify-center gap-4 text-center text-text-muted">
-                  {isCreatingDraft ? (
-                    <>
-                      <p className="text-sm font-medium text-text-primary">
-                        Creating design draft
-                      </p>
-                      <p className="max-w-sm text-sm text-text-muted">
-                        Preparing a new workspace draft so you can start
-                        designing immediately.
-                      </p>
-                    </>
-                  ) : draftBootstrapError ? (
-                    <>
-                      <p className="text-sm font-medium text-text-primary">
-                        Draft creation failed
-                      </p>
-                      <p className="max-w-sm text-sm text-text-muted">
-                        {draftBootstrapError}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm font-medium text-text-primary">
-                        No design selected
-                      </p>
-                      <p className="max-w-sm text-sm text-text-muted">
-                        Open a design from a project or from the workspace
-                        designs list before using the editor.
-                      </p>
-                    </>
-                  )}
-                  {isCreatingDraft ? null : draftBootstrapError && !project ? (
-                    <button
-                      type="button"
-                      className="rounded-md border border-border-default px-4 py-2 text-sm text-text-primary hover:bg-bg-input"
-                      onClick={() =>
-                        setDraftBootstrapAttempt((value) => value + 1)
-                      }
-                    >
-                      Retry draft creation
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="rounded-md border border-border-default px-4 py-2 text-sm text-text-primary hover:bg-bg-input"
-                      onClick={navigateToHome}
-                    >
-                      Back to Home
-                    </button>
-                  )}
+                  <p className="text-sm font-medium text-text-primary">
+                    No design selected
+                  </p>
+                  <p className="max-w-sm text-sm text-text-muted">
+                    Open a design from a project or from the workspace
+                    designs list before using the editor.
+                  </p>
+                  <button
+                    type="button"
+                    className="rounded-md border border-border-default px-4 py-2 text-sm text-text-primary hover:bg-bg-input"
+                    onClick={navigateToHome}
+                  >
+                    Back to Home
+                  </button>
                 </div>
               ) : designTab === "schematic" ? (
                 <div className="relative h-full">

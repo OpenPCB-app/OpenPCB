@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSchematicStore } from "@/stores/schematic-store";
 import type { SchematicDocument } from "@/components/pcb/types";
+import * as designApi from "@/lib/api/design-api";
 import { DesignScreen } from "./DesignScreen";
 
 let designTab: "schematic" | "pcb" | "3d" | "bom" = "schematic";
@@ -83,9 +84,37 @@ vi.mock("@/hooks/useDesigns", () => ({
   }),
 }));
 
+vi.mock("@/lib/api/design-api", () => ({
+  getSheetContent: vi.fn(),
+  saveSheetContent: vi.fn(),
+}));
+
+const getSheetContent = vi.mocked(designApi.getSheetContent);
+const saveSheetContent = vi.mocked(designApi.saveSheetContent);
+
 vi.mock("./design/DesignHeader", () => ({
-  DesignHeader: ({ designName }: { designName: string }) => (
-    <div>Header {designName}</div>
+  DesignHeader: ({
+    designName,
+    onSave,
+    onClose,
+  }: {
+    designName: string;
+    onSave?: () => void;
+    onClose?: () => void;
+  }) => (
+    <div>
+      <div>Header {designName}</div>
+      {onSave && (
+        <button type="button" onClick={onSave}>
+          Save design
+        </button>
+      )}
+      {onClose && (
+        <button type="button" onClick={onClose}>
+          Close design
+        </button>
+      )}
+    </div>
   ),
 }));
 
@@ -244,54 +273,122 @@ describe("DesignScreen schematic shell", () => {
     navigateToProject.mockReset();
     navigateToHome.mockReset();
     createDesign.mockReset();
+    getSheetContent.mockReset();
+    saveSheetContent.mockReset();
+    getSheetContent.mockResolvedValue({ sheet: null, content: null });
+    saveSheetContent.mockResolvedValue({
+      sheet: {
+        id: "sheet-1",
+        designId: "design-1",
+        sheetIndex: 0,
+        title: "Sheet 1",
+        contentHash: null,
+      },
+    });
     resetStore();
   });
 
-  it("creates and opens a workspace draft when design editor opens without project or design", async () => {
+  it("opens clean in-memory designer without creating backend draft", async () => {
+    currentProjectId = null;
+    currentDesignId = null;
+    designs = [];
+
+    render(<DesignScreen />);
+
+    await waitFor(() =>
+      expect(useSchematicStore.getState().persisted.document).toMatchObject({
+        name: "Untitled design",
+        symbols: [],
+        wires: [],
+        labels: [],
+      }),
+    );
+    expect(useSchematicStore.getState().persisted.sheetId).toBeNull();
+    expect(createDesign).not.toHaveBeenCalled();
+    expect(navigateToDesign).not.toHaveBeenCalled();
+  });
+
+  it("keeps in-memory draft when revisiting design screen", async () => {
+    currentProjectId = null;
+    currentDesignId = null;
+    designs = [];
+
+    render(<DesignScreen />);
+
+    await waitFor(() =>
+      expect(useSchematicStore.getState().persisted.document).not.toBeNull(),
+    );
+    const firstDraftId = useSchematicStore.getState().persisted.document?.id;
+
+    render(<DesignScreen />);
+
+    await waitFor(() =>
+      expect(useSchematicStore.getState().persisted.document?.id).toBe(
+        firstDraftId,
+      ),
+    );
+  });
+
+  it("creates backend design only on explicit save of non-empty draft", async () => {
+    const user = userEvent.setup();
     currentProjectId = null;
     currentDesignId = null;
     designs = [];
     createDesign.mockResolvedValue({
       id: "design-new",
+      workspaceId: "workspace-1",
+      projectId: null,
       name: "Untitled design",
+      updatedAt: "2026-03-31T00:00:00Z",
     });
 
     render(<DesignScreen />);
 
-    expect(screen.getByText("Creating design draft")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(useSchematicStore.getState().persisted.document).not.toBeNull(),
+    );
+
+    act(() => {
+      useSchematicStore.setState((state) => {
+        const document = state.persisted.document;
+        if (!document) {
+          return state;
+        }
+
+        return {
+          ...state,
+          persisted: {
+            ...state.persisted,
+            document: {
+              ...document,
+              labels: [
+                {
+                  id: "label-1",
+                  entityType: "label",
+                  text: "NET_LABEL",
+                  position: { x: 0, y: 0 },
+                  rotation: 0,
+                  mirrored: false,
+                  net: null,
+                },
+              ],
+            },
+          },
+        };
+      });
+    });
+
+    await user.click(screen.getByRole("button", { name: "Save design" }));
 
     await waitFor(() =>
       expect(createDesign).toHaveBeenCalledWith({ name: "Untitled design" }),
     );
     await waitFor(() =>
-      expect(navigateToDesign).toHaveBeenCalledWith(null, "design-new"),
-    );
-  });
-
-  it("shows retry state when workspace draft bootstrap fails", async () => {
-    const user = userEvent.setup();
-    currentProjectId = null;
-    currentDesignId = null;
-    designs = [];
-    createDesign.mockRejectedValueOnce(new Error("boom"));
-    createDesign.mockResolvedValueOnce({
-      id: "design-retry",
-      name: "Untitled design",
-    });
-
-    render(<DesignScreen />);
-
-    await waitFor(() =>
-      expect(screen.getByText("Draft creation failed")).toBeInTheDocument(),
-    );
-
-    await user.click(
-      screen.getByRole("button", { name: "Retry draft creation" }),
-    );
-
-    await waitFor(() => expect(createDesign).toHaveBeenCalledTimes(2));
-    await waitFor(() =>
-      expect(navigateToDesign).toHaveBeenCalledWith(null, "design-retry"),
+      expect(saveSheetContent).toHaveBeenCalledWith(
+        "design-new",
+        0,
+        expect.objectContaining({ id: "design-new" }),
+      ),
     );
   });
 

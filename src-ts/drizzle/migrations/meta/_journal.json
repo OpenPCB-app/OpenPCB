@@ -85,6 +85,20 @@
       "when": 1774100000001,
       "tag": "0011_component_library_enhancements",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1774100000002,
+      "tag": "0012_add_component_import_job",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1774100000003,
+      "tag": "0013_add_v1_component_tables",
+      "breakpoints": true
     }
   ]
 }

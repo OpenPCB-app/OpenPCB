@@ -1,0 +1,175 @@
+- generic:
+  - generic:
+    - generic:
+      - complementary:
+        - generic:
+          - button:
+            - img
+          - navigation:
+            - button:
+              - img
+              - generic: Home
+            - button:
+              - img
+              - generic: Design
+            - button:
+              - img
+              - generic: Library
+            - button:
+              - img
+              - generic: Chat
+            - button:
+              - img
+              - generic: Notes
+        - generic:
+          - button:
+            - img
+            - generic: Settings
+          - generic: U
+      - main:
+        - generic:
+          - generic:
+            - button:
+              - img
+            - heading [level=1]: New component
+            - generic: "Step 1 of 4: Symbol"
+            - generic:
+              - generic:
+                - img
+                - text: Failed to initialize wizard. Please try again.
+          - generic:
+            - generic:
+              - generic: 1. Symbol
+            - generic:
+              - generic: 2. Footprint
+            - generic:
+              - generic: 3. 3D Model
+            - generic:
+              - generic: 4. Specs
+          - generic:
+            - generic:
+              - generic:
+                - button:
+                  - img
+                - generic:
+                  - button [disabled]:
+                    - img
+                  - button [disabled]:
+                    - img
+                - generic:
+                  - button:
+                    - img
+                  - combobox
+                - button:
+                  - img
+                - generic: Shift+drag to pan | Scroll to zoom | Del to delete
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: Body Shape
+                    - generic:
+                      - button:
+                        - generic: □
+                        - generic: Blank
+                      - button:
+                        - generic: ▭
+                        - generic: IC Box
+                      - button:
+                        - generic: ▷
+                        - generic: Op-Amp
+                      - button:
+                        - generic: ═
+                        - generic: 2-Pin Passive
+                      - button:
+                        - generic: ◯
+                        - generic: Transistor
+                      - button:
+                        - generic: ◁|
+                        - generic: Diode
+                      - button:
+                        - generic: ⊞
+                        - generic: Connector
+                      - button:
+                        - generic: ▥
+                        - generic: V-Reg
+                  - generic:
+                    - generic:
+                      - generic: Pin Types
+                      - generic:
+                        - generic:
+                          - generic: Input
+                        - generic:
+                          - generic: Output
+                        - generic:
+                          - generic: Bidirectional
+                        - generic:
+                          - generic: Passive
+                        - generic:
+                          - generic: Power In
+                        - generic:
+                          - generic: Power Out
+                        - generic:
+                          - generic: Open Collector
+                        - generic:
+                          - generic: Open Emitter
+                        - generic:
+                          - generic: Unspecified
+                      - generic: Click to add or drag to position
+                - generic:
+                  - generic:
+                    - generic: Symbol Info
+                    - generic:
+                      - generic: Name *
+                      - textbox:
+                        - /placeholder: e.g., LM358
+                    - generic:
+                      - generic: Reference Prefix
+                      - textbox:
+                        - /placeholder: U
+                        - text: U
+                      - generic: Designator prefix (U, R, C, etc.)
+                    - generic:
+                      - generic: Description
+                      - textbox:
+                        - /placeholder: Brief description of the component
+                  - generic:
+                    - generic:
+                      - paragraph: Pin Properties
+                      - paragraph: Select a pin to edit its properties
+          - generic:
+            - generic:
+              - button: Next
+    - list
+  - dialog "Settings" [ref=e319]:
+    - heading "Settings" [level=2] [ref=e320]
+    - generic [ref=e322]:
+      - complementary [ref=e323]:
+        - tablist [ref=e324]:
+          - tab "General" [active] [selected] [ref=e325] [cursor=pointer]:
+            - img [ref=e326]
+            - text: General
+          - tab "API Keys" [ref=e329] [cursor=pointer]:
+            - img [ref=e330]
+            - text: API Keys
+          - tab "MCP Servers" [ref=e333] [cursor=pointer]:
+            - img [ref=e334]
+            - text: MCP Servers
+          - tab "Usage & Billing" [ref=e337] [cursor=pointer]:
+            - img [ref=e338]
+            - text: Usage & Billing
+          - tab "About" [ref=e340] [cursor=pointer]:
+            - img [ref=e341]
+            - text: About
+      - tabpanel "General" [ref=e350]:
+        - generic [ref=e351]:
+          - paragraph [ref=e352]: General Settings
+          - radiogroup "Theme preference" [ref=e354]:
+            - radio "Light" [ref=e355] [cursor=pointer]:
+              - generic [ref=e356]: Light
+            - radio "Dark" [checked] [ref=e357] [cursor=pointer]:
+              - generic [ref=e358]: Dark
+            - radio "System" [ref=e359] [cursor=pointer]:
+              - generic [ref=e360]: System
+    - button "Close" [ref=e361] [cursor=pointer]:
+      - img
+      - generic [ref=e362]: Close

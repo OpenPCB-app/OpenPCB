@@ -34,11 +34,22 @@ export class ComponentFamilyController {
     }
 
     const deletableIds: string[] = [];
+    let skippedBuiltInCount = 0;
+    let skippedNotFoundCount = 0;
+
     for (const id of ids) {
       const family = await this.repo.findById(id);
-      if (family && family.scope === "workspace") {
-        deletableIds.push(id);
+      if (!family) {
+        skippedNotFoundCount++;
+        continue;
       }
+
+      if (family.scope === "workspace") {
+        deletableIds.push(id);
+        continue;
+      }
+
+      skippedBuiltInCount++;
     }
 
     for (const id of deletableIds) {
@@ -49,6 +60,8 @@ export class ComponentFamilyController {
       deleted: true,
       deletedCount: deletableIds.length,
       skippedCount: ids.length - deletableIds.length,
+      skippedBuiltInCount,
+      skippedNotFoundCount,
     });
   }
 

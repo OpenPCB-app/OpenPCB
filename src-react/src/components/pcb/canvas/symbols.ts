@@ -1,4 +1,5 @@
 import type { Bounds, Point, SymbolEntity, Viewport } from "../types";
+import type { SymbolColors } from "@/lib/canvas-theme";
 import { schematicToScreen } from "./viewport";
 import { DEFAULT_SCHEMATIC_ZOOM } from "./viewport";
 import { getSymbolKindLabel } from "../symbol-display";
@@ -18,6 +19,7 @@ const PIN_LABEL_OFFSET_NM = 220_000;
 interface SymbolRenderOptions {
   selected?: boolean;
   preview?: boolean;
+  colors?: SymbolColors;
 }
 
 interface PinExtents {
@@ -604,14 +606,19 @@ function renderPins(
   symbol: SymbolEntity,
   viewport: Viewport,
   selected: boolean,
+  colors?: SymbolColors,
 ): void {
   const connectorRadius =
     CONNECTOR_RADIUS_PX / Math.max(viewport.zoom, Number.EPSILON);
 
   for (const pin of symbol.pins) {
     ctx.beginPath();
-    ctx.fillStyle = selected ? "#0f172a" : "#f8fafc";
-    ctx.strokeStyle = selected ? "#38bdf8" : "#f59e0b";
+    ctx.fillStyle = selected
+      ? (colors?.background ?? "#0f172a")
+      : (colors?.pinLabel ?? "#f8fafc");
+    ctx.strokeStyle = selected
+      ? (colors?.selectionStroke ?? "#38bdf8")
+      : (colors?.pinDot ?? "#f59e0b");
     ctx.arc(pin.position.x, pin.position.y, connectorRadius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
@@ -723,11 +730,12 @@ function renderSymbolLabels(
   ctx: CanvasRenderingContext2D,
   symbol: SymbolEntity,
   viewport: Viewport,
+  colors?: SymbolColors,
 ): void {
   const fontSizePx = getLabelFontSizePx(viewport);
 
   ctx.save();
-  ctx.fillStyle = "#cbd5e1";
+  ctx.fillStyle = colors?.valueLabel ?? "#cbd5e1";
   ctx.font = `${fontSizePx}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -752,13 +760,15 @@ export function renderSymbol(
 ): void {
   ctx.save();
   applySymbolTransform(ctx, symbol, viewport);
-  ctx.strokeStyle = options.selected ? "#e0f2fe" : "#cbd5e1";
+  ctx.strokeStyle = options.selected
+    ? (options.colors?.selectionStroke ?? "#e0f2fe")
+    : (options.colors?.bodyStroke ?? "#cbd5e1");
   ctx.globalAlpha = options.preview ? 0.75 : 1;
   renderBody(ctx, symbol);
-  renderPins(ctx, symbol, viewport, options.selected ?? false);
+  renderPins(ctx, symbol, viewport, options.selected ?? false, options.colors);
   ctx.restore();
 
   if (!options.preview) {
-    renderSymbolLabels(ctx, symbol, viewport);
+    renderSymbolLabels(ctx, symbol, viewport, options.colors);
   }
 }

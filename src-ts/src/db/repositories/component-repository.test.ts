@@ -57,6 +57,18 @@ function createTestDb() {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS ux_component_usage_design_component_variant
       ON component_usage(design_id, component_id, variant_id);
+
+    CREATE TABLE IF NOT EXISTS design (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      project_id TEXT,
+      name TEXT NOT NULL,
+      description TEXT,
+      sort_order INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    );
   `);
 
   return { db, sqlite };
@@ -225,6 +237,13 @@ describe("ComponentRepository", () => {
 
     const defaultVariantId = created.component.defaultVariantId!;
 
+    sqlite.exec(`
+      INSERT INTO design (id, workspace_id, name, created_at, updated_at, deleted_at)
+      VALUES
+        ('design-a', 'ws-1', 'Design A', 1, 1, NULL),
+        ('design-b', 'ws-1', 'Design B', 1, 1, NULL);
+    `);
+
     await repo.recordUsage({
       componentId: created.component.id,
       designId: "design-a",
@@ -251,5 +270,38 @@ describe("ComponentRepository", () => {
     );
 
     expect(await repo.getComponent(created.component.id)).not.toBeNull();
+  });
+
+  test("deleteComponent ignores usage rows for missing or deleted designs", async () => {
+    const created = await repo.createComponent({
+      canonicalKey: "test-delete-unused",
+      displayLabel: "Test Delete Unused",
+      symbolData: { referencePrefix: "U", pinDefinitions: [], properties: {} },
+      variants: [variant("0603", "0603", true)],
+    });
+
+    const defaultVariantId = created.component.defaultVariantId!;
+
+    sqlite.exec(`
+      INSERT INTO design (id, workspace_id, name, created_at, updated_at, deleted_at)
+      VALUES ('deleted-design', 'ws-1', 'Deleted Design', 1, 1, 1);
+    `);
+
+    await repo.recordUsage({
+      componentId: created.component.id,
+      designId: "missing-design",
+      variantId: defaultVariantId,
+    });
+
+    await repo.recordUsage({
+      componentId: created.component.id,
+      designId: "deleted-design",
+      variantId: defaultVariantId,
+    });
+
+    expect(await repo.getUsageCount(created.component.id)).toBe(0);
+
+    await repo.deleteComponent(created.component.id);
+    expect(await repo.getComponent(created.component.id)).toBeNull();
   });
 });

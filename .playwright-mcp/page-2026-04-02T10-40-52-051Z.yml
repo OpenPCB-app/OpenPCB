@@ -1,0 +1,63 @@
+- generic [ref=e2]:
+  - generic [ref=e8]:
+    - complementary [ref=e9]:
+      - generic [ref=e10]:
+        - button "OpenPCB Home" [ref=e11]:
+          - img [ref=e12]
+        - navigation [ref=e19]:
+          - button "Home" [ref=e20]:
+            - img [ref=e21]
+            - generic [ref=e26]: Home
+          - button "Design" [ref=e27]:
+            - img [ref=e28]
+            - generic [ref=e33]: Design
+          - button "Library" [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e39]: Library
+          - button "Chat" [ref=e40]:
+            - img [ref=e41]
+            - generic [ref=e43]: Chat
+          - button "Notes" [ref=e44]:
+            - img [ref=e45]
+            - generic [ref=e48]: Notes
+      - generic [ref=e49]:
+        - button "Settings" [ref=e50]:
+          - img [ref=e51]
+          - generic [ref=e54]: Settings
+        - generic [ref=e55]: U
+    - main [ref=e56]:
+      - generic [ref=e61]:
+        - heading "Home" [level=1] [ref=e62]
+        - paragraph [ref=e63]: Your hardware workspace
+        - generic [ref=e64]:
+          - heading "Quick actions" [level=2] [ref=e65]
+          - generic [ref=e66]:
+            - button "New design" [ref=e67]:
+              - img [ref=e68]
+              - text: New design
+            - button "New component" [ref=e69]
+            - button "New from template" [ref=e70]
+            - button "Import KiCad" [ref=e71]
+        - generic [ref=e72]:
+          - generic [ref=e73]:
+            - heading "Recent designs" [level=2] [ref=e74]
+            - paragraph [ref=e75]: Standalone designs for simple boards and single-part work. Stored in workspace.
+          - generic [ref=e77] [cursor=pointer]:
+            - paragraph [ref=e79]: Untitled design
+            - paragraph [ref=e80]: No description
+            - generic [ref=e81]:
+              - button "Edit Untitled design" [ref=e82]:
+                - img [ref=e83]
+                - text: Edit
+              - button "Delete Untitled design" [ref=e86]:
+                - img [ref=e87]
+                - text: Delete
+        - generic [ref=e90]:
+          - generic [ref=e91]:
+            - heading "Recent notes" [level=2] [ref=e92]
+            - paragraph [ref=e94]: No notes yet
+          - generic [ref=e95]:
+            - heading "Recent chats" [level=2] [ref=e96]
+            - paragraph [ref=e98]: No chats yet
+  - region "Notifications (F8)":
+    - list

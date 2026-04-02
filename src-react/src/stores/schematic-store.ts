@@ -93,6 +93,7 @@ interface SchematicState {
   deleteSelectedEntities: () => void;
 
   setDocument: (doc: SchematicDocument | SchematicProjectDocument) => void;
+  clearDocument: () => void;
   setComponentLibrary: (components: ComponentType[]) => void;
   setProjectContext: (projectId: string | null, sheetId: string | null) => void;
   setConnectivity: (conn: DerivedConnectivity | null) => void;
@@ -854,6 +855,21 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         draggedSymbolKind: null,
       };
     }),
+
+  clearDocument: () =>
+    set(() => ({
+      persisted: {
+        document: null,
+        projectId: null,
+        sheetId: null,
+      },
+      derived: INITIAL_DERIVED_STATE,
+      chrome: {
+        ...INITIAL_CHROME_STATE,
+      },
+      session: null,
+      draggedSymbolKind: null,
+    })),
 
   setComponentLibrary: (components) =>
     set((state) => {

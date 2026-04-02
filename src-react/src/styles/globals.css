@@ -42,6 +42,20 @@
   /* ── Canvas ── */
   --color-canvas-bg: #1e1e2e;
   --color-canvas-grid: #2a2a3e;
+  --color-canvas-grid-dot: rgba(148, 163, 184, 0.3);
+  --color-canvas-grid-dot-faint: rgba(148, 163, 184, 0.15);
+  --color-canvas-grid-major: rgba(148, 163, 184, 0.1);
+  --color-canvas-origin-cross: rgba(148, 163, 184, 0.4);
+  --color-canvas-body-stroke: #94a3b8;
+  --color-canvas-body-fill: #1e293b;
+  --color-canvas-pin-line: #94a3b8;
+  --color-canvas-pin-dot: #38bdf8;
+  --color-canvas-pin-label: #e2e8f0;
+  --color-canvas-pin-number: #64748b;
+  --color-canvas-selection-stroke: #38bdf8;
+  --color-canvas-selection-fill: rgba(56, 189, 248, 0.15);
+  --color-canvas-wire-selected: #e0f2fe;
+  --color-canvas-junction: #f8fafc;
   --color-canvas-wire: #00d4aa;
   --color-canvas-ref: #ffd700;
   --color-canvas-value: #00d4aa;
@@ -55,6 +69,7 @@
   --color-success: #44cc88;
   --color-warning: #ffaa00;
   --color-danger: #e24b4a;
+  --color-error: #e24b4a;
   --color-info: #5b8def;
 
   /* ── shadcn/ui semantic mapping (dark-first) ── */
@@ -222,6 +237,20 @@
 
   --color-canvas-bg: #fafafe;
   --color-canvas-grid: #e8e8f0;
+  --color-canvas-grid-dot: rgba(100, 116, 139, 0.35);
+  --color-canvas-grid-dot-faint: rgba(100, 116, 139, 0.2);
+  --color-canvas-grid-major: rgba(100, 116, 139, 0.12);
+  --color-canvas-origin-cross: rgba(100, 116, 139, 0.5);
+  --color-canvas-body-stroke: #475569;
+  --color-canvas-body-fill: #f1f5f9;
+  --color-canvas-pin-line: #475569;
+  --color-canvas-pin-dot: #7c3aed;
+  --color-canvas-pin-label: #1e293b;
+  --color-canvas-pin-number: #64748b;
+  --color-canvas-selection-stroke: #7c3aed;
+  --color-canvas-selection-fill: rgba(124, 58, 237, 0.12);
+  --color-canvas-wire-selected: #7c3aed;
+  --color-canvas-junction: #1e293b;
 
   --color-icon-muted: #888899;
   --color-icon-default: #555568;

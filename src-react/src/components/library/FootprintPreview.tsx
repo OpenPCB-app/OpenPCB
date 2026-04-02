@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useCanvasColors } from "@/lib/canvas-theme";
 import type { FootprintOptionType } from "../../../../src-ts/src/core/schemas/component-library.schema";
 
 interface ParsedPad {
@@ -120,6 +121,7 @@ interface FpViewport {
 export function FootprintPreview({ footprint }: FootprintPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [fpViewport, setFpViewport] = useState<FpViewport | null>(null);
+  const canvasColors = useCanvasColors();
   const initialFpViewportRef = useRef<FpViewport | null>(null);
   const isPanningRef = useRef(false);
   const lastMouseRef = useRef({ x: 0, y: 0 });
@@ -144,7 +146,7 @@ export function FootprintPreview({ footprint }: FootprintPreviewProps) {
     canvas.height = height;
 
     // Clear canvas
-    ctx.fillStyle = "#1a1b26";
+    ctx.fillStyle = canvasColors.background;
     ctx.fillRect(0, 0, width, height);
 
     // Try to get footprint data
@@ -234,7 +236,7 @@ export function FootprintPreview({ footprint }: FootprintPreviewProps) {
         parsedFootprint.graphics.length === 0)
     ) {
       // Draw empty state
-      ctx.fillStyle = "#565f89";
+      ctx.fillStyle = canvasColors.pinNumber;
       ctx.font = "14px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -243,7 +245,7 @@ export function FootprintPreview({ footprint }: FootprintPreviewProps) {
     }
 
     // Draw grid
-    ctx.strokeStyle = "#2a2b36";
+    ctx.strokeStyle = canvasColors.gridMajorLine;
     ctx.lineWidth = 1;
     const gridSize = 10;
     for (let x = 0; x < width; x += gridSize) {
@@ -351,7 +353,9 @@ export function FootprintPreview({ footprint }: FootprintPreviewProps) {
 
     // Draw graphics (silkscreen, fab layer)
     parsedFootprint.graphics.forEach((graphic) => {
-      ctx.strokeStyle = graphic.layer.includes("SilkS") ? "#94a3b8" : "#64748b";
+      ctx.strokeStyle = graphic.layer.includes("SilkS")
+        ? canvasColors.silkscreen
+        : canvasColors.fabOutline;
       ctx.lineWidth = 1.5;
 
       switch (graphic.type) {
@@ -433,8 +437,8 @@ export function FootprintPreview({ footprint }: FootprintPreviewProps) {
       ctx.translate(pos.x, pos.y);
       ctx.rotate((-pad.rotation * Math.PI) / 180);
 
-      ctx.fillStyle = "rgba(201, 162, 39, 0.3)";
-      ctx.strokeStyle = "#c9a227";
+      ctx.fillStyle = canvasColors.padSelectedFill;
+      ctx.strokeStyle = canvasColors.padStroke;
       ctx.lineWidth = 1.5;
 
       if (pad.shape === "circle") {
@@ -457,7 +461,7 @@ export function FootprintPreview({ footprint }: FootprintPreviewProps) {
 
       // Draw pad number
       if (scale > 0.5) {
-        ctx.fillStyle = "#e2e8f0";
+        ctx.fillStyle = canvasColors.padNumberLight;
         ctx.font = "10px monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -469,12 +473,12 @@ export function FootprintPreview({ footprint }: FootprintPreviewProps) {
     const pin1 = parsedFootprint.pads.find((p) => p.number === "1");
     if (pin1) {
       const pos = transform(pin1.position.x, pin1.position.y);
-      ctx.fillStyle = "#38bdf8";
+      ctx.fillStyle = canvasColors.pin1Marker;
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, 3, 0, Math.PI * 2);
       ctx.fill();
     }
-  }, [footprint, fpViewport]);
+  }, [footprint, fpViewport, canvasColors]);
 
   const handleZoomIn = useCallback(() => {
     setFpViewport((prev) => {

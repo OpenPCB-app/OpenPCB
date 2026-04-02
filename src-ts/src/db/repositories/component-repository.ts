@@ -1,5 +1,5 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { and, eq, like, or, sql } from "drizzle-orm";
+import { and, eq, isNull, like, or, sql } from "drizzle-orm";
 import type * as schema from "../schema";
 import type { QueryLogger } from "../query-logger";
 import { withQueryLogging } from "../decorators";
@@ -10,6 +10,7 @@ import {
   type ComponentRow,
   type NewComponentRow,
 } from "../schema/component";
+import { design } from "../schema/design";
 import {
   componentVariant,
   type ComponentVariantRow,
@@ -560,6 +561,13 @@ export class ComponentRepository extends BaseRepository<
       const rows = await this.db
         .select({ count: sql<number>`count(distinct ${componentUsage.designId})` })
         .from(componentUsage)
+        .innerJoin(
+          design,
+          and(
+            eq(design.id, componentUsage.designId),
+            isNull(design.deletedAt),
+          ),
+        )
         .where(eq(componentUsage.componentId, componentId));
 
       return Number(rows[0]?.count ?? 0);

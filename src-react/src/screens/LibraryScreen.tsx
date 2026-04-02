@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
   Search,
@@ -13,6 +13,7 @@ import {
 import { useComponents, type UseComponentsFilters } from "@/hooks/useComponents";
 import { useNavigationStore } from "@/stores/navigation-store";
 import { UnifiedImportModal } from "@/components/unified-import/UnifiedImportModal";
+import { ComponentWizard } from "@/components/wizard/ComponentWizard";
 import {
   bulkDeleteComponentFamilies,
   type MountType,
@@ -27,6 +28,7 @@ const MOUNT_TYPE_OPTIONS: Array<{ value: MountType; label: string }> = [
 export function LibraryScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [filters, setFilters] = useState<UseComponentsFilters>({});
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
@@ -52,6 +54,20 @@ export function LibraryScreen() {
       return next.size === current.size ? current : next;
     });
   }, [components]);
+
+  // Handle wizard close
+  const handleWizardClose = useCallback(() => {
+    setWizardOpen(false);
+  }, []);
+
+  // Handle successful publish from wizard
+  const handlePublished = useCallback(
+    (_familyId: string) => {
+      // Refetch components to show the new one
+      void refetch();
+    },
+    [refetch],
+  );
 
   const toggleSelection = (id: string) => {
     setSelectedIds((current) => {
@@ -97,9 +113,21 @@ export function LibraryScreen() {
       void refetch();
 
       if (result.skippedCount > 0) {
-        setBulkDeleteError(
-          `${result.skippedCount} component${result.skippedCount === 1 ? " was" : "s were"} not deleted because it is in use.`,
-        );
+        const reasons: string[] = [];
+
+        if (result.skippedBuiltInCount > 0) {
+          reasons.push(
+            `${result.skippedBuiltInCount} built-in component${result.skippedBuiltInCount === 1 ? "" : "s"} cannot be deleted`,
+          );
+        }
+
+        if (result.skippedNotFoundCount > 0) {
+          reasons.push(
+            `${result.skippedNotFoundCount} component${result.skippedNotFoundCount === 1 ? " was" : "s were"} not found`,
+          );
+        }
+
+        setBulkDeleteError(reasons.join(". "));
         return;
       }
 
@@ -124,6 +152,16 @@ export function LibraryScreen() {
       mountType: current.mountType === mountType ? undefined : mountType,
     }));
   };
+
+  // Show wizard full-screen when creating new component
+  if (wizardOpen) {
+    return (
+      <ComponentWizard
+        onClose={handleWizardClose}
+        onPublished={handlePublished}
+      />
+    );
+  }
 
   return (
     <>
@@ -171,7 +209,7 @@ export function LibraryScreen() {
             <button
               type="button"
               className="flex h-9 items-center gap-1.5 rounded-md bg-brand px-4 text-sm font-medium text-white transition-opacity hover:opacity-90"
-              onClick={() => navigateToComponentDetail()}
+              onClick={() => setWizardOpen(true)}
             >
               <Plus className="h-4 w-4" />
               New

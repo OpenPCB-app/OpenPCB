@@ -1,0 +1,123 @@
+- generic [ref=e2]:
+  - generic [ref=e8]:
+    - complementary [ref=e9]:
+      - generic [ref=e10]:
+        - button "OpenPCB Home" [ref=e11]:
+          - img [ref=e12]
+        - navigation [ref=e19]:
+          - button "Home" [ref=e20]:
+            - img [ref=e21]
+            - generic [ref=e26]: Home
+          - button "Design" [ref=e27]:
+            - img [ref=e28]
+            - generic [ref=e33]: Design
+          - button "Library" [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e39]: Library
+          - button "Chat" [ref=e40]:
+            - img [ref=e41]
+            - generic [ref=e43]: Chat
+          - button "Notes" [ref=e44]:
+            - img [ref=e45]
+            - generic [ref=e48]: Notes
+      - generic [ref=e49]:
+        - button "Settings" [ref=e50]:
+          - img [ref=e51]
+          - generic [ref=e54]: Settings
+        - generic [ref=e55]: U
+    - main [ref=e56]:
+      - generic [ref=e539]:
+        - generic [ref=e540]:
+          - generic [ref=e541]:
+            - button "Back to Library" [ref=e542]:
+              - img [ref=e543]
+              - generic [ref=e545]: Back to Library
+            - generic [ref=e547]:
+              - heading "E2E Component 1775124206936" [level=1] [ref=e548]
+              - generic [ref=e549]:
+                - generic [ref=e550]: A test component created by E2E
+                - generic [ref=e551]: "|"
+                - generic [ref=e552]: 0 pins
+                - generic [ref=e553]: "|"
+                - generic [ref=e554]: smd
+          - generic [ref=e555]:
+            - button "Export" [ref=e556]:
+              - img [ref=e557]
+              - text: Export
+            - button "Duplicate" [ref=e560]:
+              - img [ref=e561]
+              - text: Duplicate
+            - button "Edit" [ref=e564]:
+              - img [ref=e565]
+              - text: Edit
+        - generic [ref=e568]:
+          - generic [ref=e569]:
+            - generic [ref=e570]:
+              - generic [ref=e571]:
+                - generic [ref=e572]:
+                  - heading "Schematic Symbol" [level=2] [ref=e573]:
+                    - img [ref=e574]
+                    - text: Schematic Symbol
+                  - generic [ref=e577]: "Ref: U"
+                - generic [ref=e581]:
+                  - button "Fit to content" [ref=e582]:
+                    - img [ref=e583]
+                  - button "Zoom out" [ref=e585]:
+                    - img [ref=e586]
+                  - button "Zoom in" [ref=e587]:
+                    - img [ref=e588]
+              - generic [ref=e590]:
+                - heading "PCB Footprint" [level=2] [ref=e592]:
+                  - img [ref=e593]
+                  - text: PCB Footprint
+                - generic [ref=e599]:
+                  - button "Fit to content" [ref=e600]:
+                    - img [ref=e601]
+                  - button "Zoom out" [ref=e603]:
+                    - img [ref=e604]
+                  - button "Zoom in" [ref=e605]:
+                    - img [ref=e606]
+            - generic [ref=e608]:
+              - heading "3D Model" [level=2] [ref=e610]:
+                - img [ref=e611]
+                - text: 3D Model
+              - generic [ref=e615]:
+                - img [ref=e616]
+                - paragraph [ref=e619]: No 3D model
+          - generic [ref=e620]:
+            - generic [ref=e621]:
+              - heading "Technical Specifications" [level=3] [ref=e622]
+              - generic [ref=e623]:
+                - generic [ref=e624]:
+                  - term [ref=e625]: Reference Prefix
+                  - definition [ref=e626]: U
+                - generic [ref=e627]:
+                  - term [ref=e628]: Package
+                  - definition [ref=e629]: variant-1
+                - generic [ref=e630]:
+                  - term [ref=e631]: Mount Type
+                  - definition [ref=e632]: smd
+                - generic [ref=e633]:
+                  - term [ref=e634]: Pin Count
+                  - definition [ref=e635]: "0"
+            - generic [ref=e636]:
+              - heading "Pin Assignments" [level=3] [ref=e637]
+              - generic [ref=e638]: No pin information available
+            - generic [ref=e639]:
+              - heading "Actions" [level=3] [ref=e640]
+              - generic [ref=e641]:
+                - button "Use in Design" [ref=e642]:
+                  - img [ref=e643]
+                  - text: Use in Design
+                - button "Export KiCAD Files" [ref=e644]:
+                  - img [ref=e645]
+                  - text: Export KiCAD Files
+                - generic [ref=e648]:
+                  - button "Duplicate" [ref=e649]:
+                    - img [ref=e650]
+                    - text: Duplicate
+                  - button "Delete" [ref=e653]:
+                    - img [ref=e654]
+                    - text: Delete
+  - region "Notifications (F8)":
+    - list

@@ -279,7 +279,8 @@ export function initializeNavigationFromHash(): void {
   } else if (hash === "#import") {
     useNavigationStore.getState().navigateToImport();
   } else if (hash === "#component-new") {
-    useNavigationStore.getState().navigateToComponentDetail(null);
+    // New component creation is handled by wizard in LibraryScreen
+    useNavigationStore.getState().navigateToLibrary();
   } else if (hash.startsWith("#component-")) {
     const componentId = hash.substring(11);
     useNavigationStore.getState().navigateToComponentDetail(componentId);
@@ -399,14 +400,9 @@ export function setupHashChangeListener(): () => void {
         useNavigationStore.setState({ currentScreen: "import" });
       }
     } else if (hash === "#component-new") {
-      if (
-        state.currentScreen !== "component-detail" ||
-        state.currentComponentId !== null
-      ) {
-        useNavigationStore.setState({
-          currentScreen: "component-detail",
-          currentComponentId: null,
-        });
+      // New component creation is handled by wizard in LibraryScreen
+      if (state.currentScreen !== "library") {
+        useNavigationStore.setState({ currentScreen: "library" });
       }
     } else if (hash.startsWith("#component-")) {
       const componentId = hash.substring(11);

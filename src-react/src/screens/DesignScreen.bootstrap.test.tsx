@@ -2,6 +2,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSchematicStore } from "@/stores/schematic-store";
+import * as designApi from "@/lib/api/design-api";
 import { DesignScreen } from "./DesignScreen";
 
 let designTab: "schematic" | "pcb" | "3d" | "bom" = "schematic";
@@ -75,6 +76,13 @@ vi.mock("@/hooks/useDesigns", () => ({
   }),
 }));
 
+vi.mock("@/lib/api/design-api", () => ({
+  getSheetContent: vi.fn(),
+  saveSheetContent: vi.fn(),
+}));
+
+const getSheetContent = vi.mocked(designApi.getSheetContent);
+
 vi.mock("./design/DesignHeader", () => ({
   DesignHeader: ({ designName }: { designName: string }) => (
     <div>Header {designName}</div>
@@ -89,6 +97,33 @@ vi.mock("@/components/pcb/StatusBar", () => ({
   StatusBar: () => <div>PCB Status</div>,
 }));
 
+vi.mock("@/components/pcb/palette/ComponentPalette", () => ({
+  ComponentPalette: ({
+    controller,
+  }: {
+    controller: {
+      beginPlacement: (kind: "resistor" | "gnd") => void;
+    };
+  }) => (
+    <div>
+      <button
+        type="button"
+        draggable
+        onDragStart={() => controller.beginPlacement("gnd")}
+      >
+        Ground
+      </button>
+      <button
+        type="button"
+        draggable
+        onDragStart={() => controller.beginPlacement("resistor")}
+      >
+        Resistor
+      </button>
+    </div>
+  ),
+}));
+
 vi.mock("@/hooks/useComponents", () => ({
   useComponents: vi.fn(() => ({
     components: [],
@@ -98,6 +133,15 @@ vi.mock("@/hooks/useComponents", () => ({
     filters: {},
     setFilters: vi.fn(),
   })),
+}));
+
+vi.mock("@/components/ThemeProvider", () => ({
+  useTheme: () => ({
+    preference: "system",
+    mode: "dark",
+    isReady: true,
+    setPreference: vi.fn(),
+  }),
 }));
 
 function createMockContext(): CanvasRenderingContext2D {
@@ -263,6 +307,8 @@ describe("DesignScreen real schematic bootstrap", () => {
     navigateToProject.mockReset();
     navigateToHome.mockReset();
     createDesign.mockReset();
+    getSheetContent.mockReset();
+    getSheetContent.mockResolvedValue({ sheet: null, content: null });
     resetStore();
   });
 

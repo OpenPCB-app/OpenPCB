@@ -94,6 +94,7 @@ function ensureSymbolData(
       unitCount: 1,
       bodyGraphics: [],
       rawKicadSource: null,
+      symbolTemplate: "generic_ic",
     }
   );
 }
@@ -141,13 +142,18 @@ function extractComponentUpdates(
 ): Partial<ComponentType> {
   const updates: Partial<ComponentType> = {};
 
-  if (payload.canonicalKey !== undefined) updates.canonicalKey = payload.canonicalKey;
-  if (payload.displayLabel !== undefined) updates.displayLabel = payload.displayLabel;
-  if (payload.description !== undefined) updates.description = payload.description;
+  if (payload.canonicalKey !== undefined)
+    updates.canonicalKey = payload.canonicalKey;
+  if (payload.displayLabel !== undefined)
+    updates.displayLabel = payload.displayLabel;
+  if (payload.description !== undefined)
+    updates.description = payload.description;
   if (payload.symbolData !== undefined) updates.symbolData = payload.symbolData;
-  if (payload.categoryPath !== undefined) updates.categoryPath = payload.categoryPath;
+  if (payload.categoryPath !== undefined)
+    updates.categoryPath = payload.categoryPath;
   if (payload.tags !== undefined) updates.tags = payload.tags;
-  if (payload.defaultVariantId !== undefined) updates.defaultVariantId = payload.defaultVariantId;
+  if (payload.defaultVariantId !== undefined)
+    updates.defaultVariantId = payload.defaultVariantId;
   if (payload.defaultPackageVariantId !== undefined) {
     updates.defaultPackageVariantId = payload.defaultPackageVariantId;
   }
@@ -217,7 +223,9 @@ export async function listComponents(filters?: {
   tags?: string[];
   mountType?: MountType;
 }): Promise<ComponentType[]> {
-  const response = await customFetch<ApiResponse<{ components: ComponentType[] }>>(
+  const response = await customFetch<
+    ApiResponse<{ components: ComponentType[] }>
+  >(
     `/api/components${buildQuery({
       search: filters?.search,
       categoryPath: filters?.categoryPath,
@@ -279,13 +287,12 @@ export async function addComponentVariant(
   componentId: string,
   variant: Partial<ComponentVariant>,
 ): Promise<ComponentVariant> {
-  const response = await customFetch<ApiResponse<{ variant: ComponentVariant }>>(
-    `/api/components/${encodeURIComponent(componentId)}/variants`,
-    {
-      method: "POST",
-      body: JSON.stringify(variant),
-    },
-  );
+  const response = await customFetch<
+    ApiResponse<{ variant: ComponentVariant }>
+  >(`/api/components/${encodeURIComponent(componentId)}/variants`, {
+    method: "POST",
+    body: JSON.stringify(variant),
+  });
   return unwrapResponse(response).variant;
 }
 
@@ -294,7 +301,9 @@ export async function updateComponentVariant(
   variantId: string,
   updates: Partial<ComponentVariant>,
 ): Promise<ComponentVariant> {
-  const response = await customFetch<ApiResponse<{ variant: ComponentVariant }>>(
+  const response = await customFetch<
+    ApiResponse<{ variant: ComponentVariant }>
+  >(
     `/api/components/${encodeURIComponent(componentId)}/variants/${encodeURIComponent(variantId)}`,
     {
       method: "PATCH",
@@ -372,12 +381,19 @@ export async function deleteComponentFamily(id: string): Promise<void> {
 
 export async function bulkDeleteComponentFamilies(
   ids: string[],
-): Promise<{ deletedCount: number; skippedCount: number }> {
+): Promise<{
+  deletedCount: number;
+  skippedCount: number;
+  skippedBuiltInCount: number;
+  skippedNotFoundCount: number;
+}> {
   const response = await customFetch<
     ApiResponse<{
       deleted: boolean;
       deletedCount: number;
       skippedCount: number;
+      skippedBuiltInCount: number;
+      skippedNotFoundCount: number;
     }>
   >("/api/components/families/bulk-delete", {
     method: "POST",
@@ -387,6 +403,8 @@ export async function bulkDeleteComponentFamilies(
   return {
     deletedCount: result.deletedCount,
     skippedCount: result.skippedCount,
+    skippedBuiltInCount: result.skippedBuiltInCount,
+    skippedNotFoundCount: result.skippedNotFoundCount,
   };
 }
 
@@ -503,7 +521,9 @@ export async function patchWorkspaceComponentRecord(
   return toWorkspaceRecord(component);
 }
 
-export async function discardWorkspaceComponentRecord(id: string): Promise<void> {
+export async function discardWorkspaceComponentRecord(
+  id: string,
+): Promise<void> {
   await deleteComponent(id);
 }
 
@@ -568,10 +588,13 @@ export async function importComponentsFromFiles(
     formData.append("files", file);
   }
 
-  const response = await fetch(`${backendUrl.replace(/\/$/, "")}/api/components/import`, {
-    method: "POST",
-    body: formData,
-  });
+  const response = await fetch(
+    `${backendUrl.replace(/\/$/, "")}/api/components/import`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
 
   const payload = (await response.json()) as ApiResponse<{
     import: ComponentImportExecutionResult;

@@ -1,4 +1,5 @@
 import type { GridStyle, Viewport } from "../types";
+import type { GridColors } from "@/lib/canvas-theme";
 import { schematicToScreen, screenToSchematic } from "./viewport";
 
 export interface SchematicBounds {
@@ -50,6 +51,7 @@ export function renderGrid(
   viewport: Viewport,
   gridSize: number,
   style: GridStyle = "dots",
+  colors?: GridColors,
 ): void {
   if (gridSize <= 0) {
     throw new RangeError("gridSize must be greater than 0");
@@ -68,13 +70,13 @@ export function renderGrid(
   // Render based on style
   switch (style) {
     case "dots":
-      renderDotGrid(ctx, bounds, viewport, gridSize, gridPx, width, height);
+      renderDotGrid(ctx, bounds, viewport, gridSize, gridPx, width, height, colors);
       break;
     case "lines":
-      renderLineGrid(ctx, bounds, viewport, gridSize, gridPx, width, height);
+      renderLineGrid(ctx, bounds, viewport, gridSize, gridPx, width, height, colors);
       break;
     case "cross":
-      renderCrossGrid(ctx, bounds, viewport, gridSize, gridPx, width, height);
+      renderCrossGrid(ctx, bounds, viewport, gridSize, gridPx, colors);
       break;
   }
 
@@ -82,7 +84,7 @@ export function renderGrid(
   const ox = offsetX;
   const oy = offsetY;
   if (ox >= -10 && ox <= width + 10 && oy >= -10 && oy <= height + 10) {
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.4)";
+    ctx.strokeStyle = colors?.originCross ?? "rgba(148, 163, 184, 0.4)";
     ctx.lineWidth = 1;
     const crossSize = 12;
     ctx.beginPath();
@@ -102,11 +104,13 @@ function renderDotGrid(
   gridPx: number,
   width: number,
   height: number,
+  colors?: GridColors,
 ): void {
   const dotRadius = Math.max(0.5, viewport.zoom * 0.25);
 
-  ctx.fillStyle =
-    gridPx > 15 ? "rgba(148, 163, 184, 0.35)" : "rgba(148, 163, 184, 0.2)";
+  ctx.fillStyle = colors
+    ? (gridPx > 15 ? colors.dot : colors.dotFaint)
+    : (gridPx > 15 ? "rgba(148, 163, 184, 0.35)" : "rgba(148, 163, 184, 0.2)");
 
   for (let x = bounds.left; x <= bounds.right; x += gridSize) {
     for (let y = bounds.top; y <= bounds.bottom; y += gridSize) {
@@ -127,7 +131,7 @@ function renderDotGrid(
       majorGridSize,
     );
 
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.1)";
+    ctx.strokeStyle = colors?.majorLine ?? "rgba(148, 163, 184, 0.1)";
     ctx.lineWidth = 1;
     ctx.beginPath();
 
@@ -155,10 +159,12 @@ function renderLineGrid(
   gridPx: number,
   width: number,
   height: number,
+  colors?: GridColors,
 ): void {
   // Primary grid lines
-  ctx.strokeStyle =
-    gridPx > 10 ? "rgba(148, 163, 184, 0.25)" : "rgba(148, 163, 184, 0.15)";
+  ctx.strokeStyle = colors
+    ? (gridPx > 10 ? colors.dot : colors.dotFaint)
+    : (gridPx > 10 ? "rgba(148, 163, 184, 0.25)" : "rgba(148, 163, 184, 0.15)");
   ctx.lineWidth = 1;
   ctx.beginPath();
 
@@ -186,7 +192,7 @@ function renderLineGrid(
       majorGridSize,
     );
 
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.4)";
+    ctx.strokeStyle = colors?.originCross ?? "rgba(148, 163, 184, 0.4)";
     ctx.lineWidth = 1;
     ctx.beginPath();
 
@@ -212,13 +218,13 @@ function renderCrossGrid(
   viewport: Viewport,
   gridSize: number,
   gridPx: number,
-  _width: number,
-  _height: number,
+  colors?: GridColors,
 ): void {
   const crossSize = Math.max(3, gridPx * 0.3);
 
-  ctx.strokeStyle =
-    gridPx > 10 ? "rgba(148, 163, 184, 0.4)" : "rgba(148, 163, 184, 0.25)";
+  ctx.strokeStyle = colors
+    ? (gridPx > 10 ? colors.dot : colors.dotFaint)
+    : (gridPx > 10 ? "rgba(148, 163, 184, 0.4)" : "rgba(148, 163, 184, 0.25)");
   ctx.lineWidth = 1;
 
   for (let x = bounds.left; x <= bounds.right; x += gridSize) {

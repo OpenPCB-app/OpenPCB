@@ -6,6 +6,7 @@
  */
 
 import { useRef, useEffect, useCallback } from "react";
+import { useCanvasColors } from "@/lib/canvas-theme";
 import { useFootprintEditorStore } from "./footprint-editor-store";
 import {
   footprintToScreen,
@@ -17,7 +18,7 @@ import {
   getPadBounds,
 } from "./viewport";
 import type { Bounds, FootprintGraphic, PadDefinition, Viewport } from "./types";
-import { renderGrid, renderPad, renderGraphic, COLORS } from "./render-utils";
+import { renderGrid, renderPad, renderGraphic } from "./render-utils";
 
 // ---------------------------------------------------------------------------
 // Hit Testing
@@ -171,6 +172,7 @@ export function FootprintEditorCanvas() {
   const clearSelection = useFootprintEditorStore((s) => s.clearSelection);
   const movePad = useFootprintEditorStore((s) => s.movePad);
   const updateGraphic = useFootprintEditorStore((s) => s.updateGraphic);
+  const canvasColors = useCanvasColors();
 
   // Resize canvas to fill container
   const resizeCanvas = useCallback(() => {
@@ -202,7 +204,7 @@ export function FootprintEditorCanvas() {
     ctx.scale(dpr, dpr);
 
     // Clear
-    ctx.fillStyle = COLORS.background;
+    ctx.fillStyle = canvasColors.background;
     ctx.fillRect(0, 0, width, height);
 
     const store = useFootprintEditorStore.getState();
@@ -211,22 +213,22 @@ export function FootprintEditorCanvas() {
 
     // Grid
     if (showGrid) {
-      renderGrid(ctx, width, height, viewport, gridSize);
+      renderGrid(ctx, width, height, viewport, gridSize, canvasColors);
     }
 
     // Graphics (courtyard, silkscreen, fab)
     for (const graphic of graphics) {
-      renderGraphic(ctx, graphic, viewport);
+      renderGraphic(ctx, graphic, viewport, canvasColors);
     }
 
     // Pads
     for (const pad of pads) {
       const isSelected = selection.selectedPadIds.has(pad.id);
-      renderPad(ctx, pad, viewport, isSelected);
+      renderPad(ctx, pad, viewport, isSelected, canvasColors);
     }
 
     ctx.restore();
-  }, []);
+  }, [canvasColors]);
 
   // Animation loop
   useEffect(() => {

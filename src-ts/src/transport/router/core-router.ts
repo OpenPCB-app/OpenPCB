@@ -2163,6 +2163,8 @@ export class CoreRouter extends BaseHttpRouter {
             deleted: z.boolean(),
             deletedCount: z.number(),
             skippedCount: z.number(),
+            skippedBuiltInCount: z.number(),
+            skippedNotFoundCount: z.number(),
           }),
         },
       },

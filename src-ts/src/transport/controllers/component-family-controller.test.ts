@@ -184,7 +184,7 @@ describe("ComponentFamilyController", () => {
         >,
     );
     repo.update = mock(
-      async (id: string, data: unknown) =>
+      async (id: string, data: Record<string, unknown>) =>
         ({
           id,
           ...data,
@@ -219,6 +219,8 @@ describe("ComponentFamilyController", () => {
     expect(res.status).toBe(200);
     expect(body.data.deletedCount).toBe(1);
     expect(body.data.skippedCount).toBe(1);
+    expect(body.data.skippedBuiltInCount).toBe(1);
+    expect(body.data.skippedNotFoundCount).toBe(0);
   });
 });
 

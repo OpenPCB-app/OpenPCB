@@ -5,33 +5,14 @@
  */
 
 import type { Viewport, Millimeters, PadDefinition, FootprintGraphic } from "./types";
+import {
+  CANVAS_COLORS_DARK,
+  getFootprintColors,
+  type FootprintColors,
+} from "@/lib/canvas-theme";
 import { footprintToScreen, mmToPixels } from "./viewport";
 
-// ---------------------------------------------------------------------------
-// Colors
-// ---------------------------------------------------------------------------
-
-export const COLORS = {
-  background: "#0f172a",
-  gridDot: "rgba(148, 163, 184, 0.3)",
-  gridDotFaint: "rgba(148, 163, 184, 0.15)",
-  gridMajorLine: "rgba(148, 163, 184, 0.08)",
-  originCross: "rgba(148, 163, 184, 0.25)",// Pads
-  padFill: "#c9a227",
-  padStroke: "#f4d03f",
-  padSelectedStroke: "#38bdf8",
-  padSelectedFill: "rgba(56, 189, 248, 0.2)",
-  padNumber: "#1e293b",
-  padNumberLight: "#e2e8f0",
-  // Layers
-  courtyard: "rgba(255, 193, 7, 0.3)",
-  courtyardStroke: "rgba(255, 193, 7, 0.6)",
-  silkscreen: "#94a3b8",
-  fabOutline: "#64748b",
-  fabFill: "rgba(100, 116, 139, 0.1)",
-  // Pin 1 marker
-  pin1Marker: "#38bdf8",
-} as const;
+const DEFAULT_COLORS: FootprintColors = getFootprintColors(CANVAS_COLORS_DARK);
 
 // ---------------------------------------------------------------------------
 // Grid Rendering
@@ -67,6 +48,7 @@ export function renderGrid(
   height: number,
   viewport: Viewport,
   gridSize: Millimeters,
+  colors: FootprintColors = DEFAULT_COLORS,
 ): void {
   const gridPx = mmToPixels(gridSize, viewport.zoom);
   if (gridPx < 4) return;
@@ -78,7 +60,7 @@ export function renderGrid(
   const snappedMaxY = Math.ceil(bounds.maxY / gridSize) * gridSize;
 
   const dotRadius = Math.max(0.5, viewport.zoom * 0.015);
-  ctx.fillStyle = gridPx > 20 ? COLORS.gridDot : COLORS.gridDotFaint;
+  ctx.fillStyle = gridPx > 20 ? colors.gridDot : colors.gridDotFaint;
 
   // Draw grid dots
   for (let x = snappedMinX; x <= snappedMaxX; x += gridSize) {
@@ -99,7 +81,7 @@ export function renderGrid(
     const majorMaxX = Math.ceil(bounds.maxX / majorGridSize) * majorGridSize;
     const majorMaxY = Math.ceil(bounds.maxY / majorGridSize) * majorGridSize;
 
-    ctx.strokeStyle = COLORS.gridMajorLine;
+    ctx.strokeStyle = colors.gridMajorLine;
     ctx.lineWidth = 1;
     ctx.beginPath();
 
@@ -121,7 +103,7 @@ export function renderGrid(
   // Origin cross
   const origin = footprintToScreen(0, 0, viewport);
   if (origin.x >= -10 && origin.x <= width + 10 && origin.y >= -10 && origin.y <= height + 10) {
-    ctx.strokeStyle = COLORS.originCross;
+    ctx.strokeStyle = colors.originCross;
     ctx.lineWidth = 1;
     const crossSize = 15;
     ctx.beginPath();
@@ -212,6 +194,7 @@ export function renderPad(
   pad: PadDefinition,
   viewport: Viewport,
   selected: boolean,
+  colors: FootprintColors = DEFAULT_COLORS,
 ): void {
   const screen = footprintToScreen(pad.position.x, pad.position.y, viewport);
   const screenWidth = mmToPixels(pad.size.width, viewport.zoom);
@@ -242,8 +225,8 @@ export function renderPad(
   }
 
   // Fill and stroke
-  ctx.fillStyle = selected ? COLORS.padSelectedFill : COLORS.padFill;
-  ctx.strokeStyle = selected ? COLORS.padSelectedStroke : COLORS.padStroke;
+  ctx.fillStyle = selected ? colors.padSelectedFill : colors.padFill;
+  ctx.strokeStyle = selected ? colors.padSelectedStroke : colors.padStroke;
   ctx.lineWidth = selected ? 2 : 1;
   ctx.fill();
   ctx.stroke();
@@ -256,7 +239,7 @@ export function renderPad(
     ctx.font = `${fontSize}px monospace`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = selected ? COLORS.padNumberLight : COLORS.padNumber;
+    ctx.fillStyle = selected ? colors.padNumberLight : colors.padNumber;
     ctx.fillText(pad.number, screen.x, screen.y);
   }
 }
@@ -269,24 +252,25 @@ export function renderGraphic(
   ctx: CanvasRenderingContext2D,
   graphic: FootprintGraphic,
   viewport: Viewport,
+  colors: FootprintColors = DEFAULT_COLORS,
 ): void {
   ctx.save();
 
   // Set style based on layer
   switch (graphic.layer) {
     case "F.CrtYd":
-      ctx.strokeStyle = COLORS.courtyardStroke;
+      ctx.strokeStyle = colors.courtyardStroke;
       ctx.setLineDash([4, 2]);
       break;
     case "F.SilkS":
-      ctx.strokeStyle = COLORS.silkscreen;
+      ctx.strokeStyle = colors.silkscreen;
       break;
     case "F.Fab":
-      ctx.strokeStyle = COLORS.fabOutline;
-      ctx.fillStyle = COLORS.fabFill;
+      ctx.strokeStyle = colors.fabOutline;
+      ctx.fillStyle = colors.fabFill;
       break;
     default:
-      ctx.strokeStyle = COLORS.fabOutline;
+      ctx.strokeStyle = colors.fabOutline;
   }
 
   ctx.lineWidth = mmToPixels(graphic.strokeWidth, viewport.zoom);
@@ -360,7 +344,7 @@ export function renderGraphic(
       ctx.font = `${fontSize}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillStyle = COLORS.silkscreen;
+      ctx.fillStyle = colors.silkscreen;
       const rad = (graphic.rotation * Math.PI) / 180;
       ctx.save();
       ctx.translate(pos.x, pos.y);
@@ -383,13 +367,14 @@ export function renderPin1Marker(
   position: { x: Millimeters; y: Millimeters },
   viewport: Viewport,
   markerType: "dot" | "octagon" | "bevel" = "dot",
+  colors: FootprintColors = DEFAULT_COLORS,
 ): void {
   const screen = footprintToScreen(position.x, position.y, viewport);
   const size = mmToPixels(0.8, viewport.zoom);
 
   ctx.save();
-  ctx.strokeStyle = COLORS.pin1Marker;
-  ctx.fillStyle = COLORS.pin1Marker;
+  ctx.strokeStyle = colors.pin1Marker;
+  ctx.fillStyle = colors.pin1Marker;
   ctx.lineWidth = 2;
 
   switch (markerType) {
@@ -399,6 +384,7 @@ export function renderPin1Marker(
       ctx.fill();
       break;
     case "octagon":
+    {
       ctx.beginPath();
       const sides = 8;
       const radius = size / 2;
@@ -412,6 +398,7 @@ export function renderPin1Marker(
       ctx.closePath();
       ctx.stroke();
       break;
+    }
     case "bevel":
       ctx.beginPath();
       ctx.moveTo(screen.x - size / 2, screen.y - size / 2);

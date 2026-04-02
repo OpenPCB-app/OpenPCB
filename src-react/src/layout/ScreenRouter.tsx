@@ -11,7 +11,7 @@ import { ChatScreen } from "@/screens/ChatScreen";
 import { DesignScreen } from "@/screens/DesignScreen";
 import { NotesScreen } from "@/screens/NotesScreen";
 import { LibraryScreen } from "@/screens/LibraryScreen";
-import { ComponentEditor } from "@/components/editor/ComponentEditor";
+import { ComponentDetailPage } from "@/components/library/ComponentDetailPage";
 
 export function ScreenRouter() {
   const currentScreen = useNavigationStore((s) => s.currentScreen);
@@ -39,7 +39,13 @@ export function ScreenRouter() {
     case "import":
       return <LibraryScreen />;
     case "component-detail":
-      return <ComponentEditor componentId={currentComponentId ?? undefined} />;
+      // Only show detail page for existing components (with ID)
+      // New component creation uses the wizard in LibraryScreen
+      if (currentComponentId) {
+        return <ComponentDetailPage />;
+      }
+      // Redirect to library if no component ID (shouldn't happen normally)
+      return <LibraryScreen />;
     default:
       return <HomeScreen />;
   }

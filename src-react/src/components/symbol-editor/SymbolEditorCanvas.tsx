@@ -6,6 +6,10 @@
  */
 
 import { useRef, useEffect, useCallback } from "react";
+import {
+  useCanvasColors,
+  type CanvasColors,
+} from "@/lib/canvas-theme";
 import { useSymbolEditorStore } from "./symbol-editor-store";
 import {
   symbolToScreen,
@@ -26,26 +30,6 @@ import type {
   PinSide,
 } from "./types";
 import { PIN_DRAG_MIME, DEFAULT_PIN_LENGTH, createPin } from "./types";
-
-// ---------------------------------------------------------------------------
-// Rendering Constants
-// ---------------------------------------------------------------------------
-
-const COLORS = {
-  background: "#0f172a",
-  gridDot: "rgba(148, 163, 184, 0.3)",
-  gridDotFaint: "rgba(148, 163, 184, 0.15)",
-  gridMajorLine: "rgba(148, 163, 184, 0.08)",
-  originCross: "rgba(148, 163, 184, 0.25)",
-  bodyStroke: "#94a3b8",
-  bodyFill: "#1e293b",
-  pinLine: "#94a3b8",
-  pinDot: "#38bdf8",
-  pinLabel: "#e2e8f0",
-  pinNumber: "#64748b",
-  selectionStroke: "#38bdf8",
-  selectionFill: "rgba(56, 189, 248, 0.15)",
-};
 
 const PIN_DOT_RADIUS = 4;
 const PIN_LINE_WIDTH = 2;
@@ -94,6 +78,7 @@ function renderGrid(
   height: number,
   viewport: Viewport,
   gridSize: Nanometers,
+  colors: CanvasColors,
 ): void {
   const gridPx = getGridPixelSpacing(gridSize, viewport);
   if (gridPx < 4) return;
@@ -105,7 +90,7 @@ function renderGrid(
   const snappedTop = Math.ceil(bounds.top / gridSize) * gridSize;
 
   const dotRadius = Math.max(0.5, viewport.zoom * 0.0003);
-  ctx.fillStyle = gridPx > 20 ? COLORS.gridDot : COLORS.gridDotFaint;
+  ctx.fillStyle = gridPx > 20 ? colors.gridDot : colors.gridDotFaint;
 
   for (let x = snappedLeft; x <= snappedRight; x += gridSize) {
     for (let y = snappedBottom; y <= snappedTop; y += gridSize) {
@@ -126,7 +111,7 @@ function renderGrid(
     const majorRight = Math.ceil(bounds.right / majorGridSize) * majorGridSize;
     const majorTop = Math.ceil(bounds.top / majorGridSize) * majorGridSize;
 
-    ctx.strokeStyle = COLORS.gridMajorLine;
+    ctx.strokeStyle = colors.gridMajorLine;
     ctx.lineWidth = 1;
     ctx.beginPath();
 
@@ -153,7 +138,7 @@ function renderGrid(
     origin.y >= -10 &&
     origin.y <= height + 10
   ) {
-    ctx.strokeStyle = COLORS.originCross;
+    ctx.strokeStyle = colors.originCross;
     ctx.lineWidth = 1;
     const crossSize = 15;
     ctx.beginPath();
@@ -173,6 +158,7 @@ function renderBody(
   ctx: CanvasRenderingContext2D,
   body: BodyPreset,
   viewport: Viewport,
+  colors: CanvasColors,
 ): void {
   const halfWidth = body.width / 2;
   const halfHeight = body.height / 2;
@@ -188,8 +174,8 @@ function renderBody(
       const w = bottomRight.x - topLeft.x;
       const h = bottomRight.y - topLeft.y;
 
-      ctx.fillStyle = COLORS.bodyFill;
-      ctx.strokeStyle = COLORS.bodyStroke;
+      ctx.fillStyle = colors.bodyFill;
+      ctx.strokeStyle = colors.bodyStroke;
       ctx.lineWidth = BODY_LINE_WIDTH;
       ctx.fillRect(topLeft.x, topLeft.y, w, h);
       ctx.strokeRect(topLeft.x, topLeft.y, w, h);
@@ -202,8 +188,8 @@ function renderBody(
       const bottomCorner = symbolToScreen(-halfWidth, -halfHeight, viewport);
       const tip = symbolToScreen(halfWidth, 0, viewport);
 
-      ctx.fillStyle = COLORS.bodyFill;
-      ctx.strokeStyle = COLORS.bodyStroke;
+      ctx.fillStyle = colors.bodyFill;
+      ctx.strokeStyle = colors.bodyStroke;
       ctx.lineWidth = BODY_LINE_WIDTH;
 
       ctx.beginPath();
@@ -228,7 +214,7 @@ function renderBody(
       );
 
       ctx.font = `${Math.max(10, viewport.zoom * 0.012)}px monospace`;
-      ctx.fillStyle = COLORS.pinLabel;
+      ctx.fillStyle = colors.pinLabel;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText("+", plusPos.x, plusPos.y);
@@ -243,8 +229,8 @@ function renderBody(
       const w = bottomRight.x - topLeft.x;
       const h = bottomRight.y - topLeft.y;
 
-      ctx.fillStyle = COLORS.bodyFill;
-      ctx.strokeStyle = COLORS.bodyStroke;
+      ctx.fillStyle = colors.bodyFill;
+      ctx.strokeStyle = colors.bodyStroke;
       ctx.lineWidth = BODY_LINE_WIDTH;
       ctx.fillRect(topLeft.x, topLeft.y, w, h);
       ctx.strokeRect(topLeft.x, topLeft.y, w, h);
@@ -258,8 +244,8 @@ function renderBody(
         symbolToScreen(halfWidth, 0, viewport).x - center.x,
       );
 
-      ctx.fillStyle = COLORS.bodyFill;
-      ctx.strokeStyle = COLORS.bodyStroke;
+      ctx.fillStyle = colors.bodyFill;
+      ctx.strokeStyle = colors.bodyStroke;
       ctx.lineWidth = BODY_LINE_WIDTH;
       ctx.beginPath();
       ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
@@ -303,8 +289,8 @@ function renderBody(
       );
       const tip = symbolToScreen(halfWidth * 0.6, 0, viewport);
 
-      ctx.fillStyle = COLORS.bodyFill;
-      ctx.strokeStyle = COLORS.bodyStroke;
+      ctx.fillStyle = colors.bodyFill;
+      ctx.strokeStyle = colors.bodyStroke;
       ctx.lineWidth = BODY_LINE_WIDTH;
 
       // Triangle (anode)
@@ -341,8 +327,8 @@ function renderBody(
       const w = bottomRight.x - topLeft.x;
       const h = bottomRight.y - topLeft.y;
 
-      ctx.fillStyle = COLORS.bodyFill;
-      ctx.strokeStyle = COLORS.bodyStroke;
+      ctx.fillStyle = colors.bodyFill;
+      ctx.strokeStyle = colors.bodyStroke;
       ctx.lineWidth = BODY_LINE_WIDTH;
       ctx.setLineDash([6, 3]);
       ctx.fillRect(topLeft.x, topLeft.y, w, h);
@@ -358,8 +344,8 @@ function renderBody(
       const w = bottomRight.x - topLeft.x;
       const h = bottomRight.y - topLeft.y;
 
-      ctx.fillStyle = COLORS.bodyFill;
-      ctx.strokeStyle = COLORS.bodyStroke;
+      ctx.fillStyle = colors.bodyFill;
+      ctx.strokeStyle = colors.bodyStroke;
       ctx.lineWidth = BODY_LINE_WIDTH;
       ctx.fillRect(topLeft.x, topLeft.y, w, h);
       ctx.strokeRect(topLeft.x, topLeft.y, w, h);
@@ -367,7 +353,7 @@ function renderBody(
       // Labels
       const fontSize = Math.max(8, viewport.zoom * 0.008);
       ctx.font = `${fontSize}px monospace`;
-      ctx.fillStyle = COLORS.pinLabel;
+      ctx.fillStyle = colors.pinLabel;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
@@ -399,6 +385,7 @@ function renderPin(
   pin: SymbolPin,
   viewport: Viewport,
   selected: boolean,
+  colors: CanvasColors,
 ): void {
   // Calculate pin line end (body connection) based on side
   const pinTip = pin.position;
@@ -423,7 +410,7 @@ function renderPin(
   const bodyScreen = symbolToScreen(bodyEnd.x, bodyEnd.y, viewport);
 
   // Pin line
-  ctx.strokeStyle = selected ? COLORS.selectionStroke : COLORS.pinLine;
+  ctx.strokeStyle = selected ? colors.selectionStroke : colors.pinLine;
   ctx.lineWidth = PIN_LINE_WIDTH;
   ctx.beginPath();
   ctx.moveTo(tipScreen.x, tipScreen.y);
@@ -431,14 +418,14 @@ function renderPin(
   ctx.stroke();
 
   // Connection dot at tip
-  ctx.fillStyle = selected ? COLORS.selectionStroke : COLORS.pinDot;
+  ctx.fillStyle = selected ? colors.selectionStroke : colors.pinDot;
   ctx.beginPath();
   ctx.arc(tipScreen.x, tipScreen.y, PIN_DOT_RADIUS, 0, Math.PI * 2);
   ctx.fill();
 
   // Selection highlight
   if (selected) {
-    ctx.strokeStyle = COLORS.selectionStroke;
+    ctx.strokeStyle = colors.selectionStroke;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(tipScreen.x, tipScreen.y, PIN_DOT_RADIUS + 4, 0, Math.PI * 2);
@@ -452,7 +439,7 @@ function renderPin(
 
   // Pin name (near body end)
   if (pin.name) {
-    ctx.fillStyle = COLORS.pinLabel;
+    ctx.fillStyle = colors.pinLabel;
     const labelPadding = 6;
 
     switch (pin.side) {
@@ -485,7 +472,7 @@ function renderPin(
 
   // Pin number (near tip)
   if (pin.number) {
-    ctx.fillStyle = COLORS.pinNumber;
+    ctx.fillStyle = colors.pinNumber;
     const numberPadding = PIN_DOT_RADIUS + 6;
 
     switch (pin.side) {
@@ -577,7 +564,12 @@ function renderBezierGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraph
   ctx.stroke();
 }
 
-function renderTextGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "text" }, viewport: Viewport): void {
+function renderTextGraphic(
+  ctx: CanvasRenderingContext2D,
+  graphic: SymbolGraphic & { type: "text" },
+  viewport: Viewport,
+  colors: CanvasColors,
+): void {
   const point = symbolToScreen(graphic.x, graphic.y, viewport);
   const fontSize = Math.max(10, graphic.fontSize * viewport.zoom);
   const angle = (-graphic.rotation * Math.PI) / 180;
@@ -587,7 +579,7 @@ function renderTextGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic
   ctx.font = `${fontSize}px monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = COLORS.pinLabel;
+  ctx.fillStyle = colors.pinLabel;
   ctx.fillText(graphic.content, 0, 0);
   ctx.restore();
 }
@@ -596,10 +588,11 @@ function renderGraphic(
   ctx: CanvasRenderingContext2D,
   graphic: SymbolGraphic,
   viewport: Viewport,
+  colors: CanvasColors,
 ): void {
   ctx.save();
-  ctx.strokeStyle = COLORS.bodyStroke;
-  ctx.fillStyle = COLORS.bodyFill;
+  ctx.strokeStyle = colors.bodyStroke;
+  ctx.fillStyle = colors.bodyFill;
   ctx.lineWidth = "strokeWidth" in graphic
     ? graphicStrokeWidthPx(graphic.strokeWidth, viewport)
     : 1;
@@ -624,7 +617,7 @@ function renderGraphic(
       renderBezierGraphic(ctx, graphic, viewport);
       break;
     case "text":
-      renderTextGraphic(ctx, graphic, viewport);
+      renderTextGraphic(ctx, graphic, viewport, colors);
       break;
   }
 
@@ -828,6 +821,7 @@ export function SymbolEditorCanvas() {
   const movePin = useSymbolEditorStore((s) => s.movePin);
   const updateGraphic = useSymbolEditorStore((s) => s.updateGraphic);
   const addPin = useSymbolEditorStore((s) => s.addPin);
+  const canvasColors = useCanvasColors();
 
   // Resize canvas to fill container
   const resizeCanvas = useCallback(() => {
@@ -859,7 +853,7 @@ export function SymbolEditorCanvas() {
     ctx.scale(dpr, dpr);
 
     // Clear
-    ctx.fillStyle = COLORS.background;
+    ctx.fillStyle = canvasColors.background;
     ctx.fillRect(0, 0, width, height);
 
     const store = useSymbolEditorStore.getState();
@@ -868,25 +862,25 @@ export function SymbolEditorCanvas() {
 
     // Grid
     if (showGrid) {
-      renderGrid(ctx, width, height, viewport, gridSize);
+      renderGrid(ctx, width, height, viewport, gridSize, canvasColors);
     }
 
     // Body
-    renderBody(ctx, body, viewport);
+    renderBody(ctx, body, viewport, canvasColors);
 
     // Imported/custom graphics
     for (const graphic of graphics) {
-      renderGraphic(ctx, graphic, viewport);
+      renderGraphic(ctx, graphic, viewport, canvasColors);
     }
 
     // Pins
     for (const pin of pins) {
       const isSelected = selection.selectedPinIds.has(pin.id);
-      renderPin(ctx, pin, viewport, isSelected);
+      renderPin(ctx, pin, viewport, isSelected, canvasColors);
     }
 
     ctx.restore();
-  }, []);
+  }, [canvasColors]);
 
   // Animation loop
   useEffect(() => {

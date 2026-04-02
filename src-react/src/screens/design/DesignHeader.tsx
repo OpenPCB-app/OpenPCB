@@ -13,6 +13,10 @@ interface DesignHeaderProps {
   designName?: string;
   onAiToggle?: () => void;
   aiOpen?: boolean;
+  onSave?: () => void;
+  onClose?: () => void;
+  saveDisabled?: boolean;
+  isSaving?: boolean;
 }
 
 export function DesignHeader({
@@ -20,6 +24,10 @@ export function DesignHeader({
   designName = "Untitled design",
   onAiToggle,
   aiOpen,
+  onSave,
+  onClose,
+  saveDisabled = false,
+  isSaving = false,
 }: DesignHeaderProps) {
   const designTab = useNavigationStore((s) => s.designTab);
   const setDesignTab = useNavigationStore((s) => s.setDesignTab);
@@ -43,6 +51,7 @@ export function DesignHeader({
         {TABS.map((tab) => (
           <button
             key={tab.id}
+            type="button"
             className={cn(
               "px-3 py-1 text-xs font-medium rounded transition-colors",
               designTab === tab.id
@@ -58,10 +67,33 @@ export function DesignHeader({
 
       {/* Right: actions */}
       <div className="flex items-center gap-2">
-        <button className="text-xs text-text-tertiary hover:text-text-secondary transition-colors">
+        {onClose && (
+          <button
+            type="button"
+            className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        )}
+        {onSave && (
+          <button
+            type="button"
+            className="rounded-md border border-border-default px-2 py-1 text-xs text-text-primary hover:bg-bg-input disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={onSave}
+            disabled={saveDisabled || isSaving}
+          >
+            {isSaving ? "Saving..." : "Save"}
+          </button>
+        )}
+        <button
+          type="button"
+          className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+        >
           Share
         </button>
         <button
+          type="button"
           className={cn(
             "h-7 w-7 rounded flex items-center justify-center text-xs font-medium transition-colors",
             aiOpen

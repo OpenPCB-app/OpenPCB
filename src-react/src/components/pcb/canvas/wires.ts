@@ -1,4 +1,5 @@
 import type { DerivedJunction, Point, Viewport, WireEntity } from "../types";
+import type { WireColors } from "@/lib/canvas-theme";
 import { schematicToScreen } from "./viewport";
 
 function isSamePoint(a: Point, b: Point): boolean {
@@ -124,6 +125,7 @@ export function deriveWireJunctions(
 interface RenderWireOptions {
   preview?: boolean;
   selected?: boolean;
+  colors?: WireColors;
 }
 
 export function renderWire(
@@ -135,6 +137,8 @@ export function renderWire(
   if (points.length < 2 || getWireLength(points) <= 0) {
     return;
   }
+
+  const colors = options.colors;
 
   ctx.save();
   ctx.beginPath();
@@ -150,10 +154,10 @@ export function renderWire(
   });
 
   ctx.strokeStyle = options.preview
-    ? "#38bdf8"
+    ? (colors?.wirePreview ?? "#38bdf8")
     : options.selected
-      ? "#e0f2fe"
-      : "#cbd5e1";
+      ? (colors?.wireSelected ?? "#e0f2fe")
+      : (colors?.wireDefault ?? "#cbd5e1");
   ctx.lineWidth = options.preview ? 2.5 : 2;
   ctx.setLineDash(options.preview ? [10, 6] : []);
   ctx.globalAlpha = options.preview ? 0.9 : 1;
@@ -165,9 +169,10 @@ export function renderJunctions(
   ctx: CanvasRenderingContext2D,
   junctions: DerivedJunction[],
   viewport: Viewport,
+  colors?: WireColors,
 ): void {
   ctx.save();
-  ctx.fillStyle = "#f8fafc";
+  ctx.fillStyle = colors?.junction ?? "#f8fafc";
 
   for (const junction of junctions) {
     const screenPoint = schematicToScreen(
