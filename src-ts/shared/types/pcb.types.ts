@@ -1,8 +1,12 @@
 export type PcbProjectDocumentFormatVersion = "pcb.project-document/v1";
-export type SchematicProjectDocumentFormatVersion = "pcb.schematic-project-document/v1";
-export type LibraryProjectDocumentFormatVersion = "pcb.library-project-document/v1";
-export type ManufacturingProjectDocumentFormatVersion = "pcb.manufacturing-project-document/v1";
-export type ProjectDocumentBundleFormatVersion = "pcb.project-document-bundle/v1";
+export type SchematicProjectDocumentFormatVersion =
+  "pcb.schematic-project-document/v1";
+export type LibraryProjectDocumentFormatVersion =
+  "pcb.library-project-document/v1";
+export type ManufacturingProjectDocumentFormatVersion =
+  "pcb.manufacturing-project-document/v1";
+export type ProjectDocumentBundleFormatVersion =
+  "pcb.project-document-bundle/v1";
 
 export interface ProjectDocumentId {
   id: string;
@@ -35,6 +39,9 @@ export interface SchematicSymbolPin {
 
 export interface SchematicSymbol {
   id: string;
+  componentId?: string | null;
+  variantId?: string | null;
+  /** @deprecated Use componentId instead. Kept for backward compatibility with old documents. */
   libraryPartId?: string | null;
   symbolTemplate?: string | null;
   reference?: string | null;
@@ -139,7 +146,11 @@ export interface LibraryProjectDocument extends ProjectDocumentId {
   parts: LibraryPartReference[];
 }
 
-export type ManufacturingOutputFormat = "gerber" | "drill" | "pick-and-place" | "bom";
+export type ManufacturingOutputFormat =
+  | "gerber"
+  | "drill"
+  | "pick-and-place"
+  | "bom";
 
 export interface ManufacturingExportMetadata {
   exportedAt: string;

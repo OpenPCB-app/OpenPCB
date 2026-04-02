@@ -72,6 +72,9 @@ export const SchematicSymbolPinSchema = z
 export const SchematicSymbolSchema = z
   .object({
     id: DocumentIdSchema,
+    componentId: DocumentIdSchema.nullable().optional(),
+    variantId: DocumentIdSchema.nullable().optional(),
+    /** @deprecated Use componentId instead */
     libraryPartId: DocumentIdSchema.nullable().optional(),
     reference: z.string().nullable().optional(),
     position: ProjectPointSchema,
@@ -227,20 +230,21 @@ export const ManufacturingExportMetadataSchema = z
   .strict()
   .openapi("ManufacturingExportMetadata");
 
-export const ManufacturingProjectDocumentSchema = ProjectDocumentIdSchema.extend({
-  formatVersion: ManufacturingProjectDocumentFormatVersionSchema,
-  settings: z
-    .object({
-      outputUnits: z.enum(["mm", "mil"]).optional(),
-      includeAssembly: z.boolean().optional(),
-      includeFabrication: z.boolean().optional(),
-      notes: z.string().optional(),
-    })
-    .strict(),
-  lastExport: ManufacturingExportMetadataSchema.nullable().optional(),
-})
-  .strict()
-  .openapi("ManufacturingProjectDocument");
+export const ManufacturingProjectDocumentSchema =
+  ProjectDocumentIdSchema.extend({
+    formatVersion: ManufacturingProjectDocumentFormatVersionSchema,
+    settings: z
+      .object({
+        outputUnits: z.enum(["mm", "mil"]).optional(),
+        includeAssembly: z.boolean().optional(),
+        includeFabrication: z.boolean().optional(),
+        notes: z.string().optional(),
+      })
+      .strict(),
+    lastExport: ManufacturingExportMetadataSchema.nullable().optional(),
+  })
+    .strict()
+    .openapi("ManufacturingProjectDocument");
 
 export const ProjectDocumentBundleSchema = z
   .object({

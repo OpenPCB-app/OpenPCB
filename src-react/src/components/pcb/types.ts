@@ -179,9 +179,9 @@ function normalizeReferenceValue(
   return fallbackId;
 }
 
-function normalizeOptionalString(value: string | null | undefined):
-  | string
-  | undefined {
+function normalizeOptionalString(
+  value: string | null | undefined,
+): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -206,8 +206,12 @@ export function toEditorSchematicSymbol(
   symbol: SharedSchematicSymbol,
 ): SymbolEntity {
   const reference = normalizeReferenceValue(symbol.reference, symbol.id);
-  const componentId = normalizeOptionalString(symbol.properties?.component_id);
-  const variantId = normalizeOptionalString(symbol.properties?.variant_id);
+  const componentId =
+    normalizeOptionalString(symbol.componentId) ??
+    normalizeOptionalString(symbol.properties?.component_id);
+  const variantId =
+    normalizeOptionalString(symbol.variantId) ??
+    normalizeOptionalString(symbol.properties?.variant_id);
 
   return normalizeSymbolEntity({
     ...symbol,
@@ -275,17 +279,13 @@ export function toSchematicProjectDocument(
         properties.value = s.value;
       }
 
-      if (s.componentId && s.variantId) {
-        properties.component_id = s.componentId;
-        properties.variant_id = s.variantId;
-      } else {
-        delete properties.component_id;
-        delete properties.variant_id;
-      }
+      delete properties.component_id;
+      delete properties.variant_id;
 
       return {
         id: s.id,
-        libraryPartId: s.libraryPartId,
+        componentId: s.componentId ?? null,
+        variantId: s.variantId ?? null,
         symbolTemplate: s.symbolTemplate ?? null,
         reference: s.reference,
         position: s.position,

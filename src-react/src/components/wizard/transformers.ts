@@ -4,14 +4,23 @@
  * Transform frontend wizard draft to backend ComponentDraftPayload format.
  */
 
-import type { WizardDraftPayload } from "@/stores/component-wizard-store";
-import type { SymbolDraft } from "@/components/symbol-editor/types";
-import type { FootprintDraft, FootprintGraphic, PadDefinition } from "@/components/footprint-editor/types";
-import { createEmptyDraft as createEmptySymbolDraft, type SymbolGraphic, type SymbolPin } from "@/components/symbol-editor/types";
-import { createEmptyDraft as createEmptyFootprintDraft } from "@/components/footprint-editor/types";
 import type {
-  SymbolGraphic as BackendSymbolGraphic,
-} from "@shared/types/component-semantics.types";
+  WizardDraftPayload,
+  WizardVariantDraft,
+} from "@/stores/component-wizard-store";
+import type { SymbolDraft } from "@/components/symbol-editor/types";
+import type {
+  FootprintDraft,
+  FootprintGraphic,
+  PadDefinition,
+} from "@/components/footprint-editor/types";
+import {
+  createEmptyDraft as createEmptySymbolDraft,
+  type SymbolGraphic,
+  type SymbolPin,
+} from "@/components/symbol-editor/types";
+import { createEmptyDraft as createEmptyFootprintDraft } from "@/components/footprint-editor/types";
+import type { SymbolGraphic as BackendSymbolGraphic } from "@shared/types/component-semantics.types";
 import type {
   ComponentType,
   ComponentVariantType,
@@ -39,12 +48,17 @@ function cloneSymbolPin(pin: SymbolPin): SymbolPin {
 
 function cloneSymbolGraphic(graphic: SymbolGraphic): SymbolGraphic {
   if (graphic.type === "polygon") {
-    return { ...graphic, points: graphic.points.map((point) => ({ ...point })) };
+    return {
+      ...graphic,
+      points: graphic.points.map((point) => ({ ...point })),
+    };
   }
   if (graphic.type === "bezier") {
     return {
       ...graphic,
-      points: graphic.points.map((point) => ({ ...point })) as typeof graphic.points,
+      points: graphic.points.map((point) => ({
+        ...point,
+      })) as typeof graphic.points,
     };
   }
   return { ...graphic };
@@ -63,7 +77,11 @@ function clonePad(pad: PadDefinition): PadDefinition {
 function cloneFootprintGraphic(graphic: FootprintGraphic): FootprintGraphic {
   switch (graphic.type) {
     case "line":
-      return { ...graphic, start: { ...graphic.start }, end: { ...graphic.end } };
+      return {
+        ...graphic,
+        start: { ...graphic.start },
+        end: { ...graphic.end },
+      };
     case "rect":
       return { ...graphic, position: { ...graphic.position } };
     case "circle":
@@ -71,7 +89,10 @@ function cloneFootprintGraphic(graphic: FootprintGraphic): FootprintGraphic {
     case "arc":
       return { ...graphic, center: { ...graphic.center } };
     case "polygon":
-      return { ...graphic, points: graphic.points.map((point) => ({ ...point })) };
+      return {
+        ...graphic,
+        points: graphic.points.map((point) => ({ ...point })),
+      };
     case "text":
       return { ...graphic, position: { ...graphic.position } };
   }
@@ -87,7 +108,9 @@ function cloneSymbolDraft(draft: SymbolDraft): SymbolDraft {
     importPreservation: draft.importPreservation
       ? {
           ...draft.importPreservation,
-          warnings: draft.importPreservation.warnings.map((warning) => ({ ...warning })),
+          warnings: draft.importPreservation.warnings.map((warning) => ({
+            ...warning,
+          })),
         }
       : null,
   };
@@ -103,13 +126,17 @@ function cloneFootprintDraft(draft: FootprintDraft): FootprintDraft {
     importPreservation: draft.importPreservation
       ? {
           ...draft.importPreservation,
-          warnings: draft.importPreservation.warnings.map((warning) => ({ ...warning })),
-          model3dReferences: draft.importPreservation.model3dReferences.map((ref) => ({
-            ...ref,
-            offset: { ...ref.offset },
-            scale: { ...ref.scale },
-            rotation: { ...ref.rotation },
+          warnings: draft.importPreservation.warnings.map((warning) => ({
+            ...warning,
           })),
+          model3dReferences: draft.importPreservation.model3dReferences.map(
+            (ref) => ({
+              ...ref,
+              offset: { ...ref.offset },
+              scale: { ...ref.scale },
+              rotation: { ...ref.rotation },
+            }),
+          ),
         }
       : null,
   };
@@ -119,13 +146,11 @@ function cloneFootprintDraft(draft: FootprintDraft): FootprintDraft {
 // Transformers
 // ---------------------------------------------------------------------------
 
-/**
- * Transform frontend wizard draft to backend payload format
- */
 export function transformWizardToBackendPayload(
   draft: WizardDraftPayload,
+  wizardVariants?: WizardVariantDraft[],
 ): BackendComponentDraftPayload {
-  const variants = transformVariants(draft);
+  const variants = transformVariants(draft, wizardVariants);
   const defaultVariantId =
     variants.find((variant) => variant.isDefault)?.id ?? null;
 
@@ -180,7 +205,9 @@ function transformSymbolData(draft: WizardDraftPayload): BackendSymbolData {
 /**
  * Transform body/graphics to KiCad-compatible format
  */
-function transformBodyGraphics(symbolData: WizardDraftPayload["symbolData"]): BackendSymbolGraphic[] {
+function transformBodyGraphics(
+  symbolData: WizardDraftPayload["symbolData"],
+): BackendSymbolGraphic[] {
   if (!symbolData) return [];
 
   const graphics: BackendSymbolGraphic[] = [];
@@ -240,14 +267,49 @@ function transformBodyGraphics(symbolData: WizardDraftPayload["symbolData"]): Ba
   return graphics;
 }
 
-/**
- * Transform footprint data to package variants.
- * For MVP, creates a single package variant from footprint data.
- */
 function transformVariants(
   draft: WizardDraftPayload,
+  wizardVariants?: WizardVariantDraft[],
 ): BackendComponentDraftPayload["variants"] {
-  // If no footprint data, return empty array (MVP allows this)
+  if (wizardVariants && wizardVariants.length > 0) {
+    return wizardVariants
+      .filter((v) => v.footprintDraft !== null)
+      .map((variant) => {
+        const variantId = variant.id;
+        const footprintId = crypto.randomUUID();
+        const footprintData = variant.footprintDraft!;
+
+        return {
+          id: variantId,
+          canonicalCode: variant.canonicalCode || "DEFAULT",
+          humanLabel: variant.humanLabel || variant.canonicalCode || "Package",
+          imperialAlias: null,
+          metricAlias: null,
+          mountType: variant.mountType,
+          dimensions: null,
+          isDefault: variant.isDefault,
+          pinRemapTable: null,
+          footprintOptions: [
+            {
+              id: footprintId,
+              variantId,
+              label: "Default",
+              isDefault: true,
+              kicadPayload: transformFootprintToKicad(footprintData),
+              densityLevel: footprintData.densityLevel,
+              ipcName: null,
+              model3dOptions: transformModel3dOptionsForVariant(
+                draft,
+                footprintId,
+                footprintData,
+              ),
+            },
+          ],
+          defaultFootprintOptionId: footprintId,
+        };
+      });
+  }
+
   if (!draft.footprintData) {
     return [];
   }
@@ -299,7 +361,7 @@ function determineMountType(
   }
 
   const preset = footprintData.preset.toLowerCase();
-  
+
   if (
     preset.includes("smd") ||
     preset.includes("chip") ||
@@ -308,18 +370,20 @@ function determineMountType(
   ) {
     return "smd";
   }
-  
+
   if (preset.includes("dip") || preset.includes("through")) {
     return "through_hole";
   }
-  
+
   return "smd"; // Default to SMD
 }
 
 /**
  * Transform footprint data to KiCad payload format
  */
-function transformFootprintToKicad(footprintData: NonNullable<WizardDraftPayload["footprintData"]>): unknown {
+function transformFootprintToKicad(
+  footprintData: NonNullable<WizardDraftPayload["footprintData"]>,
+): unknown {
   return {
     pads: footprintData.pads,
     graphics: footprintData.graphics,
@@ -329,7 +393,8 @@ function transformFootprintToKicad(footprintData: NonNullable<WizardDraftPayload
     densityLevel: footprintData.densityLevel,
     metadata: footprintData.metadata,
     rawKicadSource: footprintData.importPreservation?.rawSource ?? null,
-    model3dReferences: footprintData.importPreservation?.model3dReferences ?? [],
+    model3dReferences:
+      footprintData.importPreservation?.model3dReferences ?? [],
   };
 }
 
@@ -350,7 +415,9 @@ function transformModel3dOptions(
 
   if (uploaded?.stepFileName) {
     const matchedRef = refs.find(
-      (ref) => ref.resolvedFileName.toLowerCase() === uploaded.stepFileName?.toLowerCase(),
+      (ref) =>
+        ref.resolvedFileName.toLowerCase() ===
+        uploaded.stepFileName?.toLowerCase(),
     );
     const unresolvedRefs = refs.filter((ref) => ref !== matchedRef);
 
@@ -393,9 +460,34 @@ function transformModel3dOptions(
   }));
 }
 
-/**
- * Create empty symbol data for components without symbol
- */
+function transformModel3dOptionsForVariant(
+  _draft: WizardDraftPayload,
+  footprintOptionId: string,
+  footprintData: FootprintDraft,
+): Array<{
+  id: string;
+  footprintOptionId: string;
+  fileName: string;
+  stepAssetPath: string | null;
+  gltfPreviewPath: string | null;
+  isDefault: boolean;
+  linkStatus: "valid" | "missing_target" | "orphan_asset";
+}> {
+  const refs = footprintData.importPreservation?.model3dReferences ?? [];
+
+  if (refs.length === 0) return [];
+
+  return refs.map((ref, index) => ({
+    id: crypto.randomUUID(),
+    footprintOptionId,
+    fileName: ref.resolvedFileName,
+    stepAssetPath: null,
+    gltfPreviewPath: null,
+    isDefault: index === 0,
+    linkStatus: "missing_target",
+  }));
+}
+
 function createEmptySymbolData(): BackendSymbolData {
   return {
     referencePrefix: "U",
@@ -444,4 +536,58 @@ export function transformWizardToFootprintDraft(
     return createEmptyFootprintDraft(id ?? crypto.randomUUID());
   }
   return cloneFootprintDraft(draft);
+}
+
+export function transformKicadPayloadToFootprintDraft(
+  kicadPayload: unknown,
+  id?: string,
+): FootprintDraft | null {
+  if (!kicadPayload || typeof kicadPayload !== "object") {
+    return null;
+  }
+
+  const payload = kicadPayload as Record<string, unknown>;
+
+  const pads = Array.isArray(payload.pads) ? payload.pads : [];
+  const graphics = Array.isArray(payload.graphics) ? payload.graphics : [];
+  const preset = typeof payload.preset === "string" ? payload.preset : "custom";
+  const config = payload.config ?? {};
+  const configMode =
+    typeof payload.configMode === "string" ? payload.configMode : "auto";
+  const densityLevel =
+    typeof payload.densityLevel === "string" ? payload.densityLevel : "nominal";
+  const metadata =
+    payload.metadata && typeof payload.metadata === "object"
+      ? payload.metadata
+      : { name: "", description: "", keywords: "" };
+  const rawKicadSource =
+    typeof payload.rawKicadSource === "string" ? payload.rawKicadSource : null;
+  const model3dReferences = Array.isArray(payload.model3dReferences)
+    ? payload.model3dReferences
+    : [];
+
+  return {
+    id: id ?? crypto.randomUUID(),
+    preset: preset as FootprintDraft["preset"],
+    config: config as FootprintDraft["config"],
+    configMode: configMode as FootprintDraft["configMode"],
+    densityLevel: densityLevel as FootprintDraft["densityLevel"],
+    pads: pads as FootprintDraft["pads"],
+    graphics: graphics as FootprintDraft["graphics"],
+    metadata: metadata as FootprintDraft["metadata"],
+    importPreservation: rawKicadSource
+      ? {
+          rawSource: rawKicadSource,
+          sourceFileName: "",
+          warnings: [],
+          model3dReferences:
+            model3dReferences as FootprintDraft["importPreservation"] extends {
+              model3dReferences: infer R;
+            }
+              ? R
+              : never,
+          attributes: { type: "unknown" as const },
+        }
+      : null,
+  };
 }

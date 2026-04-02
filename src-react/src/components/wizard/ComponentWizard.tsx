@@ -15,9 +15,13 @@ import { toast } from "@/components/ui/use-toast";
 import {
   useComponentWizardStore,
   type WizardStep,
+  type WizardVariantDraft,
+  type MountType,
+  type WizardDraftPayload,
 } from "@/stores/component-wizard-store";
 import {
   createWorkspaceComponentRecord,
+  getComponent,
   patchWorkspaceComponentRecord,
   publishWorkspaceComponentRecord,
 } from "@/lib/api/component-api";
@@ -27,6 +31,7 @@ import { ModelStep } from "./ModelStep";
 import {
   createEmptyBackendPayload,
   transformFootprintDraftToWizard,
+  transformKicadPayloadToFootprintDraft,
   transformSymbolDraftToWizard,
   transformWizardToBackendPayload,
   transformWizardToFootprintDraft,
@@ -42,13 +47,18 @@ import {
 } from "@/components/symbol-editor";
 import type { SymbolDraft } from "@/components/symbol-editor/types";
 import type { FootprintDraft } from "@/components/footprint-editor/types";
-import { FootprintEditorStep, useFootprintEditorStore } from "@/components/footprint-editor";
+import {
+  FootprintEditorStep,
+  useFootprintEditorStore,
+} from "@/components/footprint-editor";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 interface ComponentWizardProps {
+  /** If provided, wizard opens in edit mode for existing component */
+  componentId?: string;
   onClose: () => void;
   onPublished?: (componentId: string) => void;
 }
@@ -76,17 +86,23 @@ function areJsonEqual(a: unknown, b: unknown): boolean {
 // Component
 // ---------------------------------------------------------------------------
 
-export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) {
+export function ComponentWizard({
+  componentId,
+  onClose,
+  onPublished,
+}: ComponentWizardProps) {
   // Wizard store state
   const draftId = useComponentWizardStore((s) => s.draftId);
   const currentStep = useComponentWizardStore((s) => s.currentStep);
   const isSaving = useComponentWizardStore((s) => s.isSaving);
   const initDraft = useComponentWizardStore((s) => s.initDraft);
+  const initFromExisting = useComponentWizardStore((s) => s.initFromExisting);
   const setStep = useComponentWizardStore((s) => s.setStep);
   const updateDraft = useComponentWizardStore((s) => s.updateDraft);
   const setSaving = useComponentWizardStore((s) => s.setSaving);
   const reset = useComponentWizardStore((s) => s.reset);
   const draft = useComponentWizardStore((s) => s.draft);
+  const variants = useComponentWizardStore((s) => s.variants);
 
   // Symbol editor store
   const symbolDraft = useSymbolEditorStore((s) => s.draft);
@@ -100,6 +116,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
   const [isInitializing, setIsInitializing] = useState(true);
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isEditMode] = useState(!!componentId);
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressSymbolSyncRef = useRef(false);
   const suppressFootprintSyncRef = useRef(false);
@@ -113,21 +130,75 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
       setError(null);
 
       try {
-        // Create backend draft
-        const backendDraft = await createWorkspaceComponentRecord(
-          createEmptyBackendPayload(),
-        );
+        if (componentId) {
+          // Edit mode: fetch existing component
+          const component = await getComponent(componentId);
 
-        if (!mounted) return;
+          if (!mounted) return;
 
-        // Initialize wizard store with draft ID
-        initDraft(backendDraft.id);
+          // Build wizard draft from component
+          const wizardDraft: WizardDraftPayload = {
+            displayLabel: component.displayLabel,
+            description: component.description,
+            symbolData: null,
+            footprintData: null,
+            modelData: null,
+            specs: {
+              name: component.displayLabel,
+              category: component.categoryPath ?? undefined,
+            },
+            defaultVariantId: component.defaultVariantId ?? null,
+          };
 
-        resetSymbolDraft();
-        resetFootprintDraft();
+          // Convert API variants to wizard variants
+          const wizardVariants: WizardVariantDraft[] = component.variants.map(
+            (v) => {
+              const footprintOption = v.footprintOptions[0];
+              const footprintDraft = footprintOption?.kicadPayload
+                ? transformKicadPayloadToFootprintDraft(
+                    footprintOption.kicadPayload,
+                  )
+                : null;
+
+              return {
+                id: v.id,
+                canonicalCode: v.canonicalCode,
+                humanLabel: v.humanLabel,
+                mountType: v.mountType as MountType,
+                isDefault: v.isDefault,
+                footprintDraft,
+              };
+            },
+          );
+
+          initFromExisting(componentId, wizardDraft, wizardVariants);
+
+          // Set footprint for active variant
+          const defaultVariant =
+            wizardVariants.find((v) => v.isDefault) ?? wizardVariants[0];
+          if (defaultVariant?.footprintDraft) {
+            setFootprintDraft(defaultVariant.footprintDraft);
+          } else {
+            resetFootprintDraft();
+          }
+
+          resetSymbolDraft();
+        } else {
+          // Create mode: create new backend draft
+          const backendDraft = await createWorkspaceComponentRecord(
+            createEmptyBackendPayload(),
+          );
+
+          if (!mounted) return;
+
+          initDraft(backendDraft.id);
+
+          resetSymbolDraft();
+          resetFootprintDraft();
+        }
       } catch (err) {
         if (!mounted) return;
-        console.error("Failed to create draft:", err);
+        console.error("Failed to initialize wizard:", err);
         setError("Failed to initialize wizard. Please try again.");
       } finally {
         if (mounted) {
@@ -141,7 +212,14 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
     return () => {
       mounted = false;
     };
-  }, [initDraft, resetFootprintDraft, resetSymbolDraft]);
+  }, [
+    componentId,
+    initDraft,
+    initFromExisting,
+    resetFootprintDraft,
+    resetSymbolDraft,
+    setFootprintDraft,
+  ]);
 
   useEffect(() => {
     if (!draft) return;
@@ -157,7 +235,8 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
     }
 
     if (currentStep === "footprint" && draft.footprintData) {
-      const currentFootprintPayload = transformFootprintDraftToWizard(footprintDraft);
+      const currentFootprintPayload =
+        transformFootprintDraftToWizard(footprintDraft);
       if (areJsonEqual(currentFootprintPayload, draft.footprintData)) {
         suppressFootprintSyncRef.current = false;
       } else {
@@ -213,12 +292,11 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
       try {
         setSaving(true);
         await patchWorkspaceComponentRecord(draftId, {
-          payload: transformWizardToBackendPayload(draft),
+          payload: transformWizardToBackendPayload(draft, variants),
         });
         markClean();
       } catch (err) {
         console.error("Auto-save failed:", err);
-        // Don't show error for auto-save failures, just log
       } finally {
         setSaving(false);
       }
@@ -230,7 +308,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
         autosaveTimeoutRef.current = null;
       }
     };
-  }, [isDirty, draftId, draft, setSaving, markClean]);
+  }, [isDirty, draftId, draft, variants, setSaving, markClean]);
 
   // Handle step navigation
   const handleBack = useCallback(() => {
@@ -258,7 +336,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
           autosaveTimeoutRef.current = null;
         }
         await patchWorkspaceComponentRecord(draftId, {
-          payload: transformWizardToBackendPayload(draft),
+          payload: transformWizardToBackendPayload(draft, variants),
         });
       } catch {
         // Silent fail for draft save on close
@@ -266,7 +344,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
     }
     reset();
     onClose();
-  }, [draftId, draft, reset, onClose]);
+  }, [draftId, draft, variants, reset, onClose]);
 
   // Handle publish
   const handlePublish = useCallback(async () => {
@@ -281,15 +359,12 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
         autosaveTimeoutRef.current = null;
       }
 
-      // Transform wizard draft to backend format
-      const backendPayload = transformWizardToBackendPayload(draft);
-      
-      // Final save before publish
+      const backendPayload = transformWizardToBackendPayload(draft, variants);
+
       await patchWorkspaceComponentRecord(draftId, {
         payload: backendPayload,
       });
 
-      // Publish
       const result = await publishWorkspaceComponentRecord(draftId);
 
       toast({
@@ -312,7 +387,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
     } finally {
       setIsPublishing(false);
     }
-  }, [draftId, draft, reset, onPublished, onClose]);
+  }, [draftId, draft, variants, reset, onPublished, onClose]);
 
   const handleImportedSymbolDraft = useCallback(
     (importedDraft: SymbolDraft) => {
@@ -361,7 +436,9 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <h1 className="text-lg font-medium text-text-primary">New component</h1>
+        <h1 className="text-lg font-medium text-text-primary">
+          {isEditMode ? "Edit component" : "New component"}
+        </h1>
         <span className="text-sm text-text-tertiary">
           Step {stepNumber} of {WIZARD_STEPS.length}:{" "}
           {WIZARD_STEPS.find((s) => s.id === currentStep)?.label}
@@ -401,7 +478,9 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
             <span
               className={cn(
                 "text-[10px]",
-                s.number <= stepNumber ? "text-text-secondary" : "text-text-muted",
+                s.number <= stepNumber
+                  ? "text-text-secondary"
+                  : "text-text-muted",
               )}
             >
               {s.number}. {s.label}
@@ -413,7 +492,9 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
       {/* Step content */}
       <div className="flex-1 overflow-hidden">
         {currentStep === "symbol" && (
-          <SymbolEditorStepContent onImportedDraft={handleImportedSymbolDraft} />
+          <SymbolEditorStepContent
+            onImportedDraft={handleImportedSymbolDraft}
+          />
         )}
         {currentStep === "footprint" && (
           <FootprintEditorStep onImportedDraft={handleImportedFootprintDraft} />

@@ -516,9 +516,14 @@ export class ComponentRepository extends BaseRepository<
             }
 
             const candidate = symbol as {
+              componentId?: unknown;
               libraryPartId?: unknown;
               properties?: Record<string, unknown>;
             };
+
+            if (candidate.componentId === componentId) {
+              return true;
+            }
 
             const properties = candidate.properties;
             const propertyComponentId =
