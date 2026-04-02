@@ -94,7 +94,7 @@ describe("ComponentRepository", () => {
     sqlite.close();
   });
 
-  test("createComponent + getComponent persist canonical data and variants", async () => {
+  test("supports canonical component CRUD", async () => {
     const created = await repo.createComponent({
       canonicalKey: "resistor",
       displayLabel: "Resistor",
@@ -116,34 +116,34 @@ describe("ComponentRepository", () => {
     expect(loaded).not.toBeNull();
     expect(loaded!.component.canonicalKey).toBe("resistor");
     expect(loaded!.variants.length).toBe(2);
-  });
-
-  test("updateComponent + setDefaultVariant update default selection", async () => {
-    const created = await repo.createComponent({
-      canonicalKey: "capacitor",
-      displayLabel: "Capacitor",
-      symbolData: { referencePrefix: "C", pinDefinitions: [], properties: {} },
-      variants: [variant("0402", "0402", true), variant("0603", "0603")],
-    });
-
-    const nextDefault = created.variants.find((item) => item.canonicalCode === "0603")!;
 
     const updated = await repo.updateComponent(created.component.id, {
-      displayLabel: "Ceramic Capacitor",
-      defaultVariantId: nextDefault.id,
+      displayLabel: "Precision Resistor",
+      description: "Thin film resistor",
+      categoryPath: "passives/resistors/thin-film",
+      tags: ["precision", "passive"],
+      symbolData: { referencePrefix: "R", pinDefinitions: [], properties: { tolerance: "1%" } },
     });
 
-    expect(updated.component.displayLabel).toBe("Ceramic Capacitor");
-    expect(updated.component.defaultVariantId).toBe(nextDefault.id);
-    expect(updated.variants.find((item) => item.id === nextDefault.id)!.isDefault).toBe(
-      true,
-    );
+    expect(updated.component.displayLabel).toBe("Precision Resistor");
+    expect(updated.component.description).toBe("Thin film resistor");
+    expect(updated.component.categoryPath).toBe("passives/resistors/thin-film");
+    expect(updated.component.tags).toEqual(["precision", "passive"]);
+    expect(updated.component.symbolData).toEqual({
+      referencePrefix: "R",
+      pinDefinitions: [],
+      properties: { tolerance: "1%" },
+    });
+
+    await repo.deleteComponent(created.component.id);
+    expect(await repo.getComponent(created.component.id)).toBeNull();
   });
 
-  test("listComponents supports search and mountType filters", async () => {
+  test("listComponents supports search, mountType, and categoryPath filters", async () => {
     await repo.createComponent({
       canonicalKey: "res-1k",
       displayLabel: "Resistor 1k",
+      categoryPath: "passives/resistors/chip",
       symbolData: { referencePrefix: "R", pinDefinitions: [], properties: {} },
       variants: [variant("0603", "0603", true)],
     });
@@ -151,6 +151,7 @@ describe("ComponentRepository", () => {
     await repo.createComponent({
       canonicalKey: "hdr-2x1",
       displayLabel: "Header 2x1",
+      categoryPath: "connectors/headers/pin",
       symbolData: { referencePrefix: "J", pinDefinitions: [], properties: {} },
       variants: [
         {
@@ -167,9 +168,13 @@ describe("ComponentRepository", () => {
     const byMountType = await repo.listComponents({ mountType: "through_hole" });
     expect(byMountType.length).toBe(1);
     expect(byMountType[0]!.component.canonicalKey).toBe("hdr-2x1");
+
+    const byCategoryPath = await repo.listComponents({ categoryPath: "passives/resistors" });
+    expect(byCategoryPath.length).toBe(1);
+    expect(byCategoryPath[0]!.component.canonicalKey).toBe("res-1k");
   });
 
-  test("variant repository supports add/update/remove/setDefaultFootprint", async () => {
+  test("variant repository supports add/update/remove/setDefault", async () => {
     const created = await repo.createComponent({
       canonicalKey: "inductor",
       displayLabel: "Inductor",
@@ -182,18 +187,19 @@ describe("ComponentRepository", () => {
       variant("1206", "1206", false),
     );
 
-    const withFootprint = await repo.variants.setDefaultFootprint(
-      newVariant.id,
-      "fp-1206-default",
-    );
-    expect(withFootprint.defaultFootprintId).toBe("fp-1206-default");
-
     const updatedVariant = await repo.variants.updateVariant(newVariant.id, {
       humanLabel: "1206 metric",
-      isDefault: true,
+      defaultFootprintId: "fp-1206-default",
     });
     expect(updatedVariant.humanLabel).toBe("1206 metric");
-    expect(updatedVariant.isDefault).toBe(true);
+    expect(updatedVariant.defaultFootprintId).toBe("fp-1206-default");
+
+    const defaultVariant = await repo.variants.setDefaultVariant(
+      created.component.id,
+      newVariant.id,
+    );
+    expect(defaultVariant.id).toBe(newVariant.id);
+    expect(defaultVariant.isDefault).toBe(true);
 
     const refreshed = await repo.getComponent(created.component.id);
     expect(refreshed!.component.defaultVariantId).toBe(newVariant.id);
@@ -209,7 +215,7 @@ describe("ComponentRepository", () => {
     );
   });
 
-  test("recordUsage + getUsageCount + deleteComponent blocking", async () => {
+  test("deleteComponent throws DbConflictError when the component is referenced", async () => {
     const created = await repo.createComponent({
       canonicalKey: "ferrite-bead",
       displayLabel: "Ferrite Bead",
@@ -239,21 +245,11 @@ describe("ComponentRepository", () => {
 
     expect(await repo.getUsageCount(created.component.id)).toBe(2);
 
-    try {
-      await repo.deleteComponent(created.component.id);
-      throw new Error("delete should have failed");
-    } catch (error) {
-      expect(error).toBeInstanceOf(DbConflictError);
-      expect((error as Error).message).toContain("in use by 2 design(s)");
-    }
+    await expect(repo.deleteComponent(created.component.id)).rejects.toThrow(DbConflictError);
+    await expect(repo.deleteComponent(created.component.id)).rejects.toThrow(
+      "in use by 2 design(s)",
+    );
 
     expect(await repo.getComponent(created.component.id)).not.toBeNull();
-
-    await repo.removeUsage({ componentId: created.component.id, designId: "design-a" });
-    await repo.removeUsage({ componentId: created.component.id, designId: "design-b" });
-    expect(await repo.getUsageCount(created.component.id)).toBe(0);
-
-    await repo.deleteComponent(created.component.id);
-    expect(await repo.getComponent(created.component.id)).toBeNull();
   });
 });

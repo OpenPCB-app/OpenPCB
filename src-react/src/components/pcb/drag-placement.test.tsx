@@ -224,8 +224,6 @@ describe("palette drag placement", () => {
     const groundButton = screen.getByRole("button", { name: /ground/i });
     const canvas = container.querySelector("canvas");
     expect(canvas).not.toBeNull();
-    const canvasSurface = canvas?.parentElement;
-    expect(canvasSurface).not.toBeNull();
 
     const dataTransfer = createDataTransfer();
     const expectedPosition = snapToGrid(
@@ -234,7 +232,7 @@ describe("palette drag placement", () => {
     );
 
     dispatchDragEvent(groundButton, "dragstart", { dataTransfer });
-    dispatchDragEvent(canvasSurface!, "dragover", {
+    dispatchDragEvent(canvas!, "dragover", {
       dataTransfer,
       clientX: 105,
       clientY: 205,
@@ -246,7 +244,7 @@ describe("palette drag placement", () => {
       previewPosition: expectedPosition,
     });
 
-    dispatchDragEvent(canvasSurface!, "drop", {
+    dispatchDragEvent(canvas!, "drop", {
       dataTransfer,
       clientX: 105,
       clientY: 205,
@@ -268,8 +266,6 @@ describe("palette drag placement", () => {
     const groundButton = screen.getByRole("button", { name: /ground/i });
     const canvas = container.querySelector("canvas");
     expect(canvas).not.toBeNull();
-    const canvasSurface = canvas?.parentElement;
-    expect(canvasSurface).not.toBeNull();
 
     const startTransfer = createDataTransfer();
     const emptyTransfer = createDataTransfer();
@@ -281,12 +277,12 @@ describe("palette drag placement", () => {
     dispatchDragEvent(groundButton, "dragstart", {
       dataTransfer: startTransfer,
     });
-    dispatchDragEvent(canvasSurface!, "dragenter", {
+    dispatchDragEvent(canvas!, "dragenter", {
       dataTransfer: emptyTransfer,
       clientX: 105,
       clientY: 205,
     });
-    dispatchDragEvent(canvasSurface!, "dragover", {
+    dispatchDragEvent(canvas!, "dragover", {
       dataTransfer: emptyTransfer,
       clientX: 105,
       clientY: 205,
@@ -298,7 +294,7 @@ describe("palette drag placement", () => {
       previewPosition: expectedPosition,
     });
 
-    dispatchDragEvent(canvasSurface!, "drop", {
+    dispatchDragEvent(canvas!, "drop", {
       dataTransfer: emptyTransfer,
       clientX: 105,
       clientY: 205,
@@ -320,8 +316,6 @@ describe("palette drag placement", () => {
     const { container } = render(<PaletteCanvasHarness />);
     const canvas = container.querySelector("canvas");
     expect(canvas).not.toBeNull();
-    const canvasSurface = canvas?.parentElement;
-    expect(canvasSurface).not.toBeNull();
 
     useSchematicStore.setState({
       draggedSymbolKind: "gnd",
@@ -339,7 +333,7 @@ describe("palette drag placement", () => {
       1_270_000,
     );
 
-    dispatchDragEvent(canvasSurface!, "dragover", {
+    dispatchDragEvent(canvas!, "dragover", {
       dataTransfer: emptyTransfer,
       clientX: 200,
       clientY: 300,
@@ -357,18 +351,16 @@ describe("palette drag placement", () => {
     const groundButton = screen.getByRole("button", { name: /ground/i });
     const canvas = container.querySelector("canvas");
     expect(canvas).not.toBeNull();
-    const canvasSurface = canvas?.parentElement;
-    expect(canvasSurface).not.toBeNull();
 
     const dataTransfer = createDataTransfer();
 
     dispatchDragEvent(groundButton, "dragstart", { dataTransfer });
-    dispatchDragEvent(canvasSurface!, "dragover", {
+    dispatchDragEvent(canvas!, "dragover", {
       dataTransfer,
       clientX: 105,
       clientY: 205,
     });
-    dispatchDragEvent(canvasSurface!, "dragleave", {
+    dispatchDragEvent(canvas!, "dragleave", {
       dataTransfer,
       relatedTarget: null,
     });

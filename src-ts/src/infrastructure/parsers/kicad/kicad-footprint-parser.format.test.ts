@@ -3,23 +3,28 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { parseKicadFootprint } from "./kicad-footprint-parser";
 
+const FIXTURES_DIR = join(import.meta.dir, "__fixtures__");
+
 describe("KiCad footprint parser format coverage", () => {
-  test("parses real BGA footprint with array-shaped graphics data", () => {
+  test("parses checked-in complex footprint with array-shaped graphics data", () => {
     const content = readFileSync(
-      join(import.meta.dir, "../../../../../data/S32K376NHT1MJBST/BGA289C80P17X17_1400X1400X152N.kicad_mod"),
+      join(FIXTURES_DIR, "CP_Elec_6.3x5.4_Nichicon.kicad_mod"),
       "utf-8",
     );
 
     const footprint = parseKicadFootprint(content);
     const firstGraphic = footprint.graphics[0]!;
 
-    expect(footprint.name).toBe("BGA289C80P17X17_1400X1400X152N");
-    expect(footprint.pads).toHaveLength(289);
+    expect(footprint.name).toBe("CP_Elec_6.3x5.4_Nichicon");
+    expect(footprint.pads).toHaveLength(2);
     expect(footprint.graphics.length).toBeGreaterThanOrEqual(20);
     expect(firstGraphic.type).toBe("line");
-    expect(firstGraphic.data.start).toEqual([7, 7]);
-    expect(firstGraphic.data.end).toEqual([-7, 7]);
-    expect(firstGraphic.data.width).toBe(0.127);
+    expect(firstGraphic.data.start).toEqual([-4.4375, -1.8475]);
+    expect(firstGraphic.data.end).toEqual([-3.65, -1.8475]);
+    expect(firstGraphic.data.stroke).toEqual([
+      ["width", 0.12],
+      ["type", "solid"],
+    ]);
     expect(footprint.attributes.type).toBe("smd");
   });
 });

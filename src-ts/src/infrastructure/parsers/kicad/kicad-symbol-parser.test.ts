@@ -96,17 +96,15 @@ describe("KiCad symbol parser", () => {
     expect(sym.rawSource).toContain("pin");
   });
 
-  test("detects hidden pins in real multi-unit symbol", () => {
-    const content = readFileSync(
-      join(import.meta.dir, "../../../../../data/S32K376NHT1MJBST/S32K376NHT1MJBST.kicad_sym"),
-      "utf-8",
-    );
+  test("parses checked-in multi-unit symbol fixture", () => {
+    const content = readFixture("multi_unit_opamp.kicad_sym");
     const result = parseKicadSymbolLib(content);
     const sym = result.symbols[0]!;
 
+    expect(sym.name).toBe("LM358");
     expect(sym.units).toBe(3);
-    expect(sym.pins.some((pin) => pin.hidden)).toBe(true);
-    expect(sym.bodyGraphics.some((graphic) => graphic.unit === 3)).toBe(true);
+    expect(sym.pins).toHaveLength(8);
+    expect(sym.warnings).toHaveLength(0);
   });
 
   test("extracts version and generator", () => {

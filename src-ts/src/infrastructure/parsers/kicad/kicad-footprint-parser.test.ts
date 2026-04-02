@@ -4,10 +4,6 @@ import { join } from "path";
 import { parseKicadFootprint } from "./kicad-footprint-parser";
 
 const FIXTURES_DIR = join(import.meta.dir, "__fixtures__");
-const DATA_DIR = join(
-  import.meta.dir,
-  "../../../../../data/S32K376NHT1MJBST",
-);
 
 function loadFixture(name: string): string {
   return readFileSync(join(FIXTURES_DIR, name), "utf-8");
@@ -124,14 +120,11 @@ describe("kicad-footprint-parser", () => {
     );
   });
 
-  test("parses real data file from data/ directory", () => {
-    const source = readFileSync(
-      join(DATA_DIR, "BGA289C80P17X17_1400X1400X152N.kicad_mod"),
-      "utf-8",
-    );
+  test("parses checked-in complex footprint fixture", () => {
+    const source = loadFixture("CP_Elec_6.3x5.4_Nichicon.kicad_mod");
     const fp = parseKicadFootprint(source);
-    expect(fp.name).toBe("BGA289C80P17X17_1400X1400X152N");
-    expect(fp.pads.length).toBeGreaterThanOrEqual(289);
+    expect(fp.name).toBe("CP_Elec_6.3x5.4_Nichicon");
+    expect(fp.pads.length).toBe(2);
     expect(fp.graphics.length).toBeGreaterThanOrEqual(20);
     expect(fp.attributes.type).toBe("smd");
   });

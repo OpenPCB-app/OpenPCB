@@ -11,6 +11,7 @@ const getComponentMock = vi.fn();
 const createComponentMock = vi.fn();
 const updateComponentMock = vi.fn();
 const deleteComponentMock = vi.fn();
+const setComponentLibraryMock = vi.fn();
 
 const baseComponent = {
   id: "component-1",
@@ -40,6 +41,14 @@ vi.mock("@/lib/api/component-api", () => ({
   deleteComponent: (...args: unknown[]) => deleteComponentMock(...args),
 }));
 
+vi.mock("@/stores/schematic-store", () => ({
+  useSchematicStore: {
+    getState: () => ({
+      setComponentLibrary: setComponentLibraryMock,
+    }),
+  },
+}));
+
 describe("useComponents", () => {
   beforeEach(() => {
     listComponentsMock.mockReset();
@@ -47,6 +56,7 @@ describe("useComponents", () => {
     createComponentMock.mockReset();
     updateComponentMock.mockReset();
     deleteComponentMock.mockReset();
+    setComponentLibraryMock.mockReset();
 
     listComponentsMock.mockResolvedValue([baseComponent]);
     getComponentMock.mockResolvedValue(baseComponent);
@@ -98,6 +108,51 @@ describe("useComponents", () => {
         search: "sensor",
       });
     });
+  });
+
+  it("refetchAndPropagate refreshes the schematic component library", async () => {
+    const propagatedComponent = {
+      ...baseComponent,
+      displayLabel: "Propagated Op Amp",
+    };
+    listComponentsMock
+      .mockResolvedValueOnce([baseComponent])
+      .mockResolvedValueOnce([propagatedComponent]);
+
+    const { result } = renderHook(() => useComponents({ search: "amp" }));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.refetchAndPropagate();
+    });
+
+    expect(listComponentsMock).toHaveBeenLastCalledWith({ search: "amp" });
+    expect(result.current.components).toEqual([propagatedComponent]);
+    expect(setComponentLibraryMock).toHaveBeenCalledWith([propagatedComponent]);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("refetchAndPropagate does not overwrite the propagated library on failure", async () => {
+    listComponentsMock
+      .mockResolvedValueOnce([baseComponent])
+      .mockRejectedValueOnce(new Error("backend unavailable"));
+
+    const { result } = renderHook(() => useComponents({ search: "amp" }));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.refetchAndPropagate();
+    });
+
+    expect(setComponentLibraryMock).not.toHaveBeenCalled();
+    expect(result.current.components).toEqual([baseComponent]);
+    expect(result.current.error).toBe("backend unavailable");
   });
 
   it("creates, updates, and deletes components through the unified mutation layer", async () => {

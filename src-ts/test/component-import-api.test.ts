@@ -55,7 +55,7 @@ describe("Component import API", () => {
     expect(footprintJson.data.footprint.name).toBe("C_0603_1608Metric");
   });
 
-  it("previews bundled KiCad imports over HTTP", async () => {
+  it("imports bundled KiCad files through the create-only v1 endpoint", async () => {
     const formData = new FormData();
     formData.append(
       "symbol",
@@ -67,12 +67,28 @@ describe("Component import API", () => {
     );
     formData.append("model", new File(["step"], "C_0603_1608Metric.step"));
 
-    const previewRes = await fetch(`${BASE_URL}/preview`, {
+    const importRes = await fetch(BASE_URL, {
       method: "POST",
       body: formData,
     });
-    const previewJson = await previewRes.json() as any;
-    expect(previewRes.status).toBe(200);
-    expect(previewJson.data.preview.groups.length).toBeGreaterThanOrEqual(1);
+    const importJson = await importRes.json() as any;
+
+    expect(importRes.status).toBe(201);
+    expect(importJson.data.import.components).toHaveLength(1);
+    expect(importJson.data.import.components[0]).toMatchObject({
+      displayLabel: expect.stringContaining("Capacitor"),
+      variantCount: 1,
+      sourceFileNames: ["simple_capacitor.kicad_sym", "C_0603_1608Metric.kicad_mod"],
+    });
+
+    const listRes = await fetch("http://127.0.0.1:3003/api/components");
+    const listJson = await listRes.json() as any;
+
+    expect(listRes.status).toBe(200);
+    expect(listJson.data.components).toHaveLength(1);
+    expect(listJson.data.components[0]).toMatchObject({
+      displayLabel: expect.stringContaining("Capacitor"),
+      packageVariants: [expect.objectContaining({ canonicalCode: expect.any(String) })],
+    });
   });
 });

@@ -126,14 +126,21 @@ function createRepoMock(): ComponentRepository {
 }
 
 describe("ComponentController", () => {
-  it("lists workspace components", async () => {
-    const ctrl = new ComponentController(createRepoMock());
+  it("lists workspace components with v1 filters", async () => {
+    const repo = createRepoMock();
+    const ctrl = new ComponentController(repo);
     const res = await ctrl.listComponents(createContext({ query: { search: "Resistor" } }));
     const body = await res.json();
 
     expect(res.status).toBe(200);
     expect(body.data.components).toHaveLength(1);
     expect(body.data.components[0].packageVariants).toHaveLength(1);
+    expect(repo.listComponents).toHaveBeenCalledWith({
+      search: "Resistor",
+      categoryPath: undefined,
+      mountType: undefined,
+      tags: undefined,
+    });
   });
 
   it("gets component with variants", async () => {
@@ -147,7 +154,8 @@ describe("ComponentController", () => {
   });
 
   it("creates component", async () => {
-    const ctrl = new ComponentController(createRepoMock());
+    const repo = createRepoMock();
+    const ctrl = new ComponentController(repo);
     const res = await ctrl.createComponent(
       createContext({
         body: {
@@ -169,17 +177,55 @@ describe("ComponentController", () => {
 
     expect(res.status).toBe(201);
     expect(body.data.component.displayLabel).toBe("Resistor");
+    expect(repo.createComponent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        canonicalKey: "resistor",
+        displayLabel: "Resistor",
+        variants: [
+          expect.objectContaining({
+            canonicalCode: "0603",
+            humanLabel: "0603",
+            mountType: "smd",
+            isDefault: true,
+            defaultFootprintId: "footprint-1",
+            footprintPayload: {},
+          }),
+        ],
+      }),
+    );
   });
 
   it("updates component metadata", async () => {
-    const ctrl = new ComponentController(createRepoMock());
+    const repo = createRepoMock();
+    const ctrl = new ComponentController(repo);
     const res = await ctrl.updateComponent(
-      createContext({ id: "component-1", body: { displayLabel: "Updated Resistor" } }),
+      createContext({
+        id: "component-1",
+        body: {
+          displayLabel: "Updated Resistor",
+          defaultPackageVariantId: "variant-2",
+        },
+      }),
     );
     const body = await res.json();
 
     expect(res.status).toBe(200);
     expect(body.data.component.displayLabel).toBe("Updated Resistor");
+    expect(repo.updateComponent).toHaveBeenCalledWith("component-1", {
+      displayLabel: "Updated Resistor",
+      defaultVariantId: "variant-2",
+    });
+  });
+
+  it("deletes an unused component", async () => {
+    const repo = createRepoMock();
+    const ctrl = new ComponentController(repo);
+    const res = await ctrl.deleteComponent(createContext({ id: "component-1" }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.deleted).toBe(true);
+    expect(repo.deleteComponent).toHaveBeenCalledWith("component-1");
   });
 
   it("returns conflict when deleting used component", async () => {
@@ -192,7 +238,8 @@ describe("ComponentController", () => {
   });
 
   it("adds variant", async () => {
-    const ctrl = new ComponentController(createRepoMock());
+    const repo = createRepoMock();
+    const ctrl = new ComponentController(repo);
     const res = await ctrl.addVariant(
       createContext({
         id: "component-1",
@@ -208,10 +255,21 @@ describe("ComponentController", () => {
 
     expect(res.status).toBe(201);
     expect(body.data.variant.id).toBe("variant-2");
+    expect(repo.variants.addVariant).toHaveBeenCalledWith(
+      "component-1",
+      expect.objectContaining({
+        canonicalCode: "0805",
+        humanLabel: "0805",
+        mountType: "smd",
+        defaultFootprintId: "footprint-2",
+        footprintPayload: {},
+      }),
+    );
   });
 
   it("updates variant", async () => {
-    const ctrl = new ComponentController(createRepoMock());
+    const repo = createRepoMock();
+    const ctrl = new ComponentController(repo);
     const res = await ctrl.updateVariant(
       createContext({
         id: "component-1",
@@ -223,6 +281,23 @@ describe("ComponentController", () => {
 
     expect(res.status).toBe(200);
     expect(body.data.variant.humanLabel).toBe("0603 metric");
+    expect(repo.variants.updateVariant).toHaveBeenCalledWith("variant-1", {
+      humanLabel: "0603 metric",
+      isDefault: true,
+    });
+  });
+
+  it("removes a non-final variant", async () => {
+    const repo = createRepoMock();
+    const ctrl = new ComponentController(repo);
+    const res = await ctrl.removeVariant(
+      createContext({ id: "component-1", variantId: "variant-1" }),
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.deleted).toBe(true);
+    expect(repo.variants.removeVariant).toHaveBeenCalledWith("variant-1");
   });
 
   it("blocks removing the final variant", async () => {

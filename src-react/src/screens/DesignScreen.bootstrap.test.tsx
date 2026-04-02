@@ -294,16 +294,16 @@ describe("DesignScreen real schematic bootstrap", () => {
     );
 
     const groundButton = screen.getByRole("button", { name: /ground/i });
-    const canvasSurface = screen.getByTestId("schematic-canvas-surface");
+    const canvas = screen.getByTestId("schematic-canvas");
     const dataTransfer = createDataTransfer();
 
     dispatchDragEvent(groundButton, "dragstart", { dataTransfer });
-    dispatchDragEvent(canvasSurface, "dragenter", {
+    dispatchDragEvent(canvas, "dragenter", {
       dataTransfer,
       clientX: 520,
       clientY: 320,
     });
-    dispatchDragEvent(canvasSurface, "dragover", {
+    dispatchDragEvent(canvas, "dragover", {
       dataTransfer,
       clientX: 520,
       clientY: 320,
@@ -314,7 +314,7 @@ describe("DesignScreen real schematic bootstrap", () => {
       symbolKind: "gnd",
     });
 
-    dispatchDragEvent(canvasSurface, "drop", {
+    dispatchDragEvent(canvas, "drop", {
       dataTransfer,
       clientX: 520,
       clientY: 320,
