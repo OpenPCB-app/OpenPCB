@@ -23,7 +23,7 @@ interface NavigationState {
   navigateToNewChat: () => void;
   navigateToLibrary: () => void;
   navigateToImport: () => void;
-  navigateToComponentDetail: (componentId: string) => void;
+  navigateToComponentDetail: (componentId?: string | null) => void;
   navigateBack: () => void;
   setDesignTab: (tab: DesignTab) => void;
   toggleSidebar: () => void;
@@ -82,7 +82,7 @@ function updateUrlHash(
       hash = "#import";
       break;
     case "component-detail":
-      hash = id ? `#component-${id}` : "#library";
+      hash = id ? `#component-${id}` : "#component-new";
       break;
     case "home":
     default:
@@ -194,14 +194,14 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     updateUrlHash("import");
   },
 
-  navigateToComponentDetail: (componentId: string) => {
+  navigateToComponentDetail: (componentId) => {
     set({
       previousScreen: get().currentScreen,
       currentScreen: "component-detail",
-      currentComponentId: componentId,
+      currentComponentId: componentId ?? null,
       chatId: null,
     });
-    updateUrlHash("component-detail", componentId);
+    updateUrlHash("component-detail", componentId ?? null);
   },
 
   navigateBack: () => {
@@ -278,6 +278,8 @@ export function initializeNavigationFromHash(): void {
     useNavigationStore.getState().navigateToLibrary();
   } else if (hash === "#import") {
     useNavigationStore.getState().navigateToImport();
+  } else if (hash === "#component-new") {
+    useNavigationStore.getState().navigateToComponentDetail(null);
   } else if (hash.startsWith("#component-")) {
     const componentId = hash.substring(11);
     useNavigationStore.getState().navigateToComponentDetail(componentId);
@@ -395,6 +397,16 @@ export function setupHashChangeListener(): () => void {
     } else if (hash === "#import") {
       if (state.currentScreen !== "import") {
         useNavigationStore.setState({ currentScreen: "import" });
+      }
+    } else if (hash === "#component-new") {
+      if (
+        state.currentScreen !== "component-detail" ||
+        state.currentComponentId !== null
+      ) {
+        useNavigationStore.setState({
+          currentScreen: "component-detail",
+          currentComponentId: null,
+        });
       }
     } else if (hash.startsWith("#component-")) {
       const componentId = hash.substring(11);

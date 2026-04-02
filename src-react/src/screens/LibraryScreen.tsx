@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   Search,
@@ -10,11 +10,7 @@ import {
   X,
   AlertTriangle,
 } from "lucide-react";
-import {
-  useComponents,
-  useComponentMutations,
-  type UseComponentsFilters,
-} from "@/hooks/useComponents";
+import { useComponents, type UseComponentsFilters } from "@/hooks/useComponents";
 import { useNavigationStore } from "@/stores/navigation-store";
 import { UnifiedImportModal } from "@/components/unified-import/UnifiedImportModal";
 import {
@@ -27,10 +23,6 @@ const MOUNT_TYPE_OPTIONS: Array<{ value: MountType; label: string }> = [
   { value: "through_hole", label: "Through-hole" },
   { value: "virtual", label: "Virtual" },
 ];
-
-function createUntitledComponentKey(): string {
-  return `component-${globalThis.crypto?.randomUUID?.() ?? Date.now().toString()}`;
-}
 
 export function LibraryScreen() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -48,13 +40,6 @@ export function LibraryScreen() {
     ...filters,
     search: searchQuery.trim() || undefined,
   });
-  const {
-    createComponent,
-    creating,
-    error: mutationError,
-    clearError: clearMutationError,
-  } = useComponentMutations();
-
   const hasSelection = selectedIds.size > 0;
   const isAllSelected = components.length > 0 && selectedIds.size === components.length;
 
@@ -67,20 +52,6 @@ export function LibraryScreen() {
       return next.size === current.size ? current : next;
     });
   }, [components]);
-
-  const handleCreateComponent = useCallback(async () => {
-    clearMutationError();
-
-    try {
-      const component = await createComponent({
-        canonicalKey: createUntitledComponentKey(),
-        displayLabel: "Untitled Component",
-      });
-      navigateToComponentDetail(component.id);
-    } catch {
-      return;
-    }
-  }, [clearMutationError, createComponent, navigateToComponentDetail]);
 
   const toggleSelection = (id: string) => {
     setSelectedIds((current) => {
@@ -199,16 +170,11 @@ export function LibraryScreen() {
 
             <button
               type="button"
-              className="flex h-9 items-center gap-1.5 rounded-md bg-brand px-4 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={() => void handleCreateComponent()}
-              disabled={creating}
+              className="flex h-9 items-center gap-1.5 rounded-md bg-brand px-4 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              onClick={() => navigateToComponentDetail()}
             >
-              {creating ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4" />
-              )}
-              {creating ? "Creating..." : "New"}
+              <Plus className="h-4 w-4" />
+              New
             </button>
 
             <button
@@ -271,12 +237,6 @@ export function LibraryScreen() {
         </div>
 
         <div className="flex-1 overflow-auto p-6">
-          {mutationError && (
-            <div className="mb-4 rounded-lg border border-border-default bg-bg-secondary px-4 py-3 text-sm text-error">
-              {mutationError}
-            </div>
-          )}
-
           {loading ? (
             <div className="flex h-64 items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-text-tertiary" />

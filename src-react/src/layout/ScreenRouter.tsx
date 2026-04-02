@@ -11,10 +11,11 @@ import { ChatScreen } from "@/screens/ChatScreen";
 import { DesignScreen } from "@/screens/DesignScreen";
 import { NotesScreen } from "@/screens/NotesScreen";
 import { LibraryScreen } from "@/screens/LibraryScreen";
-import { ComponentDetailPage } from "@/components/library/ComponentDetailPage";
+import { ComponentEditor } from "@/components/editor/ComponentEditor";
 
 export function ScreenRouter() {
   const currentScreen = useNavigationStore((s) => s.currentScreen);
+  const currentComponentId = useNavigationStore((s) => s.currentComponentId);
 
   useEffect(() => {
     initializeNavigationFromHash();
@@ -38,7 +39,7 @@ export function ScreenRouter() {
     case "import":
       return <LibraryScreen />;
     case "component-detail":
-      return <ComponentDetailPage />;
+      return <ComponentEditor componentId={currentComponentId ?? undefined} />;
     default:
       return <HomeScreen />;
   }

@@ -3,15 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LibraryScreen } from "./LibraryScreen";
 
 const useComponentsMock = vi.fn();
-const useComponentMutationsMock = vi.fn();
 
 const navigationState = {
   navigateToComponentDetail: vi.fn(),
 };
 
 const refetchMock = vi.fn();
-const createComponentMock = vi.fn();
-const clearMutationErrorMock = vi.fn();
 
 const mockComponents = [
   {
@@ -69,7 +66,6 @@ let latestFilters: Record<string, unknown> = {};
 
 vi.mock("@/hooks/useComponents", () => ({
   useComponents: (...args: unknown[]) => useComponentsMock(...args),
-  useComponentMutations: (...args: unknown[]) => useComponentMutationsMock(...args),
 }));
 
 vi.mock("@/stores/navigation-store", () => ({
@@ -85,8 +81,6 @@ describe("LibraryScreen", () => {
   beforeEach(() => {
     latestFilters = {};
     refetchMock.mockReset();
-    createComponentMock.mockReset();
-    clearMutationErrorMock.mockReset();
     navigationState.navigateToComponentDetail.mockReset();
 
     useComponentsMock.mockImplementation((initialFilters?: Record<string, unknown>) => {
@@ -108,15 +102,6 @@ describe("LibraryScreen", () => {
         filters: initialFilters ?? {},
         setFilters: vi.fn(),
       };
-    });
-
-    useComponentMutationsMock.mockReturnValue({
-      createComponent: createComponentMock,
-      creating: false,
-      updating: false,
-      deleting: false,
-      error: null,
-      clearError: clearMutationErrorMock,
     });
   });
 
@@ -149,21 +134,13 @@ describe("LibraryScreen", () => {
     expect(latestFilters).toMatchObject({ search: "ground", mountType: undefined });
   });
 
-  it("creates a component and navigates to its detail page", async () => {
-    createComponentMock.mockResolvedValue({ id: "component-123" });
-
+  it("opens the canonical editor when creating a component", async () => {
     render(<LibraryScreen />);
 
     fireEvent.click(screen.getByRole("button", { name: "New" }));
 
     await waitFor(() => {
-      expect(clearMutationErrorMock).toHaveBeenCalledTimes(1);
-      expect(createComponentMock).toHaveBeenCalledWith(
-        expect.objectContaining({ displayLabel: "Untitled Component" }),
-      );
-      expect(navigationState.navigateToComponentDetail).toHaveBeenCalledWith(
-        "component-123",
-      );
+      expect(navigationState.navigateToComponentDetail).toHaveBeenCalledWith();
     });
   });
 });
