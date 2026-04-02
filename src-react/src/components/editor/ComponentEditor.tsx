@@ -101,10 +101,7 @@ function parseTags(value: string): string[] {
 
 function getServerVariants(
   component: ComponentType,
-): ComponentType["packageVariants"] {
-  if (component.packageVariants.length > 0) {
-    return component.packageVariants;
-  }
+): ComponentType["variants"] {
   return component.variants;
 }
 
@@ -420,7 +417,7 @@ export function ComponentEditor({ componentId }: ComponentEditorProps) {
         await createComponent({
           canonicalKey: createCanonicalKey(displayLabel),
           ...payload,
-          packageVariants: normalizedVariants.map((variant) =>
+          variants: normalizedVariants.map((variant) =>
             toComponentVariantPayload(variant, "temp"),
           ),
         });

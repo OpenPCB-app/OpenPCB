@@ -33,17 +33,13 @@ function getSourceVariants(component?: ComponentType | null): ComponentVariant[]
   if (!component) {
     return [];
   }
-  if (component.packageVariants.length > 0) {
-    return component.packageVariants;
-  }
   return component.variants;
 }
 
 function getDefaultFootprint(variant: ComponentVariant) {
   return (
-    [...variant.footprintOptions, ...variant.footprints].find((footprint) => footprint.isDefault) ??
+    variant.footprintOptions.find((footprint) => footprint.isDefault) ??
     variant.footprintOptions[0] ??
-    variant.footprints[0] ??
     null
   );
 }
@@ -235,13 +231,13 @@ function toFootprintPayload(variant: EditableComponentVariant) {
 
 export function toComponentVariantPayload(
   variant: EditableComponentVariant,
-  familyId: string,
-): ComponentType["packageVariants"][number] {
+  componentId: string,
+): ComponentType["variants"][number] {
   const footprint = toFootprintPayload(variant);
 
   return {
     id: variant.id,
-    familyId,
+    componentId,
     canonicalCode: variant.canonicalCode,
     humanLabel: variant.humanLabel,
     imperialAlias: null,
@@ -250,8 +246,6 @@ export function toComponentVariantPayload(
     dimensions: null,
     isDefault: variant.isDefault,
     pinRemapTable: null,
-    footprints: [footprint],
-    defaultFootprintId: footprint.id,
     footprintOptions: [footprint],
     defaultFootprintOptionId: footprint.id,
   };
@@ -271,8 +265,6 @@ export function toVariantMutationPayload(
     dimensions: null,
     isDefault: variant.isDefault,
     pinRemapTable: null,
-    footprints: [footprint],
-    defaultFootprintId: footprint.id,
     footprintOptions: [footprint],
     defaultFootprintOptionId: footprint.id,
   };

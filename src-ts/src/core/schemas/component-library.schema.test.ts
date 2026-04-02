@@ -11,7 +11,6 @@ const UUID2 = "01935c4a-1b2d-7e3f-8c9d-0e1f2a3b4c5e";
 describe("ComponentSchema", () => {
   test("accepts workspace component payload", () => {
     const parsed = ComponentSchema.parse({
-      component_id: UUID,
       id: UUID,
       canonicalKey: "resistor_chip",
       displayLabel: "Resistor",
@@ -29,8 +28,7 @@ describe("ComponentSchema", () => {
         rawKicadSource: null,
       },
       variants: [],
-      packageVariants: [],
-      defaultPackageVariantId: null,
+      defaultVariantId: null,
       categoryPath: null,
       tags: [],
     });
@@ -52,8 +50,8 @@ describe("ComponentSchema", () => {
         properties: {},
         unitCount: 1,
       },
-      packageVariants: [],
-      defaultPackageVariantId: null,
+      variants: [],
+      defaultVariantId: null,
       categoryPath: null,
       tags: [],
     });
@@ -64,10 +62,8 @@ describe("ComponentSchema", () => {
 describe("ComponentVariantSchema", () => {
   test("accepts variant with direct footprint payload", () => {
     const parsed = ComponentVariantSchema.parse({
-      variant_id: UUID,
-      component_id: UUID2,
       id: UUID,
-      familyId: UUID2,
+      componentId: UUID2,
       canonicalCode: "0603",
       humanLabel: "0603",
       imperialAlias: "0603",
@@ -76,10 +72,8 @@ describe("ComponentVariantSchema", () => {
       dimensions: { lengthMm: 1.6, widthMm: 0.8, heightMm: null },
       isDefault: true,
       pinRemapTable: null,
-      footprints: [
+      footprintOptions: [
         {
-          footprint_id: UUID,
-          variant_id: UUID,
           id: UUID,
           variantId: UUID,
           label: "Nominal",
@@ -89,13 +83,11 @@ describe("ComponentVariantSchema", () => {
           ipcName: null,
         },
       ],
-      footprintOptions: [],
-      defaultFootprintId: UUID,
-      defaultFootprintOptionId: null,
+      defaultFootprintOptionId: UUID,
     });
 
-    expect(parsed.footprints[0]?.label).toBe("Nominal");
-    expect(parsed.variant_id).toBe(UUID);
+    expect(parsed.footprintOptions[0]?.label).toBe("Nominal");
+    expect(parsed.componentId).toBe(UUID2);
   });
 });
 

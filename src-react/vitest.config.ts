@@ -19,7 +19,11 @@ export default defineConfig({
     alias: {
       "@/": path.resolve(__dirname, "./src") + "/",
       "@shared/types": path.resolve(__dirname, "../src-ts/shared/types"),
-      "@shared/sdk": path.resolve(__dirname, "../src-ts/shared/sdk/index"),
+      "@shared/sdk": path.resolve(__dirname, "../src-ts/shared/sdk"),
+      "@shared/generated": path.resolve(
+        __dirname,
+        "../src-ts/shared/generated",
+      ),
       "@modules": path.resolve(__dirname, "../modules"),
     },
   },

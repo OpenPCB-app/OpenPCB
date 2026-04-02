@@ -65,8 +65,6 @@ export const FootprintPayloadSchema = z.unknown().openapi("FootprintPayload");
 
 export const ComponentFootprintSchema = z
   .object({
-    footprint_id: UUIDv7Schema.optional(),
-    variant_id: UUIDv7Schema.optional(),
     id: UUIDv7Schema,
     variantId: UUIDv7Schema,
     label: z.string().min(1),
@@ -81,10 +79,8 @@ export const ComponentFootprintSchema = z
 
 export const ComponentVariantSchema = z
   .object({
-    variant_id: UUIDv7Schema.optional(),
-    component_id: UUIDv7Schema.optional(),
     id: UUIDv7Schema,
-    familyId: UUIDv7Schema,
+    componentId: UUIDv7Schema,
     canonicalCode: z.string().min(1),
     humanLabel: z.string().min(1),
     imperialAlias: z.string().nullable(),
@@ -93,8 +89,6 @@ export const ComponentVariantSchema = z
     dimensions: PackageDimensionsSchema.nullable(),
     isDefault: z.boolean(),
     pinRemapTable: PinRemapTableSchema.nullable(),
-    footprints: z.array(ComponentFootprintSchema).default([]),
-    defaultFootprintId: UUIDv7Schema.nullable().optional(),
     footprintOptions: z.array(ComponentFootprintSchema).default([]),
     defaultFootprintOptionId: UUIDv7Schema.nullable(),
   })
@@ -103,7 +97,6 @@ export const ComponentVariantSchema = z
 
 export const ComponentSchema = z
   .object({
-    component_id: UUIDv7Schema.optional(),
     id: UUIDv7Schema,
     canonicalKey: z.string().min(1),
     displayLabel: z.string().min(1),
@@ -112,8 +105,6 @@ export const ComponentSchema = z
     symbolData: SymbolDataSchema,
     variants: z.array(ComponentVariantSchema).default([]),
     defaultVariantId: UUIDv7Schema.nullable().optional(),
-    packageVariants: z.array(ComponentVariantSchema).default([]),
-    defaultPackageVariantId: UUIDv7Schema.nullable(),
     categoryPath: z.string().nullable(),
     tags: z.array(z.string()).default([]),
     createdAt: TimestampSchema.optional(),
@@ -153,6 +144,3 @@ export type ComponentType = z.infer<typeof ComponentSchema>;
 export type ComponentVariantType = z.infer<typeof ComponentVariantSchema>;
 export type ComponentFootprintType = z.infer<typeof ComponentFootprintSchema>;
 export type ComponentReferenceType = z.infer<typeof ComponentReferenceSchema>;
-export type ComponentFamilyType = ComponentType;
-export type PackageVariantType = ComponentVariantType;
-export type FootprintOptionType = ComponentFootprintType;

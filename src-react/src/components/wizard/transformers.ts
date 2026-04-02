@@ -9,14 +9,29 @@ import type { SymbolDraft } from "@/components/symbol-editor/types";
 import type { FootprintDraft, FootprintGraphic, PadDefinition } from "@/components/footprint-editor/types";
 import { createEmptyDraft as createEmptySymbolDraft, type SymbolGraphic, type SymbolPin } from "@/components/symbol-editor/types";
 import { createEmptyDraft as createEmptyFootprintDraft } from "@/components/footprint-editor/types";
-import type { ComponentDraftPayload, SymbolGraphic as BackendSymbolGraphic } from "@/../../src-ts/src/core/schemas/component-semantics";
+import type {
+  SymbolGraphic as BackendSymbolGraphic,
+} from "@shared/types/component-semantics.types";
+import type {
+  ComponentType,
+  ComponentVariantType,
+} from "@shared/types/component-library-schema.types";
 
 // ---------------------------------------------------------------------------
-// Backend Types (mirror of src-ts/src/core/schemas/component-semantics.ts)
+// Contract Types (from shared semantics contract)
 // ---------------------------------------------------------------------------
 
-type BackendSymbolData = ComponentDraftPayload["symbolData"];
-type BackendComponentDraftPayload = ComponentDraftPayload;
+type BackendSymbolData = ComponentType["symbolData"];
+type BackendVariantPayload = Partial<ComponentVariantType> & {
+  footprintOptions: ComponentVariantType["footprintOptions"];
+};
+type BackendComponentDraftPayload = {
+  displayLabel: string;
+  description: string;
+  symbolData: BackendSymbolData;
+  variants: BackendVariantPayload[];
+  defaultVariantId: string | null;
+};
 
 function cloneSymbolPin(pin: SymbolPin): SymbolPin {
   return { ...pin, position: { ...pin.position } };
@@ -110,16 +125,16 @@ function cloneFootprintDraft(draft: FootprintDraft): FootprintDraft {
 export function transformWizardToBackendPayload(
   draft: WizardDraftPayload,
 ): BackendComponentDraftPayload {
-  const packageVariants = transformPackageVariants(draft);
-  const defaultPackageVariantId =
-    packageVariants.find((variant) => variant.isDefault)?.id ?? null;
+  const variants = transformVariants(draft);
+  const defaultVariantId =
+    variants.find((variant) => variant.isDefault)?.id ?? null;
 
   return {
     displayLabel: draft.displayLabel || "Untitled Component",
     description: draft.description || "",
     symbolData: transformSymbolData(draft),
-    packageVariants,
-    defaultPackageVariantId,
+    variants,
+    defaultVariantId,
   };
 }
 
@@ -134,7 +149,7 @@ export function createEmptyBackendPayload(): BackendComponentDraftPayload {
     footprintData: null,
     modelData: null,
     specs: null,
-    defaultPackageVariantId: null,
+    defaultVariantId: null,
   });
 }
 
@@ -229,7 +244,9 @@ function transformBodyGraphics(symbolData: WizardDraftPayload["symbolData"]): Ba
  * Transform footprint data to package variants.
  * For MVP, creates a single package variant from footprint data.
  */
-function transformPackageVariants(draft: WizardDraftPayload): ComponentDraftPayload["packageVariants"] {
+function transformVariants(
+  draft: WizardDraftPayload,
+): BackendComponentDraftPayload["variants"] {
   // If no footprint data, return empty array (MVP allows this)
   if (!draft.footprintData) {
     return [];
@@ -239,12 +256,10 @@ function transformPackageVariants(draft: WizardDraftPayload): ComponentDraftPayl
   const variantId = crypto.randomUUID();
   const footprintId = crypto.randomUUID();
   const model3dOptions = transformModel3dOptions(draft, footprintId);
-  const defaultModel3dOptionId = model3dOptions[0]?.id ?? null;
 
   return [
     {
       id: variantId,
-      familyId: "",
       canonicalCode: footprintData.preset || "DEFAULT",
       humanLabel: draft.displayLabel || "Default Package",
       imperialAlias: null,
@@ -263,11 +278,9 @@ function transformPackageVariants(draft: WizardDraftPayload): ComponentDraftPayl
           densityLevel: footprintData.densityLevel,
           ipcName: null,
           model3dOptions,
-          defaultModel3dOptionId,
         },
       ],
       defaultFootprintOptionId: footprintId,
-      offerings: transformOfferings(draft.specs, variantId),
     },
   ];
 }
@@ -277,7 +290,7 @@ function transformPackageVariants(draft: WizardDraftPayload): ComponentDraftPayl
  */
 function determineMountType(
   footprintData: NonNullable<WizardDraftPayload["footprintData"]>,
-): ComponentDraftPayload["packageVariants"][number]["mountType"] {
+): NonNullable<BackendComponentDraftPayload["variants"][number]["mountType"]> {
   if (footprintData.importPreservation?.rawSource) {
     const importedMount = footprintData.importPreservation.attributes?.type;
     if (importedMount === "through_hole") return "through_hole";
@@ -431,23 +444,4 @@ export function transformWizardToFootprintDraft(
     return createEmptyFootprintDraft(id ?? crypto.randomUUID());
   }
   return cloneFootprintDraft(draft);
-}
-
-function transformOfferings(
-  specs: WizardDraftPayload["specs"],
-  variantId: string,
-): ComponentDraftPayload["packageVariants"][number]["offerings"] {
-  if (!specs?.mpn || !specs.manufacturer) {
-    return [];
-  }
-
-  return [
-    {
-      id: crypto.randomUUID(),
-      variantId,
-      mpn: specs.mpn,
-      manufacturer: specs.manufacturer,
-      datasheetUrl: specs.datasheetUrl || null,
-    },
-  ];
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useCanvasColors } from "@/lib/canvas-theme";
-import type { FootprintOptionType } from "../../../../src-ts/src/core/schemas/component-library.schema";
+import type { ComponentFootprintType } from "@shared/types/component-library-schema.types";
 
 interface ParsedPad {
   number: string;
@@ -108,7 +108,7 @@ function parseKicadFootprint(source: string): ParsedFootprint | null {
 }
 
 interface FootprintPreviewProps {
-  footprint?: FootprintOptionType;
+  footprint?: ComponentFootprintType;
 }
 
 interface FpViewport {

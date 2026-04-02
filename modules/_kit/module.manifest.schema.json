@@ -101,8 +101,22 @@
         "prefix": {
           "type": "string",
           "description": "Logical namespace for module tables/collections"
+        },
+        "rawAccess": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow access to raw db instance via ctx.db.getRawDb()"
         }
       }
+    },
+    "coreCapabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["projects", "contentEditor", "toolRegistry"]
+      },
+      "default": ["projects", "contentEditor", "toolRegistry"],
+      "description": "Declared host capabilities exposed on ctx.core"
     },
     "ui": {
       "type": "object",

@@ -145,7 +145,7 @@ describe("ComponentController", () => {
 
     expect(res.status).toBe(200);
     expect(body.data.components).toHaveLength(1);
-    expect(body.data.components[0].packageVariants).toHaveLength(1);
+    expect(body.data.components[0].variants).toHaveLength(1);
     expect(repo.listComponents).toHaveBeenCalledWith({
       search: "Resistor",
       categoryPath: undefined,
@@ -161,7 +161,7 @@ describe("ComponentController", () => {
 
     expect(res.status).toBe(200);
     expect(body.data.component.id).toBe("component-1");
-    expect(body.data.component.defaultPackageVariantId).toBe("variant-1");
+    expect(body.data.component.defaultVariantId).toBe("variant-1");
   });
 
   it("creates component", async () => {
@@ -172,7 +172,7 @@ describe("ComponentController", () => {
         body: {
           displayLabel: "Resistor",
           symbolData: { referencePrefix: "R", pinDefinitions: [], properties: {} },
-          packageVariants: [
+          variants: [
             {
               canonicalCode: "0603",
               humanLabel: "0603",
@@ -214,7 +214,7 @@ describe("ComponentController", () => {
         id: "component-1",
         body: {
           displayLabel: "Updated Resistor",
-          defaultPackageVariantId: "variant-2",
+          defaultVariantId: "variant-2",
         },
       }),
     );
@@ -371,6 +371,6 @@ describe("ComponentController", () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.data.component.defaultPackageVariantId).toBe("variant-2");
+    expect(body.data.component.defaultVariantId).toBe("variant-2");
   });
 });

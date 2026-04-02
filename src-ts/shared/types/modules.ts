@@ -39,6 +39,12 @@ export type ModuleKind =
   | "widget"
   | "system";
 
+/** Explicit core capability keys modules can request from host runtime */
+export type ModuleCoreCapability =
+  | "projects"
+  | "contentEditor"
+  | "toolRegistry";
+
 export interface SpaceModuleSidebarButtons {
   left_top: React.ReactNode[];
   left_bottom: React.ReactNode[];
@@ -109,7 +115,7 @@ export interface ModuleContext {
 
   /** Core services available to modules */
   core: {
-    projects: {
+    projects?: {
       list: () => Promise<ProjectRecord[]>;
       get: (id: string) => Promise<ProjectRecord | null>;
       current: () => ProjectRecord | null;

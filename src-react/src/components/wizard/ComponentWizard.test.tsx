@@ -49,7 +49,7 @@ vi.mock("@/lib/api/component-api", async () => {
   };
 });
 
-vi.mock("@/../../src-ts/shared/sdk/file-client", () => ({ uploadFile }));
+vi.mock("@shared/sdk/file-client", () => ({ uploadFile }));
 
 function createMockContext(): CanvasRenderingContext2D {
   return {
@@ -124,7 +124,7 @@ describe("ComponentWizard", () => {
 
     createWorkspaceComponentRecord.mockResolvedValue({
       id: "draft-1",
-      familyId: null,
+      componentId: null,
       wizardStep: 0,
       payload: {},
       warnings: [],
@@ -133,7 +133,7 @@ describe("ComponentWizard", () => {
     });
     patchWorkspaceComponentRecord.mockResolvedValue({ id: "draft-1" });
     publishWorkspaceComponentRecord.mockResolvedValue({
-      familyId: "family-1",
+      componentId: "component-1",
       revision: { id: "rev-1" },
     });
     uploadFile.mockResolvedValue({ id: "file-1", originalName: "Package.step" });
@@ -298,13 +298,13 @@ describe("ComponentWizard", () => {
 
     const finalPatchPayload = patchWorkspaceComponentRecord.mock.calls.at(-1)?.[1]?.payload;
     expect(finalPatchPayload.symbolData.rawKicadSource).toContain("symbol chip");
-    expect(finalPatchPayload.packageVariants[0]?.footprintOptions[0]?.kicadPayload.rawKicadSource).toContain(
+    expect(finalPatchPayload.variants[0]?.footprintOptions[0]?.kicadPayload.rawKicadSource).toContain(
       "footprint chip",
     );
     expect(
-      finalPatchPayload.packageVariants[0]?.footprintOptions[0]?.model3dOptions[0]?.fileName,
+      finalPatchPayload.variants[0]?.footprintOptions[0]?.model3dOptions[0]?.fileName,
     ).toBe("Package.step");
-    expect(onPublished).toHaveBeenCalledWith("family-1");
+    expect(onPublished).toHaveBeenCalledWith("component-1");
     expect(onClose).toHaveBeenCalled();
   });
 });

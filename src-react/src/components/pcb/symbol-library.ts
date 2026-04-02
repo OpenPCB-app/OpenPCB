@@ -2,7 +2,7 @@ import type { Point, Rotation, SymbolEntity, SymbolTemplate } from "./types";
 import type {
   ComponentType,
   ComponentVariantType,
-} from "@/../../src-ts/src/core/schemas/component-library.schema";
+} from "@shared/types/component-library-schema.types";
 
 export const PALETTE_SYMBOL_KIND_MIME = "application/x-openpcb-symbol-kind";
 
@@ -34,31 +34,38 @@ const EMBEDDED_SYMBOLS: Record<string, EmbeddedSymbolDef> = {
   },
 };
 
-const libraryComponentsById = new Map<string, ComponentType>();
+export interface ComponentLibraryIndex {
+  componentsById: ReadonlyMap<string, ComponentType>;
+}
+
+const EMPTY_COMPONENTS_BY_ID = new Map<string, ComponentType>();
+
+export const EMPTY_COMPONENT_LIBRARY_INDEX: ComponentLibraryIndex = {
+  componentsById: EMPTY_COMPONENTS_BY_ID,
+};
+
+export function createComponentLibraryIndex(
+  components: ComponentType[],
+): ComponentLibraryIndex {
+  const componentsById = new Map<string, ComponentType>();
+  for (const component of components) {
+    componentsById.set(component.id, component);
+  }
+
+  return { componentsById };
+}
 
 function getComponentVariants(
   component: ComponentType,
 ): ComponentVariantType[] {
-  if (component.packageVariants.length > 0) {
-    return component.packageVariants;
-  }
-
-  return component.variants ?? [];
+  return component.variants;
 }
 
-function findComponentInLibrary(componentId: string): ComponentType | null {
-  const component = libraryComponentsById.get(componentId);
-  if (component) {
-    return component;
-  }
-
-  for (const candidate of libraryComponentsById.values()) {
-    if (candidate.component_id === componentId) {
-      return candidate;
-    }
-  }
-
-  return null;
+function findComponentInLibrary(
+  index: ComponentLibraryIndex,
+  componentId: string,
+): ComponentType | null {
+  return index.componentsById.get(componentId) ?? null;
 }
 
 function resolveComponentVariant(
@@ -72,21 +79,17 @@ function resolveComponentVariant(
 
   if (preferredVariantId) {
     const directMatch = variants.find(
-      (variant) =>
-        variant.id === preferredVariantId ||
-        variant.variant_id === preferredVariantId,
+      (variant) => variant.id === preferredVariantId,
     );
     if (directMatch) {
       return directMatch;
     }
   }
 
-  const defaultVariantId =
-    component.defaultPackageVariantId ?? component.defaultVariantId ?? null;
+  const defaultVariantId = component.defaultVariantId ?? null;
   if (defaultVariantId) {
     const configuredDefault = variants.find(
-      (variant) =>
-        variant.id === defaultVariantId || variant.variant_id === defaultVariantId,
+      (variant) => variant.id === defaultVariantId,
     );
     if (configuredDefault) {
       return configuredDefault;
@@ -97,10 +100,11 @@ function resolveComponentVariant(
 }
 
 function resolveComponentAndVariant(
+  index: ComponentLibraryIndex,
   componentId: string,
   preferredVariantId?: string,
 ): { component: ComponentType; variant: ComponentVariantType } | null {
-  const component = findComponentInLibrary(componentId);
+  const component = findComponentInLibrary(index, componentId);
   if (!component) {
     return null;
   }
@@ -148,8 +152,8 @@ function createSymbolFromComponent(
   reference: string,
   mirrored = false,
 ): SymbolEntity {
-  const componentId = component.component_id ?? component.id;
-  const variantId = variant.variant_id ?? variant.id;
+  const componentId = component.id;
+  const variantId = variant.id;
   const pinDefinitions = component.symbolData.pinDefinitions;
   const pinPositions = generatePinPositions(pinDefinitions.length);
   const properties = { ...component.symbolData.properties };
@@ -162,6 +166,7 @@ function createSymbolFromComponent(
     symbolKind: componentId,
     componentId,
     variantId,
+    linkStatus: "ok",
     libraryPartId: componentId,
     symbolTemplate: component.symbolData.symbolTemplate,
     reference,
@@ -207,9 +212,10 @@ function createEmbeddedSymbol(
 
 function requireComponentAndVariant(
   componentOrId: string | ComponentType,
+  index: ComponentLibraryIndex,
 ): { component: ComponentType; variant: ComponentVariantType } {
   if (typeof componentOrId === "string") {
-    const resolved = resolveComponentAndVariant(componentOrId);
+    const resolved = resolveComponentAndVariant(index, componentOrId);
     if (resolved) {
       return resolved;
     }
@@ -232,24 +238,29 @@ function requireComponentAndVariant(
   };
 }
 
-export function setComponentLibrary(components: ComponentType[]): void {
-  libraryComponentsById.clear();
-  for (const component of components) {
-    libraryComponentsById.set(component.id, component);
-    if (component.component_id && component.component_id !== component.id) {
-      libraryComponentsById.set(component.component_id, component);
-    }
-  }
-}
-
-export function resolveSymbolEntityFromLibrary(symbol: SymbolEntity): SymbolEntity {
+export function resolveSymbolEntityFromLibrary(
+  symbol: SymbolEntity,
+  index: ComponentLibraryIndex,
+): SymbolEntity {
   if (!symbol.componentId) {
     return symbol;
   }
 
-  const resolved = resolveComponentAndVariant(symbol.componentId, symbol.variantId);
+  const resolved = resolveComponentAndVariant(
+    index,
+    symbol.componentId,
+    symbol.variantId,
+  );
   if (!resolved) {
-    return symbol;
+    return {
+      ...symbol,
+      linkStatus: "missing",
+      symbolTemplate: symbol.symbolTemplate ?? "generic_ic",
+      value:
+        symbol.value && symbol.value.trim().length > 0
+          ? symbol.value
+          : `Missing ${symbol.componentId}`,
+    };
   }
 
   return createSymbolFromComponent(
@@ -268,6 +279,7 @@ export function createSymbolEntity(
   position: Point,
   rotation: Rotation,
   symbols: SymbolEntity[],
+  index: ComponentLibraryIndex,
 ): SymbolEntity {
   if (typeof kindOrComponent === "string") {
     const embeddedDef = EMBEDDED_SYMBOLS[kindOrComponent];
@@ -285,7 +297,7 @@ export function createSymbolEntity(
     }
   }
 
-  const { component, variant } = requireComponentAndVariant(kindOrComponent);
+  const { component, variant } = requireComponentAndVariant(kindOrComponent, index);
   const prefix = component.symbolData.referencePrefix || "U";
   const reference = getNextReference(prefix, symbols);
   return createSymbolFromComponent(
@@ -302,6 +314,7 @@ export function createPreviewSymbol(
   kindOrComponent: string | ComponentType,
   position: Point,
   rotation: Rotation,
+  index: ComponentLibraryIndex,
 ): SymbolEntity {
   if (typeof kindOrComponent === "string") {
     const embeddedDef = EMBEDDED_SYMBOLS[kindOrComponent];
@@ -316,7 +329,7 @@ export function createPreviewSymbol(
     }
   }
 
-  const { component, variant } = requireComponentAndVariant(kindOrComponent);
+  const { component, variant } = requireComponentAndVariant(kindOrComponent, index);
   return createSymbolFromComponent(
     component,
     variant,
@@ -329,6 +342,7 @@ export function createPreviewSymbol(
 
 export function getSymbolLabel(
   kindOrComponent: string | ComponentType,
+  index: ComponentLibraryIndex,
 ): string {
   if (typeof kindOrComponent === "string") {
     const embeddedDef = EMBEDDED_SYMBOLS[kindOrComponent];
@@ -336,7 +350,9 @@ export function getSymbolLabel(
       return embeddedDef.label;
     }
 
-    return findComponentInLibrary(kindOrComponent)?.displayLabel ?? kindOrComponent;
+    return (
+      findComponentInLibrary(index, kindOrComponent)?.displayLabel ?? kindOrComponent
+    );
   }
 
   return kindOrComponent.displayLabel;
@@ -344,6 +360,7 @@ export function getSymbolLabel(
 
 export function getSymbolPrefix(
   kindOrComponent: string | ComponentType,
+  index: ComponentLibraryIndex,
 ): string | null {
   if (typeof kindOrComponent === "string") {
     const embeddedDef = EMBEDDED_SYMBOLS[kindOrComponent];
@@ -352,7 +369,7 @@ export function getSymbolPrefix(
     }
 
     return (
-      findComponentInLibrary(kindOrComponent)?.symbolData.referencePrefix ?? null
+      findComponentInLibrary(index, kindOrComponent)?.symbolData.referencePrefix ?? null
     );
   }
 

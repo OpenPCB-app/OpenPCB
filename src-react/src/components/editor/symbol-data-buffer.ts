@@ -12,7 +12,7 @@ import {
   type SymbolGraphic,
   type SymbolPin,
 } from "@/components/symbol-editor/types";
-import type { SymbolGraphic as BackendSymbolGraphic } from "@/../../src-ts/src/core/schemas/component-semantics";
+import type { SymbolGraphic as BackendSymbolGraphic } from "@shared/types/component-semantics.types";
 
 type SymbolData = ComponentType["symbolData"];
 

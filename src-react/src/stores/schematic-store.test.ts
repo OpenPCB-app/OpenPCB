@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createHitTestCache } from "@/components/pcb/canvas/hit-test";
-import type { ComponentType } from "@/../../src-ts/src/core/schemas/component-library.schema";
+import type { ComponentType } from "@shared/types/component-library-schema.types";
 import {
   MAX_VIEWPORT_ZOOM,
   MIN_VIEWPORT_ZOOM,
   fitViewportToBounds,
   screenToSchematic,
 } from "@/components/pcb/canvas/viewport";
-import type { SchematicDocument } from "@/components/pcb/types";
+import {
+  toSchematicProjectDocument,
+  type SchematicDocument,
+} from "@/components/pcb/types";
 import { useSchematicStore } from "./schematic-store";
 
 const TEST_DOCUMENT: SchematicDocument = {
@@ -89,10 +92,10 @@ function createVariant(
   componentId: string,
   variantId: string,
   humanLabel: string,
-): ComponentType["packageVariants"][number] {
+): ComponentType["variants"][number] {
   return {
     id: variantId,
-    familyId: componentId,
+    componentId,
     canonicalCode: humanLabel.toLowerCase().replace(/\s+/g, "-"),
     humanLabel,
     imperialAlias: null,
@@ -101,8 +104,6 @@ function createVariant(
     dimensions: null,
     isDefault: true,
     pinRemapTable: null,
-    footprints: [],
-    defaultFootprintId: null,
     footprintOptions: [],
     defaultFootprintOptionId: null,
   };
@@ -144,8 +145,6 @@ function createLibraryComponents(
       },
       variants: [resistorVariant],
       defaultVariantId: resistorVariant.id,
-      packageVariants: [resistorVariant],
-      defaultPackageVariantId: resistorVariant.id,
       categoryPath: "passives/resistors",
       tags: [],
       createdAt: "2026-01-01T00:00:00Z",
@@ -171,8 +170,6 @@ function createLibraryComponents(
       },
       variants: [connectorVariant],
       defaultVariantId: connectorVariant.id,
-      packageVariants: [connectorVariant],
-      defaultPackageVariantId: connectorVariant.id,
       categoryPath: "connectors/headers",
       tags: [],
       createdAt: "2026-01-01T00:00:00Z",
@@ -277,6 +274,38 @@ describe("useSchematicStore", () => {
       value: "22k",
     });
     expect(resolved?.pins.map((pin) => pin.name)).toEqual(["P", "N"]);
+  });
+
+  it("persists minimal symbol snapshot for missing library links across reloads", () => {
+    const state = useSchematicStore.getState();
+
+    state.setComponentLibrary(createLibraryComponents("10k", ["1", "2"]));
+    state.setDocument(TEST_DOCUMENT);
+
+    state.setComponentLibrary([]);
+    const unresolvedDocument = useSchematicStore.getState().persisted.document;
+    const unresolvedSymbol = unresolvedDocument?.symbols.find(
+      (symbol) => symbol.id === "symbol-1",
+    );
+
+    expect(unresolvedSymbol).toMatchObject({
+      componentId: "component-resistor",
+      variantId: "variant-resistor-default",
+      symbolTemplate: "resistor",
+      linkStatus: "missing",
+    });
+
+    const persisted = toSchematicProjectDocument(unresolvedDocument!);
+    state.setDocument(persisted);
+
+    const reloadedSymbol = useSchematicStore
+      .getState()
+      .persisted.document?.symbols.find((symbol) => symbol.id === "symbol-1");
+
+    expect(reloadedSymbol).toMatchObject({
+      symbolTemplate: "resistor",
+      linkStatus: "missing",
+    });
   });
 
   it("defaults to 50mil grid size in nanometers", () => {

@@ -1,4 +1,4 @@
-import { customFetch } from "@/../../src-ts/shared/sdk/mutator";
+import { customFetch } from "@shared/sdk/mutator";
 import type { FavoriteWithChat } from "@shared/types/favorite.types";
 
 interface ApiResponse<T> {

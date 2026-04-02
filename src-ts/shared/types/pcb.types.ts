@@ -36,6 +36,7 @@ export interface SchematicSymbolPin {
 export interface SchematicSymbol {
   id: string;
   libraryPartId?: string | null;
+  symbolTemplate?: string | null;
   reference?: string | null;
   position: ProjectPoint;
   rotation?: number;

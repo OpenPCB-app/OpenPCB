@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useHealthCheck } from "@/hooks/useHealthCheck";
 import { Button } from "@/components/ui/button";
-import { commands } from "@/../../src-ts/shared/generated/tauri-bindings";
+import { commands } from "@shared/generated/tauri-bindings";
 import { AlertTriangle, RefreshCw, Power } from "lucide-react";
 
 export function ReconnectionOverlay() {

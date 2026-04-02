@@ -125,8 +125,6 @@ const existingComponent = {
   },
   variants: [],
   defaultVariantId: null,
-  packageVariants: [],
-  defaultPackageVariantId: null,
   categoryPath: "Passives/Resistors",
   tags: ["passive", "smd"],
   createdAt: "2026-04-02T10:00:00.000Z",
@@ -453,25 +451,25 @@ describe("ComponentEditor", () => {
     });
 
     const createPayload = createComponentMock.mock.calls[0]?.[0] as {
-      packageVariants: Array<{
-        familyId: string;
+      variants: Array<{
+        componentId: string;
         canonicalCode: string;
         humanLabel: string;
         isDefault: boolean;
       }>;
     };
 
-    expect(createPayload.packageVariants).toHaveLength(2);
-    expect(createPayload.packageVariants).toEqual(
+    expect(createPayload.variants).toHaveLength(2);
+    expect(createPayload.variants).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          familyId: "temp",
+          componentId: "temp",
           canonicalCode: "variant-1",
           humanLabel: "Variant 1",
           isDefault: true,
         }),
         expect.objectContaining({
-          familyId: "temp",
+          componentId: "temp",
           canonicalCode: "variant-2",
           humanLabel: "Variant 2",
           isDefault: false,

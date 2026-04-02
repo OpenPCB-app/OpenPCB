@@ -1,6 +1,6 @@
 
 
-import { customFetch } from '@/../../src-ts/shared/sdk/mutator';
+import { customFetch } from "@shared/sdk/mutator";
 import type { ProviderInfo, ProviderDetail } from '@shared/types';
 
 interface ApiResponse<T> {

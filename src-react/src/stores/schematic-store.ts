@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import {
+  createComponentLibraryIndex,
   createSymbolEntity,
+  EMPTY_COMPONENT_LIBRARY_INDEX,
   resolveSymbolEntityFromLibrary,
-  setComponentLibrary as setSymbolLibraryComponents,
+  type ComponentLibraryIndex,
 } from "@/components/pcb/symbol-library";
 import {
   GRID_PRESETS,
@@ -10,7 +12,7 @@ import {
   toEditorSchematicDocument,
 } from "@/components/pcb/types";
 import type { SchematicProjectDocument } from "@shared/types";
-import type { ComponentType } from "@/../../src-ts/src/core/schemas/component-library.schema";
+import type { ComponentType } from "@shared/types/component-library-schema.types";
 import { createHitTestCache } from "@/components/pcb/canvas/hit-test";
 import type {
   Bounds,
@@ -57,6 +59,7 @@ interface SchematicState {
   chrome: EditorChromeState;
   session: InteractionSession;
   draggedSymbolKind: SymbolKind | null;
+  componentLibraryIndex: ComponentLibraryIndex;
 
   setViewport: (viewport: Viewport) => void;
   pan: (dx: number, dy: number) => void;
@@ -295,10 +298,13 @@ function getUpdatedSymbolPositions(
 
 function resolveDocumentSymbolsFromLibrary(
   document: SchematicDocument,
+  index: ComponentLibraryIndex,
 ): SchematicDocument {
   return {
     ...document,
-    symbols: document.symbols.map(resolveSymbolEntityFromLibrary),
+    symbols: document.symbols.map((symbol) =>
+      resolveSymbolEntityFromLibrary(symbol, index),
+    ),
   };
 }
 
@@ -312,6 +318,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   chrome: INITIAL_CHROME_STATE,
   session: null,
   draggedSymbolKind: null,
+  componentLibraryIndex: EMPTY_COMPONENT_LIBRARY_INDEX,
 
   setViewport: (viewport) => {
     if (
@@ -424,6 +431,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         position,
         state.session.rotation,
         document.symbols,
+        state.componentLibraryIndex,
       );
       const nextDocument = {
         ...document,
@@ -831,6 +839,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
           : toEditorSchematicDocument(document);
       const resolvedDocument = resolveDocumentSymbolsFromLibrary(
         normalizedDocument,
+        state.componentLibraryIndex,
       );
 
       return {
@@ -873,17 +882,21 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
   setComponentLibrary: (components) =>
     set((state) => {
-      setSymbolLibraryComponents(components);
+      const componentLibraryIndex = createComponentLibraryIndex(components);
 
       if (!state.persisted.document) {
-        return state;
+        return {
+          componentLibraryIndex,
+        };
       }
 
       const resolvedDocument = resolveDocumentSymbolsFromLibrary(
         state.persisted.document,
+        componentLibraryIndex,
       );
 
       return {
+        componentLibraryIndex,
         persisted: {
           ...state.persisted,
           document: resolvedDocument,

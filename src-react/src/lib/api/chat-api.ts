@@ -5,7 +5,7 @@
  * Uses the custom fetch mutator with dynamic backend URL
  */
 
-import { customFetch, getBackendURL } from "@/../../src-ts/shared/sdk/mutator";
+import { customFetch, getBackendURL } from "@shared/sdk/mutator";
 import type {
   ChatMetadata,
   CreateChatInput,

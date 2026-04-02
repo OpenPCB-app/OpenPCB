@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useBackendURL } from "@/contexts/BackendURLContext";
-import { customFetch } from "@/../../src-ts/shared/sdk/mutator";
+import { customFetch } from "@shared/sdk/mutator";
 import type { MentionEntity, MentionSearchResponse } from "@shared/types";
 
 interface UseMentionsOptions {

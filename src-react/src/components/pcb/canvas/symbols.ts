@@ -631,6 +631,10 @@ function getLabelFontSizePx(viewport: Viewport): number {
 }
 
 function getPrimarySymbolLabel(symbol: SymbolEntity): string {
+  if (symbol.linkStatus === "missing") {
+    return `${symbol.reference} ⚠`;
+  }
+
   if (symbol.symbolKind === "gnd") {
     return getSymbolKindLabel(symbol.symbolKind);
   }
@@ -760,9 +764,13 @@ export function renderSymbol(
 ): void {
   ctx.save();
   applySymbolTransform(ctx, symbol, viewport);
-  ctx.strokeStyle = options.selected
-    ? (options.colors?.selectionStroke ?? "#e0f2fe")
-    : (options.colors?.bodyStroke ?? "#cbd5e1");
+  if (options.selected) {
+    ctx.strokeStyle = options.colors?.selectionStroke ?? "#e0f2fe";
+  } else if (symbol.linkStatus === "missing") {
+    ctx.strokeStyle = "#f97316";
+  } else {
+    ctx.strokeStyle = options.colors?.bodyStroke ?? "#cbd5e1";
+  }
   ctx.globalAlpha = options.preview ? 0.75 : 1;
   renderBody(ctx, symbol);
   renderPins(ctx, symbol, viewport, options.selected ?? false, options.colors);

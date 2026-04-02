@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useCanvasColors, type CanvasColors } from "@/lib/canvas-theme";
-import type { ComponentFamilyType } from "../../../../src-ts/src/core/schemas/component-library.schema";
-import type { SymbolGraphic as BackendSymbolGraphic } from "../../../../src-ts/src/core/schemas/component-semantics";
+import type { ComponentType } from "@shared/types/component-library-schema.types";
+import type { SymbolGraphic as BackendSymbolGraphic } from "@shared/types/component-semantics.types";
 import { parseKicadSymbolImport } from "../../lib/api/component-api";
 import { convertParsedKicadSymbolToDraft } from "../symbol-editor/kicad-import";
 import type {
@@ -14,7 +14,7 @@ import type {
 import { symbolToScreen, fitViewportToBounds } from "../symbol-editor/viewport";
 
 interface SymbolPreviewProps {
-  symbolData?: ComponentFamilyType["symbolData"];
+  symbolData?: ComponentType["symbolData"];
 }
 
 const PIN_DOT_RADIUS = 3;

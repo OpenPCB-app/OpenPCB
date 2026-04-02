@@ -13,8 +13,10 @@
   },
   "db": {
     "prefix": "knowledge_",
-    "migrations": true
+    "migrations": true,
+    "rawAccess": true
   },
+  "coreCapabilities": ["contentEditor", "toolRegistry"],
   "dependsOn": [],
   "exports": {
     "services": [

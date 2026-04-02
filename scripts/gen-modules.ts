@@ -13,6 +13,7 @@ import type { ErrorObject, ValidateFunction } from "ajv";
 
 type ModuleKind = "space" | "service" | "integration" | "widget" | "system";
 type ServiceExportKind = "http" | "bridge" | "local";
+type ModuleCoreCapability = "projects" | "contentEditor" | "toolRegistry";
 
 interface ModuleDependency {
   id: string;
@@ -51,6 +52,10 @@ interface ModuleManifestFile {
   apiVersion?: number;
   kind?: ModuleKind;
   tags?: string[];
+  coreCapabilities?: ModuleCoreCapability[];
+  db?: {
+    rawAccess?: boolean;
+  };
   ui: {
     moduleEntry: string;
     primarySpace?: string;
@@ -72,6 +77,7 @@ interface GeneratedModuleManifest {
   kind: ModuleKind;
   apiVersion: number;
   tags: string[];
+  coreCapabilities: ModuleCoreCapability[];
   dependsOn: ModuleDependency[];
   exports: ModuleExports;
   registerAsSpaceInTopBar: boolean;
@@ -108,6 +114,11 @@ const schemaPath = path.join(
   "module.manifest.schema.json",
 );
 const namespacePattern = /^[a-z][a-z0-9]*(?:\.[a-z0-9]+)+$/;
+const DEFAULT_CORE_CAPABILITIES: ModuleCoreCapability[] = [
+  "projects",
+  "contentEditor",
+  "toolRegistry",
+];
 
 // =============================================================================
 // Utilities
@@ -252,6 +263,7 @@ function normalizeToV2(
     kind: parsed.kind ?? "space",
     apiVersion,
     tags: parsed.tags ?? [],
+    coreCapabilities: parsed.coreCapabilities ?? DEFAULT_CORE_CAPABILITIES,
     dependsOn,
     exports: {
       services: parsed.exports?.services ?? [],
@@ -595,6 +607,7 @@ function serializeModules(modules: GeneratedModuleManifest[]): string {
   const interfaceBlock = `// V2 Types
 export type ModuleKind = "space" | "service" | "integration" | "widget" | "system";
 export type ServiceExportKind = "http" | "bridge" | "local";
+export type ModuleCoreCapability = "projects" | "contentEditor" | "toolRegistry";
 
 export interface ModuleDependency {
     id: string;
@@ -628,6 +641,7 @@ export interface GeneratedModuleManifest {
     kind: ModuleKind;
     apiVersion: number;
     tags: string[];
+    coreCapabilities: ModuleCoreCapability[];
     dependsOn: ModuleDependency[];
     exports: ModuleExports;
     registerAsSpaceInTopBar: boolean;
@@ -643,6 +657,7 @@ export interface GeneratedModuleManifest {
       const dependsOnStr = JSON.stringify(mod.dependsOn);
       const exportsStr = JSON.stringify(mod.exports);
       const tagsStr = JSON.stringify(mod.tags);
+      const coreCapabilitiesStr = JSON.stringify(mod.coreCapabilities);
       const resolvedDepsStr = JSON.stringify(mod.resolvedDependencies);
 
       return `    {
@@ -654,6 +669,7 @@ export interface GeneratedModuleManifest {
         kind: "${mod.kind}",
         apiVersion: ${mod.apiVersion},
         tags: ${tagsStr},
+        coreCapabilities: ${coreCapabilitiesStr},
         dependsOn: ${dependsOnStr},
         exports: ${exportsStr},
         registerAsSpaceInTopBar: ${mod.registerAsSpaceInTopBar},

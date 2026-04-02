@@ -1,12 +1,12 @@
 import { X, Package, Ruler, FileText } from "lucide-react";
 import * as Accordion from "@radix-ui/react-accordion";
 import type {
-  ComponentFamilyType,
-  PackageVariantType,
-} from "@/../../src-ts/src/core/schemas/component-library.schema";
+  ComponentType,
+  ComponentVariantType,
+} from "@shared/types/component-library-schema.types";
 
 interface ComponentDetailPanelProps {
-  component: ComponentFamilyType;
+  component: ComponentType;
   onClose: () => void;
 }
 
@@ -14,8 +14,11 @@ export function ComponentDetailPanel({
   component,
   onClose,
 }: ComponentDetailPanelProps) {
+  const variants = getComponentVariants(component);
+  const defaultVariantId = getDefaultVariantId(component, variants);
+
   // Group variants by size/dimensions
-  const variantsBySize = groupVariantsBySize(component.packageVariants || []);
+  const variantsBySize = groupVariantsBySize(variants);
 
   return (
     <div className="fixed inset-y-0 right-0 w-[480px] border-l border-border-default bg-bg-secondary shadow-xl flex flex-col z-50">
@@ -75,7 +78,7 @@ export function ComponentDetailPanel({
         <section className="border-b border-border-default p-4">
           <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-text-primary">
             <Package className="h-4 w-4" />
-            Package Variants ({component.packageVariants?.length || 0})
+            Package Variants ({variants.length})
           </h3>
           <Accordion.Root type="single" collapsible>
             {Object.entries(variantsBySize).map(([sizeKey, variants]) => (
@@ -110,7 +113,7 @@ export function ComponentDetailPanel({
                         key={variant.id}
                         variant={variant}
                         isDefault={
-                          variant.id === component.defaultPackageVariantId
+                          variant.id === defaultVariantId
                         }
                       />
                     ))}
@@ -130,7 +133,7 @@ function VariantCard({
   variant,
   isDefault,
 }: {
-  variant: PackageVariantType;
+  variant: ComponentVariantType;
   isDefault: boolean;
 }) {
   return (
@@ -193,9 +196,9 @@ function VariantCard({
 }
 
 function groupVariantsBySize(
-  variants: PackageVariantType[],
-): Record<string, PackageVariantType[]> {
-  const groups: Record<string, PackageVariantType[]> = {};
+  variants: ComponentVariantType[],
+): Record<string, ComponentVariantType[]> {
+  const groups: Record<string, ComponentVariantType[]> = {};
 
   for (const variant of variants) {
     let key = "Other";
@@ -221,4 +224,20 @@ function groupVariantsBySize(
   }
 
   return groups;
+}
+
+function getComponentVariants(component: ComponentType): ComponentVariantType[] {
+  return component.variants;
+}
+
+function getDefaultVariantId(
+  component: ComponentType,
+  variants: ComponentVariantType[],
+): string | null {
+  return (
+    component.defaultVariantId ??
+    variants.find((variant) => variant.isDefault)?.id ??
+    variants[0]?.id ??
+    null
+  );
 }

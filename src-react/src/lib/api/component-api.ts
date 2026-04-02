@@ -1,9 +1,9 @@
-import { customFetch, getBackendURL } from "@/../../src-ts/shared/sdk/mutator";
+import { customFetch, getBackendURL } from "@shared/sdk/mutator";
 import type { MountType } from "@shared/types/component-library.types";
 import type {
-  ComponentFamilyType,
+  ComponentType as SharedComponentType,
   ComponentVariantType,
-} from "@/../../src-ts/src/core/schemas/component-library.schema";
+} from "@shared/types/component-library-schema.types";
 
 interface ApiResponse<T> {
   ok: boolean;
@@ -29,15 +29,13 @@ function unwrapResponse<T>(response: ApiResponse<T>): T {
 }
 
 export type ComponentScope = "built_in" | "workspace";
-export type ComponentType = ComponentFamilyType;
+export type ComponentType = SharedComponentType;
 export type ComponentVariant = ComponentVariantType;
 export type { MountType };
 
 type WorkspaceComponentVariantPayload = Partial<ComponentVariant> & {
   footprintOptions?: ComponentVariant["footprintOptions"];
-  footprints?: ComponentVariant["footprints"];
   defaultFootprintOptionId?: string | null;
-  defaultFootprintId?: string | null;
 };
 
 type WorkspaceComponentPayload = {
@@ -48,14 +46,12 @@ type WorkspaceComponentPayload = {
   categoryPath?: string | null;
   tags?: string[];
   variants?: WorkspaceComponentVariantPayload[];
-  packageVariants?: WorkspaceComponentVariantPayload[];
   defaultVariantId?: string | null;
-  defaultPackageVariantId?: string | null;
 };
 
 export interface ComponentWorkspaceRecord {
   id: string;
-  familyId: string | null;
+  componentId: string | null;
   wizardStep: number;
   payload: Partial<ComponentType>;
   warnings: unknown[];
@@ -74,6 +70,18 @@ function buildQuery(params: Record<string, string | undefined>): string {
 
   const queryString = query.toString();
   return queryString ? `?${queryString}` : "";
+}
+
+function createCanonicalKey(displayLabel?: string): string {
+  const base = (displayLabel ?? "component")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const suffix =
+    globalThis.crypto?.randomUUID?.().slice(0, 8) ?? Date.now().toString(36);
+
+  return `${base || "component"}-${suffix}`;
 }
 
 async function fetchComponent(id: string): Promise<ComponentType> {
@@ -99,6 +107,48 @@ function ensureSymbolData(
   );
 }
 
+function resolveVariantFootprints(
+  variant: ComponentVariant,
+): ComponentVariant["footprintOptions"] {
+  return variant.footprintOptions;
+}
+
+function normalizeVariant(variant: ComponentVariant): ComponentVariant {
+  const footprintOptions = resolveVariantFootprints(variant);
+  const defaultFootprintOptionId =
+    variant.defaultFootprintOptionId ??
+    footprintOptions.find((entry) => entry.isDefault)?.id ??
+    footprintOptions[0]?.id ??
+    null;
+
+  return {
+    ...variant,
+    footprintOptions,
+    defaultFootprintOptionId,
+  };
+}
+
+function resolveComponentVariants(
+  component: ComponentType,
+): ComponentVariant[] {
+  return component.variants.map(normalizeVariant);
+}
+
+function normalizeComponent(component: ComponentType): ComponentType {
+  const variants = resolveComponentVariants(component);
+  const defaultVariantId =
+    component.defaultVariantId ??
+    variants.find((variant) => variant.isDefault)?.id ??
+    variants[0]?.id ??
+    null;
+
+  return {
+    ...component,
+    variants,
+    defaultVariantId,
+  };
+}
+
 function createPlaceholderVariant(
   payload?: WorkspaceComponentPayload,
 ): WorkspaceComponentVariantPayload {
@@ -112,23 +162,21 @@ function createPlaceholderVariant(
     isDefault: true,
     pinRemapTable: null,
     footprintOptions: [],
-    footprints: [],
     defaultFootprintOptionId: null,
-    defaultFootprintId: null,
   };
 }
 
 function getRequestedVariants(
   payload?: WorkspaceComponentPayload,
 ): WorkspaceComponentVariantPayload[] {
-  const variants = payload?.packageVariants ?? payload?.variants ?? [];
+  const variants = payload?.variants ?? [];
   return variants.length > 0 ? variants : [createPlaceholderVariant(payload)];
 }
 
 function toWorkspaceRecord(component: ComponentType): ComponentWorkspaceRecord {
   return {
     id: component.id,
-    familyId: component.id,
+    componentId: component.id,
     wizardStep: 0,
     payload: component,
     warnings: [],
@@ -152,10 +200,9 @@ function extractComponentUpdates(
   if (payload.categoryPath !== undefined)
     updates.categoryPath = payload.categoryPath;
   if (payload.tags !== undefined) updates.tags = payload.tags;
-  if (payload.defaultVariantId !== undefined)
-    updates.defaultVariantId = payload.defaultVariantId;
-  if (payload.defaultPackageVariantId !== undefined) {
-    updates.defaultPackageVariantId = payload.defaultPackageVariantId;
+  const defaultVariantId = payload.defaultVariantId;
+  if (defaultVariantId !== undefined) {
+    updates.defaultVariantId = defaultVariantId;
   }
 
   return updates;
@@ -164,7 +211,7 @@ function extractComponentUpdates(
 function getPrimaryVariantPayload(
   payload: WorkspaceComponentPayload,
 ): WorkspaceComponentVariantPayload | null {
-  const variants = payload.packageVariants ?? payload.variants ?? [];
+  const variants = payload.variants ?? [];
   return variants[0] ?? null;
 }
 
@@ -184,9 +231,8 @@ async function syncWorkspaceComponent(
   }
 
   const currentVariant =
-    component.packageVariants.find(
-      (variant) => variant.id === component.defaultPackageVariantId,
-    ) ?? component.packageVariants[0];
+    component.variants.find((variant) => variant.id === component.defaultVariantId) ??
+    component.variants[0];
 
   if (currentVariant) {
     await updateComponentVariant(id, currentVariant.id, {
@@ -198,13 +244,11 @@ async function syncWorkspaceComponent(
       dimensions: primaryVariant.dimensions,
       isDefault: true,
       pinRemapTable: primaryVariant.pinRemapTable,
-      footprints: primaryVariant.footprints,
       footprintOptions: primaryVariant.footprintOptions,
-      defaultFootprintId: primaryVariant.defaultFootprintId,
       defaultFootprintOptionId: primaryVariant.defaultFootprintOptionId,
     });
     component = await getComponent(id);
-    if (component.defaultPackageVariantId !== currentVariant.id) {
+    if (component.defaultVariantId !== currentVariant.id) {
       component = await setDefaultComponentVariant(id, currentVariant.id);
     }
     return component;
@@ -233,32 +277,36 @@ export async function listComponents(filters?: {
       mountType: filters?.mountType,
     })}`,
   );
-  return unwrapResponse(response).components;
+  return unwrapResponse(response).components.map(normalizeComponent);
 }
 
 export async function getComponent(id: string): Promise<ComponentType> {
-  return fetchComponent(id);
+  const component = await fetchComponent(id);
+  return normalizeComponent(component);
 }
 
 export async function createComponent(
   payload: Partial<ComponentType> | WorkspaceComponentPayload,
 ): Promise<ComponentType> {
+  const canonicalKey =
+    payload.canonicalKey?.trim() || createCanonicalKey(payload.displayLabel);
+
   const response = await customFetch<ApiResponse<{ component: ComponentType }>>(
     "/api/components",
     {
       method: "POST",
       body: JSON.stringify({
-        canonicalKey: payload.canonicalKey,
+        canonicalKey,
         displayLabel: payload.displayLabel,
         description: payload.description,
         symbolData: ensureSymbolData(payload.symbolData),
         categoryPath: payload.categoryPath,
         tags: payload.tags,
-        packageVariants: getRequestedVariants(payload),
+        variants: getRequestedVariants(payload),
       }),
     },
   );
-  return unwrapResponse(response).component;
+  return normalizeComponent(unwrapResponse(response).component);
 }
 
 export async function updateComponent(
@@ -272,7 +320,7 @@ export async function updateComponent(
       body: JSON.stringify(updates),
     },
   );
-  return unwrapResponse(response).component;
+  return normalizeComponent(unwrapResponse(response).component);
 }
 
 export async function deleteComponent(id: string): Promise<void> {
@@ -362,18 +410,7 @@ export async function setDefaultComponentVariant(
       body: JSON.stringify({ variantId }),
     },
   );
-  return unwrapResponse(response).component;
-}
-
-export async function listComponentFamilies(
-  _scope?: ComponentScope,
-  search?: string,
-): Promise<ComponentType[]> {
-  return listComponents({ search });
-}
-
-export async function getComponentFamily(id: string): Promise<ComponentType> {
-  return getComponent(id);
+  return normalizeComponent(unwrapResponse(response).component);
 }
 
 export interface CategoryNode {
@@ -390,23 +427,7 @@ export async function getComponentCategories(): Promise<CategoryNode[]> {
   return unwrapResponse(response).categories;
 }
 
-export async function updateComponentFamily(
-  id: string,
-  updates: {
-    displayLabel?: string;
-    description?: string;
-    categoryPath?: string;
-    tags?: string[];
-  },
-): Promise<ComponentType> {
-  return updateComponent(id, updates);
-}
-
-export async function deleteComponentFamily(id: string): Promise<void> {
-  return deleteComponent(id);
-}
-
-export async function bulkDeleteComponentFamilies(
+export async function bulkDeleteComponents(
   ids: string[],
   options?: { forceUsed?: boolean },
 ): Promise<{
@@ -549,7 +570,7 @@ export async function createWorkspaceComponentRecord(
 export async function patchWorkspaceComponentRecord(
   id: string,
   updates: {
-    familyId?: string | null;
+    componentId?: string | null;
     payload?: WorkspaceComponentPayload;
   },
 ): Promise<ComponentWorkspaceRecord> {
@@ -574,9 +595,9 @@ export async function validateWorkspaceComponentRecord(
 
 export async function publishWorkspaceComponentRecord(
   id: string,
-): Promise<{ familyId: string; revision: unknown }> {
+): Promise<{ componentId: string; revision: unknown }> {
   const component = await getComponent(id);
-  return { familyId: component.id, revision: null };
+  return { componentId: component.id, revision: null };
 }
 
 export async function parseKicadSymbolImport(

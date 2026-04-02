@@ -39,7 +39,9 @@ export interface ModuleManifest {
     db: {
         prefix: string;
         migrations: boolean;
+        rawAccess: boolean;
     };
+    coreCapabilities: Array<"projects" | "contentEditor" | "toolRegistry">;
     ui: {
         moduleEntry: string;
         primarySpace?: string;

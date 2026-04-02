@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { customFetch } from "@/../../src-ts/shared/sdk/mutator";
+import { customFetch } from "@shared/sdk/mutator";
 import { useBackendURL } from "@/contexts/BackendURLContext";
 import type { FileRecord } from "@shared/types/file.types";
 

@@ -4,6 +4,7 @@
 // V2 Types
 export type ModuleKind = "space" | "service" | "integration" | "widget" | "system";
 export type ServiceExportKind = "http" | "bridge" | "local";
+export type ModuleCoreCapability = "projects" | "contentEditor" | "toolRegistry";
 
 export interface ModuleDependency {
     id: string;
@@ -37,6 +38,7 @@ export interface GeneratedModuleManifest {
     kind: ModuleKind;
     apiVersion: number;
     tags: string[];
+    coreCapabilities: ModuleCoreCapability[];
     dependsOn: ModuleDependency[];
     exports: ModuleExports;
     registerAsSpaceInTopBar: boolean;
@@ -55,6 +57,7 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
         kind: "space",
         apiVersion: 2,
         tags: ["productivity","notes","knowledge-base"],
+        coreCapabilities: ["contentEditor","toolRegistry"],
         dependsOn: [],
         exports: {"services":[{"id":"knowledge.pages","kind":"http","description":"Page CRUD API"},{"id":"knowledge.search","kind":"http","description":"Page search API"}],"widgets":[]},
         registerAsSpaceInTopBar: true,

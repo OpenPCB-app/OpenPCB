@@ -28,7 +28,9 @@ export function generateManifest(opts: ScaffoldOptions): ModuleManifest {
         db: {
             prefix: opts.id.replace(/-/g, "_"),
             migrations: true,
+            rawAccess: true,
         },
+        coreCapabilities: ["projects", "contentEditor", "toolRegistry"],
         ui: {
             moduleEntry: "ts/module.ts",
             primarySpace: opts.kind === "space" || opts.hasReactUI ? "react/Space.tsx" : undefined,

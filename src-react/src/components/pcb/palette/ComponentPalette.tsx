@@ -11,7 +11,7 @@ import {
   mapCategoryPathToCategory,
 } from "../symbol-display";
 import { useComponents } from "@/hooks/useComponents";
-import type { ComponentFamilyType } from "@/../../src-ts/src/core/schemas/component-library.schema";
+import type { ComponentType } from "@shared/types/component-library-schema.types";
 import type { SymbolCategory } from "../symbol-display";
 import {
   useSchematicInteractionController,
@@ -22,36 +22,36 @@ interface ComponentPaletteProps {
   controller?: SchematicInteractionController;
 }
 
-function groupFamiliesByCategory(
-  families: ComponentFamilyType[],
-): Map<SymbolCategory, ComponentFamilyType[]> {
-  const groups = new Map<SymbolCategory, ComponentFamilyType[]>();
+function groupComponentsByCategory(
+  components: ComponentType[],
+): Map<SymbolCategory, ComponentType[]> {
+  const groups = new Map<SymbolCategory, ComponentType[]>();
   for (const category of SYMBOL_CATEGORIES) {
     groups.set(category.key, []);
   }
-  for (const family of families) {
-    const category = mapCategoryPathToCategory(family.categoryPath ?? null);
+  for (const component of components) {
+    const category = mapCategoryPathToCategory(component.categoryPath ?? null);
     const group = groups.get(category);
     if (group) {
-      group.push(family);
+      group.push(component);
     }
   }
   return groups;
 }
 
 function FamilyItem({
-  family,
+  component,
   isActive,
   onDragStart,
   onDragEnd,
 }: {
-  family: ComponentFamilyType;
+  component: ComponentType;
   isActive: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
 }) {
-  const prefix = family.symbolData.referencePrefix;
-  const variantCount = family.packageVariants?.length ?? 0;
+  const prefix = component.symbolData.referencePrefix;
+  const variantCount = getComponentVariants(component).length;
   return (
     <Button
       type="button"
@@ -62,15 +62,15 @@ function FamilyItem({
       onDragStart={(event) => {
         onDragStart();
         event.dataTransfer.effectAllowed = "copy";
-        event.dataTransfer.setData(PALETTE_SYMBOL_KIND_MIME, family.id);
-        event.dataTransfer.setData("text/plain", family.id);
+        event.dataTransfer.setData(PALETTE_SYMBOL_KIND_MIME, component.id);
+        event.dataTransfer.setData("text/plain", component.id);
       }}
       onClick={onDragStart}
       onDragEnd={onDragEnd}
     >
       <GripVertical className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="text-xs font-medium">{family.displayLabel}</span>
+        <span className="text-xs font-medium">{component.displayLabel}</span>
         <span className="text-[10px] text-text-muted">
           {prefix} {variantCount > 1 ? `(${variantCount} variants)` : ""}
         </span>
@@ -166,8 +166,8 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
   const activeSymbolKind =
     session?.type === "placement" ? session.symbolKind : draggedSymbolKind;
 
-  const groupedFamilies = useMemo(
-    () => groupFamiliesByCategory(components),
+  const groupedComponents = useMemo(
+    () => groupComponentsByCategory(components),
     [components],
   );
 
@@ -180,9 +180,9 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
     setPaletteDragSymbolKind(kind);
     interactionController.beginPlacement(kind);
   };
-  const handleFamilyDragStart = (family: ComponentFamilyType) => {
-    setPaletteDragSymbolKind(family.id);
-    interactionController.beginPlacement(family.id);
+  const handleFamilyDragStart = (component: ComponentType) => {
+    setPaletteDragSymbolKind(component.id);
+    interactionController.beginPlacement(component.id);
   };
   const handleDragEnd = () => {
     setPaletteDragSymbolKind(null);
@@ -235,7 +235,7 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
         ) : (
           <div className="flex flex-col gap-1 p-2">
             {SYMBOL_CATEGORIES.map((category) => {
-              const families = groupedFamilies.get(category.key) ?? [];
+              const families = groupedComponents.get(category.key) ?? [];
               const embeddedItems = EMBEDDED_SYMBOLS.filter(
                 (item) => item.category === category.key,
               );
@@ -263,7 +263,7 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
                   {families.map((family) => (
                     <FamilyItem
                       key={family.id}
-                      family={family}
+                      component={family}
                       isActive={activeSymbolKind === family.id}
                       onDragStart={() => handleFamilyDragStart(family)}
                       onDragEnd={handleDragEnd}
@@ -277,4 +277,8 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
       </ScrollArea>
     </div>
   );
+}
+
+function getComponentVariants(component: ComponentType) {
+  return component.variants;
 }

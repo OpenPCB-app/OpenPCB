@@ -231,6 +231,7 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
             store.session.symbolKind,
             store.session.previewPosition,
             store.session.rotation,
+            store.componentLibraryIndex,
           ),
           store.chrome.viewport,
           { preview: true, colors: symbolColors },

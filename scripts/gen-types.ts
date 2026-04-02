@@ -21,8 +21,8 @@ interface ModuleTarget {
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), "..");
 const coreManifestPath = path.join(repoRoot, "src-tauri", "Cargo.toml");
-const tauriBindingsPath = path.join(repoRoot, "src-ts", "core", "generated", "tauri-bindings.ts");
-const generatedDir = path.join(repoRoot, "src-ts", "core", "generated", "types");
+const tauriBindingsPath = path.join(repoRoot, "src-ts", "shared", "generated", "tauri-bindings.ts");
+const generatedDir = path.join(repoRoot, "src-ts", "shared", "generated", "types");
 const generatedIndexPath = path.join(generatedDir, "index.ts");
 const coreTypesFile = path.join(generatedDir, "core.ts");
 const modulesDir = path.join(repoRoot, "modules");

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { setBackendURL } from "@/../../src-ts/shared/sdk/mutator";
+import { setBackendURL } from "@shared/sdk/mutator";
 
 interface BackendReadyPayload {
     url: string;
@@ -76,7 +76,7 @@ export const BackendURLProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         // Listen for backend-ready event from Rust
         const setupListener = async () => {
             const eventApi = await import("@tauri-apps/api/event");
-            const tauriBindings = await import("@/../../src-ts/shared/generated/tauri-bindings");
+            const tauriBindings = await import("@shared/generated/tauri-bindings");
 
             const unlisten = await eventApi.listen<BackendReadyPayload>("backend-ready", (event) => {
                 if (cancelled) return;

@@ -29,8 +29,8 @@ const baseComponent = {
     bodyGraphics: [],
     rawKicadSource: null,
   },
-  packageVariants: [],
-  defaultPackageVariantId: null,
+  variants: [],
+  defaultVariantId: null,
   tags: ["analog"],
 };
 

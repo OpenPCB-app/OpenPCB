@@ -1,4 +1,4 @@
-import { commands } from "@/../../src-ts/shared/generated/tauri-bindings";
+import { commands } from "@shared/generated/tauri-bindings";
 
 type BridgeResult = { status: "ok"; result: any } | { status: "error"; error: { message: string } };
 

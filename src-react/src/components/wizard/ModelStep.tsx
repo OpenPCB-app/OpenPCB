@@ -3,7 +3,7 @@ import { Upload } from "lucide-react";
 import { useComponentWizardStore } from "@/stores/component-wizard-store";
 import { useAppStore } from "@/stores/app-store";
 import { toast } from "@/components/ui/use-toast";
-import * as fileClient from "@/../../src-ts/shared/sdk/file-client";
+import * as fileClient from "@shared/sdk/file-client";
 import { StepViewer } from "@/components/3d-viewer/StepViewer";
 
 export function ModelStep() {

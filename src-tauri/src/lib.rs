@@ -21,7 +21,7 @@ use sidecar::bun_ts::BunBridge as _;
 #[allow(unused_imports)]
 use secrets_bridge::SecretsBridge as _;
 
-pub const SPECTA_EXPORT_PATH: &str = "../src-ts/core/generated/tauri-bindings.ts";
+pub const SPECTA_EXPORT_PATH: &str = "../src-ts/shared/generated/tauri-bindings.ts";
 
 pub fn create_specta_builder() -> SpectaBuilder<tauri::Wry> {
     SpectaBuilder::<tauri::Wry>::new().commands(collect_commands![crate::bridge_invoke,])

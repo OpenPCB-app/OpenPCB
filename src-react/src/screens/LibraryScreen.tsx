@@ -15,7 +15,7 @@ import { useNavigationStore } from "@/stores/navigation-store";
 import { UnifiedImportModal } from "@/components/unified-import/UnifiedImportModal";
 import { ComponentWizard } from "@/components/wizard/ComponentWizard";
 import {
-  bulkDeleteComponentFamilies,
+  bulkDeleteComponents,
   deleteComponentWithOptions,
   getComponentDeleteImpact,
   type MountType,
@@ -74,7 +74,7 @@ export function LibraryScreen() {
 
   // Handle successful publish from wizard
   const handlePublished = useCallback(
-    (_familyId: string) => {
+    (_componentId: string) => {
       // Refetch components to show the new one
       void refetchAndPropagate();
     },
@@ -121,7 +121,7 @@ export function LibraryScreen() {
     setBulkDeleteError(null);
 
     try {
-      const result = await bulkDeleteComponentFamilies(Array.from(selectedIds), {
+      const result = await bulkDeleteComponents(Array.from(selectedIds), {
         forceUsed: bulkForceUsedDelete,
       });
       void refetchAndPropagate();
@@ -354,6 +354,7 @@ export function LibraryScreen() {
             <>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
                 {components.map((component) => {
+                  const variants = getComponentVariants(component);
                   const isSelected = selectedIds.has(component.id);
 
                   return (
@@ -411,7 +412,7 @@ export function LibraryScreen() {
                             {component.description || "No description"}
                           </p>
                           <div className="mt-1.5 flex flex-wrap gap-1">
-                            {component.packageVariants.slice(0, 2).map((variant) => (
+                            {variants.slice(0, 2).map((variant) => (
                               <span
                                 key={variant.id}
                                 className="rounded bg-bg-input px-1.5 py-0.5 text-[9px] text-text-tertiary"
@@ -419,9 +420,9 @@ export function LibraryScreen() {
                                 {variant.humanLabel}
                               </span>
                             ))}
-                            {component.packageVariants.length > 2 && (
+                            {variants.length > 2 && (
                               <span className="text-[9px] text-text-tertiary">
-                                +{component.packageVariants.length - 2}
+                                +{variants.length - 2}
                               </span>
                             )}
                           </div>
@@ -580,4 +581,10 @@ export function LibraryScreen() {
       )}
     </>
   );
+}
+
+function getComponentVariants(
+  component: ReturnType<typeof useComponents>["components"][number],
+) {
+  return component.variants;
 }

@@ -30,12 +30,6 @@ type ComponentRequestVariant = {
   isDefault?: boolean;
   pinRemapTable?: Record<string, string> | null;
   footprintPayload?: Record<string, unknown> | null;
-  defaultFootprintId?: string | null;
-  footprints?: Array<{
-    id?: string;
-    isDefault?: boolean;
-    kicadPayload?: Record<string, unknown> | null;
-  }>;
   footprintOptions?: Array<{
     id?: string;
     isDefault?: boolean;
@@ -52,9 +46,7 @@ type ComponentRequestBody = {
   categoryPath?: string | null;
   tags?: string[];
   defaultVariantId?: string | null;
-  defaultPackageVariantId?: string | null;
   variants?: ComponentRequestVariant[];
-  packageVariants?: ComponentRequestVariant[];
 };
 
 export class ComponentController {
@@ -353,9 +345,8 @@ function parseUpdateComponentInput(body: ComponentRequestBody): UpdateComponentI
   }
   if (body.tags !== undefined) updates.tags = body.tags;
 
-  const defaultVariantId = body.defaultVariantId ?? body.defaultPackageVariantId;
-  if (defaultVariantId !== undefined) {
-    updates.defaultVariantId = defaultVariantId;
+  if (body.defaultVariantId !== undefined) {
+    updates.defaultVariantId = body.defaultVariantId;
   }
 
   return updates;
@@ -389,15 +380,12 @@ function parseUpdateVariantInput(variant: ComponentRequestVariant): UpdateVarian
   if (variant.pinRemapTable !== undefined) updates.pinRemapTable = variant.pinRemapTable;
   if (
     variant.footprintPayload !== undefined ||
-    variant.footprints !== undefined ||
     variant.footprintOptions !== undefined
   ) {
     updates.footprintPayload = getVariantFootprintPayload(variant);
   }
   if (
-    variant.defaultFootprintId !== undefined ||
     variant.defaultFootprintOptionId !== undefined ||
-    variant.footprints !== undefined ||
     variant.footprintOptions !== undefined
   ) {
     updates.defaultFootprintId = getVariantDefaultFootprintId(variant);
@@ -411,11 +399,8 @@ function serializeComponent(component: ComponentWithVariants) {
 
   return {
     ...component.component,
-    component_id: component.component.id,
     variants,
-    packageVariants: variants,
     defaultVariantId: component.component.defaultVariantId,
-    defaultPackageVariantId: component.component.defaultVariantId,
   };
 }
 
@@ -424,13 +409,14 @@ function serializeVariant(
 ) {
   const footprint = serializeFootprint(variant);
   const footprints = footprint ? [footprint] : [];
+  const {
+    footprintPayload: _footprintPayload,
+    defaultFootprintId: _defaultFootprintId,
+    ...variantWithoutLegacyFields
+  } = variant;
 
   return {
-    ...variant,
-    familyId: variant.componentId,
-    component_id: variant.componentId,
-    variant_id: variant.id,
-    footprints,
+    ...variantWithoutLegacyFields,
     footprintOptions: footprints,
     defaultFootprintOptionId: variant.defaultFootprintId ?? footprint?.id ?? null,
   };
@@ -444,9 +430,7 @@ function serializeFootprint(variant: ComponentWithVariants["variants"][number]) 
   const id = variant.defaultFootprintId ?? variant.id;
   return {
     id,
-    footprint_id: id,
     variantId: variant.id,
-    variant_id: variant.id,
     label: "Default",
     isDefault: true,
     kicadPayload: variant.footprintPayload,
@@ -457,7 +441,7 @@ function serializeFootprint(variant: ComponentWithVariants["variants"][number]) 
 }
 
 function getRequestVariants(body: ComponentRequestBody): ComponentRequestVariant[] {
-  return body.packageVariants ?? body.variants ?? [];
+  return body.variants ?? [];
 }
 
 function getVariantFootprintPayload(
@@ -467,9 +451,9 @@ function getVariantFootprintPayload(
     return variant.footprintPayload;
   }
 
-  const footprint = [...(variant.footprintOptions ?? []), ...(variant.footprints ?? [])].find(
+  const footprint = variant.footprintOptions?.find(
     (entry) => entry.isDefault,
-  ) ?? variant.footprintOptions?.[0] ?? variant.footprints?.[0];
+  ) ?? variant.footprintOptions?.[0];
 
   return footprint?.kicadPayload ?? null;
 }
@@ -481,13 +465,9 @@ function getVariantDefaultFootprintId(
     return variant.defaultFootprintOptionId;
   }
 
-  if (variant.defaultFootprintId !== undefined) {
-    return variant.defaultFootprintId;
-  }
-
-  const footprint = [...(variant.footprintOptions ?? []), ...(variant.footprints ?? [])].find(
+  const footprint = variant.footprintOptions?.find(
     (entry) => entry.isDefault,
-  ) ?? variant.footprintOptions?.[0] ?? variant.footprints?.[0];
+  ) ?? variant.footprintOptions?.[0];
 
   return footprint?.id ?? null;
 }

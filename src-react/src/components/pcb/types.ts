@@ -30,6 +30,7 @@ export type EditorSchematicSymbol = SharedSchematicSymbol & {
   symbolKind: SymbolKind;
   componentId?: string;
   variantId?: string;
+  linkStatus?: "ok" | "missing";
   symbolTemplate?: SymbolTemplate | null;
   mirrored?: boolean;
   reference: string;
@@ -194,6 +195,7 @@ export function normalizeSymbolEntity(symbol: SymbolEntity): SymbolEntity {
     ...symbol,
     rotation: normalizeRotationValue(symbol.rotation),
     mirrored: symbol.mirrored ?? false,
+    symbolTemplate: symbol.symbolTemplate ?? "generic_ic",
     reference: normalizeReferenceValue(symbol.reference, symbol.id),
     componentId: normalizeOptionalString(symbol.componentId),
     variantId: normalizeOptionalString(symbol.variantId),
@@ -213,6 +215,7 @@ export function toEditorSchematicSymbol(
     symbolKind: inferSymbolKind(reference),
     componentId,
     variantId,
+    symbolTemplate: symbol.symbolTemplate ?? null,
     reference,
     rotation: normalizeRotationValue(symbol.rotation),
     mirrored: false,
@@ -283,6 +286,7 @@ export function toSchematicProjectDocument(
       return {
         id: s.id,
         libraryPartId: s.libraryPartId,
+        symbolTemplate: s.symbolTemplate ?? null,
         reference: s.reference,
         position: s.position,
         rotation: s.rotation,

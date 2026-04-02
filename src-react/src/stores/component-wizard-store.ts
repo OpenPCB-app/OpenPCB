@@ -64,7 +64,7 @@ export interface WizardDraftPayload {
   } | null;
   
   // Package variant (for full publish)
-  defaultPackageVariantId: string | null;
+  defaultVariantId: string | null;
   variants?: ComponentVariant[];
   componentReference?: ComponentReference | null;
   componentId?: Component["id"] | null;
@@ -73,7 +73,7 @@ export interface WizardDraftPayload {
 export interface ComponentWorkspaceRecord {
   id: string;
   payload: WizardDraftPayload;
-  familyId?: string | null;
+  componentId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -147,7 +147,7 @@ function createEmptyDraft(): WizardDraftPayload {
     displayLabel: "",
     description: "",
     symbolData: null,
-    defaultPackageVariantId: null,
+    defaultVariantId: null,
     footprintData: null,
     modelData: null,
     specs: null,

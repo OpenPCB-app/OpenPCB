@@ -14,8 +14,7 @@
  */
 
 import type { DatabaseAccess } from '../../../db';
-import type { Task as DbTask, TaskMetadata, MessageTaskResultData } from '../../../db/schema/task';
-import type { MessageContent } from '../../../db/schema/message';
+import type { Task as DbTask } from '../../../db/schema/task';
 import type { ProviderRegistry } from '../../../infrastructure/ai-providers/registry';
 import { getModelLoadCache, initializeModelLoadCache } from '../../../infrastructure/cache/model-load-cache';
 import { TaskSystem, type MessageTaskSpec, type LoadTaskSpec, type TaskFilter, type TaskEvent, initializeTaskSystem } from '../task-system';
@@ -24,6 +23,9 @@ import { TaskQueueManager, initializeTaskQueueManager, type QueueStatus, type Qu
 import { TaskExecutor, type ExecutorConfig, type ExecutionEvent, type ExecutionEventType } from './task-executor';
 import { ChatTaskLock, initializeChatTaskLock } from '../chat-task-lock';
 import { ChunkBuffer, initializeChunkBuffer } from './chunk-buffer';
+import { persistAssistantMessageForTask } from './assistant-message-persistence';
+import { TaskStartupRecovery } from './task-startup-recovery';
+import { TaskLoadDependencyCoordinator } from './task-load-dependency-coordinator';
 import type { ToolDispatcher } from '../tools/tool-dispatcher';
 import { LicenseUtil } from '../license-util';
 
@@ -65,6 +67,8 @@ export class TaskOrchestrator {
   private executor: TaskExecutor;
   private chatTaskLock: ChatTaskLock;
   private chunkBuffer: ChunkBuffer;
+  private startupRecovery: TaskStartupRecovery;
+  private loadDependencyCoordinator: TaskLoadDependencyCoordinator;
   private debug: boolean;
 
   constructor(
@@ -121,6 +125,28 @@ export class TaskOrchestrator {
     // Wire up executor events to task system
     this.executor.on((event) => {
       this.handleExecutorEvent(event);
+    });
+
+    this.startupRecovery = new TaskStartupRecovery({
+      db: this.db,
+      taskSystem: this.taskSystem,
+      queueManager: this.queueManager,
+      chatTaskLock: this.chatTaskLock,
+      ensureChatTaskQueued: this.ensureChatTaskQueued.bind(this),
+      startChatQueuedTask: this.startChatQueuedTask.bind(this),
+      enqueueTask: this.enqueueTask.bind(this),
+      log: this.log.bind(this),
+    });
+
+    this.loadDependencyCoordinator = new TaskLoadDependencyCoordinator({
+      db: this.db,
+      taskSystem: this.taskSystem,
+      chatTaskLock: this.chatTaskLock,
+      enqueueTask: this.enqueueTask.bind(this),
+      enqueueTaskSync: this.enqueueTaskSync.bind(this),
+      startMessageTaskIfReady: this.startMessageTaskIfReady.bind(this),
+      startChatQueuedTaskIfReady: this.startChatQueuedTaskIfReady.bind(this),
+      log: this.log.bind(this),
     });
 
     this.log('Orchestrator initialized');
@@ -413,90 +439,7 @@ export class TaskOrchestrator {
    * Resume tasks after application restart
    */
   async resumeTasksOnStartup(): Promise<void> {
-    // Mark interrupted tasks as paused
-    await this.taskSystem.resumeTasksOnStartup();
-
-    // Restore chat locks in task creation order
-    const messageTasks = await this.db.tasks.findByTypeAndStatus('message', [
-      'pending',
-      'waiting',
-      'queued',
-      'paused',
-    ]);
-
-    const sortedMessageTasks = [...messageTasks].sort(
-      (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
-    );
-
-    for (const task of sortedMessageTasks) {
-      if (task.chatId) {
-        this.ensureChatTaskQueued(task.chatId, task.id);
-      }
-    }
-
-    // Enqueue only the active task per chat (respecting dependency order)
-    for (const task of sortedMessageTasks) {
-      if (!task.chatId) continue;
-
-      const activeTaskId = this.chatTaskLock.getActive(task.chatId);
-      if (activeTaskId !== task.id) {
-        const waitReason = task.dependsOn ? 'model_loading' : 'chat_serialized';
-        const currentWaitReason = (task.metadata as TaskMetadata | null)?.waitReason;
-        if (task.status !== 'waiting' || currentWaitReason !== waitReason) {
-          await this.db.tasks.update(task.id, {
-            status: 'waiting',
-            metadata: {
-              ...((task.metadata as Record<string, unknown>) ?? {}),
-              waitReason,
-            },
-          });
-        }
-        continue;
-      }
-
-      if (task.dependsOn) {
-        await this.db.tasks.update(task.id, {
-          status: 'waiting',
-          metadata: {
-            ...((task.metadata as Record<string, unknown>) ?? {}),
-            waitReason: 'model_loading',
-          },
-        });
-        continue;
-      }
-
-      await this.startChatQueuedTask(task.chatId, task.id);
-    }
-
-    // Re-enqueue queued non-message tasks
-    const queuedTasks = await this.db.tasks.findByStatus(['queued']);
-    for (const task of queuedTasks) {
-      if (task.type === 'message') continue;
-      this.queueManager.enqueue(task);
-    }
-
-    // Re-enqueue paused non-message tasks that should retry
-    const pausedTasks = await this.db.tasks.findByStatus(['paused']);
-    for (const task of pausedTasks) {
-      if (task.type === 'message') continue;
-      if ((task.retryCount ?? 0) < (task.maxRetries ?? 3)) {
-        // Check if dependency is resolved before re-enqueueing
-        if (task.dependsOn) {
-          const dep = await this.db.tasks.findById(task.dependsOn);
-          if (dep && dep.status !== 'completed') {
-            // Dependency not resolved - skip, will be enqueued when dep completes
-            this.log(`Skipping paused task ${task.id} - dependency ${task.dependsOn} not resolved`);
-            continue;
-          }
-        }
-        await this.enqueueTask({ ...task, status: 'queued' });
-      }
-    }
-
-    // Process all queues
-    await this.queueManager.processAllQueues();
-
-    this.log('Startup recovery complete');
+    await this.startupRecovery.resumeTasksOnStartup();
   }
 
   /**
@@ -575,67 +518,15 @@ export class TaskOrchestrator {
   }
 
   private async resolveLoadDependencies(loadTaskId: string): Promise<void> {
-    const waitingTasks = await this.db.tasks.findWaitingOn(loadTaskId);
-    for (const waitingTask of waitingTasks) {
-      if (waitingTask.type === 'message') {
-        await this.startMessageTaskIfReady(waitingTask, { clearDependency: true });
-        continue;
-      }
-
-      await this.db.tasks.update(waitingTask.id, { dependsOn: null });
-      await this.enqueueTask({ ...waitingTask, dependsOn: null });
-    }
+    await this.loadDependencyCoordinator.resolveLoadDependencies(loadTaskId);
   }
 
   private async ensureLoadTaskQueued(loadTaskId: string): Promise<void> {
-    const loadTask = await this.db.tasks.findById(loadTaskId);
-    if (!loadTask || loadTask.type !== 'load') {
-      return;
-    }
-
-    if (loadTask.status === 'queued') {
-      this.enqueueTaskSync(loadTask);
-      return;
-    }
-
-    if (loadTask.status === 'pending') {
-      await this.enqueueTask(loadTask);
-      return;
-    }
-
-    if (loadTask.status === 'paused' && (loadTask.retryCount ?? 0) < (loadTask.maxRetries ?? 3)) {
-      await this.taskSystem.retryTask(loadTask.id);
-      const updated = await this.db.tasks.findById(loadTask.id);
-      if (updated) {
-        this.enqueueTaskSync(updated);
-      }
-    }
+    await this.loadDependencyCoordinator.ensureLoadTaskQueued(loadTaskId);
   }
 
   private async cancelLoadDependencies(loadTaskId: string): Promise<void> {
-    const waitingTasks = await this.db.tasks.findWaitingOn(loadTaskId);
-    if (waitingTasks.length === 0) {
-      return;
-    }
-
-    await this.taskSystem.cascadeCancellation(
-      waitingTasks.map(task => task.id),
-      'parent_failed'
-    );
-
-    const affectedChats = new Set<string>();
-    for (const waitingTask of waitingTasks) {
-      if (!waitingTask.chatId) continue;
-      affectedChats.add(waitingTask.chatId);
-      this.chatTaskLock.cancel(waitingTask.chatId, waitingTask.id);
-    }
-
-    for (const chatId of affectedChats) {
-      const activeTaskId = this.chatTaskLock.getActive(chatId);
-      if (activeTaskId) {
-        await this.startChatQueuedTaskIfReady(chatId, activeTaskId);
-      }
-    }
+    await this.loadDependencyCoordinator.cancelLoadDependencies(loadTaskId);
   }
 
   private async releaseChatLockAndStartNext(task: DbTask): Promise<void> {
@@ -727,72 +618,7 @@ export class TaskOrchestrator {
   }
 
   private async ensureAssistantMessage(task: DbTask): Promise<void> {
-    if (task.type !== 'message' || !task.chatId) {
-      return;
-    }
-
-    const assistantMessageId = task.assistantMessageId;
-    if (!assistantMessageId) {
-      return;
-    }
-
-    const result = task.result as MessageTaskResultData | null;
-    const resultData = result?.data as { content?: string } | undefined;
-    let content = resultData?.content ?? '';
-
-    if (!content && task.status === 'failed' && task.error?.message) {
-      content = `Task failed: ${task.error.message}`;
-    }
-
-    const existingById = await this.db.messages.findById(assistantMessageId);
-
-    const metadata: Record<string, unknown> | undefined =
-      task.status === 'cancelled'
-        ? { incomplete: true, cancelled: true }
-        : task.status === 'failed'
-          ? { error: task.error?.message || 'Task failed', incomplete: true }
-          : undefined;
-
-    if (existingById) {
-      const existingContent = this.extractMessageText(existingById.content as MessageContent);
-      const mergedContent = content ? `${existingContent}${content}` : existingContent;
-
-      if (mergedContent !== existingContent || result?.tokensUsed || metadata) {
-        await this.chatManager.updateAssistantMessage(assistantMessageId, {
-          ...(mergedContent !== existingContent ? { content: mergedContent } : {}),
-          ...(result?.tokensUsed ? { tokens: result.tokensUsed } : {}),
-          ...(metadata ? { metadata } : {}),
-        });
-      }
-      return;
-    }
-
-    if (!content) {
-      return;
-    }
-
-    await this.chatManager.createAssistantMessage(task.chatId, {
-      id: assistantMessageId,
-      content,
-      taskId: task.id,
-      provider: task.provider,
-      model: task.model,
-      tokens: result?.tokensUsed,
-      metadata,
-    });
-  }
-
-  private extractMessageText(content: MessageContent): string {
-    if (content.type === 'text') {
-      return content.text ?? '';
-    }
-    if (content.type === 'multipart' && Array.isArray(content.parts)) {
-      return content.parts
-        .filter((part) => part.type === 'text' && typeof part.text === 'string')
-        .map((part) => part.text)
-        .join('');
-    }
-    return '';
+    await persistAssistantMessageForTask(this.db, this.chatManager, task);
   }
 
   /**

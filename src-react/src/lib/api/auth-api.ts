@@ -1,4 +1,4 @@
-import { customFetch } from "@/../../src-ts/shared/sdk/mutator";
+import { customFetch } from "@shared/sdk/mutator";
 
 export interface ApiResponse<T> {
   ok: boolean;

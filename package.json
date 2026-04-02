@@ -35,7 +35,7 @@
     "gen:openapi": "bun scripts/generate-openapi.ts",
     "gen:sdk:orval": "orval",
     "gen": "npm run modules:generate && npm run bindings:generate && npm run bridge:generate && npm run sdk:generate && npm run gen:openapi && npm run gen:sdk:orval",
-    "gen:check": "npm run gen && git diff --quiet -- src-react/src/generated src-react/src/bridge/generated || (echo 'Codegen not committed. Run npm run gen and commit generated files.' && git --no-pager diff -- src-react/src/generated src-react/src/bridge/generated && exit 1)",
+    "gen:check": "npm run gen && git diff --quiet -- src-react/src/generated src-ts/shared/generated openapi.json || (echo 'Codegen not committed. Run npm run gen and commit generated files.' && git --no-pager diff -- src-react/src/generated src-ts/shared/generated openapi.json && exit 1)",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun src-ts/scripts/run-migrations.ts",
     "db:push": "drizzle-kit push",

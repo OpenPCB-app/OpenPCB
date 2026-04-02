@@ -32,9 +32,7 @@ export interface SymbolData {
 
 export interface ComponentFootprint {
   id: string;
-  footprint_id?: string;
   variantId: string;
-  variant_id?: string;
   label: string;
   isDefault: boolean;
   kicadPayload: unknown | null;
@@ -50,9 +48,7 @@ export interface ComponentFootprint {
 
 export interface ComponentVariant {
   id: string;
-  variant_id?: string;
-  familyId: string;
-  component_id?: string;
+  componentId: string;
   canonicalCode: string;
   humanLabel: string;
   imperialAlias: string | null;
@@ -66,23 +62,18 @@ export interface ComponentVariant {
   isDefault: boolean;
   pinRemapTable: Record<string, string> | null;
   footprintOptions: ComponentFootprint[];
-  footprints?: ComponentFootprint[];
   defaultFootprintOptionId: string | null;
-  defaultFootprintId?: string | null;
 }
 
 export interface Component {
   id: string;
-  component_id?: string;
   canonicalKey: string;
   displayLabel: string;
   description: string;
   scope: ComponentScope;
   symbolData: SymbolData;
-  packageVariants: ComponentVariant[];
-  variants?: ComponentVariant[];
-  defaultPackageVariantId: string | null;
-  defaultVariantId?: string | null;
+  variants: ComponentVariant[];
+  defaultVariantId: string | null;
   categoryPath: string | null;
   tags: string[];
   createdAt?: string;
@@ -98,7 +89,7 @@ export interface ComponentReference {
 
 export interface ComponentWorkspaceRecord {
   id: string;
-  familyId: string | null;
+  componentId: string | null;
   wizardStep: number;
   payload: Partial<Component>;
   warnings: unknown[];

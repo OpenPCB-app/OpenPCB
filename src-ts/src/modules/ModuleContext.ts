@@ -12,7 +12,6 @@ import type {
 } from "shared/types";
 import type { EventBus } from "./EventBus";
 import type { Logger } from "./Logger";
-import type { ModuleDbHandle } from "../db/module-handle";
 
 /**
  * Runtime module context type
@@ -33,7 +32,7 @@ export function createModuleContext(
   manifest: ModuleManifest,
   logger: Logger,
   events: EventBus,
-  db: ModuleDbHandle,
+  db: ModuleContextInterface["db"],
   mentions: MentionRegistration,
   core: ModuleContextInterface["core"],
 ): ModuleContext {

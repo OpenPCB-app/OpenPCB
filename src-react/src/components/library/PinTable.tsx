@@ -1,9 +1,9 @@
 import { useState } from "react";
-import type { ComponentFamilyType } from "../../../../src-ts/src/core/schemas/component-library.schema";
+import type { ComponentType } from "@shared/types/component-library-schema.types";
 import { Search } from "lucide-react";
 
 interface PinTableProps {
-  pins?: ComponentFamilyType['symbolData']['pinDefinitions'];
+  pins?: ComponentType["symbolData"]["pinDefinitions"];
 }
 
 const ELECTRICAL_TYPE_LABELS: Record<string, string> = {
@@ -71,7 +71,7 @@ export function PinTable({ pins }: PinTableProps) {
           </thead>
           <tbody className="divide-y divide-border-default">
             {filteredPins.map((pin, index) => (
-              <tr key={index} className="hover:bg-bg-hover">
+              <tr key={`${pin.name}-${pin.electricalType}`} className="hover:bg-bg-hover">
                 <td className="px-3 py-2 text-text-tertiary">{index + 1}</td>
                 <td className="px-3 py-2 text-text-primary font-medium">{pin.name}</td>
                 <td className="px-3 py-2">

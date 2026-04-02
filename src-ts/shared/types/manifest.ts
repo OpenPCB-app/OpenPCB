@@ -5,7 +5,14 @@
  * The full manifest may contain additional properties defined in the schema.
  */
 
-import type { ModuleKind } from "./modules";
+import type { ModuleCoreCapability, ModuleKind } from "./modules";
+
+export interface ModuleDbConfig {
+    migrations?: boolean | string;
+    prefix?: string;
+    /** Allow module access to raw db instance via ctx.db.getRawDb() */
+    rawAccess?: boolean;
+}
 
 /**
  * Module Manifest
@@ -39,4 +46,10 @@ export interface ModuleManifest {
 
     /** Optional module description */
     description?: string;
+
+    /** Optional module database settings */
+    db?: ModuleDbConfig;
+
+    /** Declared host capabilities requested by module */
+    coreCapabilities?: ModuleCoreCapability[];
 }

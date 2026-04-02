@@ -19,6 +19,7 @@ import {
 import { WsRouter } from "../transport/ws/WsRouter";
 import { WsManager } from "../transport/ws/WsManager";
 import type { ModuleDefinitionV2, MentionRegistration, ContentTarget as ModuleContentTarget } from "shared/types";
+import type { ModuleCoreCapability } from "shared/types";
 import type { DatabaseAccess } from "../db";
 import { withTimeout, DEFAULT_TIMEOUTS } from "../core/utils/timeout";
 import { MentionRegistry } from "../domain/services/mention-registry";
@@ -44,6 +45,12 @@ interface LoadedModule {
   wsRouter: WsRouter;
   wsManager: WsManager;
 }
+
+const DEFAULT_CORE_CAPABILITIES: ModuleCoreCapability[] = [
+  "projects",
+  "contentEditor",
+  "toolRegistry",
+];
 
 /**
  * Module loader - manages module lifecycle
@@ -106,6 +113,58 @@ export class ModuleLoader {
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString(),
       deletedAt: project.deletedAt ? project.deletedAt.toISOString() : null,
+    };
+  }
+
+  private resolveCoreCapabilities(
+    manifest: ModuleManifest,
+    logger: Logger,
+  ): Set<ModuleCoreCapability> {
+    const declared = manifest.coreCapabilities;
+    if (!declared || declared.length === 0) {
+      logger.warn(
+        "Manifest missing coreCapabilities; defaulting to full core capability set",
+      );
+      return new Set(DEFAULT_CORE_CAPABILITIES);
+    }
+
+    const allowed = new Set(DEFAULT_CORE_CAPABILITIES);
+    const unknown = declared.filter((cap) => !allowed.has(cap));
+    if (unknown.length > 0) {
+      logger.warn(
+        `Ignoring unknown core capabilities: ${unknown.join(", ")}`,
+      );
+    }
+
+    return new Set(declared.filter((cap) => allowed.has(cap)));
+  }
+
+  private createScopedDbHandle(
+    moduleId: string,
+    manifest: ModuleManifest,
+    dbHandle: ModuleContext["db"],
+    logger: Logger,
+  ): ModuleContext["db"] {
+    const allowRawAccess = manifest.db?.rawAccess !== false;
+    if (allowRawAccess) {
+      return dbHandle;
+    }
+
+    logger.info("Raw DB access disabled by manifest (db.rawAccess=false)");
+    return {
+      getRawDb: () => {
+        throw new Error(
+          `Module '${moduleId}' has db.rawAccess=false; raw db access is disabled`,
+        );
+      },
+      query: (sqlTemplate, tableName, params) =>
+        dbHandle.query(sqlTemplate, tableName, params),
+      execute: (sqlTemplate, tableName, params) =>
+        dbHandle.execute(sqlTemplate, tableName, params),
+      createTable: (tableName, columnDefinitions) =>
+        dbHandle.createTable(tableName, columnDefinitions),
+      dropTable: (tableName) => dbHandle.dropTable(tableName),
+      transaction: (fn, options) => dbHandle.transaction(fn, options),
     };
   }
 
@@ -179,6 +238,12 @@ export class ModuleLoader {
     const logger = new Logger(`module:${moduleId}`);
     const events = new EventBus();
     const dbHandle = this.db.getModuleHandle(moduleId);
+    const scopedDbHandle = this.createScopedDbHandle(
+      moduleId,
+      manifest,
+      dbHandle,
+      logger,
+    );
     const mentionRegistry = MentionRegistry.get();
     const mentions: MentionRegistration = {
       register: (provider) => mentionRegistry.register(provider),
@@ -198,8 +263,11 @@ export class ModuleLoader {
           return dispose;
         }
       : undefined;
-    const core = {
-      projects: {
+    const capabilities = this.resolveCoreCapabilities(manifest, logger);
+    const core: ModuleContext["core"] = {};
+
+    if (capabilities.has("projects")) {
+      core.projects = {
         list: async () => {
           const projects = await this.db.projects.findByWorkspace(
             DEFAULT_WORKSPACE_ID,
@@ -211,32 +279,47 @@ export class ModuleLoader {
           return project ? this.toProjectRecord(project) : null;
         },
         current: () => null,
-      },
-      contentEditor: contentTargetRegistry
-        ? {
-            registerTarget: (target: ModuleContentTarget) => {
-              if (!this.isDomainContentTarget(target)) {
-                throw new Error("Invalid content target registration");
-              }
-              contentTargetRegistry.register(target);
-            },
-            unregisterTarget: (targetType: string) => {
-              contentTargetRegistry.unregister(targetType);
-            },
-          }
-        : undefined,
-      toolRegistry: registerTool
-        ? {
-            registerTool,
-          }
-        : undefined,
-    };
+      };
+    }
+
+    if (capabilities.has("contentEditor")) {
+      if (!contentTargetRegistry) {
+        logger.warn(
+          "Module requested contentEditor capability, but content registry is unavailable",
+        );
+      } else {
+        core.contentEditor = {
+          registerTarget: (target: ModuleContentTarget) => {
+            if (!this.isDomainContentTarget(target)) {
+              throw new Error("Invalid content target registration");
+            }
+            contentTargetRegistry.register(target);
+          },
+          unregisterTarget: (targetType: string) => {
+            contentTargetRegistry.unregister(targetType);
+          },
+        };
+      }
+    }
+
+    if (capabilities.has("toolRegistry")) {
+      if (!registerTool) {
+        logger.warn(
+          "Module requested toolRegistry capability, but tool registry is unavailable",
+        );
+      } else {
+        core.toolRegistry = {
+          registerTool,
+        };
+      }
+    }
+
     const context = createModuleContext(
       moduleId,
       manifest,
       logger,
       events,
-      dbHandle,
+      scopedDbHandle,
       mentions,
       core,
     );

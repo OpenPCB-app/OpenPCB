@@ -17,6 +17,10 @@ import { SymbolPreview } from "./SymbolPreview";
 import { FootprintPreview } from "./FootprintPreview";
 import { Model3dPlaceholder } from "./Model3dPlaceholder";
 import { PinTable } from "./PinTable";
+import type {
+  ComponentType,
+  ComponentVariantType,
+} from "@shared/types/component-library-schema.types";
 
 export function ComponentDetailPage() {
   const navigateBack = useNavigationStore((state) => state.navigateBack);
@@ -58,12 +62,13 @@ export function ComponentDetailPage() {
       return;
     }
 
+    const variants = getComponentVariants(component);
+    const defaultVariantId = getDefaultVariantId(component, variants);
+
     const selectedVariant =
-      component.packageVariants.find((variant) => variant.id === selectedVariantId) ??
-      component.packageVariants.find(
-        (variant) => variant.id === component.defaultPackageVariantId,
-      ) ??
-      component.packageVariants[0] ??
+      variants.find((variant) => variant.id === selectedVariantId) ??
+      variants.find((variant) => variant.id === defaultVariantId) ??
+      variants[0] ??
       null;
 
     if (!selectedVariant) {
@@ -110,13 +115,16 @@ export function ComponentDetailPage() {
     );
   }
 
-  const selectedVariant = component.packageVariants.find(
+  const variants = getComponentVariants(component);
+  const defaultVariantId = getDefaultVariantId(component, variants);
+
+  const selectedVariant = variants.find(
     (variant) => variant.id === selectedVariantId,
   );
   const selectedFootprint = selectedVariant?.footprintOptions?.find(
     (footprint) => footprint.id === selectedFootprintId,
   );
-  const hasMultipleVariants = component.packageVariants.length > 1;
+  const hasMultipleVariants = variants.length > 1;
   const hasMultipleFootprints = (selectedVariant?.footprintOptions?.length ?? 0) > 1;
 
   const handleEditClick = () => {
@@ -170,7 +178,7 @@ export function ComponentDetailPage() {
   const handleVariantChange = (variantId: string) => {
     setSelectedVariantId(variantId);
 
-    const nextVariant = component.packageVariants.find(
+    const nextVariant = variants.find(
       (variant) => variant.id === variantId,
     );
     const defaultFootprint =
@@ -410,9 +418,9 @@ export function ComponentDetailPage() {
                 onChange={(event) => handleVariantChange(event.target.value)}
                 className="w-full rounded-md border border-border-default bg-bg-input px-3 py-2 text-sm text-text-primary"
               >
-                {component.packageVariants.map((variant) => (
+                {variants.map((variant) => (
                   <option key={variant.id} value={variant.id}>
-                    {variant.humanLabel} {variant.id === component.defaultPackageVariantId ? "(default)" : ""}
+                    {variant.humanLabel} {variant.id === defaultVariantId ? "(default)" : ""}
                   </option>
                 ))}
               </select>
@@ -582,5 +590,21 @@ export function ComponentDetailPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function getComponentVariants(component: ComponentType): ComponentVariantType[] {
+  return component.variants;
+}
+
+function getDefaultVariantId(
+  component: ComponentType,
+  variants: ComponentVariantType[],
+): string | null {
+  return (
+    component.defaultVariantId ??
+    variants.find((variant) => variant.isDefault)?.id ??
+    variants[0]?.id ??
+    null
   );
 }

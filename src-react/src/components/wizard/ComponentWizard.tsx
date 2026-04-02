@@ -50,7 +50,7 @@ import { FootprintEditorStep, useFootprintEditorStore } from "@/components/footp
 
 interface ComponentWizardProps {
   onClose: () => void;
-  onPublished?: (familyId: string) => void;
+  onPublished?: (componentId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -298,7 +298,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
       });
 
       reset();
-      onPublished?.(result.familyId);
+      onPublished?.(result.componentId);
       onClose();
     } catch (err) {
       console.error("Publish failed:", err);
