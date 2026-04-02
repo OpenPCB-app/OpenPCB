@@ -48,7 +48,7 @@ import {
 interface PersistedDocumentState {
   document: SchematicDocument | null;
   projectId: string | null;
-  sheetId: string | null;
+  designId: string | null;
 }
 
 interface SchematicState {
@@ -95,7 +95,7 @@ interface SchematicState {
   setDocument: (doc: SchematicDocument | SchematicProjectDocument) => void;
   clearDocument: () => void;
   setComponentLibrary: (components: ComponentType[]) => void;
-  setProjectContext: (projectId: string | null, sheetId: string | null) => void;
+  setProjectContext: (projectId: string | null, designId: string | null) => void;
   setConnectivity: (conn: DerivedConnectivity | null) => void;
   setDocumentBounds: (bounds: Bounds | null) => void;
   setHitTestCache: (cache: HitTestCache) => void;
@@ -306,7 +306,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   persisted: {
     document: null,
     projectId: null,
-    sheetId: null,
+    designId: null,
   },
   derived: INITIAL_DERIVED_STATE,
   chrome: INITIAL_CHROME_STATE,
@@ -861,7 +861,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       persisted: {
         document: null,
         projectId: null,
-        sheetId: null,
+        designId: null,
       },
       derived: INITIAL_DERIVED_STATE,
       chrome: {
@@ -897,12 +897,12 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       };
     }),
 
-  setProjectContext: (projectId, sheetId) =>
+  setProjectContext: (projectId, designId) =>
     set((state) => ({
       persisted: {
         ...state.persisted,
         projectId,
-        sheetId,
+        designId,
       },
     })),
 

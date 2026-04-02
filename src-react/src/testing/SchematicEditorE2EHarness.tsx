@@ -92,7 +92,7 @@ function resetHarnessStore() {
     persisted: {
       document: TEST_DOCUMENT,
       projectId: "project-e2e",
-      sheetId: "sheet-e2e",
+      designId: TEST_DOCUMENT.id,
     },
     derived: {
       connectivity: null,

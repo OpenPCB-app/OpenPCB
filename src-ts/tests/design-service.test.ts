@@ -121,4 +121,80 @@ describe("DesignService", () => {
             }),
         ).rejects.toThrow("Design workspace must match project workspace");
     });
+
+    it("saveSheetContent persists schematic content", async () => {
+        const design = await service.create({
+            workspaceId,
+            projectId,
+            name: "Persistence Check",
+        });
+
+        await service.saveSheetContent(design.id, 0, {
+            id: design.id,
+            projectId,
+            updatedAt: new Date().toISOString(),
+            version: 1,
+            formatVersion: "pcb.schematic-project-document/v1",
+            title: "Sheet 1",
+            symbols: [
+                {
+                    id: "symbol-1",
+                    reference: "R1",
+                    position: { x: 0, y: 0 },
+                    pins: [
+                        { id: "pin-1", name: "1", position: { x: 0, y: 0 } },
+                        { id: "pin-2", name: "2", position: { x: 1000, y: 0 } },
+                    ],
+                    properties: { value: "10k" },
+                },
+            ],
+            wires: [
+                {
+                    id: "wire-1",
+                    points: [
+                        { x: 0, y: 0 },
+                        { x: 1000, y: 0 },
+                    ],
+                    sourcePinId: "pin-1",
+                    targetPinId: "pin-2",
+                    net: null,
+                },
+            ],
+            labels: [],
+        });
+
+        const saved = await service.getSheetContent(design.id, 0);
+        expect(saved).not.toBeNull();
+        expect(saved?.content.symbols).toHaveLength(1);
+        expect(saved?.content.wires).toHaveLength(1);
+    });
+
+    it("saveSheetContent bumps design updatedAt", async () => {
+        const design = await service.create({
+            workspaceId,
+            projectId,
+            name: "Timestamp Check",
+        });
+
+        const before = await service.get(design.id);
+        const beforeMs = new Date(before.updatedAt).getTime();
+
+        await new Promise((resolve) => setTimeout(resolve, 5));
+
+        await service.saveSheetContent(design.id, 0, {
+            id: design.id,
+            projectId,
+            updatedAt: new Date().toISOString(),
+            version: 1,
+            formatVersion: "pcb.schematic-project-document/v1",
+            title: "Sheet 1",
+            symbols: [],
+            wires: [],
+            labels: [],
+        });
+
+        const after = await service.get(design.id);
+        const afterMs = new Date(after.updatedAt).getTime();
+        expect(afterMs).toBeGreaterThan(beforeMs);
+    });
 });

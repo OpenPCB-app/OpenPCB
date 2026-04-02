@@ -1,6 +1,9 @@
 import type { DatabaseAccess } from "../../db";
+import { and, eq, isNull } from "drizzle-orm";
 import type { Design } from "../../db/schema/design";
 import type { DesignSheetRow } from "../../db/schema/design-sheet";
+import { design as designTable } from "../../db/schema/design";
+import { designSheet as designSheetTable } from "../../db/schema/design-sheet";
 import { NotFoundError, ValidationError } from "../../core/errors";
 import type {
   CreateDesignInput,
@@ -148,12 +151,69 @@ export class DesignService implements IDesignService {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-    const sheet = await this.db.designSheets.upsertContent(
-      designId,
-      sheetIndex,
-      content,
-      contentHash,
-    );
+    const now = new Date();
+    const sheet = await this.db.transaction(async (tx) => {
+      const client = tx.getClient();
+
+      const existing = await client
+        .select({ id: designSheetTable.id })
+        .from(designSheetTable)
+        .where(
+          and(
+            eq(designSheetTable.designId, designId),
+            eq(designSheetTable.sheetIndex, sheetIndex),
+            isNull(designSheetTable.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      const existingSheetId = existing[0]?.id ?? null;
+
+      if (existingSheetId) {
+        await client
+          .update(designSheetTable)
+          .set({
+            content: content as unknown as SchematicProjectDocument,
+            contentHash,
+            updatedAt: now,
+          })
+          .where(eq(designSheetTable.id, existingSheetId));
+      } else {
+        await client.insert(designSheetTable).values({
+          designId,
+          sheetIndex,
+          title: `Sheet ${sheetIndex + 1}`,
+          content: content as unknown as SchematicProjectDocument,
+          contentHash,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      await client
+        .update(designTable)
+        .set({ updatedAt: now } as never)
+        .where(eq(designTable.id, designId));
+
+      const latest = await client
+        .select()
+        .from(designSheetTable)
+        .where(
+          and(
+            eq(designSheetTable.designId, designId),
+            eq(designSheetTable.sheetIndex, sheetIndex),
+            isNull(designSheetTable.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      const row = latest[0];
+      if (!row) {
+        throw new ValidationError("Failed to persist design sheet content");
+      }
+
+      return row;
+    });
 
     const { content: _content, ...meta } = sheet;
     return meta;

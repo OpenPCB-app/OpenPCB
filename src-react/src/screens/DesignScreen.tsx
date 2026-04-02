@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -26,6 +26,7 @@ import {
   toEditorSchematicDocument,
   toSchematicProjectDocument,
 } from "@/components/pcb/types";
+import { useToast } from "@/components/ui/use-toast";
 
 const AUTO_DRAFT_NAME = "Untitled design";
 
@@ -84,10 +85,16 @@ export function DesignScreen() {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingDesign, setIsLoadingDesign] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [failedDesignId, setFailedDesignId] = useState<string | null>(null);
+  const [loadNonce, setLoadNonce] = useState(0);
+  const lastLoadedDesignIdRef = useRef<string | null>(null);
   const controller = useSchematicInteractionController();
+  const { toast } = useToast();
   const popoverEntityId = useSchematicStore((s) => s.chrome.popoverEntityId);
   const currentDocument = useSchematicStore((s) => s.persisted.document);
-  const currentSheetId = useSchematicStore((s) => s.persisted.sheetId);
+  const currentDesignContextId = useSchematicStore((s) => s.persisted.designId);
   const currentDocumentId = useSchematicStore(
     (s) => s.persisted.document?.id ?? null,
   );
@@ -95,25 +102,29 @@ export function DesignScreen() {
   const clearDocument = useSchematicStore((s) => s.clearDocument);
   const setProjectContext = useSchematicStore((s) => s.setProjectContext);
   const setPopoverTarget = useSchematicStore((s) => s.setPopoverTarget);
-  const isUnsavedDraft = currentDocument !== null && currentSheetId === null;
+  const isUnsavedDraft =
+    currentDocument !== null && currentDesignContextId === null;
 
   useEffect(() => {
     if (!activeWorkspaceId || currentProjectId || currentDesignId) {
       return;
     }
 
-    if (currentDocument && currentSheetId === null) {
+    if (currentDocument || currentDesignContextId !== null) {
       return;
     }
 
+    lastLoadedDesignIdRef.current = null;
+    setLoadError(null);
+    setFailedDesignId(null);
     setProjectContext(null, null);
     setDocument(createUnsavedSchematicDraft(activeWorkspaceId));
   }, [
     activeWorkspaceId,
     currentDocument,
+    currentDesignContextId,
     currentDesignId,
     currentProjectId,
-    currentSheetId,
     setDocument,
     setProjectContext,
   ]);
@@ -126,11 +137,27 @@ export function DesignScreen() {
 
     setProjectContext(design.projectId, design.id);
 
-    if (currentDocumentId === design.id) {
+    if (
+      currentDesignContextId === design.id &&
+      currentDocumentId === design.id &&
+      loadNonce === 0
+    ) {
+      lastLoadedDesignIdRef.current = design.id;
+      return;
+    }
+
+    if (
+      lastLoadedDesignIdRef.current === design.id &&
+      currentDocumentId === design.id &&
+      loadNonce === 0
+    ) {
       return;
     }
 
     let cancelled = false;
+    setIsLoadingDesign(true);
+    setLoadError(null);
+    setFailedDesignId(null);
 
     void getSheetContent(design.id, 0)
       .then((result) => {
@@ -140,10 +167,29 @@ export function DesignScreen() {
         } else {
           setDocument(createEmptySchematicDocument(design));
         }
+        lastLoadedDesignIdRef.current = design.id;
+        setLoadNonce(0);
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
-        setDocument(createEmptySchematicDocument(design));
+        setLoadNonce(0);
+        lastLoadedDesignIdRef.current = null;
+        const message =
+          error instanceof Error ? error.message : "Failed to load design";
+        setLoadError(message);
+        setFailedDesignId(design.id);
+
+        if (currentDocumentId === design.id) {
+          toast({
+            title: "Load failed",
+            description: message,
+            variant: "destructive",
+          });
+        }
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setIsLoadingDesign(false);
       });
 
     return () => {
@@ -151,11 +197,14 @@ export function DesignScreen() {
     };
   }, [
     currentDesignId,
+    currentDesignContextId,
     currentDocumentId,
     currentProjectId,
     design,
+    loadNonce,
     setDocument,
     setProjectContext,
+    toast,
   ]);
 
   useEffect(() => {
@@ -164,7 +213,7 @@ export function DesignScreen() {
       const doc = state.persisted.document;
 
       if (
-        state.persisted.sheetId === null &&
+        state.persisted.designId === null &&
         doc &&
         !hasSchematicCanvasContent(doc)
       ) {
@@ -180,16 +229,16 @@ export function DesignScreen() {
       return false;
     }
 
-    const isPersistedDesign = state.persisted.sheetId !== null;
+    const isPersistedDesign = state.persisted.designId !== null;
     if (!isPersistedDesign && !hasSchematicCanvasContent(doc)) {
       return false;
     }
 
     setIsSaving(true);
     try {
-      if (state.persisted.sheetId) {
+      if (state.persisted.designId) {
         await saveSheetContent(
-          state.persisted.sheetId,
+          state.persisted.designId,
           0,
           toSchematicProjectDocument(doc),
         );
@@ -201,21 +250,18 @@ export function DesignScreen() {
       }
 
       const createdDesign = await create({ name: AUTO_DRAFT_NAME });
-      const savedDoc = {
-        ...doc,
-        id: createdDesign.id,
-        name: createdDesign.name,
-        projectId: createdDesign.projectId ?? createdDesign.workspaceId,
-        updatedAt: createdDesign.updatedAt,
-      };
-
-      setProjectContext(createdDesign.projectId, createdDesign.id);
-      setDocument(savedDoc);
       await saveSheetContent(
         createdDesign.id,
         0,
-        toSchematicProjectDocument(savedDoc),
+        toSchematicProjectDocument({
+          ...doc,
+          id: createdDesign.id,
+          name: createdDesign.name,
+          projectId: createdDesign.projectId ?? createdDesign.workspaceId,
+          updatedAt: createdDesign.updatedAt,
+        }),
       );
+      lastLoadedDesignIdRef.current = null;
       navigateToDesign(createdDesign.projectId, createdDesign.id);
       return true;
     } catch {
@@ -223,12 +269,12 @@ export function DesignScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [activeWorkspaceId, create, navigateToDesign, setDocument, setProjectContext]);
+  }, [activeWorkspaceId, create, navigateToDesign]);
 
   const closeDesigner = useCallback(async () => {
     const state = useSchematicStore.getState();
     const doc = state.persisted.document;
-    const isUnsaved = state.persisted.sheetId === null;
+    const isUnsaved = state.persisted.designId === null;
 
     if (isUnsaved && doc && hasSchematicCanvasContent(doc)) {
       const shouldSave = window.confirm(
@@ -260,6 +306,22 @@ export function DesignScreen() {
 
     navigateToHome();
   }, [clearDocument, navigateToHome, saveCurrentDocument]);
+
+  const retryLoadDesign = useCallback(() => {
+    if (!design) {
+      return;
+    }
+
+    lastLoadedDesignIdRef.current = null;
+    setLoadError(null);
+    setFailedDesignId(null);
+    setLoadNonce((value) => value + 1);
+  }, [design]);
+
+  const isFailedToOpenSelectedDesign =
+    design !== undefined &&
+    failedDesignId === design.id &&
+    currentDocumentId !== design.id;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -411,8 +473,39 @@ export function DesignScreen() {
                     Back to Home
                   </button>
                 </div>
+              ) : isFailedToOpenSelectedDesign ? (
+                <div className="flex h-full flex-col items-center justify-center gap-4 text-center text-text-muted">
+                  <p className="text-sm font-medium text-text-primary">
+                    Failed to open design
+                  </p>
+                  <p className="max-w-sm text-sm text-text-muted">
+                    {loadError ?? "Unable to load this design right now."}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded-md border border-border-default px-4 py-2 text-sm text-text-primary hover:bg-bg-input disabled:opacity-50"
+                      onClick={retryLoadDesign}
+                      disabled={isLoadingDesign}
+                    >
+                      {isLoadingDesign ? "Retrying..." : "Retry"}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-border-default px-4 py-2 text-sm text-text-primary hover:bg-bg-input"
+                      onClick={navigateToHome}
+                    >
+                      Back to Home
+                    </button>
+                  </div>
+                </div>
               ) : designTab === "schematic" ? (
                 <div className="relative h-full">
+                  {loadError && currentDocumentId === design?.id && (
+                    <div className="absolute left-2 top-2 z-30 rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-xs text-red-200">
+                      Load failed. Showing last local canvas.
+                    </div>
+                  )}
                   <SchematicCanvas controller={controller} />
                   <FloatingPropertiesPopover />
                 </div>

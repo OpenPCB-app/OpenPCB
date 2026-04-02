@@ -97,6 +97,12 @@ vi.mock("@/components/pcb/StatusBar", () => ({
   StatusBar: () => <div>PCB Status</div>,
 }));
 
+vi.mock("@/components/ui/use-toast", () => ({
+  useToast: () => ({
+    toast: vi.fn(),
+  }),
+}));
+
 vi.mock("@/components/pcb/palette/ComponentPalette", () => ({
   ComponentPalette: ({
     controller,
@@ -227,7 +233,7 @@ function resetStore() {
     persisted: {
       document: null,
       projectId: null,
-      sheetId: null,
+      designId: null,
     },
     derived: {
       connectivity: null,

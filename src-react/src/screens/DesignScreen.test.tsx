@@ -167,6 +167,12 @@ vi.mock("@/components/pcb/StatusBar", () => ({
   StatusBar: () => <div>PCB Status</div>,
 }));
 
+vi.mock("@/components/ui/use-toast", () => ({
+  useToast: () => ({
+    toast: vi.fn(),
+  }),
+}));
+
 const TEST_DOCUMENT: SchematicDocument = {
   id: "design-1",
   projectId: "project-1",
@@ -220,7 +226,7 @@ function resetStore() {
     persisted: {
       document: TEST_DOCUMENT,
       projectId: "project-1",
-      sheetId: "sheet-1",
+      designId: TEST_DOCUMENT.id,
     },
     derived: {
       connectivity: null,
@@ -292,6 +298,14 @@ describe("DesignScreen schematic shell", () => {
     currentProjectId = null;
     currentDesignId = null;
     designs = [];
+    useSchematicStore.setState((state) => ({
+      ...state,
+      persisted: {
+        ...state.persisted,
+        document: null,
+        designId: null,
+      },
+    }));
 
     render(<DesignScreen />);
 
@@ -303,7 +317,7 @@ describe("DesignScreen schematic shell", () => {
         labels: [],
       }),
     );
-    expect(useSchematicStore.getState().persisted.sheetId).toBeNull();
+    expect(useSchematicStore.getState().persisted.designId).toBeNull();
     expect(createDesign).not.toHaveBeenCalled();
     expect(navigateToDesign).not.toHaveBeenCalled();
   });
@@ -404,6 +418,40 @@ describe("DesignScreen schematic shell", () => {
       screen.getByRole("button", { name: "Begin wire" }),
     ).toBeInTheDocument();
     expect(screen.getByText("PCB Status")).toBeInTheDocument();
+  });
+
+  it("shows blocking retry panel when opening another design fails", async () => {
+    currentProjectId = "project-2";
+    currentDesignId = "design-2";
+    designs = [
+      {
+        id: "design-2",
+        workspaceId: "workspace-1",
+        projectId: "project-2",
+        name: "Broken design",
+        createdAt: "2026-03-31T00:00:00Z",
+        updatedAt: "2026-03-31T00:00:00Z",
+      },
+    ];
+    getSheetContent.mockRejectedValue(new Error("network failed"));
+
+    render(<DesignScreen />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Failed to open design")).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("keeps current canvas when reloading active design fails", async () => {
+    getSheetContent.mockRejectedValueOnce(new Error("network failed"));
+
+    render(<DesignScreen />);
+
+    await waitFor(() =>
+      expect(screen.queryByText("Failed to open design")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Begin wire" })).toBeInTheDocument();
   });
 
   it("routes palette drag starts through the shared placement controller", () => {

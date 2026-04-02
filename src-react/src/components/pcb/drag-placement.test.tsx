@@ -122,7 +122,7 @@ function resetStore() {
     persisted: {
       document: TEST_DOCUMENT,
       projectId: "project-1",
-      sheetId: "sheet-1",
+      designId: TEST_DOCUMENT.id,
     },
     derived: {
       connectivity: null,

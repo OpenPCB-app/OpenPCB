@@ -11,7 +11,7 @@ const DEBOUNCE_MS = 1000;
 export function useSchematicAutoSave(
   onStatusChange: (status: SaveStatus) => void,
 ): void {
-  const sheetId = useSchematicStore((s) => s.persisted.sheetId);
+  const designId = useSchematicStore((s) => s.persisted.designId);
   const documentId = useSchematicStore((s) => s.persisted.document?.id ?? null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedJsonRef = useRef<string | null>(null);
@@ -22,7 +22,7 @@ export function useSchematicAutoSave(
   const saveNow = useCallback(async () => {
     const { persisted } = useSchematicStore.getState();
     const doc = persisted.document;
-    const designId = persisted.sheetId;
+    const designId = persisted.designId;
 
     if (!doc || !designId) return;
 
@@ -42,7 +42,7 @@ export function useSchematicAutoSave(
   }, []);
 
   useEffect(() => {
-    if (!sheetId || !documentId) {
+    if (!designId || !documentId) {
       lastSavedJsonRef.current = null;
       return;
     }
@@ -57,7 +57,7 @@ export function useSchematicAutoSave(
       toSchematicProjectDocument(persisted.document),
     );
   }, [
-    sheetId,
+    designId,
     documentId,
   ]);
 
