@@ -4,8 +4,8 @@ import { join } from "path";
 import type { RouteContext } from "../router";
 import { RouteParams } from "../router/route-parser";
 import { ComponentImportController } from "./component-import-controller";
-import type { ComponentImportService } from "../../domain/services/component-import-service";
-import type { DatabaseAccess } from "../../db";
+import type { IComponentImportService } from "../../domain/services/component-import-service";
+import type { IComponentZipImportService } from "../../domain/services/component-zip-import-service";
 
 const FIXTURES_DIR = join(import.meta.dir, "../../infrastructure/parsers/kicad/__fixtures__");
 
@@ -22,25 +22,11 @@ function createContext(request: Request): RouteContext {
   };
 }
 
-function createDbMock() {
-  return {
-    componentFamilies: {
-      create: mock(async () => ({ id: "family-1" })),
-      createVariant: mock(async () => ({ id: "variant-1" })),
-      createFootprint: mock(async () => ({ id: "footprint-1" })),
-      createModel3d: mock(async () => ({ id: "model-1" })),
-    },
-    componentProvenance: {
-      create: mock(async () => ({ id: "prov-1" })),
-    },
-  } as unknown as DatabaseAccess;
-}
-
 describe("ComponentImportController", () => {
   it("parses a KiCad symbol file", async () => {
     const controller = new ComponentImportController(
-      { generatePreview: mock(() => ({ groups: [], ungroupedFiles: [], totalWarnings: 0 })) } as unknown as ComponentImportService,
-      createDbMock(),
+      { importFiles: mock(async () => ({ components: [], warnings: [], ungroupedFiles: [] })) } as unknown as IComponentImportService,
+      { importZip: mock(async () => ({ components: [], warnings: [], ungroupedFiles: [] })) } as unknown as IComponentZipImportService,
     );
 
     const response = await controller.parseSymbol(
@@ -55,7 +41,7 @@ describe("ComponentImportController", () => {
         }),
       ),
     );
-    const json = await response.json() as any;
+    const json = (await response.json()) as any;
 
     expect(response.status).toBe(200);
     expect(json.data.symbol.name).toBe("R");
@@ -64,8 +50,8 @@ describe("ComponentImportController", () => {
 
   it("parses a KiCad footprint file", async () => {
     const controller = new ComponentImportController(
-      { generatePreview: mock(() => ({ groups: [], ungroupedFiles: [], totalWarnings: 0 })) } as unknown as ComponentImportService,
-      createDbMock(),
+      { importFiles: mock(async () => ({ components: [], warnings: [], ungroupedFiles: [] })) } as unknown as IComponentImportService,
+      { importZip: mock(async () => ({ components: [], warnings: [], ungroupedFiles: [] })) } as unknown as IComponentZipImportService,
     );
 
     const response = await controller.parseFootprint(
@@ -80,97 +66,93 @@ describe("ComponentImportController", () => {
         }),
       ),
     );
-    const json = await response.json() as any;
+    const json = (await response.json()) as any;
 
     expect(response.status).toBe(200);
     expect(json.data.footprint.name).toBe("C_0603_1608Metric");
     expect(json.data.footprint.pads.length).toBe(2);
   });
 
-  it("previews multipart KiCad imports", async () => {
-    const generatePreview = mock(() => ({
-      groups: [{ canonicalKey: "c0603", variants: [], warnings: [] }],
+  it("imports multipart KiCad files through the canonical service", async () => {
+    const importFiles = mock(async () => ({
+      components: [
+        {
+          componentId: "component-1",
+          displayLabel: "Capacitor 0603",
+          canonicalKey: "capacitor-0603",
+          variantCount: 1,
+          sourceFileNames: ["simple_capacitor.kicad_sym", "C_0603_1608Metric.kicad_mod"],
+        },
+      ],
+      warnings: [],
       ungroupedFiles: [],
-      totalWarnings: 0,
     }));
+    const importZip = mock(async () => ({ components: [], warnings: [], ungroupedFiles: [] }));
     const controller = new ComponentImportController(
-      { generatePreview } as unknown as ComponentImportService,
-      createDbMock(),
+      { importFiles } as unknown as IComponentImportService,
+      { importZip } as unknown as IComponentZipImportService,
     );
 
     const formData = new FormData();
     formData.append(
+      "symbol",
+      new File([readFixture("simple_capacitor.kicad_sym")], "simple_capacitor.kicad_sym"),
+    );
+    formData.append(
       "footprint",
       new File([readFixture("C_0603_1608Metric.kicad_mod")], "C_0603_1608Metric.kicad_mod"),
     );
-    formData.append("model", new File(["step"], "C_0603_1608Metric.step"));
 
-    const response = await controller.previewImport(
+    const response = await controller.importComponents(
       createContext(
-        new Request("http://localhost/api/components/import/preview", {
+        new Request("http://localhost/api/components/import", {
           method: "POST",
           body: formData,
         }),
       ),
     );
-    const json = await response.json() as any;
+    const json = (await response.json()) as any;
 
-    expect(response.status).toBe(200);
-    expect(generatePreview).toHaveBeenCalled();
-    expect(json.data.preview.groups).toHaveLength(1);
+    expect(response.status).toBe(201);
+    expect(importFiles).toHaveBeenCalled();
+    expect(importZip).not.toHaveBeenCalled();
+    expect(json.data.import.components).toHaveLength(1);
   });
 
-  it("confirms imports and stores provenance, footprints, and model links", async () => {
-    const db = createDbMock();
+  it("routes ZIP uploads through the ZIP wrapper", async () => {
+    const importFiles = mock(async () => ({ components: [], warnings: [], ungroupedFiles: [] }));
+    const importZip = mock(async () => ({
+      components: [
+        {
+          componentId: "component-zip",
+          displayLabel: "ZIP Component",
+          canonicalKey: "zip-component",
+          variantCount: 1,
+          sourceFileNames: ["archive.zip"],
+        },
+      ],
+      warnings: [],
+      ungroupedFiles: [],
+    }));
     const controller = new ComponentImportController(
-      { generatePreview: mock(() => ({ groups: [], ungroupedFiles: [], totalWarnings: 0 })) } as unknown as ComponentImportService,
-      db,
+      { importFiles } as unknown as IComponentImportService,
+      { importZip } as unknown as IComponentZipImportService,
     );
 
-    const response = await controller.confirmImport(
+    const formData = new FormData();
+    formData.append("archive", new File(["zip"], "archive.zip"));
+
+    const response = await controller.importComponents(
       createContext(
-        new Request("http://localhost/api/components/import/confirm", {
+        new Request("http://localhost/api/components/import", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            files: [
-              {
-                fileName: "simple_capacitor.kicad_sym",
-                content: readFixture("simple_capacitor.kicad_sym"),
-              },
-              {
-                fileName: "C_0603_1608Metric.kicad_mod",
-                content: readFixture("C_0603_1608Metric.kicad_mod"),
-              },
-            ],
-            groups: [
-              {
-                familyLabel: "Capacitor 0603",
-                canonicalKey: "capacitor_0603",
-                categoryPath: "Capacitors > Ceramic",
-                symbolFileName: "simple_capacitor.kicad_sym",
-                variants: [
-                  {
-                    canonicalCode: "0603",
-                    humanLabel: "0603",
-                    mountType: "smd",
-                    footprintFileNames: ["C_0603_1608Metric.kicad_mod"],
-                    model3dFileNames: ["C_0603_1608Metric.step"],
-                  },
-                ],
-              },
-            ],
-          }),
+          body: formData,
         }),
       ),
     );
-    const json = await response.json() as any;
 
-    expect(response.status).toBe(200);
-    expect(json.data.familyIds).toEqual(["family-1"]);
-    expect(db.componentFamilies.create).toHaveBeenCalled();
-    expect(db.componentFamilies.createFootprint).toHaveBeenCalled();
-    expect(db.componentFamilies.createModel3d).toHaveBeenCalled();
-    expect(db.componentProvenance.create).toHaveBeenCalled();
+    expect(response.status).toBe(201);
+    expect(importZip).toHaveBeenCalled();
+    expect(importFiles).not.toHaveBeenCalled();
   });
 });

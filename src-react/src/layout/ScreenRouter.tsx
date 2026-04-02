@@ -11,7 +11,6 @@ import { ChatScreen } from "@/screens/ChatScreen";
 import { DesignScreen } from "@/screens/DesignScreen";
 import { NotesScreen } from "@/screens/NotesScreen";
 import { LibraryScreen } from "@/screens/LibraryScreen";
-import { ImportWizard } from "@/screens/ImportWizard";
 import { ComponentDetailPage } from "@/components/library/ComponentDetailPage";
 
 export function ScreenRouter() {
@@ -37,7 +36,7 @@ export function ScreenRouter() {
     case "library":
       return <LibraryScreen />;
     case "import":
-      return <ImportWizard />;
+      return <LibraryScreen />;
     case "component-detail":
       return <ComponentDetailPage />;
     default:

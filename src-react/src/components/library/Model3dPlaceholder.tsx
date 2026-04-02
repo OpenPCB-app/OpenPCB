@@ -8,12 +8,28 @@ interface ModelAsset {
 }
 
 interface Model3dPlaceholderProps {
-  model3dOptions?: ModelAsset[];
+  model3dOptions?: unknown[];
+}
+
+function isModelAsset(value: unknown): value is ModelAsset {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  return (
+    "id" in value &&
+    typeof value.id === "string" &&
+    "fileName" in value &&
+    typeof value.fileName === "string" &&
+    "stepAssetPath" in value &&
+    (typeof value.stepAssetPath === "string" || value.stepAssetPath === null)
+  );
 }
 
 export function Model3dPlaceholder({ model3dOptions }: Model3dPlaceholderProps) {
+  const models = model3dOptions?.filter(isModelAsset);
   const selectedModel =
-    model3dOptions?.find((model) => model.isDefault) ?? model3dOptions?.[0];
+    models?.find((model) => model.isDefault) ?? models?.[0];
 
   return (
     <StepViewer

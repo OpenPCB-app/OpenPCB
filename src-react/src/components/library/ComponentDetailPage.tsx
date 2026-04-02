@@ -11,82 +11,76 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import {
-  getComponentFamily,
-  updateComponentFamily,
-  deleteComponentFamily,
-} from "../../lib/api/component-api";
+import { useComponentDetail } from "@/hooks/useComponents";
 import { useNavigationStore } from "../../stores/navigation-store";
-import type { ComponentFamilyType } from "../../../../src-ts/src/core/schemas/component-library.schema";
 import { SymbolPreview } from "./SymbolPreview";
 import { FootprintPreview } from "./FootprintPreview";
 import { Model3dPlaceholder } from "./Model3dPlaceholder";
 import { PinTable } from "./PinTable";
 
 export function ComponentDetailPage() {
-  const navigateBack = useNavigationStore((s) => s.navigateBack);
-  const currentComponentId = useNavigationStore((s) => s.currentComponentId);
-  const [component, setComponent] = useState<ComponentFamilyType | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
-    null,
-  );
-  const [selectedFootprintId, setSelectedFootprintId] = useState<string | null>(
-    null,
-  );
+  const navigateBack = useNavigationStore((state) => state.navigateBack);
+  const currentComponentId = useNavigationStore((state) => state.currentComponentId);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const [selectedFootprintId, setSelectedFootprintId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editForm, setEditForm] = useState({
     displayLabel: "",
     description: "",
     categoryPath: "",
   });
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const {
+    component,
+    loading,
+    error,
+    mutationError,
+    saving,
+    deleting,
+    clearMutationError,
+    updateComponent,
+    deleteComponent,
+  } = useComponentDetail(currentComponentId);
 
   useEffect(() => {
     if (!currentComponentId) {
       navigateBack();
+    }
+  }, [currentComponentId, navigateBack]);
+
+  useEffect(() => {
+    if (!component) {
+      setSelectedVariantId(null);
+      setSelectedFootprintId(null);
       return;
     }
 
-    const loadComponent = async () => {
-      try {
-        setLoading(true);
-        const data = await getComponentFamily(currentComponentId);
-        setComponent(data);
-        if (data.packageVariants && data.packageVariants.length > 0) {
-          const defaultVariant =
-            data.packageVariants.find(
-              (v) => v.id === data.defaultPackageVariantId,
-            ) || data.packageVariants[0];
-          if (defaultVariant) {
-            setSelectedVariantId(defaultVariant.id);
-            if (
-              defaultVariant.footprintOptions &&
-              defaultVariant.footprintOptions.length > 0
-            ) {
-              const defaultFootprint =
-                defaultVariant.footprintOptions.find((f) => f.isDefault) ||
-                defaultVariant.footprintOptions[0];
-              if (defaultFootprint) {
-                setSelectedFootprintId(defaultFootprint.id);
-              }
-            }
-          }
-        }
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to load component",
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
+    const selectedVariant =
+      component.packageVariants.find((variant) => variant.id === selectedVariantId) ??
+      component.packageVariants.find(
+        (variant) => variant.id === component.defaultPackageVariantId,
+      ) ??
+      component.packageVariants[0] ??
+      null;
 
-    loadComponent();
-  }, [currentComponentId, navigateBack]);
+    if (!selectedVariant) {
+      setSelectedVariantId(null);
+      setSelectedFootprintId(null);
+      return;
+    }
+
+    setSelectedVariantId(selectedVariant.id);
+
+    const selectedFootprint =
+      selectedVariant.footprintOptions.find(
+        (footprint) => footprint.id === selectedFootprintId,
+      ) ??
+      selectedVariant.footprintOptions.find((footprint) => footprint.isDefault) ??
+      selectedVariant.footprintOptions[0] ??
+      null;
+
+    setSelectedFootprintId(selectedFootprint?.id ?? null);
+  }, [component, selectedVariantId, selectedFootprintId]);
 
   if (loading) {
     return (
@@ -100,8 +94,12 @@ export function ComponentDetailPage() {
     return (
       <div className="flex h-screen items-center justify-center bg-bg-secondary">
         <div className="text-center">
-          <p className="text-error mb-4">{error || "Component not found"}</p>
-          <button onClick={navigateBack} className="text-brand hover:underline">
+          <p className="mb-4 text-error">{error || "Component not found"}</p>
+          <button
+            type="button"
+            onClick={navigateBack}
+            className="text-brand hover:underline"
+          >
             Back to Library
           </button>
         </div>
@@ -109,16 +107,14 @@ export function ComponentDetailPage() {
     );
   }
 
-  const selectedVariant = component.packageVariants?.find(
-    (v) => v.id === selectedVariantId,
+  const selectedVariant = component.packageVariants.find(
+    (variant) => variant.id === selectedVariantId,
   );
   const selectedFootprint = selectedVariant?.footprintOptions?.find(
-    (f) => f.id === selectedFootprintId,
+    (footprint) => footprint.id === selectedFootprintId,
   );
-  const hasMultipleVariants = (component.packageVariants?.length || 0) > 1;
-  const hasMultipleFootprints =
-    (selectedVariant?.footprintOptions?.length || 0) > 1;
-  const isWorkspaceComponent = component.scope === "workspace";
+  const hasMultipleVariants = component.packageVariants.length > 1;
+  const hasMultipleFootprints = (selectedVariant?.footprintOptions?.length ?? 0) > 1;
 
   const handleEditClick = () => {
     setEditForm({
@@ -126,64 +122,67 @@ export function ComponentDetailPage() {
       description: component.description || "",
       categoryPath: component.categoryPath || "",
     });
+    clearMutationError();
     setIsEditing(true);
-    setSaveError(null);
   };
 
   const handleCancelEdit = () => {
+    clearMutationError();
     setIsEditing(false);
-    setSaveError(null);
   };
 
   const handleSaveEdit = async () => {
-    if (!currentComponentId) return;
-    setSaveError(null);
+    clearMutationError();
+
     try {
-      const updated = await updateComponentFamily(currentComponentId, {
+      await updateComponent({
         displayLabel: editForm.displayLabel,
         description: editForm.description,
         categoryPath: editForm.categoryPath,
       });
-      setComponent(updated);
       setIsEditing(false);
-    } catch (err) {
-      setSaveError(
-        err instanceof Error ? err.message : "Failed to save changes",
-      );
+    } catch {
+      return;
     }
   };
 
   const handleDeleteClick = () => {
+    clearMutationError();
     setShowDeleteConfirm(true);
   };
 
   const handleConfirmDelete = async () => {
-    if (!currentComponentId) return;
-    setIsDeleting(true);
     try {
-      await deleteComponentFamily(currentComponentId);
+      await deleteComponent();
       setShowDeleteConfirm(false);
       navigateBack();
-    } catch (err) {
-      setSaveError(
-        err instanceof Error ? err.message : "Failed to delete component",
-      );
-      setIsDeleting(false);
+    } catch {
+      return;
     }
   };
 
-  const handleCancelDelete = () => {
-    setShowDeleteConfirm(false);
+  const handleVariantChange = (variantId: string) => {
+    setSelectedVariantId(variantId);
+
+    const nextVariant = component.packageVariants.find(
+      (variant) => variant.id === variantId,
+    );
+    const defaultFootprint =
+      nextVariant?.footprintOptions.find((footprint) => footprint.isDefault) ??
+      nextVariant?.footprintOptions[0] ??
+      null;
+
+    setSelectedFootprintId(defaultFootprint?.id ?? null);
   };
 
   return (
-    <div className="flex flex-col h-screen bg-bg-secondary">
-      {/* Header */}
+    <div className="flex h-screen flex-col bg-bg-secondary">
       <header className="flex items-center justify-between border-b border-border-default bg-bg-elevated px-6 py-4">
         <div className="flex items-center gap-4">
           <button
+            type="button"
             onClick={navigateBack}
-            className="flex items-center gap-2 text-text-secondary hover:text-text-primary transition-colors"
+            className="flex items-center gap-2 text-text-secondary transition-colors hover:text-text-primary"
           >
             <ArrowLeft className="h-4 w-4" />
             <span className="text-sm">Back to Library</span>
@@ -193,20 +192,16 @@ export function ComponentDetailPage() {
             <h1 className="text-xl font-semibold text-text-primary">
               {component.displayLabel}
             </h1>
-            <div className="flex items-center gap-3 text-sm text-text-secondary mt-0.5">
+            <div className="mt-0.5 flex items-center gap-3 text-sm text-text-secondary">
               {component.description && (
-                <span className="truncate max-w-md">
-                  {component.description}
-                </span>
+                <span className="max-w-md truncate">{component.description}</span>
               )}
               <span className="text-text-tertiary">|</span>
-              <span>
-                {component.symbolData?.pinDefinitions?.length || 0} pins
-              </span>
+              <span>{component.symbolData?.pinDefinitions?.length || 0} pins</span>
               {selectedVariant && (
                 <>
                   <span className="text-text-tertiary">|</span>
-                  <span className="uppercase text-xs bg-bg-input px-2 py-0.5 rounded">
+                  <span className="rounded bg-bg-input px-2 py-0.5 text-xs uppercase">
                     {selectedVariant.mountType}
                   </span>
                 </>
@@ -217,57 +212,56 @@ export function ComponentDetailPage() {
         <div className="flex items-center gap-2">
           {isEditing ? (
             <>
-              {saveError && (
-                <span className="text-sm text-error mr-2">{saveError}</span>
+              {mutationError && (
+                <span className="mr-2 text-sm text-error">{mutationError}</span>
               )}
               <button
+                type="button"
                 onClick={handleCancelEdit}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-md transition-colors"
+                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary"
               >
                 <X className="h-4 w-4" />
                 Cancel
               </button>
               <button
-                onClick={handleSaveEdit}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-brand text-white hover:opacity-90 rounded-md transition-opacity"
+                type="button"
+                onClick={() => void handleSaveEdit()}
+                disabled={saving}
+                className="flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-sm text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Check className="h-4 w-4" />
-                Save
+                {saving ? "Saving..." : "Save"}
               </button>
             </>
           ) : (
             <>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-md transition-colors">
+              <button type="button" className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary">
                 <Download className="h-4 w-4" />
                 Export
               </button>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-md transition-colors">
+              <button type="button" className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary">
                 <Copy className="h-4 w-4" />
                 Duplicate
               </button>
-              {isWorkspaceComponent && (
-                <button
-                  onClick={handleEditClick}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-brand text-white hover:opacity-90 rounded-md transition-opacity"
-                >
-                  <Edit className="h-4 w-4" />
-                  Edit
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleEditClick}
+                className="flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-sm text-white transition-opacity hover:opacity-90"
+              >
+                <Edit className="h-4 w-4" />
+                Edit
+              </button>
             </>
           )}
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Column - Visual Stack */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex-1 space-y-6 overflow-y-auto p-6">
           <div className="grid grid-cols-2 gap-4">
-            {/* Symbol Preview */}
-            <section className="bg-bg-elevated rounded-lg border border-border-default overflow-hidden">
-              <div className="px-4 py-3 border-b border-border-default bg-bg-secondary flex items-center justify-between">
-                <h2 className="text-sm font-medium text-text-primary flex items-center gap-2">
+            <section className="overflow-hidden rounded-lg border border-border-default bg-bg-elevated">
+              <div className="flex items-center justify-between border-b border-border-default bg-bg-secondary px-4 py-3">
+                <h2 className="flex items-center gap-2 text-sm font-medium text-text-primary">
                   <FileText className="h-4 w-4 text-text-tertiary" />
                   Schematic Symbol
                 </h2>
@@ -280,11 +274,11 @@ export function ComponentDetailPage() {
               </div>
             </section>
 
-            {/* Footprint Preview */}
-            <section className="bg-bg-elevated rounded-lg border border-border-default overflow-hidden">
-              <div className="px-4 py-3 border-b border-border-default bg-bg-secondary flex items-center justify-between">
-                <h2 className="text-sm font-medium text-text-primary flex items-center gap-2">
+            <section className="overflow-hidden rounded-lg border border-border-default bg-bg-elevated">
+              <div className="flex items-center justify-between border-b border-border-default bg-bg-secondary px-4 py-3">
+                <h2 className="flex items-center gap-2 text-sm font-medium text-text-primary">
                   <svg
+                    aria-hidden="true"
                     className="h-4 w-4 text-text-tertiary"
                     viewBox="0 0 24 24"
                     fill="none"
@@ -298,13 +292,14 @@ export function ComponentDetailPage() {
                 </h2>
                 {hasMultipleFootprints && (
                   <select
+                    aria-label="Footprint variant"
                     value={selectedFootprintId || ""}
-                    onChange={(e) => setSelectedFootprintId(e.target.value)}
-                    className="text-xs bg-bg-input border border-border-default rounded px-2 py-1 text-text-primary"
+                    onChange={(event) => setSelectedFootprintId(event.target.value)}
+                    className="rounded border border-border-default bg-bg-input px-2 py-1 text-xs text-text-primary"
                   >
-                    {selectedVariant?.footprintOptions?.map((fp) => (
-                      <option key={fp.id} value={fp.id}>
-                        {fp.label} {fp.isDefault ? "(default)" : ""}
+                    {selectedVariant?.footprintOptions?.map((footprint) => (
+                      <option key={footprint.id} value={footprint.id}>
+                        {footprint.label} {footprint.isDefault ? "(default)" : ""}
                       </option>
                     ))}
                   </select>
@@ -314,7 +309,7 @@ export function ComponentDetailPage() {
                 {selectedFootprint ? (
                   <FootprintPreview footprint={selectedFootprint} />
                 ) : (
-                  <div className="text-center py-12 text-text-tertiary">
+                  <div className="py-12 text-center text-text-tertiary">
                     No footprint available
                   </div>
                 )}
@@ -322,11 +317,11 @@ export function ComponentDetailPage() {
             </section>
           </div>
 
-          {/* 3D Model */}
-          <section className="bg-bg-elevated rounded-lg border border-border-default overflow-hidden">
-            <div className="px-4 py-3 border-b border-border-default bg-bg-secondary">
-              <h2 className="text-sm font-medium text-text-primary flex items-center gap-2">
+          <section className="overflow-hidden rounded-lg border border-border-default bg-bg-elevated">
+            <div className="border-b border-border-default bg-bg-secondary px-4 py-3">
+              <h2 className="flex items-center gap-2 text-sm font-medium text-text-primary">
                 <svg
+                  aria-hidden="true"
                   className="h-4 w-4 text-text-tertiary"
                   viewBox="0 0 24 24"
                   fill="none"
@@ -339,114 +334,93 @@ export function ComponentDetailPage() {
               </h2>
             </div>
             <div className="p-4">
-              <Model3dPlaceholder
-                model3dOptions={selectedFootprint?.model3dOptions}
-              />
+              <Model3dPlaceholder model3dOptions={selectedFootprint?.model3dOptions} />
             </div>
           </section>
         </div>
 
-        {/* Right Column - Specs & Actions */}
-        <div className="w-[400px] border-l border-border-default bg-bg-elevated overflow-y-auto">
-          {/* Edit Form */}
+        <div className="w-[400px] overflow-y-auto border-l border-border-default bg-bg-elevated">
           {isEditing && (
-            <div className="p-4 border-b border-border-default bg-brand-bg/30">
-              <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wide mb-3">
+            <div className="border-b border-border-default bg-brand-bg/30 p-4">
+              <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-secondary">
                 Edit Component
               </h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-text-tertiary mb-1">
+                  <label htmlFor="component-display-label" className="mb-1 block text-xs text-text-tertiary">
                     Display Label
                   </label>
                   <input
+                    id="component-display-label"
                     type="text"
                     value={editForm.displayLabel}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, displayLabel: e.target.value })
+                    onChange={(event) =>
+                      setEditForm({ ...editForm, displayLabel: event.target.value })
                     }
-                    className="w-full bg-bg-input border border-border-default rounded-md px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
+                    className="w-full rounded-md border border-border-default bg-bg-input px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-text-tertiary mb-1">
+                  <label htmlFor="component-description" className="mb-1 block text-xs text-text-tertiary">
                     Description
                   </label>
                   <textarea
+                    id="component-description"
                     value={editForm.description}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, description: e.target.value })
+                    onChange={(event) =>
+                      setEditForm({ ...editForm, description: event.target.value })
                     }
                     rows={3}
-                    className="w-full bg-bg-input border border-border-default rounded-md px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none resize-none"
+                    className="w-full resize-none rounded-md border border-border-default bg-bg-input px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-text-tertiary mb-1">
+                  <label htmlFor="component-category-path" className="mb-1 block text-xs text-text-tertiary">
                     Category Path
                   </label>
                   <input
+                    id="component-category-path"
                     type="text"
                     value={editForm.categoryPath}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, categoryPath: e.target.value })
+                    onChange={(event) =>
+                      setEditForm({ ...editForm, categoryPath: event.target.value })
                     }
                     placeholder="e.g., Passive/Resistors"
-                    className="w-full bg-bg-input border border-border-default rounded-md px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
+                    className="w-full rounded-md border border-border-default bg-bg-input px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
                   />
                 </div>
               </div>
             </div>
           )}
 
-          {/* Variant Selector (if multiple) */}
           {hasMultipleVariants && (
-            <div className="p-4 border-b border-border-default">
-              <label className="text-xs font-medium text-text-secondary uppercase tracking-wide mb-2 block">
+            <div className="border-b border-border-default p-4">
+              <label htmlFor="component-variant" className="mb-2 block text-xs font-medium uppercase tracking-wide text-text-secondary">
                 Package Variant
               </label>
               <select
+                id="component-variant"
                 value={selectedVariantId || ""}
-                onChange={(e) => {
-                  setSelectedVariantId(e.target.value);
-                  const variant = component.packageVariants?.find(
-                    (v) => v.id === e.target.value,
-                  );
-                  if (
-                    variant?.footprintOptions &&
-                    variant.footprintOptions.length > 0
-                  ) {
-                    const defaultFp =
-                      variant.footprintOptions.find((f) => f.isDefault) ||
-                      variant.footprintOptions[0];
-                    if (defaultFp) {
-                      setSelectedFootprintId(defaultFp.id);
-                    }
-                  }
-                }}
-                className="w-full bg-bg-input border border-border-default rounded-md px-3 py-2 text-sm text-text-primary"
+                onChange={(event) => handleVariantChange(event.target.value)}
+                className="w-full rounded-md border border-border-default bg-bg-input px-3 py-2 text-sm text-text-primary"
               >
-                {component.packageVariants?.map((variant) => (
+                {component.packageVariants.map((variant) => (
                   <option key={variant.id} value={variant.id}>
-                    {variant.humanLabel}{" "}
-                    {variant.id === component.defaultPackageVariantId
-                      ? "(default)"
-                      : ""}
+                    {variant.humanLabel} {variant.id === component.defaultPackageVariantId ? "(default)" : ""}
                   </option>
                 ))}
               </select>
             </div>
           )}
 
-          {/* Technical Specifications */}
-          <div className="p-4 border-b border-border-default">
-            <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wide mb-3">
+          <div className="border-b border-border-default p-4">
+            <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-secondary">
               Technical Specifications
             </h3>
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <dt className="text-text-tertiary">Reference Prefix</dt>
-                <dd className="text-text-primary font-medium">
+                <dd className="font-medium text-text-primary">
                   {component.symbolData?.referencePrefix || "U"}
                 </dd>
               </div>
@@ -458,7 +432,7 @@ export function ComponentDetailPage() {
               </div>
               <div className="flex justify-between">
                 <dt className="text-text-tertiary">Mount Type</dt>
-                <dd className="text-text-primary capitalize">
+                <dd className="capitalize text-text-primary">
                   {selectedVariant?.mountType || "—"}
                 </dd>
               </div>
@@ -467,8 +441,7 @@ export function ComponentDetailPage() {
                   <div className="flex justify-between">
                     <dt className="text-text-tertiary">Body Size</dt>
                     <dd className="text-text-primary">
-                      {selectedVariant.dimensions.lengthMm} ×{" "}
-                      {selectedVariant.dimensions.widthMm} mm
+                      {selectedVariant.dimensions.lengthMm} × {selectedVariant.dimensions.widthMm} mm
                     </dd>
                   </div>
                   {selectedVariant.dimensions.heightMm && (
@@ -490,63 +463,57 @@ export function ComponentDetailPage() {
               {selectedVariant?.imperialAlias && (
                 <div className="flex justify-between">
                   <dt className="text-text-tertiary">Imperial Code</dt>
-                  <dd className="text-text-primary">
-                    {selectedVariant.imperialAlias}
-                  </dd>
+                  <dd className="text-text-primary">{selectedVariant.imperialAlias}</dd>
                 </div>
               )}
             </dl>
           </div>
 
-          {/* Pin Table */}
-          <div className="p-4 border-b border-border-default">
-            <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wide mb-3">
+          <div className="border-b border-border-default p-4">
+            <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-secondary">
               Pin Assignments
             </h3>
             <PinTable pins={component.symbolData?.pinDefinitions} />
           </div>
 
-          {/* Actions */}
           <div className="p-4">
-            <h3 className="text-xs font-medium text-text-secondary uppercase tracking-wide mb-3">
+            <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-secondary">
               Actions
             </h3>
             <div className="space-y-2">
-              <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-brand text-white text-sm font-medium rounded-md hover:opacity-90 transition-opacity">
+              <button type="button" className="flex w-full items-center justify-center gap-2 rounded-md bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90">
                 <Plus className="h-4 w-4" />
                 Use in Design
               </button>
-              <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-border-default text-text-primary text-sm font-medium rounded-md hover:bg-bg-hover transition-colors">
+              <button type="button" className="flex w-full items-center justify-center gap-2 rounded-md border border-border-default px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-bg-hover">
                 <Download className="h-4 w-4" />
                 Export KiCAD Files
               </button>
               <div className="flex gap-2">
-                <button className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-border-default text-text-secondary text-sm rounded-md hover:bg-bg-hover transition-colors">
+                <button type="button" className="flex flex-1 items-center justify-center gap-2 rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-hover">
                   <Copy className="h-4 w-4" />
                   Duplicate
                 </button>
-                {isWorkspaceComponent && (
-                  <button
-                    onClick={handleDeleteClick}
-                    disabled={isDeleting}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-error text-error text-sm rounded-md hover:bg-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    {isDeleting ? "Deleting..." : "Delete"}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleDeleteClick}
+                  disabled={deleting}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-md border border-error px-4 py-2 text-sm text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {deleting ? "Deleting..." : "Delete"}
+                </button>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bg-elevated rounded-lg border border-border-default p-6 max-w-md w-full mx-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 w-full max-w-md rounded-lg border border-border-default bg-bg-elevated p-6">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-error/10">
                 <AlertTriangle className="h-5 w-5 text-error" />
               </div>
               <div>
@@ -558,30 +525,32 @@ export function ComponentDetailPage() {
                 </p>
               </div>
             </div>
-            <p className="text-sm text-text-secondary mb-4">
-              This will permanently remove{" "}
+            <p className="mb-4 text-sm text-text-secondary">
+              This will permanently remove {" "}
               <span className="font-medium text-text-primary">
                 {component.displayLabel}
               </span>{" "}
               from your library. This action cannot be undone.
             </p>
-            {saveError && (
-              <p className="text-sm text-error mb-4">{saveError}</p>
+            {mutationError && (
+              <p className="mb-4 text-sm text-error">{mutationError}</p>
             )}
-            <div className="flex gap-3 justify-end">
+            <div className="flex justify-end gap-3">
               <button
-                onClick={handleCancelDelete}
-                disabled={isDeleting}
-                className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm text-text-secondary transition-colors hover:text-text-primary"
               >
                 Cancel
               </button>
               <button
-                onClick={handleConfirmDelete}
-                disabled={isDeleting}
-                className="px-4 py-2 bg-error text-white text-sm font-medium rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                type="button"
+                onClick={() => void handleConfirmDelete()}
+                disabled={deleting}
+                className="rounded-md bg-error px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isDeleting ? "Deleting..." : "Delete Component"}
+                {deleting ? "Deleting..." : "Delete Component"}
               </button>
             </div>
           </div>

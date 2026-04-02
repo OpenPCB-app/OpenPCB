@@ -46,9 +46,8 @@ import { ComponentValidationService } from "../../domain/services/component-vali
 import { PackageSwitchService } from "../../domain/services/package-switch-service";
 import { ComponentImportService } from "../../domain/services/component-import-service";
 import { ComponentFamilyController } from "../../transport/controllers/component-family-controller";
-import { ComponentDraftController } from "../../transport/controllers/component-draft-controller";
+import { ComponentController } from "../../transport/controllers/component-controller";
 import { ComponentImportController } from "../../transport/controllers/component-import-controller";
-import { ComponentZipImportController } from "../../transport/controllers/component-zip-import-controller";
 import { ComponentZipImportService } from "../../domain/services/component-zip-import-service";
 import { ComponentPresetController } from "../../transport/controllers/component-preset-controller";
 import { FileService } from "../../domain/services/file-service";
@@ -335,18 +334,17 @@ export function setupDIContainer(options: DISetupOptions): Container {
       ),
   );
 
-  container.register(TOKENS.ComponentDraftController, (c) => {
+  container.register(TOKENS.ComponentController, (c) => {
     const db = c.resolve<DatabaseAccess>(TOKENS.DatabaseAccess);
-    return new ComponentDraftController(
-      db.componentDrafts,
-      db.componentFamilies,
-      c.resolve(TOKENS.ComponentValidationService),
-    );
+    return new ComponentController(db.components);
   });
 
   container.register(
     TOKENS.ComponentImportService,
-    () => new ComponentImportService(),
+    (c) =>
+      new ComponentImportService(
+        c.resolve<DatabaseAccess>(TOKENS.DatabaseAccess).components,
+      ),
   );
 
   container.register(
@@ -354,27 +352,10 @@ export function setupDIContainer(options: DISetupOptions): Container {
     (c) =>
       new ComponentImportController(
         c.resolve(TOKENS.ComponentImportService),
-        c.resolve<DatabaseAccess>(TOKENS.DatabaseAccess),
-      ),
-  );
-
-  container.register(
-    TOKENS.ComponentZipImportController,
-    (c) => {
-      const db = c.resolve<DatabaseAccess>(TOKENS.DatabaseAccess);
-      const logger = db.getLogger();
-      const drizzleDb = db.getDb();
-      return new ComponentZipImportController(
         new ComponentZipImportService(
-          db.componentImportJobs,
-          db.componentFamilies,
-          db.fileRecords,
-          db.fileBlobs,
-          drizzleDb,
-          process.env.APP_DATA_DIR || ".",
+          c.resolve(TOKENS.ComponentImportService),
         ),
-      );
-    },
+      ),
   );
 
   container.register(

@@ -25,9 +25,8 @@ import type { ContentEditorController } from "../controllers/content-editor-cont
 import { DiagnosticsController } from "../controllers/diagnostics-controller";
 import { LicenseController } from "../controllers/license-controller";
 import type { ComponentFamilyController } from "../controllers/component-family-controller";
-import type { ComponentDraftController } from "../controllers/component-draft-controller";
+import type { ComponentController } from "../controllers/component-controller";
 import type { ComponentImportController } from "../controllers/component-import-controller";
-import type { ComponentZipImportController } from "../controllers/component-zip-import-controller";
 import type { ComponentPresetController } from "../controllers/component-preset-controller";
 
 // Import schemas
@@ -2026,17 +2025,12 @@ export class CoreRouter extends BaseHttpRouter {
       this.container.resolve<ComponentFamilyController>(
         TOKENS.ComponentFamilyController,
       );
-    const componentDraftController =
-      this.container.resolve<ComponentDraftController>(
-        TOKENS.ComponentDraftController,
-      );
+    const componentController = this.container.resolve<ComponentController>(
+      TOKENS.ComponentController,
+    );
     const componentImportController =
       this.container.resolve<ComponentImportController>(
         TOKENS.ComponentImportController,
-      );
-    const componentZipImportController =
-      this.container.resolve<ComponentZipImportController>(
-        TOKENS.ComponentZipImportController,
       );
     const componentPresetController =
       this.container.resolve<ComponentPresetController>(
@@ -2175,85 +2169,130 @@ export class CoreRouter extends BaseHttpRouter {
     );
 
     this.post(
-      "/api/components/drafts",
-      (ctx) => componentDraftController.create(ctx),
+      "/api/components",
+      (ctx) => componentController.createComponent(ctx),
       {
-        operationId: "createComponentDraft",
+        operationId: "createComponent",
         tags: ["Components"],
-        summary: "Create a new component draft",
-        requestBody: z.object({
-          familyId: z.string().nullable().optional(),
-          payload: z.any(),
-        }),
-        responses: { 201: z.object({ draft: z.any() }) },
+        summary: "Create a component",
+        requestBody: z.any(),
+        responses: { 201: z.object({ component: z.any() }) },
       },
     );
 
     this.get(
-      "/api/components/drafts",
-      (ctx) => componentDraftController.list(ctx),
+      "/api/components",
+      (ctx) => componentController.listComponents(ctx),
       {
-        operationId: "listComponentDrafts",
+        operationId: "listComponents",
         tags: ["Components"],
-        summary: "List active (non-deleted) component drafts",
-        responses: { 200: z.object({ drafts: z.array(z.any()) }) },
+        summary: "List workspace components",
+        responses: { 200: z.object({ components: z.array(z.any()) }) },
+      },
+    );
+
+    this.get(
+      "/api/components/:id",
+      (ctx) => componentController.getComponent(ctx),
+      {
+        operationId: "getComponent",
+        tags: ["Components"],
+        summary: "Get component with variants",
+        responses: { 200: z.object({ component: z.any() }) },
       },
     );
 
     this.patch(
-      "/api/components/drafts/:id",
-      (ctx) => componentDraftController.patch(ctx),
+      "/api/components/:id",
+      (ctx) => componentController.updateComponent(ctx),
       {
-        operationId: "patchComponentDraft",
+        operationId: "updateComponent",
         tags: ["Components"],
-        summary: "Partial update to component draft (auto-save)",
+        summary: "Update component metadata",
         requestBody: z.any(),
-        responses: { 200: z.object({ draft: z.any() }) },
+        responses: {
+          200: z.object({ component: z.any() }),
+          404: z.object({ code: z.string(), message: z.string() }),
+          409: z.object({ code: z.string(), message: z.string(), details: z.any() }),
+        },
       },
     );
 
     this.delete(
-      "/api/components/drafts/:id",
-      (ctx) => componentDraftController.discard(ctx),
+      "/api/components/:id",
+      (ctx) => componentController.deleteComponent(ctx),
       {
-        operationId: "discardComponentDraft",
+        operationId: "deleteComponent",
         tags: ["Components"],
-        summary: "Discard (soft-delete) a component draft",
-        responses: { 200: z.object({ deleted: z.boolean() }) },
-      },
-    );
-
-    this.post(
-      "/api/components/drafts/:id/validate",
-      (ctx) => componentDraftController.validate(ctx),
-      {
-        operationId: "validateComponentDraft",
-        tags: ["Components"],
-        summary: "Validate a component draft",
+        summary: "Delete component if unused",
         responses: {
-          200: z.object({
-            blockers: z.array(z.any()),
-            warnings: z.array(z.any()),
-            canPublish: z.boolean(),
-          }),
+          200: z.object({ deleted: z.boolean() }),
+          404: z.object({ code: z.string(), message: z.string() }),
+          409: z.object({ code: z.string(), message: z.string(), details: z.any() }),
         },
       },
     );
 
     this.post(
-      "/api/components/drafts/:id/publish",
-      (ctx) => componentDraftController.publish(ctx),
+      "/api/components/:id/variants",
+      (ctx) => componentController.addVariant(ctx),
       {
-        operationId: "publishComponentDraft",
+        operationId: "addComponentVariant",
         tags: ["Components"],
-        summary: "Validate and publish a draft as a new revision",
+        summary: "Add variant to component",
+        requestBody: z.any(),
         responses: {
-          200: z.object({ familyId: z.string(), revision: z.any() }),
-          422: z.object({
-            code: z.string(),
-            message: z.string(),
-            details: z.any(),
-          }),
+          201: z.object({ variant: z.any() }),
+          404: z.object({ code: z.string(), message: z.string() }),
+          409: z.object({ code: z.string(), message: z.string(), details: z.any() }),
+        },
+      },
+    );
+
+    this.patch(
+      "/api/components/:id/variants/:variantId",
+      (ctx) => componentController.updateVariant(ctx),
+      {
+        operationId: "updateComponentVariant",
+        tags: ["Components"],
+        summary: "Update component variant",
+        requestBody: z.any(),
+        responses: {
+          200: z.object({ variant: z.any() }),
+          404: z.object({ code: z.string(), message: z.string() }),
+          409: z.object({ code: z.string(), message: z.string(), details: z.any() }),
+        },
+      },
+    );
+
+    this.delete(
+      "/api/components/:id/variants/:variantId",
+      (ctx) => componentController.removeVariant(ctx),
+      {
+        operationId: "removeComponentVariant",
+        tags: ["Components"],
+        summary: "Remove component variant",
+        responses: {
+          200: z.object({ deleted: z.boolean() }),
+          404: z.object({ code: z.string(), message: z.string() }),
+          409: z.object({ code: z.string(), message: z.string(), details: z.any() }),
+        },
+      },
+    );
+
+    this.patch(
+      "/api/components/:id/default-variant",
+      (ctx) => componentController.setDefaultVariant(ctx),
+      {
+        operationId: "setDefaultComponentVariant",
+        tags: ["Components"],
+        summary: "Set default component variant",
+        requestBody: z.object({ variantId: z.string() }),
+        responses: {
+          200: z.object({ component: z.any() }),
+          400: z.object({ code: z.string(), message: z.string() }),
+          404: z.object({ code: z.string(), message: z.string() }),
+          409: z.object({ code: z.string(), message: z.string(), details: z.any() }),
         },
       },
     );
@@ -2302,148 +2341,19 @@ export class CoreRouter extends BaseHttpRouter {
     );
 
     this.post(
-      "/api/components/import/preview",
-      (ctx) => componentImportController.previewImport(ctx),
+      "/api/components/import",
+      (ctx) => componentImportController.importComponents(ctx),
       {
-        operationId: "previewComponentImport",
+        operationId: "importComponents",
         tags: ["Components"],
-        summary: "Preview a component import (not yet implemented)",
-        responses: { 501: z.object({ code: z.string(), message: z.string() }) },
-      },
-    );
-
-    this.post(
-      "/api/components/import/confirm",
-      (ctx) => componentImportController.confirmImport(ctx),
-      {
-        operationId: "confirmComponentImport",
-        tags: ["Components"],
-        summary: "Confirm and execute component import",
-        requestBody: z.object({
-          files: z.array(
-            z.object({
-              fileName: z.string(),
-              content: z.string(),
-            }),
-          ),
-          groups: z.array(
-            z.object({
-              familyLabel: z.string(),
-              canonicalKey: z.string(),
-              categoryPath: z.string().optional(),
-              symbolFileName: z.string().nullable(),
-              variants: z.array(
-                z.object({
-                  canonicalCode: z.string(),
-                  humanLabel: z.string(),
-                  mountType: z.enum(["smd", "through_hole", "virtual"]),
-                  footprintFileNames: z.array(z.string()),
-                  model3dFileNames: z.array(z.string()),
-                }),
-              ),
-            }),
-          ),
-        }),
+        summary: "Import KiCad components into the canonical library",
+        requestBody: z.any(),
         responses: {
-          200: z.object({
-            familyIds: z.array(z.string()),
+          201: z.object({
+            import: z.any(),
             message: z.string(),
           }),
           400: z.object({ code: z.string(), message: z.string() }),
-          500: z.object({ code: z.string(), message: z.string() }),
-        },
-      },
-    );
-
-    // Unified ZIP Import routes
-    this.post(
-      "/api/components/import-zip",
-      (ctx) => componentZipImportController.uploadZip(ctx),
-      {
-        operationId: "uploadComponentZip",
-        tags: ["Components"],
-        summary: "Upload a ZIP file for unified component import",
-        requestBody: z.any(), // FormData with file
-        responses: {
-          200: z.object({ job: z.any() }),
-          400: z.object({ code: z.string(), message: z.string() }),
-        },
-      },
-    );
-
-    this.get(
-      "/api/components/import-zip/:jobId/status",
-      (ctx) => componentZipImportController.getStatus(ctx),
-      {
-        operationId: "getComponentZipImportStatus",
-        tags: ["Components"],
-        summary: "Get ZIP import job status",
-        responses: {
-          200: z.object({ status: z.any() }),
-          500: z.object({ code: z.string(), message: z.string() }),
-        },
-      },
-    );
-
-    this.get(
-      "/api/components/import-zip/:jobId/preview",
-      (ctx) => componentZipImportController.getPreview(ctx),
-      {
-        operationId: "getComponentZipImportPreview",
-        tags: ["Components"],
-        summary: "Get ZIP import preview data",
-        responses: {
-          200: z.object({ preview: z.any() }),
-          500: z.object({ code: z.string(), message: z.string() }),
-        },
-      },
-    );
-
-    this.post(
-      "/api/components/import-zip/:jobId/resolve",
-      (ctx) => componentZipImportController.resolveConflict(ctx),
-      {
-        operationId: "resolveComponentZipImportConflict",
-        tags: ["Components"],
-        summary: "Resolve import conflict",
-        requestBody: z.object({
-          resolution: z.enum(["create_new", "update_existing", "skip"]),
-        }),
-        responses: {
-          200: z.object({ message: z.string() }),
-          500: z.object({ code: z.string(), message: z.string() }),
-        },
-      },
-    );
-
-    this.post(
-      "/api/components/import-zip/:jobId/approve",
-      (ctx) => componentZipImportController.approve(ctx),
-      {
-        operationId: "approveComponentZipImport",
-        tags: ["Components"],
-        summary: "Approve and save component import",
-        requestBody: z.object({ metadata: z.any().optional() }),
-        responses: {
-          200: z.object({
-            familyId: z.string().optional(),
-            componentName: z.string().optional(),
-            message: z.string(),
-          }),
-          500: z.object({ code: z.string(), message: z.string() }),
-        },
-      },
-    );
-
-    this.post(
-      "/api/components/import-zip/:jobId/cancel",
-      (ctx) => componentZipImportController.cancel(ctx),
-      {
-        operationId: "cancelComponentZipImport",
-        tags: ["Components"],
-        summary: "Cancel import job",
-        responses: {
-          200: z.object({ message: z.string() }),
           500: z.object({ code: z.string(), message: z.string() }),
         },
       },

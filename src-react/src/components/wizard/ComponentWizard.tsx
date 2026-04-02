@@ -17,9 +17,9 @@ import {
   type WizardStep,
 } from "@/stores/component-wizard-store";
 import {
-  createComponentDraft,
-  patchComponentDraft,
-  publishComponentDraft,
+  createWorkspaceComponentRecord,
+  patchWorkspaceComponentRecord,
+  publishWorkspaceComponentRecord,
 } from "@/lib/api/component-api";
 import { useSymbolEditorStore } from "@/components/symbol-editor";
 import { SpecsStep } from "./SpecsStep";
@@ -114,7 +114,9 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
 
       try {
         // Create backend draft
-        const backendDraft = await createComponentDraft(createEmptyBackendPayload());
+        const backendDraft = await createWorkspaceComponentRecord(
+          createEmptyBackendPayload(),
+        );
 
         if (!mounted) return;
 
@@ -165,10 +167,11 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
     }
   }, [
     currentStep,
-    draft?.symbolData,
-    draft?.footprintData,
+    draft,
+    footprintDraft,
     setFootprintDraft,
     setSymbolDraft,
+    symbolDraft,
   ]);
 
   // Sync symbol editor changes to wizard store
@@ -209,7 +212,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
     autosaveTimeoutRef.current = setTimeout(async () => {
       try {
         setSaving(true);
-        await patchComponentDraft(draftId, {
+        await patchWorkspaceComponentRecord(draftId, {
           payload: transformWizardToBackendPayload(draft),
         });
         markClean();
@@ -254,7 +257,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
           clearTimeout(autosaveTimeoutRef.current);
           autosaveTimeoutRef.current = null;
         }
-        await patchComponentDraft(draftId, {
+        await patchWorkspaceComponentRecord(draftId, {
           payload: transformWizardToBackendPayload(draft),
         });
       } catch {
@@ -282,10 +285,12 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
       const backendPayload = transformWizardToBackendPayload(draft);
       
       // Final save before publish
-      await patchComponentDraft(draftId, { payload: backendPayload as never });
+      await patchWorkspaceComponentRecord(draftId, {
+        payload: backendPayload,
+      });
 
       // Publish
-      const result = await publishComponentDraft(draftId);
+      const result = await publishWorkspaceComponentRecord(draftId);
 
       toast({
         title: "Component published",
@@ -350,6 +355,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-border-default bg-bg-secondary px-6 py-3">
         <button
+          type="button"
           className="text-text-tertiary hover:text-text-secondary"
           onClick={handleClose}
         >
@@ -424,6 +430,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
         <div className="flex items-center gap-2">
           {!isFirstStep && (
             <button
+              type="button"
               className="h-9 rounded-md bg-bg-input px-4 text-sm font-medium text-text-secondary hover:bg-bg-elevated transition-colors"
               onClick={handleBack}
             >
@@ -432,6 +439,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
           )}
           {isLastStep ? (
             <button
+              type="button"
               className="flex items-center gap-2 h-9 rounded-md bg-brand px-4 text-sm font-medium text-white hover:opacity-90 transition-opacity disabled:opacity-50"
               onClick={handlePublish}
               disabled={isPublishing}
@@ -450,6 +458,7 @@ export function ComponentWizard({ onClose, onPublished }: ComponentWizardProps) 
             </button>
           ) : (
             <button
+              type="button"
               className="h-9 rounded-md bg-brand px-4 text-sm font-medium text-white hover:opacity-90 transition-opacity"
               onClick={handleNext}
             >

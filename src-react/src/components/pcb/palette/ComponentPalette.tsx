@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { GripVertical, Package, RefreshCw } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -22,19 +22,14 @@ interface ComponentPaletteProps {
   controller?: SchematicInteractionController;
 }
 
-type ComponentScope = "built_in" | "workspace" | "all";
-
 function groupFamiliesByCategory(
   families: ComponentFamilyType[],
-  scope: ComponentScope,
 ): Map<SymbolCategory, ComponentFamilyType[]> {
-  const filtered =
-    scope === "all" ? families : families.filter((f) => f.scope === scope);
   const groups = new Map<SymbolCategory, ComponentFamilyType[]>();
   for (const category of SYMBOL_CATEGORIES) {
     groups.set(category.key, []);
   }
-  for (const family of filtered) {
+  for (const family of families) {
     const category = mapCategoryPathToCategory(family.categoryPath ?? null);
     const group = groups.get(category);
     if (group) {
@@ -166,14 +161,13 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
   const setPaletteDragSymbolKind = useSchematicStore(
     (s) => s.setPaletteDragSymbolKind,
   );
-  const [scope, setScope] = useState<ComponentScope>("all");
   const { components, loading, error, refetch } = useComponents();
   const activeSymbolKind =
     session?.type === "placement" ? session.symbolKind : draggedSymbolKind;
 
   const groupedFamilies = useMemo(
-    () => groupFamiliesByCategory(components, scope),
-    [components, scope],
+    () => groupFamiliesByCategory(components),
+    [components],
   );
   const hasComponents = components.length > 0 || EMBEDDED_SYMBOLS.length > 0;
   const handleLegacyDragStart = (kind: string) => {
@@ -206,32 +200,6 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
             <RefreshCw className="h-3 w-3" />
           </Button>
         </div>
-        <div className="mt-1 flex gap-1">
-          <Button
-            variant={scope === "all" ? "default" : "ghost"}
-            size="sm"
-            className="h-6 px-2 text-[10px]"
-            onClick={() => setScope("all")}
-          >
-            All
-          </Button>
-          <Button
-            variant={scope === "built_in" ? "default" : "ghost"}
-            size="sm"
-            className="h-6 px-2 text-[10px]"
-            onClick={() => setScope("built_in")}
-          >
-            Built-in
-          </Button>
-          <Button
-            variant={scope === "workspace" ? "default" : "ghost"}
-            size="sm"
-            className="h-6 px-2 text-[10px]"
-            onClick={() => setScope("workspace")}
-          >
-            Workspace
-          </Button>
-        </div>
       </div>
 
       {error && (
@@ -243,8 +211,17 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
       <ScrollArea className="flex-1">
         {loading ? (
           <div className="flex flex-col gap-2 p-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-8 w-full" />
+            {[
+              "component-palette-skeleton-1",
+              "component-palette-skeleton-2",
+              "component-palette-skeleton-3",
+              "component-palette-skeleton-4",
+              "component-palette-skeleton-5",
+              "component-palette-skeleton-6",
+              "component-palette-skeleton-7",
+              "component-palette-skeleton-8",
+            ].map((key) => (
+              <Skeleton key={key} className="h-8 w-full" />
             ))}
           </div>
         ) : !hasComponents ? (

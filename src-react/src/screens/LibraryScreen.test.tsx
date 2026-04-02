@@ -1,92 +1,169 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LibraryScreen } from "./LibraryScreen";
+
+const useComponentsMock = vi.fn();
+const useComponentMutationsMock = vi.fn();
+
+const navigationState = {
+  navigateToComponentDetail: vi.fn(),
+};
+
+const refetchMock = vi.fn();
+const createComponentMock = vi.fn();
+const clearMutationErrorMock = vi.fn();
 
 const mockComponents = [
   {
-    id: "built-in-ground",
-    displayLabel: "Ground",
-    canonicalKey: "ground",
+    id: "workspace-ground",
+    displayLabel: "Ground Reference",
+    canonicalKey: "ground-reference",
     description: "Ground reference symbol",
-    scope: "built_in",
+    scope: "workspace",
     categoryPath: "Power",
     symbolData: {
       referencePrefix: "GND",
       pinDefinitions: [{ name: "GND", electricalType: "power_in" }],
       properties: {},
     },
-    packageVariants: [],
-    defaultPackageVariantId: null,
+    packageVariants: [
+      {
+        id: "variant-ground",
+        humanLabel: "Symbol Only",
+      },
+    ],
+    defaultPackageVariantId: "variant-ground",
     tags: [],
   },
   {
-    id: "built-in-resistor",
+    id: "workspace-resistor",
     displayLabel: "Resistor",
     canonicalKey: "resistor",
     description: "Generic resistor",
-    scope: "built_in",
+    scope: "workspace",
     categoryPath: "Passives/Resistors",
     symbolData: {
       referencePrefix: "R",
-      pinDefinitions: [{ name: "1", electricalType: "passive" }, { name: "2", electricalType: "passive" }],
+      pinDefinitions: [
+        { name: "1", electricalType: "passive" },
+        { name: "2", electricalType: "passive" },
+      ],
       properties: {},
     },
-    packageVariants: [],
-    defaultPackageVariantId: null,
+    packageVariants: [
+      {
+        id: "variant-resistor-0603",
+        humanLabel: "0603",
+      },
+      {
+        id: "variant-resistor-0805",
+        humanLabel: "0805",
+      },
+    ],
+    defaultPackageVariantId: "variant-resistor-0603",
     tags: [],
   },
 ];
 
-let mockFilters: { search?: string; scope?: string; mountTypes?: string[] } = {};
+let latestFilters: Record<string, unknown> = {};
 
 vi.mock("@/hooks/useComponents", () => ({
-  useComponents: vi.fn((initialFilters?: { search?: string }) => {
-    mockFilters = initialFilters ?? {};
-    const search = initialFilters?.search?.toLowerCase();
-    const filtered = search
-      ? mockComponents.filter((c) =>
-          c.displayLabel.toLowerCase().includes(search)
-        )
-      : mockComponents;
-    return {
-      components: filtered,
-      loading: false,
-      error: null,
-      refetch: vi.fn(),
-      filters: mockFilters,
-      setFilters: vi.fn(),
-    };
-  }),
+  useComponents: (...args: unknown[]) => useComponentsMock(...args),
+  useComponentMutations: (...args: unknown[]) => useComponentMutationsMock(...args),
 }));
 
-vi.mock("@/hooks/useDrafts", () => ({
-  useDrafts: vi.fn(() => ({
-    drafts: [],
-    loading: false,
-    refetch: vi.fn(),
-  })),
+vi.mock("@/stores/navigation-store", () => ({
+  useNavigationStore: (selector: (state: typeof navigationState) => unknown) =>
+    selector(navigationState),
+}));
+
+vi.mock("@/components/unified-import/UnifiedImportModal", () => ({
+  UnifiedImportModal: () => null,
 }));
 
 describe("LibraryScreen", () => {
-  it("shows only Ground and Resistor cards without fake procurement metadata", () => {
-    render(<LibraryScreen />);
+  beforeEach(() => {
+    latestFilters = {};
+    refetchMock.mockReset();
+    createComponentMock.mockReset();
+    clearMutationErrorMock.mockReset();
+    navigationState.navigateToComponentDetail.mockReset();
 
-    expect(screen.getByText("Ground")).toBeInTheDocument();
-    expect(screen.getByText("Resistor")).toBeInTheDocument();
-    expect(screen.queryByText("ESP32-S3")).not.toBeInTheDocument();
-    expect(screen.queryByText("USB-C Connector")).not.toBeInTheDocument();
-    expect(screen.queryByText("$0.002")).not.toBeInTheDocument();
-    expect(screen.queryByText("45K")).not.toBeInTheDocument();
+    useComponentsMock.mockImplementation((initialFilters?: Record<string, unknown>) => {
+      latestFilters = initialFilters ?? {};
+      const search = typeof initialFilters?.search === "string"
+        ? initialFilters.search.toLowerCase()
+        : null;
+      const filtered = search
+        ? mockComponents.filter((component) =>
+            component.displayLabel.toLowerCase().includes(search),
+          )
+        : mockComponents;
+
+      return {
+        components: filtered,
+        loading: false,
+        error: null,
+        refetch: refetchMock,
+        filters: initialFilters ?? {},
+        setFilters: vi.fn(),
+      };
+    });
+
+    useComponentMutationsMock.mockReturnValue({
+      createComponent: createComponentMock,
+      creating: false,
+      updating: false,
+      deleting: false,
+      error: null,
+      clearError: clearMutationErrorMock,
+    });
   });
 
-  it("filters the built-in list by search query", () => {
+  it("renders workspace components without scope or draft affordances", () => {
+    render(<LibraryScreen />);
+
+    expect(screen.getByText("Ground Reference")).toBeInTheDocument();
+    expect(screen.getByText("Resistor")).toBeInTheDocument();
+    expect(screen.queryByText("Pending Drafts")).not.toBeInTheDocument();
+    expect(screen.queryByText("Built-in")).not.toBeInTheDocument();
+    expect(screen.queryByText("Workspace")).not.toBeInTheDocument();
+    expect(screen.queryByText("Continue")).not.toBeInTheDocument();
+  });
+
+  it("passes search and single mount filters into useComponents", () => {
     render(<LibraryScreen />);
 
     fireEvent.change(screen.getByPlaceholderText("Search components..."), {
       target: { value: "ground" },
     });
 
-    expect(screen.getByText("Ground")).toBeInTheDocument();
+    expect(latestFilters).toMatchObject({ search: "ground" });
+    expect(screen.getByText("Ground Reference")).toBeInTheDocument();
     expect(screen.queryByText("Resistor")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "SMD" }));
+    expect(latestFilters).toMatchObject({ search: "ground", mountType: "smd" });
+
+    fireEvent.click(screen.getByRole("button", { name: "SMD" }));
+    expect(latestFilters).toMatchObject({ search: "ground", mountType: undefined });
+  });
+
+  it("creates a component and navigates to its detail page", async () => {
+    createComponentMock.mockResolvedValue({ id: "component-123" });
+
+    render(<LibraryScreen />);
+
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+
+    await waitFor(() => {
+      expect(clearMutationErrorMock).toHaveBeenCalledTimes(1);
+      expect(createComponentMock).toHaveBeenCalledWith(
+        expect.objectContaining({ displayLabel: "Untitled Component" }),
+      );
+      expect(navigationState.navigateToComponentDetail).toHaveBeenCalledWith(
+        "component-123",
+      );
+    });
   });
 });

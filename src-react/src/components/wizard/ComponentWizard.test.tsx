@@ -8,17 +8,17 @@ import { useFootprintEditorStore } from "@/components/footprint-editor";
 
 const {
   toast,
-  createComponentDraft,
-  patchComponentDraft,
-  publishComponentDraft,
+  createWorkspaceComponentRecord,
+  patchWorkspaceComponentRecord,
+  publishWorkspaceComponentRecord,
   parseKicadSymbolImport,
   parseKicadFootprintImport,
   uploadFile,
 } = vi.hoisted(() => ({
   toast: vi.fn(),
-  createComponentDraft: vi.fn(),
-  patchComponentDraft: vi.fn(),
-  publishComponentDraft: vi.fn(),
+  createWorkspaceComponentRecord: vi.fn(),
+  patchWorkspaceComponentRecord: vi.fn(),
+  publishWorkspaceComponentRecord: vi.fn(),
   parseKicadSymbolImport: vi.fn(),
   parseKicadFootprintImport: vi.fn(),
   uploadFile: vi.fn(),
@@ -41,9 +41,9 @@ vi.mock("@/lib/api/component-api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/component-api")>("@/lib/api/component-api");
   return {
     ...actual,
-    createComponentDraft,
-    patchComponentDraft,
-    publishComponentDraft,
+    createWorkspaceComponentRecord,
+    patchWorkspaceComponentRecord,
+    publishWorkspaceComponentRecord,
     parseKicadSymbolImport,
     parseKicadFootprintImport,
   };
@@ -122,7 +122,7 @@ describe("ComponentWizard", () => {
     useSymbolEditorStore.getState().resetDraft("symbol-test");
     useFootprintEditorStore.getState().resetDraft("footprint-test");
 
-    createComponentDraft.mockResolvedValue({
+    createWorkspaceComponentRecord.mockResolvedValue({
       id: "draft-1",
       familyId: null,
       wizardStep: 0,
@@ -131,8 +131,11 @@ describe("ComponentWizard", () => {
       createdAt: "2026-04-01T00:00:00Z",
       updatedAt: "2026-04-01T00:00:00Z",
     });
-    patchComponentDraft.mockResolvedValue({ id: "draft-1" });
-    publishComponentDraft.mockResolvedValue({ familyId: "family-1", revision: { id: "rev-1" } });
+    patchWorkspaceComponentRecord.mockResolvedValue({ id: "draft-1" });
+    publishWorkspaceComponentRecord.mockResolvedValue({
+      familyId: "family-1",
+      revision: { id: "rev-1" },
+    });
     uploadFile.mockResolvedValue({ id: "file-1", originalName: "Package.step" });
 
     parseKicadSymbolImport.mockResolvedValue({
@@ -290,10 +293,10 @@ describe("ComponentWizard", () => {
     fireEvent.click(screen.getByRole("button", { name: /Save Component/i }));
 
     await waitFor(() => {
-      expect(publishComponentDraft).toHaveBeenCalledWith("draft-1");
+      expect(publishWorkspaceComponentRecord).toHaveBeenCalledWith("draft-1");
     });
 
-    const finalPatchPayload = patchComponentDraft.mock.calls.at(-1)?.[1]?.payload;
+    const finalPatchPayload = patchWorkspaceComponentRecord.mock.calls.at(-1)?.[1]?.payload;
     expect(finalPatchPayload.symbolData.rawKicadSource).toContain("symbol chip");
     expect(finalPatchPayload.packageVariants[0]?.footprintOptions[0]?.kicadPayload.rawKicadSource).toContain(
       "footprint chip",

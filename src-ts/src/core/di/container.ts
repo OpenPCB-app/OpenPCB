@@ -122,7 +122,7 @@ export const TOKENS = {
 
   // Component Library
   ComponentFamilyController: Symbol("ComponentFamilyController"),
-  ComponentDraftController: Symbol("ComponentDraftController"),
+  ComponentController: Symbol("ComponentController"),
   ComponentImportController: Symbol("ComponentImportController"),
   ComponentZipImportController: Symbol("ComponentZipImportController"),
   ComponentPresetController: Symbol("ComponentPresetController"),

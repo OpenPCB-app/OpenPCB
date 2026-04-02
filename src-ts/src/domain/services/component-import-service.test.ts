@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { ComponentImportService } from "./component-import-service";
@@ -13,53 +13,21 @@ function readFixture(name: string): string {
 }
 
 describe("ComponentImportService", () => {
-  const svc = new ComponentImportService();
-
-  test("generates preview from capacitor footprint fixtures", () => {
-    const files = [
-      {
-        fileName: "C_0603_1608Metric.kicad_mod",
-        content: readFixture("C_0603_1608Metric.kicad_mod"),
+  test("imports grouped KiCad symbol and footprint files into canonical components", async () => {
+    const createComponent = mock(async (input: any) => ({
+      component: {
+        id: "component-1",
+        canonicalKey: input.canonicalKey,
+        displayLabel: input.displayLabel,
       },
-      {
-        fileName: "C_0603_1608Metric_Pad1.08x0.95mm_HandSolder.kicad_mod",
-        content: readFixture(
-          "C_0603_1608Metric_Pad1.08x0.95mm_HandSolder.kicad_mod",
-        ),
-      },
-    ];
+      variants: input.variants.map((variant: any, index: number) => ({
+        id: `variant-${index + 1}`,
+        ...variant,
+      })),
+    }));
+    const service = new ComponentImportService({ createComponent } as any);
 
-    const result = svc.generatePreview(files, ["C_0603_1608Metric.step"]);
-
-    expect(result.groups.length).toBe(1);
-    const group = result.groups[0]!;
-    expect(group.suggestedFamilyLabel).toContain("0603");
-    expect(group.variants.length).toBe(2);
-    expect(result.ungroupedFiles.length).toBe(0);
-  });
-
-  test("import preview returns grouped families with warnings", () => {
-    const files = [
-      {
-        fileName: "C_0603_1608Metric.kicad_mod",
-        content: readFixture("C_0603_1608Metric.kicad_mod"),
-      },
-      {
-        fileName: "missing_3d_footprint.kicad_mod",
-        content: readFixture("missing_3d_footprint.kicad_mod"),
-      },
-    ];
-
-    const result = svc.generatePreview(files, ["C_0603_1608Metric.step"]);
-
-    // Should have groups for both
-    expect(result.groups.length).toBeGreaterThanOrEqual(1);
-    // Missing 3D should produce a warning
-    expect(result.totalWarnings).toBeGreaterThan(0);
-  });
-
-  test("handles symbol files alongside footprints", () => {
-    const files = [
+    const result = await service.importFiles([
       {
         fileName: "simple_capacitor.kicad_sym",
         content: readFixture("simple_capacitor.kicad_sym"),
@@ -68,58 +36,74 @@ describe("ComponentImportService", () => {
         fileName: "C_0603_1608Metric.kicad_mod",
         content: readFixture("C_0603_1608Metric.kicad_mod"),
       },
-    ];
-
-    const result = svc.generatePreview(files, []);
-
-    expect(result.groups.length).toBe(1);
-    // Symbol should be matched to the capacitor group
-    expect(result.groups[0]!.symbolFileName).toBe("simple_capacitor.kicad_sym");
-  });
-
-  test("ambiguous grouping requires confirm", () => {
-    // Import manufacturer-specific alongside generic
-    const files = [
-      {
-        fileName: "CP_Elec_6.3x5.4_Nichicon.kicad_mod",
-        content: readFixture("CP_Elec_6.3x5.4_Nichicon.kicad_mod"),
-      },
-    ];
-
-    const result = svc.generatePreview(files, [
-      "CP_Elec_6.3x5.4_Nichicon.step",
+      { fileName: "C_0603_1608Metric.step" },
     ]);
 
-    expect(result.groups.length).toBe(1);
-    const group = result.groups[0]!;
-    expect(group.suggestedFamilyLabel).toContain("Electrolytic");
-    expect(group.suggestedFamilyLabel).toContain("6.3x5.4");
+    expect(createComponent).toHaveBeenCalledTimes(1);
+    expect(result.components).toHaveLength(1);
+
+    const input = createComponent.mock.calls[0]?.[0];
+    expect(input.displayLabel.toLowerCase()).toContain("capacitor");
+    expect(input.variants).toHaveLength(1);
+    expect(input.variants[0]?.footprintPayload?.importProvenance?.sourceFileName).toBe(
+      "C_0603_1608Metric.kicad_mod",
+    );
+    expect(input.symbolData.importProvenance.sourceFileName).toBe(
+      "simple_capacitor.kicad_sym",
+    );
   });
 
-  test("ungrouped files are reported for unparseable content", () => {
-    const files = [
-      {
-        fileName: "garbage.kicad_mod",
-        content: "this is not valid sexpr content",
+  test("creates symbol-only virtual components when no footprints are provided", async () => {
+    const createComponent = mock(async (input: any) => ({
+      component: {
+        id: "component-2",
+        canonicalKey: input.canonicalKey,
+        displayLabel: input.displayLabel,
       },
-    ];
+      variants: input.variants.map((variant: any, index: number) => ({
+        id: `variant-${index + 1}`,
+        ...variant,
+      })),
+    }));
+    const service = new ComponentImportService({ createComponent } as any);
 
-    const result = svc.generatePreview(files, []);
-    expect(result.ungroupedFiles).toContain("garbage.kicad_mod");
+    const result = await service.importFiles([
+      {
+        fileName: "simple_resistor.kicad_sym",
+        content: readFixture("simple_resistor.kicad_sym"),
+      },
+    ]);
+
+    expect(result.components).toHaveLength(1);
+    const input = createComponent.mock.calls[0]?.[0];
+    expect(input.variants[0]?.mountType).toBe("virtual");
+    expect(input.symbolData.referencePrefix).toBe("R");
   });
 
-  test("3D link classification produces warnings for missing models", () => {
-    const files = [
+  test("reports warnings for missing 3D model targets while still importing", async () => {
+    const createComponent = mock(async (input: any) => ({
+      component: {
+        id: "component-3",
+        canonicalKey: input.canonicalKey,
+        displayLabel: input.displayLabel,
+      },
+      variants: input.variants.map((variant: any, index: number) => ({
+        id: `variant-${index + 1}`,
+        ...variant,
+      })),
+    }));
+    const service = new ComponentImportService({ createComponent } as any);
+
+    const result = await service.importFiles([
       {
         fileName: "missing_3d_footprint.kicad_mod",
         content: readFixture("missing_3d_footprint.kicad_mod"),
       },
-    ];
+    ]);
 
-    const result = svc.generatePreview(files, []);
-    const missingWarnings = result.groups.flatMap((g) =>
-      g.warnings.filter((w) => w.code === "missing_3d_model"),
+    expect(result.components).toHaveLength(1);
+    expect(result.warnings.some((warning) => warning.code === "missing_3d_model")).toBe(
+      true,
     );
-    expect(missingWarnings.length).toBeGreaterThan(0);
   });
 });

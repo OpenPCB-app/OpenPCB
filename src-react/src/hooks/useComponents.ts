@@ -1,21 +1,23 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  listComponentFamilies,
-  getComponentFamily,
-  type ComponentScope,
+  createComponent as createComponentRecord,
+  deleteComponent as deleteComponentRecord,
+  getComponent,
+  listComponents,
   type MountType,
+  type ComponentType,
+  updateComponent as updateComponentRecord,
 } from "@/lib/api/component-api";
-import type { ComponentFamilyType } from "@/../../src-ts/src/core/schemas/component-library.schema";
 
 export interface UseComponentsFilters {
-  scope?: ComponentScope;
   search?: string;
-  mountTypes?: MountType[];
-  category?: string;
+  mountType?: MountType;
+  categoryPath?: string;
+  tags?: string[];
 }
 
 export interface UseComponentsReturn {
-  components: ComponentFamilyType[];
+  components: ComponentType[];
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -23,10 +25,31 @@ export interface UseComponentsReturn {
   setFilters: (filters: UseComponentsFilters) => void;
 }
 
+export interface UseComponentMutationsReturn {
+  creating: boolean;
+  updating: boolean;
+  deleting: boolean;
+  error: string | null;
+  clearError: () => void;
+  createComponent: (payload?: Partial<ComponentType>) => Promise<ComponentType>;
+  updateComponent: (
+    id: string,
+    updates: Partial<ComponentType>,
+  ) => Promise<ComponentType>;
+  deleteComponent: (id: string) => Promise<void>;
+}
+
+function toErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function useComponents(
   initialFilters: UseComponentsFilters = {},
 ): UseComponentsReturn {
-  const [components, setComponents] = useState<ComponentFamilyType[]>([]);
+  const [components, setComponents] = useState<ComponentType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<UseComponentsFilters>(initialFilters);
@@ -36,35 +59,19 @@ export function useComponents(
     setError(null);
 
     try {
-      let results = await listComponentFamilies(filters.scope, filters.search);
-
-      // Client-side filtering for mount types
-      if (filters.mountTypes && filters.mountTypes.length > 0) {
-        results = results.filter((component) =>
-          component.packageVariants.some((variant) =>
-            filters.mountTypes?.includes(variant.mountType as MountType),
-          ),
-        );
-      }
-
-      // Note: category filtering would require categoryPath in ComponentFamily schema
-      // For now, we'll skip category filtering until the schema is updated
-      if (filters.category) {
-        // TODO: Filter by category when categoryPath is added to schema
-      }
-
+      const results = await listComponents(filters);
       setComponents(results);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to fetch components";
+      const message = toErrorMessage(err, "Failed to fetch components");
       setError(message);
       console.error("Failed to fetch components:", err);
     } finally {
       setLoading(false);
     }
-  }, [filters.scope, filters.search, filters.mountTypes, filters.category]);
+  }, [filters]);
 
   useEffect(() => {
-    fetchComponents();
+    void fetchComponents();
   }, [fetchComponents]);
 
   return {
@@ -77,29 +84,116 @@ export function useComponents(
   };
 }
 
-export interface UseComponentDetailReturn {
-  component: ComponentFamilyType | null;
-  loading: boolean;
-  error: string | null;
-  refetch: () => Promise<void>;
-}
-
-export function useComponentDetail(id: string): UseComponentDetailReturn {
-  const [component, setComponent] = useState<ComponentFamilyType | null>(null);
-  const [loading, setLoading] = useState(true);
+export function useComponentMutations(): UseComponentMutationsReturn {
+  const [creating, setCreating] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
+  const createComponent = useCallback(
+    async (payload: Partial<ComponentType> = {}) => {
+      setCreating(true);
+      setError(null);
+
+      try {
+        return await createComponentRecord(payload);
+      } catch (err) {
+        const message = toErrorMessage(err, "Failed to create component");
+        setError(message);
+        throw err;
+      } finally {
+        setCreating(false);
+      }
+    },
+    [],
+  );
+
+  const updateComponent = useCallback(
+    async (id: string, updates: Partial<ComponentType>) => {
+      setUpdating(true);
+      setError(null);
+
+      try {
+        return await updateComponentRecord(id, updates);
+      } catch (err) {
+        const message = toErrorMessage(err, "Failed to save component");
+        setError(message);
+        throw err;
+      } finally {
+        setUpdating(false);
+      }
+    },
+    [],
+  );
+
+  const deleteComponent = useCallback(async (id: string) => {
+    setDeleting(true);
+    setError(null);
+
+    try {
+      await deleteComponentRecord(id);
+    } catch (err) {
+      const message = toErrorMessage(err, "Failed to delete component");
+      setError(message);
+      throw err;
+    } finally {
+      setDeleting(false);
+    }
+  }, []);
+
+  return {
+    creating,
+    updating,
+    deleting,
+    error,
+    clearError,
+    createComponent,
+    updateComponent,
+    deleteComponent,
+  };
+}
+
+export interface UseComponentDetailReturn {
+  component: ComponentType | null;
+  loading: boolean;
+  error: string | null;
+  mutationError: string | null;
+  saving: boolean;
+  deleting: boolean;
+  clearMutationError: () => void;
+  refetch: () => Promise<void>;
+  updateComponent: (updates: Partial<ComponentType>) => Promise<ComponentType>;
+  deleteComponent: () => Promise<void>;
+}
+
+export function useComponentDetail(id?: string | null): UseComponentDetailReturn {
+  const [component, setComponent] = useState<ComponentType | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   const fetchComponent = useCallback(async () => {
-    if (!id) return;
+    if (!id) {
+      setComponent(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     try {
-      const result = await getComponentFamily(id);
+      const result = await getComponent(id);
       setComponent(result);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to fetch component";
+      const message = toErrorMessage(err, "Failed to fetch component");
       setError(message);
       console.error("Failed to fetch component:", err);
     } finally {
@@ -108,13 +202,67 @@ export function useComponentDetail(id: string): UseComponentDetailReturn {
   }, [id]);
 
   useEffect(() => {
-    fetchComponent();
+    void fetchComponent();
   }, [fetchComponent]);
+
+  const clearMutationError = useCallback(() => {
+    setMutationError(null);
+  }, []);
+
+  const updateComponentDetail = useCallback(
+    async (updates: Partial<ComponentType>) => {
+      if (!id) {
+        throw new Error("Component id is required");
+      }
+
+      setSaving(true);
+      setMutationError(null);
+
+      try {
+        const updated = await updateComponentRecord(id, updates);
+        setComponent(updated);
+        return updated;
+      } catch (err) {
+        const message = toErrorMessage(err, "Failed to save component");
+        setMutationError(message);
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [id],
+  );
+
+  const deleteComponentDetail = useCallback(async () => {
+    if (!id) {
+      throw new Error("Component id is required");
+    }
+
+    setDeleting(true);
+    setMutationError(null);
+
+    try {
+      await deleteComponentRecord(id);
+      setComponent(null);
+    } catch (err) {
+      const message = toErrorMessage(err, "Failed to delete component");
+      setMutationError(message);
+      throw err;
+    } finally {
+      setDeleting(false);
+    }
+  }, [id]);
 
   return {
     component,
     loading,
     error,
+    mutationError,
+    saving,
+    deleting,
+    clearMutationError,
     refetch: fetchComponent,
+    updateComponent: updateComponentDetail,
+    deleteComponent: deleteComponentDetail,
   };
 }
