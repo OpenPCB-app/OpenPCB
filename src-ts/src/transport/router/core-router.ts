@@ -2235,6 +2235,50 @@ export class CoreRouter extends BaseHttpRouter {
       },
     );
 
+    this.get(
+      "/api/components/:id/delete-impact",
+      (ctx) => componentController.getDeleteImpact(ctx),
+      {
+        operationId: "getComponentDeleteImpact",
+        tags: ["Components"],
+        summary: "Get component delete impact and usage references",
+        responses: {
+          200: z.object({
+            usageCount: z.number(),
+            designNames: z.array(z.string()),
+          }),
+          404: z.object({ code: z.string(), message: z.string() }),
+        },
+      },
+    );
+
+    this.post(
+      "/api/components/bulk-delete",
+      (ctx) => componentController.bulkDeleteComponents(ctx),
+      {
+        operationId: "bulkDeleteComponents",
+        tags: ["Components"],
+        summary: "Bulk delete components with optional used-component override",
+        requestBody: z.object({
+          ids: z.array(z.string()),
+          forceUsed: z.boolean().optional(),
+        }),
+        responses: {
+          200: z.object({
+            deleted: z.boolean(),
+            deletedCount: z.number(),
+            skippedCount: z.number(),
+            skippedNotFoundCount: z.number(),
+            skippedUsedCount: z.number(),
+            skippedUsed: z.array(z.any()),
+            deletedUsedCount: z.number(),
+            deletedUsed: z.array(z.any()),
+          }),
+          400: z.object({ code: z.string(), message: z.string() }),
+        },
+      },
+    );
+
     this.post(
       "/api/components/:id/variants",
       (ctx) => componentController.addVariant(ctx),

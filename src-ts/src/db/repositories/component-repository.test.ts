@@ -3,7 +3,6 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import * as schema from "../schema";
 import { QueryLogger } from "../query-logger";
-import { DbConflictError } from "../errors";
 import { ComponentRepository } from "./component-repository";
 
 function createTestDb() {
@@ -65,6 +64,18 @@ function createTestDb() {
       name TEXT NOT NULL,
       description TEXT,
       sort_order INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      deleted_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS design_sheet (
+      id TEXT PRIMARY KEY,
+      design_id TEXT NOT NULL REFERENCES design(id) ON DELETE CASCADE,
+      sheet_index INTEGER NOT NULL DEFAULT 0,
+      title TEXT NOT NULL DEFAULT 'Sheet 1',
+      content TEXT NOT NULL,
+      content_hash TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       deleted_at INTEGER
@@ -227,7 +238,7 @@ describe("ComponentRepository", () => {
     );
   });
 
-  test("deleteComponent throws DbConflictError when the component is referenced", async () => {
+  test("getDeleteImpact returns usage count and design names", async () => {
     const created = await repo.createComponent({
       canonicalKey: "ferrite-bead",
       displayLabel: "Ferrite Bead",
@@ -235,41 +246,21 @@ describe("ComponentRepository", () => {
       variants: [variant("0603", "0603", true)],
     });
 
-    const defaultVariantId = created.component.defaultVariantId!;
-
     sqlite.exec(`
       INSERT INTO design (id, workspace_id, name, created_at, updated_at, deleted_at)
       VALUES
         ('design-a', 'ws-1', 'Design A', 1, 1, NULL),
         ('design-b', 'ws-1', 'Design B', 1, 1, NULL);
+
+      INSERT INTO design_sheet (id, design_id, sheet_index, title, content, content_hash, created_at, updated_at, deleted_at)
+      VALUES
+        ('sheet-a', 'design-a', 0, 'Sheet 1', '{"id":"doc-a","projectId":"p","updatedAt":"2026-01-01T00:00:00Z","version":1,"formatVersion":"pcb.schematic-project-document/v1","symbols":[{"id":"s1","libraryPartId":"${created.component.id}","reference":"U1","position":{"x":0,"y":0},"pins":[]}],"wires":[],"labels":[]}', 'h1', 1, 1, NULL),
+        ('sheet-b', 'design-b', 0, 'Sheet 1', '{"id":"doc-b","projectId":"p","updatedAt":"2026-01-01T00:00:00Z","version":1,"formatVersion":"pcb.schematic-project-document/v1","symbols":[{"id":"s2","properties":{"component_id":"${created.component.id}"},"reference":"U2","position":{"x":0,"y":0},"pins":[]}],"wires":[],"labels":[]}', 'h2', 1, 1, NULL);
     `);
 
-    await repo.recordUsage({
-      componentId: created.component.id,
-      designId: "design-a",
-      variantId: defaultVariantId,
-    });
-
-    await repo.recordUsage({
-      componentId: created.component.id,
-      designId: "design-a",
-      variantId: defaultVariantId,
-    });
-
-    await repo.recordUsage({
-      componentId: created.component.id,
-      designId: "design-b",
-      variantId: defaultVariantId,
-    });
-
-    expect(await repo.getUsageCount(created.component.id)).toBe(2);
-
-    await expect(repo.deleteComponent(created.component.id)).rejects.toThrow(DbConflictError);
-    await expect(repo.deleteComponent(created.component.id)).rejects.toThrow(
-      "in use by 2 design(s)",
-    );
-
-    expect(await repo.getComponent(created.component.id)).not.toBeNull();
+    const impact = await repo.getDeleteImpact(created.component.id);
+    expect(impact.usageCount).toBe(2);
+    expect(impact.designNames).toEqual(["Design A", "Design B"]);
   });
 
   test("deleteComponent ignores usage rows for missing or deleted designs", async () => {
@@ -280,24 +271,14 @@ describe("ComponentRepository", () => {
       variants: [variant("0603", "0603", true)],
     });
 
-    const defaultVariantId = created.component.defaultVariantId!;
-
     sqlite.exec(`
       INSERT INTO design (id, workspace_id, name, created_at, updated_at, deleted_at)
       VALUES ('deleted-design', 'ws-1', 'Deleted Design', 1, 1, 1);
+
+      INSERT INTO design_sheet (id, design_id, sheet_index, title, content, content_hash, created_at, updated_at, deleted_at)
+      VALUES
+        ('sheet-deleted', 'deleted-design', 0, 'Sheet 1', '{"id":"doc-d","projectId":"p","updatedAt":"2026-01-01T00:00:00Z","version":1,"formatVersion":"pcb.schematic-project-document/v1","symbols":[{"id":"s3","libraryPartId":"${created.component.id}","reference":"U3","position":{"x":0,"y":0},"pins":[]}],"wires":[],"labels":[]}', 'h3', 1, 1, NULL);
     `);
-
-    await repo.recordUsage({
-      componentId: created.component.id,
-      designId: "missing-design",
-      variantId: defaultVariantId,
-    });
-
-    await repo.recordUsage({
-      componentId: created.component.id,
-      designId: "deleted-design",
-      variantId: defaultVariantId,
-    });
 
     expect(await repo.getUsageCount(created.component.id)).toBe(0);
 

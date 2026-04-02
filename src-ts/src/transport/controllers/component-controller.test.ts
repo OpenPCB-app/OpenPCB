@@ -102,9 +102,20 @@ function createRepoMock(): ComponentRepository {
       createAggregate({ component: input }),
     ),
     deleteComponent: mock(async (id: string) => {
+      void id;
+    }),
+    getDeleteImpact: mock(async (id: string) => {
       if (id === "component-used") {
-        throw new DbConflictError("Component is in use by 2 design(s)", "Component", id);
+        return {
+          usageCount: 2,
+          designNames: ["Design A", "Design B"],
+        };
       }
+
+      return {
+        usageCount: 0,
+        designNames: [],
+      };
     }),
     setDefaultVariant: mock(async (_id: string, variantId: string) =>
       createAggregate({ component: { defaultVariantId: variantId } }),
@@ -229,12 +240,27 @@ describe("ComponentController", () => {
   });
 
   it("returns conflict when deleting used component", async () => {
-    const ctrl = new ComponentController(createRepoMock());
+    const repo = createRepoMock();
+    const ctrl = new ComponentController(repo);
     const res = await ctrl.deleteComponent(createContext({ id: "component-used" }));
     const body = await res.json();
 
     expect(res.status).toBe(409);
     expect(body.error.code).toBe("CONFLICT");
+    expect(repo.deleteComponent).not.toHaveBeenCalled();
+  });
+
+  it("deletes used component when force=true", async () => {
+    const repo = createRepoMock();
+    const ctrl = new ComponentController(repo);
+    const res = await ctrl.deleteComponent(
+      createContext({ id: "component-used", query: { force: "true" } }),
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.usageCount).toBe(2);
+    expect(repo.deleteComponent).toHaveBeenCalledWith("component-used");
   });
 
   it("adds variant", async () => {

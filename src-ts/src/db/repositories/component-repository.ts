@@ -11,6 +11,7 @@ import {
   type NewComponentRow,
 } from "../schema/component";
 import { design } from "../schema/design";
+import { designSheet } from "../schema/design-sheet";
 import {
   componentVariant,
   type ComponentVariantRow,
@@ -69,6 +70,11 @@ export interface ComponentUsageInput {
   componentId: string;
   designId: string;
   variantId: string;
+}
+
+export interface ComponentDeleteImpact {
+  usageCount: number;
+  designNames: string[];
 }
 
 type DbExecutor = BunSQLiteDatabase<typeof schema>;
@@ -415,17 +421,67 @@ export class ComponentRepository extends BaseRepository<
   async deleteComponent(componentId: string): Promise<void> {
     return withQueryLogging(this.logger, this.entityName, "deleteComponent", async () => {
       await this.findByIdOrThrow(componentId);
-      const usageCount = await this.getUsageCount(componentId);
+      await this.db.delete(component).where(eq(component.id, componentId));
+    });
+  }
 
-      if (usageCount > 0) {
-        throw new DbConflictError(
-          `Component is in use by ${usageCount} design(s)`,
-          "Component",
-          componentId,
-        );
+  async getDeleteImpact(componentId: string): Promise<ComponentDeleteImpact> {
+    return withQueryLogging(this.logger, this.entityName, "getDeleteImpact", async () => {
+      await this.findByIdOrThrow(componentId);
+
+      const usageRows = await this.db
+        .select({
+          designId: design.id,
+          designName: design.name,
+          content: designSheet.content,
+        })
+        .from(designSheet)
+        .innerJoin(
+          design,
+          and(eq(design.id, designSheet.designId), isNull(design.deletedAt)),
+        )
+        .where(isNull(designSheet.deletedAt));
+
+      const designNames = new Set<string>();
+
+      for (const row of usageRows) {
+        const symbols = row.content?.symbols;
+        if (!Array.isArray(symbols)) {
+          continue;
+        }
+
+        const hasReference = symbols.some((symbol) => {
+          if (!symbol || typeof symbol !== "object") {
+            return false;
+          }
+
+          const candidate = symbol as {
+            libraryPartId?: unknown;
+            properties?: Record<string, unknown>;
+          };
+
+          const properties = candidate.properties;
+          const propertyComponentId =
+            typeof properties?.component_id === "string"
+              ? properties.component_id
+              : typeof properties?.componentId === "string"
+                ? properties.componentId
+                : null;
+
+          return (
+            candidate.libraryPartId === componentId || propertyComponentId === componentId
+          );
+        });
+
+        if (hasReference) {
+          designNames.add(row.designName);
+        }
       }
 
-      await this.db.delete(component).where(eq(component.id, componentId));
+      return {
+        usageCount: designNames.size,
+        designNames: Array.from(designNames).sort((a, b) => a.localeCompare(b)),
+      };
     });
   }
 
@@ -557,21 +613,8 @@ export class ComponentRepository extends BaseRepository<
   }
 
   async getUsageCount(componentId: string): Promise<number> {
-    return withQueryLogging(this.logger, this.entityName, "getUsageCount", async () => {
-      const rows = await this.db
-        .select({ count: sql<number>`count(distinct ${componentUsage.designId})` })
-        .from(componentUsage)
-        .innerJoin(
-          design,
-          and(
-            eq(design.id, componentUsage.designId),
-            isNull(design.deletedAt),
-          ),
-        )
-        .where(eq(componentUsage.componentId, componentId));
-
-      return Number(rows[0]?.count ?? 0);
-    });
+    const impact = await this.getDeleteImpact(componentId);
+    return impact.usageCount;
   }
 
   get variants(): ComponentVariantRepository {

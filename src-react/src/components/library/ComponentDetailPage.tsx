@@ -37,7 +37,10 @@ export function ComponentDetailPage() {
     mutationError,
     saving,
     deleting,
+    deleteImpactLoading,
+    deleteImpact,
     clearMutationError,
+    loadDeleteImpact,
     updateComponent,
     deleteComponent,
   } = useComponentDetail(currentComponentId);
@@ -148,12 +151,15 @@ export function ComponentDetailPage() {
 
   const handleDeleteClick = () => {
     clearMutationError();
+    void loadDeleteImpact();
     setShowDeleteConfirm(true);
   };
 
   const handleConfirmDelete = async () => {
     try {
-      await deleteComponent();
+      await deleteComponent({
+        forceUsed: (deleteImpact?.usageCount ?? 0) > 0,
+      });
       setShowDeleteConfirm(false);
       navigateBack();
     } catch {
@@ -532,6 +538,25 @@ export function ComponentDetailPage() {
               </span>{" "}
               from your library. This action cannot be undone.
             </p>
+            {deleteImpactLoading && (
+              <p className="mb-4 text-sm text-text-secondary">Loading usage…</p>
+            )}
+            {(deleteImpact?.usageCount ?? 0) > 0 && (
+              <div className="mb-4 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-text-primary">
+                <p className="font-medium">
+                  Used in {deleteImpact?.usageCount} design{deleteImpact?.usageCount === 1 ? "" : "s"}.
+                </p>
+                {deleteImpact?.designNames.length ? (
+                  <p className="mt-1 text-text-secondary">
+                    {deleteImpact.designNames.slice(0, 4).join(", ")}
+                    {deleteImpact.designNames.length > 4 ? ", …" : ""}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-text-secondary">
+                  Existing placed instances stay in designs.
+                </p>
+              </div>
+            )}
             {mutationError && (
               <p className="mb-4 text-sm text-error">{mutationError}</p>
             )}

@@ -11,6 +11,7 @@ const getComponentMock = vi.fn();
 const createComponentMock = vi.fn();
 const updateComponentMock = vi.fn();
 const deleteComponentMock = vi.fn();
+const getComponentDeleteImpactMock = vi.fn();
 const setComponentLibraryMock = vi.fn();
 
 const baseComponent = {
@@ -39,6 +40,9 @@ vi.mock("@/lib/api/component-api", () => ({
   createComponent: (...args: unknown[]) => createComponentMock(...args),
   updateComponent: (...args: unknown[]) => updateComponentMock(...args),
   deleteComponent: (...args: unknown[]) => deleteComponentMock(...args),
+  deleteComponentWithOptions: (...args: unknown[]) => deleteComponentMock(...args),
+  getComponentDeleteImpact: (...args: unknown[]) =>
+    getComponentDeleteImpactMock(...args),
 }));
 
 vi.mock("@/stores/schematic-store", () => ({
@@ -57,6 +61,7 @@ describe("useComponents", () => {
     updateComponentMock.mockReset();
     deleteComponentMock.mockReset();
     setComponentLibraryMock.mockReset();
+    getComponentDeleteImpactMock.mockReset();
 
     listComponentsMock.mockResolvedValue([baseComponent]);
     getComponentMock.mockResolvedValue(baseComponent);
@@ -66,6 +71,10 @@ describe("useComponents", () => {
       displayLabel: "Updated Op Amp",
     });
     deleteComponentMock.mockResolvedValue(undefined);
+    getComponentDeleteImpactMock.mockResolvedValue({
+      usageCount: 0,
+      designNames: [],
+    });
   });
 
   it("forwards backend-supported filters to listComponents", async () => {
@@ -170,7 +179,7 @@ describe("useComponents", () => {
     expect(updateComponentMock).toHaveBeenCalledWith("component-1", {
       displayLabel: "Updated Op Amp",
     });
-    expect(deleteComponentMock).toHaveBeenCalledWith("component-1");
+    expect(deleteComponentMock).toHaveBeenCalledWith("component-1", undefined);
     expect(result.current.error).toBeNull();
   });
 
@@ -194,7 +203,7 @@ describe("useComponents", () => {
       await result.current.deleteComponent();
     });
 
-    expect(deleteComponentMock).toHaveBeenCalledWith("component-1");
+    expect(deleteComponentMock).toHaveBeenCalledWith("component-1", undefined);
     expect(result.current.component).toBeNull();
   });
 });

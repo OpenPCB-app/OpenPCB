@@ -276,11 +276,38 @@ export async function updateComponent(
 }
 
 export async function deleteComponent(id: string): Promise<void> {
-  const response = await customFetch<ApiResponse<{ deleted: boolean }>>(
-    `/api/components/${encodeURIComponent(id)}`,
+  const response = await customFetch<
+    ApiResponse<{
+      deleted: boolean;
+      usageCount: number;
+      designNames: string[];
+    }>
+  >(`/api/components/${encodeURIComponent(id)}`, { method: "DELETE" });
+  unwrapResponse(response);
+}
+
+export async function deleteComponentWithOptions(
+  id: string,
+  options?: { forceUsed?: boolean },
+): Promise<{ deleted: boolean; usageCount: number; designNames: string[] }> {
+  const forceQuery = options?.forceUsed ? "?force=true" : "";
+  const response = await customFetch<
+    ApiResponse<{ deleted: boolean; usageCount: number; designNames: string[] }>
+  >(
+    `/api/components/${encodeURIComponent(id)}${forceQuery}`,
     { method: "DELETE" },
   );
-  unwrapResponse(response);
+  return unwrapResponse(response);
+}
+
+export async function getComponentDeleteImpact(id: string): Promise<{
+  usageCount: number;
+  designNames: string[];
+}> {
+  const response = await customFetch<
+    ApiResponse<{ usageCount: number; designNames: string[] }>
+  >(`/api/components/${encodeURIComponent(id)}/delete-impact`);
+  return unwrapResponse(response);
 }
 
 export async function addComponentVariant(
@@ -381,30 +408,41 @@ export async function deleteComponentFamily(id: string): Promise<void> {
 
 export async function bulkDeleteComponentFamilies(
   ids: string[],
+  options?: { forceUsed?: boolean },
 ): Promise<{
   deletedCount: number;
   skippedCount: number;
-  skippedBuiltInCount: number;
   skippedNotFoundCount: number;
+  skippedUsedCount: number;
+  skippedUsed: Array<{ id: string; usageCount: number; designNames: string[] }>;
+  deletedUsedCount: number;
 }> {
   const response = await customFetch<
     ApiResponse<{
       deleted: boolean;
       deletedCount: number;
       skippedCount: number;
-      skippedBuiltInCount: number;
       skippedNotFoundCount: number;
+      skippedUsedCount: number;
+      skippedUsed: Array<{
+        id: string;
+        usageCount: number;
+        designNames: string[];
+      }>;
+      deletedUsedCount: number;
     }>
-  >("/api/components/families/bulk-delete", {
+  >("/api/components/bulk-delete", {
     method: "POST",
-    body: JSON.stringify({ ids }),
+    body: JSON.stringify({ ids, forceUsed: options?.forceUsed ?? false }),
   });
   const result = unwrapResponse(response);
   return {
     deletedCount: result.deletedCount,
     skippedCount: result.skippedCount,
-    skippedBuiltInCount: result.skippedBuiltInCount,
     skippedNotFoundCount: result.skippedNotFoundCount,
+    skippedUsedCount: result.skippedUsedCount,
+    skippedUsed: result.skippedUsed,
+    deletedUsedCount: result.deletedUsedCount,
   };
 }
 

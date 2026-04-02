@@ -118,13 +118,112 @@ export class ComponentController {
 
   async deleteComponent(ctx: RouteContext): Promise<Response> {
     const id = ctx.params.getOrThrow("id");
+    const forceUsedDelete = ctx.query.get("force") === "true";
 
     try {
+      const impact = await this.repo.getDeleteImpact(id);
+      if (impact.usageCount > 0 && !forceUsedDelete) {
+        return ResponseBuilder.conflict(
+          `Component is in use by ${impact.usageCount} design(s)`,
+          {
+            resource: "Component",
+            id,
+            usageCount: impact.usageCount,
+            designNames: impact.designNames,
+          },
+        );
+      }
+
       await this.repo.deleteComponent(id);
-      return ResponseBuilder.success({ deleted: true });
+      return ResponseBuilder.success({
+        deleted: true,
+        usageCount: impact.usageCount,
+        designNames: impact.designNames,
+      });
     } catch (error) {
       return this.handleRepositoryError(error, "Component", id);
     }
+  }
+
+  async getDeleteImpact(ctx: RouteContext): Promise<Response> {
+    const id = ctx.params.getOrThrow("id");
+
+    try {
+      const impact = await this.repo.getDeleteImpact(id);
+      return ResponseBuilder.success(impact);
+    } catch (error) {
+      return this.handleRepositoryError(error, "Component", id);
+    }
+  }
+
+  async bulkDeleteComponents(ctx: RouteContext): Promise<Response> {
+    const body = (await ctx.req.json()) as {
+      ids?: string[];
+      forceUsed?: boolean;
+    };
+    const ids = body.ids ?? [];
+    const forceUsed = body.forceUsed === true;
+
+    if (ids.length === 0) {
+      return ResponseBuilder.badRequest("No component IDs provided");
+    }
+
+    const skippedUsed: Array<{
+      id: string;
+      usageCount: number;
+      designNames: string[];
+    }> = [];
+    const deletedUsed: Array<{
+      id: string;
+      usageCount: number;
+      designNames: string[];
+    }> = [];
+
+    let deletedCount = 0;
+    let skippedNotFoundCount = 0;
+
+    for (const id of ids) {
+      const existing = await this.repo.getComponent(id);
+      if (!existing) {
+        skippedNotFoundCount++;
+        continue;
+      }
+
+      const impact = await this.repo.getDeleteImpact(id);
+      if (impact.usageCount > 0 && !forceUsed) {
+        skippedUsed.push({
+          id,
+          usageCount: impact.usageCount,
+          designNames: impact.designNames,
+        });
+        continue;
+      }
+
+      await this.repo.deleteComponent(id);
+      deletedCount++;
+
+      if (impact.usageCount > 0) {
+        deletedUsed.push({
+          id,
+          usageCount: impact.usageCount,
+          designNames: impact.designNames,
+        });
+      }
+    }
+
+    const skippedUsedCount = skippedUsed.length;
+    const skippedCount = skippedNotFoundCount + skippedUsedCount;
+
+    return ResponseBuilder.success({
+      deleted: true,
+      deletedCount,
+      skippedCount,
+      skippedNotFoundCount,
+      skippedUsedCount,
+      skippedUsed,
+      deletedUsedCount: deletedUsed.length,
+      deletedUsed,
+    });
   }
 
   async addVariant(ctx: RouteContext): Promise<Response> {

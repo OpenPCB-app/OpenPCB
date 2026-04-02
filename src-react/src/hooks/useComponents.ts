@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   createComponent as createComponentRecord,
-  deleteComponent as deleteComponentRecord,
+  deleteComponentWithOptions as deleteComponentRecord,
+  getComponentDeleteImpact,
   getComponent,
   listComponents,
   type MountType,
@@ -38,7 +39,7 @@ export interface UseComponentMutationsReturn {
     id: string,
     updates: Partial<ComponentType>,
   ) => Promise<ComponentType>;
-  deleteComponent: (id: string) => Promise<void>;
+  deleteComponent: (id: string, options?: { forceUsed?: boolean }) => Promise<void>;
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -147,12 +148,12 @@ export function useComponentMutations(): UseComponentMutationsReturn {
     [],
   );
 
-  const deleteComponent = useCallback(async (id: string) => {
+  const deleteComponent = useCallback(async (id: string, options?: { forceUsed?: boolean }) => {
     setDeleting(true);
     setError(null);
 
     try {
-      await deleteComponentRecord(id);
+      await deleteComponentRecord(id, options);
     } catch (err) {
       const message = toErrorMessage(err, "Failed to delete component");
       setError(message);
@@ -181,10 +182,13 @@ export interface UseComponentDetailReturn {
   mutationError: string | null;
   saving: boolean;
   deleting: boolean;
+  deleteImpactLoading: boolean;
+  deleteImpact: { usageCount: number; designNames: string[] } | null;
   clearMutationError: () => void;
+  loadDeleteImpact: () => Promise<void>;
   refetch: () => Promise<void>;
   updateComponent: (updates: Partial<ComponentType>) => Promise<ComponentType>;
-  deleteComponent: () => Promise<void>;
+  deleteComponent: (options?: { forceUsed?: boolean }) => Promise<void>;
 }
 
 export function useComponentDetail(
@@ -196,6 +200,11 @@ export function useComponentDetail(
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteImpactLoading, setDeleteImpactLoading] = useState(false);
+  const [deleteImpact, setDeleteImpact] = useState<{
+    usageCount: number;
+    designNames: string[];
+  } | null>(null);
 
   const fetchComponent = useCallback(async () => {
     if (!id) {
@@ -228,6 +237,25 @@ export function useComponentDetail(
     setMutationError(null);
   }, []);
 
+  const loadDeleteImpact = useCallback(async () => {
+    if (!id) {
+      setDeleteImpact(null);
+      return;
+    }
+
+    setDeleteImpactLoading(true);
+    try {
+      const impact = await getComponentDeleteImpact(id);
+      setDeleteImpact(impact);
+    } catch (err) {
+      const message = toErrorMessage(err, "Failed to load component usage");
+      setMutationError(message);
+      throw err;
+    } finally {
+      setDeleteImpactLoading(false);
+    }
+  }, [id]);
+
   const updateComponentDetail = useCallback(
     async (updates: Partial<ComponentType>) => {
       if (!id) {
@@ -252,7 +280,7 @@ export function useComponentDetail(
     [id],
   );
 
-  const deleteComponentDetail = useCallback(async () => {
+  const deleteComponentDetail = useCallback(async (options?: { forceUsed?: boolean }) => {
     if (!id) {
       throw new Error("Component id is required");
     }
@@ -261,7 +289,9 @@ export function useComponentDetail(
     setMutationError(null);
 
     try {
-      await deleteComponentRecord(id);
+      await deleteComponentRecord(id, options);
+      const latestComponents = await listComponents();
+      useSchematicStore.getState().setComponentLibrary(latestComponents);
       setComponent(null);
     } catch (err) {
       const message = toErrorMessage(err, "Failed to delete component");
@@ -279,7 +309,10 @@ export function useComponentDetail(
     mutationError,
     saving,
     deleting,
+    deleteImpactLoading,
+    deleteImpact,
     clearMutationError,
+    loadDeleteImpact,
     refetch: fetchComponent,
     updateComponent: updateComponentDetail,
     deleteComponent: deleteComponentDetail,
