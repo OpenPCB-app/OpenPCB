@@ -9,10 +9,11 @@
 export { OpenAIEngine, createOpenAIEngine } from "./openai.ts";
 export { OpenRouterEngine, createOpenRouterEngine } from "./openrouter.ts";
 export { OllamaEngine, createOllamaEngine } from "./ollama.ts";
-export { GitHubCopilotEngine, createGitHubCopilotEngine } from "./github-copilot.ts";
+export {
+  GitHubCopilotEngine,
+  createGitHubCopilotEngine,
+} from "./github-copilot.ts";
 export type { LoadedModel } from "../engine.ts";
-// TODO: Restore when rust-client.ts is migrated to infrastructure
-// export { LocalEngine, createLocalEngine } from "./local.ts";
 
 import type { ProviderId } from "@shared/types";
 import type { ProviderEngineFactory } from "../engine.ts";
@@ -23,13 +24,15 @@ import { createOllamaEngine } from "./ollama.ts";
 import { createGitHubCopilotEngine } from "./github-copilot.ts";
 
 /** Map of provider IDs to their engine factories */
-export const ENGINE_FACTORIES: Partial<Record<ProviderId, ProviderEngineFactory>> = {
+export const ENGINE_FACTORIES: Partial<
+  Record<ProviderId, ProviderEngineFactory>
+> = {
   openai: createOpenAIEngine,
   openrouter: createOpenRouterEngine,
   ollama: createOllamaEngine,
   // Codex uses OpenAI engine (same API, different auth via OAuth token)
   codex: createOpenAIEngine,
-  'github-copilot': createGitHubCopilotEngine,
+  "github-copilot": createGitHubCopilotEngine,
 };
 
 /**
@@ -41,7 +44,9 @@ export function registerAllEngines(registry: ProviderRegistry): void {
       registry.register(providerId as ProviderId, factory);
     }
   }
-  console.log(`[Engines] Registered ${Object.keys(ENGINE_FACTORIES).length} provider engines`);
+  console.log(
+    `[Engines] Registered ${Object.keys(ENGINE_FACTORIES).length} provider engines`,
+  );
 }
 
 /**
@@ -61,6 +66,8 @@ export function registerEngine(
 /**
  * Get factory for a specific provider.
  */
-export function getEngineFactory(providerId: ProviderId): ProviderEngineFactory | undefined {
+export function getEngineFactory(
+  providerId: ProviderId,
+): ProviderEngineFactory | undefined {
   return ENGINE_FACTORIES[providerId];
 }

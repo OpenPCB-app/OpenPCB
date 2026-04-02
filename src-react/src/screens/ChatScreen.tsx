@@ -67,17 +67,6 @@ export function ChatScreen() {
   //   setProjectContextError(false);
   // }, [chatId]);
 
-  // useEffect(() => {
-  //   if (!activeChat?.projectId) {
-  //     setProjectContext(null);
-  //     setProjectContextError(false);
-  //     return;
-  //   }
-  //   const project = projects.find((item) => item.id === activeChat.projectId) ?? null;
-  //   setProjectContext(project);
-  //   setProjectContextError(project === null);
-  // }, [activeChat?.projectId, projects]);
-
   const {
     messages,
     status,

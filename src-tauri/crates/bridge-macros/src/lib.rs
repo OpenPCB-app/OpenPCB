@@ -276,7 +276,7 @@ pub fn bridge_module(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             quote! {
                 let args: #args_ty = serde_json::from_value(payload)
-                    .map_err(|e| one_mind_bridge::BridgeError::invalid_payload(
+                    .map_err(|e| openpcb_bridge::BridgeError::invalid_payload(
                         #ns, #exposed, e.to_string(), None
                     ))?;
             }
@@ -376,10 +376,10 @@ pub fn bridge_module(args: TokenStream, input: TokenStream) -> TokenStream {
                         let out = #call_expr;
                         match out {
                             Ok(ok) => serde_json::to_value(ok)
-                                .map_err(|e| one_mind_bridge::BridgeError::handler_failed(
+                                .map_err(|e| openpcb_bridge::BridgeError::handler_failed(
                                     #ns, #exposed, anyhow::anyhow!("serialization failed: {}", e)
                                 )),
-                            Err(e) => Err(one_mind_bridge::BridgeError::handler_failed(
+                            Err(e) => Err(openpcb_bridge::BridgeError::handler_failed(
                                 #ns, #exposed, anyhow::anyhow!("{}", e)
                             )),
                         }
@@ -392,7 +392,7 @@ pub fn bridge_module(args: TokenStream, input: TokenStream) -> TokenStream {
                         #args_deser
                         let out = #call_expr;
                         serde_json::to_value(out)
-                            .map_err(|e| one_mind_bridge::BridgeError::handler_failed(
+                            .map_err(|e| openpcb_bridge::BridgeError::handler_failed(
                                 #ns, #exposed, anyhow::anyhow!("serialization failed: {}", e)
                             ))
                     }
@@ -430,7 +430,7 @@ pub fn bridge_module(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         cmd_specs.push(quote! {
-            one_mind_bridge::BridgeCommandSpec {
+            openpcb_bridge::BridgeCommandSpec {
                 name: #exposed,
                 args_rust: #args_ty_lit,
                 result_rust: #ret_ty_lit,
@@ -463,7 +463,7 @@ pub fn bridge_module(args: TokenStream, input: TokenStream) -> TokenStream {
         #ast
 
         #[::async_trait::async_trait]
-        impl<R: ::tauri::Runtime, E: ::one_mind_bridge::EventSink> ::one_mind_bridge::BridgeNamespaceHandler<R, E> for #self_ty {
+        impl<R: ::tauri::Runtime, E: ::openpcb_bridge::EventSink> ::openpcb_bridge::BridgeNamespaceHandler<R, E> for #self_ty {
             fn namespace(&self) -> &'static str {
                 #ns_str
             }
@@ -473,11 +473,11 @@ pub fn bridge_module(args: TokenStream, input: TokenStream) -> TokenStream {
                 app: &::tauri::AppHandle<R>,
                 command: &str,
                 payload: ::serde_json::Value,
-                ctx: &::one_mind_bridge::BridgeCtx<E>,
-            ) -> ::one_mind_bridge::BridgeResult {
+                ctx: &::openpcb_bridge::BridgeCtx<E>,
+            ) -> ::openpcb_bridge::BridgeResult {
                 match command {
                     #(#match_arms,)*
-                    other => Err(::one_mind_bridge::BridgeError::CommandNotFound {
+                    other => Err(::openpcb_bridge::BridgeError::CommandNotFound {
                         namespace: #ns_str.to_string(),
                         command: other.to_string(),
                     }),
@@ -492,23 +492,23 @@ pub fn bridge_module(args: TokenStream, input: TokenStream) -> TokenStream {
         // If bridge_events! wasn't called, we'll get a compile error (undefined symbol).
         // To support modules without events, they should call: bridge_events!(("namespace"));
         #[doc(hidden)]
-        const __EVENTS: &'static [::one_mind_bridge::BridgeEventSpec] = &#events_ident;
+        const __EVENTS: &'static [::openpcb_bridge::BridgeEventSpec] = &#events_ident;
 
         #[doc(hidden)]
-        pub static #commands_ident: &[::one_mind_bridge::BridgeCommandSpec] = &[
+        pub static #commands_ident: &[::openpcb_bridge::BridgeCommandSpec] = &[
             #(#cmd_specs),*
         ];
 
         #[doc(hidden)]
-        pub static #spec_ident: ::one_mind_bridge::BridgeModuleSpec = ::one_mind_bridge::BridgeModuleSpec {
+        pub static #spec_ident: ::openpcb_bridge::BridgeModuleSpec = ::openpcb_bridge::BridgeModuleSpec {
             namespace: #ns_str,
             commands: #commands_ident,
             events: __EVENTS,
         };
 
-        // Use one_mind_bridge's re-export of inventory
-        ::one_mind_bridge::__inventory_submit! {
-            ::one_mind_bridge::BridgeModuleRegistration {
+        // Use openpcb_bridge's re-export of inventory
+        ::openpcb_bridge::__inventory_submit! {
+            ::openpcb_bridge::BridgeModuleRegistration {
                 ns: #ns_str,
                 ctor: || {
                     use ::std::default::Default;
@@ -588,7 +588,7 @@ pub fn bridge_events(input: TokenStream) -> TokenStream {
             let ty_name_lit = syn::LitStr::new(&ty_name_str, proc_macro2::Span::call_site());
 
             specs.push(quote! {
-                ::one_mind_bridge::BridgeEventSpec {
+                ::openpcb_bridge::BridgeEventSpec {
                     name: #name_lit,
                     payload_rust: #ty_name_lit,
                 }
@@ -605,7 +605,7 @@ pub fn bridge_events(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         #[doc(hidden)]
         #[allow(non_upper_case_globals)]
-        static #events_ident: &[::one_mind_bridge::BridgeEventSpec] = &[
+        static #events_ident: &[::openpcb_bridge::BridgeEventSpec] = &[
             #(#specs),*
         ];
     };

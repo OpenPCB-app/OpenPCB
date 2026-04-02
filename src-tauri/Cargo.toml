@@ -31,7 +31,7 @@ sentry = "0.42"
 specta = "=2.0.0-rc.22"
 specta-typescript = "0.0.9"
 tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
-one_mind_bridge = { path = "crates/bridge" }
+openpcb_bridge = { path = "crates/bridge" }
 bridge-macros = { path = "crates/bridge-macros" }
 
 

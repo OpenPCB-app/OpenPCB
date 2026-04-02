@@ -1,5 +1,5 @@
 use inventory;
-use one_mind_bridge::BridgeModuleRegistration;
+use openpcb_bridge::BridgeModuleRegistration;
 use serde_json::json;
 
 // Import modules to trigger inventory registration

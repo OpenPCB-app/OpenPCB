@@ -15,7 +15,7 @@ describe("Chat fork integration", () => {
   let workspaceId: string;
 
   beforeAll(async () => {
-    dbDir = mkdtempSync(join(tmpdir(), "onemind-chat-fork-"));
+    dbDir = mkdtempSync(join(tmpdir(), "openpcb-chat-fork-"));
     const dbFilePath = join(dbDir, "chat-fork-integration.db");
 
     DatabaseAccess.reset();
@@ -49,7 +49,9 @@ describe("Chat fork integration", () => {
     const root = await db.messages.create({
       chatId: chat.id,
       role: "user",
-      content: options?.rootContent ?? ({ type: "text", text: "root user" } as MessageContent),
+      content:
+        options?.rootContent ??
+        ({ type: "text", text: "root user" } as MessageContent),
       parentMessageId: null,
       depth: 0,
       isActive: true,
@@ -172,7 +174,9 @@ describe("Chat fork integration", () => {
       expect(forkMessages[i]?.depth).toBe(i);
       expect(forkMessages[i]?.taskId).toBeNull();
       if (i > 0) {
-        expect(forkMessages[i]?.parentMessageId).toBe(forkMessages[i - 1]?.id ?? null);
+        expect(forkMessages[i]?.parentMessageId).toBe(
+          forkMessages[i - 1]?.id ?? null,
+        );
       }
     }
 
@@ -243,12 +247,18 @@ describe("Chat fork integration", () => {
 
     expect(afterOriginal.length).toBe(5);
     expect(afterFork.length).toBe(4);
-    expect(afterOriginal.every((message) => message.chatId === chat.id)).toBe(true);
-    expect(afterFork.every((message) => message.chatId === fork.chatId)).toBe(true);
+    expect(afterOriginal.every((message) => message.chatId === chat.id)).toBe(
+      true,
+    );
+    expect(afterFork.every((message) => message.chatId === fork.chatId)).toBe(
+      true,
+    );
 
     const sourceRoot = await db.messages.findById(messages[0]!.id);
     const forkRoot = await db.messages.findById(forkPath[0]!.id);
-    expect((sourceRoot?.content as MessageContent).text).toBe("updated source root");
+    expect((sourceRoot?.content as MessageContent).text).toBe(
+      "updated source root",
+    );
     expect((forkRoot?.content as MessageContent).text).toBe("root user");
   });
 
@@ -289,7 +299,9 @@ describe("Chat fork integration", () => {
     };
 
     try {
-      await expect(chatManager.forkChat(chat.id, messages[2]!.id)).rejects.toThrow();
+      await expect(
+        chatManager.forkChat(chat.id, messages[2]!.id),
+      ).rejects.toThrow();
     } finally {
       dbWithPatchedTransaction.transaction = originalTransaction;
     }
@@ -308,18 +320,17 @@ describe("Chat fork integration", () => {
         candidate.title === `Fork of ${chat.title}`,
     );
     for (const createdForkChat of createdForkChats) {
-      const createdForkMessages = await db.messages.findByChat(createdForkChat.id);
+      const createdForkMessages = await db.messages.findByChat(
+        createdForkChat.id,
+      );
       expect(createdForkMessages.length).toBeLessThan(expectedForkPathLength);
       expect(createdForkChat.messageCount).toBeLessThan(expectedForkPathLength);
     }
   });
 
-  it.skip(
-    "handles very large active paths (500+ messages) within acceptable latency (skipped in default CI: perf-heavy/flaky)",
-    async () => {
-      const { chat, messages } = await createSourceChat();
-      expect(chat.id).toBeDefined();
-      expect(messages.length).toBeGreaterThan(0);
-    },
-  );
+  it.skip("handles very large active paths (500+ messages) within acceptable latency (skipped in default CI: perf-heavy/flaky)", async () => {
+    const { chat, messages } = await createSourceChat();
+    expect(chat.id).toBeDefined();
+    expect(messages.length).toBeGreaterThan(0);
+  });
 });

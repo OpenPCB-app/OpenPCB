@@ -2,7 +2,7 @@ use bridge_macros::{bridge_cmd, bridge_events, bridge_module};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
-use one_mind_bridge::BridgeResult;
+use openpcb_bridge::BridgeResult;
 
 use crate::entitlement_verifier::{now_unix_ms, EntitlementVerifier};
 use crate::secrets::{AccountSessionSecret, EntitlementCacheMetadata, SecretsState};
@@ -23,7 +23,7 @@ impl SecretsBridge {
     ) -> BridgeResult {
         let state: tauri::State<'_, SecretsState> = app.state();
         let providers = state.list_provider_keys().map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "listProviderApiKeys",
                 anyhow::anyhow!("{}", e),
@@ -32,7 +32,7 @@ impl SecretsBridge {
 
         let response = ProviderKeyListResponse { providers };
         serde_json::to_value(response).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "listProviderApiKeys",
                 anyhow::anyhow!("{}", e),
@@ -48,7 +48,7 @@ impl SecretsBridge {
     ) -> BridgeResult {
         let state: tauri::State<'_, SecretsState> = app.state();
         let has = state.has_provider_key(&args.provider_id).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "hasProviderApiKey",
                 anyhow::anyhow!("{}", e),
@@ -60,7 +60,7 @@ impl SecretsBridge {
             has_key: has,
         };
         serde_json::to_value(response).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "hasProviderApiKey",
                 anyhow::anyhow!("{}", e),
@@ -78,7 +78,7 @@ impl SecretsBridge {
         state
             .set_provider_key(&args.provider_id, &args.api_key)
             .map_err(|e| {
-                one_mind_bridge::BridgeError::handler_failed(
+                openpcb_bridge::BridgeError::handler_failed(
                     "secrets",
                     "setProviderApiKey",
                     anyhow::anyhow!("{}", e),
@@ -100,7 +100,7 @@ impl SecretsBridge {
         };
 
         serde_json::to_value(response).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "setProviderApiKey",
                 anyhow::anyhow!("{}", e),
@@ -116,7 +116,7 @@ impl SecretsBridge {
     ) -> BridgeResult {
         let state: tauri::State<'_, SecretsState> = app.state();
         state.remove_provider_key(&args.provider_id).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "removeProviderApiKey",
                 anyhow::anyhow!("{}", e),
@@ -136,7 +136,7 @@ impl SecretsBridge {
             sync_error,
         };
         serde_json::to_value(response).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "removeProviderApiKey",
                 anyhow::anyhow!("{}", e),
@@ -166,7 +166,7 @@ impl SecretsBridge {
         };
 
         serde_json::to_value(response).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "syncProviderApiKey",
                 anyhow::anyhow!("{}", e),
@@ -197,7 +197,7 @@ impl SecretsBridge {
         };
 
         serde_json::to_value(response).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "syncProviderApiKeyRemoval",
                 anyhow::anyhow!("{}", e),
@@ -225,7 +225,7 @@ impl SecretsBridge {
             .map_err(|e| map_secrets_bridge_error("setAccountSession", e))?;
 
         serde_json::to_value(SetAccountSessionResponse { stored: true }).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "setAccountSession",
                 anyhow::anyhow!("{}", e),
@@ -250,7 +250,7 @@ impl SecretsBridge {
         };
 
         serde_json::to_value(response).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "getAccountSession",
                 anyhow::anyhow!("{}", e),
@@ -270,7 +270,7 @@ impl SecretsBridge {
             .map_err(|e| map_secrets_bridge_error("removeAccountSession", e))?;
 
         serde_json::to_value(DeleteSecretResponse { removed }).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "removeAccountSession",
                 anyhow::anyhow!("{}", e),
@@ -297,7 +297,7 @@ impl SecretsBridge {
             .map_err(|e| map_secrets_bridge_error("setEntitlementCache", e))?;
 
         serde_json::to_value(SetEntitlementCacheResponse { stored: true }).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "setEntitlementCache",
                 anyhow::anyhow!("{}", e),
@@ -321,7 +321,7 @@ impl SecretsBridge {
         };
 
         serde_json::to_value(response).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "getEntitlementCache",
                 anyhow::anyhow!("{}", e),
@@ -341,7 +341,7 @@ impl SecretsBridge {
             .map_err(|e| map_secrets_bridge_error("removeEntitlementCache", e))?;
 
         serde_json::to_value(DeleteSecretResponse { removed }).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "removeEntitlementCache",
                 anyhow::anyhow!("{}", e),
@@ -391,7 +391,7 @@ impl SecretsBridge {
         };
 
         serde_json::to_value(response).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "secrets",
                 "evaluateEntitlementState",
                 anyhow::anyhow!("{}", e),
@@ -505,7 +505,7 @@ pub struct EvaluateEntitlementResponse {
     pub cache_expires_at_unix_ms: Option<u64>,
 }
 
-fn map_secrets_bridge_error(command: &str, err: anyhow::Error) -> one_mind_bridge::BridgeError {
+fn map_secrets_bridge_error(command: &str, err: anyhow::Error) -> openpcb_bridge::BridgeError {
     let text = err.to_string();
     let code = if text.contains("SECRETS_ENCODE_FAILED") {
         "SECRETS_ENCODE_FAILED"
@@ -523,7 +523,7 @@ fn map_secrets_bridge_error(command: &str, err: anyhow::Error) -> one_mind_bridg
         "SECRETS_STORAGE_FAILED"
     };
 
-    one_mind_bridge::BridgeError::handler_failed(
+    openpcb_bridge::BridgeError::handler_failed(
         "secrets",
         command,
         anyhow::anyhow!("{}: {}", code, text),

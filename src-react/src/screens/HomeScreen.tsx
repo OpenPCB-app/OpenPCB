@@ -6,25 +6,18 @@ import { useAppStore } from "@/stores/app-store";
 import { DesignDialog } from "@/components/design/DesignDialog";
 import { useDesigns } from "@/hooks/useDesigns";
 
-// Projects feature is temporarily disabled
-// import { ProjectCreateDialog } from "@/components/project/ProjectCreateDialog";
-
 export function HomeScreen() {
   const navigateToDesign = useNavigationStore((s) => s.navigateToDesign);
-  // Projects feature is temporarily disabled
-  // const navigateToProject = useNavigationStore((s) => s.navigateToProject);
-  // const projects = useAppStore((s) => s.projects);
   const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId);
   const workspaces = useAppStore((s) => s.workspaces);
-  // Projects feature is temporarily disabled
-  // const [createOpen, setCreateOpen] = useState(false);
   const [createDesignOpen, setCreateDesignOpen] = useState(false);
   const [editDesignId, setEditDesignId] = useState<string | null>(null);
   const { designs, create, update, remove } = useDesigns({
     workspaceId: activeWorkspaceId,
     projectId: null,
   });
-  const workspace = workspaces.find((item) => item.id === activeWorkspaceId) ?? null;
+  const workspace =
+    workspaces.find((item) => item.id === activeWorkspaceId) ?? null;
   const editDesign = useMemo(
     () => designs.find((design) => design.id === editDesignId) ?? null,
     [designs, editDesignId],

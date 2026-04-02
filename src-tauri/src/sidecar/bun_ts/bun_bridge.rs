@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager, Runtime, State};
 use tauri_plugin_log::log::{error, info};
 use tokio::sync::Mutex;
-use one_mind_bridge::BridgeResult;
+use openpcb_bridge::BridgeResult;
 
 use super::bun_runtime::{BunRuntime, BunRuntimeStatus};
 
@@ -48,7 +48,7 @@ impl BunBridge {
     #[bridge_cmd(name = "status")]
     async fn status<R: Runtime>(&self, _args: EmptyArgs, app: &AppHandle<R>) -> BridgeResult {
         let state = app.try_state::<BunBridgeState>().ok_or_else(|| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "bun",
                 "status",
                 anyhow::anyhow!("Bun bridge not initialized"),
@@ -70,7 +70,7 @@ impl BunBridge {
         };
 
         serde_json::to_value(response).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed("bun", "status", anyhow::anyhow!("{}", e))
+            openpcb_bridge::BridgeError::handler_failed("bun", "status", anyhow::anyhow!("{}", e))
         })
     }
 
@@ -82,7 +82,7 @@ impl BunBridge {
         app: &AppHandle<R>,
     ) -> BridgeResult {
         let state = app.try_state::<BunBridgeState>().ok_or_else(|| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "bun",
                 "getBackendUrl",
                 anyhow::anyhow!("Bun bridge not initialized"),
@@ -93,7 +93,7 @@ impl BunBridge {
         let url = if let Some(port) = runtime.port() {
             format!("http://127.0.0.1:{}", port)
         } else {
-            return Err(one_mind_bridge::BridgeError::handler_failed(
+            return Err(openpcb_bridge::BridgeError::handler_failed(
                 "bun",
                 "getBackendUrl",
                 anyhow::anyhow!("Bun runtime not running or port not discovered"),
@@ -112,7 +112,7 @@ impl BunBridge {
         };
 
         serde_json::to_value(response).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "bun",
                 "getBackendUrl",
                 anyhow::anyhow!("{}", e),
@@ -124,7 +124,7 @@ impl BunBridge {
     #[bridge_cmd(name = "restart")]
     async fn restart<R: Runtime>(&self, _args: EmptyArgs, app: &AppHandle<R>) -> BridgeResult {
         let state = app.try_state::<BunBridgeState>().ok_or_else(|| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "bun",
                 "restart",
                 anyhow::anyhow!("Bun bridge not initialized"),
@@ -145,7 +145,7 @@ impl BunBridge {
         let port = {
             let mut runtime = runtime_arc.lock().await;
             runtime.spawn(&app_clone).await.map_err(|e| {
-                one_mind_bridge::BridgeError::handler_failed(
+                openpcb_bridge::BridgeError::handler_failed(
                     "bun",
                     "restart",
                     anyhow::anyhow!("Failed to restart Bun runtime: {}", e),
@@ -156,7 +156,7 @@ impl BunBridge {
         let response = RestartResponse { port };
 
         serde_json::to_value(response).map_err(|e| {
-            one_mind_bridge::BridgeError::handler_failed(
+            openpcb_bridge::BridgeError::handler_failed(
                 "bun",
                 "restart",
                 anyhow::anyhow!("{}", e),

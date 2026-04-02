@@ -5,8 +5,6 @@ import {
   setupHashChangeListener,
 } from "@/stores/navigation-store";
 import { HomeScreen } from "@/screens/HomeScreen";
-// Projects feature is temporarily disabled
-// import { ProjectScreen } from "@/screens/ProjectScreen";
 import { ChatScreen } from "@/screens/ChatScreen";
 import { DesignScreen } from "@/screens/DesignScreen";
 import { NotesScreen } from "@/screens/NotesScreen";

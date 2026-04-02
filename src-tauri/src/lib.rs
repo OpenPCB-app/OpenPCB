@@ -2,7 +2,7 @@ use specta_typescript::Typescript;
 use tauri::{Manager, State};
 use tauri_plugin_log::log::{error, info};
 use tauri_specta::{collect_commands, Builder as SpectaBuilder};
-use one_mind_bridge::{BridgeRequest, BridgeResponse, BridgeRouter};
+use openpcb_bridge::{BridgeRequest, BridgeResponse, BridgeRouter};
 
 mod commands;
 pub mod core_bridge;
@@ -34,12 +34,12 @@ async fn bridge_invoke(
     router: State<'_, BridgeRouter>,
     req: BridgeRequest,
 ) -> Result<BridgeResponse, String> {
-    Ok(one_mind_bridge::dispatch_bridge_request(&app, &router, req).await)
+    Ok(openpcb_bridge::dispatch_bridge_request(&app, &router, req).await)
 }
 
 fn create_bridge_router(app: &tauri::AppHandle<tauri::Wry>) -> BridgeRouter<tauri::Wry> {
     // Auto-register all modules via inventory
-    let events = one_mind_bridge::TauriEventSink::new(app.clone());
+    let events = openpcb_bridge::TauriEventSink::new(app.clone());
     BridgeRouter::auto_with_events(events)
 }
 

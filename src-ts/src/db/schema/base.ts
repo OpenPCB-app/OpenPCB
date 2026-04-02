@@ -46,7 +46,9 @@ export const softDelete = {
  * UUIDv7s are time-ordered identifiers stored as text.
  */
 export const uuidPrimaryKey = {
-  id: text("id").primaryKey().$defaultFn(() => uuidv7()),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => uuidv7()),
 } as const;
 
 /**
@@ -60,14 +62,4 @@ export const uuidPrimaryKey = {
  */
 export function generateUUIDv7(): string {
   return uuidv7();
-}
-
-/**
- * Get current timestamp in milliseconds
- *
- * @returns Current timestamp as number
- * @deprecated Use `now()` from `core/utils/time` instead
- */
-export function now(): number {
-  return Date.now();
 }
