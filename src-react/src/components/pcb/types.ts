@@ -28,6 +28,8 @@ export type SymbolTemplate = string;
 export type EditorSchematicSymbol = SharedSchematicSymbol & {
   entityType: "symbol";
   symbolKind: SymbolKind;
+  componentId?: string;
+  variantId?: string;
   symbolTemplate?: SymbolTemplate | null;
   mirrored?: boolean;
   reference: string;
@@ -176,12 +178,25 @@ function normalizeReferenceValue(
   return fallbackId;
 }
 
+function normalizeOptionalString(value: string | null | undefined):
+  | string
+  | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 export function normalizeSymbolEntity(symbol: SymbolEntity): SymbolEntity {
   return {
     ...symbol,
     rotation: normalizeRotationValue(symbol.rotation),
     mirrored: symbol.mirrored ?? false,
     reference: normalizeReferenceValue(symbol.reference, symbol.id),
+    componentId: normalizeOptionalString(symbol.componentId),
+    variantId: normalizeOptionalString(symbol.variantId),
   };
 }
 
@@ -189,11 +204,15 @@ export function toEditorSchematicSymbol(
   symbol: SharedSchematicSymbol,
 ): SymbolEntity {
   const reference = normalizeReferenceValue(symbol.reference, symbol.id);
+  const componentId = normalizeOptionalString(symbol.properties?.component_id);
+  const variantId = normalizeOptionalString(symbol.properties?.variant_id);
 
   return normalizeSymbolEntity({
     ...symbol,
     entityType: "symbol",
     symbolKind: inferSymbolKind(reference),
+    componentId,
+    variantId,
     reference,
     rotation: normalizeRotationValue(symbol.rotation),
     mirrored: false,
@@ -244,18 +263,33 @@ export function toSchematicProjectDocument(
     version: doc.revision,
     formatVersion: doc.formatVersion,
     title: doc.name,
-    symbols: doc.symbols.map((s) => ({
-      id: s.id,
-      libraryPartId: s.libraryPartId,
-      reference: s.reference,
-      position: s.position,
-      rotation: s.rotation,
-      pins: s.pins,
-      properties: {
+    symbols: doc.symbols.map((s) => {
+      const properties: Record<string, string> = {
         ...s.properties,
-        ...(s.value ? { value: s.value } : {}),
-      },
-    })),
+      };
+
+      if (s.value) {
+        properties.value = s.value;
+      }
+
+      if (s.componentId && s.variantId) {
+        properties.component_id = s.componentId;
+        properties.variant_id = s.variantId;
+      } else {
+        delete properties.component_id;
+        delete properties.variant_id;
+      }
+
+      return {
+        id: s.id,
+        libraryPartId: s.libraryPartId,
+        reference: s.reference,
+        position: s.position,
+        rotation: s.rotation,
+        pins: s.pins,
+        properties,
+      };
+    }),
     wires: doc.wires.map((w) => ({
       id: w.id,
       points: w.points,

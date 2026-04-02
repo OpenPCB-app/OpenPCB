@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { GripVertical, Package, RefreshCw } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -161,6 +161,7 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
   const setPaletteDragSymbolKind = useSchematicStore(
     (s) => s.setPaletteDragSymbolKind,
   );
+  const setComponentLibrary = useSchematicStore((s) => s.setComponentLibrary);
   const { components, loading, error, refetch } = useComponents();
   const activeSymbolKind =
     session?.type === "placement" ? session.symbolKind : draggedSymbolKind;
@@ -169,6 +170,11 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
     () => groupFamiliesByCategory(components),
     [components],
   );
+
+  useEffect(() => {
+    setComponentLibrary(components);
+  }, [components, setComponentLibrary]);
+
   const hasComponents = components.length > 0 || EMBEDDED_SYMBOLS.length > 0;
   const handleLegacyDragStart = (kind: string) => {
     setPaletteDragSymbolKind(kind);

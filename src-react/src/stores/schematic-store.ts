@@ -1,11 +1,16 @@
 import { create } from "zustand";
-import { createSymbolEntity } from "@/components/pcb/symbol-library";
+import {
+  createSymbolEntity,
+  resolveSymbolEntityFromLibrary,
+  setComponentLibrary as setSymbolLibraryComponents,
+} from "@/components/pcb/symbol-library";
 import {
   GRID_PRESETS,
   normalizeSchematicDocument,
   toEditorSchematicDocument,
 } from "@/components/pcb/types";
 import type { SchematicProjectDocument } from "@shared/types";
+import type { ComponentType } from "@/../../src-ts/src/core/schemas/component-library.schema";
 import { createHitTestCache } from "@/components/pcb/canvas/hit-test";
 import type {
   Bounds,
@@ -88,6 +93,7 @@ interface SchematicState {
   deleteSelectedEntities: () => void;
 
   setDocument: (doc: SchematicDocument | SchematicProjectDocument) => void;
+  setComponentLibrary: (components: ComponentType[]) => void;
   setProjectContext: (projectId: string | null, sheetId: string | null) => void;
   setConnectivity: (conn: DerivedConnectivity | null) => void;
   setDocumentBounds: (bounds: Bounds | null) => void;
@@ -283,6 +289,15 @@ function getUpdatedSymbolPositions(
           }
         : symbol,
     ),
+  };
+}
+
+function resolveDocumentSymbolsFromLibrary(
+  document: SchematicDocument,
+): SchematicDocument {
+  return {
+    ...document,
+    symbols: document.symbols.map(resolveSymbolEntityFromLibrary),
   };
 }
 
@@ -813,27 +828,56 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         "name" in document
           ? normalizeSchematicDocument(document)
           : toEditorSchematicDocument(document);
+      const resolvedDocument = resolveDocumentSymbolsFromLibrary(
+        normalizedDocument,
+      );
 
       return {
         persisted: {
           ...state.persisted,
-          document: normalizedDocument,
+          document: resolvedDocument,
         },
         derived: {
           ...state.derived,
-          connectivity: deriveConnectivity(normalizedDocument),
-          documentBounds: deriveDocumentBounds(normalizedDocument),
-          hitTestCache: createHitTestCache(normalizedDocument.symbols),
+          connectivity: deriveConnectivity(resolvedDocument),
+          documentBounds: deriveDocumentBounds(resolvedDocument),
+          hitTestCache: createHitTestCache(resolvedDocument.symbols),
         },
         chrome: {
           ...state.chrome,
-          viewport: getResetViewport(normalizedDocument),
+          viewport: getResetViewport(resolvedDocument),
           selectedEntityIds: new Set(),
           activeTool: "select",
           popoverEntityId: null,
         },
         session: null,
         draggedSymbolKind: null,
+      };
+    }),
+
+  setComponentLibrary: (components) =>
+    set((state) => {
+      setSymbolLibraryComponents(components);
+
+      if (!state.persisted.document) {
+        return state;
+      }
+
+      const resolvedDocument = resolveDocumentSymbolsFromLibrary(
+        state.persisted.document,
+      );
+
+      return {
+        persisted: {
+          ...state.persisted,
+          document: resolvedDocument,
+        },
+        derived: {
+          ...state.derived,
+          connectivity: deriveConnectivity(resolvedDocument),
+          documentBounds: deriveDocumentBounds(resolvedDocument),
+          hitTestCache: createHitTestCache(resolvedDocument.symbols),
+        },
       };
     }),
 

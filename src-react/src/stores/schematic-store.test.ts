@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createHitTestCache } from "@/components/pcb/canvas/hit-test";
+import type { ComponentType } from "@/../../src-ts/src/core/schemas/component-library.schema";
 import {
   MAX_VIEWPORT_ZOOM,
   MIN_VIEWPORT_ZOOM,
@@ -22,6 +23,8 @@ const TEST_DOCUMENT: SchematicDocument = {
       id: "symbol-1",
       entityType: "symbol",
       symbolKind: "resistor",
+      componentId: "component-resistor",
+      variantId: "variant-resistor-default",
       symbolTemplate: "resistor",
       reference: "R1",
       value: "10k",
@@ -38,6 +41,8 @@ const TEST_DOCUMENT: SchematicDocument = {
       id: "symbol-2",
       entityType: "symbol",
       symbolKind: "connector",
+      componentId: "component-connector",
+      variantId: "variant-connector-default",
       symbolTemplate: "connector",
       reference: "J1",
       value: "HDR2",
@@ -80,7 +85,105 @@ const TEST_DOCUMENT: SchematicDocument = {
   ],
 };
 
+function createVariant(
+  componentId: string,
+  variantId: string,
+  humanLabel: string,
+): ComponentType["packageVariants"][number] {
+  return {
+    id: variantId,
+    familyId: componentId,
+    canonicalCode: humanLabel.toLowerCase().replace(/\s+/g, "-"),
+    humanLabel,
+    imperialAlias: null,
+    metricAlias: null,
+    mountType: "smd",
+    dimensions: null,
+    isDefault: true,
+    pinRemapTable: null,
+    footprints: [],
+    defaultFootprintId: null,
+    footprintOptions: [],
+    defaultFootprintOptionId: null,
+  };
+}
+
+function createLibraryComponents(
+  resistorValue: string,
+  resistorPins: string[],
+): ComponentType[] {
+  const resistorVariant = createVariant(
+    "component-resistor",
+    "variant-resistor-default",
+    "0603",
+  );
+  const connectorVariant = createVariant(
+    "component-connector",
+    "variant-connector-default",
+    "1x2",
+  );
+
+  return [
+    {
+      id: "component-resistor",
+      canonicalKey: "resistor.generic",
+      displayLabel: "Resistor",
+      description: "",
+      scope: "workspace",
+      symbolData: {
+        referencePrefix: "R",
+        pinDefinitions: resistorPins.map((name) => ({
+          name,
+          electricalType: "passive",
+        })),
+        properties: { value: resistorValue },
+        unitCount: 1,
+        bodyGraphics: [],
+        rawKicadSource: null,
+        symbolTemplate: "resistor",
+      },
+      variants: [resistorVariant],
+      defaultVariantId: resistorVariant.id,
+      packageVariants: [resistorVariant],
+      defaultPackageVariantId: resistorVariant.id,
+      categoryPath: "passives/resistors",
+      tags: [],
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    },
+    {
+      id: "component-connector",
+      canonicalKey: "connector.1x2",
+      displayLabel: "Connector",
+      description: "",
+      scope: "workspace",
+      symbolData: {
+        referencePrefix: "J",
+        pinDefinitions: [
+          { name: "1", electricalType: "passive" },
+          { name: "2", electricalType: "passive" },
+        ],
+        properties: { value: "HDR2" },
+        unitCount: 1,
+        bodyGraphics: [],
+        rawKicadSource: null,
+        symbolTemplate: "connector",
+      },
+      variants: [connectorVariant],
+      defaultVariantId: connectorVariant.id,
+      packageVariants: [connectorVariant],
+      defaultPackageVariantId: connectorVariant.id,
+      categoryPath: "connectors/headers",
+      tags: [],
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    },
+  ];
+}
+
 function resetStore() {
+  useSchematicStore.getState().setComponentLibrary([]);
+
   useSchematicStore.setState((state) => ({
     ...state,
     persisted: {
@@ -122,6 +225,58 @@ describe("useSchematicStore", () => {
     expect(state.derived.hitTestCache.connectorAnchors).toEqual({});
     expect(state.chrome.gridSize).toBe(1_270_000);
     expect(state.session).toBeNull();
+  });
+
+  it("resolves symbol value and pins from canonical library data on document load", () => {
+    const state = useSchematicStore.getState();
+    const document = {
+      ...TEST_DOCUMENT,
+      symbols: TEST_DOCUMENT.symbols.map((symbol) =>
+        symbol.id === "symbol-1"
+          ? {
+              ...symbol,
+              value: "stale",
+              pins: [{ id: "pin-1", name: "OLD", position: { x: 0, y: 0 } }],
+            }
+          : symbol,
+      ),
+    };
+
+    state.setComponentLibrary(createLibraryComponents("47k", ["A", "B", "C"]));
+    state.setDocument(document);
+
+    const resolved = useSchematicStore
+      .getState()
+      .persisted.document?.symbols.find((symbol) => symbol.id === "symbol-1");
+
+    expect(resolved).toMatchObject({
+      componentId: "component-resistor",
+      variantId: "variant-resistor-default",
+      value: "47k",
+      symbolTemplate: "resistor",
+    });
+    expect(resolved?.pins.map((pin) => pin.name)).toEqual(["A", "B", "C"]);
+  });
+
+  it("resolves updated canonical definitions after component edits and reload", () => {
+    const state = useSchematicStore.getState();
+
+    state.setComponentLibrary(createLibraryComponents("10k", ["1", "2"]));
+    state.setDocument(TEST_DOCUMENT);
+
+    state.setComponentLibrary(createLibraryComponents("22k", ["P", "N"]));
+    state.setDocument(TEST_DOCUMENT);
+
+    const resolved = useSchematicStore
+      .getState()
+      .persisted.document?.symbols.find((symbol) => symbol.id === "symbol-1");
+
+    expect(resolved).toMatchObject({
+      componentId: "component-resistor",
+      variantId: "variant-resistor-default",
+      value: "22k",
+    });
+    expect(resolved?.pins.map((pin) => pin.name)).toEqual(["P", "N"]);
   });
 
   it("defaults to 50mil grid size in nanometers", () => {
@@ -252,6 +407,25 @@ describe("useSchematicStore", () => {
     expect(nextState.chrome.selectedEntityIds).toEqual(
       new Set([nextState.persisted.document?.symbols[2]?.id]),
     );
+  });
+
+  it("stores component and variant references when placing a library component", () => {
+    const state = useSchematicStore.getState();
+
+    state.setComponentLibrary(createLibraryComponents("33k", ["P", "N"]));
+    state.beginPlacement("component-resistor");
+    state.commitPlacement({ x: 2_540_000, y: 1_270_000 });
+
+    const placed = useSchematicStore.getState().persisted.document?.symbols.at(-1);
+
+    expect(placed).toMatchObject({
+      symbolKind: "component-resistor",
+      componentId: "component-resistor",
+      variantId: "variant-resistor-default",
+      reference: "R2",
+      value: "33k",
+    });
+    expect(placed?.pins.map((pin) => pin.name)).toEqual(["P", "N"]);
   });
 
   it("tracks drag sessions and moves selected symbols from their initial positions", () => {
@@ -427,6 +601,7 @@ describe("useSchematicStore", () => {
                   id: "symbol-3",
                   entityType: "symbol",
                   symbolKind: "connector",
+                  symbolTemplate: "connector",
                   reference: "J2",
                   value: "HDR1",
                   position: { x: 1_270_000, y: 0 },
