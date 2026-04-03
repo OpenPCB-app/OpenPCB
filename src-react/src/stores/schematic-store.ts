@@ -18,10 +18,11 @@ import type {
   Bounds,
   DerivedConnectivity,
   DerivedSchematicState,
-  EditorChromeState,
   DragSession,
+  EditorChromeState,
   HitTestCache,
   InteractionSession,
+  NetLabelEntity,
   Point,
   Rotation,
   SchematicDocument,
@@ -88,6 +89,11 @@ interface SchematicState {
   setPaletteDragSymbolKind: (kind: SymbolKind | null) => void;
   cancelSession: () => void;
 
+  beginNetLabelPlacement: () => void;
+  setNetLabelPreview: (position: Point | null) => void;
+  commitNetLabel: (text: string, position: Point) => void;
+  updateNetLabelText: (labelId: string, text: string) => void;
+
   selectEntities: (ids: string[]) => void;
   addToSelection: (ids: string[]) => void;
   clearSelection: () => void;
@@ -98,7 +104,10 @@ interface SchematicState {
   setDocument: (doc: SchematicDocument | SchematicProjectDocument) => void;
   clearDocument: () => void;
   setComponentLibrary: (components: ComponentType[]) => void;
-  setProjectContext: (projectId: string | null, designId: string | null) => void;
+  setProjectContext: (
+    projectId: string | null,
+    designId: string | null,
+  ) => void;
   setConnectivity: (conn: DerivedConnectivity | null) => void;
   setDocumentBounds: (bounds: Bounds | null) => void;
   setHitTestCache: (cache: HitTestCache) => void;
@@ -691,11 +700,108 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
           state.session?.type === "placement" &&
           state.chrome.activeTool === "place"
             ? "select"
-            : state.chrome.activeTool,
+            : state.session?.type === "netLabel" &&
+                state.chrome.activeTool === "label"
+              ? "select"
+              : state.chrome.activeTool,
       },
       session: null,
       draggedSymbolKind: null,
     })),
+
+  beginNetLabelPlacement: () =>
+    set((state) => ({
+      chrome: {
+        ...state.chrome,
+        activeTool: "label",
+      },
+      session: {
+        type: "netLabel",
+        previewPosition: null,
+        rotation: state.chrome.placementRotation,
+      },
+    })),
+
+  setNetLabelPreview: (position) =>
+    set((state) => {
+      if (state.session?.type !== "netLabel") {
+        return state;
+      }
+
+      return {
+        session: {
+          ...state.session,
+          previewPosition: position,
+        },
+      };
+    }),
+
+  commitNetLabel: (text, position) =>
+    set((state) => {
+      const document = state.persisted.document;
+      if (state.session?.type !== "netLabel" || !document) {
+        return state;
+      }
+
+      const newLabel: NetLabelEntity = {
+        id: `label-${crypto.randomUUID()}`,
+        entityType: "label",
+        text,
+        position,
+        rotation: state.session.rotation,
+        net: text,
+      };
+
+      const nextDocument = {
+        ...document,
+        labels: [...document.labels, newLabel],
+      };
+
+      return {
+        persisted: {
+          ...state.persisted,
+          document: nextDocument,
+        },
+        derived: {
+          ...state.derived,
+          connectivity: deriveConnectivity(nextDocument),
+          documentBounds: deriveDocumentBounds(nextDocument),
+        },
+        chrome: {
+          ...state.chrome,
+          activeTool: "select",
+          selectedEntityIds: new Set([newLabel.id]),
+          popoverEntityId: null,
+        },
+        session: null,
+      };
+    }),
+
+  updateNetLabelText: (labelId, text) =>
+    set((state) => {
+      const document = state.persisted.document;
+      if (!document) {
+        return state;
+      }
+
+      const nextDocument = {
+        ...document,
+        labels: document.labels.map((label) =>
+          label.id === labelId ? { ...label, text, net: text } : label,
+        ),
+      };
+
+      return {
+        persisted: {
+          ...state.persisted,
+          document: nextDocument,
+        },
+        derived: {
+          ...state.derived,
+          connectivity: deriveConnectivity(nextDocument),
+        },
+      };
+    }),
 
   selectEntities: (ids) =>
     set((state) => ({

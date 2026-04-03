@@ -21,6 +21,9 @@ export interface SchematicInteractionController {
   updateDragMove: (delta: Point) => void;
   commitDragMove: () => void;
   deleteSelectedEntities: () => void;
+  beginNetLabelPlacement: () => void;
+  setNetLabelPreview: (position: Point | null) => void;
+  commitNetLabel: (text: string, position: Point) => void;
 }
 
 export function useSchematicInteractionController(): SchematicInteractionController {
@@ -44,6 +47,13 @@ export function useSchematicInteractionController(): SchematicInteractionControl
   const deleteSelectedEntities = useSchematicStore(
     (state) => state.deleteSelectedEntities,
   );
+  const beginNetLabelPlacement = useSchematicStore(
+    (state) => state.beginNetLabelPlacement,
+  );
+  const setNetLabelPreview = useSchematicStore(
+    (state) => state.setNetLabelPreview,
+  );
+  const commitNetLabel = useSchematicStore((state) => state.commitNetLabel);
 
   return useMemo(
     () => ({
@@ -61,6 +71,9 @@ export function useSchematicInteractionController(): SchematicInteractionControl
       updateDragMove,
       commitDragMove,
       deleteSelectedEntities,
+      beginNetLabelPlacement,
+      setNetLabelPreview,
+      commitNetLabel,
     }),
     [
       activateTool,
@@ -77,6 +90,9 @@ export function useSchematicInteractionController(): SchematicInteractionControl
       updateDragMove,
       commitDragMove,
       deleteSelectedEntities,
+      beginNetLabelPlacement,
+      setNetLabelPreview,
+      commitNetLabel,
     ],
   );
 }

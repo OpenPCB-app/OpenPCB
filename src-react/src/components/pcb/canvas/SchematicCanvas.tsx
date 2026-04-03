@@ -7,13 +7,18 @@ import {
   screenToSchematic,
   snapToGrid,
 } from "./viewport";
-import { createHitTestCache, hitTestScreen } from "./hit-test";
+import {
+  createHitTestCache,
+  createNetLabelHitTestCache,
+  hitTestScreen,
+} from "./hit-test";
 import { renderSymbol } from "./symbols";
 import {
   buildOrthogonalWirePathWithWaypoints,
   renderJunctions,
   renderWire,
 } from "./wires";
+import { renderNetLabels } from "./net-labels";
 import {
   createPreviewSymbol,
   PALETTE_SYMBOL_KIND_MIME,
@@ -64,7 +69,10 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
   const document = useSchematicStore((s) => s.persisted.document);
   const canvasColors = useCanvasColors();
   const gridColors = useMemo(() => getGridColors(canvasColors), [canvasColors]);
-  const symbolColors = useMemo(() => getSymbolColors(canvasColors), [canvasColors]);
+  const symbolColors = useMemo(
+    () => getSymbolColors(canvasColors),
+    [canvasColors],
+  );
   const wireColors = useMemo(() => getWireColors(canvasColors), [canvasColors]);
 
   const getPlacementPosition = useCallback(
@@ -214,6 +222,15 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
         );
       }
 
+      if (document.labels.length > 0) {
+        renderNetLabels(
+          ctx,
+          document.labels,
+          store.chrome.viewport,
+          selectedIds,
+        );
+      }
+
       for (const symbol of document.symbols) {
         renderSymbol(ctx, symbol, store.chrome.viewport, {
           selected: selectedIds.has(symbol.id),
@@ -360,6 +377,19 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
         return;
       }
 
+      if (useSchematicStore.getState().chrome.activeTool === "label") {
+        const position = getPlacementPosition(e.clientX, e.clientY);
+        if (!position) {
+          return;
+        }
+
+        const netName = window.prompt("Enter net name:", "NET1");
+        if (netName) {
+          interactionController.commitNetLabel(netName, position);
+        }
+        return;
+      }
+
       const canvas = canvasRef.current;
       if (!canvas) {
         return;
@@ -383,6 +413,8 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
         document.symbols,
         store.chrome.viewport,
         store.derived.hitTestCache,
+        document.labels,
+        createNetLabelHitTestCache(document.labels, store.chrome.viewport),
       );
 
       if (store.session?.type === "wire") {
@@ -428,6 +460,16 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
           startClient: { x: e.clientX, y: e.clientY },
           didStartDrag: false,
         };
+        return;
+      }
+
+      if (hit?.kind === "netLabel" && store.chrome.activeTool === "select") {
+        const isMultiSelect = e.shiftKey || e.metaKey || e.ctrlKey;
+        if (isMultiSelect) {
+          store.addToSelection([hit.labelId]);
+        } else {
+          store.selectEntities([hit.labelId]);
+        }
         return;
       }
 
@@ -483,6 +525,8 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
           document.symbols,
           store.chrome.viewport,
           store.derived.hitTestCache,
+          document.labels,
+          createNetLabelHitTestCache(document.labels, store.chrome.viewport),
         );
         const sourcePoint =
           store.derived.hitTestCache.connectorAnchors[session.sourcePinId];

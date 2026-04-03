@@ -151,6 +151,10 @@ function E2EDebugPanel() {
       return `placement:${session.symbolKind}`;
     }
 
+    if (session.type === "netLabel") {
+      return "netLabel:pending";
+    }
+
     if ("sourcePinId" in session) {
       return `wire:${session.sourcePinId}:${session.targetPinId ?? "pending"}`;
     }

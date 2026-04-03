@@ -328,8 +328,15 @@ export interface DragSession {
   initialPositions: Record<string, Point>;
 }
 
+export interface NetLabelSession {
+  type: "netLabel";
+  previewPosition: Point | null;
+  rotation: Rotation;
+}
+
 export type InteractionSession =
   | PlacementSession
   | WireSession
   | DragSession
+  | NetLabelSession
   | null;
