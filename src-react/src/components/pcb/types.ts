@@ -1,12 +1,15 @@
 /** Core PCB schematic types for the frontend */
 
 import type {
+  PcbProjectDocument,
+  ProjectDocumentBundle,
   ProjectPoint,
   SchematicLabel,
   SchematicProjectDocument,
   SchematicSymbol as SharedSchematicSymbol,
   SchematicWire,
 } from "@shared/types";
+import type { PcbDocument } from "@/components/pcb-editor/pcb-types";
 
 export type Point = ProjectPoint;
 export type Rotation = 0 | 90 | 180 | 270;
@@ -309,6 +312,59 @@ export function toSchematicProjectDocument(
       rotation: l.rotation,
       net: l.net,
     })),
+  };
+}
+
+export function toEditorPcbDocument(document: PcbProjectDocument): PcbDocument {
+  return {
+    boardOutline: document.boardOutline,
+    manufacturerPreset: document.manufacturerPreset,
+    netClasses: document.netClasses,
+    nets: document.nets,
+    placements: document.placements.map((placement) => ({
+      ...placement,
+      footprintData: placement.footprintData,
+    })) as PcbDocument["placements"],
+    traces: document.traces,
+    vias: document.vias,
+    zones: document.zones,
+  };
+}
+
+export function toPcbProjectDocument(
+  schematic: SchematicDocument,
+  pcb: PcbDocument,
+): PcbProjectDocument {
+  return {
+    id: schematic.id,
+    projectId: schematic.projectId,
+    updatedAt: schematic.updatedAt,
+    version: schematic.revision,
+    formatVersion: "pcb.project-document/v1",
+    boardOutline: pcb.boardOutline,
+    manufacturerPreset: pcb.manufacturerPreset,
+    netClasses: pcb.netClasses,
+    nets: pcb.nets,
+    placements: pcb.placements.map((placement) => ({
+      ...placement,
+      footprintData: placement.footprintData,
+    })),
+    traces: pcb.traces,
+    vias: pcb.vias,
+    zones: pcb.zones,
+  };
+}
+
+export function toProjectDocumentBundle(
+  schematic: SchematicDocument,
+  pcb: PcbDocument | null,
+): ProjectDocumentBundle {
+  return {
+    formatVersion: "pcb.project-document-bundle/v1",
+    docs: {
+      schematic: toSchematicProjectDocument(schematic),
+      pcb: pcb ? toPcbProjectDocument(schematic, pcb) : null,
+    },
   };
 }
 

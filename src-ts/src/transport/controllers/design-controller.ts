@@ -1,7 +1,7 @@
 import type { RouteContext } from "../router";
 import type { IDesignService } from "../../domain/services/design-service";
 import { ResponseBuilder } from "../../core/utils/response-builder";
-import { SchematicProjectDocumentSchema } from "../../core/schemas/pcb-project.schema";
+import { ProjectDocumentBundleSchema } from "../../core/schemas/pcb-project.schema";
 
 export class DesignController {
   constructor(private designService: IDesignService) {}
@@ -85,10 +85,10 @@ export class DesignController {
     }
 
     const body = await ctx.req.json();
-    const parsed = SchematicProjectDocumentSchema.safeParse(body.content);
+    const parsed = ProjectDocumentBundleSchema.safeParse(body.content);
     if (!parsed.success) {
       return ResponseBuilder.badRequest(
-        `Invalid schematic document: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
+        `Invalid project bundle: ${parsed.error.issues.map((i) => i.message).join(", ")}`,
       );
     }
 

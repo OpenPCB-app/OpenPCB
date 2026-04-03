@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useSchematicStore } from "@/stores/schematic-store";
-import { toSchematicProjectDocument } from "@/components/pcb/types";
+import { toProjectDocumentBundle } from "@/components/pcb/types";
+import { usePcbStore } from "@/stores/pcb-store";
 import { saveSheetContent } from "@/lib/api/design-api";
 import type { SchematicDocument } from "@/components/pcb/types";
 
@@ -23,10 +24,11 @@ export function useSchematicAutoSave(
     const { persisted } = useSchematicStore.getState();
     const doc = persisted.document;
     const designId = persisted.designId;
+    const pcbDoc = usePcbStore.getState().document;
 
     if (!doc || !designId) return;
 
-    const projectDoc = toSchematicProjectDocument(doc);
+    const projectDoc = toProjectDocumentBundle(doc, pcbDoc);
     const json = JSON.stringify(projectDoc);
 
     if (json === lastSavedJsonRef.current) return;
@@ -48,13 +50,14 @@ export function useSchematicAutoSave(
     }
 
     const { persisted } = useSchematicStore.getState();
+    const pcbDoc = usePcbStore.getState().document;
     if (!persisted.document) {
       lastSavedJsonRef.current = null;
       return;
     }
 
     lastSavedJsonRef.current = JSON.stringify(
-      toSchematicProjectDocument(persisted.document),
+      toProjectDocumentBundle(persisted.document, pcbDoc),
     );
   }, [
     designId,

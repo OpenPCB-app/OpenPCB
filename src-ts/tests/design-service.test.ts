@@ -122,7 +122,7 @@ describe("DesignService", () => {
         ).rejects.toThrow("Design workspace must match project workspace");
     });
 
-    it("saveSheetContent persists schematic content", async () => {
+    it("saveSheetContent persists bundle content", async () => {
         const design = await service.create({
             workspaceId,
             projectId,
@@ -130,43 +130,108 @@ describe("DesignService", () => {
         });
 
         await service.saveSheetContent(design.id, 0, {
+            formatVersion: "pcb.project-document-bundle/v1",
+            docs: {
+                schematic: {
+                    id: design.id,
+                    projectId,
+                    updatedAt: new Date().toISOString(),
+                    version: 1,
+                    formatVersion: "pcb.schematic-project-document/v1",
+                    title: "Sheet 1",
+                    symbols: [
+                        {
+                            id: "symbol-1",
+                            reference: "R1",
+                            position: { x: 0, y: 0 },
+                            pins: [
+                                { id: "pin-1", name: "1", position: { x: 0, y: 0 } },
+                                { id: "pin-2", name: "2", position: { x: 1000, y: 0 } },
+                            ],
+                            properties: { value: "10k" },
+                        },
+                    ],
+                    wires: [
+                        {
+                            id: "wire-1",
+                            points: [
+                                { x: 0, y: 0 },
+                                { x: 1000, y: 0 },
+                            ],
+                            sourcePinId: "pin-1",
+                            targetPinId: "pin-2",
+                            net: null,
+                        },
+                    ],
+                    labels: [],
+                },
+                pcb: {
+                    id: design.id,
+                    projectId,
+                    updatedAt: new Date().toISOString(),
+                    version: 1,
+                    formatVersion: "pcb.project-document/v1",
+                    boardOutline: { width: 100, height: 80 },
+                    manufacturerPreset: "jlcpcb_standard",
+                    netClasses: [],
+                    nets: [],
+                    placements: [],
+                    traces: [],
+                    vias: [],
+                    zones: [],
+                },
+            },
+        });
+
+        const saved = await service.getSheetContent(design.id, 0);
+        expect(saved).not.toBeNull();
+        expect(saved?.content.docs.schematic?.symbols).toHaveLength(1);
+        expect(saved?.content.docs.schematic?.wires).toHaveLength(1);
+        expect(saved?.content.docs.pcb?.boardOutline.width).toBe(100);
+    });
+
+    it("getSheetContent wraps legacy schematic-only content into a bundle", async () => {
+        const design = await service.create({
+            workspaceId,
+            projectId,
+            name: "Legacy Persistence Check",
+        });
+
+        const rawDb = db.getRawDb();
+        const legacyJson = JSON.stringify({
             id: design.id,
             projectId,
             updatedAt: new Date().toISOString(),
             version: 1,
             formatVersion: "pcb.schematic-project-document/v1",
             title: "Sheet 1",
-            symbols: [
-                {
-                    id: "symbol-1",
-                    reference: "R1",
-                    position: { x: 0, y: 0 },
-                    pins: [
-                        { id: "pin-1", name: "1", position: { x: 0, y: 0 } },
-                        { id: "pin-2", name: "2", position: { x: 1000, y: 0 } },
-                    ],
-                    properties: { value: "10k" },
-                },
-            ],
-            wires: [
-                {
-                    id: "wire-1",
-                    points: [
-                        { x: 0, y: 0 },
-                        { x: 1000, y: 0 },
-                    ],
-                    sourcePinId: "pin-1",
-                    targetPinId: "pin-2",
-                    net: null,
-                },
-            ],
+            symbols: [],
+            wires: [],
             labels: [],
-        });
+        }).replace(/'/g, "''");
+        const createdAt = new Date().toISOString();
+        const updatedAt = new Date().toISOString();
+
+        rawDb.exec(`
+            INSERT INTO design_sheet (id, design_id, sheet_index, title, content, content_hash, created_at, updated_at)
+            VALUES (
+                '${crypto.randomUUID()}',
+                '${design.id}',
+                0,
+                'Sheet 1',
+                json('${legacyJson}'),
+                'legacy-hash',
+                '${createdAt}',
+                '${updatedAt}'
+            )
+        `);
 
         const saved = await service.getSheetContent(design.id, 0);
-        expect(saved).not.toBeNull();
-        expect(saved?.content.symbols).toHaveLength(1);
-        expect(saved?.content.wires).toHaveLength(1);
+        expect(saved?.content.formatVersion).toBe("pcb.project-document-bundle/v1");
+        expect(saved?.content.docs.schematic?.formatVersion).toBe(
+            "pcb.schematic-project-document/v1",
+        );
+        expect(saved?.content.docs.pcb).toBeNull();
     });
 
     it("saveSheetContent bumps design updatedAt", async () => {
@@ -182,15 +247,21 @@ describe("DesignService", () => {
         await new Promise((resolve) => setTimeout(resolve, 5));
 
         await service.saveSheetContent(design.id, 0, {
-            id: design.id,
-            projectId,
-            updatedAt: new Date().toISOString(),
-            version: 1,
-            formatVersion: "pcb.schematic-project-document/v1",
-            title: "Sheet 1",
-            symbols: [],
-            wires: [],
-            labels: [],
+            formatVersion: "pcb.project-document-bundle/v1",
+            docs: {
+                schematic: {
+                    id: design.id,
+                    projectId,
+                    updatedAt: new Date().toISOString(),
+                    version: 1,
+                    formatVersion: "pcb.schematic-project-document/v1",
+                    title: "Sheet 1",
+                    symbols: [],
+                    wires: [],
+                    labels: [],
+                },
+                pcb: null,
+            },
         });
 
         const after = await service.get(design.id);

@@ -4,7 +4,7 @@ import type {
   DesignRecord,
   UpdateDesignInput,
 } from "@shared/types";
-import type { SchematicProjectDocument } from "@shared/types/pcb.types";
+import type { ProjectDocumentBundle } from "@shared/types/pcb.types";
 
 interface ApiResponse<T> {
   ok: boolean;
@@ -90,7 +90,7 @@ export interface SheetContentResponse {
     title: string;
     contentHash: string | null;
   } | null;
-  content: SchematicProjectDocument | null;
+  content: ProjectDocumentBundle | null;
 }
 
 export async function getSheetContent(
@@ -116,7 +116,7 @@ export interface SaveSheetContentResponse {
 export async function saveSheetContent(
   designId: string,
   sheetIndex: number,
-  content: SchematicProjectDocument,
+  content: ProjectDocumentBundle,
 ): Promise<SaveSheetContentResponse> {
   const response = await customFetch<ApiResponse<SaveSheetContentResponse>>(
     `/api/designs/${encodeURIComponent(designId)}/sheets/${sheetIndex}/content`,

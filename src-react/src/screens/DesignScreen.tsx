@@ -24,13 +24,14 @@ import {
   createUnsavedSchematicDraft,
   hasSchematicCanvasContent,
 } from "@/components/pcb/schematic-document";
-import { extractNets } from "@/components/pcb/canvas/net-extraction";
 import { getSheetContent, saveSheetContent } from "@/lib/api/design-api";
 import {
+  toEditorPcbDocument,
   toEditorSchematicDocument,
-  toSchematicProjectDocument,
+  toProjectDocumentBundle,
 } from "@/components/pcb/types";
 import { useToast } from "@/components/ui/use-toast";
+import { createEmptyPcbDocument } from "@/components/pcb-editor/pcb-types";
 
 const AUTO_DRAFT_NAME = "Untitled design";
 
@@ -98,7 +99,6 @@ export function DesignScreen() {
   const { toast } = useToast();
   const popoverEntityId = useSchematicStore((s) => s.chrome.popoverEntityId);
   const currentDocument = useSchematicStore((s) => s.persisted.document);
-  const componentLibraryIndex = useSchematicStore((s) => s.componentLibraryIndex);
   const currentDesignContextId = useSchematicStore((s) => s.persisted.designId);
   const currentDocumentId = useSchematicStore(
     (s) => s.persisted.document?.id ?? null,
@@ -107,9 +107,7 @@ export function DesignScreen() {
   const clearDocument = useSchematicStore((s) => s.clearDocument);
   const setProjectContext = useSchematicStore((s) => s.setProjectContext);
   const setPopoverTarget = useSchematicStore((s) => s.setPopoverTarget);
-  const initializePcbFromSchematic = usePcbStore((s) => s.initFromSchematic);
-  const pcbDocument = usePcbStore((s) => s.document);
-  const lastPcbSeedRef = useRef<string | null>(null);
+  const setPcbDocument = usePcbStore((s) => s.setDocument);
   const isUnsavedDraft =
     currentDocument !== null && currentDesignContextId === null;
 
@@ -171,9 +169,19 @@ export function DesignScreen() {
       .then((result) => {
         if (cancelled) return;
         if (result.content) {
-          setDocument(toEditorSchematicDocument(result.content));
+          const schematic = result.content.docs.schematic;
+          const pcb = result.content.docs.pcb;
+
+          if (schematic) {
+            setDocument(toEditorSchematicDocument(schematic));
+          } else {
+            setDocument(createEmptySchematicDocument(design));
+          }
+
+          setPcbDocument(pcb ? toEditorPcbDocument(pcb) : createEmptyPcbDocument());
         } else {
           setDocument(createEmptySchematicDocument(design));
+          setPcbDocument(createEmptyPcbDocument());
         }
         lastLoadedDesignIdRef.current = design.id;
         setLoadNonce(0);
@@ -210,6 +218,7 @@ export function DesignScreen() {
     currentProjectId,
     design,
     loadNonce,
+    setPcbDocument,
     setDocument,
     setProjectContext,
     toast,
@@ -248,7 +257,7 @@ export function DesignScreen() {
         await saveSheetContent(
           state.persisted.designId,
           0,
-          toSchematicProjectDocument(doc),
+          toProjectDocumentBundle(doc, usePcbStore.getState().document),
         );
         return true;
       }
@@ -258,16 +267,17 @@ export function DesignScreen() {
       }
 
       const createdDesign = await create({ name: AUTO_DRAFT_NAME });
+      const nextDoc = {
+        ...doc,
+        id: createdDesign.id,
+        name: createdDesign.name,
+        projectId: createdDesign.projectId ?? createdDesign.workspaceId,
+        updatedAt: createdDesign.updatedAt,
+      };
       await saveSheetContent(
         createdDesign.id,
         0,
-        toSchematicProjectDocument({
-          ...doc,
-          id: createdDesign.id,
-          name: createdDesign.name,
-          projectId: createdDesign.projectId ?? createdDesign.workspaceId,
-          updatedAt: createdDesign.updatedAt,
-        }),
+        toProjectDocumentBundle(nextDoc, usePcbStore.getState().document),
       );
       lastLoadedDesignIdRef.current = null;
       navigateToDesign(createdDesign.projectId, createdDesign.id);
@@ -330,40 +340,6 @@ export function DesignScreen() {
     design !== undefined &&
     failedDesignId === design.id &&
     currentDocumentId !== design.id;
-
-  useEffect(() => {
-    if (designTab !== "pcb" || !currentDocument) {
-      return;
-    }
-
-    const seedKey = [
-      currentDocument.id,
-      currentDocument.symbols.length,
-      currentDocument.wires.length,
-      currentDocument.labels.length,
-      componentLibraryIndex.componentsById.size,
-    ].join(":");
-
-    if (pcbDocument && lastPcbSeedRef.current === seedKey) {
-      return;
-    }
-
-    const nets = extractNets(
-      currentDocument.symbols,
-      currentDocument.wires,
-      currentDocument.labels,
-    );
-    const components = Array.from(componentLibraryIndex.componentsById.values());
-
-    initializePcbFromSchematic(nets, currentDocument.symbols, components);
-    lastPcbSeedRef.current = seedKey;
-  }, [
-    componentLibraryIndex,
-    currentDocument,
-    designTab,
-    initializePcbFromSchematic,
-    pcbDocument,
-  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

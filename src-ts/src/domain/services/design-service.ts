@@ -9,13 +9,57 @@ import type {
   CreateDesignInput,
   UpdateDesignInput,
 } from "@shared/types/design.types";
-import type { SchematicProjectDocument } from "@shared/types/pcb.types";
+import type {
+  ProjectDocumentBundle,
+  SchematicProjectDocument,
+} from "@shared/types/pcb.types";
 
 const MAX_CONTENT_SIZE_BYTES = 5 * 1024 * 1024; // 5MB hard limit
 
 export interface SheetContentResult {
   sheet: Omit<DesignSheetRow, "content">;
-  content: SchematicProjectDocument;
+  content: ProjectDocumentBundle;
+}
+
+function isLegacySchematicDocument(
+  content: unknown,
+): content is SchematicProjectDocument {
+  return (
+    typeof content === "object" &&
+    content !== null &&
+    "symbols" in content &&
+    "wires" in content &&
+    "labels" in content
+  );
+}
+
+function isProjectDocumentBundle(
+  content: unknown,
+): content is ProjectDocumentBundle {
+  return (
+    typeof content === "object" &&
+    content !== null &&
+    "docs" in content &&
+    "formatVersion" in content
+  );
+}
+
+function toProjectDocumentBundle(content: unknown): ProjectDocumentBundle {
+  if (isProjectDocumentBundle(content)) {
+    return content;
+  }
+
+  if (isLegacySchematicDocument(content)) {
+    return {
+      formatVersion: "pcb.project-document-bundle/v1",
+      docs: {
+        schematic: content,
+        pcb: null,
+      },
+    };
+  }
+
+  throw new ValidationError("Invalid design sheet content format");
 }
 
 export interface IDesignService {
@@ -32,7 +76,7 @@ export interface IDesignService {
   saveSheetContent(
     designId: string,
     sheetIndex: number,
-    content: SchematicProjectDocument,
+    content: ProjectDocumentBundle,
   ): Promise<Omit<DesignSheetRow, "content">>;
 }
 
@@ -125,13 +169,13 @@ export class DesignService implements IDesignService {
       return null;
     }
     const { content, ...meta } = sheet;
-    return { sheet: meta, content };
+    return { sheet: meta, content: toProjectDocumentBundle(content) };
   }
 
   async saveSheetContent(
     designId: string,
     sheetIndex: number,
-    content: SchematicProjectDocument,
+    content: ProjectDocumentBundle,
   ): Promise<Omit<DesignSheetRow, "content">> {
     await this.get(designId);
 
@@ -173,7 +217,7 @@ export class DesignService implements IDesignService {
         await client
           .update(designSheetTable)
           .set({
-            content: content as unknown as SchematicProjectDocument,
+            content,
             contentHash,
             updatedAt: now,
           })
@@ -183,7 +227,7 @@ export class DesignService implements IDesignService {
           designId,
           sheetIndex,
           title: `Sheet ${sheetIndex + 1}`,
-          content: content as unknown as SchematicProjectDocument,
+          content,
           contentHash,
           createdAt: now,
           updatedAt: now,

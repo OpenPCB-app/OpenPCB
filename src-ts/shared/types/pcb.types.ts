@@ -76,61 +76,84 @@ export interface SchematicProjectDocument extends ProjectDocumentId {
 }
 
 export interface PcbBoardOutline {
-  id: string;
-  outline: ProjectPolyline;
-  keepoutAreas?: ProjectRect[];
-  thicknessMm?: number;
+  width: number;
+  height: number;
 }
 
-export interface PcbFootprintPad {
+export interface PcbNetClass {
+  name: string;
+  traceWidth: number;
+  clearance: number;
+  viaDiameter: number;
+  viaDrill: number;
+}
+
+export interface PcbPadReference {
+  componentId: string;
+  padNumber: string;
+}
+
+export interface PcbNet {
   id: string;
   name: string;
-  position: ProjectPoint;
-  size: ProjectRect;
+  netClass: string;
+  padRefs: PcbPadReference[];
 }
 
-export interface PcbFootprint {
+export interface PcbPlacement {
   id: string;
-  symbolId?: string | null;
-  libraryPartId?: string | null;
-  reference?: string | null;
+  schematicSymbolId: string;
+  componentId: string;
+  variantId: string;
+  footprintOptionId: string;
+  reference: string;
+  value: string;
   position: ProjectPoint;
-  rotation?: number;
-  pads: PcbFootprintPad[];
+  rotation: number;
+  layer: "F.Cu" | "B.Cu";
+  footprintData: unknown;
 }
 
 export interface PcbTrace {
   id: string;
-  net?: string | null;
+  start: ProjectPoint;
+  end: ProjectPoint;
   width: number;
   layer: string;
-  points: ProjectPoint[];
+  net: string;
 }
 
 export interface PcbVia {
   id: string;
-  net?: string | null;
   position: ProjectPoint;
+  padDiameter: number;
   drillDiameter: number;
-  diameter: number;
-  layerFrom: string;
-  layerTo: string;
-}
-
-export interface PcbDesignRules {
-  defaultTraceWidthMm?: number;
-  defaultViaDiameterMm?: number;
-  defaultViaDrillMm?: number;
-  clearanceMm?: number;
+  net: string;
+  type: "through";
+  layers: [string, string];
+  tented: boolean;
 }
 
 export interface PcbProjectDocument extends ProjectDocumentId {
   formatVersion: PcbProjectDocumentFormatVersion;
-  board: PcbBoardOutline;
-  footprints: PcbFootprint[];
+  boardOutline: PcbBoardOutline;
+  manufacturerPreset: string;
+  netClasses: PcbNetClass[];
+  nets: PcbNet[];
+  placements: PcbPlacement[];
   traces: PcbTrace[];
   vias: PcbVia[];
-  rules?: PcbDesignRules;
+  zones: Array<{
+    id: string;
+    net: string;
+    layer: string;
+    priority: number;
+    outline: ProjectPoint[];
+    fillType: "solid" | "hatched" | "none";
+    clearance: number;
+    minWidth: number;
+    padConnection: "thermal" | "direct" | "none";
+  }>;
 }
 
 export interface LibraryPartReference {

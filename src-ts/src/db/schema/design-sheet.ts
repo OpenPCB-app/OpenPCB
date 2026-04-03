@@ -7,7 +7,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { uuidPrimaryKey, timestamps, softDelete } from "./base";
 import { design } from "./design";
-import type { SchematicProjectDocument } from "@shared/types/pcb.types";
+import type { ProjectDocumentBundle } from "@shared/types/pcb.types";
 
 export const designSheet = sqliteTable(
   "design_sheet",
@@ -19,7 +19,7 @@ export const designSheet = sqliteTable(
     sheetIndex: integer("sheet_index").notNull().default(0),
     title: text("title").notNull().default("Sheet 1"),
     content: text("content", { mode: "json" })
-      .$type<SchematicProjectDocument>()
+      .$type<ProjectDocumentBundle>()
       .notNull(),
     contentHash: text("content_hash"),
     ...timestamps,

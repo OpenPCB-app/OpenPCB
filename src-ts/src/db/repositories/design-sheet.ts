@@ -9,7 +9,7 @@ import {
 } from "../schema/design-sheet";
 import { and, eq, isNull, asc } from "drizzle-orm";
 import { parseSQLiteError } from "../errors";
-import type { SchematicProjectDocument } from "@shared/types/pcb.types";
+import type { ProjectDocumentBundle } from "@shared/types/pcb.types";
 
 export class DesignSheetRepository extends BaseRepository<
   typeof designSheet,
@@ -78,7 +78,7 @@ export class DesignSheetRepository extends BaseRepository<
   async upsertContent(
     designId: string,
     sheetIndex: number,
-    content: SchematicProjectDocument,
+    content: ProjectDocumentBundle,
     contentHash: string,
   ): Promise<DesignSheetRow> {
     const start = performance.now();
@@ -90,7 +90,7 @@ export class DesignSheetRepository extends BaseRepository<
         await this.db
           .update(designSheet)
           .set({
-            content: content as unknown as SchematicProjectDocument,
+            content,
             contentHash,
             updatedAt: now,
           })
@@ -105,7 +105,7 @@ export class DesignSheetRepository extends BaseRepository<
         designId,
         sheetIndex,
         title: `Sheet ${sheetIndex + 1}`,
-        content: content as unknown as SchematicProjectDocument,
+        content,
         contentHash,
       });
 

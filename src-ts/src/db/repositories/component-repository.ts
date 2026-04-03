@@ -506,7 +506,23 @@ export class ComponentRepository extends BaseRepository<
         const designNames = new Set<string>();
 
         for (const row of usageRows) {
-          const symbols = row.content?.symbols;
+          const schematicDoc =
+            row.content &&
+            typeof row.content === "object" &&
+            "docs" in row.content &&
+            row.content.docs &&
+            typeof row.content.docs === "object" &&
+            "schematic" in row.content.docs
+              ? row.content.docs.schematic
+              : row.content;
+
+          const symbols =
+            schematicDoc &&
+            typeof schematicDoc === "object" &&
+            "symbols" in schematicDoc
+              ? schematicDoc.symbols
+              : undefined;
+
           if (!Array.isArray(symbols)) {
             continue;
           }

@@ -119,44 +119,66 @@ export const SchematicProjectDocumentSchema = ProjectDocumentIdSchema.extend({
 
 export const PcbBoardOutlineSchema = z
   .object({
-    id: DocumentIdSchema,
-    outline: ProjectPolylineSchema,
-    keepoutAreas: z.array(ProjectRectSchema).optional(),
-    thicknessMm: z.number().positive().optional(),
+    width: z.number().positive(),
+    height: z.number().positive(),
   })
   .strict()
   .openapi("PcbBoardOutline");
 
-export const PcbFootprintPadSchema = z
+export const PcbNetClassSchema = z
   .object({
-    id: DocumentIdSchema,
     name: z.string().min(1),
-    position: ProjectPointSchema,
-    size: ProjectRectSchema,
+    traceWidth: z.number().positive(),
+    clearance: z.number().nonnegative(),
+    viaDiameter: z.number().positive(),
+    viaDrill: z.number().positive(),
   })
   .strict()
-  .openapi("PcbFootprintPad");
+  .openapi("PcbNetClass");
 
-export const PcbFootprintSchema = z
+export const PcbPadReferenceSchema = z
+  .object({
+    componentId: DocumentIdSchema,
+    padNumber: z.string().min(1),
+  })
+  .strict()
+  .openapi("PcbPadReference");
+
+export const PcbNetSchema = z
+  .object({
+    name: z.string().min(1),
+    id: DocumentIdSchema,
+    netClass: z.string().min(1),
+    padRefs: z.array(PcbPadReferenceSchema),
+  })
+  .strict()
+  .openapi("PcbNet");
+
+export const PcbPlacementSchema = z
   .object({
     id: DocumentIdSchema,
-    symbolId: DocumentIdSchema.nullable().optional(),
-    libraryPartId: DocumentIdSchema.nullable().optional(),
-    reference: z.string().nullable().optional(),
+    schematicSymbolId: DocumentIdSchema,
+    componentId: DocumentIdSchema,
+    variantId: DocumentIdSchema,
+    footprintOptionId: DocumentIdSchema,
+    reference: z.string().min(1),
+    value: z.string(),
     position: ProjectPointSchema,
-    rotation: z.number().optional(),
-    pads: z.array(PcbFootprintPadSchema),
+    rotation: z.number(),
+    layer: z.enum(["F.Cu", "B.Cu"]),
+    footprintData: z.unknown(),
   })
   .strict()
-  .openapi("PcbFootprint");
+  .openapi("PcbPlacement");
 
 export const PcbTraceSchema = z
   .object({
     id: DocumentIdSchema,
-    net: z.string().nullable().optional(),
+    start: ProjectPointSchema,
+    end: ProjectPointSchema,
     width: z.number().positive(),
     layer: z.string().min(1),
-    points: z.array(ProjectPointSchema).min(2),
+    net: z.string().min(1),
   })
   .strict()
   .openapi("PcbTrace");
@@ -164,33 +186,42 @@ export const PcbTraceSchema = z
 export const PcbViaSchema = z
   .object({
     id: DocumentIdSchema,
-    net: z.string().nullable().optional(),
     position: ProjectPointSchema,
+    padDiameter: z.number().positive(),
     drillDiameter: z.number().positive(),
-    diameter: z.number().positive(),
-    layerFrom: z.string().min(1),
-    layerTo: z.string().min(1),
+    net: z.string().min(1),
+    type: z.literal("through"),
+    layers: z.tuple([z.string().min(1), z.string().min(1)]),
+    tented: z.boolean(),
   })
   .strict()
   .openapi("PcbVia");
 
-export const PcbDesignRulesSchema = z
+export const PcbCopperZoneSchema = z
   .object({
-    defaultTraceWidthMm: z.number().positive().optional(),
-    defaultViaDiameterMm: z.number().positive().optional(),
-    defaultViaDrillMm: z.number().positive().optional(),
-    clearanceMm: z.number().positive().optional(),
+    id: DocumentIdSchema,
+    net: z.string().min(1),
+    layer: z.string().min(1),
+    priority: z.number().int(),
+    outline: z.array(ProjectPointSchema),
+    fillType: z.enum(["solid", "hatched", "none"]),
+    clearance: z.number().nonnegative(),
+    minWidth: z.number().positive(),
+    padConnection: z.enum(["thermal", "direct", "none"]),
   })
   .strict()
-  .openapi("PcbDesignRules");
+  .openapi("PcbCopperZone");
 
 export const PcbProjectDocumentSchema = ProjectDocumentIdSchema.extend({
   formatVersion: PcbProjectDocumentFormatVersionSchema,
-  board: PcbBoardOutlineSchema,
-  footprints: z.array(PcbFootprintSchema),
-  traces: z.array(PcbTraceSchema),
-  vias: z.array(PcbViaSchema),
-  rules: PcbDesignRulesSchema.optional(),
+  boardOutline: PcbBoardOutlineSchema,
+  manufacturerPreset: z.string().min(1),
+  netClasses: z.array(PcbNetClassSchema),
+  nets: z.array(PcbNetSchema),
+  placements: z.array(PcbPlacementSchema),
+  traces: z.array(PcbTraceSchema).default([]),
+  vias: z.array(PcbViaSchema).default([]),
+  zones: z.array(PcbCopperZoneSchema).default([]),
 })
   .strict()
   .openapi("PcbProjectDocument");
