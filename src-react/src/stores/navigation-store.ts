@@ -16,6 +16,7 @@ interface NavigationState {
   currentDesignId: string | null;
   currentNotePageId: string | null;
   currentComponentId: string | null;
+  editComponentId: string | null;
   previousScreen: Screen | null;
   designTab: DesignTab;
   sidebarCollapsed: boolean;
@@ -23,13 +24,18 @@ interface NavigationState {
   setScreen: (screen: Screen) => void;
   navigateToHome: () => void;
   navigateToProject: (projectId: string | null) => void;
-  navigateToDesign: (projectId?: string | null, designId?: string | null) => void;
+  navigateToDesign: (
+    projectId?: string | null,
+    designId?: string | null,
+  ) => void;
   navigateToNotes: (pageId?: string | null) => void;
   navigateToChat: (chatId: string | null) => void;
   navigateToNewChat: () => void;
   navigateToLibrary: () => void;
   navigateToImport: () => void;
   navigateToComponentDetail: (componentId?: string | null) => void;
+  navigateToComponentEdit: (componentId: string) => void;
+  clearEditComponentId: () => void;
   navigateBack: () => void;
   setDesignTab: (tab: DesignTab) => void;
   toggleSidebar: () => void;
@@ -78,6 +84,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   currentDesignId: null,
   currentNotePageId: null,
   currentComponentId: null,
+  editComponentId: null,
   previousScreen: null,
   designTab: "schematic",
   sidebarCollapsed: getPersistedSidebarState(),
@@ -133,7 +140,10 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       currentNotePageId: pageId ?? get().currentNotePageId,
       chatId: null,
     });
-    updateUrlHash({ screen: "notes", pageId: pageId ?? get().currentNotePageId });
+    updateUrlHash({
+      screen: "notes",
+      pageId: pageId ?? get().currentNotePageId,
+    });
   },
 
   navigateToChat: (chatId) => {
@@ -183,6 +193,20 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       screen: "component-detail",
       componentId: componentId ?? null,
     });
+  },
+
+  navigateToComponentEdit: (componentId) => {
+    set({
+      previousScreen: get().currentScreen,
+      currentScreen: "library",
+      editComponentId: componentId,
+      chatId: null,
+    });
+    updateUrlHash({ screen: "library" });
+  },
+
+  clearEditComponentId: () => {
+    set({ editComponentId: null });
   },
 
   navigateBack: () => {

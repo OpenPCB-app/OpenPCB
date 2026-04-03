@@ -3,7 +3,10 @@ import { useCanvasColors, type CanvasColors } from "@/lib/canvas-theme";
 import type { ComponentType } from "@shared/types/component-library-schema.types";
 import type { SymbolGraphic as BackendSymbolGraphic } from "@shared/types/component-semantics.types";
 import { parseKicadSymbolImport } from "../../lib/api/component-api";
-import { convertParsedKicadSymbolToDraft } from "../symbol-editor/kicad-import";
+import {
+  convertParsedKicadSymbolToDraft,
+  convertBodyGraphic,
+} from "../symbol-editor/kicad-import";
 import type {
   SymbolPin,
   SymbolGraphic,
@@ -435,11 +438,57 @@ function renderPin(
 // Fallback layout for components without rawKicadSource
 // ---------------------------------------------------------------------------
 
+/**
+ * Raw KiCAD body graphic format from the database (unit + S-expression node)
+ */
+interface RawKicadBodyGraphic {
+  unit: number;
+  node: unknown[];
+}
+
+/**
+ * Detect if a value is raw KiCAD format vs parsed BackendSymbolGraphic
+ */
+function isRawKicadGraphic(g: unknown): g is RawKicadBodyGraphic {
+  return (
+    typeof g === "object" &&
+    g !== null &&
+    "node" in g &&
+    Array.isArray((g as RawKicadBodyGraphic).node)
+  );
+}
+
+/**
+ * Convert bodyGraphics to editor format, handling both:
+ * - Raw KiCAD S-expressions: {unit: 0, node: ["polyline", ...]}
+ * - Parsed BackendSymbolGraphic: {type: "line", x1, y1, ...}
+ */
+function convertBodyGraphics(bodyGraphics: unknown[]): SymbolGraphic[] {
+  const result: SymbolGraphic[] = [];
+
+  for (let i = 0; i < bodyGraphics.length; i++) {
+    const g = bodyGraphics[i];
+    if (!g) continue;
+
+    if (isRawKicadGraphic(g)) {
+      // Raw KiCAD S-expression format
+      const converted = convertBodyGraphic(g.node, i);
+      if (converted) result.push(converted);
+    } else if (typeof g === "object" && "type" in g) {
+      // Already parsed BackendSymbolGraphic format
+      const converted = backendGraphicToEditor(g as BackendSymbolGraphic, i);
+      if (converted) result.push(converted);
+    }
+  }
+
+  return result;
+}
+
 function createFallbackLayout(
   pinDefs: Array<{ name: string; electricalType: string }>,
-  bodyGraphics: BackendSymbolGraphic[],
+  bodyGraphics: unknown[],
 ): { pins: SymbolPin[]; graphics: SymbolGraphic[] } {
-  const graphics = bodyGraphics.map(backendGraphicToEditor);
+  const graphics = convertBodyGraphics(bodyGraphics);
 
   // Compute body bounds from graphics to determine body size
   const gBounds = computeBounds([], graphics);
@@ -575,7 +624,7 @@ export function SymbolPreview({ symbolData }: SymbolPreviewProps) {
     if (draft) return { pins: draft.pins, graphics: draft.graphics };
     return createFallbackLayout(
       symbolData.pinDefinitions ?? [],
-      (symbolData.bodyGraphics ?? []) as BackendSymbolGraphic[],
+      (symbolData.bodyGraphics ?? []) as unknown[],
     );
   }, [symbolData, draft]);
 
@@ -611,7 +660,8 @@ export function SymbolPreview({ symbolData }: SymbolPreviewProps) {
 
     const { pins, graphics } = resolvedData();
 
-    for (const g of graphics) renderGraphic(ctx, g, viewportState, canvasColors);
+    for (const g of graphics)
+      renderGraphic(ctx, g, viewportState, canvasColors);
     for (const pin of pins) renderPin(ctx, pin, viewportState, canvasColors);
 
     ctx.fillStyle = canvasColors.refLabel;

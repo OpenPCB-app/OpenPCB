@@ -6,8 +6,6 @@ import {
   Trash2,
   FileText,
   Plus,
-  X,
-  Check,
   AlertTriangle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -22,30 +20,34 @@ import type {
   ComponentVariantType,
 } from "@shared/types/component-library-schema.types";
 
-export function ComponentDetailPage() {
+interface ComponentDetailPageProps {
+  onEditComponent?: (componentId: string) => void;
+}
+
+export function ComponentDetailPage({
+  onEditComponent,
+}: ComponentDetailPageProps) {
   const navigateBack = useNavigationStore((state) => state.navigateBack);
-  const currentComponentId = useNavigationStore((state) => state.currentComponentId);
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
-  const [selectedFootprintId, setSelectedFootprintId] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
+  const currentComponentId = useNavigationStore(
+    (state) => state.currentComponentId,
+  );
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
+    null,
+  );
+  const [selectedFootprintId, setSelectedFootprintId] = useState<string | null>(
+    null,
+  );
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [editForm, setEditForm] = useState({
-    displayLabel: "",
-    description: "",
-    categoryPath: "",
-  });
   const {
     component,
     loading,
     error,
     mutationError,
-    saving,
     deleting,
     deleteImpactLoading,
     deleteImpact,
     clearMutationError,
     loadDeleteImpact,
-    updateComponent,
     deleteComponent,
   } = useComponentDetail(currentComponentId);
 
@@ -83,7 +85,9 @@ export function ComponentDetailPage() {
       selectedVariant.footprintOptions.find(
         (footprint) => footprint.id === selectedFootprintId,
       ) ??
-      selectedVariant.footprintOptions.find((footprint) => footprint.isDefault) ??
+      selectedVariant.footprintOptions.find(
+        (footprint) => footprint.isDefault,
+      ) ??
       selectedVariant.footprintOptions[0] ??
       null;
 
@@ -125,35 +129,14 @@ export function ComponentDetailPage() {
     (footprint) => footprint.id === selectedFootprintId,
   );
   const hasMultipleVariants = variants.length > 1;
-  const hasMultipleFootprints = (selectedVariant?.footprintOptions?.length ?? 0) > 1;
+  const hasMultipleFootprints =
+    (selectedVariant?.footprintOptions?.length ?? 0) > 1;
+
+  const isBuiltin = component.scope === "builtin";
 
   const handleEditClick = () => {
-    setEditForm({
-      displayLabel: component.displayLabel,
-      description: component.description || "",
-      categoryPath: component.categoryPath || "",
-    });
-    clearMutationError();
-    setIsEditing(true);
-  };
-
-  const handleCancelEdit = () => {
-    clearMutationError();
-    setIsEditing(false);
-  };
-
-  const handleSaveEdit = async () => {
-    clearMutationError();
-
-    try {
-      await updateComponent({
-        displayLabel: editForm.displayLabel,
-        description: editForm.description,
-        categoryPath: editForm.categoryPath,
-      });
-      setIsEditing(false);
-    } catch {
-      return;
+    if (onEditComponent && currentComponentId) {
+      onEditComponent(currentComponentId);
     }
   };
 
@@ -178,9 +161,7 @@ export function ComponentDetailPage() {
   const handleVariantChange = (variantId: string) => {
     setSelectedVariantId(variantId);
 
-    const nextVariant = variants.find(
-      (variant) => variant.id === variantId,
-    );
+    const nextVariant = variants.find((variant) => variant.id === variantId);
     const defaultFootprint =
       nextVariant?.footprintOptions.find((footprint) => footprint.isDefault) ??
       nextVariant?.footprintOptions[0] ??
@@ -203,15 +184,26 @@ export function ComponentDetailPage() {
           </button>
           <div className="h-6 w-px bg-border-default" />
           <div>
-            <h1 className="text-xl font-semibold text-text-primary">
-              {component.displayLabel}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold text-text-primary">
+                {component.displayLabel}
+              </h1>
+              {isBuiltin && (
+                <span className="rounded bg-bg-input px-2 py-0.5 text-xs font-medium text-text-tertiary">
+                  Built-in
+                </span>
+              )}
+            </div>
             <div className="mt-0.5 flex items-center gap-3 text-sm text-text-secondary">
               {component.description && (
-                <span className="max-w-md truncate">{component.description}</span>
+                <span className="max-w-md truncate">
+                  {component.description}
+                </span>
               )}
               <span className="text-text-tertiary">|</span>
-              <span>{component.symbolData?.pinDefinitions?.length || 0} pins</span>
+              <span>
+                {component.symbolData?.pinDefinitions?.length || 0} pins
+              </span>
               {selectedVariant && (
                 <>
                   <span className="text-text-tertiary">|</span>
@@ -224,48 +216,29 @@ export function ComponentDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isEditing ? (
-            <>
-              {mutationError && (
-                <span className="mr-2 text-sm text-error">{mutationError}</span>
-              )}
-              <button
-                type="button"
-                onClick={handleCancelEdit}
-                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary"
-              >
-                <X className="h-4 w-4" />
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleSaveEdit()}
-                disabled={saving}
-                className="flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-sm text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Check className="h-4 w-4" />
-                {saving ? "Saving..." : "Save"}
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary">
-                <Download className="h-4 w-4" />
-                Export
-              </button>
-              <button type="button" className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary">
-                <Copy className="h-4 w-4" />
-                Duplicate
-              </button>
-              <button
-                type="button"
-                onClick={handleEditClick}
-                className="flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-sm text-white transition-opacity hover:opacity-90"
-              >
-                <Edit className="h-4 w-4" />
-                Edit
-              </button>
-            </>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary"
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </button>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary"
+          >
+            <Copy className="h-4 w-4" />
+            Duplicate
+          </button>
+          {!isBuiltin && (
+            <button
+              type="button"
+              onClick={handleEditClick}
+              className="flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-sm text-white transition-opacity hover:opacity-90"
+            >
+              <Edit className="h-4 w-4" />
+              Edit
+            </button>
           )}
         </div>
       </header>
@@ -308,12 +281,15 @@ export function ComponentDetailPage() {
                   <select
                     aria-label="Footprint variant"
                     value={selectedFootprintId || ""}
-                    onChange={(event) => setSelectedFootprintId(event.target.value)}
+                    onChange={(event) =>
+                      setSelectedFootprintId(event.target.value)
+                    }
                     className="rounded border border-border-default bg-bg-input px-2 py-1 text-xs text-text-primary"
                   >
                     {selectedVariant?.footprintOptions?.map((footprint) => (
                       <option key={footprint.id} value={footprint.id}>
-                        {footprint.label} {footprint.isDefault ? "(default)" : ""}
+                        {footprint.label}{" "}
+                        {footprint.isDefault ? "(default)" : ""}
                       </option>
                     ))}
                   </select>
@@ -348,68 +324,20 @@ export function ComponentDetailPage() {
               </h2>
             </div>
             <div className="p-4">
-              <Model3dPlaceholder model3dOptions={selectedFootprint?.model3dOptions} />
+              <Model3dPlaceholder
+                model3dOptions={selectedFootprint?.model3dOptions}
+              />
             </div>
           </section>
         </div>
 
         <div className="w-[400px] overflow-y-auto border-l border-border-default bg-bg-elevated">
-          {isEditing && (
-            <div className="border-b border-border-default bg-brand-bg/30 p-4">
-              <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-secondary">
-                Edit Component
-              </h3>
-              <div className="space-y-3">
-                <div>
-                  <label htmlFor="component-display-label" className="mb-1 block text-xs text-text-tertiary">
-                    Display Label
-                  </label>
-                  <input
-                    id="component-display-label"
-                    type="text"
-                    value={editForm.displayLabel}
-                    onChange={(event) =>
-                      setEditForm({ ...editForm, displayLabel: event.target.value })
-                    }
-                    className="w-full rounded-md border border-border-default bg-bg-input px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="component-description" className="mb-1 block text-xs text-text-tertiary">
-                    Description
-                  </label>
-                  <textarea
-                    id="component-description"
-                    value={editForm.description}
-                    onChange={(event) =>
-                      setEditForm({ ...editForm, description: event.target.value })
-                    }
-                    rows={3}
-                    className="w-full resize-none rounded-md border border-border-default bg-bg-input px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="component-category-path" className="mb-1 block text-xs text-text-tertiary">
-                    Category Path
-                  </label>
-                  <input
-                    id="component-category-path"
-                    type="text"
-                    value={editForm.categoryPath}
-                    onChange={(event) =>
-                      setEditForm({ ...editForm, categoryPath: event.target.value })
-                    }
-                    placeholder="e.g., Passive/Resistors"
-                    className="w-full rounded-md border border-border-default bg-bg-input px-3 py-2 text-sm text-text-primary focus:border-brand focus:outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
           {hasMultipleVariants && (
             <div className="border-b border-border-default p-4">
-              <label htmlFor="component-variant" className="mb-2 block text-xs font-medium uppercase tracking-wide text-text-secondary">
+              <label
+                htmlFor="component-variant"
+                className="mb-2 block text-xs font-medium uppercase tracking-wide text-text-secondary"
+              >
                 Package Variant
               </label>
               <select
@@ -420,7 +348,8 @@ export function ComponentDetailPage() {
               >
                 {variants.map((variant) => (
                   <option key={variant.id} value={variant.id}>
-                    {variant.humanLabel} {variant.id === defaultVariantId ? "(default)" : ""}
+                    {variant.humanLabel}{" "}
+                    {variant.id === defaultVariantId ? "(default)" : ""}
                   </option>
                 ))}
               </select>
@@ -455,7 +384,8 @@ export function ComponentDetailPage() {
                   <div className="flex justify-between">
                     <dt className="text-text-tertiary">Body Size</dt>
                     <dd className="text-text-primary">
-                      {selectedVariant.dimensions.lengthMm} × {selectedVariant.dimensions.widthMm} mm
+                      {selectedVariant.dimensions.lengthMm} ×{" "}
+                      {selectedVariant.dimensions.widthMm} mm
                     </dd>
                   </div>
                   {selectedVariant.dimensions.heightMm && (
@@ -477,7 +407,9 @@ export function ComponentDetailPage() {
               {selectedVariant?.imperialAlias && (
                 <div className="flex justify-between">
                   <dt className="text-text-tertiary">Imperial Code</dt>
-                  <dd className="text-text-primary">{selectedVariant.imperialAlias}</dd>
+                  <dd className="text-text-primary">
+                    {selectedVariant.imperialAlias}
+                  </dd>
                 </div>
               )}
             </dl>
@@ -495,28 +427,39 @@ export function ComponentDetailPage() {
               Actions
             </h3>
             <div className="space-y-2">
-              <button type="button" className="flex w-full items-center justify-center gap-2 rounded-md bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90">
+              <button
+                type="button"
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              >
                 <Plus className="h-4 w-4" />
                 Use in Design
               </button>
-              <button type="button" className="flex w-full items-center justify-center gap-2 rounded-md border border-border-default px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-bg-hover">
+              <button
+                type="button"
+                className="flex w-full items-center justify-center gap-2 rounded-md border border-border-default px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-bg-hover"
+              >
                 <Download className="h-4 w-4" />
                 Export KiCAD Files
               </button>
               <div className="flex gap-2">
-                <button type="button" className="flex flex-1 items-center justify-center gap-2 rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-hover">
+                <button
+                  type="button"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-hover"
+                >
                   <Copy className="h-4 w-4" />
                   Duplicate
                 </button>
-                <button
-                  type="button"
-                  onClick={handleDeleteClick}
-                  disabled={deleting}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-md border border-error px-4 py-2 text-sm text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  {deleting ? "Deleting..." : "Delete"}
-                </button>
+                {!isBuiltin && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteClick}
+                    disabled={deleting}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-md border border-error px-4 py-2 text-sm text-error transition-colors hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {deleting ? "Deleting..." : "Delete"}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -540,7 +483,7 @@ export function ComponentDetailPage() {
               </div>
             </div>
             <p className="mb-4 text-sm text-text-secondary">
-              This will permanently remove {" "}
+              This will permanently remove{" "}
               <span className="font-medium text-text-primary">
                 {component.displayLabel}
               </span>{" "}
@@ -552,7 +495,8 @@ export function ComponentDetailPage() {
             {(deleteImpact?.usageCount ?? 0) > 0 && (
               <div className="mb-4 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-text-primary">
                 <p className="font-medium">
-                  Used in {deleteImpact?.usageCount} design{deleteImpact?.usageCount === 1 ? "" : "s"}.
+                  Used in {deleteImpact?.usageCount} design
+                  {deleteImpact?.usageCount === 1 ? "" : "s"}.
                 </p>
                 {deleteImpact?.designNames.length ? (
                   <p className="mt-1 text-text-secondary">
@@ -593,7 +537,9 @@ export function ComponentDetailPage() {
   );
 }
 
-function getComponentVariants(component: ComponentType): ComponentVariantType[] {
+function getComponentVariants(
+  component: ComponentType,
+): ComponentVariantType[] {
   return component.variants;
 }
 

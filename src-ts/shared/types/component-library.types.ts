@@ -1,4 +1,4 @@
-export type ComponentScope = "workspace";
+export type ComponentScope = "workspace" | "builtin";
 
 export type MountType = "smd" | "through_hole" | "virtual";
 

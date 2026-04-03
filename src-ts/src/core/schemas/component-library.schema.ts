@@ -1,7 +1,9 @@
 import { z } from "./base";
 import { TimestampSchema, UUIDv7Schema } from "./common";
 
-export const ComponentScopeSchema = z.literal("workspace").openapi("ComponentScope");
+export const ComponentScopeSchema = z
+  .enum(["workspace", "builtin"])
+  .openapi("ComponentScope");
 
 export const SymbolTemplateSchema = z.string().min(1).openapi("SymbolTemplate");
 

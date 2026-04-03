@@ -16,7 +16,11 @@ import type {
   SymbolPin,
   TextGraphic,
 } from "./types";
-import { DEFAULT_BODY_HEIGHT, DEFAULT_BODY_WIDTH, createEmptyDraft } from "./types";
+import {
+  DEFAULT_BODY_HEIGHT,
+  DEFAULT_BODY_WIDTH,
+  createEmptyDraft,
+} from "./types";
 
 type KicadNode = unknown[];
 
@@ -54,7 +58,9 @@ function findChild(node: KicadNode | null, tag: string): KicadNode | null {
 
 function findChildren(node: KicadNode | null, tag: string): KicadNode[] {
   if (!node) return [];
-  return node.filter((child): child is KicadNode => Array.isArray(child) && child[0] === tag);
+  return node.filter(
+    (child): child is KicadNode => Array.isArray(child) && child[0] === tag,
+  );
 }
 
 function parsePointNode(node: KicadNode | null): Point | null {
@@ -145,7 +151,10 @@ function convertRectangle(node: KicadNode, index: number): RectGraphic | null {
   };
 }
 
-function convertPolyline(node: KicadNode, index: number): PolygonGraphic | null {
+function convertPolyline(
+  node: KicadNode,
+  index: number,
+): PolygonGraphic | null {
   const ptsNode = findChild(node, "pts");
   const xyNodes = findChildren(ptsNode, "xy");
   const points = xyNodes
@@ -155,7 +164,9 @@ function convertPolyline(node: KicadNode, index: number): PolygonGraphic | null 
 
   const first = points[0];
   const last = points[points.length - 1];
-  const closed = Boolean(first && last && first.x === last.x && first.y === last.y);
+  const closed = Boolean(
+    first && last && first.x === last.x && first.y === last.y,
+  );
 
   return {
     id: `kicad-poly-${index}`,
@@ -202,7 +213,11 @@ function convertCircle(node: KicadNode, index: number): CircleGraphic | null {
   };
 }
 
-function solveCircleFromThreePoints(start: Point, mid: Point, end: Point): {
+function solveCircleFromThreePoints(
+  start: Point,
+  mid: Point,
+  end: Point,
+): {
   cx: number;
   cy: number;
   radius: number;
@@ -244,8 +259,10 @@ function convertArc(node: KicadNode, index: number): ArcGraphic | null {
   const circle = solveCircleFromThreePoints(start, mid, end);
   if (!circle) return null;
 
-  const startAngle = (Math.atan2(start.y - circle.cy, start.x - circle.cx) * 180) / Math.PI;
-  const endAngle = (Math.atan2(end.y - circle.cy, end.x - circle.cx) * 180) / Math.PI;
+  const startAngle =
+    (Math.atan2(start.y - circle.cy, start.x - circle.cx) * 180) / Math.PI;
+  const endAngle =
+    (Math.atan2(end.y - circle.cy, end.x - circle.cx) * 180) / Math.PI;
 
   return {
     id: `kicad-arc-${index}`,
@@ -267,7 +284,10 @@ function convertText(node: KicadNode, index: number): TextGraphic | null {
   if (!point) return null;
 
   const rotation = toNumber(atNode?.[3]) ?? 0;
-  const fontSizeNode = findChild(findChild(findChild(node, "effects"), "font"), "size");
+  const fontSizeNode = findChild(
+    findChild(findChild(node, "effects"), "font"),
+    "size",
+  );
   const fontSizeMm = toNumber(fontSizeNode?.[1]) ?? 1.27;
 
   return {
@@ -282,7 +302,10 @@ function convertText(node: KicadNode, index: number): TextGraphic | null {
   };
 }
 
-function convertBodyGraphic(node: unknown, index: number): SymbolGraphic | null {
+export function convertBodyGraphic(
+  node: unknown,
+  index: number,
+): SymbolGraphic | null {
   const list = toNode(node);
   if (!list) return null;
 
@@ -360,7 +383,10 @@ function addGraphicBounds(
   bounds.maxY = Math.max(bounds.maxY, graphic.y);
 }
 
-function getBodyDimensions(pins: SymbolPin[], graphics: SymbolGraphic[]): { width: number; height: number } {
+function getBodyDimensions(
+  pins: SymbolPin[],
+  graphics: SymbolGraphic[],
+): { width: number; height: number } {
   if (pins.length === 0 && graphics.length === 0) {
     return { width: DEFAULT_BODY_WIDTH, height: DEFAULT_BODY_HEIGHT };
   }
@@ -424,11 +450,21 @@ function getContentBounds(
   return bounds;
 }
 
-function translateGraphics(graphics: SymbolGraphic[], dx: number, dy: number): SymbolGraphic[] {
+function translateGraphics(
+  graphics: SymbolGraphic[],
+  dx: number,
+  dy: number,
+): SymbolGraphic[] {
   return graphics.map((graphic) => {
     switch (graphic.type) {
       case "line":
-        return { ...graphic, x1: graphic.x1 + dx, y1: graphic.y1 + dy, x2: graphic.x2 + dx, y2: graphic.y2 + dy };
+        return {
+          ...graphic,
+          x1: graphic.x1 + dx,
+          y1: graphic.y1 + dy,
+          x2: graphic.x2 + dx,
+          y2: graphic.y2 + dy,
+        };
       case "rect":
         return { ...graphic, x: graphic.x + dx, y: graphic.y + dy };
       case "circle":
@@ -436,9 +472,21 @@ function translateGraphics(graphics: SymbolGraphic[], dx: number, dy: number): S
       case "arc":
         return { ...graphic, cx: graphic.cx + dx, cy: graphic.cy + dy };
       case "polygon":
-        return { ...graphic, points: graphic.points.map((point) => ({ x: point.x + dx, y: point.y + dy })) };
+        return {
+          ...graphic,
+          points: graphic.points.map((point) => ({
+            x: point.x + dx,
+            y: point.y + dy,
+          })),
+        };
       case "bezier":
-        return { ...graphic, points: graphic.points.map((point) => ({ x: point.x + dx, y: point.y + dy })) as typeof graphic.points };
+        return {
+          ...graphic,
+          points: graphic.points.map((point) => ({
+            x: point.x + dx,
+            y: point.y + dy,
+          })) as typeof graphic.points,
+        };
       case "text":
         return { ...graphic, x: graphic.x + dx, y: graphic.y + dy };
     }
@@ -526,7 +574,12 @@ function getUnitNumber(unit: number): number {
 function getNormalizedUnitContent(
   pins: SymbolPin[],
   graphics: SymbolGraphic[],
-): { pins: SymbolPin[]; graphics: SymbolGraphic[]; width: number; height: number } {
+): {
+  pins: SymbolPin[];
+  graphics: SymbolGraphic[];
+  width: number;
+  height: number;
+} {
   const normalized = normalizeImportedContent(pins, graphics);
   const bounds = getContentBounds(normalized.pins, normalized.graphics);
   return {
@@ -536,9 +589,11 @@ function getNormalizedUnitContent(
   };
 }
 
-function combineUnits(
-  parsed: ParsedKicadSymbol,
-): { pins: SymbolPin[]; graphics: SymbolGraphic[]; droppedGraphics: number } {
+function combineUnits(parsed: ParsedKicadSymbol): {
+  pins: SymbolPin[];
+  graphics: SymbolGraphic[];
+  droppedGraphics: number;
+} {
   const parsedPinsByUnit = new Map<number, ParsedKicadSymbolPin[]>();
   for (const pin of parsed.pins) {
     const unit = getUnitNumber(pin.unit);
@@ -567,12 +622,15 @@ function combineUnits(
     const unitPins = (parsedPinsByUnit.get(unit) ?? []).map(convertPin);
     const unitGraphicsSource = graphicsByUnit.get(unit);
     const { graphics, droppedGraphics: dropped } = convertGraphics(
-      unitGraphicsSource && unitGraphicsSource.length > 0 ? unitGraphicsSource : sharedGraphics,
+      unitGraphicsSource && unitGraphicsSource.length > 0
+        ? unitGraphicsSource
+        : sharedGraphics,
       graphicIndex,
     );
-    graphicIndex += (unitGraphicsSource && unitGraphicsSource.length > 0
-      ? unitGraphicsSource.length
-      : sharedGraphics.length) + 1;
+    graphicIndex +=
+      (unitGraphicsSource && unitGraphicsSource.length > 0
+        ? unitGraphicsSource.length
+        : sharedGraphics.length) + 1;
     droppedGraphics += dropped;
     normalizedUnits.push(getNormalizedUnitContent(unitPins, graphics));
   }
@@ -586,7 +644,10 @@ function combineUnits(
     };
   }
 
-  const cols = normalizedUnits.length <= 3 ? normalizedUnits.length : Math.ceil(Math.sqrt(normalizedUnits.length));
+  const cols =
+    normalizedUnits.length <= 3
+      ? normalizedUnits.length
+      : Math.ceil(Math.sqrt(normalizedUnits.length));
   const rows = Math.ceil(normalizedUnits.length / cols);
   const gutterX = DEFAULT_BODY_WIDTH / 2;
   const gutterY = DEFAULT_BODY_HEIGHT / 2;
@@ -596,14 +657,22 @@ function combineUnits(
   normalizedUnits.forEach((unit, index) => {
     const col = index % cols;
     const row = Math.floor(index / cols);
-    colWidths[col] = Math.max(colWidths[col] ?? 0, unit.width || DEFAULT_BODY_WIDTH);
-    rowHeights[row] = Math.max(rowHeights[row] ?? 0, unit.height || DEFAULT_BODY_HEIGHT);
+    colWidths[col] = Math.max(
+      colWidths[col] ?? 0,
+      unit.width || DEFAULT_BODY_WIDTH,
+    );
+    rowHeights[row] = Math.max(
+      rowHeights[row] ?? 0,
+      unit.height || DEFAULT_BODY_HEIGHT,
+    );
   });
 
   const totalWidth =
-    colWidths.reduce((sum, value) => sum + value, 0) + gutterX * Math.max(cols - 1, 0);
+    colWidths.reduce((sum, value) => sum + value, 0) +
+    gutterX * Math.max(cols - 1, 0);
   const totalHeight =
-    rowHeights.reduce((sum, value) => sum + value, 0) + gutterY * Math.max(rows - 1, 0);
+    rowHeights.reduce((sum, value) => sum + value, 0) +
+    gutterY * Math.max(rows - 1, 0);
 
   const combinedPins: SymbolPin[] = [];
   const combinedGraphics: SymbolGraphic[] = [];
@@ -649,13 +718,19 @@ export function convertParsedKicadSymbolToDraft(
 ): SymbolDraft {
   const draft = createEmptyDraft(crypto.randomUUID());
   const { pins, graphics, droppedGraphics } = combineUnits(parsed);
-  const normalized = parsed.units > 1 ? { pins, graphics } : normalizeImportedContent(pins, graphics);
+  const normalized =
+    parsed.units > 1
+      ? { pins, graphics }
+      : normalizeImportedContent(pins, graphics);
 
   if (normalized.pins.length === 0 && normalized.graphics.length === 0) {
     throw new Error("Imported symbol contains no renderable pins or graphics");
   }
 
-  const bodyDimensions = getBodyDimensions(normalized.pins, normalized.graphics);
+  const bodyDimensions = getBodyDimensions(
+    normalized.pins,
+    normalized.graphics,
+  );
 
   return {
     ...draft,
@@ -674,7 +749,12 @@ export function convertParsedKicadSymbolToDraft(
     importPreservation: {
       rawSource: parsed.rawSource,
       sourceFileName: fileName,
-      warnings: toWarningMessages(parsed.warnings, droppedGraphics, symbolCount, parsed.units),
+      warnings: toWarningMessages(
+        parsed.warnings,
+        droppedGraphics,
+        symbolCount,
+        parsed.units,
+      ),
       unitCount: parsed.units,
       graphicsEditable: true,
     },

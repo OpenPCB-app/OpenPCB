@@ -10,7 +10,10 @@ import {
   X,
   AlertTriangle,
 } from "lucide-react";
-import { useComponents, type UseComponentsFilters } from "@/hooks/useComponents";
+import {
+  useComponents,
+  type UseComponentsFilters,
+} from "@/hooks/useComponents";
 import { useNavigationStore } from "@/stores/navigation-store";
 import { UnifiedImportModal } from "@/components/unified-import/UnifiedImportModal";
 import { ComponentWizard } from "@/components/wizard/ComponentWizard";
@@ -43,11 +46,18 @@ export function LibraryScreen() {
     usageCount: number;
     designNames: string[];
   } | null>(null);
-  const [singleDeleteLoadingImpact, setSingleDeleteLoadingImpact] = useState(false);
+  const [singleDeleteLoadingImpact, setSingleDeleteLoadingImpact] =
+    useState(false);
   const [singleDeleting, setSingleDeleting] = useState(false);
-  const [singleDeleteError, setSingleDeleteError] = useState<string | null>(null);
+  const [singleDeleteError, setSingleDeleteError] = useState<string | null>(
+    null,
+  );
   const navigateToComponentDetail = useNavigationStore(
     (state) => state.navigateToComponentDetail,
+  );
+  const editComponentId = useNavigationStore((state) => state.editComponentId);
+  const clearEditComponentId = useNavigationStore(
+    (state) => state.clearEditComponentId,
   );
 
   const { components, loading, error, refetchAndPropagate } = useComponents({
@@ -55,12 +65,15 @@ export function LibraryScreen() {
     search: searchQuery.trim() || undefined,
   });
   const hasSelection = selectedIds.size > 0;
-  const isAllSelected = components.length > 0 && selectedIds.size === components.length;
+  const isAllSelected =
+    components.length > 0 && selectedIds.size === components.length;
 
   useEffect(() => {
     setSelectedIds((current) => {
       const next = new Set(
-        Array.from(current).filter((id) => components.some((component) => component.id === id)),
+        Array.from(current).filter((id) =>
+          components.some((component) => component.id === id),
+        ),
       );
 
       return next.size === current.size ? current : next;
@@ -70,7 +83,8 @@ export function LibraryScreen() {
   // Handle wizard close
   const handleWizardClose = useCallback(() => {
     setWizardOpen(false);
-  }, []);
+    clearEditComponentId();
+  }, [clearEditComponentId]);
 
   // Handle successful publish from wizard
   const handlePublished = useCallback(
@@ -220,10 +234,11 @@ export function LibraryScreen() {
     }));
   };
 
-  // Show wizard full-screen when creating new component
-  if (wizardOpen) {
+  // Show wizard full-screen when creating or editing a component
+  if (wizardOpen || editComponentId) {
     return (
       <ComponentWizard
+        componentId={editComponentId ?? undefined}
         onClose={handleWizardClose}
         onPublished={handlePublished}
       />
@@ -356,6 +371,7 @@ export function LibraryScreen() {
                 {components.map((component) => {
                   const variants = getComponentVariants(component);
                   const isSelected = selectedIds.has(component.id);
+                  const isBuiltin = component.scope === "builtin";
 
                   return (
                     <div
@@ -365,32 +381,43 @@ export function LibraryScreen() {
                         isSelected && "ring-1 ring-brand",
                       )}
                     >
-                      <div className="absolute left-2 top-2 z-10">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelection(component.id)}
-                          className="h-4 w-4 rounded border-border-default text-brand focus:ring-brand"
-                          aria-label={`Select ${component.displayLabel}`}
-                        />
-                      </div>
-                      <span className="absolute right-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleSingleDeleteClick(
-                              component.id,
-                              component.displayLabel,
-                            );
-                          }}
-                          className="flex h-7 w-7 items-center justify-center rounded-md border border-error/40 bg-bg-elevated text-error transition-colors hover:bg-error/10"
-                          aria-label={`Delete ${component.displayLabel}`}
-                          title={`Delete ${component.displayLabel}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </span>
+                      {!isBuiltin && (
+                        <div className="absolute left-2 top-2 z-10">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelection(component.id)}
+                            className="h-4 w-4 rounded border-border-default text-brand focus:ring-brand"
+                            aria-label={`Select ${component.displayLabel}`}
+                          />
+                        </div>
+                      )}
+                      {isBuiltin && (
+                        <div className="absolute left-2 top-2 z-10">
+                          <span className="rounded bg-bg-input px-1.5 py-0.5 text-[9px] font-medium text-text-tertiary">
+                            Built-in
+                          </span>
+                        </div>
+                      )}
+                      {!isBuiltin && (
+                        <span className="absolute right-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleSingleDeleteClick(
+                                component.id,
+                                component.displayLabel,
+                              );
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-md border border-error/40 bg-bg-elevated text-error transition-colors hover:bg-error/10"
+                            aria-label={`Delete ${component.displayLabel}`}
+                            title={`Delete ${component.displayLabel}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </span>
+                      )}
                       <button
                         type="button"
                         className={cn(
@@ -470,7 +497,7 @@ export function LibraryScreen() {
               </div>
             </div>
             <p className="mb-4 text-sm text-text-secondary">
-              This will permanently remove {" "}
+              This will permanently remove{" "}
               <span className="font-medium text-text-primary">
                 {selectedIds.size}
               </span>{" "}
@@ -524,7 +551,9 @@ export function LibraryScreen() {
 
             <p className="mb-3 text-sm text-text-secondary">
               This will remove{" "}
-              <span className="font-medium text-text-primary">{singleDeleteLabel}</span>{" "}
+              <span className="font-medium text-text-primary">
+                {singleDeleteLabel}
+              </span>{" "}
               from your library and Designer sidebar.
             </p>
 
@@ -535,7 +564,8 @@ export function LibraryScreen() {
             {(singleDeleteUsage?.usageCount ?? 0) > 0 && (
               <div className="mb-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-text-primary">
                 <p className="font-medium">
-                  Used in {singleDeleteUsage?.usageCount} design{singleDeleteUsage?.usageCount === 1 ? "" : "s"}.
+                  Used in {singleDeleteUsage?.usageCount} design
+                  {singleDeleteUsage?.usageCount === 1 ? "" : "s"}.
                 </p>
                 {singleDeleteUsage?.designNames.length ? (
                   <p className="mt-1 text-text-secondary">

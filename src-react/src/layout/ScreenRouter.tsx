@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import {
   useNavigationStore,
   initializeNavigationFromHash,
@@ -14,16 +14,25 @@ import { ComponentDetailPage } from "@/components/library/ComponentDetailPage";
 export function ScreenRouter() {
   const currentScreen = useNavigationStore((s) => s.currentScreen);
   const currentComponentId = useNavigationStore((s) => s.currentComponentId);
+  const navigateToComponentEdit = useNavigationStore(
+    (s) => s.navigateToComponentEdit,
+  );
 
   useEffect(() => {
     initializeNavigationFromHash();
     return setupHashChangeListener();
   }, []);
 
+  const handleEditComponent = useCallback(
+    (componentId: string) => {
+      navigateToComponentEdit(componentId);
+    },
+    [navigateToComponentEdit],
+  );
+
   switch (currentScreen) {
     case "home":
       return <HomeScreen />;
-    // Projects feature is temporarily disabled - redirect to home
     case "project":
       return <HomeScreen />;
     case "design":
@@ -37,12 +46,9 @@ export function ScreenRouter() {
     case "import":
       return <LibraryScreen />;
     case "component-detail":
-      // Only show detail page for existing components (with ID)
-      // New component creation uses the wizard in LibraryScreen
       if (currentComponentId) {
-        return <ComponentDetailPage />;
+        return <ComponentDetailPage onEditComponent={handleEditComponent} />;
       }
-      // Redirect to library if no component ID (shouldn't happen normally)
       return <LibraryScreen />;
     default:
       return <HomeScreen />;
