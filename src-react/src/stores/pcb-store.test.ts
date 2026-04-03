@@ -44,6 +44,27 @@ function createPlacement(id: string, x: number): PcbPlacement {
   };
 }
 
+function createPlacementWithLayers(
+  id: string,
+  x: number,
+  layer: "F.Cu" | "B.Cu",
+  padLayers: string[],
+): PcbPlacement {
+  return {
+    ...createPlacement(id, x),
+    layer,
+    footprintData: {
+      ...createFootprint(),
+      pads: [
+        {
+          ...createFootprint().pads[0]!,
+          layers: padLayers,
+        },
+      ],
+    },
+  };
+}
+
 function createDocument(): PcbDocument {
   const placements = [createPlacement("u1", 0), createPlacement("u2", 10)];
   const traces: TraceSegment[] = [
@@ -182,7 +203,11 @@ describe("pcb-store deleteSelectedEntities", () => {
     });
     usePcbStore.setState({ activeTool: "route" });
 
-    store.startRouting({ componentId: "u1", padNumber: "1" }, { x: 0.13, y: 0.11 });
+    store.startRouting(
+      { componentId: "u1", padNumber: "1" },
+      { x: 0.13, y: 0.11 },
+      "F.Cu",
+    );
     store.completeRoute({ x: 10.37, y: 0.11 });
 
     const state = usePcbStore.getState();
@@ -196,7 +221,11 @@ describe("pcb-store deleteSelectedEntities", () => {
     store.setDocument(createDocument());
     usePcbStore.setState({ activeTool: "route" });
 
-    store.startRouting({ componentId: "u1", padNumber: "1" }, { x: 0, y: 0 });
+    store.startRouting(
+      { componentId: "u1", padNumber: "1" },
+      { x: 0, y: 0 },
+      "F.Cu",
+    );
     store.updateRoutingPreview({ x: 10, y: 5 });
     const initialWidth = usePcbStore.getState().routingSession?.previewSegments[0]?.width;
 
@@ -204,5 +233,59 @@ describe("pcb-store deleteSelectedEntities", () => {
 
     const updatedWidth = usePcbStore.getState().routingSession?.previewSegments[0]?.width;
     expect(updatedWidth).not.toBe(initialWidth);
+  });
+
+  it("starts routing on the clicked pad layer", () => {
+    const store = usePcbStore.getState();
+    store.setDocument({
+      ...createDocument(),
+      placements: [
+        createPlacementWithLayers("u1", 0, "B.Cu", ["B.Cu"]),
+        createPlacementWithLayers("u2", 10, "F.Cu", ["F.Cu"]),
+      ],
+      traces: [],
+      vias: [],
+    });
+
+    store.startRouting({ componentId: "u1", padNumber: "1" }, { x: 0, y: 0 }, "B.Cu");
+
+    const state = usePcbStore.getState();
+    expect(state.routingSession?.layer).toBe("B.Cu");
+    expect(state.activeLayer).toBe("B.Cu");
+  });
+
+  it("clears transient pcb editor state on schematic sync", () => {
+    const store = usePcbStore.getState();
+    store.setDocument(createDocument());
+    usePcbStore.setState({
+      selectedIds: new Set(["u1"]),
+      activeTool: "route",
+      routingSession: {
+        netId: "net-1",
+        layer: "F.Cu",
+        width: 0.25,
+        widthPresets: [0.25, 0.5],
+        widthIndex: 0,
+        elbowDirection: "horizontal_first",
+        committedSegments: [],
+        committedVias: [],
+        startPoint: { x: 0, y: 0 },
+        previewSegments: [],
+        viaDiameter: 0.8,
+        viaDrill: 0.4,
+      },
+      lastCursorPosition: { x: 1, y: 1 },
+    });
+
+    store.syncFromSchematic([], [], {
+      componentsById: new Map(),
+      importedSymbolLayoutsByComponentId: new Map(),
+    });
+
+    const state = usePcbStore.getState();
+    expect(state.routingSession).toBeNull();
+    expect(state.lastCursorPosition).toBeNull();
+    expect(state.selectedIds.size).toBe(0);
+    expect(state.activeTool).toBe("select");
   });
 });

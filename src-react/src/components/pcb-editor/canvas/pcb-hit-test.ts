@@ -286,6 +286,36 @@ export function getPadWorldPosition(
   return transformPoint(placement, pad.position.x, pad.position.y);
 }
 
+export function getPadRoutingLayer(
+  placements: PcbPlacement[],
+  placementId: string,
+  padNumber: string,
+): "F.Cu" | "B.Cu" | null {
+  const placement = placements.find((p) => p.id === placementId);
+  if (!placement?.footprintData) return null;
+
+  const pad = placement.footprintData.pads.find((p) => p.number === padNumber);
+  if (!pad) return null;
+
+  const copperLayers = pad.layers.filter(
+    (layer) => layer === "F.Cu" || layer === "B.Cu" || layer === "*.Cu",
+  );
+
+  if (copperLayers.includes("*.Cu")) {
+    return placement.layer;
+  }
+
+  if (copperLayers.includes("F.Cu") && !copperLayers.includes("B.Cu")) {
+    return "F.Cu";
+  }
+
+  if (copperLayers.includes("B.Cu") && !copperLayers.includes("F.Cu")) {
+    return "B.Cu";
+  }
+
+  return placement.layer;
+}
+
 export function findPadNet(
   placements: PcbPlacement[],
   nets: { id: string; padRefs: { componentId: string; padNumber: string }[] }[],

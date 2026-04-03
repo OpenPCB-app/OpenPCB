@@ -97,7 +97,11 @@ interface PcbStoreState {
   pan: (dx: number, dy: number) => void;
   zoomAt: (centerX: number, centerY: number, factor: number) => void;
 
-  startRouting: (padRef: PadReference, worldPosition: Point2D) => void;
+  startRouting: (
+    padRef: PadReference,
+    worldPosition: Point2D,
+    startLayer: "F.Cu" | "B.Cu",
+  ) => void;
   updateRoutingPreview: (cursorPosition: Point2D) => void;
   addRoutingCorner: (position: Point2D) => void;
   placeRoutingVia: (position: Point2D) => void;
@@ -160,6 +164,20 @@ function updateRoutingSession(
   return {
     ...nextSession,
     previewSegments: buildRoutingPreview(nextSession, cursorPosition),
+  };
+}
+
+function createResetEditorState(
+  document: PcbDocument,
+  ratsnest: RatsnestLine[],
+) {
+  return {
+    document,
+    ratsnest,
+    routingSession: null,
+    lastCursorPosition: null,
+    selectedIds: new Set<string>(),
+    activeTool: "select" as const,
   };
 }
 
@@ -228,9 +246,9 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
           : [...DEFAULT_NET_CLASSES],
     };
 
+    pcbUndoManager.clear();
     set({
-      document,
-      ratsnest: result.ratsnest,
+      ...createResetEditorState(document, result.ratsnest),
     });
   },
 
@@ -243,23 +261,24 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
       existingDocument,
       existingDocument?.boardOutline ?? { width: 100, height: 100 },
     );
+    const document: PcbDocument = {
+      ...result.document,
+      netClasses:
+        result.document.netClasses.length > 0
+          ? result.document.netClasses
+          : [...DEFAULT_NET_CLASSES],
+    };
+
+    pcbUndoManager.clear();
     set({
-      document: {
-        ...result.document,
-        netClasses:
-          result.document.netClasses.length > 0
-            ? result.document.netClasses
-            : [...DEFAULT_NET_CLASSES],
-      },
-      ratsnest: result.ratsnest,
+      ...createResetEditorState(document, result.ratsnest),
     });
   },
 
   setDocument: (doc) => {
     pcbUndoManager.clear();
     set({
-      document: doc,
-      ratsnest: recalculateRatsnest(doc),
+      ...createResetEditorState(doc, recalculateRatsnest(doc)),
     });
   },
 
@@ -454,8 +473,8 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
     });
   },
 
-  startRouting: (padRef, worldPosition) => {
-    const { document, activeLayer } = get();
+  startRouting: (padRef, worldPosition, startLayer) => {
+    const { document } = get();
     if (!document) return;
 
     const net = document.nets.find((n) =>
@@ -472,7 +491,7 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
     set({
       routingSession: {
         netId: net.id,
-        layer: activeLayer,
+        layer: startLayer,
         width: resolved.defaultWidth,
         widthPresets: resolved.presets,
         widthIndex: findWidthIndex(resolved.defaultWidth, resolved.presets),
@@ -485,6 +504,7 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
         viaDrill: resolved.viaDrill,
       },
       lastCursorPosition: worldPosition,
+      activeLayer: startLayer,
       activeTool: "route",
       selectedIds: new Set(),
     });

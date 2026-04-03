@@ -4,6 +4,7 @@ import {
   hitTestPcb,
   getPadWorldPosition,
   findPadNet,
+  getPadRoutingLayer,
 } from "./canvas/pcb-hit-test";
 import { screenToPcb, snapToGrid } from "./canvas/pcb-viewport";
 import type { Point2D } from "./pcb-types";
@@ -93,13 +94,19 @@ export function usePcbInteractionController() {
                 hit.placementId,
                 hit.padNumber,
               );
-              if (padPos) {
+              const padLayer = getPadRoutingLayer(
+                store.document.placements,
+                hit.placementId,
+                hit.padNumber,
+              );
+              if (padPos && padLayer) {
                 store.startRouting(
                   {
                     componentId: placement.schematicSymbolId,
                     padNumber: hit.padNumber,
                   },
                   padPos,
+                  padLayer,
                 );
                 stateRef.current = { type: "routing" };
               }
