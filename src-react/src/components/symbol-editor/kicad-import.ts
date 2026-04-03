@@ -1,10 +1,9 @@
-import {
-  parseKicadSymbolImport,
-  type ParsedKicadSymbol,
-  type ParsedKicadSymbolGraphic,
-  type ParsedKicadSymbolPin,
-  type KicadImportWarning,
-} from "@/lib/api/component-api";
+import type {
+  ParsedKicadSymbol,
+  ParsedKicadSymbolGraphic,
+  ParsedKicadSymbolPin,
+  KicadImportWarning,
+} from "../../lib/api/component-api";
 import type {
   ArcGraphic,
   CircleGraphic,
@@ -19,12 +18,36 @@ import type {
 import {
   DEFAULT_BODY_HEIGHT,
   DEFAULT_BODY_WIDTH,
+  DEFAULT_PIN_LENGTH,
+  GRID_SIZES,
   createEmptyDraft,
 } from "./types";
 
 type KicadNode = unknown[];
 
+export type ImportedSymbolClassificationKind =
+  | "two-terminal-passive"
+  | "rectangular-ic"
+  | "multi-unit-rectangular-ic"
+  | "unsupported";
+
+export type ImportedSymbolClassification =
+  | {
+      kind:
+        | "two-terminal-passive"
+        | "rectangular-ic"
+        | "multi-unit-rectangular-ic";
+      reason: null;
+    }
+  | {
+      kind: "unsupported";
+      reason: string;
+    };
+
 const NM_PER_MM = 1_000_000;
+const IMPORT_GRID_STEP_NM = GRID_SIZES.normal;
+const IMPORTED_IC_MIN_BODY_WIDTH_NM = IMPORT_GRID_STEP_NM * 4;
+const IMPORTED_IC_MAX_BODY_WIDTH_NM = IMPORT_GRID_STEP_NM * 8;
 
 function mmToNm(value: number): number {
   return Math.round(value * NM_PER_MM);
@@ -110,6 +133,173 @@ function rotationToSide(rotation: number): SymbolPin["side"] {
   if (normalized === 180) return "right";
   if (normalized === 270) return "top";
   return "left";
+}
+
+function createSupportedClassification(
+  kind: Exclude<ImportedSymbolClassificationKind, "unsupported">,
+): ImportedSymbolClassification {
+  return { kind, reason: null };
+}
+
+function createUnsupportedClassification(
+  reason: string,
+): ImportedSymbolClassification {
+  return { kind: "unsupported", reason };
+}
+
+function hasSingleRectangleBody(
+  graphics: ParsedKicadSymbolGraphic[],
+): boolean {
+  return (
+    graphics.filter((graphic) => {
+      const node = toNode(graphic.node);
+      return node !== null && nodeTag(node) === "rectangle";
+    }).length === 1
+  );
+}
+
+function getSideCounts(
+  pins: ParsedKicadSymbolPin[],
+): Record<SymbolPin["side"], number> {
+  const counts: Record<SymbolPin["side"], number> = {
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  };
+
+  for (const pin of pins) {
+    counts[rotationToSide(pin.rotation)] += 1;
+  }
+
+  return counts;
+}
+
+function getUsedSides(
+  sideCounts: Record<SymbolPin["side"], number>,
+): SymbolPin["side"][] {
+  return (Object.entries(sideCounts) as Array<[SymbolPin["side"], number]>)
+    .filter(([, count]) => count > 0)
+    .map(([side]) => side);
+}
+
+function isOppositeSidePair(sides: SymbolPin["side"][]): boolean {
+  if (sides.length !== 2) {
+    return false;
+  }
+
+  return (
+    (sides.includes("left") && sides.includes("right")) ||
+    (sides.includes("top") && sides.includes("bottom"))
+  );
+}
+
+function classifySingleUnitSymbol(
+  pins: ParsedKicadSymbolPin[],
+  graphics: ParsedKicadSymbolGraphic[],
+): ImportedSymbolClassification {
+  if (pins.length === 0) {
+    return createUnsupportedClassification(
+      "graphics-only symbol has no pins to classify",
+    );
+  }
+
+  const visiblePins = pins.filter((pin) => !pin.hidden);
+  if (visiblePins.length === 0) {
+    return createUnsupportedClassification(
+      "symbol has no visible pins to classify",
+    );
+  }
+
+  const sideCounts = getSideCounts(pins);
+  const usedSides = getUsedSides(sideCounts);
+  const hasRectangleBody = hasSingleRectangleBody(graphics);
+
+  if (pins.length === 2 && isOppositeSidePair(usedSides)) {
+    return createSupportedClassification("two-terminal-passive");
+  }
+
+  if (
+    pins.length === 3 &&
+    hasRectangleBody &&
+    sideCounts.left === 1 &&
+    sideCounts.right === 1 &&
+    ((sideCounts.top === 1 && sideCounts.bottom === 0) ||
+      (sideCounts.bottom === 1 && sideCounts.top === 0))
+  ) {
+    return createSupportedClassification("rectangular-ic");
+  }
+
+  if (
+    pins.length >= 3 &&
+    sideCounts.left > 0 &&
+    sideCounts.right > 0 &&
+    sideCounts.top === 0 &&
+    sideCounts.bottom === 0 &&
+    (graphics.length === 0 || hasRectangleBody)
+  ) {
+    return createSupportedClassification("rectangular-ic");
+  }
+
+  if (usedSides.length >= 3) {
+    return createUnsupportedClassification(
+      `pin distribution spans ${usedSides.length} sides`,
+    );
+  }
+
+  if (
+    pins.length >= 3 &&
+    sideCounts.left > 0 &&
+    sideCounts.right > 0 &&
+    sideCounts.top === 0 &&
+    sideCounts.bottom === 0 &&
+    graphics.length > 0 &&
+    !hasRectangleBody
+  ) {
+    return createUnsupportedClassification(
+      "ic-like pin layout lacks a single rectangular body graphic",
+    );
+  }
+
+  return createUnsupportedClassification(
+    "pin layout does not match supported v1 archetypes",
+  );
+}
+
+export function classifyImportedSymbol(
+  parsed: Pick<ParsedKicadSymbol, "pins" | "bodyGraphics" | "units">,
+): ImportedSymbolClassification {
+  const unitCount = Math.max(parsed.units, 1);
+  if (unitCount <= 1) {
+    return classifySingleUnitSymbol(parsed.pins, parsed.bodyGraphics);
+  }
+
+  const pinsByUnit = new Map<number, ParsedKicadSymbolPin[]>();
+  for (const pin of parsed.pins) {
+    const unit = getUnitNumber(pin.unit);
+    pinsByUnit.set(unit, [...(pinsByUnit.get(unit) ?? []), pin]);
+  }
+
+  const graphicsByUnit = new Map<number, ParsedKicadSymbolGraphic[]>();
+  for (const graphic of parsed.bodyGraphics) {
+    const unit = graphic.unit > 0 ? graphic.unit : 0;
+    graphicsByUnit.set(unit, [...(graphicsByUnit.get(unit) ?? []), graphic]);
+  }
+
+  const sharedGraphics = graphicsByUnit.get(0) ?? [];
+
+  for (let unit = 1; unit <= unitCount; unit += 1) {
+    const pins = pinsByUnit.get(unit) ?? [];
+    const graphics = graphicsByUnit.get(unit) ?? sharedGraphics;
+    const classification = classifySingleUnitSymbol(pins, graphics);
+    if (classification.kind !== "rectangular-ic") {
+      return createUnsupportedClassification(
+        `multi-unit symbol has non-rectangular unit ${unit}: ${classification.reason}`,
+      );
+    }
+  }
+
+  return createSupportedClassification("multi-unit-rectangular-ic");
 }
 
 function convertPin(pin: ParsedKicadSymbolPin): SymbolPin {
@@ -489,11 +679,15 @@ function translateGraphics(
         };
       case "text":
         return { ...graphic, x: graphic.x + dx, y: graphic.y + dy };
+      default: {
+        const exhaustive: never = graphic;
+        return exhaustive;
+      }
     }
   });
 }
 
-function normalizeImportedContent(
+function centerImportedContent(
   pins: SymbolPin[],
   graphics: SymbolGraphic[],
 ): { pins: SymbolPin[]; graphics: SymbolGraphic[] } {
@@ -517,11 +711,94 @@ function normalizeImportedContent(
   };
 }
 
+function clampImportedIcBodyWidth(height: number): number {
+  return Math.max(
+    IMPORTED_IC_MIN_BODY_WIDTH_NM,
+    Math.min(IMPORTED_IC_MAX_BODY_WIDTH_NM, height),
+  );
+}
+
+function isRectangularTwoSidedImportedIcLayout(
+  pins: SymbolPin[],
+  graphics: SymbolGraphic[],
+): graphics is [RectGraphic] {
+  if (graphics.length !== 1 || graphics[0]?.type !== "rect") {
+    return false;
+  }
+
+  if (pins.length < 4) {
+    return false;
+  }
+
+  let hasLeft = false;
+  let hasRight = false;
+
+  for (const pin of pins) {
+    if (pin.side === "left") {
+      hasLeft = true;
+      continue;
+    }
+
+    if (pin.side === "right") {
+      hasRight = true;
+      continue;
+    }
+
+    return false;
+  }
+
+  return hasLeft && hasRight;
+}
+
+function normalizeRectangularTwoSidedImportedIcLayout(
+  pins: SymbolPin[],
+  bodyGraphic: RectGraphic,
+): { pins: SymbolPin[]; graphics: [RectGraphic] } {
+  const bodyWidth = clampImportedIcBodyWidth(bodyGraphic.height);
+  const halfBodyWidth = bodyWidth / 2;
+  const pinOffsetX = halfBodyWidth + DEFAULT_PIN_LENGTH;
+
+  return {
+    pins: pins.map((pin) => ({
+      ...pin,
+      position: {
+        x: pin.side === "left" ? -pinOffsetX : pinOffsetX,
+        y: pin.position.y,
+      },
+      length: DEFAULT_PIN_LENGTH,
+    })),
+    graphics: [
+      {
+        ...bodyGraphic,
+        x: -halfBodyWidth,
+        width: bodyWidth,
+      },
+    ],
+  };
+}
+
+function normalizeImportedSchematicContent(
+  pins: SymbolPin[],
+  graphics: SymbolGraphic[],
+  classification: ImportedSymbolClassification,
+): { pins: SymbolPin[]; graphics: SymbolGraphic[] } {
+  if (
+    (classification.kind === "rectangular-ic" ||
+      classification.kind === "multi-unit-rectangular-ic") &&
+    isRectangularTwoSidedImportedIcLayout(pins, graphics)
+  ) {
+    return normalizeRectangularTwoSidedImportedIcLayout(pins, graphics[0]);
+  }
+
+  return { pins, graphics };
+}
+
 function toWarningMessages(
   parserWarnings: KicadImportWarning[],
   droppedGraphics: number,
   symbolCount: number,
   unitCount: number,
+  classification: ImportedSymbolClassification,
 ): KicadImportWarning[] {
   const warnings = [...parserWarnings];
 
@@ -543,6 +820,13 @@ function toWarningMessages(
     warnings.push({
       code: "multi_unit_combined",
       message: `Combined ${unitCount} symbol units into one editable view`,
+    });
+  }
+
+  if (classification.kind === "unsupported") {
+    warnings.push({
+      code: "unsupported_symbol_archetype",
+      message: `Preserved near-original geometry: ${classification.reason}`,
     });
   }
 
@@ -577,10 +861,10 @@ function getNormalizedUnitContent(
 ): {
   pins: SymbolPin[];
   graphics: SymbolGraphic[];
-  width: number;
-  height: number;
+    width: number;
+    height: number;
 } {
-  const normalized = normalizeImportedContent(pins, graphics);
+  const normalized = centerImportedContent(pins, graphics);
   const bounds = getContentBounds(normalized.pins, normalized.graphics);
   return {
     ...normalized,
@@ -717,11 +1001,17 @@ export function convertParsedKicadSymbolToDraft(
   symbolCount = 1,
 ): SymbolDraft {
   const draft = createEmptyDraft(crypto.randomUUID());
+  const classification = classifyImportedSymbol(parsed);
   const { pins, graphics, droppedGraphics } = combineUnits(parsed);
-  const normalized =
+  const centered =
     parsed.units > 1
       ? { pins, graphics }
-      : normalizeImportedContent(pins, graphics);
+      : centerImportedContent(pins, graphics);
+  const normalized = normalizeImportedSchematicContent(
+    centered.pins,
+    centered.graphics,
+    classification,
+  );
 
   if (normalized.pins.length === 0 && normalized.graphics.length === 0) {
     throw new Error("Imported symbol contains no renderable pins or graphics");
@@ -754,6 +1044,7 @@ export function convertParsedKicadSymbolToDraft(
         droppedGraphics,
         symbolCount,
         parsed.units,
+        classification,
       ),
       unitCount: parsed.units,
       graphicsEditable: true,
@@ -763,6 +1054,7 @@ export function convertParsedKicadSymbolToDraft(
 
 export async function importKicadSymbolFile(file: File): Promise<SymbolDraft> {
   const content = await file.text();
+  const { parseKicadSymbolImport } = await import("../../lib/api/component-api");
   const parsed = await parseKicadSymbolImport(content, file.name);
   return convertParsedKicadSymbolToDraft(
     parsed.symbol,
