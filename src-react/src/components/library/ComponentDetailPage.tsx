@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useComponentDetail } from "@/hooks/useComponents";
+import { createComponent } from "@/lib/api/component-api";
+import { toast } from "@/components/ui/use-toast";
 import { useNavigationStore } from "../../stores/navigation-store";
 import { SymbolPreview } from "./SymbolPreview";
 import { FootprintPreview } from "./FootprintPreview";
@@ -29,6 +31,11 @@ export function ComponentDetailPage({
   onEditComponent,
 }: ComponentDetailPageProps) {
   const navigateBack = useNavigationStore((state) => state.navigateBack);
+  const navigateToDesign = useNavigationStore((state) => state.navigateToDesign);
+  const navigateToComponentDetail = useNavigationStore(
+    (state) => state.navigateToComponentDetail,
+  );
+  const setDesignTab = useNavigationStore((state) => state.setDesignTab);
   const currentComponentId = useNavigationStore(
     (state) => state.currentComponentId,
   );
@@ -172,6 +179,106 @@ export function ComponentDetailPage({
     setSelectedFootprintId(defaultFootprint?.id ?? null);
   };
 
+  const handleUseInDesign = () => {
+    setDesignTab("schematic");
+    navigateToDesign();
+  };
+
+  const handleExportJson = () => {
+    downloadTextFile(
+      `${toSafeFileBase(component.displayLabel)}.json`,
+      JSON.stringify(component, null, 2),
+      "application/json",
+    );
+    toast({
+      title: "Component exported",
+      description: "Downloaded component JSON.",
+    });
+  };
+
+  const handleExportKicad = () => {
+    const fileBase = toSafeFileBase(component.displayLabel);
+    const symbolSource = component.symbolData?.rawKicadSource ?? null;
+    const footprintPayload = selectedFootprint?.kicadPayload;
+    const footprintSource =
+      typeof footprintPayload === "object" &&
+      footprintPayload !== null &&
+      "rawSource" in footprintPayload &&
+      typeof footprintPayload.rawSource === "string"
+        ? footprintPayload.rawSource
+        : null;
+
+    if (!symbolSource && !footprintSource) {
+      toast({
+        title: "Export unavailable",
+        description: "No KiCad source is available for this component.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (symbolSource) {
+      downloadTextFile(`${fileBase}.kicad_sym`, symbolSource, "text/plain");
+    }
+
+    if (footprintSource) {
+      downloadTextFile(`${fileBase}.kicad_mod`, footprintSource, "text/plain");
+    }
+
+    toast({
+      title: "KiCad files exported",
+      description: "Downloaded available KiCad sources.",
+    });
+  };
+
+  const handleDuplicate = async () => {
+    try {
+      const duplicated = await createComponent({
+        displayLabel: `${component.displayLabel} Copy`,
+        description: component.description,
+        symbolData: component.symbolData,
+        categoryPath: component.categoryPath,
+        tags: component.tags,
+        variants: component.variants.map((variant) => ({
+          id: crypto.randomUUID(),
+          componentId: "",
+          canonicalCode: variant.canonicalCode,
+          humanLabel: variant.humanLabel,
+          imperialAlias: variant.imperialAlias,
+          metricAlias: variant.metricAlias,
+          mountType: variant.mountType,
+          dimensions: variant.dimensions,
+          isDefault: variant.isDefault,
+          pinRemapTable: variant.pinRemapTable,
+          defaultFootprintOptionId: variant.footprintOptions.find((option) => option.isDefault)?.id ?? variant.footprintOptions[0]?.id ?? null,
+          footprintOptions: variant.footprintOptions.map((option) => ({
+            id: crypto.randomUUID(),
+            variantId: "",
+            label: option.label,
+            isDefault: option.isDefault,
+            kicadPayload: option.kicadPayload,
+            model3dOptions: option.model3dOptions,
+            densityLevel: option.densityLevel,
+            ipcName: option.ipcName,
+          })),
+        })),
+      });
+
+      toast({
+        title: "Component duplicated",
+        description: `Created ${duplicated.displayLabel}.`,
+      });
+      navigateToComponentDetail(duplicated.id);
+    } catch (err) {
+      toast({
+        title: "Duplicate failed",
+        description:
+          err instanceof Error ? err.message : "Failed to duplicate component.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="flex h-screen flex-col bg-bg-secondary">
       <header className="flex items-center justify-between border-b border-border-default bg-bg-elevated px-6 py-4">
@@ -220,6 +327,7 @@ export function ComponentDetailPage({
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={handleExportJson}
             className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary"
           >
             <Download className="h-4 w-4" />
@@ -227,6 +335,7 @@ export function ComponentDetailPage({
           </button>
           <button
             type="button"
+            onClick={() => void handleDuplicate()}
             className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary"
           >
             <Copy className="h-4 w-4" />
@@ -431,6 +540,7 @@ export function ComponentDetailPage({
             <div className="space-y-2">
               <button
                 type="button"
+                onClick={handleUseInDesign}
                 className="flex w-full items-center justify-center gap-2 rounded-md bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
               >
                 <Plus className="h-4 w-4" />
@@ -438,6 +548,7 @@ export function ComponentDetailPage({
               </button>
               <button
                 type="button"
+                onClick={handleExportKicad}
                 className="flex w-full items-center justify-center gap-2 rounded-md border border-border-default px-4 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-bg-hover"
               >
                 <Download className="h-4 w-4" />
@@ -446,6 +557,7 @@ export function ComponentDetailPage({
               <div className="flex gap-2">
                 <button
                   type="button"
+                  onClick={() => void handleDuplicate()}
                   className="flex flex-1 items-center justify-center gap-2 rounded-md border border-border-default px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-hover"
                 >
                   <Copy className="h-4 w-4" />
@@ -537,6 +649,30 @@ export function ComponentDetailPage({
       )}
     </div>
   );
+}
+
+function toSafeFileBase(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "component";
+}
+
+function downloadTextFile(
+  fileName: string,
+  content: string,
+  mimeType: string,
+): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function getComponentVariants(

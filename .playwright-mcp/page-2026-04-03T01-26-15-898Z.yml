@@ -1,0 +1,51 @@
+- generic [ref=e2]:
+  - generic [ref=e8]:
+    - complementary [ref=e9]:
+      - generic [ref=e10]:
+        - button "OpenPCB Home" [ref=e11]:
+          - img [ref=e12]
+        - navigation [ref=e19]:
+          - button "Home" [ref=e20]:
+            - img [ref=e21]
+            - generic [ref=e26]: Home
+          - button "Design" [ref=e27]:
+            - img [ref=e28]
+            - generic [ref=e33]: Design
+          - button "Library" [active] [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e39]: Library
+          - button "Chat" [ref=e40]:
+            - img [ref=e41]
+            - generic [ref=e43]: Chat
+          - button "Notes" [ref=e44]:
+            - img [ref=e45]
+            - generic [ref=e48]: Notes
+      - generic [ref=e49]:
+        - button "Settings" [ref=e50]:
+          - img [ref=e51]
+          - generic [ref=e54]: Settings
+        - generic [ref=e55]: U
+    - main [ref=e56]:
+      - generic [ref=e86]:
+        - generic [ref=e87]:
+          - heading "Component Library" [level=1] [ref=e88]
+          - generic [ref=e89]:
+            - generic [ref=e90]:
+              - img [ref=e91]
+              - textbox "Search components..." [ref=e94]
+            - button "New" [ref=e95]:
+              - img [ref=e96]
+              - text: New
+            - button "Import" [ref=e97]:
+              - img [ref=e98]
+              - text: Import
+        - generic [ref=e104]:
+          - img [ref=e105]
+          - generic [ref=e107]: "Mount:"
+          - generic [ref=e108]:
+            - button "SMD" [ref=e109]
+            - button "Through-hole" [ref=e110]
+            - button "Virtual" [ref=e111]
+        - paragraph [ref=e114]: No components match the current filters.
+  - region "Notifications (F8)":
+    - list

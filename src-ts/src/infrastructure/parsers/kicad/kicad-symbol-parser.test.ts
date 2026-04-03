@@ -69,6 +69,47 @@ describe("KiCad symbol parser", () => {
     expect(sym.bodyGraphics.every((graphic) => graphic.unit >= 0)).toBe(true);
   });
 
+  test("parses LM317T-style 3-pin regulator fixture", () => {
+    const content = readFixture("lm317t_regulator.kicad_sym");
+    const result = parseKicadSymbolLib(content);
+
+    expect(result.symbols.length).toBe(1);
+    const sym = result.symbols[0]!;
+    expect(sym.name).toBe("LM317T");
+    expect(sym.pins).toHaveLength(3);
+    expect(sym.pins.map((pin) => pin.number)).toEqual(["1", "2", "3"]);
+    expect(sym.pins.map((pin) => pin.rotation)).toEqual([0, 180, 90]);
+    expect(sym.bodyGraphics).toHaveLength(1);
+    expect(sym.warnings).toHaveLength(0);
+  });
+
+  test("parses unsupported three-side IC fixture", () => {
+    const content = readFixture("three_side_ic.kicad_sym");
+    const result = parseKicadSymbolLib(content);
+
+    expect(result.symbols.length).toBe(1);
+    const sym = result.symbols[0]!;
+    expect(sym.name).toBe("THREESIDE");
+    expect(sym.pins).toHaveLength(4);
+    expect(new Set(sym.pins.map((pin) => pin.rotation))).toEqual(
+      new Set([0, 180, 90]),
+    );
+    expect(sym.bodyGraphics).toHaveLength(1);
+    expect(sym.warnings).toHaveLength(0);
+  });
+
+  test("parses graphics-only fallback fixture", () => {
+    const content = readFixture("graphics_only.kicad_sym");
+    const result = parseKicadSymbolLib(content);
+
+    expect(result.symbols.length).toBe(1);
+    const sym = result.symbols[0]!;
+    expect(sym.name).toBe("GRAPHICSONLY");
+    expect(sym.pins).toHaveLength(0);
+    expect(sym.bodyGraphics).toHaveLength(2);
+    expect(sym.warnings).toHaveLength(0);
+  });
+
   test("warns on unsupported graphic construct", () => {
     const content = readFixture("unsupported_construct.kicad_sym");
     const result = parseKicadSymbolLib(content);

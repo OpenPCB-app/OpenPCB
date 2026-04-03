@@ -1,10 +1,27 @@
-import type { Point, Rotation, SymbolEntity, SymbolTemplate } from "./types";
+import type {
+  Bounds,
+  Point,
+  RenderedSymbolPin,
+  Rotation,
+  SymbolEntity,
+  SymbolTemplate,
+} from "./types";
 import type {
   ComponentType,
   ComponentVariantType,
 } from "@shared/types/component-library-schema.types";
+import type {
+  SymbolDraft,
+  SymbolGraphic,
+} from "@/components/symbol-editor/types";
 
 export const PALETTE_SYMBOL_KIND_MIME = "application/x-openpcb-symbol-kind";
+
+export interface ImportedSymbolLayout {
+  pins: RenderedSymbolPin[];
+  graphics: SymbolGraphic[];
+  bodyBounds: Bounds | null;
+}
 
 const DEFAULT_TWO_TERMINAL_PIN_POSITIONS: Point[] = [
   { x: 0, y: 0 },
@@ -200,7 +217,6 @@ function inferSymbolTemplate(component: ComponentType): SymbolTemplate {
 
 const GRID_STEP_NM = 1_270_000;
 const HALF_GRID_STEP_NM = GRID_STEP_NM / 2;
-
 interface EmbeddedSymbolDef {
   label: string;
   prefix: string | null;
@@ -228,23 +244,209 @@ const EMBEDDED_SYMBOLS: Record<string, EmbeddedSymbolDef> = {
 
 export interface ComponentLibraryIndex {
   componentsById: ReadonlyMap<string, ComponentType>;
+  importedSymbolLayoutsByComponentId: ReadonlyMap<string, ImportedSymbolLayout>;
 }
 
 const EMPTY_COMPONENTS_BY_ID = new Map<string, ComponentType>();
+const EMPTY_IMPORTED_SYMBOL_LAYOUTS = new Map<string, ImportedSymbolLayout>();
 
 export const EMPTY_COMPONENT_LIBRARY_INDEX: ComponentLibraryIndex = {
   componentsById: EMPTY_COMPONENTS_BY_ID,
+  importedSymbolLayoutsByComponentId: EMPTY_IMPORTED_SYMBOL_LAYOUTS,
 };
 
 export function createComponentLibraryIndex(
   components: ComponentType[],
+  importedSymbolLayoutsByComponentId: ReadonlyMap<string, ImportedSymbolLayout> =
+    EMPTY_IMPORTED_SYMBOL_LAYOUTS,
 ): ComponentLibraryIndex {
   const componentsById = new Map<string, ComponentType>();
   for (const component of components) {
     componentsById.set(component.id, component);
   }
 
-  return { componentsById };
+  return { componentsById, importedSymbolLayoutsByComponentId };
+}
+
+function clonePoint(point: Point): Point {
+  return { x: point.x, y: point.y };
+}
+
+function toSchematicPoint(point: Point): Point {
+  return { x: point.x, y: -point.y };
+}
+
+function toSchematicPinSide(side: RenderedSymbolPin["side"]): RenderedSymbolPin["side"] {
+  if (side === "top") return "bottom";
+  if (side === "bottom") return "top";
+  return side;
+}
+
+function cloneImportedGraphic(graphic: SymbolGraphic): SymbolGraphic {
+  switch (graphic.type) {
+    case "line":
+      return {
+        ...graphic,
+        y1: -graphic.y1,
+        y2: -graphic.y2,
+      };
+    case "rect":
+      return {
+        ...graphic,
+        y: -(graphic.y + graphic.height),
+      };
+    case "circle":
+      return {
+        ...graphic,
+        cy: -graphic.cy,
+      };
+    case "arc":
+      return {
+        ...graphic,
+        cy: -graphic.cy,
+        startAngle: -graphic.startAngle,
+        endAngle: -graphic.endAngle,
+      };
+    case "polygon":
+      return {
+        ...graphic,
+        points: graphic.points.map(toSchematicPoint),
+      };
+    case "bezier":
+      return {
+        ...graphic,
+        points: graphic.points.map(toSchematicPoint) as typeof graphic.points,
+      };
+    case "text":
+      return {
+        ...graphic,
+        y: -graphic.y,
+        rotation: -graphic.rotation,
+      };
+  }
+}
+
+function cloneImportedPin(pin: RenderedSymbolPin, symbolId: string, index: number): RenderedSymbolPin {
+  return {
+    id: `${symbolId}-pin-${index + 1}`,
+    name: pin.name,
+    number: pin.number,
+    position: clonePoint(pin.position),
+    side: pin.side,
+    length: pin.length,
+  };
+}
+
+function cloneImportedBounds(bounds: Bounds | null | undefined): Bounds | null {
+  if (!bounds) {
+    return null;
+  }
+
+  return {
+    minX: bounds.minX,
+    minY: bounds.minY,
+    maxX: bounds.maxX,
+    maxY: bounds.maxY,
+  };
+}
+
+function includePoint(bounds: Bounds | null, point: Point): Bounds {
+  if (!bounds) {
+    return {
+      minX: point.x,
+      minY: point.y,
+      maxX: point.x,
+      maxY: point.y,
+    };
+  }
+
+  return {
+    minX: Math.min(bounds.minX, point.x),
+    minY: Math.min(bounds.minY, point.y),
+    maxX: Math.max(bounds.maxX, point.x),
+    maxY: Math.max(bounds.maxY, point.y),
+  };
+}
+
+function computeImportedBodyBounds(graphics: SymbolGraphic[]): Bounds | null {
+  let bounds: Bounds | null = null;
+
+  for (const graphic of graphics) {
+    switch (graphic.type) {
+      case "line":
+        bounds = includePoint(includePoint(bounds, { x: graphic.x1, y: graphic.y1 }), {
+          x: graphic.x2,
+          y: graphic.y2,
+        });
+        break;
+      case "rect":
+        bounds = includePoint(includePoint(bounds, { x: graphic.x, y: graphic.y }), {
+          x: graphic.x + graphic.width,
+          y: graphic.y + graphic.height,
+        });
+        break;
+      case "circle":
+        bounds = includePoint(
+          includePoint(bounds, {
+            x: graphic.cx - graphic.radius,
+            y: graphic.cy - graphic.radius,
+          }),
+          {
+            x: graphic.cx + graphic.radius,
+            y: graphic.cy + graphic.radius,
+          },
+        );
+        break;
+      case "arc":
+        bounds = includePoint(
+          includePoint(bounds, {
+            x: graphic.cx - graphic.radius,
+            y: graphic.cy - graphic.radius,
+          }),
+          {
+            x: graphic.cx + graphic.radius,
+            y: graphic.cy + graphic.radius,
+          },
+        );
+        break;
+      case "polygon":
+        for (const point of graphic.points) {
+          bounds = includePoint(bounds, point);
+        }
+        break;
+      case "bezier":
+        for (const point of graphic.points) {
+          bounds = includePoint(bounds, point);
+        }
+        break;
+      case "text":
+        bounds = includePoint(bounds, { x: graphic.x, y: graphic.y });
+        break;
+    }
+  }
+
+  return bounds;
+}
+
+export function createImportedSymbolLayout(
+  draft: Pick<SymbolDraft, "pins" | "graphics">,
+): ImportedSymbolLayout {
+  // KiCad schematic-size normalization is owned by convertParsedKicadSymbolToDraft().
+  // Drafts reaching the library are already final-scale and must not be resized again.
+  const graphics = draft.graphics.map(cloneImportedGraphic);
+
+  return {
+    pins: draft.pins.map((pin, index) => ({
+      id: `imported-pin-${index + 1}`,
+      name: pin.name,
+      number: pin.number,
+      position: toSchematicPoint(pin.position),
+      side: toSchematicPinSide(pin.side),
+      length: pin.length,
+    })),
+    graphics,
+    bodyBounds: computeImportedBodyBounds(graphics),
+  };
 }
 
 function getComponentVariants(
@@ -343,6 +545,7 @@ function createSymbolFromComponent(
   id: string,
   reference: string,
   mirrored = false,
+  importedLayout: ImportedSymbolLayout | null = null,
 ): SymbolEntity {
   const componentId = component.id;
   const variantId = variant.id;
@@ -366,7 +569,11 @@ function createSymbolFromComponent(
     position,
     rotation,
     mirrored,
-    pins: getComponentPins(component, id, symbolTemplate),
+    pins: importedLayout
+      ? importedLayout.pins.map((pin, index) => cloneImportedPin(pin, id, index))
+      : getComponentPins(component, id, symbolTemplate),
+    importedGraphics: importedLayout?.graphics.map(cloneImportedGraphic),
+    importedBodyBounds: cloneImportedBounds(importedLayout?.bodyBounds),
     properties,
   };
 }
@@ -459,6 +666,7 @@ export function resolveSymbolEntityFromLibrary(
     symbol.id,
     symbol.reference,
     symbol.mirrored ?? false,
+    index.importedSymbolLayoutsByComponentId.get(resolved.component.id) ?? null,
   );
 }
 
@@ -498,6 +706,8 @@ export function createSymbolEntity(
     rotation,
     crypto.randomUUID(),
     reference,
+    false,
+    index.importedSymbolLayoutsByComponentId.get(component.id) ?? null,
   );
 }
 
@@ -531,6 +741,8 @@ export function createPreviewSymbol(
     rotation,
     "__placement-preview__",
     component.displayLabel,
+    false,
+    index.importedSymbolLayoutsByComponentId.get(component.id) ?? null,
   );
 }
 

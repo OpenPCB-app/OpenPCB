@@ -1,0 +1,12 @@
+(kicad_symbol_lib
+  (version 20231120)
+  (generator "openpcb_test")
+  (symbol "GRAPHICSONLY"
+    (property "Reference" "U" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "GRAPHICSONLY" (at 0 -2.54 0) (effects (font (size 1.27 1.27))))
+    (symbol "GRAPHICSONLY_0_1"
+      (rectangle (start -5.08 -5.08) (end 5.08 5.08) (stroke (width 0) (type default)) (fill (type none)))
+      (polyline (pts (xy -5.08 0) (xy 0 5.08) (xy 5.08 0) (xy 0 -5.08) (xy -5.08 0)) (stroke (width 0.254) (type default)) (fill (type none)))
+    )
+  )
+)

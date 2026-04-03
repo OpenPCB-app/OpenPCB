@@ -1,0 +1,79 @@
+- generic:
+  - generic:
+    - generic:
+      - complementary:
+        - generic:
+          - button:
+            - img
+          - navigation:
+            - button:
+              - img
+              - generic: Home
+            - button:
+              - img
+              - generic: Design
+            - button:
+              - img
+              - generic: Library
+            - button:
+              - img
+              - generic: Chat
+            - button:
+              - img
+              - generic: Notes
+        - generic:
+          - button:
+            - img
+            - generic: Settings
+          - generic: U
+      - main:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - heading [level=1]: Home
+                  - paragraph: Your hardware workspace
+                  - generic:
+                    - heading [level=2]: Quick actions
+                    - generic:
+                      - button:
+                        - img
+                        - text: New design
+                      - button: New component
+                      - button: New from template
+                      - button: Import KiCad
+                  - generic:
+                    - generic:
+                      - heading [level=2]: Recent designs
+                      - paragraph: Standalone designs for simple boards and single-part work. Stored in Design Workspace.
+                    - generic: No workspace designs yet.
+                  - generic:
+                    - generic:
+                      - heading [level=2]: Recent notes
+                      - generic:
+                        - paragraph: No notes yet
+                    - generic:
+                      - heading [level=2]: Recent chats
+                      - generic:
+                        - paragraph: No chats yet
+    - list
+  - dialog "Create Workspace Design" [ref=e86]:
+    - generic [ref=e87]:
+      - heading "Create Workspace Design" [level=2] [ref=e88]
+      - paragraph [ref=e89]: Store a design directly in the workspace without attaching it to a project.
+    - generic [ref=e90]:
+      - generic [ref=e91]:
+        - generic [ref=e92]: Name
+        - textbox "Name" [active] [ref=e93]:
+          - /placeholder: Main board
+      - generic [ref=e94]:
+        - generic [ref=e95]: Description
+        - textbox "Description" [ref=e96]:
+          - /placeholder: Optional design notes
+    - generic [ref=e97]:
+      - button "Cancel" [ref=e98] [cursor=pointer]
+      - button "Create Design" [ref=e99] [cursor=pointer]
+    - button "Close" [ref=e100] [cursor=pointer]:
+      - img
+      - generic [ref=e101]: Close

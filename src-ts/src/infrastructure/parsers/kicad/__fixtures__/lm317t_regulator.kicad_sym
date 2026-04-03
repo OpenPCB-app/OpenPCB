@@ -1,0 +1,16 @@
+(kicad_symbol_lib
+  (version 20231120)
+  (generator "openpcb_test")
+  (symbol "LM317T"
+    (property "Reference" "U" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "LM317T" (at 0 -2.54 0) (effects (font (size 1.27 1.27))))
+    (symbol "LM317T_0_1"
+      (rectangle (start -5.08 -5.08) (end 5.08 5.08) (stroke (width 0) (type default)) (fill (type none)))
+    )
+    (symbol "LM317T_1_1"
+      (pin input line (at -7.62 2.54 0) (length 2.54) (name "IN" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+      (pin output line (at 7.62 2.54 180) (length 2.54) (name "OUT" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+      (pin input line (at 0 -7.62 90) (length 2.54) (name "ADJ" (effects (font (size 1.27 1.27)))) (number "3" (effects (font (size 1.27 1.27)))))
+    )
+  )
+)

@@ -1,0 +1,97 @@
+- generic [ref=e2]:
+  - generic [ref=e8]:
+    - complementary [ref=e9]:
+      - generic [ref=e10]:
+        - button "OpenPCB Home" [ref=e11]:
+          - img [ref=e12]
+        - navigation [ref=e19]:
+          - button "Home" [ref=e20]:
+            - img [ref=e21]
+            - generic [ref=e26]: Home
+          - button "Design" [ref=e27]:
+            - img [ref=e28]
+            - generic [ref=e33]: Design
+          - button "Library" [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e39]: Library
+          - button "Chat" [ref=e40]:
+            - img [ref=e41]
+            - generic [ref=e43]: Chat
+          - button "Notes" [ref=e44]:
+            - img [ref=e45]
+            - generic [ref=e48]: Notes
+      - generic [ref=e49]:
+        - button "Settings" [ref=e50]:
+          - img [ref=e51]
+          - generic [ref=e54]: Settings
+        - generic [ref=e55]: U
+    - main [ref=e56]:
+      - generic [ref=e432]:
+        - generic [ref=e433]:
+          - generic [ref=e435]:
+            - paragraph [ref=e436]: Untitled design
+            - paragraph [ref=e437]: Design Workspace
+          - generic [ref=e438]:
+            - button "Schem" [ref=e439]
+            - button "PCB" [ref=e440]
+            - button "3D" [ref=e441]
+            - button "BOM" [ref=e442]
+          - generic [ref=e443]:
+            - button "Close" [ref=e444]
+            - button "Save" [disabled] [ref=e445]
+            - button "Share" [ref=e446]
+            - button "Toggle AI copilot" [ref=e447]: AI
+        - generic [ref=e449]:
+          - generic [ref=e451]:
+            - generic [ref=e452]:
+              - generic [ref=e453]: Components
+              - button [ref=e454]:
+                - img [ref=e455]
+            - generic [ref=e460]:
+              - paragraph [ref=e461]: Drag To Canvas
+              - button "Refresh components" [ref=e462] [cursor=pointer]:
+                - img
+            - generic [ref=e475]:
+              - generic [ref=e477]: Layers
+              - generic [ref=e478]:
+                - generic [ref=e481]: F.Cu
+                - generic [ref=e484]: B.Cu
+                - generic [ref=e487]: F.SilkS
+                - generic [ref=e490]: F.Mask
+                - generic [ref=e493]: Edge.Cuts
+          - separator [ref=e494]:
+            - img [ref=e496]
+          - generic [ref=e506]:
+            - generic [ref=e507]:
+              - button "Select" [pressed] [ref=e508]:
+                - img
+              - button "Place Component" [ref=e509]:
+                - img
+              - button "Draw Wire" [ref=e510]:
+                - img
+              - button "Net Label" [ref=e511]:
+                - img
+            - generic [ref=e512]:
+              - button [disabled]:
+                - img
+              - button [disabled]:
+                - img
+            - generic [ref=e513]:
+              - button [ref=e514] [cursor=pointer]:
+                - img
+              - button [ref=e515] [cursor=pointer]:
+                - img
+              - button [ref=e516] [cursor=pointer]:
+                - img
+              - button [pressed] [ref=e517]:
+                - img
+              - combobox "Grid preset" [ref=e518]:
+                - generic: Small (0.5mm)
+                - img
+            - generic [ref=e519]: Select
+        - generic [ref=e523]:
+          - generic [ref=e524]: "Grid: 0.51mm"
+          - generic [ref=e525]: "Zoom: 0%"
+          - generic [ref=e526]: select
+  - region "Notifications (F8)":
+    - list

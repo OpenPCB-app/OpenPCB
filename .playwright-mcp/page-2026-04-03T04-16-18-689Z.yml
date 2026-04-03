@@ -1,0 +1,112 @@
+- generic [ref=e2]:
+  - generic [ref=e8]:
+    - complementary [ref=e9]:
+      - generic [ref=e10]:
+        - button "OpenPCB Home" [ref=e11]:
+          - img [ref=e12]
+        - navigation [ref=e19]:
+          - button "Home" [ref=e20]:
+            - img [ref=e21]
+            - generic [ref=e26]: Home
+          - button "Design" [ref=e27]:
+            - img [ref=e28]
+            - generic [ref=e33]: Design
+          - button "Library" [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e39]: Library
+          - button "Chat" [ref=e40]:
+            - img [ref=e41]
+            - generic [ref=e43]: Chat
+          - button "Notes" [ref=e44]:
+            - img [ref=e45]
+            - generic [ref=e48]: Notes
+      - generic [ref=e49]:
+        - button "Settings" [ref=e50]:
+          - img [ref=e51]
+          - generic [ref=e54]: Settings
+        - generic [ref=e55]: U
+    - main [ref=e56]:
+      - generic [ref=e57]:
+        - generic [ref=e58]:
+          - generic [ref=e59]:
+            - button "Back to Library" [ref=e60]:
+              - img [ref=e61]
+              - generic [ref=e63]: Back to Library
+            - generic [ref=e65]:
+              - generic [ref=e66]:
+                - heading "GND" [level=1] [ref=e67]
+                - generic [ref=e68]: Built-in
+              - generic [ref=e69]:
+                - generic [ref=e70]: Ground reference symbol
+                - generic [ref=e71]: "|"
+                - generic [ref=e72]: 0 pins
+                - generic [ref=e73]: "|"
+                - generic [ref=e74]: virtual
+          - generic [ref=e75]:
+            - button "Export" [ref=e76]:
+              - img [ref=e77]
+              - text: Export
+            - button "Duplicate" [ref=e80]:
+              - img [ref=e81]
+              - text: Duplicate
+        - generic [ref=e84]:
+          - generic [ref=e85]:
+            - generic [ref=e86]:
+              - generic [ref=e87]:
+                - generic [ref=e88]:
+                  - heading "Schematic Symbol" [level=2] [ref=e89]:
+                    - img [ref=e90]
+                    - text: Schematic Symbol
+                  - generic [ref=e93]: "Ref: #PWR"
+                - generic [ref=e97]:
+                  - button "Fit to content" [ref=e98]:
+                    - img [ref=e99]
+                  - button "Zoom out" [ref=e101]:
+                    - img [ref=e102]
+                  - button "Zoom in" [ref=e103]:
+                    - img [ref=e104]
+              - generic [ref=e106]:
+                - heading "PCB Footprint" [level=2] [ref=e108]:
+                  - img [ref=e109]
+                  - text: PCB Footprint
+                - generic [ref=e113]: No footprint available
+            - generic [ref=e114]:
+              - heading "3D Model" [level=2] [ref=e116]:
+                - img [ref=e117]
+                - text: 3D Model
+              - generic [ref=e121]:
+                - img [ref=e122]
+                - paragraph [ref=e125]: No 3D model
+          - generic [ref=e126]:
+            - generic [ref=e127]:
+              - heading "Technical Specifications" [level=3] [ref=e128]
+              - generic [ref=e129]:
+                - generic [ref=e130]:
+                  - term [ref=e131]: Reference Prefix
+                  - definition [ref=e132]: "#PWR"
+                - generic [ref=e133]:
+                  - term [ref=e134]: Package
+                  - definition [ref=e135]: default
+                - generic [ref=e136]:
+                  - term [ref=e137]: Mount Type
+                  - definition [ref=e138]: virtual
+                - generic [ref=e139]:
+                  - term [ref=e140]: Pin Count
+                  - definition [ref=e141]: "0"
+            - generic [ref=e142]:
+              - heading "Pin Assignments" [level=3] [ref=e143]
+              - generic [ref=e144]: No pin information available
+            - generic [ref=e145]:
+              - heading "Actions" [level=3] [ref=e146]
+              - generic [ref=e147]:
+                - button "Use in Design" [ref=e148]:
+                  - img [ref=e149]
+                  - text: Use in Design
+                - button "Export KiCAD Files" [ref=e150]:
+                  - img [ref=e151]
+                  - text: Export KiCAD Files
+                - button "Duplicate" [ref=e155]:
+                  - img [ref=e156]
+                  - text: Duplicate
+  - region "Notifications (F8)":
+    - list

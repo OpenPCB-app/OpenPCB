@@ -1,0 +1,44 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e7]:
+        - paragraph [ref=e8]: Drag To Canvas
+        - button "Refresh components" [ref=e9] [cursor=pointer]:
+          - img
+      - paragraph [ref=e11]: "[SDK] Backend URL not initialized. This usually means the BackendURLContext has not finished discovering the dynamic port. Please ensure the app has fully loaded."
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - generic [ref=e49]: Power
+          - button "GND" [ref=e50] [cursor=pointer]:
+            - img
+            - generic [ref=e52]: GND
+          - button "VCC" [ref=e53] [cursor=pointer]:
+            - img
+            - generic [ref=e55]: VCC
+        - generic [ref=e56]:
+          - generic [ref=e57]: Passives
+          - button "Resistor (3 variants)" [ref=e58] [cursor=pointer]:
+            - img
+            - generic [ref=e59]:
+              - generic [ref=e60]: Resistor
+              - generic [ref=e61]: (3 variants)
+  - main [ref=e24]:
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - paragraph [ref=e27]: Schematic E2E
+        - button "Reset" [ref=e28]
+      - generic [ref=e29]:
+        - generic [ref=e30]: symbols
+        - generic [ref=e31]: "2"
+      - generic [ref=e32]:
+        - generic [ref=e33]: wires
+        - generic [ref=e34]: "0"
+      - generic [ref=e35]:
+        - generic [ref=e36]: selected
+        - generic [ref=e37]: none
+      - generic [ref=e38]:
+        - generic [ref=e39]: session
+        - generic [ref=e40]: none
+      - generic [ref=e41]:
+        - generic [ref=e42]: popover
+        - generic [ref=e43]: none

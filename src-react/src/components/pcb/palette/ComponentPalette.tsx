@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSchematicStore } from "@/stores/schematic-store";
 import { useNavigationStore } from "@/stores/navigation-store";
 import { PALETTE_SYMBOL_KIND_MIME } from "../symbol-library";
+import { createImportedSymbolLayout } from "../symbol-library";
 import {
   SYMBOL_CATEGORIES,
   mapCategoryPathToCategory,
@@ -13,6 +14,8 @@ import {
 import { useComponents } from "@/hooks/useComponents";
 import type { ComponentType } from "@shared/types/component-library-schema.types";
 import type { SymbolCategory } from "../symbol-display";
+import { parseKicadSymbolImport } from "@/lib/api/component-api";
+import { convertParsedKicadSymbolToDraft } from "@/components/symbol-editor/kicad-import";
 import {
   useSchematicInteractionController,
   type SchematicInteractionController,
@@ -170,6 +173,58 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
 
   useEffect(() => {
     setComponentLibrary(components);
+
+    let cancelled = false;
+    const importedComponents = components.filter(
+      (component) => typeof component.symbolData.rawKicadSource === "string",
+    );
+
+    if (importedComponents.length === 0) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void Promise.all(
+      importedComponents.map(async (component) => {
+        try {
+          const parsed = await parseKicadSymbolImport(
+            component.symbolData.rawKicadSource!,
+          );
+          const draft = convertParsedKicadSymbolToDraft(
+            parsed.symbol,
+            component.displayLabel,
+            parsed.availableSymbols.length,
+          );
+          return [component.id, createImportedSymbolLayout(draft)] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) {
+        return;
+      }
+
+      const importedLayouts = new Map(
+        entries.filter(
+          (
+            entry,
+          ): entry is readonly [
+            string,
+            ReturnType<typeof createImportedSymbolLayout>,
+          ] => entry !== null,
+        ),
+      );
+
+      if (importedLayouts.size > 0) {
+        setComponentLibrary(components, importedLayouts);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [components, setComponentLibrary]);
 
   const hasComponents = components.length > 0 || EMBEDDED_SYMBOLS.length > 0;

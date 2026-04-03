@@ -81,7 +81,19 @@ export function parseKicadSymbolLib(content: string): {
   generator: string | null;
 } {
   const tree = parseSexpr(content);
-  if (!Array.isArray(tree) || tree[0] !== "kicad_symbol_lib") {
+  if (!Array.isArray(tree)) {
+    throw new Error("Not a valid KiCad symbol library file");
+  }
+
+  if (tree[0] === "symbol") {
+    return {
+      symbols: [parseSymbol(tree, content)],
+      version: null,
+      generator: null,
+    };
+  }
+
+  if (tree[0] !== "kicad_symbol_lib") {
     throw new Error("Not a valid KiCad symbol library file");
   }
 

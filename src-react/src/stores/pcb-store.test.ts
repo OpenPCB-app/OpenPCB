@@ -235,6 +235,65 @@ describe("pcb-store deleteSelectedEntities", () => {
     expect(updatedWidth).not.toBe(initialWidth);
   });
 
+  it("places a routing via, flips layers, and persists the routed chain on completion", () => {
+    const store = usePcbStore.getState();
+    store.setDocument(createDocument());
+    usePcbStore.setState({ activeTool: "route" });
+
+    store.startRouting(
+      { componentId: "u1", padNumber: "1" },
+      { x: 0, y: 0 },
+      "F.Cu",
+    );
+    store.updateRoutingPreview({ x: 5, y: 0 });
+    store.placeRoutingVia({ x: 5, y: 0 });
+
+    expect(usePcbStore.getState().routingSession?.layer).toBe("B.Cu");
+    expect(usePcbStore.getState().routingSession?.committedVias).toHaveLength(1);
+
+    store.completeRoute({ x: 10, y: 0 });
+
+    const state = usePcbStore.getState();
+    expect(state.document?.vias).toHaveLength(2);
+    expect(state.document?.traces.at(-2)?.layer).toBe("F.Cu");
+    expect(state.document?.traces.at(-1)?.layer).toBe("B.Cu");
+  });
+
+  it("cancels routing without mutating the document", () => {
+    const store = usePcbStore.getState();
+    store.setDocument(createDocument());
+    usePcbStore.setState({ activeTool: "route" });
+
+    const before = usePcbStore.getState().document;
+
+    store.startRouting(
+      { componentId: "u1", padNumber: "1" },
+      { x: 0, y: 0 },
+      "F.Cu",
+    );
+    store.updateRoutingPreview({ x: 5, y: 5 });
+    store.cancelRouting();
+
+    const state = usePcbStore.getState();
+    expect(state.routingSession).toBeNull();
+    expect(state.lastCursorPosition).toBeNull();
+    expect(state.document).toEqual(before);
+  });
+
+  it("does not create undo history when deleting unknown ids", () => {
+    const store = usePcbStore.getState();
+    store.setDocument(createDocument());
+    usePcbStore.setState({ selectedIds: new Set(["missing-id"]) });
+
+    store.deleteSelectedEntities();
+
+    const state = usePcbStore.getState();
+    expect(state.document?.placements).toHaveLength(2);
+    expect(state.document?.traces).toHaveLength(1);
+    expect(state.document?.vias).toHaveLength(1);
+    expect(state.canUndo()).toBe(false);
+  });
+
   it("starts routing on the clicked pad layer", () => {
     const store = usePcbStore.getState();
     store.setDocument({

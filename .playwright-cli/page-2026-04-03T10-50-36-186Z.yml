@@ -1,0 +1,121 @@
+- generic [ref=e2]:
+  - generic [ref=e8]:
+    - complementary [ref=e9]:
+      - generic [ref=e10]:
+        - button "OpenPCB Home" [ref=e11]:
+          - img [ref=e12]
+        - navigation [ref=e19]:
+          - button "Home" [ref=e20]:
+            - img [ref=e21]
+            - generic [ref=e26]: Home
+          - button "Design" [active] [ref=e27]:
+            - img [ref=e28]
+            - generic [ref=e33]: Design
+          - button "Library" [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e39]: Library
+          - button "Chat" [ref=e40]:
+            - img [ref=e41]
+            - generic [ref=e43]: Chat
+          - button "Notes" [ref=e44]:
+            - img [ref=e45]
+            - generic [ref=e48]: Notes
+      - generic [ref=e49]:
+        - button "Settings" [ref=e50]:
+          - img [ref=e51]
+          - generic [ref=e54]: Settings
+        - generic [ref=e55]: U
+    - main [ref=e56]:
+      - generic [ref=e175]:
+        - generic [ref=e176]:
+          - generic [ref=e178]:
+            - paragraph [ref=e179]: Untitled design
+            - paragraph [ref=e180]: Design Workspace
+          - generic [ref=e181]:
+            - button "Schem" [ref=e182]
+            - button "PCB" [ref=e183]
+            - button "3D" [ref=e184]
+            - button "BOM" [ref=e185]
+          - generic [ref=e186]:
+            - button "Close" [ref=e187]
+            - button "Save" [disabled] [ref=e188]
+            - button "Share" [ref=e189]
+            - button "Toggle AI copilot" [ref=e190]: AI
+        - generic [ref=e192]:
+          - generic [ref=e194]:
+            - generic [ref=e195]:
+              - generic [ref=e196]: Components
+              - button [ref=e197]:
+                - img [ref=e198]
+            - generic [ref=e201]:
+              - generic [ref=e203]:
+                - paragraph [ref=e204]: Drag To Canvas
+                - button "Refresh components" [ref=e205] [cursor=pointer]:
+                  - img
+              - generic [ref=e209]:
+                - generic [ref=e210]:
+                  - generic [ref=e211]: Power
+                  - button "GND" [ref=e212] [cursor=pointer]:
+                    - img
+                    - generic [ref=e214]: GND
+                  - button "VCC" [ref=e215] [cursor=pointer]:
+                    - img
+                    - generic [ref=e217]: VCC
+                - generic [ref=e218]:
+                  - generic [ref=e219]: Passives
+                  - button "Resistor (3 variants)" [ref=e220] [cursor=pointer]:
+                    - img
+                    - generic [ref=e221]:
+                      - generic [ref=e222]: Resistor
+                      - generic [ref=e223]: (3 variants)
+                - generic [ref=e224]:
+                  - generic [ref=e225]: Other
+                  - button "ATTINY13A-SU IC" [ref=e226] [cursor=pointer]:
+                    - img
+                    - generic [ref=e227]:
+                      - generic [ref=e228]: ATTINY13A-SU
+                      - generic [ref=e229]: IC
+            - generic [ref=e230]:
+              - generic [ref=e232]: Layers
+              - generic [ref=e233]:
+                - generic [ref=e236]: F.Cu
+                - generic [ref=e239]: B.Cu
+                - generic [ref=e242]: F.SilkS
+                - generic [ref=e245]: F.Mask
+                - generic [ref=e248]: Edge.Cuts
+          - separator [ref=e249]:
+            - img [ref=e251]
+          - generic [ref=e261]:
+            - generic [ref=e262]:
+              - button "Select" [pressed] [ref=e263]:
+                - img
+              - button "Place Component" [ref=e264]:
+                - img
+              - button "Draw Wire" [ref=e265]:
+                - img
+              - button "Net Label" [ref=e266]:
+                - img
+            - generic [ref=e267]:
+              - button [disabled]:
+                - img
+              - button [disabled]:
+                - img
+            - generic [ref=e268]:
+              - button [ref=e269] [cursor=pointer]:
+                - img
+              - button [ref=e270] [cursor=pointer]:
+                - img
+              - button [ref=e271] [cursor=pointer]:
+                - img
+              - button [pressed] [ref=e272]:
+                - img
+              - combobox "Grid preset" [ref=e273]:
+                - generic: Small (0.5mm)
+                - img
+            - generic [ref=e274]: Select
+        - generic [ref=e278]:
+          - generic [ref=e279]: "Grid: 0.51mm"
+          - generic [ref=e280]: "Zoom: 0%"
+          - generic [ref=e281]: select
+  - region "Notifications (F8)":
+    - list

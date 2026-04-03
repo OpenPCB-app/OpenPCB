@@ -258,4 +258,70 @@ describe("syncSchematicToPcb", () => {
     expect(result.placements).toHaveLength(1);
     expect(result.placements[0]?.schematicSymbolId).toBe("s1");
   });
+
+  it("normalizes wizard-style footprint payloads for PCB sync", () => {
+    const component = makeComponent("c1");
+    component.variants[0]!.footprintOptions[0]!.kicadPayload = {
+      metadata: {
+        name: "ATTINY13A",
+        description: "Custom MCU footprint",
+        reference: "U",
+      },
+      pads: [
+        {
+          id: "pad-1",
+          number: "1",
+          name: "PB5",
+          type: "thru_hole",
+          shape: "circle",
+          position: { x: -3, y: 4 },
+          size: { width: 1.6, height: 1.6 },
+          rotation: 0,
+          layers: ["*.Cu", "*.Mask"],
+          drillDiameter: 0.8,
+        },
+      ],
+      graphics: [
+        {
+          id: "g-1",
+          type: "line",
+          layer: "F.SilkS",
+          strokeWidth: 0.12,
+          start: { x: -4, y: -5 },
+          end: { x: 4, y: -5 },
+        },
+      ],
+      importPreservation: {
+        rawSource: "(footprint ATTINY13A)",
+        sourceFileName: "attiny13a.kicad_mod",
+        warnings: [],
+        model3dReferences: [],
+        attributes: { type: "through_hole" },
+      },
+    };
+
+    const result = syncSchematicToPcb(
+      [
+        makeSymbol("s1", "U1", {
+          componentId: component.id,
+        }),
+      ],
+      [],
+      createComponentLibraryIndex([component]),
+      null,
+      { width: 100, height: 80 },
+    );
+
+    expect(result.placements).toHaveLength(1);
+    expect(result.placements[0]?.footprintData.name).toBe("ATTINY13A");
+    expect(result.placements[0]?.footprintData.graphics[0]).toEqual({
+      type: "line",
+      layer: "F.SilkS",
+      data: {
+        start: { x: -4, y: -5 },
+        end: { x: 4, y: -5 },
+        width: 0.12,
+      },
+    });
+  });
 });

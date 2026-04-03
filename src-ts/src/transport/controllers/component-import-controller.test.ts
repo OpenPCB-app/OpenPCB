@@ -6,6 +6,7 @@ import { RouteParams } from "../router/route-parser";
 import { ComponentImportController } from "./component-import-controller";
 import type { IComponentImportService } from "../../domain/services/component-import-service";
 import type { IComponentZipImportService } from "../../domain/services/component-zip-import-service";
+import { parseKicadSymbolLib } from "../../infrastructure/parsers/kicad/kicad-symbol-parser";
 
 const FIXTURES_DIR = join(import.meta.dir, "../../infrastructure/parsers/kicad/__fixtures__");
 
@@ -46,6 +47,35 @@ describe("ComponentImportController", () => {
     expect(response.status).toBe(200);
     expect(json.data.symbol.name).toBe("R");
     expect(json.data.symbol.pins.length).toBe(2);
+  });
+
+  it("parses a serialized symbol node payload", async () => {
+    const controller = new ComponentImportController(
+      { importFiles: mock(async () => ({ components: [], warnings: [], ungroupedFiles: [] })) } as unknown as IComponentImportService,
+      { importZip: mock(async () => ({ components: [], warnings: [], ungroupedFiles: [] })) } as unknown as IComponentZipImportService,
+    );
+
+    const parsedLib = parseKicadSymbolLib(readFixture("simple_resistor.kicad_sym"));
+    const symbolNode = parsedLib.symbols[0]?.rawSource;
+    expect(symbolNode).toBeTruthy();
+
+    const response = await controller.parseSymbol(
+      createContext(
+        new Request("http://localhost/api/components/import/parse-symbol", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: symbolNode,
+            fileName: "R",
+          }),
+        }),
+      ),
+    );
+    const json = (await response.json()) as any;
+
+    expect(response.status).toBe(200);
+    expect(json.data.symbol.name).toBe("R");
+    expect(json.data.availableSymbols).toEqual(["R"]);
   });
 
   it("parses a KiCad footprint file", async () => {

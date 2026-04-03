@@ -394,6 +394,7 @@ export function PcbCanvas() {
     <div ref={containerRef} className="w-full h-full relative overflow-hidden">
       <canvas
         ref={canvasRef}
+        data-testid="pcb-canvas"
         className="absolute inset-0 cursor-default"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}

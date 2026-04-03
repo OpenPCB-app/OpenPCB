@@ -1,12 +1,14 @@
 import { useState, useCallback } from "react";
 import { useSchematicStore } from "@/stores/schematic-store";
+import { usePcbStore } from "@/stores/pcb-store";
 import { getSymbolKindLabel } from "./symbol-display";
 import {
   useSchematicAutoSave,
   type SaveStatus,
 } from "@/hooks/useSchematicAutoSave";
+import type { DesignTab } from "@/stores/navigation-store";
 
-export function StatusBar() {
+function SchematicStatusBar() {
   const viewport = useSchematicStore((s) => s.chrome.viewport);
   const gridSize = useSchematicStore((s) => s.chrome.gridSize);
   const selectedCount = useSchematicStore(
@@ -63,4 +65,35 @@ export function StatusBar() {
       <span className="capitalize">{activeTool}</span>
     </div>
   );
+}
+
+function PcbStatusBar() {
+  const viewport = usePcbStore((s) => s.viewport);
+  const gridSize = usePcbStore((s) => s.gridSize);
+  const selectedCount = usePcbStore((s) => s.selectedIds.size);
+  const activeTool = usePcbStore((s) => s.activeTool);
+  const routingSession = usePcbStore((s) => s.routingSession);
+
+  const zoomPercent = Math.round(viewport.zoom * 100);
+  const gridMm = gridSize.toFixed(2);
+  const sessionLabel = routingSession ? `Routing ${routingSession.netId}` : null;
+
+  return (
+    <div className="flex h-6 items-center gap-4 border-t border-border bg-surface px-3 text-[11px] text-muted-foreground">
+      <span>Grid: {gridMm}mm</span>
+      <span>Zoom: {zoomPercent}%</span>
+      {selectedCount > 0 && <span>{selectedCount} selected</span>}
+      {sessionLabel && <span>{sessionLabel}</span>}
+      <div className="flex-1" />
+      <span className="capitalize">{activeTool}</span>
+    </div>
+  );
+}
+
+export function StatusBar({ designTab }: { designTab: DesignTab }) {
+  if (designTab === "pcb") {
+    return <PcbStatusBar />;
+  }
+
+  return <SchematicStatusBar />;
 }

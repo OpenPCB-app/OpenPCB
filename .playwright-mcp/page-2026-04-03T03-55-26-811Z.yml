@@ -1,0 +1,26 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e7]:
+      - paragraph [ref=e8]: Drag To Canvas
+      - button "Refresh components" [ref=e9] [cursor=pointer]:
+        - img
+  - main [ref=e22]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - paragraph [ref=e25]: Schematic E2E
+        - button "Reset" [ref=e26]
+      - generic [ref=e27]:
+        - generic [ref=e28]: symbols
+        - generic [ref=e29]: "2"
+      - generic [ref=e30]:
+        - generic [ref=e31]: wires
+        - generic [ref=e32]: "0"
+      - generic [ref=e33]:
+        - generic [ref=e34]: selected
+        - generic [ref=e35]: none
+      - generic [ref=e36]:
+        - generic [ref=e37]: session
+        - generic [ref=e38]: none
+      - generic [ref=e39]:
+        - generic [ref=e40]: popover
+        - generic [ref=e41]: none

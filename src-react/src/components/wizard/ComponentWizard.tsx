@@ -20,16 +20,14 @@ import {
   type WizardDraftPayload,
 } from "@/stores/component-wizard-store";
 import {
-  createWorkspaceComponentRecord,
+  createComponent,
   getComponent,
   patchWorkspaceComponentRecord,
-  publishWorkspaceComponentRecord,
 } from "@/lib/api/component-api";
 import { useSymbolEditorStore } from "@/components/symbol-editor";
 import { SpecsStep } from "./SpecsStep";
 import { ModelStep } from "./ModelStep";
 import {
-  createEmptyBackendPayload,
   transformFootprintDraftToWizard,
   transformKicadPayloadToFootprintDraft,
   transformSymbolDraftToWizard,
@@ -184,14 +182,9 @@ export function ComponentWizard({
 
           resetSymbolDraft();
         } else {
-          // Create mode: create new backend draft
-          const backendDraft = await createWorkspaceComponentRecord(
-            createEmptyBackendPayload(),
-          );
-
           if (!mounted) return;
 
-          initDraft(backendDraft.id);
+          initDraft();
 
           resetSymbolDraft();
           resetFootprintDraft();
@@ -286,7 +279,7 @@ export function ComponentWizard({
   const markClean = useComponentWizardStore((s) => s.markClean);
 
   useEffect(() => {
-    if (!isDirty || !draftId || !draft) return;
+    if (!isEditMode || !isDirty || !draftId || !draft) return;
 
     autosaveTimeoutRef.current = setTimeout(async () => {
       try {
@@ -308,7 +301,7 @@ export function ComponentWizard({
         autosaveTimeoutRef.current = null;
       }
     };
-  }, [isDirty, draftId, draft, variants, setSaving, markClean]);
+  }, [isDirty, isEditMode, draftId, draft, variants, setSaving, markClean]);
 
   // Handle step navigation
   const handleBack = useCallback(() => {
@@ -327,9 +320,8 @@ export function ComponentWizard({
     }
   }, [currentStep, setStep]);
 
-  // Handle close (save as draft silently)
   const handleClose = useCallback(async () => {
-    if (draftId && draft) {
+    if (isEditMode && draftId && draft) {
       try {
         if (autosaveTimeoutRef.current) {
           clearTimeout(autosaveTimeoutRef.current);
@@ -344,7 +336,7 @@ export function ComponentWizard({
     }
     reset();
     onClose();
-  }, [draftId, draft, variants, reset, onClose]);
+  }, [draftId, draft, isEditMode, variants, reset, onClose]);
 
   // Handle publish
   const handlePublish = useCallback(async () => {
@@ -361,11 +353,13 @@ export function ComponentWizard({
 
       const backendPayload = transformWizardToBackendPayload(draft, variants);
 
-      await patchWorkspaceComponentRecord(draftId, {
-        payload: backendPayload,
-      });
-
-      const result = await publishWorkspaceComponentRecord(draftId);
+      const componentId = isEditMode
+        ? (
+            await patchWorkspaceComponentRecord(draftId, {
+              payload: backendPayload,
+            })
+          ).id
+        : (await createComponent(backendPayload)).id;
 
       toast({
         title: "Component published",
@@ -373,7 +367,7 @@ export function ComponentWizard({
       });
 
       reset();
-      onPublished?.(result.componentId);
+      onPublished?.(componentId);
       onClose();
     } catch (err) {
       console.error("Publish failed:", err);
@@ -387,7 +381,7 @@ export function ComponentWizard({
     } finally {
       setIsPublishing(false);
     }
-  }, [draftId, draft, variants, reset, onPublished, onClose]);
+  }, [draftId, draft, isEditMode, variants, reset, onPublished, onClose]);
 
   const handleImportedSymbolDraft = useCallback(
     (importedDraft: SymbolDraft) => {

@@ -33,9 +33,330 @@ interface ResolvedPlacementData {
   footprintData: ParsedKicadFootprint;
 }
 
+interface NormalizedGraphic {
+  type: ParsedKicadFootprint["graphics"][number]["type"];
+  layer: string;
+  data: Record<string, unknown>;
+}
+
 function isPowerNet(name: string | null | undefined): boolean {
   const normalized = name?.trim().toUpperCase();
   return normalized === "GND" || normalized === "VCC";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function toFiniteNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizePoint(value: unknown): Point2D | null {
+  if (Array.isArray(value)) {
+    return {
+      x: toFiniteNumber(value[0]),
+      y: toFiniteNumber(value[1]),
+    };
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    x: toFiniteNumber(value.x),
+    y: toFiniteNumber(value.y),
+  };
+}
+
+function normalizePad(payload: unknown): ParsedKicadFootprint["pads"][number] | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const position = normalizePoint(payload.position);
+  const sizeRecord = isRecord(payload.size) ? payload.size : null;
+  if (!position || !sizeRecord) {
+    return null;
+  }
+
+  const layers = Array.isArray(payload.layers)
+    ? payload.layers.filter((layer): layer is string => typeof layer === "string")
+    : [];
+
+  return {
+    number: typeof payload.number === "string" ? payload.number : "",
+    type:
+      payload.type === "thru_hole" ||
+      payload.type === "np_thru_hole" ||
+      payload.type === "connect"
+        ? payload.type
+        : "smd",
+    shape:
+      payload.shape === "circle" ||
+      payload.shape === "oval" ||
+      payload.shape === "roundrect" ||
+      payload.shape === "trapezoid" ||
+      payload.shape === "custom"
+        ? payload.shape
+        : "rect",
+    position,
+    size: {
+      width: toFiniteNumber(sizeRecord.width, 1),
+      height: toFiniteNumber(sizeRecord.height, 1),
+    },
+    rotation: toFiniteNumber(payload.rotation),
+    layers,
+    roundrectRatio: toFiniteNumber(payload.roundrectRatio, undefined),
+    drillDiameter: toFiniteNumber(payload.drillDiameter, undefined),
+    drillOffset: normalizePoint(payload.drillOffset) ?? undefined,
+  };
+}
+
+function normalizeGraphic(payload: unknown): NormalizedGraphic | null {
+  if (!isRecord(payload) || typeof payload.type !== "string") {
+    return null;
+  }
+
+  const layer = typeof payload.layer === "string" ? payload.layer : "F.Fab";
+  const data = isRecord(payload.data) ? { ...payload.data } : null;
+
+  if (data) {
+    if (payload.type === "poly") {
+      const points = Array.isArray(data.points)
+        ? data.points.map(normalizePoint).filter((point): point is Point2D => point !== null)
+        : Array.isArray(data.pts)
+          ? data.pts
+              .map((entry) => {
+                if (!Array.isArray(entry) || entry[0] !== "xy") {
+                  return null;
+                }
+                return normalizePoint({ x: entry[1], y: entry[2] });
+              })
+              .filter((point): point is Point2D => point !== null)
+          : [];
+
+      return { type: "poly", layer, data: { ...data, points } };
+    }
+
+    return {
+      type: payload.type as NormalizedGraphic["type"],
+      layer,
+      data: {
+        ...data,
+        start: normalizePoint(data.start) ?? data.start,
+        end: normalizePoint(data.end) ?? data.end,
+        mid: normalizePoint(data.mid) ?? data.mid,
+        center: normalizePoint(data.center) ?? data.center,
+      },
+    };
+  }
+
+  if (payload.type === "line") {
+    return {
+      type: "line",
+      layer,
+      data: {
+        start: normalizePoint(payload.start),
+        end: normalizePoint(payload.end),
+        width: toFiniteNumber(payload.strokeWidth, 0.12),
+      },
+    };
+  }
+
+  if (payload.type === "rect") {
+    const center = normalizePoint(payload.position);
+    if (!center) {
+      return null;
+    }
+    const halfWidth = toFiniteNumber(payload.width) / 2;
+    const halfHeight = toFiniteNumber(payload.height) / 2;
+    return {
+      type: "rect",
+      layer,
+      data: {
+        start: { x: center.x - halfWidth, y: center.y - halfHeight },
+        end: { x: center.x + halfWidth, y: center.y + halfHeight },
+        width: toFiniteNumber(payload.strokeWidth, 0.12),
+        fill: payload.filled ? "solid" : "none",
+      },
+    };
+  }
+
+  if (payload.type === "circle") {
+    const center = normalizePoint(payload.center);
+    if (!center) {
+      return null;
+    }
+    const radius = toFiniteNumber(payload.radius);
+    return {
+      type: "circle",
+      layer,
+      data: {
+        center,
+        end: { x: center.x + radius, y: center.y },
+        width: toFiniteNumber(payload.strokeWidth, 0.12),
+        fill: payload.filled ? "solid" : "none",
+      },
+    };
+  }
+
+  if (payload.type === "polygon") {
+    const points = Array.isArray(payload.points)
+      ? payload.points.map(normalizePoint).filter((point): point is Point2D => point !== null)
+      : [];
+    return {
+      type: "poly",
+      layer,
+      data: {
+        points,
+        width: toFiniteNumber(payload.strokeWidth, 0.12),
+        fill: payload.filled ? "solid" : "none",
+      },
+    };
+  }
+
+  if (payload.type === "text") {
+    return {
+      type: "text",
+      layer,
+      data: {
+        at: [
+          toFiniteNumber(isRecord(payload.position) ? payload.position.x : undefined),
+          toFiniteNumber(isRecord(payload.position) ? payload.position.y : undefined),
+          toFiniteNumber(payload.rotation),
+        ],
+        __args: [payload.content],
+        width: toFiniteNumber(payload.strokeWidth, 0.12),
+      },
+    };
+  }
+
+  return null;
+}
+
+function inferFootprintType(
+  pads: ParsedKicadFootprint["pads"],
+): ParsedKicadFootprint["attributes"]["type"] {
+  if (pads.some((pad) => pad.type === "thru_hole" || pad.type === "np_thru_hole")) {
+    return "through_hole";
+  }
+  if (pads.some((pad) => pad.type === "smd")) {
+    return "smd";
+  }
+  return "unknown";
+}
+
+function normalizeFootprintPayload(payload: unknown): ParsedKicadFootprint | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const pads = Array.isArray(payload.pads)
+    ? payload.pads.map(normalizePad).filter((pad): pad is ParsedKicadFootprint["pads"][number] => pad !== null)
+    : [];
+  const graphics = Array.isArray(payload.graphics)
+    ? payload.graphics
+        .map(normalizeGraphic)
+        .filter((graphic): graphic is ParsedKicadFootprint["graphics"][number] => graphic !== null)
+    : [];
+
+  const metadata = isRecord(payload.metadata) ? payload.metadata : null;
+  const importPreservation = isRecord(payload.importPreservation)
+    ? payload.importPreservation
+    : null;
+  const model3dRefsSource = Array.isArray(payload.model3dRefs)
+    ? payload.model3dRefs
+    : Array.isArray(importPreservation?.model3dReferences)
+      ? importPreservation.model3dReferences
+      : [];
+  const model3dRefs = model3dRefsSource.filter(isRecord).map((ref) => ({
+    path: typeof ref.path === "string" ? ref.path : "",
+    resolvedFileName:
+      typeof ref.resolvedFileName === "string" ? ref.resolvedFileName : "",
+    offset: isRecord(ref.offset)
+      ? {
+          x: toFiniteNumber(ref.offset.x),
+          y: toFiniteNumber(ref.offset.y),
+          z: toFiniteNumber(ref.offset.z),
+        }
+      : { x: 0, y: 0, z: 0 },
+    scale: isRecord(ref.scale)
+      ? {
+          x: toFiniteNumber(ref.scale.x, 1),
+          y: toFiniteNumber(ref.scale.y, 1),
+          z: toFiniteNumber(ref.scale.z, 1),
+        }
+      : { x: 1, y: 1, z: 1 },
+    rotation: isRecord(ref.rotation)
+      ? {
+          x: toFiniteNumber(ref.rotation.x),
+          y: toFiniteNumber(ref.rotation.y),
+          z: toFiniteNumber(ref.rotation.z),
+        }
+      : { x: 0, y: 0, z: 0 },
+  }));
+
+  const rawSource =
+    typeof payload.rawSource === "string"
+      ? payload.rawSource
+      : typeof payload.rawKicadSource === "string"
+        ? payload.rawKicadSource
+        : typeof importPreservation?.rawSource === "string"
+          ? importPreservation.rawSource
+          : "";
+
+  const attributesSource = isRecord(payload.attributes)
+    ? payload.attributes
+    : isRecord(importPreservation?.attributes)
+      ? importPreservation.attributes
+      : null;
+
+  return {
+    name:
+      typeof payload.name === "string"
+        ? payload.name
+        : typeof metadata?.name === "string"
+          ? metadata.name
+          : "",
+    description:
+      typeof payload.description === "string"
+        ? payload.description
+        : typeof metadata?.description === "string"
+          ? metadata.description
+          : "",
+    tags: Array.isArray(payload.tags)
+      ? payload.tags.filter((tag): tag is string => typeof tag === "string")
+      : [],
+    pads,
+    graphics,
+    model3dRefs,
+    attributes: {
+      type:
+        attributesSource?.type === "smd" ||
+        attributesSource?.type === "through_hole" ||
+        attributesSource?.type === "virtual"
+          ? attributesSource.type
+          : inferFootprintType(pads),
+    },
+    warnings: Array.isArray(payload.warnings)
+      ? payload.warnings.filter(isRecord).map((warning) => ({
+          code: typeof warning.code === "string" ? warning.code : "warning",
+          message:
+            typeof warning.message === "string" ? warning.message : "Unknown warning",
+        }))
+      : Array.isArray(importPreservation?.warnings)
+        ? importPreservation.warnings.filter(isRecord).map((warning) => ({
+            code: typeof warning.code === "string" ? warning.code : "warning",
+            message:
+              typeof warning.message === "string"
+                ? warning.message
+                : "Unknown warning",
+          }))
+        : [],
+    rawSource,
+  };
 }
 
 function getFootprintBounds(footprint: ParsedKicadFootprint): {
@@ -136,7 +457,17 @@ function resolvePlacementData(
       variant.footprintOptions.find((option) => option.isDefault) ??
       variant.footprintOptions[0];
 
-    if (!footprintOption?.kicadPayload) {
+    if (!footprintOption) {
+      console.warn("Skipping PCB sync for missing footprint option", {
+        componentId: symbol.componentId,
+        variantId: variant.id,
+        symbolId: symbol.id,
+      });
+      continue;
+    }
+
+    const footprintData = normalizeFootprintPayload(footprintOption.kicadPayload);
+    if (!footprintData) {
       console.warn("Skipping PCB sync for missing footprint payload", {
         componentId: symbol.componentId,
         variantId: variant.id,
@@ -150,7 +481,7 @@ function resolvePlacementData(
       placementId: `pcb-${symbol.id}`,
       variantId: variant.id,
       footprintOptionId: footprintOption.id,
-      footprintData: footprintOption.kicadPayload as ParsedKicadFootprint,
+      footprintData,
     });
   }
 

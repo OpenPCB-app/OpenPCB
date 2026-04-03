@@ -771,7 +771,7 @@ export function DesignScreen() {
       </div>
 
       {/* Status Bar */}
-      <StatusBar />
+      <StatusBar designTab={designTab} />
     </div>
   );
 }

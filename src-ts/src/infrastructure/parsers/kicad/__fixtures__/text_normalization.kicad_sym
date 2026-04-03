@@ -1,0 +1,16 @@
+(kicad_symbol_lib
+  (version 20231120)
+  (generator "openpcb_test")
+  (symbol "BIG_PASSIVE_WITH_TEXT"
+    (property "Reference" "R" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "BIG_PASSIVE_WITH_TEXT" (at 0 -2.54 0) (effects (font (size 1.27 1.27))))
+    (symbol "BIG_PASSIVE_WITH_TEXT_0_1"
+      (rectangle (start -12.7 -6.35) (end 12.7 6.35) (stroke (width 0) (type default)) (fill (type none)))
+      (text "hello" (at 0 10.16 0) (effects (font (size 5.08 5.08))))
+    )
+    (symbol "BIG_PASSIVE_WITH_TEXT_1_1"
+      (pin passive line (at -17.78 0 0) (length 5.08) (name "~" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+      (pin passive line (at 17.78 0 180) (length 5.08) (name "~" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))))
+    )
+  )
+)

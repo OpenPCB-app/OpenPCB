@@ -1,0 +1,90 @@
+- generic [ref=e2]:
+  - generic [ref=e8]:
+    - complementary [ref=e9]:
+      - generic [ref=e10]:
+        - button "OpenPCB Home" [ref=e11]:
+          - img [ref=e12]
+        - navigation [ref=e19]:
+          - button "Home" [ref=e20]:
+            - img [ref=e21]
+            - generic [ref=e26]: Home
+          - button "Design" [ref=e27]:
+            - img [ref=e28]
+            - generic [ref=e33]: Design
+          - button "Library" [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e39]: Library
+          - button "Chat" [ref=e40]:
+            - img [ref=e41]
+            - generic [ref=e43]: Chat
+          - button "Notes" [ref=e44]:
+            - img [ref=e45]
+            - generic [ref=e48]: Notes
+      - generic [ref=e49]:
+        - button "Settings" [ref=e50]:
+          - img [ref=e51]
+          - generic [ref=e54]: Settings
+        - generic [ref=e55]: U
+    - main [ref=e56]:
+      - generic [ref=e116]:
+        - generic [ref=e117]:
+          - generic [ref=e119]:
+            - paragraph [ref=e120]: Test Design
+            - paragraph [ref=e121]: Design Workspace
+          - generic [ref=e122]:
+            - button "Schem" [ref=e123]
+            - button "PCB" [active] [ref=e124]
+            - button "3D" [ref=e125]
+            - button "BOM" [ref=e126]
+          - generic [ref=e127]:
+            - button "Close" [ref=e128]
+            - button "Save" [ref=e129]
+            - button "Share" [ref=e130]
+            - button "Toggle AI copilot" [ref=e131]: AI
+        - generic [ref=e133]:
+          - generic [ref=e135]:
+            - generic [ref=e136]:
+              - generic [ref=e137]: PCB
+              - button [ref=e138]:
+                - img [ref=e139]
+            - generic [ref=e217]:
+              - generic [ref=e218]:
+                - heading "PCB Setup" [level=3] [ref=e219]
+                - generic [ref=e220]:
+                  - heading "Board Size" [level=3] [ref=e222]
+                  - generic [ref=e223]:
+                    - generic [ref=e224]:
+                      - text: Width (mm)
+                      - spinbutton "Width (mm)" [ref=e225]: "100"
+                    - generic [ref=e226]:
+                      - text: Height (mm)
+                      - spinbutton "Height (mm)" [ref=e227]: "100"
+              - generic [ref=e228]:
+                - heading "Layers" [level=3] [ref=e229]
+                - generic [ref=e230]:
+                  - button "F.Cu" [ref=e231]
+                  - button "B.Cu" [ref=e232]
+                - generic [ref=e233]:
+                  - generic [ref=e234]:
+                    - generic [ref=e235]: F.Cu
+                    - checkbox "F.Cu" [checked] [ref=e236]
+                  - generic [ref=e237]:
+                    - generic [ref=e238]: B.Cu
+                    - checkbox "B.Cu" [checked] [ref=e239]
+                  - generic [ref=e240]:
+                    - generic [ref=e241]: F.SilkS
+                    - checkbox "F.SilkS" [checked] [ref=e242]
+                  - generic [ref=e243]:
+                    - generic [ref=e244]: B.SilkS
+                    - checkbox "B.SilkS" [checked] [ref=e245]
+              - generic [ref=e246]:
+                - heading "Selection" [level=3] [ref=e247]
+                - paragraph [ref=e248]: Select a component on the PCB canvas.
+          - separator [ref=e184]:
+            - img [ref=e186]
+        - generic [ref=e213]:
+          - generic [ref=e214]: "Grid: 0.51mm"
+          - generic [ref=e215]: "Zoom: 0%"
+          - generic [ref=e216]: select
+  - region "Notifications (F8)":
+    - list

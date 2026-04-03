@@ -190,7 +190,7 @@ export function FloatingPropertiesPopover() {
       <button
         type="button"
         aria-label="Close symbol properties popover"
-        className="absolute inset-0 cursor-default bg-transparent"
+        className="pointer-events-auto absolute inset-0 cursor-default bg-transparent"
         data-testid="floating-properties-backdrop"
         onClick={() => setPopoverTarget(null)}
       />

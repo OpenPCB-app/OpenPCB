@@ -1,0 +1,90 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - heading "PCB Setup" [level=3] [ref=e7]
+        - generic [ref=e8]:
+          - heading "Board Size" [level=3] [ref=e10]
+          - generic [ref=e11]:
+            - generic [ref=e12]:
+              - text: Width (mm)
+              - spinbutton "Width (mm)" [ref=e13]: "100"
+            - generic [ref=e14]:
+              - text: Height (mm)
+              - spinbutton "Height (mm)" [ref=e15]: "100"
+      - generic [ref=e16]:
+        - heading "Layers" [level=3] [ref=e17]
+        - generic [ref=e18]:
+          - button "F.Cu" [ref=e19]
+          - button "B.Cu" [ref=e20]
+        - generic [ref=e21]:
+          - generic [ref=e22]:
+            - generic [ref=e23]: F.Cu
+            - checkbox "F.Cu" [checked] [ref=e24]
+          - generic [ref=e25]:
+            - generic [ref=e26]: B.Cu
+            - checkbox "B.Cu" [checked] [ref=e27]
+          - generic [ref=e28]:
+            - generic [ref=e29]: F.SilkS
+            - checkbox "F.SilkS" [checked] [ref=e30]
+          - generic [ref=e31]:
+            - generic [ref=e32]: B.SilkS
+            - checkbox "B.SilkS" [checked] [ref=e33]
+      - generic [ref=e34]:
+        - heading "Selection" [level=3] [ref=e35]
+        - paragraph [ref=e36]: Select a component on the PCB canvas.
+  - main [ref=e37]:
+    - generic:
+      - generic:
+        - paragraph: PCB E2E
+        - button "Reset" [ref=e38]
+      - generic:
+        - generic: traces
+        - generic: "0"
+      - generic:
+        - generic: vias
+        - generic: "0"
+      - generic:
+        - generic: ratsnest
+        - generic: "1"
+      - generic:
+        - generic: selected
+        - generic: none
+      - generic:
+        - generic: tool
+        - generic: select
+      - generic:
+        - generic: layer
+        - generic: F.Cu
+      - generic:
+        - generic: offset-x
+        - generic: "140.00"
+      - generic:
+        - generic: offset-y
+        - generic: "40.00"
+      - generic:
+        - generic: zoom
+        - generic: "5.1800"
+      - generic:
+        - generic: routing
+        - generic: none
+      - generic:
+        - generic: width
+        - generic: none
+      - generic:
+        - generic: elbow
+        - generic: none
+    - generic [ref=e40]:
+      - paragraph [ref=e41]: PCB Harness
+      - generic [ref=e42]:
+        - generic [ref=e43]:
+          - button "Select" [pressed] [ref=e44]:
+            - img
+          - button "Route Traces" [ref=e45]:
+            - img
+        - generic [ref=e46]:
+          - button "Undo" [disabled]:
+            - img
+          - button "Redo" [disabled]:
+            - img
+        - generic [ref=e47]: Select

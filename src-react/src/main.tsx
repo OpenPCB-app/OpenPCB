@@ -11,7 +11,10 @@ import "./styles/markdown.css";
 import Layout from "@/layout/Layout.tsx";
 import { GlobalStateProvider } from "./components/GlobalStateProvider.tsx";
 import { SidebarButtonsProvider } from "./contexts/SidebarButtonsContext.tsx";
+import { PcbEditorE2EHarness } from "@/testing/PcbEditorE2EHarness";
 import { SchematicEditorE2EHarness } from "@/testing/SchematicEditorE2EHarness";
+
+const e2eMode = new URLSearchParams(window.location.search).get("e2e");
 
 const root = document.getElementById("root");
 if (!root) {
@@ -19,11 +22,19 @@ if (!root) {
 }
 
 ReactDOM.createRoot(root).render(
-  new URLSearchParams(window.location.search).get("e2e") === "schematic" ? (
+  e2eMode === "schematic" ? (
     <React.StrictMode>
       <BackendURLProvider>
         <ThemeProvider>
           <SchematicEditorE2EHarness />
+        </ThemeProvider>
+      </BackendURLProvider>
+    </React.StrictMode>
+  ) : e2eMode === "pcb" ? (
+    <React.StrictMode>
+      <BackendURLProvider>
+        <ThemeProvider>
+          <PcbEditorE2EHarness />
         </ThemeProvider>
       </BackendURLProvider>
     </React.StrictMode>
