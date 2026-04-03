@@ -30,7 +30,9 @@ export function PcbSidebar() {
   const toggleLayerVisibility = usePcbStore((state) => state.toggleLayerVisibility);
   const rotatePlacement = usePcbStore((state) => state.rotatePlacement);
   const flipPlacement = usePcbStore((state) => state.flipPlacement);
-  const deletePlacement = usePcbStore((state) => state.deletePlacement);
+  const deleteSelectedEntities = usePcbStore(
+    (state) => state.deleteSelectedEntities,
+  );
 
   const selectedPlacement = useMemo(() => {
     if (!document) {
@@ -129,13 +131,13 @@ export function PcbSidebar() {
               >
                 {selectedPlacement.layer === "F.Cu" ? "Flip to back" : "Flip to front"}
               </button>
-              <button
-                type="button"
-                className="h-8 rounded-md border border-red-500/30 px-2 text-left text-xs text-red-300 hover:bg-red-500/10"
-                onClick={() => deletePlacement(selectedPlacement.id)}
-              >
-                Delete component
-              </button>
+                <button
+                  type="button"
+                  className="h-8 rounded-md border border-red-500/30 px-2 text-left text-xs text-red-300 hover:bg-red-500/10"
+                  onClick={deleteSelectedEntities}
+                >
+                  Delete component
+                </button>
             </div>
           </div>
         ) : (

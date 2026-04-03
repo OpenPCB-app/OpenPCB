@@ -394,6 +394,17 @@ export function DesignScreen() {
         }
 
         if (!isTextEntry) {
+          if (event.key === "Delete" || event.key === "Backspace") {
+            if (pcbStore.selectedIds.size > 0) {
+              if (event.key === "Backspace") {
+                event.preventDefault();
+              }
+
+              pcbStore.deleteSelectedEntities();
+            }
+            return;
+          }
+
           // Escape — cancel routing or switch to select
           if (event.key === "Escape") {
             if (pcbStore.routingSession) {

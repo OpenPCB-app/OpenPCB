@@ -30,7 +30,7 @@ type InteractionState =
 export function usePcbInteractionController() {
   const stateRef = useRef<InteractionState>({ type: "idle" });
 
-  const selectPlacement = usePcbStore((s) => s.selectPlacement);
+  const selectEntity = usePcbStore((s) => s.selectEntity);
   const clearSelection = usePcbStore((s) => s.clearSelection);
   const movePlacement = usePcbStore((s) => s.movePlacement);
 
@@ -45,6 +45,8 @@ export function usePcbInteractionController() {
 
       const hit = hitTestPcb(
         store.document.placements,
+        store.document.traces,
+        store.document.vias,
         worldPoint,
         store.activeLayer,
       );
@@ -99,6 +101,18 @@ export function usePcbInteractionController() {
         return;
       }
 
+      if (hit?.kind === "trace") {
+        selectEntity(hit.traceId);
+        stateRef.current = { type: "idle" };
+        return;
+      }
+
+      if (hit?.kind === "via") {
+        selectEntity(hit.viaId);
+        stateRef.current = { type: "idle" };
+        return;
+      }
+
       if (hit?.kind === "placement" || hit?.kind === "pad") {
         const placementId = hit.placementId;
         const placement = store.document.placements.find(
@@ -106,7 +120,7 @@ export function usePcbInteractionController() {
         );
         if (!placement) return;
 
-        selectPlacement(placementId);
+        selectEntity(placementId);
 
         stateRef.current = {
           type: "pending_drag",
@@ -120,7 +134,7 @@ export function usePcbInteractionController() {
         stateRef.current = { type: "idle" };
       }
     },
-    [selectPlacement, clearSelection],
+    [selectEntity, clearSelection],
   );
 
   const handleMouseMove = useCallback(

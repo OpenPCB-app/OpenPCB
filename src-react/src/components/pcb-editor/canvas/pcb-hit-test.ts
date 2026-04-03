@@ -1,9 +1,11 @@
-import type { PcbPlacement, Point2D } from "../pcb-types";
+import type { PcbPlacement, Point2D, TraceSegment, Via } from "../pcb-types";
 import type { ParsedKicadFootprint } from "@/lib/api/component-api";
 
 export type PcbHitTarget =
   | { kind: "placement"; placementId: string }
   | { kind: "pad"; placementId: string; padNumber: string }
+  | { kind: "trace"; traceId: string }
+  | { kind: "via"; viaId: string }
   | null;
 
 type ParsedPad = ParsedKicadFootprint["pads"][number];
@@ -167,8 +169,54 @@ function hitTestPlacementBounds(
   );
 }
 
+function pointToSegmentDistance(
+  point: Point2D,
+  start: Point2D,
+  end: Point2D,
+): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+
+  if (lengthSquared === 0) {
+    return Math.sqrt(
+      (point.x - start.x) * (point.x - start.x) +
+        (point.y - start.y) * (point.y - start.y),
+    );
+  }
+
+  const t = Math.max(
+    0,
+    Math.min(
+      1,
+      ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared,
+    ),
+  );
+  const projection = {
+    x: start.x + t * dx,
+    y: start.y + t * dy,
+  };
+
+  return Math.sqrt(
+    (point.x - projection.x) * (point.x - projection.x) +
+      (point.y - projection.y) * (point.y - projection.y),
+  );
+}
+
+function hitTestTrace(trace: TraceSegment, worldPoint: Point2D): boolean {
+  return pointToSegmentDistance(worldPoint, trace.start, trace.end) < trace.width / 2 + 0.1;
+}
+
+function hitTestVia(via: Via, worldPoint: Point2D): boolean {
+  const dx = worldPoint.x - via.position.x;
+  const dy = worldPoint.y - via.position.y;
+  return Math.sqrt(dx * dx + dy * dy) < via.padDiameter / 2;
+}
+
 export function hitTestPcb(
   placements: PcbPlacement[],
+  traces: TraceSegment[],
+  vias: Via[],
   worldPoint: Point2D,
   activeLayer: "F.Cu" | "B.Cu",
 ): PcbHitTarget {
@@ -192,6 +240,21 @@ export function hitTestPcb(
           padNumber: pad.number,
         };
       }
+    }
+  }
+
+  for (const via of vias) {
+    if (hitTestVia(via, worldPoint)) {
+      return { kind: "via", viaId: via.id };
+    }
+  }
+
+  const activeLayerTraces = traces.filter((trace) => trace.layer === activeLayer);
+  const otherLayerTraces = traces.filter((trace) => trace.layer !== activeLayer);
+
+  for (const trace of [...activeLayerTraces, ...otherLayerTraces]) {
+    if (hitTestTrace(trace, worldPoint)) {
+      return { kind: "trace", traceId: trace.id };
     }
   }
 

@@ -128,24 +128,57 @@ export function PcbCanvas() {
 
       for (const id of store.selectedIds) {
         const placement = doc.placements.find((p) => p.id === id);
-        if (!placement) continue;
+        if (placement) {
+          const bounds = getPlacementBounds(placement);
+          const topLeft = pcbToScreen(bounds.minX, bounds.minY, vp);
+          const bottomRight = pcbToScreen(bounds.maxX, bounds.maxY, vp);
 
-        const bounds = getPlacementBounds(placement);
-        const topLeft = pcbToScreen(bounds.minX, bounds.minY, vp);
-        const bottomRight = pcbToScreen(bounds.maxX, bounds.maxY, vp);
+          ctx.save();
+          ctx.strokeStyle = "#00FF00";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([6, 3]);
+          ctx.strokeRect(
+            topLeft.x,
+            topLeft.y,
+            bottomRight.x - topLeft.x,
+            bottomRight.y - topLeft.y,
+          );
+          ctx.setLineDash([]);
+          ctx.restore();
+          continue;
+        }
 
-        ctx.save();
-        ctx.strokeStyle = "#00FF00";
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 3]);
-        ctx.strokeRect(
-          topLeft.x,
-          topLeft.y,
-          bottomRight.x - topLeft.x,
-          bottomRight.y - topLeft.y,
-        );
-        ctx.setLineDash([]);
-        ctx.restore();
+        const trace = doc.traces.find((item) => item.id === id);
+        if (trace) {
+          const start = pcbToScreen(trace.start.x, trace.start.y, vp);
+          const end = pcbToScreen(trace.end.x, trace.end.y, vp);
+
+          ctx.save();
+          ctx.strokeStyle = "#FFFFFF";
+          ctx.lineWidth = trace.width * vp.zoom + 4;
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          ctx.beginPath();
+          ctx.moveTo(start.x, start.y);
+          ctx.lineTo(end.x, end.y);
+          ctx.stroke();
+          ctx.restore();
+          continue;
+        }
+
+        const via = doc.vias.find((item) => item.id === id);
+        if (via) {
+          const center = pcbToScreen(via.position.x, via.position.y, vp);
+          const radius = (via.padDiameter / 2) * vp.zoom + 3;
+
+          ctx.save();
+          ctx.strokeStyle = "#FFFFFF";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
       }
     },
     [],

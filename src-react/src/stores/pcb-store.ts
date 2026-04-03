@@ -81,9 +81,9 @@ interface PcbStoreState {
   movePlacement: (id: string, position: Point2D) => void;
   rotatePlacement: (id: string, delta: number) => void;
   flipPlacement: (id: string) => void;
-  selectPlacement: (id: string) => void;
+  selectEntity: (id: string) => void;
   clearSelection: () => void;
-  deletePlacement: (id: string) => void;
+  deleteSelectedEntities: () => void;
   setBoardSize: (width: number, height: number) => void;
   setGridSize: (size: number) => void;
   setActiveLayer: (layer: "F.Cu" | "B.Cu") => void;
@@ -284,7 +284,7 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
     });
   },
 
-  selectPlacement: (id) => {
+  selectEntity: (id) => {
     set({ selectedIds: new Set([id]) });
   },
 
@@ -292,22 +292,34 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
     set({ selectedIds: new Set() });
   },
 
-  deletePlacement: (id) => {
+  deleteSelectedEntities: () => {
     const { document, selectedIds } = get();
-    if (!document) return;
+    if (!document || selectedIds.size === 0) return;
 
-    pcbUndoManager.pushUndo("Delete placement", document);
+    pcbUndoManager.pushUndo("Delete selected entities", document);
 
-    const placements = document.placements.filter((p) => p.id !== id);
-    const newDoc = { ...document, placements };
+    const placementIds = new Set(document.placements.map((placement) => placement.id));
+    const traceIds = new Set(document.traces.map((trace) => trace.id));
+    const viaIds = new Set(document.vias.map((via) => via.id));
 
-    const newSelectedIds = new Set(selectedIds);
-    newSelectedIds.delete(id);
+    const placements = document.placements.filter(
+      (placement) => !selectedIds.has(placement.id),
+    );
+    const traces = document.traces.filter((trace) => !selectedIds.has(trace.id));
+    const vias = document.vias.filter((via) => !selectedIds.has(via.id));
+    const newDoc = { ...document, placements, traces, vias };
+
+    const removedSomething = Array.from(selectedIds).some(
+      (id) => placementIds.has(id) || traceIds.has(id) || viaIds.has(id),
+    );
+    if (!removedSomething) {
+      return;
+    }
 
     set({
       document: newDoc,
       ratsnest: recalculateRatsnest(newDoc),
-      selectedIds: newSelectedIds,
+      selectedIds: new Set(),
     });
   },
 
