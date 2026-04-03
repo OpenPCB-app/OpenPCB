@@ -1,6 +1,10 @@
 import { useCallback, useRef } from "react";
 import { usePcbStore } from "@/stores/pcb-store";
-import { hitTestPcb } from "./canvas/pcb-hit-test";
+import {
+  hitTestPcb,
+  getPadWorldPosition,
+  findPadNet,
+} from "./canvas/pcb-hit-test";
 import { screenToPcb, snapToGrid } from "./canvas/pcb-viewport";
 import type { Point2D } from "./pcb-types";
 
@@ -20,7 +24,8 @@ type InteractionState =
       placementId: string;
       startWorld: Point2D;
       originalPosition: Point2D;
-    };
+    }
+  | { type: "routing" };
 
 export function usePcbInteractionController() {
   const stateRef = useRef<InteractionState>({ type: "idle" });
@@ -43,6 +48,56 @@ export function usePcbInteractionController() {
         worldPoint,
         store.activeLayer,
       );
+
+      if (store.activeTool === "route") {
+        if (store.routingSession) {
+          if (hit?.kind === "pad") {
+            const hitNetId = findPadNet(
+              store.document.placements,
+              store.document.nets,
+              hit.placementId,
+              hit.padNumber,
+            );
+            if (hitNetId === store.routingSession.netId) {
+              const padPos = getPadWorldPosition(
+                store.document.placements,
+                hit.placementId,
+                hit.padNumber,
+              );
+              if (padPos) {
+                store.completeRoute(padPos);
+                stateRef.current = { type: "idle" };
+              }
+            }
+          } else {
+            store.addRoutingCorner(worldPoint);
+          }
+        } else {
+          if (hit?.kind === "pad") {
+            const placement = store.document.placements.find(
+              (p) => p.id === hit.placementId,
+            );
+            if (placement) {
+              const padPos = getPadWorldPosition(
+                store.document.placements,
+                hit.placementId,
+                hit.padNumber,
+              );
+              if (padPos) {
+                store.startRouting(
+                  {
+                    componentId: placement.schematicSymbolId,
+                    padNumber: hit.padNumber,
+                  },
+                  padPos,
+                );
+                stateRef.current = { type: "routing" };
+              }
+            }
+          }
+        }
+        return;
+      }
 
       if (hit?.kind === "placement" || hit?.kind === "pad") {
         const placementId = hit.placementId;
@@ -73,6 +128,15 @@ export function usePcbInteractionController() {
       const state = stateRef.current;
       const store = usePcbStore.getState();
 
+      const localX = screenX - canvasBounds.left;
+      const localY = screenY - canvasBounds.top;
+      const worldPoint = screenToPcb(localX, localY, store.viewport);
+
+      if (store.routingSession) {
+        store.updateRoutingPreview(worldPoint);
+        return;
+      }
+
       if (state.type === "pending_drag") {
         const dx = screenX - state.startScreen.x;
         const dy = screenY - state.startScreen.y;
@@ -89,10 +153,6 @@ export function usePcbInteractionController() {
       }
 
       if (stateRef.current.type === "dragging") {
-        const localX = screenX - canvasBounds.left;
-        const localY = screenY - canvasBounds.top;
-        const worldPoint = screenToPcb(localX, localY, store.viewport);
-
         const movedPoint = {
           x:
             stateRef.current.originalPosition.x +
@@ -109,6 +169,8 @@ export function usePcbInteractionController() {
   );
 
   const handleMouseUp = useCallback(() => {
+    const store = usePcbStore.getState();
+    if (store.routingSession) return;
     stateRef.current = { type: "idle" };
   }, []);
 
@@ -116,10 +178,15 @@ export function usePcbInteractionController() {
     return stateRef.current.type === "dragging";
   }, []);
 
+  const isRouting = useCallback(() => {
+    return usePcbStore.getState().routingSession !== null;
+  }, []);
+
   return {
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
     isDragging,
+    isRouting,
   };
 }

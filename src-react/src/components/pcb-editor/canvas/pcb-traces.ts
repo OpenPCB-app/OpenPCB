@@ -1,4 +1,4 @@
-import type { TraceSegment, Via, PcbViewport, Point2D } from "../pcb-types";
+import type { TraceSegment, Via, PcbViewport } from "../pcb-types";
 import { LAYER_COLORS, PCB_BACKGROUND } from "../layer-colors";
 import { pcbToScreen } from "./pcb-viewport";
 
@@ -42,61 +42,79 @@ export function renderVias(
   viewport: PcbViewport,
 ): void {
   for (const via of vias) {
-    const screen = pcbToScreen(via.position.x, via.position.y, viewport);
-    const outerRadius = (via.padDiameter / 2) * viewport.zoom;
-    const innerRadius = (via.drillDiameter / 2) * viewport.zoom;
-
-    ctx.fillStyle = VIA_COPPER_COLOR;
-    ctx.beginPath();
-    ctx.arc(screen.x, screen.y, outerRadius, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = PCB_BACKGROUND;
-    ctx.beginPath();
-    ctx.arc(screen.x, screen.y, innerRadius, 0, Math.PI * 2);
-    ctx.fill();
+    renderVia(ctx, via, viewport);
   }
-}
-
-export interface RoutingPreview {
-  points: Point2D[];
-  width: number;
-  layer: string;
 }
 
 export function renderRoutingPreview(
   ctx: CanvasRenderingContext2D,
-  preview: RoutingPreview | null,
+  segments: TraceSegment[],
+  committedSegments: TraceSegment[],
+  previewVia: Via | null,
   viewport: PcbViewport,
 ): void {
-  if (!preview || preview.points.length < 2) return;
-
-  const baseColor = LAYER_COLORS[preview.layer] ?? "#888888";
-
   ctx.save();
-  ctx.strokeStyle = baseColor;
-  ctx.lineWidth = preview.width * viewport.zoom;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.setLineDash([4, 4]);
 
-  ctx.beginPath();
-  const first = pcbToScreen(
-    preview.points[0]!.x,
-    preview.points[0]!.y,
-    viewport,
-  );
-  ctx.moveTo(first.x, first.y);
+  for (const seg of committedSegments) {
+    const baseColor = LAYER_COLORS[seg.layer] ?? "#888888";
+    ctx.strokeStyle = baseColor;
+    ctx.lineWidth = seg.width * viewport.zoom;
 
-  for (let i = 1; i < preview.points.length; i++) {
-    const pt = preview.points[i]!;
-    const screen = pcbToScreen(pt.x, pt.y, viewport);
-    ctx.lineTo(screen.x, screen.y);
+    const start = pcbToScreen(seg.start.x, seg.start.y, viewport);
+    const end = pcbToScreen(seg.end.x, seg.end.y, viewport);
+
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
   }
 
-  ctx.stroke();
+  ctx.setLineDash([4, 4]);
+
+  for (const seg of segments) {
+    const baseColor = LAYER_COLORS[seg.layer] ?? "#888888";
+    ctx.strokeStyle = baseColor;
+    ctx.lineWidth = seg.width * viewport.zoom;
+
+    const start = pcbToScreen(seg.start.x, seg.start.y, viewport);
+    const end = pcbToScreen(seg.end.x, seg.end.y, viewport);
+
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+  }
+
+  if (previewVia) {
+    ctx.globalAlpha = 0.6;
+    renderVia(ctx, previewVia, viewport);
+    ctx.globalAlpha = 1;
+  }
+
   ctx.setLineDash([]);
   ctx.restore();
+}
+
+function renderVia(
+  ctx: CanvasRenderingContext2D,
+  via: Via,
+  viewport: PcbViewport,
+): void {
+  const screen = pcbToScreen(via.position.x, via.position.y, viewport);
+  const outerRadius = (via.padDiameter / 2) * viewport.zoom;
+  const innerRadius = (via.drillDiameter / 2) * viewport.zoom;
+
+  ctx.fillStyle = VIA_COPPER_COLOR;
+  ctx.beginPath();
+  ctx.arc(screen.x, screen.y, outerRadius, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = PCB_BACKGROUND;
+  ctx.beginPath();
+  ctx.arc(screen.x, screen.y, innerRadius, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function applyAlpha(hexColor: string, alpha: number): string {

@@ -4,6 +4,9 @@ import type {
   PcbViewport,
   Point2D,
   RatsnestLine,
+  TraceSegment,
+  Via,
+  PadReference,
 } from "@/components/pcb-editor/pcb-types";
 import { createDefaultPcbViewport } from "@/components/pcb-editor/pcb-types";
 import {
@@ -20,10 +23,36 @@ import {
 } from "@/components/pcb/symbol-library";
 import type { ComponentType } from "@shared/types/component-library-schema.types";
 import { createUndoManager, type UndoManager } from "@/lib/undo-manager";
+import { calculateManhattanPath } from "@/components/pcb-editor/routing/manhattan-path";
+import {
+  resolveNetClassWidths,
+  findWidthIndex,
+} from "@/components/pcb-editor/routing/net-class-resolve";
+
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+export interface RoutingSession {
+  netId: string;
+  layer: string;
+  width: number;
+  widthPresets: number[];
+  widthIndex: number;
+  elbowDirection: "horizontal_first" | "vertical_first";
+  committedSegments: TraceSegment[];
+  committedVias: Via[];
+  startPoint: Point2D;
+  previewSegments: TraceSegment[];
+  viaDiameter: number;
+  viaDrill: number;
+}
 
 interface PcbStoreState {
   document: PcbDocument | null;
   ratsnest: RatsnestLine[];
+  routingSession: RoutingSession | null;
+  lastCursorPosition: Point2D | null;
 
   viewport: PcbViewport;
   activeLayer: "F.Cu" | "B.Cu";
@@ -62,6 +91,15 @@ interface PcbStoreState {
   setViewport: (viewport: PcbViewport) => void;
   pan: (dx: number, dy: number) => void;
   zoomAt: (centerX: number, centerY: number, factor: number) => void;
+
+  startRouting: (padRef: PadReference, worldPosition: Point2D) => void;
+  updateRoutingPreview: (cursorPosition: Point2D) => void;
+  addRoutingCorner: (position: Point2D) => void;
+  placeRoutingVia: (position: Point2D) => void;
+  completeRoute: (targetPadPosition: Point2D) => void;
+  cancelRouting: () => void;
+  cycleTraceWidth: (direction: 1 | -1) => void;
+  flipElbowDirection: () => void;
 }
 
 const DEFAULT_VISIBLE_LAYERS = new Set([
@@ -92,6 +130,8 @@ const pcbUndoManager: UndoManager<PcbDocument> =
 export const usePcbStore = create<PcbStoreState>((set, get) => ({
   document: null,
   ratsnest: [],
+  routingSession: null,
+  lastCursorPosition: null,
 
   viewport: createDefaultPcbViewport(),
   activeLayer: "F.Cu",
@@ -327,6 +367,227 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
         offsetX: centerX - (centerX - viewport.offsetX) * zoomRatio,
         offsetY: centerY - (centerY - viewport.offsetY) * zoomRatio,
         zoom: newZoom,
+      },
+    });
+  },
+
+  startRouting: (padRef, worldPosition) => {
+    const { document, activeLayer, gridSize } = get();
+    if (!document) return;
+
+    const net = document.nets.find((n) =>
+      n.padRefs.some(
+        (pr) =>
+          pr.componentId === padRef.componentId &&
+          pr.padNumber === padRef.padNumber,
+      ),
+    );
+    if (!net) return;
+
+    const resolved = resolveNetClassWidths(net.id, document);
+    const snapped = {
+      x: Math.round(worldPosition.x / gridSize) * gridSize,
+      y: Math.round(worldPosition.y / gridSize) * gridSize,
+    };
+
+    set({
+      routingSession: {
+        netId: net.id,
+        layer: activeLayer,
+        width: resolved.defaultWidth,
+        widthPresets: resolved.presets,
+        widthIndex: findWidthIndex(resolved.defaultWidth, resolved.presets),
+        elbowDirection: "horizontal_first",
+        committedSegments: [],
+        committedVias: [],
+        startPoint: snapped,
+        previewSegments: [],
+        viaDiameter: resolved.viaDiameter,
+        viaDrill: resolved.viaDrill,
+      },
+      lastCursorPosition: snapped,
+    });
+  },
+
+  updateRoutingPreview: (cursorPosition) => {
+    const { routingSession, gridSize } = get();
+    if (!routingSession) return;
+
+    const snapped = {
+      x: Math.round(cursorPosition.x / gridSize) * gridSize,
+      y: Math.round(cursorPosition.y / gridSize) * gridSize,
+    };
+
+    const previewSegments = calculateManhattanPath(
+      routingSession.startPoint,
+      snapped,
+      routingSession.elbowDirection,
+      routingSession.width,
+      routingSession.layer,
+      routingSession.netId,
+    );
+
+    set({
+      routingSession: { ...routingSession, previewSegments },
+      lastCursorPosition: snapped,
+    });
+  },
+
+  addRoutingCorner: (position) => {
+    const { routingSession, gridSize } = get();
+    if (!routingSession) return;
+
+    const snapped = {
+      x: Math.round(position.x / gridSize) * gridSize,
+      y: Math.round(position.y / gridSize) * gridSize,
+    };
+
+    const newSegments = calculateManhattanPath(
+      routingSession.startPoint,
+      snapped,
+      routingSession.elbowDirection,
+      routingSession.width,
+      routingSession.layer,
+      routingSession.netId,
+    );
+
+    set({
+      routingSession: {
+        ...routingSession,
+        committedSegments: [
+          ...routingSession.committedSegments,
+          ...newSegments,
+        ],
+        startPoint: snapped,
+        previewSegments: [],
+      },
+    });
+  },
+
+  placeRoutingVia: (position) => {
+    const { routingSession, gridSize } = get();
+    if (!routingSession) return;
+
+    const snapped = {
+      x: Math.round(position.x / gridSize) * gridSize,
+      y: Math.round(position.y / gridSize) * gridSize,
+    };
+
+    const newSegments = calculateManhattanPath(
+      routingSession.startPoint,
+      snapped,
+      routingSession.elbowDirection,
+      routingSession.width,
+      routingSession.layer,
+      routingSession.netId,
+    );
+
+    const via: Via = {
+      id: generateId(),
+      position: snapped,
+      padDiameter: routingSession.viaDiameter,
+      drillDiameter: routingSession.viaDrill,
+      net: routingSession.netId,
+      type: "through",
+      layers: ["F.Cu", "B.Cu"],
+      tented: true,
+    };
+
+    const newLayer = routingSession.layer === "F.Cu" ? "B.Cu" : "F.Cu";
+
+    set({
+      routingSession: {
+        ...routingSession,
+        committedSegments: [
+          ...routingSession.committedSegments,
+          ...newSegments,
+        ],
+        committedVias: [...routingSession.committedVias, via],
+        startPoint: snapped,
+        previewSegments: [],
+        layer: newLayer,
+      },
+      activeLayer: newLayer as "F.Cu" | "B.Cu",
+    });
+  },
+
+  completeRoute: (targetPadPosition) => {
+    const { document, routingSession, gridSize } = get();
+    if (!document || !routingSession) return;
+
+    const snapped = {
+      x: Math.round(targetPadPosition.x / gridSize) * gridSize,
+      y: Math.round(targetPadPosition.y / gridSize) * gridSize,
+    };
+
+    const finalSegments = calculateManhattanPath(
+      routingSession.startPoint,
+      snapped,
+      routingSession.elbowDirection,
+      routingSession.width,
+      routingSession.layer,
+      routingSession.netId,
+    );
+
+    const allSegments = [...routingSession.committedSegments, ...finalSegments];
+    const tracesWithIds: TraceSegment[] = allSegments.map((seg) => ({
+      ...seg,
+      id: generateId(),
+    }));
+
+    pcbUndoManager.pushUndo("Route traces", document);
+
+    const newDoc: PcbDocument = {
+      ...document,
+      traces: [...document.traces, ...tracesWithIds],
+      vias: [...document.vias, ...routingSession.committedVias],
+    };
+
+    set({
+      document: newDoc,
+      ratsnest: recalculateRatsnest(newDoc),
+      routingSession: null,
+      lastCursorPosition: null,
+      activeTool: "select",
+    });
+  },
+
+  cancelRouting: () => {
+    set({
+      routingSession: null,
+      lastCursorPosition: null,
+    });
+  },
+
+  cycleTraceWidth: (direction) => {
+    const { routingSession } = get();
+    if (!routingSession) return;
+
+    const { widthPresets, widthIndex } = routingSession;
+    const newIndex =
+      (widthIndex + direction + widthPresets.length) % widthPresets.length;
+    const newWidth = widthPresets[newIndex] ?? routingSession.width;
+
+    set({
+      routingSession: {
+        ...routingSession,
+        widthIndex: newIndex,
+        width: newWidth,
+      },
+    });
+  },
+
+  flipElbowDirection: () => {
+    const { routingSession } = get();
+    if (!routingSession) return;
+
+    set({
+      routingSession: {
+        ...routingSession,
+        elbowDirection:
+          routingSession.elbowDirection === "horizontal_first"
+            ? "vertical_first"
+            : "horizontal_first",
       },
     });
   },

@@ -208,3 +208,37 @@ export function hitTestPcb(
 export function getPlacementBounds(placement: PcbPlacement): PlacementBounds {
   return computePlacementBounds(placement);
 }
+
+export function getPadWorldPosition(
+  placements: PcbPlacement[],
+  placementId: string,
+  padNumber: string,
+): Point2D | null {
+  const placement = placements.find((p) => p.id === placementId);
+  if (!placement?.footprintData) return null;
+
+  const pad = placement.footprintData.pads.find((p) => p.number === padNumber);
+  if (!pad) return null;
+
+  return transformPoint(placement, pad.position.x, pad.position.y);
+}
+
+export function findPadNet(
+  placements: PcbPlacement[],
+  nets: { id: string; padRefs: { componentId: string; padNumber: string }[] }[],
+  placementId: string,
+  padNumber: string,
+): string | null {
+  const placement = placements.find((p) => p.id === placementId);
+  if (!placement) return null;
+
+  for (const net of nets) {
+    const found = net.padRefs.some(
+      (pr) =>
+        pr.componentId === placement.schematicSymbolId &&
+        pr.padNumber === padNumber,
+    );
+    if (found) return net.id;
+  }
+  return null;
+}

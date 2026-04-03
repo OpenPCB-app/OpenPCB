@@ -2,7 +2,7 @@ import { useRef, useEffect, useCallback } from "react";
 import { usePcbStore } from "@/stores/pcb-store";
 import { renderPads } from "./pcb-pads";
 import { renderSilkscreen } from "./pcb-silkscreen";
-import { renderTraces, renderVias } from "./pcb-traces";
+import { renderTraces, renderVias, renderRoutingPreview } from "./pcb-traces";
 import {
   screenToPcb,
   pcbToScreen,
@@ -11,7 +11,7 @@ import {
 import { LAYER_COLORS, PCB_BACKGROUND } from "../layer-colors";
 import { usePcbInteractionController } from "../usePcbInteractionController";
 import { getPlacementBounds } from "./pcb-hit-test";
-import type { PcbViewport } from "../pcb-types";
+import type { PcbViewport, Via } from "../pcb-types";
 
 export function PcbCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -215,6 +215,29 @@ export function PcbCanvas() {
 
       renderRatsnest(ctx, vp);
       renderSelection(ctx, vp);
+
+      if (store.routingSession) {
+        const previewVia: Via | null = store.lastCursorPosition
+          ? {
+              id: "preview-via",
+              position: store.lastCursorPosition,
+              padDiameter: store.routingSession.viaDiameter,
+              drillDiameter: store.routingSession.viaDrill,
+              net: store.routingSession.netId,
+              type: "through",
+              layers: ["F.Cu", "B.Cu"],
+              tented: true,
+            }
+          : null;
+
+        renderRoutingPreview(
+          ctx,
+          store.routingSession.previewSegments,
+          store.routingSession.committedSegments,
+          previewVia,
+          vp,
+        );
+      }
     }
 
     ctx.restore();
