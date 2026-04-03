@@ -639,5 +639,12 @@ describe("convertParsedKicadSymbolToDraft", () => {
     expect(text.fontSize).toBeCloseTo(0.508, 3);
     expect(text.y).toBeCloseTo(1_016_000, -2);
     expect(text.x).toBeCloseTo(0, 1);
+
+    const overlap = draft.pins.some((pin) => {
+      const pinMinY = pin.position.y - 100_000;
+      const pinMaxY = pin.position.y + 100_000;
+      return text.y > pinMinY && text.y < pinMaxY;
+    });
+    expect(overlap).toBe(false);
   });
 });
