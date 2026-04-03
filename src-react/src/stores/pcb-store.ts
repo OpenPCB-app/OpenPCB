@@ -19,6 +19,7 @@ import {
   type ComponentLibraryIndex,
 } from "@/components/pcb/symbol-library";
 import type { ComponentType } from "@shared/types/component-library-schema.types";
+import { createUndoManager, type UndoManager } from "@/lib/undo-manager";
 
 interface PcbStoreState {
   document: PcbDocument | null;
@@ -29,7 +30,12 @@ interface PcbStoreState {
   visibleLayers: Set<string>;
   gridSize: number;
   selectedIds: Set<string>;
-  activeTool: "select" | "place";
+  activeTool: "select" | "place" | "route";
+
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
 
   initFromSchematic: (
     nets: ExtractedNet[],
@@ -42,6 +48,7 @@ interface PcbStoreState {
     componentLibrary: ComponentLibraryIndex,
   ) => void;
   setDocument: (doc: PcbDocument) => void;
+  setActiveTool: (tool: "select" | "place" | "route") => void;
   movePlacement: (id: string, position: Point2D) => void;
   rotatePlacement: (id: string, delta: number) => void;
   flipPlacement: (id: string) => void;
@@ -79,6 +86,9 @@ function recalculateRatsnest(document: PcbDocument | null): RatsnestLine[] {
   );
 }
 
+const pcbUndoManager: UndoManager<PcbDocument> =
+  createUndoManager<PcbDocument>(50);
+
 export const usePcbStore = create<PcbStoreState>((set, get) => ({
   document: null,
   ratsnest: [],
@@ -89,6 +99,37 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
   gridSize: DEFAULT_GRID_SIZE,
   selectedIds: new Set(),
   activeTool: "select",
+
+  undo: () => {
+    const { document } = get();
+    if (!document) return;
+
+    const result = pcbUndoManager.undo(document);
+    if (!result) return;
+
+    set({
+      document: result.restored,
+      ratsnest: recalculateRatsnest(result.restored),
+      selectedIds: new Set(),
+    });
+  },
+
+  redo: () => {
+    const { document } = get();
+    if (!document) return;
+
+    const result = pcbUndoManager.redo(document);
+    if (!result) return;
+
+    set({
+      document: result.restored,
+      ratsnest: recalculateRatsnest(result.restored),
+      selectedIds: new Set(),
+    });
+  },
+
+  canUndo: () => pcbUndoManager.canUndo(),
+  canRedo: () => pcbUndoManager.canRedo(),
 
   initFromSchematic: (nets, symbols, components) => {
     const { document: existingDocument } = get();
@@ -136,15 +177,22 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
   },
 
   setDocument: (doc) => {
+    pcbUndoManager.clear();
     set({
       document: doc,
       ratsnest: recalculateRatsnest(doc),
     });
   },
 
+  setActiveTool: (tool) => {
+    set({ activeTool: tool });
+  },
+
   movePlacement: (id, position) => {
     const { document } = get();
     if (!document) return;
+
+    pcbUndoManager.pushUndo("Move placement", document);
 
     const placements = document.placements.map((p) =>
       p.id === id ? { ...p, position } : p,
@@ -161,6 +209,8 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
     const { document } = get();
     if (!document) return;
 
+    pcbUndoManager.pushUndo("Rotate placement", document);
+
     const placements = document.placements.map((p) =>
       p.id === id ? { ...p, rotation: (p.rotation + delta) % 360 } : p,
     );
@@ -175,6 +225,8 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
   flipPlacement: (id) => {
     const { document } = get();
     if (!document) return;
+
+    pcbUndoManager.pushUndo("Flip placement", document);
 
     const placements = document.placements.map((p) =>
       p.id === id
@@ -203,6 +255,8 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
   deletePlacement: (id) => {
     const { document, selectedIds } = get();
     if (!document) return;
+
+    pcbUndoManager.pushUndo("Delete placement", document);
 
     const placements = document.placements.filter((p) => p.id !== id);
     const newDoc = { ...document, placements };

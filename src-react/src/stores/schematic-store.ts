@@ -3,6 +3,7 @@ import {
   createComponentLibraryIndex,
   createSymbolEntity,
   EMPTY_COMPONENT_LIBRARY_INDEX,
+  type ImportedSymbolLayout,
   resolveSymbolEntityFromLibrary,
   type ComponentLibraryIndex,
 } from "@/components/pcb/symbol-library";
@@ -14,6 +15,7 @@ import {
 import type { SchematicProjectDocument } from "@shared/types";
 import type { ComponentType } from "@shared/types/component-library-schema.types";
 import { createHitTestCache } from "@/components/pcb/canvas/hit-test";
+import { createUndoManager, type UndoManager } from "@/lib/undo-manager";
 import type {
   Bounds,
   DerivedConnectivity,
@@ -63,6 +65,11 @@ interface SchematicState {
   draggedSymbolKind: SymbolKind | null;
   componentLibraryIndex: ComponentLibraryIndex;
 
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+
   setViewport: (viewport: Viewport) => void;
   pan: (dx: number, dy: number) => void;
   zoomAt: (centerX: number, centerY: number, factor: number) => void;
@@ -104,7 +111,13 @@ interface SchematicState {
 
   setDocument: (doc: SchematicDocument | SchematicProjectDocument) => void;
   clearDocument: () => void;
-  setComponentLibrary: (components: ComponentType[]) => void;
+  setComponentLibrary: (
+    components: ComponentType[],
+    importedSymbolLayoutsByComponentId?: ReadonlyMap<
+      string,
+      ImportedSymbolLayout
+    >,
+  ) => void;
   setProjectContext: (
     projectId: string | null,
     designId: string | null,
@@ -319,6 +332,10 @@ function resolveDocumentSymbolsFromLibrary(
   };
 }
 
+// Undo manager instance - lives outside store to persist across renders
+const schematicUndoManager: UndoManager<SchematicDocument> =
+  createUndoManager<SchematicDocument>(50);
+
 export const useSchematicStore = create<SchematicState>((set, get) => ({
   persisted: {
     document: null,
@@ -330,6 +347,63 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
   session: null,
   draggedSymbolKind: null,
   componentLibraryIndex: EMPTY_COMPONENT_LIBRARY_INDEX,
+
+  undo: () => {
+    const state = get();
+    const document = state.persisted.document;
+    if (!document) return;
+
+    const result = schematicUndoManager.undo(document);
+    if (!result) return;
+
+    set({
+      persisted: {
+        ...state.persisted,
+        document: result.restored,
+      },
+      derived: {
+        ...state.derived,
+        connectivity: deriveConnectivity(result.restored),
+        documentBounds: deriveDocumentBounds(result.restored),
+        hitTestCache: createHitTestCache(result.restored.symbols),
+      },
+      chrome: {
+        ...state.chrome,
+        selectedEntityIds: new Set(),
+        popoverEntityId: null,
+      },
+    });
+  },
+
+  redo: () => {
+    const state = get();
+    const document = state.persisted.document;
+    if (!document) return;
+
+    const result = schematicUndoManager.redo(document);
+    if (!result) return;
+
+    set({
+      persisted: {
+        ...state.persisted,
+        document: result.restored,
+      },
+      derived: {
+        ...state.derived,
+        connectivity: deriveConnectivity(result.restored),
+        documentBounds: deriveDocumentBounds(result.restored),
+        hitTestCache: createHitTestCache(result.restored.symbols),
+      },
+      chrome: {
+        ...state.chrome,
+        selectedEntityIds: new Set(),
+        popoverEntityId: null,
+      },
+    });
+  },
+
+  canUndo: () => schematicUndoManager.canUndo(),
+  canRedo: () => schematicUndoManager.canRedo(),
 
   setViewport: (viewport) => {
     if (
@@ -437,6 +511,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         return state;
       }
 
+      schematicUndoManager.pushUndo("Place symbol", document);
+
       const symbol = createSymbolEntity(
         state.session.symbolKind,
         position,
@@ -511,6 +587,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       if (!document) {
         return state;
       }
+
+      schematicUndoManager.pushUndo("Move symbols", document);
 
       const initialPositions = Object.fromEntries(
         symbolIds.map((symbolId) => [
@@ -654,6 +732,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         return state;
       }
 
+      schematicUndoManager.pushUndo("Add wire", document);
+
       const nextWire: WireEntity = {
         id: createWireId(),
         entityType: "wire",
@@ -745,6 +825,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         return state;
       }
 
+      schematicUndoManager.pushUndo("Add net label", document);
+
       const newLabel: NetLabelEntity = {
         id: `label-${crypto.randomUUID()}`,
         entityType: "label",
@@ -785,6 +867,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       if (!document) {
         return state;
       }
+
+      schematicUndoManager.pushUndo("Edit net label", document);
 
       const nextDocument = {
         ...document,
@@ -878,6 +962,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         return state;
       }
 
+      schematicUndoManager.pushUndo("Delete entities", document);
+
       const symbolIds = new Set(
         document.symbols
           .filter((symbol) => selectedEntityIds.has(symbol.id))
@@ -950,6 +1036,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         state.componentLibraryIndex,
       );
 
+      schematicUndoManager.clear();
+
       return {
         persisted: {
           ...state.persisted,
@@ -973,8 +1061,9 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       };
     }),
 
-  clearDocument: () =>
-    set(() => ({
+  clearDocument: () => {
+    schematicUndoManager.clear();
+    return set(() => ({
       persisted: {
         document: null,
         projectId: null,
@@ -986,11 +1075,15 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       },
       session: null,
       draggedSymbolKind: null,
-    })),
+    }));
+  },
 
-  setComponentLibrary: (components) =>
+  setComponentLibrary: (components, importedSymbolLayoutsByComponentId) =>
     set((state) => {
-      const componentLibraryIndex = createComponentLibraryIndex(components);
+      const componentLibraryIndex = createComponentLibraryIndex(
+        components,
+        importedSymbolLayoutsByComponentId,
+      );
 
       if (!state.persisted.document) {
         return {
@@ -1094,6 +1187,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
 
       const symbolIndex = document.symbols.findIndex((s) => s.id === symbolId);
       if (symbolIndex === -1) return state;
+
+      schematicUndoManager.pushUndo("Edit symbol value", document);
 
       const updatedSymbols = [...document.symbols];
       const existingSymbol = updatedSymbols[symbolIndex];

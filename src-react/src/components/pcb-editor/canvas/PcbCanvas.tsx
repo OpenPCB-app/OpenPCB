@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback } from "react";
 import { usePcbStore } from "@/stores/pcb-store";
 import { renderPads } from "./pcb-pads";
 import { renderSilkscreen } from "./pcb-silkscreen";
+import { renderTraces, renderVias } from "./pcb-traces";
 import {
   screenToPcb,
   pcbToScreen,
@@ -181,9 +182,22 @@ export function PcbCanvas() {
         vp,
       );
 
+      const backTraces = doc.traces.filter((t) => t.layer === "B.Cu");
+      const frontTraces = doc.traces.filter((t) => t.layer === "F.Cu");
+
+      renderTraces(ctx, backTraces, vp, store.activeLayer, store.visibleLayers);
+
       renderSilkscreen(
         ctx,
         doc.placements,
+        vp,
+        store.activeLayer,
+        store.visibleLayers,
+      );
+
+      renderTraces(
+        ctx,
+        frontTraces,
         vp,
         store.activeLayer,
         store.visibleLayers,
@@ -196,6 +210,8 @@ export function PcbCanvas() {
         store.activeLayer,
         store.visibleLayers,
       );
+
+      renderVias(ctx, doc.vias, vp);
 
       renderRatsnest(ctx, vp);
       renderSelection(ctx, vp);
