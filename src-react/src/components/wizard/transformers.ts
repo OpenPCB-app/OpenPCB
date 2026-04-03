@@ -19,6 +19,7 @@ import {
   type SymbolGraphic,
   type SymbolPin,
 } from "@/components/symbol-editor/types";
+import { setStoredImportedSymbolNormalization } from "@/components/symbol-editor/import-normalization";
 import { createEmptyDraft as createEmptyFootprintDraft } from "@/components/footprint-editor/types";
 import type { SymbolGraphic as BackendSymbolGraphic } from "@shared/types/component-semantics.types";
 import type {
@@ -186,6 +187,12 @@ function transformSymbolData(draft: WizardDraftPayload): BackendSymbolData {
 
   const pins = symbolData.pins;
   const metadata = symbolData.metadata;
+  const properties = setStoredImportedSymbolNormalization(
+    draft.specs?.category
+      ? { __openpcbCategoryPath: draft.specs.category }
+      : {},
+    symbolData.importPreservation?.normalizedSchematicGeometry === true,
+  );
 
   return {
     referencePrefix: metadata.referencePrefix || "U",
@@ -193,9 +200,7 @@ function transformSymbolData(draft: WizardDraftPayload): BackendSymbolData {
       name: pin.name || pin.number,
       electricalType: pin.electricalType || "passive",
     })),
-    properties: draft.specs?.category
-      ? { __openpcbCategoryPath: draft.specs.category }
-      : {},
+    properties,
     unitCount: symbolData.importPreservation?.unitCount ?? 1,
     bodyGraphics: transformBodyGraphics(symbolData),
     rawKicadSource: symbolData.importPreservation?.rawSource ?? null,

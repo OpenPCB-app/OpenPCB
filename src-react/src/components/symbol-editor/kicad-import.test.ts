@@ -491,6 +491,7 @@ describe("convertParsedKicadSymbolToDraft", () => {
       },
     ]);
     expect(draft.pins.map((pin) => pin.number)).toEqual(["1", "2", "3"]);
+    expect(draft.importPreservation?.normalizedSchematicGeometry).toBe(true);
     expect(draft.importPreservation?.warnings).toHaveLength(0);
     expectDraftPinsToPreserveElectricalMetadata(parsed, draft);
     expectPinGeometryToChange(parsed, draft);

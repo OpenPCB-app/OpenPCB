@@ -17,6 +17,10 @@ import type { SymbolCategory } from "../symbol-display";
 import { parseKicadSymbolImport } from "@/lib/api/component-api";
 import { convertParsedKicadSymbolToDraft } from "@/components/symbol-editor/kicad-import";
 import {
+  hasStoredImportedSymbolNormalization,
+  setDraftImportedSymbolNormalization,
+} from "@/components/symbol-editor/import-normalization";
+import {
   useSchematicInteractionController,
   type SchematicInteractionController,
 } from "../useSchematicInteractionController";
@@ -196,7 +200,17 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
             component.displayLabel,
             parsed.availableSymbols.length,
           );
-          return [component.id, createImportedSymbolLayout(draft)] as const;
+          return [
+            component.id,
+            createImportedSymbolLayout(
+              setDraftImportedSymbolNormalization(
+                draft,
+                hasStoredImportedSymbolNormalization(
+                  component.symbolData.properties,
+                ),
+              ),
+            ),
+          ] as const;
         } catch {
           return null;
         }

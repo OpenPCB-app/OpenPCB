@@ -185,6 +185,7 @@ export interface ImportPreservation {
   unitCount?: number;
   /** Whether graphics are editable or read-only preserved */
   graphicsEditable: boolean;
+  normalizedSchematicGeometry?: boolean;
 }
 
 /** Complete symbol draft for Step 1 */

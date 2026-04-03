@@ -8,6 +8,10 @@ import { ComponentWizard } from "./ComponentWizard";
 import { useComponentWizardStore } from "@/stores/component-wizard-store";
 import { useSymbolEditorStore } from "@/components/symbol-editor";
 import { useFootprintEditorStore } from "@/components/footprint-editor";
+import {
+  IMPORTED_SYMBOL_NORMALIZATION_PROPERTY,
+  IMPORTED_SYMBOL_NORMALIZATION_VERSION,
+} from "@/components/symbol-editor/import-normalization";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { parseKicadSymbolLib } from "../../../../src-ts/src/infrastructure/parsers/kicad/kicad-symbol-parser";
 
@@ -317,6 +321,10 @@ describe("ComponentWizard", () => {
 
     const createPayload = createComponent.mock.calls.at(-1)?.[0];
     expect(createPayload.symbolData.rawKicadSource).toContain("symbol chip");
+    expect(createPayload.symbolData.properties).toMatchObject({
+      [IMPORTED_SYMBOL_NORMALIZATION_PROPERTY]:
+        IMPORTED_SYMBOL_NORMALIZATION_VERSION,
+    });
     expect(createPayload.variants[0]?.footprintOptions[0]?.kicadPayload.rawKicadSource).toContain(
       "footprint chip",
     );
@@ -398,6 +406,10 @@ describe("ComponentWizard", () => {
 
     await waitFor(() => {
       expect(createComponent).toHaveBeenCalledTimes(1);
+    });
+    expect(createComponent.mock.calls.at(-1)?.[0].symbolData.properties).toMatchObject({
+      [IMPORTED_SYMBOL_NORMALIZATION_PROPERTY]:
+        IMPORTED_SYMBOL_NORMALIZATION_VERSION,
     });
     expect(onPublished).toHaveBeenCalledWith("component-1");
     expect(onClose).toHaveBeenCalled();

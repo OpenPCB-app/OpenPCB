@@ -1,4 +1,8 @@
+import { readFileSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import { describe, expect, it } from "vitest";
+import { parseKicadSymbolLib } from "../../../../src-ts/src/infrastructure/parsers/kicad/kicad-symbol-parser";
 import {
   createComponentLibraryIndex,
   createImportedSymbolLayout,
@@ -7,12 +11,18 @@ import {
 } from "./symbol-library";
 import { toSchematicProjectDocument, type SymbolEntity } from "./types";
 import type { ComponentType } from "@shared/types/component-library-schema.types";
+import { convertParsedKicadSymbolToDraft } from "../symbol-editor/kicad-import";
 import {
   DEFAULT_BODY_HEIGHT,
   DEFAULT_PIN_LENGTH,
   PASSIVE_BODY_HEIGHT,
   PASSIVE_BODY_WIDTH,
 } from "../symbol-editor/types";
+
+const FIXTURES_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../src-ts/src/infrastructure/parsers/kicad/__fixtures__",
+);
 
 function makeComponent(): ComponentType {
   return {
@@ -68,9 +78,25 @@ function makeComponent(): ComponentType {
   };
 }
 
+function loadParsedFixture(name: string) {
+  return parseKicadSymbolLib(readFileSync(join(FIXTURES_DIR, name), "utf-8"))
+    .symbols[0]!;
+}
+
+function createImportPreservation(normalizedSchematicGeometry: boolean) {
+  return {
+    rawSource: null,
+    sourceFileName: null,
+    warnings: [],
+    graphicsEditable: true,
+    normalizedSchematicGeometry,
+  };
+}
+
 describe("symbol-library imported symbol layouts", () => {
   it("preserves already-normalized imported IC layouts", () => {
     const importedLayout = createImportedSymbolLayout({
+      importPreservation: createImportPreservation(true),
       pins: [
         {
           id: "draft-pin-1",
@@ -191,8 +217,159 @@ describe("symbol-library imported symbol layouts", () => {
     ]);
   });
 
+  it("consumes fixture-driven normalized imports without a second sizing pass", () => {
+    const component = makeComponent();
+    const draft = convertParsedKicadSymbolToDraft(
+      loadParsedFixture("lm317t_regulator.kicad_sym"),
+      "lm317t_regulator.kicad_sym",
+    );
+    const importedLayout = createImportedSymbolLayout(draft);
+    const index = createComponentLibraryIndex(
+      [component],
+      new Map([[component.id, importedLayout]]),
+    );
+
+    const symbol = createSymbolEntity(
+      component.id,
+      { x: 0, y: 0 },
+      0,
+      [],
+      index,
+    );
+
+    expect(draft.importPreservation?.normalizedSchematicGeometry).toBe(true);
+    expect(symbol.pins).toEqual(
+      draft.pins.map((pin, index) => ({
+        id: `${symbol.id}-pin-${index + 1}`,
+        name: pin.name,
+        number: pin.number,
+        side:
+          pin.side === "top"
+            ? "bottom"
+            : pin.side === "bottom"
+              ? "top"
+              : pin.side,
+        length: pin.length,
+        position: { x: pin.position.x, y: -pin.position.y },
+      })),
+    );
+    expect(symbol.importedGraphics).toEqual(importedLayout.graphics);
+    expect(symbol.importedBodyBounds).toEqual(importedLayout.bodyBounds);
+  });
+
+  it("keeps the legacy IC normalization path for imports missing normalization metadata", () => {
+    const importedLayout = createImportedSymbolLayout({
+      importPreservation: createImportPreservation(false),
+      pins: [
+        {
+          id: "draft-pin-1",
+          name: "PB5",
+          number: "1",
+          electricalType: "input",
+          side: "left",
+          position: { x: -46_990_000, y: 3_810_000 },
+          length: 5_080_000,
+        },
+        {
+          id: "draft-pin-2",
+          name: "PB3",
+          number: "2",
+          electricalType: "input",
+          side: "left",
+          position: { x: -46_990_000, y: 1_270_000 },
+          length: 5_080_000,
+        },
+        {
+          id: "draft-pin-3",
+          name: "PB4",
+          number: "3",
+          electricalType: "input",
+          side: "left",
+          position: { x: -46_990_000, y: -1_270_000 },
+          length: 5_080_000,
+        },
+        {
+          id: "draft-pin-4",
+          name: "GND",
+          number: "4",
+          electricalType: "power_in",
+          side: "left",
+          position: { x: -46_990_000, y: -3_810_000 },
+          length: 5_080_000,
+        },
+        {
+          id: "draft-pin-5",
+          name: "VCC",
+          number: "8",
+          electricalType: "power_in",
+          side: "right",
+          position: { x: 46_990_000, y: 3_810_000 },
+          length: 5_080_000,
+        },
+        {
+          id: "draft-pin-6",
+          name: "PB2",
+          number: "7",
+          electricalType: "input",
+          side: "right",
+          position: { x: 46_990_000, y: 1_270_000 },
+          length: 5_080_000,
+        },
+        {
+          id: "draft-pin-7",
+          name: "PB1",
+          number: "6",
+          electricalType: "input",
+          side: "right",
+          position: { x: 46_990_000, y: -1_270_000 },
+          length: 5_080_000,
+        },
+        {
+          id: "draft-pin-8",
+          name: "PB0",
+          number: "5",
+          electricalType: "input",
+          side: "right",
+          position: { x: 46_990_000, y: -3_810_000 },
+          length: 5_080_000,
+        },
+      ],
+      graphics: [
+        {
+          id: "legacy-rect",
+          zIndex: 0,
+          type: "rect",
+          x: -41_910_000,
+          y: -6_350_000,
+          width: 83_820_000,
+          height: 12_700_000,
+          filled: false,
+          strokeWidth: 25_400,
+        },
+      ],
+    });
+
+    expect(importedLayout.bodyBounds).toEqual({
+      minX: -DEFAULT_BODY_HEIGHT / 2,
+      minY: -6_350_000,
+      maxX: DEFAULT_BODY_HEIGHT / 2,
+      maxY: 6_350_000,
+    });
+    expect(importedLayout.pins[0]).toMatchObject({
+      side: "left",
+      length: DEFAULT_PIN_LENGTH,
+      position: { x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH), y: -3_810_000 },
+    });
+    expect(importedLayout.pins[7]).toMatchObject({
+      side: "right",
+      length: DEFAULT_PIN_LENGTH,
+      position: { x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH, y: 3_810_000 },
+    });
+  });
+
   it("preserves already-normalized imported passive layouts", () => {
     const importedLayout = createImportedSymbolLayout({
+      importPreservation: createImportPreservation(true),
       pins: [
         {
           id: "draft-pin-1",
@@ -251,6 +428,7 @@ describe("symbol-library imported symbol layouts", () => {
   it("uses imported symbol pins and graphics when creating placed symbols", () => {
     const component = makeComponent();
     const importedLayout = createImportedSymbolLayout({
+      importPreservation: createImportPreservation(true),
       pins: [
         {
           id: "draft-pin-1",
@@ -390,6 +568,7 @@ describe("symbol-library imported symbol layouts", () => {
   it("re-resolves existing document symbols with imported layouts from the library", () => {
     const component = makeComponent();
     const importedLayout = createImportedSymbolLayout({
+      importPreservation: createImportPreservation(true),
       pins: [
         {
           id: "draft-pin-1",

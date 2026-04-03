@@ -1412,6 +1412,7 @@ export function convertParsedKicadSymbolToDraft(
       ),
       unitCount: parsed.units,
       graphicsEditable: true,
+      normalizedSchematicGeometry: true,
     },
   };
 }

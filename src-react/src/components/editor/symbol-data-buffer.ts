@@ -12,6 +12,11 @@ import {
   type SymbolGraphic,
   type SymbolPin,
 } from "@/components/symbol-editor/types";
+import {
+  hasStoredImportedSymbolNormalization,
+  setDraftImportedSymbolNormalization,
+  setStoredImportedSymbolNormalization,
+} from "@/components/symbol-editor/import-normalization";
 import type { SymbolGraphic as BackendSymbolGraphic } from "@shared/types/component-semantics.types";
 
 type SymbolData = ComponentType["symbolData"];
@@ -313,6 +318,9 @@ function createFallbackDraftFromSymbolData(
   component: ComponentType,
 ): SymbolDraft {
   const symbolData = component.symbolData;
+  const normalizedSchematicGeometry = hasStoredImportedSymbolNormalization(
+    symbolData.properties,
+  );
   const backendGraphics = (symbolData.bodyGraphics ?? [])
     .map(toBackendGraphic)
     .filter((graphic): graphic is BackendSymbolGraphic => graphic !== null);
@@ -348,6 +356,7 @@ function createFallbackDraftFromSymbolData(
           warnings: [],
           unitCount: symbolData.unitCount,
           graphicsEditable: true,
+          normalizedSchematicGeometry,
         }
       : null,
   };
@@ -420,14 +429,18 @@ function transformDraftGraphics(
 export async function loadSymbolDraftFromComponent(
   component: ComponentType,
 ): Promise<{ draft: SymbolDraft; warning: string | null }> {
+  const normalizedSchematicGeometry = hasStoredImportedSymbolNormalization(
+    component.symbolData.properties,
+  );
+
   if (component.symbolData.rawKicadSource) {
     try {
       const parsed = await parseKicadSymbolImport(
         component.symbolData.rawKicadSource,
       );
-      const parsedDraft = convertParsedKicadSymbolToDraft(
-        parsed.symbol,
-        component.displayLabel,
+      const parsedDraft = setDraftImportedSymbolNormalization(
+        convertParsedKicadSymbolToDraft(parsed.symbol, component.displayLabel),
+        normalizedSchematicGeometry,
       );
       return {
         draft: {
@@ -472,7 +485,10 @@ export function transformSymbolDraftToComponentSymbolData(
   return {
     referencePrefix,
     pinDefinitions,
-    properties: existingSymbolData?.properties ?? {},
+    properties: setStoredImportedSymbolNormalization(
+      existingSymbolData?.properties ?? {},
+      draft.importPreservation?.normalizedSchematicGeometry === true,
+    ),
     unitCount:
       draft.importPreservation?.unitCount ?? existingSymbolData?.unitCount ?? 1,
     bodyGraphics: [

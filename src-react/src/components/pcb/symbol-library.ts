@@ -14,6 +14,12 @@ import type {
   SymbolDraft,
   SymbolGraphic,
 } from "@/components/symbol-editor/types";
+import {
+  DEFAULT_BODY_HEIGHT,
+  DEFAULT_BODY_WIDTH,
+  DEFAULT_PIN_LENGTH,
+} from "@/components/symbol-editor/types";
+import { hasDraftImportedSymbolNormalization } from "@/components/symbol-editor/import-normalization";
 
 export const PALETTE_SYMBOL_KIND_MIME = "application/x-openpcb-symbol-kind";
 
@@ -22,6 +28,13 @@ export interface ImportedSymbolLayout {
   graphics: SymbolGraphic[];
   bodyBounds: Bounds | null;
 }
+
+type ImportedDraftLayout = Pick<
+  SymbolDraft,
+  "pins" | "graphics" | "importPreservation"
+>;
+
+type ImportedPinSide = NonNullable<RenderedSymbolPin["side"]>;
 
 const DEFAULT_TWO_TERMINAL_PIN_POSITIONS: Point[] = [
   { x: 0, y: 0 },
@@ -217,6 +230,10 @@ function inferSymbolTemplate(component: ComponentType): SymbolTemplate {
 
 const GRID_STEP_NM = 1_270_000;
 const HALF_GRID_STEP_NM = GRID_STEP_NM / 2;
+const IMPORTED_GRID_PITCH_NM = GRID_STEP_NM * 2;
+const IMPORTED_IC_MIN_BODY_WIDTH_NM = GRID_STEP_NM * 4;
+const IMPORTED_IC_MAX_BODY_WIDTH_NM = GRID_STEP_NM * 8;
+
 interface EmbeddedSymbolDef {
   label: string;
   prefix: string | null;
@@ -428,15 +445,165 @@ function computeImportedBodyBounds(graphics: SymbolGraphic[]): Bounds | null {
   return bounds;
 }
 
-export function createImportedSymbolLayout(
-  draft: Pick<SymbolDraft, "pins" | "graphics">,
-): ImportedSymbolLayout {
-  // KiCad schematic-size normalization is owned by convertParsedKicadSymbolToDraft().
-  // Drafts reaching the library are already final-scale and must not be resized again.
-  const graphics = draft.graphics.map(cloneImportedGraphic);
+function clampImportedIcBodyWidth(height: number): number {
+  return Math.max(
+    IMPORTED_IC_MIN_BODY_WIDTH_NM,
+    Math.min(IMPORTED_IC_MAX_BODY_WIDTH_NM, height),
+  );
+}
+
+function snapImportedIcValue(value: number): number {
+  return Math.round(value / GRID_STEP_NM) * GRID_STEP_NM;
+}
+
+function getImportedPinSideCounts(
+  pins: ImportedDraftLayout["pins"],
+): Record<ImportedPinSide, number> {
+  const counts: Record<ImportedPinSide, number> = {
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  };
+
+  for (const pin of pins) {
+    counts[pin.side] += 1;
+  }
+
+  return counts;
+}
+
+function getImportedIcAxisPositions(
+  side: ImportedPinSide,
+  count: number,
+): number[] {
+  if (count <= 0) {
+    return [];
+  }
+
+  const positions = Array.from({ length: count }, (_, index) =>
+    snapImportedIcValue((index - (count - 1) / 2) * IMPORTED_GRID_PITCH_NM),
+  );
+
+  return side === "left" || side === "right"
+    ? [...positions].sort((a, b) => b - a)
+    : positions;
+}
+
+function shouldLegacyNormalizeImportedIcLayout(
+  draft: ImportedDraftLayout,
+): boolean {
+  if (draft.pins.length < 3) {
+    return false;
+  }
+
+  const sideCounts = getImportedPinSideCounts(draft.pins);
+  const verticalSides = sideCounts.top + sideCounts.bottom;
+
+  return (
+    sideCounts.left > 0 &&
+    sideCounts.right > 0 &&
+    verticalSides <= 1 &&
+    draft.graphics.every(
+      (graphic) => graphic.type === "rect" || graphic.type === "text",
+    )
+  );
+}
+
+function normalizeLegacyImportedIcLayout(
+  draft: ImportedDraftLayout,
+): ImportedDraftLayout {
+  if (!shouldLegacyNormalizeImportedIcLayout(draft)) {
+    return draft;
+  }
+
+  const sideCounts = getImportedPinSideCounts(draft.pins);
+  const verticalPinCount = Math.max(sideCounts.left, sideCounts.right, 1);
+  const horizontalPinCount = Math.max(sideCounts.top, sideCounts.bottom, 1);
+  const bodyHeight = snapImportedIcValue(
+    Math.max(
+      DEFAULT_BODY_HEIGHT,
+      (verticalPinCount + 1) * IMPORTED_GRID_PITCH_NM,
+    ),
+  );
+  const bodyWidth = snapImportedIcValue(
+    Math.max(
+      clampImportedIcBodyWidth(bodyHeight),
+      DEFAULT_BODY_WIDTH,
+      (horizontalPinCount + 1) * IMPORTED_GRID_PITCH_NM,
+    ),
+  );
+  const halfBodyWidth = bodyWidth / 2;
+  const halfBodyHeight = bodyHeight / 2;
+  const axisPositions: Record<ImportedPinSide, number[]> = {
+    left: getImportedIcAxisPositions("left", sideCounts.left),
+    right: getImportedIcAxisPositions("right", sideCounts.right),
+    top: getImportedIcAxisPositions("top", sideCounts.top),
+    bottom: getImportedIcAxisPositions("bottom", sideCounts.bottom),
+  };
+  const sideIndexes: Record<ImportedPinSide, number> = {
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  };
+  const rectGraphic = draft.graphics.find((graphic) => graphic.type === "rect");
 
   return {
-    pins: draft.pins.map((pin, index) => ({
+    ...draft,
+    pins: draft.pins.map((pin) => {
+      const slotIndex = sideIndexes[pin.side];
+      sideIndexes[pin.side] += 1;
+      const axis = axisPositions[pin.side][slotIndex] ?? 0;
+
+      return {
+        ...pin,
+        position:
+          pin.side === "left"
+            ? { x: -(halfBodyWidth + DEFAULT_PIN_LENGTH), y: axis }
+            : pin.side === "right"
+              ? { x: halfBodyWidth + DEFAULT_PIN_LENGTH, y: axis }
+              : pin.side === "top"
+                ? { x: axis, y: halfBodyHeight + DEFAULT_PIN_LENGTH }
+                : { x: axis, y: -(halfBodyHeight + DEFAULT_PIN_LENGTH) },
+        length: DEFAULT_PIN_LENGTH,
+      };
+    }),
+    graphics: [
+      rectGraphic && rectGraphic.type === "rect"
+        ? {
+            ...rectGraphic,
+            x: -halfBodyWidth,
+            y: -halfBodyHeight,
+            width: bodyWidth,
+            height: bodyHeight,
+          }
+        : {
+            id: crypto.randomUUID(),
+            type: "rect",
+            zIndex: 0,
+            x: -halfBodyWidth,
+            y: -halfBodyHeight,
+            width: bodyWidth,
+            height: bodyHeight,
+            filled: false,
+            strokeWidth: 0.0254,
+          },
+      ...draft.graphics.filter((graphic) => graphic.type === "text"),
+    ],
+  };
+}
+
+export function createImportedSymbolLayout(
+  draft: ImportedDraftLayout,
+): ImportedSymbolLayout {
+  const consumedDraft = hasDraftImportedSymbolNormalization(draft)
+    ? draft
+    : normalizeLegacyImportedIcLayout(draft);
+  const graphics = consumedDraft.graphics.map(cloneImportedGraphic);
+
+  return {
+    pins: consumedDraft.pins.map((pin, index) => ({
       id: `imported-pin-${index + 1}`,
       name: pin.name,
       number: pin.number,
