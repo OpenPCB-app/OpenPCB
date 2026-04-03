@@ -8,7 +8,13 @@ import {
   classifyImportedSymbol,
   convertParsedKicadSymbolToDraft,
 } from "./kicad-import";
-import { DEFAULT_PIN_LENGTH } from "./types";
+import {
+  DEFAULT_BODY_HEIGHT,
+  DEFAULT_PIN_LENGTH,
+  GRID_SIZES,
+  PASSIVE_BODY_HEIGHT,
+  PASSIVE_BODY_WIDTH,
+} from "./types";
 
 const FIXTURES_DIR = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -33,14 +39,94 @@ function createOversizedTwoSidedImportedIc(): ParsedKicadSymbol {
       Value: "ATTINY13A",
     },
     pins: [
-      { name: "PB5", number: "1", electricalType: "input", direction: "line", position: { x: -46.99, y: 3.81 }, length: 5.08, rotation: 0, unit: 1, hidden: false },
-      { name: "PB3", number: "2", electricalType: "input", direction: "line", position: { x: -46.99, y: 1.27 }, length: 5.08, rotation: 0, unit: 1, hidden: false },
-      { name: "PB4", number: "3", electricalType: "input", direction: "line", position: { x: -46.99, y: -1.27 }, length: 5.08, rotation: 0, unit: 1, hidden: false },
-      { name: "GND", number: "4", electricalType: "power_in", direction: "line", position: { x: -46.99, y: -3.81 }, length: 5.08, rotation: 0, unit: 1, hidden: false },
-      { name: "VCC", number: "8", electricalType: "power_in", direction: "line", position: { x: 46.99, y: 3.81 }, length: 5.08, rotation: 180, unit: 1, hidden: false },
-      { name: "PB2", number: "7", electricalType: "input", direction: "line", position: { x: 46.99, y: 1.27 }, length: 5.08, rotation: 180, unit: 1, hidden: false },
-      { name: "PB1", number: "6", electricalType: "input", direction: "line", position: { x: 46.99, y: -1.27 }, length: 5.08, rotation: 180, unit: 1, hidden: false },
-      { name: "PB0", number: "5", electricalType: "input", direction: "line", position: { x: 46.99, y: -3.81 }, length: 5.08, rotation: 180, unit: 1, hidden: false },
+      {
+        name: "PB5",
+        number: "1",
+        electricalType: "input",
+        direction: "line",
+        position: { x: -46.99, y: 3.81 },
+        length: 5.08,
+        rotation: 0,
+        unit: 1,
+        hidden: false,
+      },
+      {
+        name: "PB3",
+        number: "2",
+        electricalType: "input",
+        direction: "line",
+        position: { x: -46.99, y: 1.27 },
+        length: 5.08,
+        rotation: 0,
+        unit: 1,
+        hidden: false,
+      },
+      {
+        name: "PB4",
+        number: "3",
+        electricalType: "input",
+        direction: "line",
+        position: { x: -46.99, y: -1.27 },
+        length: 5.08,
+        rotation: 0,
+        unit: 1,
+        hidden: false,
+      },
+      {
+        name: "GND",
+        number: "4",
+        electricalType: "power_in",
+        direction: "line",
+        position: { x: -46.99, y: -3.81 },
+        length: 5.08,
+        rotation: 0,
+        unit: 1,
+        hidden: false,
+      },
+      {
+        name: "VCC",
+        number: "8",
+        electricalType: "power_in",
+        direction: "line",
+        position: { x: 46.99, y: 3.81 },
+        length: 5.08,
+        rotation: 180,
+        unit: 1,
+        hidden: false,
+      },
+      {
+        name: "PB2",
+        number: "7",
+        electricalType: "input",
+        direction: "line",
+        position: { x: 46.99, y: 1.27 },
+        length: 5.08,
+        rotation: 180,
+        unit: 1,
+        hidden: false,
+      },
+      {
+        name: "PB1",
+        number: "6",
+        electricalType: "input",
+        direction: "line",
+        position: { x: 46.99, y: -1.27 },
+        length: 5.08,
+        rotation: 180,
+        unit: 1,
+        hidden: false,
+      },
+      {
+        name: "PB0",
+        number: "5",
+        electricalType: "input",
+        direction: "line",
+        position: { x: 46.99, y: -3.81 },
+        length: 5.08,
+        rotation: 180,
+        unit: 1,
+        hidden: false,
+      },
     ],
     bodyGraphics: [
       {
@@ -69,14 +155,94 @@ function createMultiUnitRectangularIc(): ParsedKicadSymbol {
       Value: "DUALIC",
     },
     pins: [
-      { name: "A1", number: "1", electricalType: "input", direction: "line", position: { x: -7.62, y: 2.54 }, length: 2.54, rotation: 0, unit: 1, hidden: false },
-      { name: "A2", number: "2", electricalType: "input", direction: "line", position: { x: -7.62, y: -2.54 }, length: 2.54, rotation: 0, unit: 1, hidden: false },
-      { name: "A3", number: "3", electricalType: "output", direction: "line", position: { x: 7.62, y: 2.54 }, length: 2.54, rotation: 180, unit: 1, hidden: false },
-      { name: "A4", number: "4", electricalType: "output", direction: "line", position: { x: 7.62, y: -2.54 }, length: 2.54, rotation: 180, unit: 1, hidden: false },
-      { name: "B1", number: "5", electricalType: "input", direction: "line", position: { x: -7.62, y: 2.54 }, length: 2.54, rotation: 0, unit: 2, hidden: false },
-      { name: "B2", number: "6", electricalType: "input", direction: "line", position: { x: -7.62, y: -2.54 }, length: 2.54, rotation: 0, unit: 2, hidden: false },
-      { name: "B3", number: "7", electricalType: "output", direction: "line", position: { x: 7.62, y: 2.54 }, length: 2.54, rotation: 180, unit: 2, hidden: false },
-      { name: "B4", number: "8", electricalType: "output", direction: "line", position: { x: 7.62, y: -2.54 }, length: 2.54, rotation: 180, unit: 2, hidden: false },
+      {
+        name: "A1",
+        number: "1",
+        electricalType: "input",
+        direction: "line",
+        position: { x: -7.62, y: 2.54 },
+        length: 2.54,
+        rotation: 0,
+        unit: 1,
+        hidden: false,
+      },
+      {
+        name: "A2",
+        number: "2",
+        electricalType: "input",
+        direction: "line",
+        position: { x: -7.62, y: -2.54 },
+        length: 2.54,
+        rotation: 0,
+        unit: 1,
+        hidden: false,
+      },
+      {
+        name: "A3",
+        number: "3",
+        electricalType: "output",
+        direction: "line",
+        position: { x: 7.62, y: 2.54 },
+        length: 2.54,
+        rotation: 180,
+        unit: 1,
+        hidden: false,
+      },
+      {
+        name: "A4",
+        number: "4",
+        electricalType: "output",
+        direction: "line",
+        position: { x: 7.62, y: -2.54 },
+        length: 2.54,
+        rotation: 180,
+        unit: 1,
+        hidden: false,
+      },
+      {
+        name: "B1",
+        number: "5",
+        electricalType: "input",
+        direction: "line",
+        position: { x: -7.62, y: 2.54 },
+        length: 2.54,
+        rotation: 0,
+        unit: 2,
+        hidden: false,
+      },
+      {
+        name: "B2",
+        number: "6",
+        electricalType: "input",
+        direction: "line",
+        position: { x: -7.62, y: -2.54 },
+        length: 2.54,
+        rotation: 0,
+        unit: 2,
+        hidden: false,
+      },
+      {
+        name: "B3",
+        number: "7",
+        electricalType: "output",
+        direction: "line",
+        position: { x: 7.62, y: 2.54 },
+        length: 2.54,
+        rotation: 180,
+        unit: 2,
+        hidden: false,
+      },
+      {
+        name: "B4",
+        number: "8",
+        electricalType: "output",
+        direction: "line",
+        position: { x: 7.62, y: -2.54 },
+        length: 2.54,
+        rotation: 180,
+        unit: 2,
+        hidden: false,
+      },
     ],
     bodyGraphics: [],
     warnings: [],
@@ -120,6 +286,23 @@ function expectDraftPinsToPreserveElectricalMetadata(
   );
 }
 
+function expectPinGeometryToChange(
+  parsed: ParsedKicadSymbol,
+  draft: ReturnType<typeof convertParsedKicadSymbolToDraft>,
+) {
+  expect(
+    draft.pins.some((pin, index) => {
+      const original = parsed.pins[index];
+      return (
+        pin.length !== Math.round((original?.length ?? 0) * 1_000_000) ||
+        pin.position.x !==
+          Math.round((original?.position.x ?? 0) * 1_000_000) ||
+        pin.position.y !== Math.round((original?.position.y ?? 0) * 1_000_000)
+      );
+    }),
+  ).toBe(true);
+}
+
 describe("classifyImportedSymbol", () => {
   it("classifies simple resistor fixture as two-terminal passive", () => {
     const parsed = loadParsedFixture("simple_resistor.kicad_sym");
@@ -146,7 +329,9 @@ describe("classifyImportedSymbol", () => {
 
     expect(classifyImportedSymbol(parsed)).toMatchObject({
       kind: "unsupported",
-      reason: expect.stringContaining("non-rectangular unit 3"),
+      reason: expect.stringContaining(
+        "non-rectangular unit 3: classified as two-terminal-passive",
+      ),
     });
     expectClassificationToBePure(parsed);
   });
@@ -191,8 +376,8 @@ describe("convertParsedKicadSymbolToDraft", () => {
 
     expect(draft.body).toMatchObject({
       kind: "blank",
-      width: 15_240_000,
-      height: 12_700_000,
+      width: DEFAULT_BODY_HEIGHT,
+      height: GRID_SIZES.normal * 10,
     });
     expect(draft.pins[0]).toMatchObject({
       side: "left",
@@ -219,9 +404,53 @@ describe("convertParsedKicadSymbolToDraft", () => {
     ]);
   });
 
+  it("normalizes supported passive fixtures onto canonical passive metrics", () => {
+    const parsed = loadParsedFixture("simple_resistor.kicad_sym");
+    const draft = convertParsedKicadSymbolToDraft(
+      parsed,
+      "simple_resistor.kicad_sym",
+    );
+
+    expect(classifyImportedSymbol(parsed)).toEqual({
+      kind: "two-terminal-passive",
+      reason: null,
+    });
+    expect(draft.body).toEqual({
+      kind: "blank",
+      width: PASSIVE_BODY_HEIGHT,
+      height: PASSIVE_BODY_WIDTH,
+    });
+    expect(draft.pins).toMatchObject([
+      {
+        side: "top",
+        length: DEFAULT_PIN_LENGTH,
+        position: { x: 0, y: PASSIVE_BODY_WIDTH / 2 + DEFAULT_PIN_LENGTH },
+      },
+      {
+        side: "bottom",
+        length: DEFAULT_PIN_LENGTH,
+        position: { x: 0, y: -(PASSIVE_BODY_WIDTH / 2 + DEFAULT_PIN_LENGTH) },
+      },
+    ]);
+    expect(draft.graphics).toMatchObject([
+      {
+        type: "rect",
+        x: -PASSIVE_BODY_HEIGHT / 2,
+        y: -PASSIVE_BODY_WIDTH / 2,
+        width: PASSIVE_BODY_HEIGHT,
+        height: PASSIVE_BODY_WIDTH,
+      },
+    ]);
+    expectDraftPinsToPreserveElectricalMetadata(parsed, draft);
+    expectPinGeometryToChange(parsed, draft);
+  });
+
   it("parses and imports the LM317T-style regulator fixture", () => {
     const parsed = loadParsedFixture("lm317t_regulator.kicad_sym");
-    const draft = convertParsedKicadSymbolToDraft(parsed, "lm317t_regulator.kicad_sym");
+    const draft = convertParsedKicadSymbolToDraft(
+      parsed,
+      "lm317t_regulator.kicad_sym",
+    );
 
     expect(classifyImportedSymbol(parsed)).toEqual({
       kind: "rectangular-ic",
@@ -230,14 +459,49 @@ describe("convertParsedKicadSymbolToDraft", () => {
     expect(draft.metadata.name).toBe("LM317T");
     expect(draft.pins).toHaveLength(3);
     expect(draft.graphics).toHaveLength(1);
+    expect(draft.body).toEqual({
+      kind: "blank",
+      width: DEFAULT_BODY_HEIGHT,
+      height: DEFAULT_BODY_HEIGHT,
+    });
+    expect(draft.graphics).toMatchObject([
+      {
+        type: "rect",
+        x: -DEFAULT_BODY_HEIGHT / 2,
+        y: -DEFAULT_BODY_HEIGHT / 2,
+        width: DEFAULT_BODY_HEIGHT,
+        height: DEFAULT_BODY_HEIGHT,
+      },
+    ]);
+    expect(draft.pins).toMatchObject([
+      {
+        side: "left",
+        position: { x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH), y: 0 },
+        length: DEFAULT_PIN_LENGTH,
+      },
+      {
+        side: "right",
+        position: { x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH, y: 0 },
+        length: DEFAULT_PIN_LENGTH,
+      },
+      {
+        side: "bottom",
+        position: { x: 0, y: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH) },
+        length: DEFAULT_PIN_LENGTH,
+      },
+    ]);
     expect(draft.pins.map((pin) => pin.number)).toEqual(["1", "2", "3"]);
     expect(draft.importPreservation?.warnings).toHaveLength(0);
     expectDraftPinsToPreserveElectricalMetadata(parsed, draft);
+    expectPinGeometryToChange(parsed, draft);
   });
 
   it("preserves mixed multi-unit opamp metadata and warns on unsupported classification", () => {
     const parsed = loadParsedFixture("multi_unit_opamp.kicad_sym");
-    const draft = convertParsedKicadSymbolToDraft(parsed, "multi_unit_opamp.kicad_sym");
+    const draft = convertParsedKicadSymbolToDraft(
+      parsed,
+      "multi_unit_opamp.kicad_sym",
+    );
 
     expect(classifyImportedSymbol(parsed)).toMatchObject({
       kind: "unsupported",
@@ -246,15 +510,51 @@ describe("convertParsedKicadSymbolToDraft", () => {
     expect(draft.importPreservation?.warnings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: "multi_unit_combined" }),
-        expect.objectContaining({ code: "unsupported_symbol_archetype" }),
+        expect.objectContaining({
+          code: "import_normalization_skipped",
+          message: expect.stringContaining(
+            "non-rectangular unit 3: classified as two-terminal-passive",
+          ),
+        }),
       ]),
     );
     expectDraftPinsToPreserveElectricalMetadata(parsed, draft);
   });
 
+  it("falls back for mixed multi-unit fixtures without partially normalizing supported units", () => {
+    const parsed = loadParsedFixture("mixed_multi_unit_ic.kicad_sym");
+    const draft = convertParsedKicadSymbolToDraft(
+      parsed,
+      "mixed_multi_unit_ic.kicad_sym",
+    );
+
+    expect(classifyImportedSymbol(parsed)).toMatchObject({
+      kind: "unsupported",
+      reason:
+        "multi-unit symbol has unsupported unit 2: pin distribution spans 3 sides",
+    });
+    expect(draft.importPreservation?.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "multi_unit_combined" }),
+        expect.objectContaining({
+          code: "import_normalization_skipped",
+          message: expect.stringContaining("for all 2 units"),
+        }),
+      ]),
+    );
+    expect(new Set(draft.pins.map((pin) => pin.length))).toEqual(
+      new Set([5_080_000]),
+    );
+    expect(draft.graphics).toHaveLength(2);
+    expectDraftPinsToPreserveElectricalMetadata(parsed, draft);
+  });
+
   it("parses and imports the unsupported three-side IC fixture", () => {
     const parsed = loadParsedFixture("three_side_ic.kicad_sym");
-    const draft = convertParsedKicadSymbolToDraft(parsed, "three_side_ic.kicad_sym");
+    const draft = convertParsedKicadSymbolToDraft(
+      parsed,
+      "three_side_ic.kicad_sym",
+    );
 
     expect(classifyImportedSymbol(parsed)).toMatchObject({
       kind: "unsupported",
@@ -268,15 +568,25 @@ describe("convertParsedKicadSymbolToDraft", () => {
     expect(draft.graphics).toHaveLength(1);
     expect(draft.importPreservation?.warnings).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ code: "unsupported_symbol_archetype" }),
+        expect.objectContaining({
+          code: "import_normalization_skipped",
+          message: expect.stringContaining("pin distribution spans 3 sides"),
+        }),
       ]),
     );
+    expect(draft.pins.find((pin) => pin.number === "4")).toMatchObject({
+      side: "bottom",
+      length: 2_540_000,
+    });
     expectDraftPinsToPreserveElectricalMetadata(parsed, draft);
   });
 
   it("parses and imports the graphics-only fallback fixture", () => {
     const parsed = loadParsedFixture("graphics_only.kicad_sym");
-    const draft = convertParsedKicadSymbolToDraft(parsed, "graphics_only.kicad_sym");
+    const draft = convertParsedKicadSymbolToDraft(
+      parsed,
+      "graphics_only.kicad_sym",
+    );
 
     expect(classifyImportedSymbol(parsed)).toMatchObject({
       kind: "unsupported",
@@ -288,8 +598,46 @@ describe("convertParsedKicadSymbolToDraft", () => {
     expect(draft.importPreservation?.unitCount).toBe(1);
     expect(draft.importPreservation?.warnings).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ code: "unsupported_symbol_archetype" }),
+        expect.objectContaining({
+          code: "import_normalization_skipped",
+          message: expect.stringContaining(
+            "graphics-only symbol has no pins to classify",
+          ),
+        }),
       ]),
     );
+    expect(draft.graphics).toMatchObject([
+      {
+        type: "rect",
+        x: -5_080_000,
+        y: -5_080_000,
+        width: 10_160_000,
+        height: 10_160_000,
+      },
+      { type: "polygon" },
+    ]);
+  });
+
+  it("normalizes text graphics and geometry for oversized two-terminal passive", () => {
+    const parsed = loadParsedFixture("text_normalization.kicad_sym");
+    const draft = convertParsedKicadSymbolToDraft(
+      parsed,
+      "text_normalization.kicad_sym",
+    );
+
+    expect(classifyImportedSymbol(parsed)).toEqual({
+      kind: "two-terminal-passive",
+      reason: null,
+    });
+
+    const rect = draft.graphics.find((g) => g.type === "rect") as any;
+    expect(rect).toBeDefined();
+
+    const text = draft.graphics.find((g) => g.type === "text") as any;
+    expect(text).toBeDefined();
+    expect(text.content).toBe("hello");
+    expect(text.fontSize).toBeCloseTo(0.508, 3);
+    expect(text.y).toBeCloseTo(1_016_000, -2);
+    expect(text.x).toBeCloseTo(0, 1);
   });
 });

@@ -1,24 +1,37 @@
+import { readFileSync } from "fs";
+import { dirname, join } from "path";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
+import { fileURLToPath } from "url";
 import { ComponentWizard } from "./ComponentWizard";
 import { useComponentWizardStore } from "@/stores/component-wizard-store";
 import { useSymbolEditorStore } from "@/components/symbol-editor";
 import { useFootprintEditorStore } from "@/components/footprint-editor";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { parseKicadSymbolLib } from "../../../../src-ts/src/infrastructure/parsers/kicad/kicad-symbol-parser";
+
+const FIXTURES_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../src-ts/src/infrastructure/parsers/kicad/__fixtures__",
+);
+
+function loadParsedSymbolFixture(name: string) {
+  return parseKicadSymbolLib(readFileSync(join(FIXTURES_DIR, name), "utf-8"))
+    .symbols[0]!;
+}
 
 const {
   toast,
-  createWorkspaceComponentRecord,
+  createComponent,
   patchWorkspaceComponentRecord,
-  publishWorkspaceComponentRecord,
   parseKicadSymbolImport,
   parseKicadFootprintImport,
   uploadFile,
 } = vi.hoisted(() => ({
   toast: vi.fn(),
-  createWorkspaceComponentRecord: vi.fn(),
+  createComponent: vi.fn(),
   patchWorkspaceComponentRecord: vi.fn(),
-  publishWorkspaceComponentRecord: vi.fn(),
   parseKicadSymbolImport: vi.fn(),
   parseKicadFootprintImport: vi.fn(),
   uploadFile: vi.fn(),
@@ -41,9 +54,8 @@ vi.mock("@/lib/api/component-api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/component-api")>("@/lib/api/component-api");
   return {
     ...actual,
-    createWorkspaceComponentRecord,
+    createComponent,
     patchWorkspaceComponentRecord,
-    publishWorkspaceComponentRecord,
     parseKicadSymbolImport,
     parseKicadFootprintImport,
   };
@@ -122,20 +134,21 @@ describe("ComponentWizard", () => {
     useSymbolEditorStore.getState().resetDraft("symbol-test");
     useFootprintEditorStore.getState().resetDraft("footprint-test");
 
-    createWorkspaceComponentRecord.mockResolvedValue({
-      id: "draft-1",
-      componentId: null,
-      wizardStep: 0,
-      payload: {},
-      warnings: [],
+    createComponent.mockResolvedValue({
+      id: "component-1",
+      displayLabel: "chip",
+      canonicalKey: "chip-1",
+      description: "Imported symbol",
+      scope: "workspace",
+      categoryPath: null,
+      tags: [],
+      symbolData: null,
+      variants: [],
+      defaultVariantId: null,
       createdAt: "2026-04-01T00:00:00Z",
       updatedAt: "2026-04-01T00:00:00Z",
     });
     patchWorkspaceComponentRecord.mockResolvedValue({ id: "draft-1" });
-    publishWorkspaceComponentRecord.mockResolvedValue({
-      componentId: "component-1",
-      revision: { id: "rev-1" },
-    });
     uploadFile.mockResolvedValue({ id: "file-1", originalName: "Package.step" });
 
     parseKicadSymbolImport.mockResolvedValue({
@@ -233,10 +246,16 @@ describe("ComponentWizard", () => {
     });
   });
 
+  function renderWizard(ui: ReactElement) {
+    return render(<ThemeProvider>{ui}</ThemeProvider>);
+  }
+
   it("imports symbol and footprint, preserves drafts across navigation, and publishes imported payload", async () => {
     const onClose = vi.fn();
     const onPublished = vi.fn();
-    const { container } = render(<ComponentWizard onClose={onClose} onPublished={onPublished} />);
+    const { container } = renderWizard(
+      <ComponentWizard onClose={onClose} onPublished={onPublished} />,
+    );
 
     await screen.findByText(/Step 1 of 4: Symbol/i);
 
@@ -293,18 +312,113 @@ describe("ComponentWizard", () => {
     fireEvent.click(screen.getByRole("button", { name: /Save Component/i }));
 
     await waitFor(() => {
-      expect(publishWorkspaceComponentRecord).toHaveBeenCalledWith("draft-1");
+      expect(createComponent).toHaveBeenCalledTimes(1);
     });
 
-    const finalPatchPayload = patchWorkspaceComponentRecord.mock.calls.at(-1)?.[1]?.payload;
-    expect(finalPatchPayload.symbolData.rawKicadSource).toContain("symbol chip");
-    expect(finalPatchPayload.variants[0]?.footprintOptions[0]?.kicadPayload.rawKicadSource).toContain(
+    const createPayload = createComponent.mock.calls.at(-1)?.[0];
+    expect(createPayload.symbolData.rawKicadSource).toContain("symbol chip");
+    expect(createPayload.variants[0]?.footprintOptions[0]?.kicadPayload.rawKicadSource).toContain(
       "footprint chip",
     );
     expect(
-      finalPatchPayload.variants[0]?.footprintOptions[0]?.model3dOptions[0]?.fileName,
+      createPayload.variants[0]?.footprintOptions[0]?.model3dOptions[0]?.fileName,
     ).toBe("Package.step");
     expect(onPublished).toHaveBeenCalledWith("component-1");
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("warns for unsupported mixed multi-unit KiCad symbols but still lets the wizard publish", async () => {
+    const onClose = vi.fn();
+    const onPublished = vi.fn();
+    parseKicadSymbolImport.mockResolvedValueOnce({
+      fileName: "mixed_multi_unit_ic.kicad_sym",
+      availableSymbols: ["MIXEDMULTI"],
+      symbol: loadParsedSymbolFixture("mixed_multi_unit_ic.kicad_sym"),
+    });
+
+    const { container } = renderWizard(
+      <ComponentWizard onClose={onClose} onPublished={onPublished} />,
+    );
+
+    await screen.findByText(/Step 1 of 4: Symbol/i);
+
+    const symbolInput = container.querySelector(
+      'input[accept=".kicad_sym"]',
+    ) as HTMLInputElement;
+    fireEvent.change(symbolInput, {
+      target: {
+        files: [
+          new File(["symbol"], "mixed_multi_unit_ic.kicad_sym", {
+            type: "text/plain",
+          }),
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      const symbolData = useComponentWizardStore.getState().draft?.symbolData;
+      expect(symbolData?.metadata.name).toBe("MIXEDMULTI");
+      expect(symbolData?.importPreservation?.warnings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: "multi_unit_combined" }),
+          expect.objectContaining({
+            code: "import_normalization_skipped",
+            message: expect.stringContaining("unsupported unit 2"),
+          }),
+        ]),
+      );
+      expect(new Set(symbolData?.pins.map((pin) => pin.length))).toEqual(
+        new Set([5_080_000]),
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByText(/Step 2 of 4: Footprint/i);
+
+    const footprintInput = container.querySelector(
+      'input[accept=".kicad_mod"]',
+    ) as HTMLInputElement;
+    fireEvent.change(footprintInput, {
+      target: {
+        files: [
+          new File(["footprint"], "chip.kicad_mod", { type: "text/plain" }),
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      expect(useFootprintEditorStore.getState().draft.pads).toHaveLength(2);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByText(/Step 3 of 4: 3D Model/i);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByText(/Step 4 of 4: Specs/i);
+    fireEvent.click(screen.getByRole("button", { name: /Save Component/i }));
+
+    await waitFor(() => {
+      expect(createComponent).toHaveBeenCalledTimes(1);
+    });
+    expect(onPublished).toHaveBeenCalledWith("component-1");
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("keeps new-component drafts local until publish and does not persist on close", async () => {
+    const onClose = vi.fn();
+    renderWizard(<ComponentWizard onClose={onClose} />);
+
+    await screen.findByText(/Step 1 of 4: Symbol/i);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByText(/Step 2 of 4: Footprint/i);
+
+    expect(createComponent).not.toHaveBeenCalled();
+    expect(patchWorkspaceComponentRecord).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getAllByRole("button")[0]!);
+
+    expect(createComponent).not.toHaveBeenCalled();
+    expect(patchWorkspaceComponentRecord).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
 });

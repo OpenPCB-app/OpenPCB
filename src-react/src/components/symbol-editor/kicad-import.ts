@@ -7,6 +7,7 @@ import type {
 import type {
   ArcGraphic,
   CircleGraphic,
+  PinSide,
   Point,
   PolygonGraphic,
   RectGraphic,
@@ -21,6 +22,8 @@ import {
   DEFAULT_PIN_LENGTH,
   GRID_SIZES,
   createEmptyDraft,
+  PASSIVE_BODY_WIDTH,
+  PASSIVE_BODY_HEIGHT,
 } from "./types";
 
 type KicadNode = unknown[];
@@ -46,8 +49,11 @@ export type ImportedSymbolClassification =
 
 const NM_PER_MM = 1_000_000;
 const IMPORT_GRID_STEP_NM = GRID_SIZES.normal;
+const IMPORT_GRID_PITCH_NM = IMPORT_GRID_STEP_NM * 2;
 const IMPORTED_IC_MIN_BODY_WIDTH_NM = IMPORT_GRID_STEP_NM * 4;
 const IMPORTED_IC_MAX_BODY_WIDTH_NM = IMPORT_GRID_STEP_NM * 8;
+const IMPORT_NORMALIZATION_SKIPPED_WARNING_CODE =
+  "import_normalization_skipped";
 
 function mmToNm(value: number): number {
   return Math.round(value * NM_PER_MM);
@@ -147,9 +153,18 @@ function createUnsupportedClassification(
   return { kind: "unsupported", reason };
 }
 
-function hasSingleRectangleBody(
-  graphics: ParsedKicadSymbolGraphic[],
-): boolean {
+function describeUnsupportedMultiUnitReason(
+  unit: number,
+  classification: ImportedSymbolClassification,
+): string {
+  if (classification.kind === "unsupported") {
+    return `multi-unit symbol has unsupported unit ${unit}: ${classification.reason}`;
+  }
+
+  return `multi-unit symbol has non-rectangular unit ${unit}: classified as ${classification.kind}`;
+}
+
+function hasSingleRectangleBody(graphics: ParsedKicadSymbolGraphic[]): boolean {
   return (
     graphics.filter((graphic) => {
       const node = toNode(graphic.node);
@@ -294,7 +309,7 @@ export function classifyImportedSymbol(
     const classification = classifySingleUnitSymbol(pins, graphics);
     if (classification.kind !== "rectangular-ic") {
       return createUnsupportedClassification(
-        `multi-unit symbol has non-rectangular unit ${unit}: ${classification.reason}`,
+        describeUnsupportedMultiUnitReason(unit, classification),
       );
     }
   }
@@ -718,61 +733,384 @@ function clampImportedIcBodyWidth(height: number): number {
   );
 }
 
-function isRectangularTwoSidedImportedIcLayout(
-  pins: SymbolPin[],
-  graphics: SymbolGraphic[],
-): graphics is [RectGraphic] {
-  if (graphics.length !== 1 || graphics[0]?.type !== "rect") {
-    return false;
-  }
-
-  if (pins.length < 4) {
-    return false;
-  }
-
-  let hasLeft = false;
-  let hasRight = false;
-
-  for (const pin of pins) {
-    if (pin.side === "left") {
-      hasLeft = true;
-      continue;
-    }
-
-    if (pin.side === "right") {
-      hasRight = true;
-      continue;
-    }
-
-    return false;
-  }
-
-  return hasLeft && hasRight;
+function snapToImportGrid(value: number): number {
+  return Math.round(value / IMPORT_GRID_STEP_NM) * IMPORT_GRID_STEP_NM;
 }
 
-function normalizeRectangularTwoSidedImportedIcLayout(
+function getGraphicBounds(
+  graphics: SymbolGraphic[],
+  includeText = true,
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  const filtered = includeText
+    ? graphics
+    : graphics.filter((graphic) => graphic.type !== "text");
+  if (filtered.length === 0) {
+    return null;
+  }
+
+  return getContentBounds([], filtered);
+}
+
+function getSidePinCounts(pins: SymbolPin[]): Record<PinSide, number> {
+  const counts: Record<PinSide, number> = {
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  };
+
+  for (const pin of pins) {
+    counts[pin.side] += 1;
+  }
+
+  return counts;
+}
+
+function getCanonicalSideAxisPositions(side: PinSide, count: number): number[] {
+  if (count <= 0) {
+    return [];
+  }
+
+  const positions = Array.from({ length: count }, (_, index) =>
+    snapToImportGrid((index - (count - 1) / 2) * IMPORT_GRID_PITCH_NM),
+  );
+
+  return side === "left" || side === "right"
+    ? [...positions].sort((a, b) => b - a)
+    : positions;
+}
+
+function normalizeRectGraphicToBounds(
+  graphic: RectGraphic,
+  bounds: { minX: number; minY: number; maxX: number; maxY: number },
+): RectGraphic {
+  return {
+    ...graphic,
+    x: bounds.minX,
+    y: bounds.minY,
+    width: bounds.maxX - bounds.minX,
+    height: bounds.maxY - bounds.minY,
+  };
+}
+
+function scaleGraphicPoint(
+  point: Point,
+  sourceBounds: { minX: number; minY: number; maxX: number; maxY: number },
+  targetBounds: { minX: number; minY: number; maxX: number; maxY: number },
+): Point {
+  const sourceWidth = sourceBounds.maxX - sourceBounds.minX;
+  const sourceHeight = sourceBounds.maxY - sourceBounds.minY;
+  const targetWidth = targetBounds.maxX - targetBounds.minX;
+  const targetHeight = targetBounds.maxY - targetBounds.minY;
+  const normalizedX =
+    sourceWidth === 0 ? 0.5 : (point.x - sourceBounds.minX) / sourceWidth;
+  const normalizedY =
+    sourceHeight === 0 ? 0.5 : (point.y - sourceBounds.minY) / sourceHeight;
+
+  return {
+    x: targetBounds.minX + normalizedX * targetWidth,
+    y: targetBounds.minY + normalizedY * targetHeight,
+  };
+}
+
+function scaleGraphicsIntoBounds(
+  graphics: SymbolGraphic[],
+  sourceBounds: {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+  } | null,
+  targetBounds: { minX: number; minY: number; maxX: number; maxY: number },
+): SymbolGraphic[] {
+  if (!sourceBounds) {
+    return graphics;
+  }
+
+  const sourceWidth = sourceBounds.maxX - sourceBounds.minX;
+  const sourceHeight = sourceBounds.maxY - sourceBounds.minY;
+  const targetWidth = targetBounds.maxX - targetBounds.minX;
+  const targetHeight = targetBounds.maxY - targetBounds.minY;
+  const scaleX = sourceWidth === 0 ? 1 : targetWidth / sourceWidth;
+  const scaleY = sourceHeight === 0 ? 1 : targetHeight / sourceHeight;
+  const uniformScale = Math.min(Math.abs(scaleX), Math.abs(scaleY));
+
+  return graphics.map((graphic) => {
+    switch (graphic.type) {
+      case "text": {
+        const pos = scaleGraphicPoint(
+          { x: graphic.x, y: graphic.y },
+          sourceBounds,
+          targetBounds,
+        );
+        return {
+          ...graphic,
+          x: pos.x,
+          y: pos.y,
+          fontSize: graphic.fontSize * uniformScale,
+        };
+      }
+      case "line": {
+        const start = scaleGraphicPoint(
+          { x: graphic.x1, y: graphic.y1 },
+          sourceBounds,
+          targetBounds,
+        );
+        const end = scaleGraphicPoint(
+          { x: graphic.x2, y: graphic.y2 },
+          sourceBounds,
+          targetBounds,
+        );
+        return {
+          ...graphic,
+          x1: start.x,
+          y1: start.y,
+          x2: end.x,
+          y2: end.y,
+        };
+      }
+      case "rect": {
+        const topLeft = scaleGraphicPoint(
+          { x: graphic.x, y: graphic.y },
+          sourceBounds,
+          targetBounds,
+        );
+        const bottomRight = scaleGraphicPoint(
+          { x: graphic.x + graphic.width, y: graphic.y + graphic.height },
+          sourceBounds,
+          targetBounds,
+        );
+        return {
+          ...graphic,
+          x: topLeft.x,
+          y: topLeft.y,
+          width: bottomRight.x - topLeft.x,
+          height: bottomRight.y - topLeft.y,
+        };
+      }
+      case "circle": {
+        const center = scaleGraphicPoint(
+          { x: graphic.cx, y: graphic.cy },
+          sourceBounds,
+          targetBounds,
+        );
+        return {
+          ...graphic,
+          cx: center.x,
+          cy: center.y,
+          radius: graphic.radius * uniformScale,
+        };
+      }
+      case "arc": {
+        const center = scaleGraphicPoint(
+          { x: graphic.cx, y: graphic.cy },
+          sourceBounds,
+          targetBounds,
+        );
+        return {
+          ...graphic,
+          cx: center.x,
+          cy: center.y,
+          radius: graphic.radius * uniformScale,
+        };
+      }
+      case "polygon":
+        return {
+          ...graphic,
+          points: graphic.points.map((point) =>
+            scaleGraphicPoint(point, sourceBounds, targetBounds),
+          ),
+        };
+      case "bezier":
+        return {
+          ...graphic,
+          points: graphic.points.map((point) =>
+            scaleGraphicPoint(point, sourceBounds, targetBounds),
+          ) as typeof graphic.points,
+        };
+      default:
+        return graphic;
+    }
+  });
+}
+
+function getBodyGraphicBoundsForDraft(
+  graphics: SymbolGraphic[],
+): { width: number; height: number } | null {
+  const bounds = getGraphicBounds(graphics, false);
+  if (!bounds) {
+    return null;
+  }
+
+  return {
+    width: bounds.maxX - bounds.minX,
+    height: bounds.maxY - bounds.minY,
+  };
+}
+
+function getNormalizedDraftBodyDimensions(
+  classification: ImportedSymbolClassification,
   pins: SymbolPin[],
-  bodyGraphic: RectGraphic,
-): { pins: SymbolPin[]; graphics: [RectGraphic] } {
-  const bodyWidth = clampImportedIcBodyWidth(bodyGraphic.height);
+  graphics: SymbolGraphic[],
+): { width: number; height: number } {
+  const graphicBounds = getBodyGraphicBoundsForDraft(graphics);
+  if (classification.kind === "two-terminal-passive") {
+    return (
+      graphicBounds ?? {
+        width: PASSIVE_BODY_WIDTH,
+        height: PASSIVE_BODY_HEIGHT,
+      }
+    );
+  }
+
+  if (
+    classification.kind === "rectangular-ic" ||
+    classification.kind === "multi-unit-rectangular-ic"
+  ) {
+    return (
+      graphicBounds ?? {
+        width: DEFAULT_BODY_WIDTH,
+        height: DEFAULT_BODY_HEIGHT,
+      }
+    );
+  }
+
+  return getBodyDimensions(pins, graphics);
+}
+
+function normalizeTwoTerminalPassiveLayout(
+  pins: SymbolPin[],
+  graphics: SymbolGraphic[],
+): { pins: SymbolPin[]; graphics: SymbolGraphic[] } {
+  const isVertical = pins.some(
+    (pin) => pin.side === "top" || pin.side === "bottom",
+  );
+  const bodyWidth = isVertical ? PASSIVE_BODY_HEIGHT : PASSIVE_BODY_WIDTH;
+  const bodyHeight = isVertical ? PASSIVE_BODY_WIDTH : PASSIVE_BODY_HEIGHT;
   const halfBodyWidth = bodyWidth / 2;
-  const pinOffsetX = halfBodyWidth + DEFAULT_PIN_LENGTH;
+  const halfBodyHeight = bodyHeight / 2;
+  const targetBounds = {
+    minX: -halfBodyWidth,
+    minY: -halfBodyHeight,
+    maxX: halfBodyWidth,
+    maxY: halfBodyHeight,
+  };
 
   return {
     pins: pins.map((pin) => ({
       ...pin,
-      position: {
-        x: pin.side === "left" ? -pinOffsetX : pinOffsetX,
-        y: pin.position.y,
-      },
+      position:
+        pin.side === "left"
+          ? { x: -(halfBodyWidth + DEFAULT_PIN_LENGTH), y: 0 }
+          : pin.side === "right"
+            ? { x: halfBodyWidth + DEFAULT_PIN_LENGTH, y: 0 }
+            : pin.side === "top"
+              ? { x: 0, y: halfBodyHeight + DEFAULT_PIN_LENGTH }
+              : { x: 0, y: -(halfBodyHeight + DEFAULT_PIN_LENGTH) },
       length: DEFAULT_PIN_LENGTH,
     })),
+    graphics:
+      graphics.length > 0
+        ? scaleGraphicsIntoBounds(
+            graphics,
+            getGraphicBounds(graphics, false),
+            targetBounds,
+          )
+        : [
+            {
+              id: crypto.randomUUID(),
+              type: "rect",
+              zIndex: 0,
+              x: targetBounds.minX,
+              y: targetBounds.minY,
+              width: bodyWidth,
+              height: bodyHeight,
+              filled: false,
+              strokeWidth: 0.0254,
+            },
+          ],
+  };
+}
+
+function normalizeRectangularIcLayout(
+  pins: SymbolPin[],
+  graphics: SymbolGraphic[],
+): { pins: SymbolPin[]; graphics: SymbolGraphic[] } {
+  const sideCounts = getSidePinCounts(pins);
+  const verticalPinCount = Math.max(sideCounts.left, sideCounts.right, 1);
+  const horizontalPinCount = Math.max(sideCounts.top, sideCounts.bottom, 1);
+  const bodyHeight = snapToImportGrid(
+    Math.max(
+      DEFAULT_BODY_HEIGHT,
+      (verticalPinCount + 1) * IMPORT_GRID_PITCH_NM,
+    ),
+  );
+  const bodyWidth = snapToImportGrid(
+    Math.max(
+      clampImportedIcBodyWidth(bodyHeight),
+      DEFAULT_BODY_WIDTH,
+      (horizontalPinCount + 1) * IMPORT_GRID_PITCH_NM,
+    ),
+  );
+  const halfBodyWidth = bodyWidth / 2;
+  const halfBodyHeight = bodyHeight / 2;
+  const axisPositions: Record<PinSide, number[]> = {
+    left: getCanonicalSideAxisPositions("left", sideCounts.left),
+    right: getCanonicalSideAxisPositions("right", sideCounts.right),
+    top: getCanonicalSideAxisPositions("top", sideCounts.top),
+    bottom: getCanonicalSideAxisPositions("bottom", sideCounts.bottom),
+  };
+  const sideIndexes: Record<PinSide, number> = {
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  };
+  const rectBounds = {
+    minX: -halfBodyWidth,
+    minY: -halfBodyHeight,
+    maxX: halfBodyWidth,
+    maxY: halfBodyHeight,
+  };
+  const bodyGraphic = graphics.find((graphic) => graphic.type === "rect") as
+    | RectGraphic
+    | undefined;
+
+  return {
+    pins: pins.map((pin) => {
+      const slotIndex = sideIndexes[pin.side];
+      sideIndexes[pin.side] += 1;
+      const axis = axisPositions[pin.side][slotIndex] ?? 0;
+
+      return {
+        ...pin,
+        position:
+          pin.side === "left"
+            ? { x: -(halfBodyWidth + DEFAULT_PIN_LENGTH), y: axis }
+            : pin.side === "right"
+              ? { x: halfBodyWidth + DEFAULT_PIN_LENGTH, y: axis }
+              : pin.side === "top"
+                ? { x: axis, y: halfBodyHeight + DEFAULT_PIN_LENGTH }
+                : { x: axis, y: -(halfBodyHeight + DEFAULT_PIN_LENGTH) },
+        length: DEFAULT_PIN_LENGTH,
+      };
+    }),
     graphics: [
-      {
-        ...bodyGraphic,
-        x: -halfBodyWidth,
-        width: bodyWidth,
-      },
+      normalizeRectGraphicToBounds(
+        bodyGraphic ?? {
+          id: crypto.randomUUID(),
+          type: "rect",
+          zIndex: 0,
+          x: rectBounds.minX,
+          y: rectBounds.minY,
+          width: bodyWidth,
+          height: bodyHeight,
+          filled: false,
+          strokeWidth: 0.0254,
+        },
+        rectBounds,
+      ),
+      ...graphics.filter((graphic) => graphic.type === "text"),
     ],
   };
 }
@@ -782,12 +1120,15 @@ function normalizeImportedSchematicContent(
   graphics: SymbolGraphic[],
   classification: ImportedSymbolClassification,
 ): { pins: SymbolPin[]; graphics: SymbolGraphic[] } {
+  if (classification.kind === "two-terminal-passive") {
+    return normalizeTwoTerminalPassiveLayout(pins, graphics);
+  }
+
   if (
-    (classification.kind === "rectangular-ic" ||
-      classification.kind === "multi-unit-rectangular-ic") &&
-    isRectangularTwoSidedImportedIcLayout(pins, graphics)
+    classification.kind === "rectangular-ic" ||
+    classification.kind === "multi-unit-rectangular-ic"
   ) {
-    return normalizeRectangularTwoSidedImportedIcLayout(pins, graphics[0]);
+    return normalizeRectangularIcLayout(pins, graphics);
   }
 
   return { pins, graphics };
@@ -825,8 +1166,11 @@ function toWarningMessages(
 
   if (classification.kind === "unsupported") {
     warnings.push({
-      code: "unsupported_symbol_archetype",
-      message: `Preserved near-original geometry: ${classification.reason}`,
+      code: IMPORT_NORMALIZATION_SKIPPED_WARNING_CODE,
+      message:
+        unitCount > 1
+          ? `Skipped canonical normalization for all ${unitCount} units and preserved converted geometry because ${classification.reason}`
+          : `Skipped canonical normalization and preserved converted geometry because ${classification.reason}`,
     });
   }
 
@@ -858,13 +1202,19 @@ function getUnitNumber(unit: number): number {
 function getNormalizedUnitContent(
   pins: SymbolPin[],
   graphics: SymbolGraphic[],
+  classification: ImportedSymbolClassification,
 ): {
   pins: SymbolPin[];
   graphics: SymbolGraphic[];
-    width: number;
-    height: number;
+  width: number;
+  height: number;
 } {
-  const normalized = centerImportedContent(pins, graphics);
+  const centered = centerImportedContent(pins, graphics);
+  const normalized = normalizeImportedSchematicContent(
+    centered.pins,
+    centered.graphics,
+    classification,
+  );
   const bounds = getContentBounds(normalized.pins, normalized.graphics);
   return {
     ...normalized,
@@ -873,7 +1223,10 @@ function getNormalizedUnitContent(
   };
 }
 
-function combineUnits(parsed: ParsedKicadSymbol): {
+function combineUnits(
+  parsed: ParsedKicadSymbol,
+  classification: ImportedSymbolClassification,
+): {
   pins: SymbolPin[];
   graphics: SymbolGraphic[];
   droppedGraphics: number;
@@ -893,6 +1246,10 @@ function combineUnits(parsed: ParsedKicadSymbol): {
   const sharedGraphics = graphicsByUnit.get(0) ?? [];
   const unitCount = Math.max(parsed.units, 1);
   const units = Array.from({ length: unitCount }, (_, index) => index + 1);
+  const unitClassification =
+    classification.kind === "multi-unit-rectangular-ic"
+      ? createSupportedClassification("rectangular-ic")
+      : createUnsupportedClassification("unit-level normalization not required");
   const normalizedUnits = [] as Array<{
     pins: SymbolPin[];
     graphics: SymbolGraphic[];
@@ -916,11 +1273,14 @@ function combineUnits(parsed: ParsedKicadSymbol): {
         ? unitGraphicsSource.length
         : sharedGraphics.length) + 1;
     droppedGraphics += dropped;
-    normalizedUnits.push(getNormalizedUnitContent(unitPins, graphics));
+    normalizedUnits.push(
+      getNormalizedUnitContent(unitPins, graphics, unitClassification),
+    );
   }
 
   if (normalizedUnits.length <= 1) {
-    const single = normalizedUnits[0] ?? getNormalizedUnitContent([], []);
+    const single =
+      normalizedUnits[0] ?? getNormalizedUnitContent([], [], unitClassification);
     return {
       pins: single.pins,
       graphics: single.graphics,
@@ -1002,22 +1362,26 @@ export function convertParsedKicadSymbolToDraft(
 ): SymbolDraft {
   const draft = createEmptyDraft(crypto.randomUUID());
   const classification = classifyImportedSymbol(parsed);
-  const { pins, graphics, droppedGraphics } = combineUnits(parsed);
+  const { pins, graphics, droppedGraphics } = combineUnits(parsed, classification);
   const centered =
     parsed.units > 1
       ? { pins, graphics }
       : centerImportedContent(pins, graphics);
-  const normalized = normalizeImportedSchematicContent(
-    centered.pins,
-    centered.graphics,
-    classification,
-  );
+  const normalized =
+    parsed.units > 1
+      ? centered
+      : normalizeImportedSchematicContent(
+          centered.pins,
+          centered.graphics,
+          classification,
+        );
 
   if (normalized.pins.length === 0 && normalized.graphics.length === 0) {
     throw new Error("Imported symbol contains no renderable pins or graphics");
   }
 
-  const bodyDimensions = getBodyDimensions(
+  const bodyDimensions = getNormalizedDraftBodyDimensions(
+    classification,
     normalized.pins,
     normalized.graphics,
   );
@@ -1054,7 +1418,9 @@ export function convertParsedKicadSymbolToDraft(
 
 export async function importKicadSymbolFile(file: File): Promise<SymbolDraft> {
   const content = await file.text();
-  const { parseKicadSymbolImport } = await import("../../lib/api/component-api");
+  const { parseKicadSymbolImport } = await import(
+    "../../lib/api/component-api"
+  );
   const parsed = await parseKicadSymbolImport(content, file.name);
   return convertParsedKicadSymbolToDraft(
     parsed.symbol,
