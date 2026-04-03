@@ -41,6 +41,44 @@ export function collapseRedundantWirePoints(points: Point[]): Point[] {
   return collapsed;
 }
 
+export function collectDirectlyAttachedPinIds(wires: WireEntity[]): string[] {
+  return [...new Set(wires.flatMap((wire) => [wire.sourcePinId, wire.targetPinId]))].sort();
+}
+
+export function translateWirePoints(points: Point[], delta: Point): Point[] {
+  return points.map((point) => ({
+    x: point.x + delta.x,
+    y: point.y + delta.y,
+  }));
+}
+
+export function rerouteWireWithMovedEndpoint(
+  wire: WireEntity,
+  movedPinIds: Set<string>,
+  initialPoints: Point[],
+  getAnchor: (pinId: string) => Point | null,
+): Point[] {
+  const sourceMoved = movedPinIds.has(wire.sourcePinId);
+  const targetMoved = movedPinIds.has(wire.targetPinId);
+
+  if (sourceMoved === targetMoved) {
+    return initialPoints;
+  }
+
+  const sourcePoint = sourceMoved ? getAnchor(wire.sourcePinId) : initialPoints[0] ?? null;
+  const targetPoint = targetMoved ? getAnchor(wire.targetPinId) : initialPoints[initialPoints.length - 1] ?? null;
+
+  if (!sourcePoint || !targetPoint) {
+    return initialPoints;
+  }
+
+  return collapseRedundantWirePoints([
+    sourcePoint,
+    ...initialPoints.slice(1, -1),
+    targetPoint,
+  ]);
+}
+
 export function buildOrthogonalWirePath(source: Point, target: Point): Point[] {
   return buildOrthogonalWirePathWithWaypoints(source, [], target);
 }

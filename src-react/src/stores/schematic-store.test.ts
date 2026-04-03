@@ -181,6 +181,10 @@ function createLibraryComponents(
 function resetStore() {
   useSchematicStore.getState().setComponentLibrary([]);
 
+  while (useSchematicStore.getState().canUndo()) {
+    useSchematicStore.getState().undo();
+  }
+
   useSchematicStore.setState((state) => ({
     ...state,
     persisted: {
@@ -517,6 +521,330 @@ describe("useSchematicStore", () => {
 
     state.commitDragMove();
     expect(useSchematicStore.getState().session).toBeNull();
+  });
+
+  it("captures attached wire state when drag starts", () => {
+    const state = useSchematicStore.getState();
+
+    state.beginDragMove(["symbol-1", "symbol-2"], "symbol-1", {
+      x: 0,
+      y: 0,
+    });
+
+    expect(useSchematicStore.getState().session).toMatchObject({
+      type: "drag",
+      movedPinIds: ["pin-1", "pin-2", "pin-3", "pin-4"],
+      affectedWireIds: ["wire-1"],
+      initialWirePointsById: {
+        "wire-1": [
+          { x: 0, y: 0 },
+          { x: 1_270_000, y: 0 },
+        ],
+      },
+      undoCaptured: false,
+    });
+  });
+
+  it("reroutes attached wires during single-symbol drag", () => {
+    const state = useSchematicStore.getState();
+    const dragDocument: SchematicDocument = {
+      ...TEST_DOCUMENT,
+      labels: [],
+      wires: [
+        {
+          id: "wire-live",
+          entityType: "wire",
+          position: { x: 0, y: 0 },
+          rotation: 0,
+          mirrored: false,
+          points: [
+            { x: 0, y: 0 },
+            { x: 635_000, y: 0 },
+            { x: 635_000, y: 1_270_000 },
+            { x: 1_905_000, y: 1_270_000 },
+          ],
+          sourcePinId: "pin-1",
+          targetPinId: "pin-3",
+          net: "NET1",
+        },
+      ],
+    };
+
+    state.setDocument(dragDocument);
+    state.beginDragMove(["symbol-1"], "symbol-1", { x: 0, y: 0 });
+    state.updateDragMove({ x: 635_000, y: 0 });
+
+    const movedWire = useSchematicStore
+      .getState()
+      .persisted.document?.wires.find((wire) => wire.id === "wire-live");
+
+    expect(movedWire?.sourcePinId).toBe("pin-1");
+    expect(movedWire?.targetPinId).toBe("pin-3");
+    expect(movedWire?.points[0]).toEqual({ x: 635_000, y: 0 });
+    expect(movedWire?.points.at(-1)).toEqual({ x: 1_905_000, y: 1_270_000 });
+
+    state.commitDragMove();
+    expect(useSchematicStore.getState().session).toBeNull();
+  });
+
+  it("moves internal wires and reroutes external wires during multi-symbol drag", () => {
+    const state = useSchematicStore.getState();
+    const dragDocument: SchematicDocument = {
+      ...TEST_DOCUMENT,
+      labels: [],
+      symbols: [
+        ...TEST_DOCUMENT.symbols,
+        {
+          id: "symbol-3",
+          entityType: "symbol",
+          symbolKind: "connector",
+          componentId: "component-connector",
+          variantId: "variant-connector-default",
+          symbolTemplate: "connector",
+          reference: "J2",
+          value: "HDR1",
+          position: { x: 3_810_000, y: 0 },
+          rotation: 0,
+          mirrored: false,
+          pins: [{ id: "pin-5", name: "1", position: { x: 0, y: 0 } }],
+          properties: {},
+        },
+      ],
+      wires: [
+        {
+          id: "wire-1",
+          entityType: "wire",
+          position: { x: 0, y: 0 },
+          rotation: 0,
+          mirrored: false,
+          points: [
+            { x: 0, y: 0 },
+            { x: 635_000, y: 0 },
+            { x: 635_000, y: 1_270_000 },
+            { x: 1_905_000, y: 1_270_000 },
+          ],
+          sourcePinId: "pin-1",
+          targetPinId: "pin-3",
+          net: "NET1",
+        },
+        {
+          id: "wire-2",
+          entityType: "wire",
+          position: { x: 1_905_000, y: 0 },
+          rotation: 0,
+          mirrored: false,
+          points: [
+            { x: 1_905_000, y: 0 },
+            { x: 2_540_000, y: 0 },
+            { x: 2_540_000, y: -635_000 },
+            { x: 3_810_000, y: -635_000 },
+            { x: 3_810_000, y: 0 },
+          ],
+          sourcePinId: "pin-4",
+          targetPinId: "pin-5",
+          net: "NET2",
+        },
+      ],
+    };
+
+    state.setDocument(dragDocument);
+    state.beginDragMove(["symbol-1", "symbol-2"], "symbol-1", { x: 0, y: 0 });
+    state.updateDragMove({ x: 635_000, y: 0 });
+
+    const nextDocument = useSchematicStore.getState().persisted.document;
+    const internalWire = nextDocument?.wires.find((wire) => wire.id === "wire-1");
+    const externalWire = nextDocument?.wires.find((wire) => wire.id === "wire-2");
+
+    expect(internalWire?.points).toEqual([
+      { x: 635_000, y: 0 },
+      { x: 1_270_000, y: 0 },
+      { x: 1_270_000, y: 1_270_000 },
+      { x: 2_540_000, y: 1_270_000 },
+    ]);
+    expect(externalWire?.points).toEqual([
+      { x: 2_540_000, y: 0 },
+      { x: 2_540_000, y: -635_000 },
+      { x: 3_810_000, y: -635_000 },
+      { x: 3_810_000, y: 0 },
+    ]);
+    expect(externalWire?.sourcePinId).toBe("pin-4");
+    expect(externalWire?.targetPinId).toBe("pin-5");
+  });
+
+  it("undoes and redoes drag with attached wires as one transaction", () => {
+    const state = useSchematicStore.getState();
+    const dragDocument: SchematicDocument = {
+      ...TEST_DOCUMENT,
+      labels: [],
+      symbols: [
+        ...TEST_DOCUMENT.symbols,
+        {
+          id: "symbol-3",
+          entityType: "symbol",
+          symbolKind: "connector",
+          componentId: "component-connector",
+          variantId: "variant-connector-default",
+          symbolTemplate: "connector",
+          reference: "J2",
+          value: "HDR1",
+          position: { x: 3_810_000, y: 0 },
+          rotation: 0,
+          mirrored: false,
+          pins: [{ id: "pin-5", name: "1", position: { x: 0, y: 0 } }],
+          properties: {},
+        },
+      ],
+      wires: [
+        {
+          id: "wire-1",
+          entityType: "wire",
+          position: { x: 0, y: 0 },
+          rotation: 0,
+          mirrored: false,
+          points: [
+            { x: 0, y: 0 },
+            { x: 635_000, y: 0 },
+            { x: 635_000, y: 1_270_000 },
+            { x: 1_905_000, y: 1_270_000 },
+          ],
+          sourcePinId: "pin-1",
+          targetPinId: "pin-3",
+          net: "NET1",
+        },
+        {
+          id: "wire-2",
+          entityType: "wire",
+          position: { x: 1_905_000, y: 0 },
+          rotation: 0,
+          mirrored: false,
+          points: [
+            { x: 1_905_000, y: 0 },
+            { x: 2_540_000, y: 0 },
+            { x: 2_540_000, y: -635_000 },
+            { x: 3_810_000, y: -635_000 },
+            { x: 3_810_000, y: 0 },
+          ],
+          sourcePinId: "pin-4",
+          targetPinId: "pin-5",
+          net: "NET2",
+        },
+      ],
+    };
+
+    state.setDocument(dragDocument);
+    expect(useSchematicStore.getState().canUndo()).toBe(false);
+
+    state.beginDragMove(["symbol-1", "symbol-2"], "symbol-1", { x: 0, y: 0 });
+    state.updateDragMove({ x: 635_000, y: 0 });
+    state.updateDragMove({ x: 1_270_000, y: 0 });
+    state.commitDragMove();
+
+    expect(useSchematicStore.getState().canUndo()).toBe(true);
+    expect(useSchematicStore.getState().persisted.document?.symbols).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "symbol-1", position: { x: 1_270_000, y: 0 } }),
+        expect.objectContaining({ id: "symbol-2", position: { x: 3_175_000, y: 635_000 } }),
+      ]),
+    );
+
+    state.undo();
+    const undone = useSchematicStore.getState().persisted.document;
+    expect(
+      undone?.symbols.map((symbol) => ({ id: symbol.id, position: symbol.position })),
+    ).toEqual(
+      dragDocument.symbols.map((symbol) => ({
+        id: symbol.id,
+        position: symbol.position,
+      })),
+    );
+    expect(undone?.wires).toEqual(dragDocument.wires);
+    expect(useSchematicStore.getState().canUndo()).toBe(false);
+    expect(useSchematicStore.getState().canRedo()).toBe(true);
+
+    state.redo();
+    const redone = useSchematicStore.getState().persisted.document;
+    const internalWire = redone?.wires.find((wire) => wire.id === "wire-1");
+    const externalWire = redone?.wires.find((wire) => wire.id === "wire-2");
+
+    expect(internalWire?.points).toEqual([
+      { x: 1_270_000, y: 0 },
+      { x: 1_905_000, y: 0 },
+      { x: 1_905_000, y: 1_270_000 },
+      { x: 3_175_000, y: 1_270_000 },
+    ]);
+    expect(externalWire?.points).toEqual([
+      { x: 3_175_000, y: 0 },
+      { x: 2_540_000, y: 0 },
+      { x: 2_540_000, y: -635_000 },
+      { x: 3_810_000, y: -635_000 },
+      { x: 3_810_000, y: 0 },
+    ]);
+    expect(useSchematicStore.getState().canRedo()).toBe(false);
+  });
+
+  it("keeps junctions and bounds in sync during live wire reroute", () => {
+    const state = useSchematicStore.getState();
+    const dragDocument: SchematicDocument = {
+      ...TEST_DOCUMENT,
+      labels: [],
+      wires: [
+        {
+          id: "wire-1",
+          entityType: "wire",
+          position: { x: 0, y: 0 },
+          rotation: 0,
+          mirrored: false,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1_905_000, y: 0 },
+            { x: 1_905_000, y: 1_270_000 },
+          ],
+          sourcePinId: "pin-1",
+          targetPinId: "pin-3",
+          net: "NET1",
+        },
+        {
+          id: "wire-2",
+          entityType: "wire",
+          position: { x: 0, y: 0 },
+          rotation: 0,
+          mirrored: false,
+          points: [
+            { x: 0, y: 0 },
+            { x: 1_905_000, y: 0 },
+          ],
+          sourcePinId: "pin-1",
+          targetPinId: "pin-4",
+          net: "NET2",
+        },
+      ],
+    };
+
+    state.setDocument(dragDocument);
+    state.beginDragMove(["symbol-1"], "symbol-1", { x: 0, y: 0 });
+    state.updateDragMove({ x: 635_000, y: 0 });
+
+    const nextState = useSchematicStore.getState();
+    expect(nextState.derived.connectivity?.junctions).toContainEqual({
+      id: "junction:635000:0",
+      position: { x: 635_000, y: 0 },
+      degree: 2,
+      wireIds: ["wire-1", "wire-2"],
+    });
+    expect(nextState.derived.connectivity?.junctions).not.toContainEqual(
+      expect.objectContaining({ id: "junction:0:0" }),
+    );
+    expect(nextState.derived.documentBounds?.minX).toBe(635_000);
+  });
+
+  it("does not create undo history for zero-delta drag", () => {
+    const state = useSchematicStore.getState();
+
+    state.beginDragMove(["symbol-1"], "symbol-1", { x: 0, y: 0 });
+    state.updateDragMove({ x: 0, y: 0 });
+    state.commitDragMove();
+
+    expect(useSchematicStore.getState().canUndo()).toBe(false);
   });
 
   it("starts wire sessions through beginWire without mutating the document", () => {

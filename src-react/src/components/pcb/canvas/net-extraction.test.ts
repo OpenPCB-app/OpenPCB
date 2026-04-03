@@ -326,6 +326,48 @@ describe("extractNets", () => {
     expect(nets[0]?.pinIds).toContain("s2-p1");
   });
 
+  it("keeps pin-id connectivity after rerouted drag geometry changes", () => {
+    const sym2 = makeSymbol("s2", { x: 400, y: 0 }, [
+      { id: "p1", name: "IN", position: { x: -100, y: 0 } },
+      { id: "p2", name: "OUT", position: { x: 100, y: 0 } },
+    ]);
+    const sym3 = makeSymbol("s3", { x: 900, y: 0 }, [
+      { id: "p1", name: "IN", position: { x: -100, y: 0 } },
+    ]);
+
+    const beforeReroute = makeWire(
+      "w-reroute",
+      [
+        { x: 500, y: 0 },
+        { x: 700, y: 0 },
+        { x: 800, y: 0 },
+      ],
+      "s2-p2",
+      "s3-p1",
+    );
+    const afterReroute = makeWire(
+      "w-reroute",
+      [
+        { x: 635, y: 0 },
+        { x: 635, y: -200 },
+        { x: 800, y: -200 },
+        { x: 800, y: 0 },
+      ],
+      "s2-p2",
+      "s3-p1",
+    );
+
+    const netsBefore = extractNets([sym2, sym3], [beforeReroute], []);
+    const netsAfter = extractNets([sym2, sym3], [afterReroute], []);
+
+    const beforeNet = netsBefore.find((net) => net.pinIds.includes("s2-p2"));
+    const afterNet = netsAfter.find((net) => net.pinIds.includes("s2-p2"));
+
+    expect(beforeNet?.pinIds).toContain("s3-p1");
+    expect(afterNet?.pinIds).toContain("s3-p1");
+    expect(afterNet?.pinIds).not.toContain("s2-p1");
+  });
+
   it("handles mixed connectivity: wires + net labels + power symbols", () => {
     const resistor = makeSymbol("r1", { x: 200, y: 0 }, [
       { id: "p1", name: "1", position: { x: -100, y: 0 } },

@@ -37,7 +37,9 @@ import {
   buildOrthogonalWirePathWithWaypoints,
   deriveWireJunctions,
   getWireLength,
-} from "@/components/pcb/canvas/wires";
+  rerouteWireWithMovedEndpoint,
+  translateWirePoints,
+} from "../components/pcb/canvas/wires";
 import {
   getSymbolBodyBounds,
   transformSymbolLocalPoint,
@@ -588,18 +590,34 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         return state;
       }
 
-      schematicUndoManager.pushUndo("Move symbols", document);
-
       const initialPositions = Object.fromEntries(
         symbolIds.map((symbolId) => [
           symbolId,
           document.symbols.find((symbol) => symbol.id === symbolId)
             ?.position ?? {
-            x: 0,
-            y: 0,
+          x: 0,
+          y: 0,
           },
         ]),
       ) as Record<string, Point>;
+
+      const movedPinIds = document.symbols
+        .filter((symbol) => symbolIds.includes(symbol.id))
+        .flatMap((symbol) => symbol.pins.map((pin) => pin.id));
+
+      const movedPinIdSet = new Set(movedPinIds);
+      const affectedWires = document.wires.filter(
+        (wire) =>
+          movedPinIdSet.has(wire.sourcePinId) ||
+          movedPinIdSet.has(wire.targetPinId),
+      );
+
+      const initialWirePointsById = Object.fromEntries(
+        affectedWires.map((wire) => [
+          wire.id,
+          wire.points.map((point) => ({ ...point })),
+        ]),
+      ) as Record<string, Array<{ x: number; y: number }>>;
 
       return {
         session: {
@@ -609,13 +627,18 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
           startPointer,
           lastSnappedDelta: { x: 0, y: 0 },
           initialPositions,
+          movedPinIds,
+          affectedWireIds: affectedWires.map((wire) => wire.id),
+          initialWirePointsById,
+          undoCaptured: false,
         } satisfies DragSession,
       };
     }),
 
   updateDragMove: (delta) =>
     set((state) => {
-      if (state.session?.type !== "drag") {
+      const session = state.session;
+      if (session?.type !== "drag") {
         return state;
       }
 
@@ -625,32 +648,86 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
       }
 
       if (
-        delta.x === state.session.lastSnappedDelta.x &&
-        delta.y === state.session.lastSnappedDelta.y
+        delta.x === session.lastSnappedDelta.x &&
+        delta.y === session.lastSnappedDelta.y
       ) {
         return state;
       }
 
+      const shouldCaptureUndo =
+        !session.undoCaptured && (delta.x !== 0 || delta.y !== 0);
+
+      if (shouldCaptureUndo) {
+        schematicUndoManager.pushUndo("Move symbols", document);
+      }
+
       const nextDocument = getUpdatedSymbolPositions(
         document,
-        state.session.symbolIds,
-        state.session.initialPositions,
+        session.symbolIds,
+        session.initialPositions,
         delta,
       );
+
+      const movedPinIdSet = new Set(session.movedPinIds);
+      const affectedWireIdSet = new Set(session.affectedWireIds);
+      const getNextAnchor = (pinId: string): Point | null => {
+        for (const symbol of nextDocument.symbols) {
+          const pin = symbol.pins.find((candidate) => candidate.id === pinId);
+          if (!pin) {
+            continue;
+          }
+
+          return transformSymbolLocalPoint(symbol, pin.position);
+        }
+
+        return null;
+      };
+
+      const nextWires = nextDocument.wires.map((wire) => {
+        if (!affectedWireIdSet.has(wire.id)) {
+          return wire;
+        }
+
+        const initialPoints =
+          session.initialWirePointsById[wire.id] ?? wire.points;
+        const bothEndpointsMoved =
+          movedPinIdSet.has(wire.sourcePinId) &&
+          movedPinIdSet.has(wire.targetPinId);
+        const nextPoints = bothEndpointsMoved
+          ? translateWirePoints(initialPoints, delta)
+          : rerouteWireWithMovedEndpoint(
+              wire,
+              movedPinIdSet,
+              initialPoints,
+              getNextAnchor,
+            );
+
+        return {
+          ...wire,
+          points: nextPoints,
+        };
+      });
+
+      const reroutedDocument = {
+        ...nextDocument,
+        wires: nextWires,
+      };
 
       return {
         persisted: {
           ...state.persisted,
-          document: nextDocument,
+          document: reroutedDocument,
         },
         derived: {
           ...state.derived,
-          documentBounds: deriveDocumentBounds(nextDocument),
-          hitTestCache: createHitTestCache(nextDocument.symbols),
+          connectivity: deriveConnectivity(reroutedDocument),
+          documentBounds: deriveDocumentBounds(reroutedDocument),
+          hitTestCache: createHitTestCache(reroutedDocument.symbols),
         },
         session: {
-          ...state.session,
+          ...session,
           lastSnappedDelta: delta,
+          undoCaptured: session.undoCaptured || shouldCaptureUndo,
         },
       };
     }),
