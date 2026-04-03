@@ -130,10 +130,7 @@ const EMBEDDED_SYMBOLS: Array<{
   label: string;
   badge: string;
   category: SymbolCategory;
-}> = [
-  { kind: "gnd", label: "Ground", badge: "GND", category: "power" },
-  { kind: "vcc", label: "VCC", badge: "VCC", category: "power" },
-];
+}> = [];
 
 function EmptyState() {
   const navigateToLibrary = useNavigationStore((s) => s.navigateToLibrary);

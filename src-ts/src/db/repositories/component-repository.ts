@@ -39,6 +39,7 @@ export interface CreateComponentInput {
   symbolData: Record<string, unknown>;
   categoryPath?: string | null;
   tags?: string[];
+  scope?: "workspace" | "builtin";
   variants: CreateVariantInput[];
 }
 
@@ -388,7 +389,7 @@ export class ComponentRepository extends BaseRepository<
             canonicalKey: input.canonicalKey,
             displayLabel: input.displayLabel,
             description: input.description ?? "",
-            scope: "workspace",
+            scope: input.scope ?? "workspace",
             symbolData: input.symbolData,
             categoryPath: input.categoryPath ?? null,
             tags: input.tags ?? [],
@@ -562,7 +563,9 @@ export class ComponentRepository extends BaseRepository<
       this.entityName,
       "listComponents",
       async () => {
-        const conditions = [eq(component.scope, "workspace")];
+        const conditions = [
+          or(eq(component.scope, "workspace"), eq(component.scope, "builtin")),
+        ];
 
         if (filters.search) {
           conditions.push(
@@ -597,7 +600,10 @@ export class ComponentRepository extends BaseRepository<
             )
             .where(
               and(
-                eq(component.scope, "workspace"),
+                or(
+                  eq(component.scope, "workspace"),
+                  eq(component.scope, "builtin"),
+                ),
                 eq(componentVariant.mountType, filters.mountType),
               ),
             );

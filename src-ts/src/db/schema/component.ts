@@ -1,7 +1,7 @@
 import { sqliteTable, text, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { uuidPrimaryKey, timestamps } from "./base";
 
-const COMPONENT_SCOPES = ["workspace"] as const;
+const COMPONENT_SCOPES = ["workspace", "builtin"] as const;
 
 export const component = sqliteTable(
   "components",
@@ -18,7 +18,10 @@ export const component = sqliteTable(
       .notNull(),
     defaultVariantId: text("default_variant_id"),
     categoryPath: text("category_path"),
-    tags: text("tags", { mode: "json" }).$type<string[]>().notNull().default([]),
+    tags: text("tags", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
     ...timestamps,
   },
   (table) => ({
@@ -27,7 +30,9 @@ export const component = sqliteTable(
       table.canonicalKey,
     ),
     scopeIdx: index("idx_components_scope").on(table.scope),
-    categoryPathIdx: index("idx_components_category_path").on(table.categoryPath),
+    categoryPathIdx: index("idx_components_category_path").on(
+      table.categoryPath,
+    ),
   }),
 );
 
@@ -45,11 +50,9 @@ export const componentUsage = sqliteTable(
   (table) => ({
     componentIdx: index("idx_component_usage_component").on(table.componentId),
     designIdx: index("idx_component_usage_design").on(table.designId),
-    uniqueUsageIdx: uniqueIndex("ux_component_usage_design_component_variant").on(
-      table.designId,
-      table.componentId,
-      table.variantId,
-    ),
+    uniqueUsageIdx: uniqueIndex(
+      "ux_component_usage_design_component_variant",
+    ).on(table.designId, table.componentId, table.variantId),
   }),
 );
 

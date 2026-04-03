@@ -56,6 +56,7 @@ import { OAuthService } from "./infrastructure/oauth/oauth-service";
 import type { OAuthProvider } from "./infrastructure/oauth/types";
 import { QueryLogger } from "./db/query-logger";
 import { createOAuthCleanup } from "./infrastructure/oauth/cleanup";
+import { seedBuiltinComponents } from "./seed/seed-builtin-components";
 
 const STARTUP_LICENSE_STATES = [
   "active",
@@ -161,6 +162,19 @@ await runMigrationsIfNeeded();
 
 const componentFamilyService = new ComponentFamilyService(db.componentFamilies);
 await componentFamilyService.seedBuiltIns();
+
+console.log("[Seed] Seeding built-in components...");
+const seedResult = await seedBuiltinComponents(
+  db.components,
+  DatabaseAccess.getInstance().getDb(),
+);
+if (seedResult.seeded > 0) {
+  console.log(`[Seed] Seeded ${seedResult.seeded} built-in component(s)`);
+} else if (seedResult.skipped > 0) {
+  console.log(
+    `[Seed] Built-in components already present, skipped ${seedResult.skipped}`,
+  );
+}
 
 console.log("[Database] Database ready");
 

@@ -132,9 +132,13 @@ function nodeToRecord(node: SExpr[]): Record<string, unknown> {
 
 export function parseKicadFootprint(source: string): ParsedKicadFootprint {
   const tree = parseSexpr(source);
-  if (!Array.isArray(tree) || tree[0] !== "footprint") {
+  // Support both KiCad 6+ (footprint) and KiCad 5 (module) formats
+  if (
+    !Array.isArray(tree) ||
+    (tree[0] !== "footprint" && tree[0] !== "module")
+  ) {
     throw new Error(
-      "Not a valid KiCad footprint file: missing (footprint ...) root",
+      "Not a valid KiCad footprint file: missing (footprint ...) or (module ...) root",
     );
   }
 
@@ -211,7 +215,8 @@ export function parseKicadFootprint(source: string): ParsedKicadFootprint {
     }
 
     if (drillNode) {
-      pad.drillDiameter = getNumberValue(drillNode, 1) ?? getNumberValue(drillNode) ?? undefined;
+      pad.drillDiameter =
+        getNumberValue(drillNode, 1) ?? getNumberValue(drillNode) ?? undefined;
       const offsetNode = findNode(drillNode, "offset");
       if (offsetNode) {
         pad.drillOffset = {
@@ -222,10 +227,16 @@ export function parseKicadFootprint(source: string): ParsedKicadFootprint {
     }
 
     if (!PAD_TYPES.has(rawType)) {
-      warnings.push({ code: "unsupported_pad_type", message: `Unsupported pad type "${rawType}" defaulted to smd` });
+      warnings.push({
+        code: "unsupported_pad_type",
+        message: `Unsupported pad type "${rawType}" defaulted to smd`,
+      });
     }
     if (!PAD_SHAPES.has(rawShape)) {
-      warnings.push({ code: "unsupported_pad_shape", message: `Unsupported pad shape "${rawShape}" defaulted to rect` });
+      warnings.push({
+        code: "unsupported_pad_shape",
+        message: `Unsupported pad shape "${rawShape}" defaulted to rect`,
+      });
     }
 
     pads.push(pad);
@@ -249,7 +260,8 @@ export function parseKicadFootprint(source: string): ParsedKicadFootprint {
     const path = getStringValue(modelNode) ?? "";
     const normalizedPath = path.replace(/\\/g, "/");
     const lastSlash = normalizedPath.lastIndexOf("/");
-    const resolvedFileName = lastSlash >= 0 ? normalizedPath.slice(lastSlash + 1) : normalizedPath;
+    const resolvedFileName =
+      lastSlash >= 0 ? normalizedPath.slice(lastSlash + 1) : normalizedPath;
 
     const offsetNode = findNode(modelNode, "offset");
     const scaleNode = findNode(modelNode, "scale");
