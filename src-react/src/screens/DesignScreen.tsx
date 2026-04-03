@@ -379,6 +379,20 @@ export function DesignScreen() {
       if (designTab === "pcb") {
         const pcbStore = usePcbStore.getState();
 
+        if (pcbStore.routingSession) {
+          if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+            if (event.key === "z" && !event.shiftKey) {
+              event.preventDefault();
+              pcbStore.cancelRouting();
+              return;
+            }
+            if ((event.key === "z" && event.shiftKey) || event.key === "y") {
+              event.preventDefault();
+              return;
+            }
+          }
+        }
+
         // Undo/Redo (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y)
         if ((event.ctrlKey || event.metaKey) && !event.altKey) {
           if (event.key === "z" && !event.shiftKey) {
@@ -391,11 +405,16 @@ export function DesignScreen() {
             pcbStore.redo();
             return;
           }
+          if (event.key === "a") {
+            event.preventDefault();
+            pcbStore.selectAllPlacements();
+            return;
+          }
         }
 
         if (!isTextEntry) {
           if (event.key === "Delete" || event.key === "Backspace") {
-            if (pcbStore.selectedIds.size > 0) {
+            if (!pcbStore.routingSession && pcbStore.selectedIds.size > 0) {
               if (event.key === "Backspace") {
                 event.preventDefault();
               }
@@ -409,6 +428,8 @@ export function DesignScreen() {
           if (event.key === "Escape") {
             if (pcbStore.routingSession) {
               pcbStore.cancelRouting();
+            } else if (pcbStore.selectedIds.size > 0) {
+              pcbStore.clearSelection();
             } else {
               pcbStore.setActiveTool("select");
             }
@@ -417,8 +438,27 @@ export function DesignScreen() {
 
           // R — activate route tool
           if (event.key === "r" || event.key === "R") {
-            pcbStore.setActiveTool("route");
+            if (!pcbStore.routingSession) {
+              const selectedPlacementId = Array.from(pcbStore.selectedIds).find((id) =>
+                pcbStore.document?.placements.some((placement) => placement.id === id),
+              );
+              if (selectedPlacementId) {
+                pcbStore.rotatePlacement(selectedPlacementId, 90);
+              } else {
+                pcbStore.setActiveTool("route");
+              }
+            }
             return;
+          }
+
+          if ((event.key === "f" || event.key === "F") && !pcbStore.routingSession) {
+            const selectedPlacementId = Array.from(pcbStore.selectedIds).find((id) =>
+              pcbStore.document?.placements.some((placement) => placement.id === id),
+            );
+            if (selectedPlacementId) {
+              pcbStore.flipPlacement(selectedPlacementId);
+              return;
+            }
           }
 
           // Routing-specific keys (only when routing session active)
@@ -484,8 +524,18 @@ export function DesignScreen() {
         }
       }
 
+      if (!isTextEntry && (event.key === "r" || event.key === "R")) {
+        useSchematicStore.getState().rotatePlacement();
+        return;
+      }
+
       // Schematic undo/redo
       if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+        if (event.key === "a") {
+          event.preventDefault();
+          useSchematicStore.getState().selectAll();
+          return;
+        }
         if (event.key === "z" && !event.shiftKey) {
           event.preventDefault();
           useSchematicStore.getState().undo();

@@ -117,6 +117,18 @@ beforeEach(() => {
 });
 
 describe("pcb-store deleteSelectedEntities", () => {
+  it("selects all placements", () => {
+    const store = usePcbStore.getState();
+    store.setDocument(createDocument());
+
+    usePcbStore.getState().selectAllPlacements();
+
+    expect(Array.from(usePcbStore.getState().selectedIds).sort()).toEqual([
+      "u1",
+      "u2",
+    ]);
+  });
+
   it("deletes mixed selected entities and undo restores them", () => {
     const store = usePcbStore.getState();
     store.setDocument(createDocument());

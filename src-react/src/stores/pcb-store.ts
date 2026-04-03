@@ -82,6 +82,7 @@ interface PcbStoreState {
   rotatePlacement: (id: string, delta: number) => void;
   flipPlacement: (id: string) => void;
   selectEntity: (id: string) => void;
+  selectAllPlacements: () => void;
   clearSelection: () => void;
   deleteSelectedEntities: () => void;
   setBoardSize: (width: number, height: number) => void;
@@ -286,6 +287,13 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
 
   selectEntity: (id) => {
     set({ selectedIds: new Set([id]) });
+  },
+
+  selectAllPlacements: () => {
+    const { document } = get();
+    if (!document) return;
+
+    set({ selectedIds: new Set(document.placements.map((placement) => placement.id)) });
   },
 
   clearSelection: () => {
