@@ -284,7 +284,7 @@ describe("symbol helpers", () => {
     expect(ctx.globalAlpha).toBe(0.4);
   });
 
-  it("renders Ground with a visible label and pin text", () => {
+  it("renders GND with only the KiCad value label", () => {
     const { ctx, operations, textWrites } = createContextRecorder();
 
     renderSymbol(
@@ -302,6 +302,6 @@ describe("symbol helpers", () => {
     );
 
     expect(operations).toContain("stroke");
-    expect(textWrites.map((entry) => entry.text)).toEqual(["Ground", "GND"]);
+      expect(textWrites.map((entry) => entry.text)).toEqual(["GND"]);
   });
 });

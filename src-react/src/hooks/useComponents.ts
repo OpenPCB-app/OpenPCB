@@ -9,6 +9,7 @@ import {
   type ComponentType,
   updateComponent as updateComponentRecord,
 } from "@/lib/api/component-api";
+import { useBackendURL } from "@/contexts/BackendURLContext";
 import { useSchematicStore } from "@/stores/schematic-store";
 
 export interface UseComponentsFilters {
@@ -49,12 +50,19 @@ function toErrorMessage(error: unknown, fallback: string): string {
 export function useComponents(
   initialFilters: UseComponentsFilters = {},
 ): UseComponentsReturn {
+  const { isReady } = useBackendURL();
   const [components, setComponents] = useState<ComponentType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<UseComponentsFilters>(initialFilters);
 
   const fetchComponents = useCallback(async () => {
+    if (!isReady) {
+      setError(null);
+      setLoading(true);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -68,9 +76,15 @@ export function useComponents(
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, isReady]);
 
   const refetchAndPropagate = useCallback(async () => {
+    if (!isReady) {
+      setError(null);
+      setLoading(true);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -85,7 +99,7 @@ export function useComponents(
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, isReady]);
 
   useEffect(() => {
     void fetchComponents();

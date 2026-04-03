@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useCanvasColors, type CanvasColors } from "@/lib/canvas-theme";
 import type { ComponentType } from "@shared/types/component-library-schema.types";
 import type { SymbolGraphic as BackendSymbolGraphic } from "@shared/types/component-semantics.types";
@@ -7,6 +7,10 @@ import {
   convertParsedKicadSymbolToDraft,
   convertBodyGraphic,
 } from "../symbol-editor/kicad-import";
+import {
+  getSymbolPreviewLabel,
+  isPowerSymbolData,
+} from "./symbolDataDisplay";
 import type {
   SymbolPin,
   SymbolGraphic,
@@ -334,6 +338,7 @@ function renderPin(
   pin: SymbolPin,
   viewport: Viewport,
   colors: CanvasColors,
+  showText = true,
 ) {
   let bodyEnd: Point;
   switch (pin.side) {
@@ -374,7 +379,7 @@ function renderPin(
   ctx.textBaseline = "middle";
 
   // Pin name (near body end)
-  if (pin.name) {
+  if (showText && pin.name) {
     ctx.fillStyle = colors.pinLabel;
     const labelPadding = 4;
     switch (pin.side) {
@@ -406,7 +411,7 @@ function renderPin(
   }
 
   // Pin number (near tip)
-  if (pin.number) {
+  if (showText && pin.number) {
     ctx.fillStyle = colors.pinNumber;
     const numberPadding = PIN_DOT_RADIUS + 4;
     switch (pin.side) {
@@ -618,7 +623,7 @@ export function SymbolPreview({ symbolData }: SymbolPreviewProps) {
   }, [symbolData?.rawKicadSource]);
 
   // Resolve pins/graphics for rendering
-  const resolvedData = useCallback(() => {
+  const resolvedData = useMemo(() => {
     if (!symbolData)
       return { pins: [] as SymbolPin[], graphics: [] as SymbolGraphic[] };
     if (draft) return { pins: draft.pins, graphics: draft.graphics };
@@ -632,14 +637,14 @@ export function SymbolPreview({ symbolData }: SymbolPreviewProps) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !symbolData) return;
-    const { pins, graphics } = resolvedData();
+    const { pins, graphics } = resolvedData;
     const bounds = computeBounds(pins, graphics);
     const fit = fitViewportToBounds(bounds, canvas.offsetWidth, 300, 30, {
       min: 0.5,
     });
     initialFitRef.current = fit;
     setViewportState(fit);
-  }, [symbolData, draft, resolvedData]);
+  }, [symbolData, resolvedData]);
 
   // Canvas rendering
   useEffect(() => {
@@ -658,17 +663,21 @@ export function SymbolPreview({ symbolData }: SymbolPreviewProps) {
     ctx.fillRect(0, 0, width, height);
     renderGrid(ctx, width, height, canvasColors);
 
-    const { pins, graphics } = resolvedData();
+    const { pins, graphics } = resolvedData;
+    const previewLabel = getSymbolPreviewLabel(symbolData);
+    const hidePowerPinText = isPowerSymbolData(symbolData);
+    const labelY = isPowerSymbolData(symbolData) ? height - 20 : 16;
 
     for (const g of graphics)
       renderGraphic(ctx, g, viewportState, canvasColors);
-    for (const pin of pins) renderPin(ctx, pin, viewportState, canvasColors);
+    for (const pin of pins)
+      renderPin(ctx, pin, viewportState, canvasColors, !hidePowerPinText);
 
     ctx.fillStyle = canvasColors.refLabel;
     ctx.font = "bold 12px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(symbolData.referencePrefix || "U", width / 2, 16);
-  }, [symbolData, draft, viewportState, resolvedData, canvasColors]);
+    ctx.fillText(previewLabel, width / 2, labelY);
+  }, [symbolData, viewportState, resolvedData, canvasColors]);
 
   const handleZoomIn = useCallback(() => {
     setViewportState((prev) => {
@@ -739,11 +748,13 @@ export function SymbolPreview({ symbolData }: SymbolPreviewProps) {
       />
       <div className="absolute bottom-2 right-2 flex gap-1">
         <button
+          type="button"
           onClick={handleFitToContent}
           className="p-1 bg-bg-elevated rounded text-text-tertiary hover:text-text-primary"
           title="Fit to content"
         >
           <svg
+            aria-hidden="true"
             className="w-4 h-4"
             fill="none"
             stroke="currentColor"
@@ -758,11 +769,13 @@ export function SymbolPreview({ symbolData }: SymbolPreviewProps) {
           </svg>
         </button>
         <button
+          type="button"
           onClick={handleZoomOut}
           className="p-1 bg-bg-elevated rounded text-text-tertiary hover:text-text-primary"
           title="Zoom out"
         >
           <svg
+            aria-hidden="true"
             className="w-4 h-4"
             fill="none"
             stroke="currentColor"
@@ -777,11 +790,13 @@ export function SymbolPreview({ symbolData }: SymbolPreviewProps) {
           </svg>
         </button>
         <button
+          type="button"
           onClick={handleZoomIn}
           className="p-1 bg-bg-elevated rounded text-text-tertiary hover:text-text-primary"
           title="Zoom in"
         >
           <svg
+            aria-hidden="true"
             className="w-4 h-4"
             fill="none"
             stroke="currentColor"

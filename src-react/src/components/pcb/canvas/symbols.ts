@@ -441,16 +441,17 @@ function renderGround(
   symbol: SymbolEntity,
 ): void {
   const pin = symbol.pins[0]?.position ?? { x: 0, y: 0 };
-  const widths = [360_000, 240_000, 120_000];
+  const stemHeight = 120_000;
+  const halfWidth = 160_000;
+  const tipY = pin.y + 280_000;
 
   ctx.beginPath();
   ctx.moveTo(pin.x, pin.y);
-  ctx.lineTo(pin.x, pin.y + 120_000);
-  widths.forEach((width, index) => {
-    const y = pin.y + 120_000 + index * 90_000;
-    ctx.moveTo(pin.x - width / 2, y);
-    ctx.lineTo(pin.x + width / 2, y);
-  });
+  ctx.lineTo(pin.x, pin.y + stemHeight);
+  ctx.lineTo(pin.x + halfWidth, pin.y + stemHeight);
+  ctx.lineTo(pin.x, tipY);
+  ctx.lineTo(pin.x - halfWidth, pin.y + stemHeight);
+  ctx.lineTo(pin.x, pin.y + stemHeight);
   ctx.stroke();
 }
 
@@ -636,7 +637,7 @@ function getPrimarySymbolLabel(symbol: SymbolEntity): string {
   }
 
   if (symbol.symbolKind === "gnd") {
-    return getSymbolKindLabel(symbol.symbolKind);
+    return symbol.value || "GND";
   }
 
   if (symbol.symbolKind === "vcc") {
@@ -647,6 +648,10 @@ function getPrimarySymbolLabel(symbol: SymbolEntity): string {
 }
 
 function getSecondarySymbolLabel(symbol: SymbolEntity): string | null {
+  if (symbol.symbolKind === "gnd" || symbol.symbolKind === "vcc") {
+    return null;
+  }
+
   if (!symbol.value || symbol.value === symbol.reference) {
     return null;
   }
@@ -667,7 +672,7 @@ function getBodyTextAnchors(symbol: SymbolEntity): {
 
   if (symbol.symbolKind === "vcc") {
     return {
-      primary: { x: 0, y: -420_000 },
+      primary: { x: 0, y: 420_000 },
       secondary: { x: 0, y: 0 },
     };
   }
@@ -718,6 +723,10 @@ function getSymbolTextLabels(symbol: SymbolEntity): SymbolTextLabel[] {
       text: secondary,
       point: transformSymbolLocalPoint(symbol, bodyAnchors.secondary),
     });
+  }
+
+  if (symbol.symbolKind === "gnd" || symbol.symbolKind === "vcc") {
+    return labels;
   }
 
   for (const [index, pin] of symbol.pins.entries()) {

@@ -21,7 +21,11 @@ if (!root) {
 ReactDOM.createRoot(root).render(
   new URLSearchParams(window.location.search).get("e2e") === "schematic" ? (
     <React.StrictMode>
-      <SchematicEditorE2EHarness />
+      <BackendURLProvider>
+        <ThemeProvider>
+          <SchematicEditorE2EHarness />
+        </ThemeProvider>
+      </BackendURLProvider>
     </React.StrictMode>
   ) : (
     <React.StrictMode>

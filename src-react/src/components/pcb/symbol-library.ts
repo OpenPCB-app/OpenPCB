@@ -6,6 +6,198 @@ import type {
 
 export const PALETTE_SYMBOL_KIND_MIME = "application/x-openpcb-symbol-kind";
 
+const DEFAULT_TWO_TERMINAL_PIN_POSITIONS: Point[] = [
+  { x: 0, y: 0 },
+  { x: 1_270_000, y: 0 },
+];
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function getComponentProperties(component: ComponentType): Record<string, string> {
+  const symbolData = asRecord(component.symbolData);
+  const properties = asRecord(symbolData?.properties);
+  if (!properties) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(properties).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
+}
+
+function getReferencePrefix(component: ComponentType): string {
+  const symbolData = asRecord(component.symbolData);
+  const referencePrefix = symbolData?.referencePrefix;
+  if (typeof referencePrefix === "string" && referencePrefix.trim().length > 0) {
+    return referencePrefix;
+  }
+
+  const properties = getComponentProperties(component);
+  const reference = properties.Reference ?? properties.reference;
+  if (typeof reference === "string" && reference.trim().length > 0) {
+    return reference.replace(/\d+$/u, "");
+  }
+
+  return "U";
+}
+
+function getComponentValue(component: ComponentType): string {
+  const properties = getComponentProperties(component);
+  return properties.value ?? properties.Value ?? component.displayLabel;
+}
+
+function getTemplateHint(component: ComponentType): string {
+  return [
+    component.displayLabel,
+    component.categoryPath ?? "",
+    component.canonicalKey ?? "",
+    getReferencePrefix(component),
+    getComponentValue(component),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function getNormalizedSymbolKind(component: ComponentType): string {
+  const canonicalKey = component.canonicalKey?.toLowerCase() ?? "";
+  if (canonicalKey === "builtin:gnd") {
+    return "gnd";
+  }
+  if (canonicalKey === "builtin:vcc") {
+    return "vcc";
+  }
+
+  const referencePrefix = getReferencePrefix(component).toUpperCase();
+  const value = getComponentValue(component).trim().toUpperCase();
+  if (referencePrefix === "#PWR" && value === "GND") {
+    return "gnd";
+  }
+  if (referencePrefix === "#PWR" && value === "VCC") {
+    return "vcc";
+  }
+
+  return component.id;
+}
+
+function isTwoTerminalTemplate(template: SymbolTemplate): boolean {
+  return ["resistor", "capacitor", "inductor", "diode", "led"].includes(
+    template,
+  );
+}
+
+function getKiCadPins(component: ComponentType): Array<Record<string, unknown>> {
+  const symbolData = asRecord(component.symbolData);
+  const pins = symbolData?.pins;
+  if (!Array.isArray(pins)) {
+    return [];
+  }
+
+  return pins
+    .map((pin) => asRecord(pin))
+    .filter((pin): pin is Record<string, unknown> => pin !== null);
+}
+
+function getPinPositions(template: SymbolTemplate, pinCount: number): Point[] {
+  if (pinCount === 2 && isTwoTerminalTemplate(template)) {
+    return DEFAULT_TWO_TERMINAL_PIN_POSITIONS;
+  }
+
+  return generatePinPositions(pinCount);
+}
+
+function getComponentPins(
+  component: ComponentType,
+  symbolId: string,
+  template: SymbolTemplate,
+): SymbolEntity["pins"] {
+  const symbolData = asRecord(component.symbolData);
+  const pinDefinitions = Array.isArray(symbolData?.pinDefinitions)
+    ? symbolData.pinDefinitions
+        .map((pin) => asRecord(pin))
+        .filter((pin): pin is Record<string, unknown> => pin !== null)
+    : [];
+
+  if (pinDefinitions.length > 0) {
+    const positions = getPinPositions(template, pinDefinitions.length);
+    return pinDefinitions.map((pin, index) => ({
+      id: `${symbolId}-pin-${index + 1}`,
+      name:
+        typeof pin.name === "string" && pin.name.trim().length > 0
+          ? pin.name
+          : String(index + 1),
+      position: positions[index] ?? { x: 0, y: 0 },
+    }));
+  }
+
+  const kiCadPins = getKiCadPins(component);
+  const positions = getPinPositions(template, kiCadPins.length);
+  return kiCadPins.map((pin, index) => ({
+    id: `${symbolId}-pin-${index + 1}`,
+    name:
+      typeof pin.name === "string" && pin.name.trim().length > 0
+        ? pin.name
+        : typeof pin.number === "string" && pin.number.trim().length > 0
+          ? pin.number
+          : String(index + 1),
+    position: positions[index] ?? { x: 0, y: 0 },
+  }));
+}
+
+function inferSymbolTemplate(component: ComponentType): SymbolTemplate {
+  const explicit = component.symbolData?.symbolTemplate;
+  if (explicit && typeof explicit === "string" && explicit.trim().length > 0) {
+    return explicit;
+  }
+
+  const prefix = getReferencePrefix(component).toUpperCase();
+  const hint = getTemplateHint(component);
+
+  switch (prefix) {
+    case "R":
+      return "resistor";
+    case "C":
+      return "capacitor";
+    case "L":
+      return "inductor";
+    case "D":
+      return "diode";
+    case "LED":
+      return "led";
+    case "Q": {
+      if (hint.includes("pnp")) return "pnp";
+      if (hint.includes("pmos") || hint.includes("p-mos"))
+        return "pmos";
+      if (hint.includes("nmos") || hint.includes("n-mos"))
+        return "nmos";
+      return "npn";
+    }
+    case "U": {
+      if (
+        hint.includes("opamp") ||
+        hint.includes("op-amp") ||
+        hint.includes("op amp")
+      ) {
+        return "opamp";
+      }
+      return "generic_ic";
+    }
+    case "J":
+    case "P":
+    case "CON":
+      return "connector";
+    default:
+      return "generic_ic";
+  }
+}
+
 const GRID_STEP_NM = 1_270_000;
 const HALF_GRID_STEP_NM = GRID_STEP_NM / 2;
 
@@ -154,31 +346,27 @@ function createSymbolFromComponent(
 ): SymbolEntity {
   const componentId = component.id;
   const variantId = variant.id;
-  const pinDefinitions = component.symbolData.pinDefinitions;
-  const pinPositions = generatePinPositions(pinDefinitions.length);
-  const properties = { ...component.symbolData.properties };
+  const symbolKind = getNormalizedSymbolKind(component);
+  const symbolTemplate = inferSymbolTemplate(component);
+  const properties = { ...getComponentProperties(component) };
   delete properties.component_id;
   delete properties.variant_id;
 
   return {
     id,
     entityType: "symbol",
-    symbolKind: componentId,
+    symbolKind,
     componentId,
     variantId,
     linkStatus: "ok",
     libraryPartId: componentId,
-    symbolTemplate: component.symbolData.symbolTemplate,
+    symbolTemplate,
     reference,
-    value: component.symbolData.properties?.value ?? component.displayLabel,
+    value: getComponentValue(component),
     position,
     rotation,
     mirrored,
-    pins: pinDefinitions.map((pin, index) => ({
-      id: `${id}-pin-${index + 1}`,
-      name: pin.name,
-      position: pinPositions[index] ?? { x: 0, y: 0 },
-    })),
+    pins: getComponentPins(component, id, symbolTemplate),
     properties,
   };
 }
@@ -297,8 +485,11 @@ export function createSymbolEntity(
     }
   }
 
-  const { component, variant } = requireComponentAndVariant(kindOrComponent, index);
-  const prefix = component.symbolData.referencePrefix || "U";
+  const { component, variant } = requireComponentAndVariant(
+    kindOrComponent,
+    index,
+  );
+  const prefix = getReferencePrefix(component);
   const reference = getNextReference(prefix, symbols);
   return createSymbolFromComponent(
     component,
@@ -329,7 +520,10 @@ export function createPreviewSymbol(
     }
   }
 
-  const { component, variant } = requireComponentAndVariant(kindOrComponent, index);
+  const { component, variant } = requireComponentAndVariant(
+    kindOrComponent,
+    index,
+  );
   return createSymbolFromComponent(
     component,
     variant,
@@ -351,7 +545,8 @@ export function getSymbolLabel(
     }
 
     return (
-      findComponentInLibrary(index, kindOrComponent)?.displayLabel ?? kindOrComponent
+      findComponentInLibrary(index, kindOrComponent)?.displayLabel ??
+      kindOrComponent
     );
   }
 
@@ -369,9 +564,11 @@ export function getSymbolPrefix(
     }
 
     return (
-      findComponentInLibrary(index, kindOrComponent)?.symbolData.referencePrefix ?? null
+      findComponentInLibrary(index, kindOrComponent)
+        ? getReferencePrefix(findComponentInLibrary(index, kindOrComponent)!)
+        : null
     );
   }
 
-  return kindOrComponent.symbolData.referencePrefix || null;
+  return getReferencePrefix(kindOrComponent);
 }

@@ -15,6 +15,7 @@ import { SymbolPreview } from "./SymbolPreview";
 import { FootprintPreview } from "./FootprintPreview";
 import { Model3dPlaceholder } from "./Model3dPlaceholder";
 import { PinTable } from "./PinTable";
+import { getSymbolReferenceDisplay } from "./symbolDataDisplay";
 import type {
   ComponentType,
   ComponentVariantType,
@@ -133,6 +134,7 @@ export function ComponentDetailPage({
     (selectedVariant?.footprintOptions?.length ?? 0) > 1;
 
   const isBuiltin = component.scope === "builtin";
+  const referenceDisplay = getSymbolReferenceDisplay(component.symbolData);
 
   const handleEditClick = () => {
     if (onEditComponent && currentComponentId) {
@@ -253,7 +255,7 @@ export function ComponentDetailPage({
                   Schematic Symbol
                 </h2>
                 <span className="text-xs text-text-tertiary">
-                  Ref: {component.symbolData?.referencePrefix || "U"}
+                  Ref: {referenceDisplay}
                 </span>
               </div>
               <div className="p-4">
@@ -364,7 +366,7 @@ export function ComponentDetailPage({
               <div className="flex justify-between">
                 <dt className="text-text-tertiary">Reference Prefix</dt>
                 <dd className="font-medium text-text-primary">
-                  {component.symbolData?.referencePrefix || "U"}
+                  {referenceDisplay}
                 </dd>
               </div>
               <div className="flex justify-between">
