@@ -76,6 +76,7 @@ export const SchematicSymbolSchema = z
     variantId: DocumentIdSchema.nullable().optional(),
     /** @deprecated Use componentId instead */
     libraryPartId: DocumentIdSchema.nullable().optional(),
+    symbolTemplate: z.string().nullable().optional(),
     reference: z.string().nullable().optional(),
     position: ProjectPointSchema,
     rotation: z.number().optional(),

@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type {
   PcbDocument,
-  PcbPlacement,
   PcbViewport,
   Point2D,
   RatsnestLine,
@@ -12,10 +11,14 @@ import {
   DEFAULT_NET_CLASSES,
 } from "@/components/pcb-editor/layer-colors";
 import { calculateRatsnest } from "@/components/pcb-editor/ratsnest";
+import { syncSchematicToPcb } from "@/components/pcb-editor/schematic-pcb-sync";
 import type { ExtractedNet } from "@/components/pcb/canvas/net-extraction";
 import type { EditorSchematicSymbol } from "@/components/pcb/types";
+import {
+  createComponentLibraryIndex,
+  type ComponentLibraryIndex,
+} from "@/components/pcb/symbol-library";
 import type { ComponentType } from "@shared/types/component-library-schema.types";
-import type { ParsedKicadFootprint } from "@/lib/api/component-api";
 
 interface PcbStoreState {
   document: PcbDocument | null;
@@ -32,6 +35,11 @@ interface PcbStoreState {
     nets: ExtractedNet[],
     symbols: EditorSchematicSymbol[],
     components: ComponentType[],
+  ) => void;
+  syncFromSchematic: (
+    nets: ExtractedNet[],
+    symbols: EditorSchematicSymbol[],
+    componentLibrary: ComponentLibraryIndex,
   ) => void;
   setDocument: (doc: PcbDocument) => void;
   movePlacement: (id: string, position: Point2D) => void;
@@ -83,76 +91,47 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
   activeTool: "select",
 
   initFromSchematic: (nets, symbols, components) => {
-    const componentMap = new Map(components.map((c) => [c.id, c]));
-    const placements: PcbPlacement[] = [];
-    let placementX = 10;
-
-    for (const symbol of symbols) {
-      if (!symbol.componentId || symbol.componentId.startsWith("builtin:")) {
-        continue;
-      }
-
-      const component = componentMap.get(symbol.componentId);
-      if (!component) continue;
-
-      const defaultVariant =
-        component.variants.find((v) => v.id === component.defaultVariantId) ??
-        component.variants[0];
-      if (!defaultVariant) continue;
-
-      const footprintOption =
-        defaultVariant.footprintOptions.find(
-          (f) => f.id === defaultVariant.defaultFootprintOptionId,
-        ) ?? defaultVariant.footprintOptions[0];
-      if (!footprintOption?.kicadPayload) continue;
-
-      const footprintData =
-        footprintOption.kicadPayload as ParsedKicadFootprint;
-
-      placements.push({
-        id: `pcb-${symbol.id}`,
-        schematicSymbolId: symbol.id,
-        componentId: symbol.componentId,
-        variantId: defaultVariant.id,
-        footprintOptionId: footprintOption.id,
-        reference: symbol.reference ?? "?",
-        value: symbol.value ?? "",
-        position: { x: placementX, y: 50 },
-        rotation: 0,
-        layer: "F.Cu",
-        footprintData,
-      });
-
-      placementX += 15;
-    }
-
-    const pcbNets = nets.map((net) => ({
-      id: net.id,
-      name: net.name ?? `Net_${net.id}`,
-      netClass: "Default",
-      padRefs: net.pinIds.map((pinId) => {
-        const [symbolId, padNumber] = pinId.split("-");
-        return {
-          componentId: `pcb-${symbolId}`,
-          padNumber: padNumber ?? "1",
-        };
-      }),
-    }));
-
+    const { document: existingDocument } = get();
+    const componentLibrary = createComponentLibraryIndex(components);
+    const result = syncSchematicToPcb(
+      symbols,
+      nets,
+      componentLibrary,
+      existingDocument,
+      existingDocument?.boardOutline ?? { width: 100, height: 100 },
+    );
     const document: PcbDocument = {
-      boardOutline: { width: 100, height: 100 },
-      manufacturerPreset: "jlcpcb_standard",
-      netClasses: [...DEFAULT_NET_CLASSES],
-      nets: pcbNets,
-      placements,
-      traces: [],
-      vias: [],
-      zones: [],
+      ...result.document,
+      netClasses:
+        result.document.netClasses.length > 0
+          ? result.document.netClasses
+          : [...DEFAULT_NET_CLASSES],
     };
 
     set({
       document,
-      ratsnest: recalculateRatsnest(document),
+      ratsnest: result.ratsnest,
+    });
+  },
+
+  syncFromSchematic: (nets, symbols, componentLibrary) => {
+    const { document: existingDocument } = get();
+    const result = syncSchematicToPcb(
+      symbols,
+      nets,
+      componentLibrary,
+      existingDocument,
+      existingDocument?.boardOutline ?? { width: 100, height: 100 },
+    );
+    set({
+      document: {
+        ...result.document,
+        netClasses:
+          result.document.netClasses.length > 0
+            ? result.document.netClasses
+            : [...DEFAULT_NET_CLASSES],
+      },
+      ratsnest: result.ratsnest,
     });
   },
 

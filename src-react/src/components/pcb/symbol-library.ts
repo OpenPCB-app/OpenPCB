@@ -291,7 +291,7 @@ function resolveComponentVariant(
   return variants.find((variant) => variant.isDefault) ?? variants[0] ?? null;
 }
 
-function resolveComponentAndVariant(
+export function resolveComponentAndVariant(
   index: ComponentLibraryIndex,
   componentId: string,
   preferredVariantId?: string,

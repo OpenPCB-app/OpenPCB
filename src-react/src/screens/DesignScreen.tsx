@@ -24,6 +24,7 @@ import {
   createUnsavedSchematicDraft,
   hasSchematicCanvasContent,
 } from "@/components/pcb/schematic-document";
+import { extractNets } from "@/components/pcb/canvas/net-extraction";
 import { getSheetContent, saveSheetContent } from "@/lib/api/design-api";
 import {
   toEditorPcbDocument,
@@ -99,6 +100,7 @@ export function DesignScreen() {
   const { toast } = useToast();
   const popoverEntityId = useSchematicStore((s) => s.chrome.popoverEntityId);
   const currentDocument = useSchematicStore((s) => s.persisted.document);
+  const componentLibraryIndex = useSchematicStore((s) => s.componentLibraryIndex);
   const currentDesignContextId = useSchematicStore((s) => s.persisted.designId);
   const currentDocumentId = useSchematicStore(
     (s) => s.persisted.document?.id ?? null,
@@ -108,6 +110,7 @@ export function DesignScreen() {
   const setProjectContext = useSchematicStore((s) => s.setProjectContext);
   const setPopoverTarget = useSchematicStore((s) => s.setPopoverTarget);
   const setPcbDocument = usePcbStore((s) => s.setDocument);
+  const syncFromSchematic = usePcbStore((s) => s.syncFromSchematic);
   const isUnsavedDraft =
     currentDocument !== null && currentDesignContextId === null;
 
@@ -223,6 +226,28 @@ export function DesignScreen() {
     setProjectContext,
     toast,
   ]);
+
+  useEffect(() => {
+    if (
+      designTab !== "pcb" ||
+      !currentDocument ||
+      componentLibraryIndex.componentsById.size === 0
+    ) {
+      return;
+    }
+
+    const extractedNets = extractNets(
+      currentDocument.symbols,
+      currentDocument.wires,
+      currentDocument.labels,
+    );
+
+    syncFromSchematic(
+      extractedNets,
+      currentDocument.symbols,
+      componentLibraryIndex,
+    );
+  }, [componentLibraryIndex, currentDocument, designTab, syncFromSchematic]);
 
   useEffect(() => {
     return () => {
