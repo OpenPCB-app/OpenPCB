@@ -5,11 +5,16 @@ import type {
   ProjectDocumentBundle,
   ProjectPoint,
   SchematicLabel,
+  SchematicSymbolPin,
   SchematicProjectDocument,
   SchematicSymbol as SharedSchematicSymbol,
   SchematicWire,
 } from "@shared/types";
 import type { PcbDocument } from "@/components/pcb-editor/pcb-types";
+import type {
+  PinSide,
+  SymbolGraphic as ImportedSymbolGraphic,
+} from "@/components/symbol-editor/types";
 
 export type Point = ProjectPoint;
 export type Rotation = 0 | 90 | 180 | 270;
@@ -28,7 +33,13 @@ export interface BaseEntity {
 
 export type SymbolTemplate = string;
 
-export type EditorSchematicSymbol = SharedSchematicSymbol & {
+export type RenderedSymbolPin = SchematicSymbolPin & {
+  number?: string;
+  side?: PinSide;
+  length?: number;
+};
+
+export type EditorSchematicSymbol = Omit<SharedSchematicSymbol, "pins"> & {
   entityType: "symbol";
   symbolKind: SymbolKind;
   componentId?: string;
@@ -40,6 +51,9 @@ export type EditorSchematicSymbol = SharedSchematicSymbol & {
   rotation: number;
   value: string;
   pinCount?: number;
+  pins: RenderedSymbolPin[];
+  importedGraphics?: ImportedSymbolGraphic[];
+  importedBodyBounds?: Bounds | null;
 };
 
 export type SymbolEntity = EditorSchematicSymbol;
@@ -294,7 +308,11 @@ export function toSchematicProjectDocument(
         reference: s.reference,
         position: s.position,
         rotation: s.rotation,
-        pins: s.pins,
+        pins: s.pins.map((pin) => ({
+          id: pin.id,
+          name: pin.name,
+          position: pin.position,
+        })),
         properties,
       };
     }),
@@ -383,6 +401,10 @@ export interface DragSession {
   startPointer: Point;
   lastSnappedDelta: Point;
   initialPositions: Record<string, Point>;
+  movedPinIds: string[];
+  affectedWireIds: string[];
+  initialWirePointsById: Record<string, Array<{ x: number; y: number }>>;
+  undoCaptured: boolean;
 }
 
 export interface NetLabelSession {
