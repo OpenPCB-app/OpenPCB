@@ -265,6 +265,7 @@ export function renderSilkscreen(
   ctx: CanvasRenderingContext2D,
   placements: PcbPlacement[],
   viewport: PcbViewport,
+  activeLayer: "F.Cu" | "B.Cu",
   visibleLayers: Set<string>,
 ): void {
   for (const placement of placements) {
@@ -276,6 +277,9 @@ export function renderSilkscreen(
 
       const layer = graphic.layer;
       if (!visibleLayers.has(layer)) continue;
+
+      ctx.save();
+      ctx.globalAlpha = placement.layer === activeLayer ? 1 : 0.3;
 
       switch (graphic.type) {
         case "line":
@@ -294,9 +298,10 @@ export function renderSilkscreen(
           renderPoly(ctx, placement, graphic, viewport, color);
           break;
         case "text":
-          // Skip text rendering for now - complex with rotation
           break;
       }
+
+      ctx.restore();
     }
   }
 }

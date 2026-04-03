@@ -15,12 +15,16 @@ import { ComponentPalette } from "@/components/pcb/palette/ComponentPalette";
 import { StatusBar } from "@/components/pcb/StatusBar";
 import { useSchematicInteractionController } from "@/components/pcb/useSchematicInteractionController";
 import { FloatingPropertiesPopover } from "@/components/pcb/properties/FloatingPropertiesPopover";
+import { PcbCanvas } from "@/components/pcb-editor/canvas/PcbCanvas";
+import { PcbSidebar } from "@/components/pcb-editor/PcbSidebar";
 import { useSchematicStore } from "@/stores/schematic-store";
+import { usePcbStore } from "@/stores/pcb-store";
 import {
   createEmptySchematicDocument,
   createUnsavedSchematicDraft,
   hasSchematicCanvasContent,
 } from "@/components/pcb/schematic-document";
+import { extractNets } from "@/components/pcb/canvas/net-extraction";
 import { getSheetContent, saveSheetContent } from "@/lib/api/design-api";
 import {
   toEditorSchematicDocument,
@@ -94,6 +98,7 @@ export function DesignScreen() {
   const { toast } = useToast();
   const popoverEntityId = useSchematicStore((s) => s.chrome.popoverEntityId);
   const currentDocument = useSchematicStore((s) => s.persisted.document);
+  const componentLibraryIndex = useSchematicStore((s) => s.componentLibraryIndex);
   const currentDesignContextId = useSchematicStore((s) => s.persisted.designId);
   const currentDocumentId = useSchematicStore(
     (s) => s.persisted.document?.id ?? null,
@@ -102,6 +107,9 @@ export function DesignScreen() {
   const clearDocument = useSchematicStore((s) => s.clearDocument);
   const setProjectContext = useSchematicStore((s) => s.setProjectContext);
   const setPopoverTarget = useSchematicStore((s) => s.setPopoverTarget);
+  const initializePcbFromSchematic = usePcbStore((s) => s.initFromSchematic);
+  const pcbDocument = usePcbStore((s) => s.document);
+  const lastPcbSeedRef = useRef<string | null>(null);
   const isUnsavedDraft =
     currentDocument !== null && currentDesignContextId === null;
 
@@ -324,6 +332,40 @@ export function DesignScreen() {
     currentDocumentId !== design.id;
 
   useEffect(() => {
+    if (designTab !== "pcb" || !currentDocument) {
+      return;
+    }
+
+    const seedKey = [
+      currentDocument.id,
+      currentDocument.symbols.length,
+      currentDocument.wires.length,
+      currentDocument.labels.length,
+      componentLibraryIndex.componentsById.size,
+    ].join(":");
+
+    if (pcbDocument && lastPcbSeedRef.current === seedKey) {
+      return;
+    }
+
+    const nets = extractNets(
+      currentDocument.symbols,
+      currentDocument.wires,
+      currentDocument.labels,
+    );
+    const components = Array.from(componentLibraryIndex.componentsById.values());
+
+    initializePcbFromSchematic(nets, currentDocument.symbols, components);
+    lastPcbSeedRef.current = seedKey;
+  }, [
+    componentLibraryIndex,
+    currentDocument,
+    designTab,
+    initializePcbFromSchematic,
+    pcbDocument,
+  ]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         if (popoverEntityId) {
@@ -391,43 +433,49 @@ export function DesignScreen() {
                 maxSize={20}
                 className="border-r border-border-default"
               >
-                <div className="flex h-full flex-col bg-bg-secondary">
-                  <div className="flex h-8 items-center justify-between border-b border-border-default px-2">
-                    <span className="text-[10px] font-medium tracking-wider text-text-secondary uppercase">
-                      Components
-                    </span>
-                    <button
-                      type="button"
-                      className="h-5 w-5 flex items-center justify-center text-text-tertiary hover:text-text-secondary"
-                      onClick={() => setLeftCollapsed(true)}
-                    >
-                      <PanelLeftClose className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <ComponentPalette controller={controller} />
-
-                  {/* Layers section */}
-                  <div className="border-t border-border-default">
-                    <div className="flex h-8 items-center px-2">
+                  <div className="flex h-full flex-col bg-bg-secondary">
+                    <div className="flex h-8 items-center justify-between border-b border-border-default px-2">
                       <span className="text-[10px] font-medium tracking-wider text-text-secondary uppercase">
-                        Layers
+                        {designTab === "pcb" ? "PCB" : "Components"}
                       </span>
+                      <button
+                        type="button"
+                        className="h-5 w-5 flex items-center justify-center text-text-tertiary hover:text-text-secondary"
+                        onClick={() => setLeftCollapsed(true)}
+                      >
+                        <PanelLeftClose className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                    <div className="px-2 pb-2">
-                      {["F.Cu", "B.Cu", "F.SilkS", "F.Mask", "Edge.Cuts"].map(
-                        (layer) => (
-                          <div
-                            key={layer}
-                            className="flex items-center gap-2 h-6 text-xs text-text-secondary"
-                          >
-                            <span className="h-2 w-2 rounded-sm bg-copper-front" />
-                            <span>{layer}</span>
+
+                    {designTab === "pcb" ? (
+                      <PcbSidebar />
+                    ) : (
+                      <>
+                        <ComponentPalette controller={controller} />
+
+                        <div className="border-t border-border-default">
+                          <div className="flex h-8 items-center px-2">
+                            <span className="text-[10px] font-medium tracking-wider text-text-secondary uppercase">
+                              Layers
+                            </span>
                           </div>
-                        ),
-                      )}
-                    </div>
+                          <div className="px-2 pb-2">
+                            {["F.Cu", "B.Cu", "F.SilkS", "F.Mask", "Edge.Cuts"].map(
+                              (layer) => (
+                                <div
+                                  key={layer}
+                                  className="flex h-6 items-center gap-2 text-xs text-text-secondary"
+                                >
+                                  <span className="h-2 w-2 rounded-sm bg-copper-front" />
+                                  <span>{layer}</span>
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
-                </div>
               </ResizablePanel>
               <ResizableHandle withHandle />
             </>
@@ -447,8 +495,7 @@ export function DesignScreen() {
               )}
 
               {/* Floating toolbar — overlays canvas */}
-              {(design || isUnsavedDraft) &&
-                (designTab === "schematic" || designTab === "pcb") && (
+              {(design || isUnsavedDraft) && designTab === "schematic" && (
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center px-4 pt-2">
                   <div className="pointer-events-auto">
                     <EditorToolbar controller={controller} />
@@ -511,11 +558,7 @@ export function DesignScreen() {
                 </div>
               ) : null}
 
-              {design && designTab === "pcb" && (
-                <div className="flex h-full items-center justify-center text-text-muted">
-                  PCB layout editor — coming soon
-                </div>
-              )}
+              {(design || isUnsavedDraft) && designTab === "pcb" && <PcbCanvas />}
 
               {design && designTab === "3d" && (
                 <div className="flex h-full items-center justify-center text-text-muted">

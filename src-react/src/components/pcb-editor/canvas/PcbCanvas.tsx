@@ -5,10 +5,11 @@ import { renderSilkscreen } from "./pcb-silkscreen";
 import {
   screenToPcb,
   pcbToScreen,
-  createCenteredPcbViewport,
-  DEFAULT_PCB_ZOOM,
+  fitPcbViewportToBounds,
 } from "./pcb-viewport";
 import { LAYER_COLORS, PCB_BACKGROUND } from "../layer-colors";
+import { usePcbInteractionController } from "../usePcbInteractionController";
+import { getPlacementBounds } from "./pcb-hit-test";
 import type { PcbViewport } from "../pcb-types";
 
 export function PcbCanvas() {
@@ -24,6 +25,8 @@ export function PcbCanvas() {
   const setViewport = usePcbStore((s) => s.setViewport);
   const pan = usePcbStore((s) => s.pan);
   const zoomAt = usePcbStore((s) => s.zoomAt);
+
+  const controller = usePcbInteractionController();
 
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -116,6 +119,37 @@ export function PcbCanvas() {
     [ratsnest, visibleLayers],
   );
 
+  const renderSelection = useCallback(
+    (ctx: CanvasRenderingContext2D, vp: PcbViewport) => {
+      const store = usePcbStore.getState();
+      const doc = store.document;
+      if (!doc) return;
+
+      for (const id of store.selectedIds) {
+        const placement = doc.placements.find((p) => p.id === id);
+        if (!placement) continue;
+
+        const bounds = getPlacementBounds(placement);
+        const topLeft = pcbToScreen(bounds.minX, bounds.minY, vp);
+        const bottomRight = pcbToScreen(bounds.maxX, bounds.maxY, vp);
+
+        ctx.save();
+        ctx.strokeStyle = "#00FF00";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 3]);
+        ctx.strokeRect(
+          topLeft.x,
+          topLeft.y,
+          bottomRight.x - topLeft.x,
+          bottomRight.y - topLeft.y,
+        );
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+    },
+    [],
+  );
+
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -147,7 +181,13 @@ export function PcbCanvas() {
         vp,
       );
 
-      renderSilkscreen(ctx, doc.placements, vp, store.visibleLayers);
+      renderSilkscreen(
+        ctx,
+        doc.placements,
+        vp,
+        store.activeLayer,
+        store.visibleLayers,
+      );
 
       renderPads(
         ctx,
@@ -158,27 +198,11 @@ export function PcbCanvas() {
       );
 
       renderRatsnest(ctx, vp);
-
-      for (const id of store.selectedIds) {
-        const placement = doc.placements.find((p) => p.id === id);
-        if (!placement) continue;
-
-        const screenPos = pcbToScreen(
-          placement.position.x,
-          placement.position.y,
-          vp,
-        );
-
-        ctx.save();
-        ctx.strokeStyle = "#00FF00";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(screenPos.x - 10, screenPos.y - 10, 20, 20);
-        ctx.restore();
-      }
+      renderSelection(ctx, vp);
     }
 
     ctx.restore();
-  }, [renderGrid, renderBoardOutline, renderRatsnest]);
+  }, [renderGrid, renderBoardOutline, renderRatsnest, renderSelection]);
 
   useEffect(() => {
     let running = true;
@@ -216,37 +240,65 @@ export function PcbCanvas() {
     if (!container || !boardOutline) return;
 
     const rect = container.getBoundingClientRect();
-    const newViewport = createCenteredPcbViewport(
+    const newViewport = fitPcbViewportToBounds(
+      boardOutline.width,
+      boardOutline.height,
       rect.width,
       rect.height,
-      DEFAULT_PCB_ZOOM,
+      40,
     );
     setViewport(newViewport);
   }, [boardOutline, setViewport]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
-      isPanning.current = true;
-      lastMouse.current = { x: e.clientX, y: e.clientY };
-      e.preventDefault();
-    }
-  }, []);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
+        isPanning.current = true;
+        lastMouse.current = { x: e.clientX, y: e.clientY };
+        e.preventDefault();
+        return;
+      }
+
+      if (e.button === 0) {
+        controller.handleMouseDown(
+          e.clientX,
+          e.clientY,
+          canvas.getBoundingClientRect(),
+        );
+      }
+    },
+    [controller],
+  );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
       if (isPanning.current) {
         const dx = e.clientX - lastMouse.current.x;
         const dy = e.clientY - lastMouse.current.y;
         pan(dx, dy);
         lastMouse.current = { x: e.clientX, y: e.clientY };
+        return;
       }
+
+      controller.handleMouseMove(
+        e.clientX,
+        e.clientY,
+        canvas.getBoundingClientRect(),
+      );
     },
-    [pan],
+    [pan, controller],
   );
 
   const handleMouseUp = useCallback(() => {
     isPanning.current = false;
-  }, []);
+    controller.handleMouseUp();
+  }, [controller]);
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
@@ -268,7 +320,7 @@ export function PcbCanvas() {
     <div ref={containerRef} className="w-full h-full relative overflow-hidden">
       <canvas
         ref={canvasRef}
-        className="absolute inset-0"
+        className="absolute inset-0 cursor-default"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}

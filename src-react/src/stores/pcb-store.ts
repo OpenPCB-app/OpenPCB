@@ -39,6 +39,7 @@ interface PcbStoreState {
   flipPlacement: (id: string) => void;
   selectPlacement: (id: string) => void;
   clearSelection: () => void;
+  deletePlacement: (id: string) => void;
   setBoardSize: (width: number, height: number) => void;
   setGridSize: (size: number) => void;
   setActiveLayer: (layer: "F.Cu" | "B.Cu") => void;
@@ -218,6 +219,23 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
 
   clearSelection: () => {
     set({ selectedIds: new Set() });
+  },
+
+  deletePlacement: (id) => {
+    const { document, selectedIds } = get();
+    if (!document) return;
+
+    const placements = document.placements.filter((p) => p.id !== id);
+    const newDoc = { ...document, placements };
+
+    const newSelectedIds = new Set(selectedIds);
+    newSelectedIds.delete(id);
+
+    set({
+      document: newDoc,
+      ratsnest: recalculateRatsnest(newDoc),
+      selectedIds: newSelectedIds,
+    });
   },
 
   setBoardSize: (width, height) => {

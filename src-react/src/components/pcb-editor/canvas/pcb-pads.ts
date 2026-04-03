@@ -28,36 +28,8 @@ function transformPadPosition(
   };
 }
 
-function getPadColor(pad: ParsedPad, activeLayer: "F.Cu" | "B.Cu"): string {
-  const isFrontPad = pad.layers.some(
-    (l) => l === "F.Cu" || l === "*.Cu" || l === "F.Mask",
-  );
-  const isBackPad = pad.layers.some(
-    (l) => l === "B.Cu" || l === "*.Cu" || l === "B.Mask",
-  );
-  const isThroughHole = pad.type === "thru_hole" || pad.type === "np_thru_hole";
-
-  if (isThroughHole) {
-    return activeLayer === "F.Cu"
-      ? LAYER_COLORS["F.Cu"]!
-      : LAYER_COLORS["B.Cu"]!;
-  }
-
-  if (isFrontPad && isBackPad) {
-    return activeLayer === "F.Cu"
-      ? LAYER_COLORS["F.Cu"]!
-      : LAYER_COLORS["B.Cu"]!;
-  }
-
-  if (isFrontPad) {
-    return LAYER_COLORS["F.Cu"]!;
-  }
-
-  if (isBackPad) {
-    return LAYER_COLORS["B.Cu"]!;
-  }
-
-  return LAYER_COLORS["F.Cu"]!;
+function getPadColor(layer: "F.Cu" | "B.Cu"): string {
+  return layer === "F.Cu" ? LAYER_COLORS["F.Cu"]! : LAYER_COLORS["B.Cu"]!;
 }
 
 export function renderPads(
@@ -84,7 +56,7 @@ export function renderPads(
       const halfWidth = (pad.size.width / 2) * viewport.zoom;
       const halfHeight = (pad.size.height / 2) * viewport.zoom;
 
-      const padColor = getPadColor(pad, activeLayer);
+      const padColor = getPadColor(placement.layer);
       ctx.fillStyle = padColor;
       ctx.globalAlpha = isActiveLayer ? 1 : 0.3;
 
