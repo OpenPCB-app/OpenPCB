@@ -29,6 +29,7 @@ export interface CanvasColors {
   pinDot: string;
   pinLabel: string;
   pinNumber: string;
+  pinConnected: string;
 
   // Wires
   wireDefault: string;
@@ -80,6 +81,7 @@ export const CANVAS_COLORS_DARK: CanvasColors = {
   pinDot: "#38bdf8",
   pinLabel: "#e2e8f0",
   pinNumber: "#64748b",
+  pinConnected: "#22c55e",
 
   // Wires
   wireDefault: "#cbd5e1",
@@ -131,6 +133,7 @@ export const CANVAS_COLORS_LIGHT: CanvasColors = {
   pinDot: "#7c3aed",
   pinLabel: "#1e293b",
   pinNumber: "#64748b",
+  pinConnected: "#16a34a",
 
   // Wires
   wireDefault: "#475569",
@@ -213,6 +216,7 @@ export interface SymbolColors {
   pinDot: string;
   pinLabel: string;
   pinNumber: string;
+  pinConnected: string;
   selectionStroke: string;
   selectionFill: string;
   refLabel: string;
@@ -228,6 +232,7 @@ export function getSymbolColors(colors: CanvasColors): SymbolColors {
     pinDot: colors.pinDot,
     pinLabel: colors.pinLabel,
     pinNumber: colors.pinNumber,
+    pinConnected: colors.pinConnected,
     selectionStroke: colors.selectionStroke,
     selectionFill: colors.selectionFill,
     refLabel: colors.refLabel,

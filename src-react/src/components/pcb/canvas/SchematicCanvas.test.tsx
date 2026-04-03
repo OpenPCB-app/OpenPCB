@@ -8,6 +8,22 @@ import { createHitTestCache } from "./hit-test";
 import { SchematicCanvas } from "./SchematicCanvas";
 import { schematicToScreen, screenToSchematic, snapToGrid } from "./viewport";
 import { buildOrthogonalWirePathWithWaypoints } from "./wires";
+import { renderSymbol } from "./symbols";
+
+vi.mock("@/components/ThemeProvider", () => ({
+  useTheme: () => ({ theme: "light" }),
+  ThemeProvider: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+}));
+
+vi.mock("./symbols", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./symbols")>();
+  return {
+    ...actual,
+    renderSymbol: vi.fn(actual.renderSymbol),
+  };
+});
 
 const TEST_DOCUMENT: SchematicDocument = {
   id: "doc-1",
@@ -255,6 +271,86 @@ function EscapeCancelableCanvas() {
 
   return <SchematicCanvas controller={controller} />;
 }
+
+describe("SchematicCanvas connected pins", () => {
+  beforeEach(() => {
+    resetStore();
+    vi.mocked(renderSymbol).mockClear();
+  });
+
+  it("passes directly attached pins into symbol rendering", () => {
+    useSchematicStore.setState((state) => {
+      const document = state.persisted.document;
+      if (!document) return state;
+      return {
+        ...state,
+        persisted: {
+          ...state.persisted,
+          document: {
+            ...document,
+            wires: [
+              {
+                id: "wire-1",
+                entityType: "wire",
+                sourcePinId: "pin-1",
+                targetPinId: "pin-3",
+                points: [],
+                position: { x: 0, y: 0 },
+                rotation: 0,
+              },
+            ],
+          },
+        },
+      };
+    });
+
+    render(<SchematicCanvas />);
+
+    const renderCalls = vi.mocked(renderSymbol).mock.calls;
+    const symbol1Call = renderCalls.find((call) => call[1].id === "symbol-1");
+    const symbol2Call = renderCalls.find((call) => call[1].id === "symbol-2");
+
+    expect(symbol1Call).toBeDefined();
+    expect(symbol2Call).toBeDefined();
+    expect(symbol1Call?.[3]?.connectedPinIds).toEqual(new Set(["pin-1"]));
+    expect(symbol2Call?.[3]?.connectedPinIds).toEqual(new Set(["pin-3"]));
+  });
+
+  it("does not mark indirectly connected pins as directly attached", () => {
+    useSchematicStore.setState((state) => {
+      const document = state.persisted.document;
+      if (!document) return state;
+      return {
+        ...state,
+        persisted: {
+          ...state.persisted,
+          document: {
+            ...document,
+            wires: [
+              {
+                id: "wire-1",
+                entityType: "wire",
+                sourcePinId: "pin-1",
+                targetPinId: "pin-3",
+                points: [],
+                position: { x: 0, y: 0 },
+                rotation: 0,
+              },
+            ],
+          },
+        },
+      };
+    });
+
+    render(<SchematicCanvas />);
+
+    const renderCalls = vi.mocked(renderSymbol).mock.calls;
+    const symbol1Call = renderCalls.find((call) => call[1].id === "symbol-1");
+
+    expect(symbol1Call).toBeDefined();
+    expect(symbol1Call?.[3]?.connectedPinIds).not.toContain("pin-2");
+  });
+});
 
 describe("SchematicCanvas wiring flow", () => {
   beforeEach(() => {

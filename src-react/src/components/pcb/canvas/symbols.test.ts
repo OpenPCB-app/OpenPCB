@@ -8,7 +8,13 @@ import {
 } from "./symbols";
 
 function createContextRecorder() {
-  const arcs: Array<{ x: number; y: number; radius: number }> = [];
+  const arcs: Array<{
+    x: number;
+    y: number;
+    radius: number;
+    strokeStyle: string;
+    fillStyle: string;
+  }> = [];
   const operations: string[] = [];
   const textWrites: Array<{ text: string; x: number; y: number }> = [];
   const globalAlphaWrites: number[] = [];
@@ -132,7 +138,13 @@ function createContextRecorder() {
       operations.push("rect");
     },
     arc(x: number, y: number, radius: number) {
-      arcs.push({ x, y, radius });
+      arcs.push({
+        x,
+        y,
+        radius,
+        strokeStyle: getCurrentState().strokeStyle,
+        fillStyle: getCurrentState().fillStyle,
+      });
     },
     stroke() {
       operations.push("stroke");
@@ -302,6 +314,41 @@ describe("symbol helpers", () => {
     );
 
     expect(operations).toContain("stroke");
-      expect(textWrites.map((entry) => entry.text)).toEqual(["GND"]);
+    expect(textWrites.map((entry) => entry.text)).toEqual(["GND"]);
+  });
+
+  it("renders a green outer ring for directly attached pins", () => {
+    const { ctx, arcs } = createContextRecorder();
+
+    renderSymbol(ctx, symbol, viewport, {
+      connectedPinIds: new Set(["pin-1"]),
+    });
+
+    expect(arcs).toHaveLength(3);
+
+    const pin1Arcs = arcs.filter((a) => a.x === 0);
+    expect(pin1Arcs).toHaveLength(2);
+
+    expect(pin1Arcs[0]!.radius).toBeGreaterThan(pin1Arcs[1]!.radius);
+    expect(pin1Arcs[0]!.strokeStyle).toBe("#22c55e");
+  });
+
+  it("keeps selected pin styling inside the connected outer ring", () => {
+    const { ctx, arcs } = createContextRecorder();
+
+    renderSymbol(ctx, symbol, viewport, {
+      selected: true,
+      connectedPinIds: new Set(["pin-1"]),
+    });
+
+    expect(arcs).toHaveLength(3);
+
+    const pin1Arcs = arcs.filter((a) => a.x === 0);
+    expect(pin1Arcs).toHaveLength(2);
+
+    expect(pin1Arcs[1]!.strokeStyle).toBe("#38bdf8");
+    expect(pin1Arcs[1]!.fillStyle).toBe("#0f172a");
+
+    expect(pin1Arcs[0]!.strokeStyle).toBe("#22c55e");
   });
 });

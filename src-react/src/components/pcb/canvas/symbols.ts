@@ -13,6 +13,7 @@ const MIN_RECT_WIDTH = 760_000;
 const MIN_RECT_HEIGHT = 760_000;
 const CONNECTOR_RADIUS_PX = 5;
 const STROKE_WIDTH_PX = 1.75;
+const PIN_LINE_WIDTH_PX = 1.5;
 const BODY_LABEL_OFFSET_NM = 420_000;
 const PIN_LABEL_OFFSET_NM = 220_000;
 
@@ -20,6 +21,7 @@ interface SymbolRenderOptions {
   selected?: boolean;
   preview?: boolean;
   colors?: SymbolColors;
+  connectedPinIds?: Set<string>;
 }
 
 interface PinExtents {
@@ -42,6 +44,15 @@ interface TwoTerminalMetrics {
 interface SymbolTextLabel {
   text: string;
   point: Point;
+  align?: CanvasTextAlign;
+}
+
+function hasImportedSymbolBody(symbol: SymbolEntity): boolean {
+  return Boolean(symbol.importedGraphics && symbol.importedGraphics.length > 0);
+}
+
+function hasImportedPinMetadata(symbol: SymbolEntity): boolean {
+  return symbol.pins.some((pin) => pin.side && typeof pin.length === "number");
 }
 
 function getPinExtents(symbol: SymbolEntity): PinExtents | null {
@@ -165,6 +176,10 @@ function getSinglePinBodyLocalBounds(
 }
 
 export function getSymbolBodyLocalBounds(symbol: SymbolEntity): Bounds {
+  if (symbol.importedBodyBounds) {
+    return symbol.importedBodyBounds;
+  }
+
   if (!symbol.symbolTemplate) {
     throw new Error(`Symbol ${symbol.id} missing symbolTemplate`);
   }
@@ -491,6 +506,123 @@ function renderRectangularSymbol(
   drawRect(ctx, getRectBodyLocalBounds(symbol));
 }
 
+function setImportedGraphicStroke(
+  ctx: CanvasRenderingContext2D,
+  strokeWidth: number,
+  viewport: Viewport,
+): void {
+  ctx.lineWidth = Math.max(
+    strokeWidth,
+    1 / Math.max(viewport.zoom, Number.EPSILON),
+  );
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+}
+
+function renderImportedGraphic(
+  ctx: CanvasRenderingContext2D,
+  graphic: NonNullable<SymbolEntity["importedGraphics"]>[number],
+  viewport: Viewport,
+): void {
+  setImportedGraphicStroke(
+    ctx,
+    "strokeWidth" in graphic
+      ? graphic.strokeWidth
+      : STROKE_WIDTH_PX / viewport.zoom,
+    viewport,
+  );
+
+  switch (graphic.type) {
+    case "line":
+      ctx.beginPath();
+      ctx.moveTo(graphic.x1, graphic.y1);
+      ctx.lineTo(graphic.x2, graphic.y2);
+      ctx.stroke();
+      return;
+    case "rect":
+      ctx.beginPath();
+      ctx.rect(graphic.x, graphic.y, graphic.width, graphic.height);
+      if (graphic.filled) {
+        ctx.fill();
+      }
+      ctx.stroke();
+      return;
+    case "circle":
+      ctx.beginPath();
+      ctx.arc(graphic.cx, graphic.cy, graphic.radius, 0, Math.PI * 2);
+      if (graphic.filled) {
+        ctx.fill();
+      }
+      ctx.stroke();
+      return;
+    case "arc":
+      ctx.beginPath();
+      ctx.arc(
+        graphic.cx,
+        graphic.cy,
+        graphic.radius,
+        (graphic.startAngle * Math.PI) / 180,
+        (graphic.endAngle * Math.PI) / 180,
+        false,
+      );
+      ctx.stroke();
+      return;
+    case "polygon":
+      if (graphic.points.length < 2) {
+        return;
+      }
+      ctx.beginPath();
+      ctx.moveTo(graphic.points[0]!.x, graphic.points[0]!.y);
+      for (let index = 1; index < graphic.points.length; index += 1) {
+        const point = graphic.points[index]!;
+        ctx.lineTo(point.x, point.y);
+      }
+      if (graphic.closed) {
+        ctx.closePath();
+      }
+      if (graphic.filled) {
+        ctx.fill();
+      }
+      ctx.stroke();
+      return;
+    case "bezier": {
+      const [p0, p1, p2, p3] = graphic.points;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
+      ctx.stroke();
+      return;
+    }
+    case "text": {
+      ctx.save();
+      ctx.translate(graphic.x, graphic.y);
+      ctx.rotate((graphic.rotation * Math.PI) / 180);
+      ctx.font = `${Math.max(graphic.fontSize, 8 / Math.max(viewport.zoom, Number.EPSILON))}px monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(graphic.content, 0, 0);
+      ctx.restore();
+      return;
+    }
+  }
+}
+
+function renderImportedBody(
+  ctx: CanvasRenderingContext2D,
+  symbol: SymbolEntity,
+  viewport: Viewport,
+): boolean {
+  if (!symbol.importedGraphics || symbol.importedGraphics.length === 0) {
+    return false;
+  }
+
+  for (const graphic of symbol.importedGraphics) {
+    renderImportedGraphic(ctx, graphic, viewport);
+  }
+
+  return true;
+}
+
 function renderBjt(
   ctx: CanvasRenderingContext2D,
   symbol: SymbolEntity,
@@ -547,7 +679,15 @@ function renderMosfet(
   ctx.stroke();
 }
 
-function renderBody(ctx: CanvasRenderingContext2D, symbol: SymbolEntity): void {
+function renderBody(
+  ctx: CanvasRenderingContext2D,
+  symbol: SymbolEntity,
+  viewport: Viewport,
+): void {
+  if (renderImportedBody(ctx, symbol, viewport)) {
+    return;
+  }
+
   if (!symbol.symbolTemplate) {
     throw new Error(`Symbol ${symbol.id} missing symbolTemplate`);
   }
@@ -606,20 +746,97 @@ function renderPins(
   ctx: CanvasRenderingContext2D,
   symbol: SymbolEntity,
   viewport: Viewport,
-  selected: boolean,
-  colors?: SymbolColors,
+  options: SymbolRenderOptions = {},
 ): void {
+  const selected = options.selected ?? false;
+  const colors = options.colors;
+
+  if (hasImportedPinMetadata(symbol)) {
+    const connectorRadius =
+      CONNECTOR_RADIUS_PX / Math.max(viewport.zoom, Number.EPSILON);
+    const pinLineWidth =
+      PIN_LINE_WIDTH_PX / Math.max(viewport.zoom, Number.EPSILON);
+
+    for (const pin of symbol.pins) {
+      const side = pin.side;
+      const length = pin.length;
+
+      if (side && typeof length === "number") {
+        let bodyEnd = { x: pin.position.x, y: pin.position.y };
+        switch (side) {
+          case "left":
+            bodyEnd = { x: pin.position.x + length, y: pin.position.y };
+            break;
+          case "right":
+            bodyEnd = { x: pin.position.x - length, y: pin.position.y };
+            break;
+          case "top":
+            bodyEnd = { x: pin.position.x, y: pin.position.y + length };
+            break;
+          case "bottom":
+            bodyEnd = { x: pin.position.x, y: pin.position.y - length };
+            break;
+        }
+
+        ctx.beginPath();
+        ctx.lineWidth = pinLineWidth;
+        ctx.moveTo(pin.position.x, pin.position.y);
+        ctx.lineTo(bodyEnd.x, bodyEnd.y);
+        ctx.stroke();
+      }
+
+      if (options.connectedPinIds?.has(pin.id)) {
+        const outerRadius =
+          connectorRadius + 2 / Math.max(viewport.zoom, Number.EPSILON);
+        const outerLineWidth = 1.5 / Math.max(viewport.zoom, Number.EPSILON);
+        ctx.beginPath();
+        ctx.strokeStyle = colors?.pinConnected ?? "#22c55e";
+        ctx.lineWidth = outerLineWidth;
+        ctx.arc(pin.position.x, pin.position.y, outerRadius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.lineWidth = pinLineWidth;
+      ctx.fillStyle = selected
+        ? colors?.background ?? "#0f172a"
+        : colors?.pinLabel ?? "#f8fafc";
+      ctx.strokeStyle = selected
+        ? colors?.selectionStroke ?? "#38bdf8"
+        : colors?.pinDot ?? "#f59e0b";
+      ctx.arc(pin.position.x, pin.position.y, connectorRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    return;
+  }
+
   const connectorRadius =
     CONNECTOR_RADIUS_PX / Math.max(viewport.zoom, Number.EPSILON);
+  const pinLineWidth =
+    PIN_LINE_WIDTH_PX / Math.max(viewport.zoom, Number.EPSILON);
 
   for (const pin of symbol.pins) {
+    if (options.connectedPinIds?.has(pin.id)) {
+      const outerRadius =
+        connectorRadius + 2 / Math.max(viewport.zoom, Number.EPSILON);
+      const outerLineWidth = 1.5 / Math.max(viewport.zoom, Number.EPSILON);
+      ctx.beginPath();
+      ctx.strokeStyle = colors?.pinConnected ?? "#22c55e";
+      ctx.lineWidth = outerLineWidth;
+      ctx.arc(pin.position.x, pin.position.y, outerRadius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     ctx.beginPath();
+    ctx.lineWidth = pinLineWidth;
     ctx.fillStyle = selected
-      ? (colors?.background ?? "#0f172a")
-      : (colors?.pinLabel ?? "#f8fafc");
+      ? colors?.background ?? "#0f172a"
+      : colors?.pinLabel ?? "#f8fafc";
     ctx.strokeStyle = selected
-      ? (colors?.selectionStroke ?? "#38bdf8")
-      : (colors?.pinDot ?? "#f59e0b");
+      ? colors?.selectionStroke ?? "#38bdf8"
+      : colors?.pinDot ?? "#f59e0b";
     ctx.arc(pin.position.x, pin.position.y, connectorRadius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
@@ -648,6 +865,10 @@ function getPrimarySymbolLabel(symbol: SymbolEntity): string {
 }
 
 function getSecondarySymbolLabel(symbol: SymbolEntity): string | null {
+  if (hasImportedSymbolBody(symbol)) {
+    return null;
+  }
+
   if (symbol.symbolKind === "gnd" || symbol.symbolKind === "vcc") {
     return null;
   }
@@ -674,6 +895,21 @@ function getBodyTextAnchors(symbol: SymbolEntity): {
     return {
       primary: { x: 0, y: 420_000 },
       secondary: { x: 0, y: 0 },
+    };
+  }
+
+  if (symbol.importedBodyBounds) {
+    return {
+      primary: {
+        x:
+          (symbol.importedBodyBounds.minX + symbol.importedBodyBounds.maxX) / 2,
+        y: symbol.importedBodyBounds.minY - BODY_LABEL_OFFSET_NM,
+      },
+      secondary: {
+        x:
+          (symbol.importedBodyBounds.minX + symbol.importedBodyBounds.maxX) / 2,
+        y: symbol.importedBodyBounds.maxY + BODY_LABEL_OFFSET_NM,
+      },
     };
   }
 
@@ -708,6 +944,84 @@ function getPinTextAnchor(symbol: SymbolEntity, pinIndex: number): Point {
   };
 }
 
+function getImportedPinNameLabel(
+  pin: SymbolEntity["pins"][number],
+): SymbolTextLabel | null {
+  if (
+    !pin.side ||
+    typeof pin.length !== "number" ||
+    pin.name.trim().length === 0
+  ) {
+    return null;
+  }
+
+  switch (pin.side) {
+    case "left":
+      return {
+        text: pin.name,
+        point: { x: pin.position.x + pin.length + 120_000, y: pin.position.y },
+        align: "left",
+      };
+    case "right":
+      return {
+        text: pin.name,
+        point: { x: pin.position.x - pin.length - 120_000, y: pin.position.y },
+        align: "right",
+      };
+    case "top":
+      return {
+        text: pin.name,
+        point: { x: pin.position.x, y: pin.position.y + pin.length + 160_000 },
+        align: "center",
+      };
+    case "bottom":
+      return {
+        text: pin.name,
+        point: { x: pin.position.x, y: pin.position.y - pin.length - 160_000 },
+        align: "center",
+      };
+  }
+}
+
+function getImportedPinNumberLabel(
+  pin: SymbolEntity["pins"][number],
+): SymbolTextLabel | null {
+  if (
+    !pin.side ||
+    typeof pin.number !== "string" ||
+    pin.number.trim().length === 0
+  ) {
+    return null;
+  }
+
+  switch (pin.side) {
+    case "left":
+      return {
+        text: pin.number,
+        point: { x: pin.position.x - 180_000, y: pin.position.y },
+        align: "right",
+      };
+    case "right":
+      return {
+        text: pin.number,
+        point: { x: pin.position.x + 180_000, y: pin.position.y },
+        align: "left",
+      };
+    case "top":
+      return {
+        text: pin.number,
+        point: { x: pin.position.x, y: pin.position.y - 180_000 },
+        align: "center",
+      };
+    case "bottom":
+      return {
+        text: pin.number,
+        point: { x: pin.position.x, y: pin.position.y + 180_000 },
+        align: "center",
+      };
+  }
+}
+
 function getSymbolTextLabels(symbol: SymbolEntity): SymbolTextLabel[] {
   const bodyAnchors = getBodyTextAnchors(symbol);
   const labels: SymbolTextLabel[] = [
@@ -726,6 +1040,28 @@ function getSymbolTextLabels(symbol: SymbolEntity): SymbolTextLabel[] {
   }
 
   if (symbol.symbolKind === "gnd" || symbol.symbolKind === "vcc") {
+    return labels;
+  }
+
+  if (hasImportedPinMetadata(symbol)) {
+    for (const pin of symbol.pins) {
+      const numberLabel = getImportedPinNumberLabel(pin);
+      if (numberLabel) {
+        labels.push({
+          ...numberLabel,
+          point: transformSymbolLocalPoint(symbol, numberLabel.point),
+        });
+      }
+
+      const nameLabel = getImportedPinNameLabel(pin);
+      if (nameLabel) {
+        labels.push({
+          ...nameLabel,
+          point: transformSymbolLocalPoint(symbol, nameLabel.point),
+        });
+      }
+    }
+
     return labels;
   }
 
@@ -750,10 +1086,10 @@ function renderSymbolLabels(
   ctx.save();
   ctx.fillStyle = colors?.valueLabel ?? "#cbd5e1";
   ctx.font = `${fontSizePx}px sans-serif`;
-  ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
   for (const label of getSymbolTextLabels(symbol)) {
+    ctx.textAlign = label.align ?? "center";
     const screenPoint = schematicToScreen(
       label.point.x,
       label.point.y,
@@ -781,8 +1117,8 @@ export function renderSymbol(
     ctx.strokeStyle = options.colors?.bodyStroke ?? "#cbd5e1";
   }
   ctx.globalAlpha = options.preview ? 0.75 : 1;
-  renderBody(ctx, symbol);
-  renderPins(ctx, symbol, viewport, options.selected ?? false, options.colors);
+  renderBody(ctx, symbol, viewport);
+  renderPins(ctx, symbol, viewport, options);
   ctx.restore();
 
   if (!options.preview) {

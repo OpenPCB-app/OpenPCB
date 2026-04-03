@@ -15,6 +15,7 @@ import {
 import { renderSymbol } from "./symbols";
 import {
   buildOrthogonalWirePathWithWaypoints,
+  collectDirectlyAttachedPinIds,
   renderJunctions,
   renderWire,
 } from "./wires";
@@ -205,6 +206,9 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
     const document = store.persisted.document;
     if (document) {
       const selectedIds = store.chrome.selectedEntityIds;
+      const allConnectedPinIds = new Set(
+        collectDirectlyAttachedPinIds(document.wires),
+      );
 
       for (const wire of document.wires) {
         renderWire(ctx, wire.points, store.chrome.viewport, {
@@ -232,9 +236,17 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
       }
 
       for (const symbol of document.symbols) {
+        const symbolConnectedPinIds = new Set(
+          symbol.pins
+            .map((pin) => pin.id)
+            .filter((pinId) => allConnectedPinIds.has(pinId)),
+        );
+
         renderSymbol(ctx, symbol, store.chrome.viewport, {
           selected: selectedIds.has(symbol.id),
           colors: symbolColors,
+          connectedPinIds:
+            symbolConnectedPinIds.size > 0 ? symbolConnectedPinIds : undefined,
         });
       }
 
