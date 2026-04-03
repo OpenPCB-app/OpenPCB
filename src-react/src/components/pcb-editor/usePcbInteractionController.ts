@@ -12,18 +12,20 @@ const DRAG_THRESHOLD_PX = 5;
 
 type InteractionState =
   | { type: "idle" }
-  | {
+    | {
       type: "pending_drag";
       placementId: string;
       startScreen: Point2D;
       startWorld: Point2D;
       originalPosition: Point2D;
+      hasStartedUndoBoundary: boolean;
     }
   | {
       type: "dragging";
       placementId: string;
       startWorld: Point2D;
       originalPosition: Point2D;
+      hasStartedUndoBoundary: boolean;
     }
   | { type: "routing" };
 
@@ -32,10 +34,16 @@ export function usePcbInteractionController() {
 
   const selectEntity = usePcbStore((s) => s.selectEntity);
   const clearSelection = usePcbStore((s) => s.clearSelection);
+  const beginPlacementMove = usePcbStore((s) => s.beginPlacementMove);
   const movePlacement = usePcbStore((s) => s.movePlacement);
 
   const handleMouseDown = useCallback(
-    (screenX: number, screenY: number, canvasBounds: DOMRect) => {
+    (
+      screenX: number,
+      screenY: number,
+      canvasBounds: DOMRect,
+      additiveSelection: boolean,
+    ) => {
       const store = usePcbStore.getState();
       if (!store.document) return;
 
@@ -102,13 +110,13 @@ export function usePcbInteractionController() {
       }
 
       if (hit?.kind === "trace") {
-        selectEntity(hit.traceId);
+        selectEntity(hit.traceId, additiveSelection);
         stateRef.current = { type: "idle" };
         return;
       }
 
       if (hit?.kind === "via") {
-        selectEntity(hit.viaId);
+        selectEntity(hit.viaId, additiveSelection);
         stateRef.current = { type: "idle" };
         return;
       }
@@ -120,7 +128,7 @@ export function usePcbInteractionController() {
         );
         if (!placement) return;
 
-        selectEntity(placementId);
+        selectEntity(placementId, additiveSelection);
 
         stateRef.current = {
           type: "pending_drag",
@@ -128,6 +136,7 @@ export function usePcbInteractionController() {
           startScreen: { x: screenX, y: screenY },
           startWorld: worldPoint,
           originalPosition: { ...placement.position },
+          hasStartedUndoBoundary: false,
         };
       } else {
         clearSelection();
@@ -162,11 +171,20 @@ export function usePcbInteractionController() {
             placementId: state.placementId,
             startWorld: state.startWorld,
             originalPosition: state.originalPosition,
+            hasStartedUndoBoundary: false,
           };
         }
       }
 
       if (stateRef.current.type === "dragging") {
+        if (!stateRef.current.hasStartedUndoBoundary) {
+          beginPlacementMove(stateRef.current.placementId);
+          stateRef.current = {
+            ...stateRef.current,
+            hasStartedUndoBoundary: true,
+          };
+        }
+
         const movedPoint = {
           x:
             stateRef.current.originalPosition.x +
@@ -179,7 +197,7 @@ export function usePcbInteractionController() {
         movePlacement(stateRef.current.placementId, snapped);
       }
     },
-    [movePlacement],
+    [beginPlacementMove, movePlacement],
   );
 
   const handleMouseUp = useCallback(() => {

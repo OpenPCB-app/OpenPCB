@@ -23,7 +23,10 @@ import {
 } from "@/components/pcb/symbol-library";
 import type { ComponentType } from "@shared/types/component-library-schema.types";
 import { createUndoManager, type UndoManager } from "@/lib/undo-manager";
-import { calculateManhattanPath } from "@/components/pcb-editor/routing/manhattan-path";
+import {
+  calculateManhattanPath,
+  snapPointToGrid,
+} from "@/components/pcb-editor/routing/manhattan-path";
 import {
   resolveNetClassWidths,
   findWidthIndex,
@@ -79,9 +82,10 @@ interface PcbStoreState {
   setDocument: (doc: PcbDocument) => void;
   setActiveTool: (tool: "select" | "place" | "route") => void;
   movePlacement: (id: string, position: Point2D) => void;
+  beginPlacementMove: (id: string) => void;
   rotatePlacement: (id: string, delta: number) => void;
   flipPlacement: (id: string) => void;
-  selectEntity: (id: string) => void;
+  selectEntity: (id: string, additive?: boolean) => void;
   selectAllPlacements: () => void;
   clearSelection: () => void;
   deleteSelectedEntities: () => void;
@@ -123,6 +127,40 @@ function recalculateRatsnest(document: PcbDocument | null): RatsnestLine[] {
     document.traces,
     document.vias,
   );
+}
+
+function buildRoutingPreview(
+  session: RoutingSession,
+  cursorPosition: Point2D | null,
+): TraceSegment[] {
+  if (!cursorPosition) {
+    return [];
+  }
+
+  return calculateManhattanPath(
+    session.startPoint,
+    cursorPosition,
+    session.elbowDirection,
+    session.width,
+    session.layer,
+    session.netId,
+  );
+}
+
+function updateRoutingSession(
+  session: RoutingSession,
+  overrides: Partial<RoutingSession>,
+  cursorPosition: Point2D | null,
+): RoutingSession {
+  const nextSession = {
+    ...session,
+    ...overrides,
+  };
+
+  return {
+    ...nextSession,
+    previewSegments: buildRoutingPreview(nextSession, cursorPosition),
+  };
 }
 
 const pcbUndoManager: UndoManager<PcbDocument> =
@@ -226,14 +264,16 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
   },
 
   setActiveTool: (tool) => {
-    set({ activeTool: tool });
+    set((state) => ({
+      activeTool: tool,
+      routingSession: tool === "route" ? state.routingSession : null,
+      lastCursorPosition: tool === "route" ? state.lastCursorPosition : null,
+    }));
   },
 
   movePlacement: (id, position) => {
     const { document } = get();
     if (!document) return;
-
-    pcbUndoManager.pushUndo("Move placement", document);
 
     const placements = document.placements.map((p) =>
       p.id === id ? { ...p, position } : p,
@@ -244,6 +284,16 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
       document: newDoc,
       ratsnest: recalculateRatsnest(newDoc),
     });
+  },
+
+  beginPlacementMove: (id) => {
+    const { document } = get();
+    if (!document) return;
+
+    const placement = document.placements.find((item) => item.id === id);
+    if (!placement) return;
+
+    pcbUndoManager.pushUndo("Move placement", document);
   },
 
   rotatePlacement: (id, delta) => {
@@ -285,8 +335,21 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
     });
   },
 
-  selectEntity: (id) => {
-    set({ selectedIds: new Set([id]) });
+  selectEntity: (id, additive = false) => {
+    set((state) => {
+      if (!additive) {
+        return { selectedIds: new Set([id]) };
+      }
+
+      const selectedIds = new Set(state.selectedIds);
+      if (selectedIds.has(id)) {
+        selectedIds.delete(id);
+      } else {
+        selectedIds.add(id);
+      }
+
+      return { selectedIds };
+    });
   },
 
   selectAllPlacements: () => {
@@ -303,8 +366,6 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
   deleteSelectedEntities: () => {
     const { document, selectedIds } = get();
     if (!document || selectedIds.size === 0) return;
-
-    pcbUndoManager.pushUndo("Delete selected entities", document);
 
     const placementIds = new Set(document.placements.map((placement) => placement.id));
     const traceIds = new Set(document.traces.map((trace) => trace.id));
@@ -323,6 +384,8 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
     if (!removedSomething) {
       return;
     }
+
+    pcbUndoManager.pushUndo("Delete selected entities", document);
 
     set({
       document: newDoc,
@@ -392,7 +455,7 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
   },
 
   startRouting: (padRef, worldPosition) => {
-    const { document, activeLayer, gridSize } = get();
+    const { document, activeLayer } = get();
     if (!document) return;
 
     const net = document.nets.find((n) =>
@@ -405,10 +468,6 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
     if (!net) return;
 
     const resolved = resolveNetClassWidths(net.id, document);
-    const snapped = {
-      x: Math.round(worldPosition.x / gridSize) * gridSize,
-      y: Math.round(worldPosition.y / gridSize) * gridSize,
-    };
 
     set({
       routingSession: {
@@ -420,12 +479,14 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
         elbowDirection: "horizontal_first",
         committedSegments: [],
         committedVias: [],
-        startPoint: snapped,
+        startPoint: worldPosition,
         previewSegments: [],
         viaDiameter: resolved.viaDiameter,
         viaDrill: resolved.viaDrill,
       },
-      lastCursorPosition: snapped,
+      lastCursorPosition: worldPosition,
+      activeTool: "route",
+      selectedIds: new Set(),
     });
   },
 
@@ -433,22 +494,10 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
     const { routingSession, gridSize } = get();
     if (!routingSession) return;
 
-    const snapped = {
-      x: Math.round(cursorPosition.x / gridSize) * gridSize,
-      y: Math.round(cursorPosition.y / gridSize) * gridSize,
-    };
-
-    const previewSegments = calculateManhattanPath(
-      routingSession.startPoint,
-      snapped,
-      routingSession.elbowDirection,
-      routingSession.width,
-      routingSession.layer,
-      routingSession.netId,
-    );
+    const snapped = snapPointToGrid(cursorPosition, gridSize);
 
     set({
-      routingSession: { ...routingSession, previewSegments },
+      routingSession: updateRoutingSession(routingSession, {}, snapped),
       lastCursorPosition: snapped,
     });
   },
@@ -457,10 +506,7 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
     const { routingSession, gridSize } = get();
     if (!routingSession) return;
 
-    const snapped = {
-      x: Math.round(position.x / gridSize) * gridSize,
-      y: Math.round(position.y / gridSize) * gridSize,
-    };
+    const snapped = snapPointToGrid(position, gridSize);
 
     const newSegments = calculateManhattanPath(
       routingSession.startPoint,
@@ -479,7 +525,17 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
           ...newSegments,
         ],
         startPoint: snapped,
-        previewSegments: [],
+        previewSegments: buildRoutingPreview(
+          {
+            ...routingSession,
+            committedSegments: [
+              ...routingSession.committedSegments,
+              ...newSegments,
+            ],
+            startPoint: snapped,
+          },
+          get().lastCursorPosition,
+        ),
       },
     });
   },
@@ -488,10 +544,7 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
     const { routingSession, gridSize } = get();
     if (!routingSession) return;
 
-    const snapped = {
-      x: Math.round(position.x / gridSize) * gridSize,
-      y: Math.round(position.y / gridSize) * gridSize,
-    };
+    const snapped = snapPointToGrid(position, gridSize);
 
     const newSegments = calculateManhattanPath(
       routingSession.startPoint,
@@ -516,33 +569,30 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
     const newLayer = routingSession.layer === "F.Cu" ? "B.Cu" : "F.Cu";
 
     set({
-      routingSession: {
-        ...routingSession,
-        committedSegments: [
-          ...routingSession.committedSegments,
-          ...newSegments,
-        ],
-        committedVias: [...routingSession.committedVias, via],
-        startPoint: snapped,
-        previewSegments: [],
-        layer: newLayer,
-      },
+      routingSession: updateRoutingSession(
+        routingSession,
+        {
+          committedSegments: [
+            ...routingSession.committedSegments,
+            ...newSegments,
+          ],
+          committedVias: [...routingSession.committedVias, via],
+          startPoint: snapped,
+          layer: newLayer,
+        },
+        get().lastCursorPosition,
+      ),
       activeLayer: newLayer as "F.Cu" | "B.Cu",
     });
   },
 
   completeRoute: (targetPadPosition) => {
-    const { document, routingSession, gridSize } = get();
+    const { document, routingSession } = get();
     if (!document || !routingSession) return;
-
-    const snapped = {
-      x: Math.round(targetPadPosition.x / gridSize) * gridSize,
-      y: Math.round(targetPadPosition.y / gridSize) * gridSize,
-    };
 
     const finalSegments = calculateManhattanPath(
       routingSession.startPoint,
-      snapped,
+      targetPadPosition,
       routingSession.elbowDirection,
       routingSession.width,
       routingSession.layer,
@@ -568,7 +618,7 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
       ratsnest: recalculateRatsnest(newDoc),
       routingSession: null,
       lastCursorPosition: null,
-      activeTool: "select",
+      activeTool: "route",
     });
   },
 
@@ -580,7 +630,7 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
   },
 
   cycleTraceWidth: (direction) => {
-    const { routingSession } = get();
+    const { routingSession, lastCursorPosition } = get();
     if (!routingSession) return;
 
     const { widthPresets, widthIndex } = routingSession;
@@ -589,26 +639,32 @@ export const usePcbStore = create<PcbStoreState>((set, get) => ({
     const newWidth = widthPresets[newIndex] ?? routingSession.width;
 
     set({
-      routingSession: {
-        ...routingSession,
-        widthIndex: newIndex,
-        width: newWidth,
-      },
+      routingSession: updateRoutingSession(
+        routingSession,
+        {
+          widthIndex: newIndex,
+          width: newWidth,
+        },
+        lastCursorPosition,
+      ),
     });
   },
 
   flipElbowDirection: () => {
-    const { routingSession } = get();
+    const { routingSession, lastCursorPosition } = get();
     if (!routingSession) return;
 
     set({
-      routingSession: {
-        ...routingSession,
-        elbowDirection:
-          routingSession.elbowDirection === "horizontal_first"
-            ? "vertical_first"
-            : "horizontal_first",
-      },
+      routingSession: updateRoutingSession(
+        routingSession,
+        {
+          elbowDirection:
+            routingSession.elbowDirection === "horizontal_first"
+              ? "vertical_first"
+              : "horizontal_first",
+        },
+        lastCursorPosition,
+      ),
     });
   },
 }));

@@ -50,6 +50,7 @@ export function renderRoutingPreview(
   ctx: CanvasRenderingContext2D,
   segments: TraceSegment[],
   committedSegments: TraceSegment[],
+  committedVias: Via[],
   previewVia: Via | null,
   viewport: PcbViewport,
 ): void {
@@ -69,6 +70,10 @@ export function renderRoutingPreview(
     ctx.moveTo(start.x, start.y);
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
+  }
+
+  for (const via of committedVias) {
+    renderVia(ctx, via, viewport);
   }
 
   ctx.setLineDash([4, 4]);

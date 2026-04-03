@@ -117,6 +117,17 @@ beforeEach(() => {
 });
 
 describe("pcb-store deleteSelectedEntities", () => {
+  it("supports additive selection toggling", () => {
+    const store = usePcbStore.getState();
+    store.setDocument(createDocument());
+
+    store.selectEntity("u1");
+    store.selectEntity("trace-1", true);
+    store.selectEntity("u1", true);
+
+    expect(Array.from(usePcbStore.getState().selectedIds)).toEqual(["trace-1"]);
+  });
+
   it("selects all placements", () => {
     const store = usePcbStore.getState();
     store.setDocument(createDocument());
@@ -148,5 +159,50 @@ describe("pcb-store deleteSelectedEntities", () => {
     expect(afterUndo.document?.placements).toHaveLength(2);
     expect(afterUndo.document?.traces).toHaveLength(1);
     expect(afterUndo.document?.vias).toHaveLength(1);
+  });
+
+  it("preserves exact route anchors and keeps route tool active after completion", () => {
+    const store = usePcbStore.getState();
+    store.setDocument({
+      ...createDocument(),
+      placements: [createPlacement("u1", 0.13), createPlacement("u2", 10.37)],
+      traces: [],
+      vias: [],
+      nets: [
+        {
+          id: "net-1",
+          name: "NET1",
+          netClass: "default",
+          padRefs: [
+            { componentId: "u1", padNumber: "1" },
+            { componentId: "u2", padNumber: "1" },
+          ],
+        },
+      ],
+    });
+    usePcbStore.setState({ activeTool: "route" });
+
+    store.startRouting({ componentId: "u1", padNumber: "1" }, { x: 0.13, y: 0.11 });
+    store.completeRoute({ x: 10.37, y: 0.11 });
+
+    const state = usePcbStore.getState();
+    expect(state.document?.traces[0]?.start).toEqual({ x: 0.13, y: 0.11 });
+    expect(state.document?.traces.at(-1)?.end).toEqual({ x: 10.37, y: 0.11 });
+    expect(state.activeTool).toBe("route");
+  });
+
+  it("recomputes routing preview when width changes", () => {
+    const store = usePcbStore.getState();
+    store.setDocument(createDocument());
+    usePcbStore.setState({ activeTool: "route" });
+
+    store.startRouting({ componentId: "u1", padNumber: "1" }, { x: 0, y: 0 });
+    store.updateRoutingPreview({ x: 10, y: 5 });
+    const initialWidth = usePcbStore.getState().routingSession?.previewSegments[0]?.width;
+
+    store.cycleTraceWidth(1);
+
+    const updatedWidth = usePcbStore.getState().routingSession?.previewSegments[0]?.width;
+    expect(updatedWidth).not.toBe(initialWidth);
   });
 });

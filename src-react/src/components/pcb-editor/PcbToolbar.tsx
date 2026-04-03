@@ -12,7 +12,7 @@ import { usePcbStore } from "@/stores/pcb-store";
 
 const TOOLS = [
   { mode: "select", icon: MousePointer2, label: "Select", shortcut: "Esc" },
-  { mode: "route", icon: Route, label: "Route Traces", shortcut: "R" },
+  { mode: "route", icon: Route, label: "Route Traces", shortcut: undefined },
 ] as const;
 
 export function PcbToolbar() {
@@ -42,7 +42,7 @@ export function PcbToolbar() {
                 </Toggle>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">
-                {tool.label} ({tool.shortcut})
+                {tool.shortcut ? `${tool.label} (${tool.shortcut})` : tool.label}
               </TooltipContent>
             </Tooltip>
           ))}
@@ -57,8 +57,9 @@ export function PcbToolbar() {
                 variant="ghost"
                 size="sm"
                 className="h-7 w-7 p-0"
-                disabled={!canUndo}
+                disabled={!canUndo || routingSession !== null}
                 onClick={undo}
+                aria-label="Undo"
               >
                 <Undo2 className="h-4 w-4" />
               </Button>
@@ -73,8 +74,9 @@ export function PcbToolbar() {
                 variant="ghost"
                 size="sm"
                 className="h-7 w-7 p-0"
-                disabled={!canRedo}
+                disabled={!canRedo || routingSession !== null}
                 onClick={redo}
+                aria-label="Redo"
               >
                 <Redo2 className="h-4 w-4" />
               </Button>

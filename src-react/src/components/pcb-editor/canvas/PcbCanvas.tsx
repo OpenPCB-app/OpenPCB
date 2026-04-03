@@ -267,6 +267,7 @@ export function PcbCanvas() {
           ctx,
           store.routingSession.previewSegments,
           store.routingSession.committedSegments,
+          store.routingSession.committedVias,
           previewVia,
           vp,
         );
@@ -339,6 +340,7 @@ export function PcbCanvas() {
           e.clientX,
           e.clientY,
           canvas.getBoundingClientRect(),
+          e.metaKey || e.ctrlKey,
         );
       }
     },

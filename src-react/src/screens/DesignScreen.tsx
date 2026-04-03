@@ -375,6 +375,10 @@ export function DesignScreen() {
     const handleKeyDown = (event: KeyboardEvent) => {
       const isTextEntry = isTextEntryFocused(globalThis.document.activeElement);
 
+      if (isTextEntry) {
+        return;
+      }
+
       // Tab-aware keyboard dispatch
       if (designTab === "pcb") {
         const pcbStore = usePcbStore.getState();
@@ -412,80 +416,71 @@ export function DesignScreen() {
           }
         }
 
-        if (!isTextEntry) {
-          if (event.key === "Delete" || event.key === "Backspace") {
-            if (!pcbStore.routingSession && pcbStore.selectedIds.size > 0) {
-              if (event.key === "Backspace") {
-                event.preventDefault();
-              }
-
-              pcbStore.deleteSelectedEntities();
+        if (event.key === "Delete" || event.key === "Backspace") {
+          if (!pcbStore.routingSession && pcbStore.selectedIds.size > 0) {
+            if (event.key === "Backspace") {
+              event.preventDefault();
             }
-            return;
-          }
 
-          // Escape — cancel routing or switch to select
-          if (event.key === "Escape") {
-            if (pcbStore.routingSession) {
-              pcbStore.cancelRouting();
-            } else if (pcbStore.selectedIds.size > 0) {
-              pcbStore.clearSelection();
-            } else {
-              pcbStore.setActiveTool("select");
-            }
-            return;
+            pcbStore.deleteSelectedEntities();
           }
+          return;
+        }
 
-          // R — activate route tool
-          if (event.key === "r" || event.key === "R") {
-            if (!pcbStore.routingSession) {
-              const selectedPlacementId = Array.from(pcbStore.selectedIds).find((id) =>
-                pcbStore.document?.placements.some((placement) => placement.id === id),
-              );
-              if (selectedPlacementId) {
-                pcbStore.rotatePlacement(selectedPlacementId, 90);
-              } else {
-                pcbStore.setActiveTool("route");
-              }
-            }
-            return;
-          }
-
-          if ((event.key === "f" || event.key === "F") && !pcbStore.routingSession) {
-            const selectedPlacementId = Array.from(pcbStore.selectedIds).find((id) =>
-              pcbStore.document?.placements.some((placement) => placement.id === id),
-            );
-            if (selectedPlacementId) {
-              pcbStore.flipPlacement(selectedPlacementId);
-              return;
-            }
-          }
-
-          // Routing-specific keys (only when routing session active)
+        // Escape — cancel routing or switch to select
+        if (event.key === "Escape") {
           if (pcbStore.routingSession) {
-            // V — place via at cursor
-            if (event.key === "v" || event.key === "V") {
-              if (pcbStore.lastCursorPosition) {
-                pcbStore.placeRoutingVia(pcbStore.lastCursorPosition);
-              }
-              return;
-            }
+            pcbStore.cancelRouting();
+            pcbStore.setActiveTool("select");
+          } else if (pcbStore.selectedIds.size > 0) {
+            pcbStore.clearSelection();
+          } else {
+            pcbStore.setActiveTool("select");
+          }
+          return;
+        }
 
-            // W / Shift+W — cycle trace width
-            if (event.key === "w") {
-              pcbStore.cycleTraceWidth(1);
-              return;
-            }
-            if (event.key === "W") {
-              pcbStore.cycleTraceWidth(-1);
-              return;
-            }
+        if (event.key === "r" || event.key === "R") {
+          const selectedPlacementId = Array.from(pcbStore.selectedIds).find((id) =>
+            pcbStore.document?.placements.some((placement) => placement.id === id),
+          );
+          if (selectedPlacementId) {
+            pcbStore.rotatePlacement(selectedPlacementId, 90);
+            return;
+          }
+        }
 
-            // F — flip elbow direction
-            if (event.key === "f" || event.key === "F") {
-              pcbStore.flipElbowDirection();
-              return;
+        if ((event.key === "f" || event.key === "F") && !pcbStore.routingSession) {
+          const selectedPlacementId = Array.from(pcbStore.selectedIds).find((id) =>
+            pcbStore.document?.placements.some((placement) => placement.id === id),
+          );
+          if (selectedPlacementId) {
+            pcbStore.flipPlacement(selectedPlacementId);
+            return;
+          }
+        }
+
+        // Routing-specific keys (only when routing session active)
+        if (pcbStore.routingSession) {
+          if (event.key === "v" || event.key === "V") {
+            if (pcbStore.lastCursorPosition) {
+              pcbStore.placeRoutingVia(pcbStore.lastCursorPosition);
             }
+            return;
+          }
+
+          if (event.key === "w") {
+            pcbStore.cycleTraceWidth(1);
+            return;
+          }
+          if (event.key === "W") {
+            pcbStore.cycleTraceWidth(-1);
+            return;
+          }
+
+          if (event.key === "f" || event.key === "F") {
+            pcbStore.flipElbowDirection();
+            return;
           }
         }
 
@@ -495,10 +490,6 @@ export function DesignScreen() {
       // Schematic tab keyboard handling
       if (event.key === "Escape") {
         if (popoverEntityId) {
-          if (isTextEntry) {
-            return;
-          }
-
           setPopoverTarget(null);
           return;
         }
@@ -508,10 +499,6 @@ export function DesignScreen() {
       }
 
       if (event.key === "Delete" || event.key === "Backspace") {
-        if (isTextEntry) {
-          return;
-        }
-
         const store = useSchematicStore.getState();
         const selectedIds = store.chrome.selectedEntityIds;
 
@@ -524,7 +511,7 @@ export function DesignScreen() {
         }
       }
 
-      if (!isTextEntry && (event.key === "r" || event.key === "R")) {
+      if (event.key === "r" || event.key === "R") {
         useSchematicStore.getState().rotatePlacement();
         return;
       }
