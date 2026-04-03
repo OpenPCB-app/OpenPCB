@@ -69,6 +69,7 @@ export interface SchematicDocument
 export interface DerivedNet {
   id: string;
   name: string | null;
+  pinIds: string[];
   symbolIds: string[];
   wireIds: string[];
   labelIds: string[];

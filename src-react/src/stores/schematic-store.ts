@@ -47,6 +47,7 @@ import {
   MAX_VIEWPORT_ZOOM,
   MIN_VIEWPORT_ZOOM,
 } from "@/components/pcb/canvas/viewport";
+import { extractNets } from "@/components/pcb/canvas/net-extraction";
 
 interface PersistedDocumentState {
   document: SchematicDocument | null;
@@ -187,8 +188,9 @@ function findPinAnchor(
 }
 
 function deriveConnectivity(document: SchematicDocument): DerivedConnectivity {
+  const nets = extractNets(document.symbols, document.wires, document.labels);
   return {
-    nets: [],
+    nets,
     junctions: deriveWireJunctions(document.wires),
   };
 }
