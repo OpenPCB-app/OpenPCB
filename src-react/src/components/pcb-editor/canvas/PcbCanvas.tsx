@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback } from "react";
 import { usePcbStore } from "@/stores/pcb-store";
+import { useCanvasWheel } from "@/hooks/useCanvasWheel";
 import { renderPads } from "./pcb-pads";
 import { renderSilkscreen } from "./pcb-silkscreen";
 import { renderTraces, renderVias, renderRoutingPreview } from "./pcb-traces";
@@ -374,21 +375,7 @@ export function PcbCanvas() {
     controller.handleMouseUp();
   }, [controller]);
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const factor = e.deltaY > 0 ? 0.9 : 1.1;
-      zoomAt(mouseX, mouseY, factor);
-    },
-    [zoomAt],
-  );
+  useCanvasWheel(canvasRef, { pan, zoomAt });
 
   return (
     <div ref={containerRef} className="w-full h-full relative overflow-hidden">
@@ -400,7 +387,6 @@ export function PcbCanvas() {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
       />
     </div>
   );

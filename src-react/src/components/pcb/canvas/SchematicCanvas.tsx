@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useMemo } from "react";
 import { useSchematicStore } from "@/stores/schematic-store";
+import { useCanvasWheel } from "@/hooks/useCanvasWheel";
 import { renderGrid } from "./grid";
 import {
   domEventToScreen,
@@ -731,21 +732,7 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
     ],
   );
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-      zoomAt(mouseX, mouseY, factor);
-    },
-    [zoomAt],
-  );
+  useCanvasWheel(canvasRef, { pan, zoomAt });
 
   return (
     <div
@@ -765,7 +752,6 @@ export function SchematicCanvas({ controller }: SchematicCanvasProps) {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
-        onWheel={handleWheel}
         onContextMenu={(e) => e.preventDefault()}
       />
     </div>
