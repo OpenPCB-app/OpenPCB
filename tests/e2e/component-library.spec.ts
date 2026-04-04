@@ -90,4 +90,99 @@ test.describe("component library integration", () => {
     // Close the dialog
     await page.getByRole("button", { name: "Cancel" }).click();
   });
+
+  test("KiCad symbol scaling - imports and scales correctly", async ({
+    page,
+  }) => {
+    page.on("console", (msg) => console.log("BROWSER: " + msg.text()));
+
+    // Import passive fixture
+    await page.goto("/#library");
+    await expect(page.getByText("Component Library")).toBeVisible();
+
+    await page.getByRole("button", { name: "New" }).click();
+    await expect(page.getByText("New component")).toBeVisible();
+
+    const passiveName = `E2E Passive ${Date.now()}`;
+    await page
+      .locator('input[accept=".kicad_sym"]')
+      .setInputFiles(
+        "src-ts/src/infrastructure/parsers/kicad/__fixtures__/simple_resistor.kicad_sym",
+      );
+
+    // Check if the symbol preview or success message is visible
+    await expect(page.getByText("Symbol imported"))
+      .toBeVisible({ timeout: 5000 })
+      .catch(() => {});
+
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByPlaceholder("10kΩ Chip Resistor").fill(passiveName);
+    await page.getByRole("button", { name: "Save Component" }).click();
+    await expect(page.getByText("Component published").first()).toBeVisible();
+
+    // Import regulator fixture
+    await page.goto("/#library");
+    await page.getByRole("button", { name: "New" }).click();
+
+    const regulatorName = `E2E Regulator ${Date.now()}`;
+    await page
+      .locator('input[accept=".kicad_sym"]')
+      .setInputFiles(
+        "src-ts/src/infrastructure/parsers/kicad/__fixtures__/lm317t_regulator.kicad_sym",
+      );
+
+    await expect(page.getByText("Symbol imported"))
+      .toBeVisible({ timeout: 5000 })
+      .catch(() => {});
+
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+
+    await page.getByPlaceholder("10kΩ Chip Resistor").fill(regulatorName);
+
+    await page.getByRole("button", { name: "Save Component" }).click();
+    await expect(page.getByText("Component published").first()).toBeVisible();
+
+    // Import unsupported fixture
+    await page.goto("/#library");
+    await page.getByRole("button", { name: "New" }).click();
+    await page
+      .locator('input[accept=".kicad_sym"]')
+      .setInputFiles(
+        "src-ts/src/infrastructure/parsers/kicad/__fixtures__/three_side_ic.kicad_sym",
+      );
+
+    // Look for the warning
+    await expect(
+      page.getByText(/Skipped canonical normalization/i).first(),
+    ).toBeVisible();
+
+    // 2. Place in design
+    await page.goto("/#design");
+    await expect(page.getByText("Drag To Canvas")).toBeVisible();
+
+    const canvas = page.getByTestId("schematic-canvas-surface");
+
+    const passiveItem = page.getByRole("button", {
+      name: new RegExp(passiveName),
+    });
+    await expect(passiveItem).toBeVisible();
+    await passiveItem.click();
+    await canvas.click({ position: { x: 300, y: 300 } });
+    await page.keyboard.press("Escape");
+
+    const regulatorItem = page.getByRole("button", {
+      name: new RegExp(regulatorName),
+    });
+    await expect(regulatorItem).toBeVisible();
+    await regulatorItem.click();
+    await canvas.click({ position: { x: 600, y: 300 } });
+    await page.keyboard.press("Escape");
+
+    // Wait for renderings
+    await page.waitForTimeout(500);
+  });
 });

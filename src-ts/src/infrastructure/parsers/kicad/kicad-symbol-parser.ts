@@ -87,7 +87,7 @@ export function parseKicadSymbolLib(content: string): {
 
   if (tree[0] === "symbol") {
     return {
-      symbols: [parseSymbol(tree, content)],
+      symbols: [parseSymbol(tree)],
       version: null,
       generator: null,
     };
@@ -103,12 +103,12 @@ export function parseKicadSymbolLib(content: string): {
   const generator = generatorNode ? getStringValue(generatorNode) : null;
 
   const symbolNodes = findNodes(tree, "symbol");
-  const symbols = symbolNodes.map((node) => parseSymbol(node, content));
+  const symbols = symbolNodes.map((node) => parseSymbol(node));
 
   return { symbols, version, generator };
 }
 
-function parseSymbol(node: SExpr[], fullSource: string): ParsedKicadSymbol {
+function parseSymbol(node: SExpr[]): ParsedKicadSymbol {
   const name = getStringValue(node) ?? "unknown";
   const warnings: ParsedWarning[] = [];
 
@@ -148,17 +148,17 @@ function parseSymbol(node: SExpr[], fullSource: string): ParsedKicadSymbol {
       const tag = child[0];
       if (typeof tag !== "string") continue;
 
-        if (KNOWN_GRAPHIC_TYPES.has(tag)) {
-          bodyGraphics.push({ unit, node: child });
-        } else if (tag !== "pin" && tag !== "symbol") {
+      if (KNOWN_GRAPHIC_TYPES.has(tag)) {
+        bodyGraphics.push({ unit, node: child });
+      } else if (tag !== "pin" && tag !== "symbol") {
         // Unknown graphic element
         warnings.push({
           code: "unsupported_construct",
           message: `Unknown graphic element "${tag}" in sub-symbol`,
         });
-          bodyGraphics.push({ unit, node: child }); // preserve it
-        }
+        bodyGraphics.push({ unit, node: child }); // preserve it
       }
+    }
   }
 
   // Filter out unit 0 (shared graphics) from unit count
