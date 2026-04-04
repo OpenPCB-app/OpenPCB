@@ -37,7 +37,7 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": "all",
-    "externalBin": ["binaries/bun-backend"],
+    "externalBin": ["../bin/bun-backend"],
     "resources": ["../src-ts/drizzle/migrations/**/*"],
     "icon": [
       "icons/32x32.png",

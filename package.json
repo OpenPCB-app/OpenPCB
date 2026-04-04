@@ -3,12 +3,14 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "src-react"
+    "src-react",
+    "src-electron"
   ],
   "scripts": {
     "setup": "npm install && (cd src-ts && bun install) && npm run bun:compile && npm run gen",
     "dev": "concurrently --kill-others-on-fail --names backend,frontend --prefix-colors blue,green \"npm run dev:backend\" \"npx wait-on tcp:127.0.0.1:3000 && npm run dev:frontend\"",
     "dev:desktop": "npm run tauri dev",
+    "dev:electron": "concurrently --kill-others-on-fail --names backend,frontend,electron-build,electron --prefix-colors blue,green,yellow,magenta \"npm run dev:backend\" \"npm run dev:frontend\" \"cd src-electron && npx tsup --watch\" \"npx wait-on http-get://127.0.0.1:1420 && cd src-electron && npx electron .\"",
     "dev:browser": "concurrently --kill-others-on-fail --names backend,frontend --prefix-colors blue,green \"npm run dev:backend\" \"npx wait-on tcp:127.0.0.1:3000 && npx playwright test --ui\"",
     "dev:backend": "cd src-ts && PORT=3000 NODE_ENV=development OPENPCB_ALLOW_UNAUTHENTICATED_API=true bun src/main.ts",
     "dev:with-feedback": "npm run dev:feedback & npm run tauri dev",

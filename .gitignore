@@ -31,6 +31,8 @@ src-react/.env
 src-react/.env.local
 src-react/src/styles/panda/
 src-tauri/binaries/
+bin/
+dist-electron/
 
 # Test data
 src-ts/.test-data/

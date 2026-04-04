@@ -4,7 +4,9 @@
  * Compile Bun TypeScript sidecar to platform-specific binary
  *
  * This script compiles src-ts/src/main.ts using Bun and names it according to Tauri conventions:
- * binaries/bun-backend-{TARGET_TRIPLE}[.exe]
+ * bin/bun-backend-{TARGET_TRIPLE}[.exe]
+ *
+ * Shared by both Tauri and Electron desktop targets.
  *
  * Examples:
  *   - macOS ARM: bun-backend-aarch64-apple-darwin
@@ -49,7 +51,7 @@ function compileBunSidecar(): void {
   const outputName = `bun-backend-${targetTriple}${extension}`;
 
   const entrypoint = join(projectRoot, "src-ts", "src", "main.ts");
-  const binariesDir = join(projectRoot, "src-tauri", "binaries");
+  const binariesDir = join(projectRoot, "bin");
   const outputPath = join(binariesDir, outputName);
 
   console.log("🔨 Compiling Bun sidecar...");
@@ -71,13 +73,10 @@ function compileBunSidecar(): void {
 
   try {
     // Compile with Bun
-    execSync(
-      `bun build --compile --outfile="${outputPath}" "${entrypoint}"`,
-      {
-        stdio: "inherit",
-        cwd: projectRoot,
-      }
-    );
+    execSync(`bun build --compile --outfile="${outputPath}" "${entrypoint}"`, {
+      stdio: "inherit",
+      cwd: projectRoot,
+    });
 
     console.log(`✅ Successfully compiled Bun sidecar: ${outputName}`);
   } catch (error: unknown) {

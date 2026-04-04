@@ -1,0 +1,22 @@
+appId: com.openpcb.electron
+productName: "OpenPCB (Electron)"
+directories:
+  output: dist-electron
+  buildResources: resources
+files:
+  - dist/**/*
+extraResources:
+  - from: ../bin/
+    to: bin/
+    filter:
+      - "bun-backend-*"
+  - from: ../src-ts/drizzle/migrations/
+    to: migrations/
+asar: true
+mac:
+  target: dmg
+  category: public.app-category.developer-tools
+win:
+  target: nsis
+linux:
+  target: AppImage
