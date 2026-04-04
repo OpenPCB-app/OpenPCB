@@ -24,6 +24,7 @@ const baseComponent = {
   symbolData: {
     referencePrefix: "U",
     pinDefinitions: [],
+    pins: [],
     properties: {},
     unitCount: 1,
     bodyGraphics: [],

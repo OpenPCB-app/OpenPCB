@@ -200,6 +200,14 @@ function transformSymbolData(draft: WizardDraftPayload): BackendSymbolData {
       name: pin.name || pin.number,
       electricalType: pin.electricalType || "passive",
     })),
+    pins: pins.map((pin) => ({
+      name: pin.name,
+      number: pin.number,
+      position: { ...pin.position },
+      side: pin.side,
+      length: pin.length,
+      electricalType: pin.electricalType,
+    })),
     properties,
     unitCount: symbolData.importPreservation?.unitCount ?? 1,
     bodyGraphics: transformBodyGraphics(symbolData),
@@ -497,6 +505,7 @@ function createEmptySymbolData(): BackendSymbolData {
   return {
     referencePrefix: "U",
     pinDefinitions: [],
+    pins: [],
     properties: {},
     unitCount: 1,
     bodyGraphics: [],

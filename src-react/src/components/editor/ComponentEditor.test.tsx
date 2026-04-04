@@ -70,6 +70,7 @@ const symbolDraft = {
 const transformedSymbolData = {
   referencePrefix: "R",
   pinDefinitions: [],
+  pins: [],
   properties: {},
   unitCount: 1,
   bodyGraphics: [],
@@ -118,6 +119,7 @@ const existingComponent = {
   symbolData: {
     referencePrefix: "R",
     pinDefinitions: [],
+    pins: [],
     properties: {},
     unitCount: 1,
     bodyGraphics: [],

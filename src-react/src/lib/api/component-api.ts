@@ -98,6 +98,7 @@ function ensureSymbolData(
     symbolData ?? {
       referencePrefix: "U",
       pinDefinitions: [],
+      pins: [],
       properties: {},
       unitCount: 1,
       bodyGraphics: [],

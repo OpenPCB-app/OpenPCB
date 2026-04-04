@@ -21,6 +21,7 @@ const mockComponents = [
     symbolData: {
       referencePrefix: "GND",
       pinDefinitions: [{ name: "GND", electricalType: "power_in" }],
+      pins: [],
       properties: {},
     },
     variants: [
@@ -55,6 +56,7 @@ const mockComponents = [
         { name: "1", electricalType: "passive" },
         { name: "2", electricalType: "passive" },
       ],
+      pins: [],
       properties: {},
     },
     variants: [

@@ -41,6 +41,19 @@ export const SymbolDataSchema = z
   .object({
     referencePrefix: z.string().min(1).max(5),
     pinDefinitions: z.array(PinDefinitionSchema),
+    pins: z
+      .array(
+        z.object({
+          name: z.string(),
+          number: z.string(),
+          position: z.object({ x: z.number(), y: z.number() }),
+          side: z.enum(["left", "right", "top", "bottom"]).nullable(),
+          length: z.number().optional(),
+          electricalType: PinElectricalTypeSchema.optional(),
+        }),
+      )
+      .optional()
+      .default([]),
     properties: z.record(z.string(), z.string()),
     unitCount: z.number().int().min(1).default(1),
     bodyGraphics: z.array(z.unknown()).optional().default([]),

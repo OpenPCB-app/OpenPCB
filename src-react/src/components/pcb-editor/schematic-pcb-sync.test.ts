@@ -56,6 +56,7 @@ function makeComponent(id: string): ComponentType {
         { name: "1", electricalType: "passive" },
         { name: "2", electricalType: "passive" },
       ],
+      pins: [],
       properties: {},
       unitCount: 1,
       bodyGraphics: [],

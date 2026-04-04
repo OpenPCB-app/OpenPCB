@@ -39,6 +39,7 @@ function makeComponent(): ComponentType {
         { name: "PB5", electricalType: "input" },
         { name: "PB0", electricalType: "bidirectional" },
       ],
+      pins: [],
       properties: {},
       unitCount: 1,
       bodyGraphics: [],

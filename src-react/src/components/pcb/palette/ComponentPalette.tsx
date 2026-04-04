@@ -14,6 +14,13 @@ import {
 import { useComponents } from "@/hooks/useComponents";
 import type { ComponentType } from "@shared/types/component-library-schema.types";
 import type { SymbolCategory } from "../symbol-display";
+import {
+  DEFAULT_PIN_LENGTH,
+  type PinElectricalType,
+  type SymbolDraft,
+  type SymbolGraphic,
+  type SymbolPin,
+} from "@/components/symbol-editor/types";
 import { parseKicadSymbolImport } from "@/lib/api/component-api";
 import { convertParsedKicadSymbolToDraft } from "@/components/symbol-editor/kicad-import";
 import {
@@ -27,6 +34,115 @@ import {
 
 interface ComponentPaletteProps {
   controller?: SchematicInteractionController;
+}
+
+const VALID_PIN_SIDES = new Set(["left", "right", "top", "bottom"]);
+const VALID_PIN_ELECTRICAL_TYPES = new Set<PinElectricalType>([
+  "passive",
+  "input",
+  "output",
+  "bidirectional",
+  "power_in",
+  "power_out",
+  "open_collector",
+  "open_emitter",
+  "unspecified",
+]);
+
+function isPinSide(value: unknown): value is SymbolPin["side"] {
+  return typeof value === "string" && VALID_PIN_SIDES.has(value);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function toElectricalType(value: unknown): PinElectricalType {
+  if (typeof value === "string" && VALID_PIN_ELECTRICAL_TYPES.has(value as PinElectricalType)) {
+    return value as PinElectricalType;
+  }
+  return "passive";
+}
+
+function toStoredPin(value: unknown, index: number): SymbolPin | null {
+  const pin = asRecord(value);
+  if (!pin) {
+    return null;
+  }
+
+  const position = asRecord(pin.position);
+  const x = position?.x;
+  const y = position?.y;
+  if (typeof x !== "number" || typeof y !== "number") {
+    return null;
+  }
+
+  const name =
+    typeof pin.name === "string" && pin.name.trim().length > 0
+      ? pin.name
+      : typeof pin.number === "string" && pin.number.trim().length > 0
+        ? pin.number
+        : String(index + 1);
+  const number =
+    typeof pin.number === "string" && pin.number.trim().length > 0
+      ? pin.number
+      : String(index + 1);
+  const side: SymbolPin["side"] = isPinSide(pin.side) ? pin.side : "left";
+
+  return {
+    id: `stored-pin-${index + 1}`,
+    name,
+    number,
+    electricalType: toElectricalType(pin.electricalType),
+    side,
+    position: { x, y },
+    length: typeof pin.length === "number" ? pin.length : DEFAULT_PIN_LENGTH,
+  };
+}
+
+function toStoredGraphics(value: unknown): SymbolGraphic[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((graphic) => {
+      const record = asRecord(graphic);
+      return record !== null && typeof record.type === "string";
+    })
+    .map((graphic) => graphic as SymbolGraphic);
+}
+
+function getStoredImportedDraft(
+  component: ComponentType,
+): Pick<SymbolDraft, "pins" | "graphics" | "importPreservation"> | null {
+  if (!Array.isArray(component.symbolData.pins) || component.symbolData.pins.length === 0) {
+    return null;
+  }
+
+  const pins = component.symbolData.pins
+    .map((pin, index) => toStoredPin(pin, index))
+    .filter((pin): pin is SymbolPin => pin !== null);
+  if (pins.length === 0) {
+    return null;
+  }
+
+  return {
+    pins,
+    graphics: toStoredGraphics(component.symbolData.bodyGraphics),
+    importPreservation: {
+      rawSource: component.symbolData.rawKicadSource ?? null,
+      sourceFileName: null,
+      warnings: [],
+      graphicsEditable: true,
+      normalizedSchematicGeometry: hasStoredImportedSymbolNormalization(
+        component.symbolData.properties,
+      ),
+    },
+  };
 }
 
 function groupComponentsByCategory(
@@ -179,18 +295,37 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
     setComponentLibrary(components);
 
     let cancelled = false;
-    const importedComponents = components.filter(
-      (component) => typeof component.symbolData.rawKicadSource === "string",
-    );
+    const storedEntries: Array<
+      readonly [string, ReturnType<typeof createImportedSymbolLayout>]
+    > = [];
+    const fallbackComponents: ComponentType[] = [];
 
-    if (importedComponents.length === 0) {
+    for (const component of components) {
+      const storedDraft = getStoredImportedDraft(component);
+      if (storedDraft) {
+        storedEntries.push([
+          component.id,
+          createImportedSymbolLayout(storedDraft),
+        ]);
+        continue;
+      }
+
+      if (typeof component.symbolData.rawKicadSource === "string") {
+        fallbackComponents.push(component);
+      }
+    }
+
+    if (fallbackComponents.length === 0) {
+      if (storedEntries.length > 0) {
+        setComponentLibrary(components, new Map(storedEntries));
+      }
       return () => {
         cancelled = true;
       };
     }
 
     void Promise.all(
-      importedComponents.map(async (component) => {
+      fallbackComponents.map(async (component) => {
         try {
           const parsed = await parseKicadSymbolImport(
             component.symbolData.rawKicadSource!,
@@ -221,14 +356,17 @@ export function ComponentPalette({ controller }: ComponentPaletteProps) {
       }
 
       const importedLayouts = new Map(
-        entries.filter(
-          (
-            entry,
-          ): entry is readonly [
-            string,
-            ReturnType<typeof createImportedSymbolLayout>,
-          ] => entry !== null,
-        ),
+        [
+          ...storedEntries,
+          ...entries.filter(
+            (
+              entry,
+            ): entry is readonly [
+              string,
+              ReturnType<typeof createImportedSymbolLayout>,
+            ] => entry !== null,
+          ),
+        ],
       );
 
       if (importedLayouts.size > 0) {

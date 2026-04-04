@@ -66,6 +66,7 @@ function makeComponent() {
     symbolData: {
       referencePrefix: "U",
       pinDefinitions: [{ id: "pin-1", name: "VCC", electricalType: "power_in" }],
+      pins: [],
       properties: {},
       rawKicadSource: "(symbol attiny13a-su)",
     },

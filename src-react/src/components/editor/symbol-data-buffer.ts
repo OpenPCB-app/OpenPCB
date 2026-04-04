@@ -485,6 +485,14 @@ export function transformSymbolDraftToComponentSymbolData(
   return {
     referencePrefix,
     pinDefinitions,
+    pins: draft.pins.map((pin, index) => ({
+      name: pin.name.trim() || pin.number.trim() || `PIN${index + 1}`,
+      number: pin.number.trim() || String(index + 1),
+      position: { ...pin.position },
+      side: pin.side,
+      length: pin.length,
+      electricalType: pin.electricalType,
+    })),
     properties: setStoredImportedSymbolNormalization(
       existingSymbolData?.properties ?? {},
       draft.importPreservation?.normalizedSchematicGeometry === true,
