@@ -1,14 +1,41 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ComponentPalette } from "@/components/pcb/palette/ComponentPalette";
 import { FloatingPropertiesPopover } from "@/components/pcb/properties/FloatingPropertiesPopover";
-import { useSchematicInteractionController } from "@/components/pcb/useSchematicInteractionController";
+import {
+  useSchematicInteractionController,
+  type SchematicInteractionController,
+} from "@/components/pcb/useSchematicInteractionController";
 import { SchematicCanvasR3F as SchematicCanvas } from "@/lib/render-engine/wrappers/SchematicCanvasR3F";
 import { createHitTestCache } from "@/components/pcb/canvas/hit-test";
 import { collectDirectlyAttachedPinIds } from "@/components/pcb/canvas/wires";
 import { useSchematicStore } from "@/stores/schematic-store";
 import type { SchematicDocument } from "@/components/pcb/types";
+import mediumHardeningFixture from "../../../tests/e2e/fixtures/medium-hardening.json";
+import mediumHardeningManifest from "../../../tests/e2e/fixtures/medium-hardening-manifest.json";
 
-type HarnessFixture = "base" | "drag-wiring";
+type HarnessFixture =
+  | "base"
+  | "base-altered"
+  | "drag-wiring"
+  | "medium-hardening";
+
+type SerializableValue =
+  | null
+  | boolean
+  | number
+  | string
+  | SerializableValue[]
+  | { [key: string]: SerializableValue };
+
+type FixtureManifest = {
+  viewportSeed?: {
+    offsetX: number;
+    offsetY: number;
+    zoom: number;
+  };
+};
+
+const DEFAULT_VIEWPORT = { offsetX: 200, offsetY: 150, zoom: 1 / 12_700 };
 
 const BASE_FIXTURE: SchematicDocument = {
   id: "e2e-doc-1",
@@ -115,9 +142,27 @@ const DRAG_WIRING_FIXTURE: SchematicDocument = {
   ],
 };
 
+const MEDIUM_HARDENING_FIXTURE =
+  mediumHardeningFixture as unknown as SchematicDocument;
+
+const MEDIUM_HARDENING_MANIFEST = mediumHardeningManifest as FixtureManifest;
+
+const MEDIUM_HARDENING_VIEWPORT =
+  MEDIUM_HARDENING_MANIFEST.viewportSeed ?? DEFAULT_VIEWPORT;
+
 const FIXTURES: Record<HarnessFixture, SchematicDocument> = {
   base: BASE_FIXTURE,
   "drag-wiring": DRAG_WIRING_FIXTURE,
+  "medium-hardening": MEDIUM_HARDENING_FIXTURE,
+};
+
+const FIXTURE_VIEWPORTS: Record<
+  HarnessFixture,
+  { offsetX: number; offsetY: number; zoom: number }
+> = {
+  base: DEFAULT_VIEWPORT,
+  "drag-wiring": DEFAULT_VIEWPORT,
+  "medium-hardening": MEDIUM_HARDENING_VIEWPORT,
 };
 
 function getHarnessFixture(): HarnessFixture {
@@ -126,7 +171,15 @@ function getHarnessFixture(): HarnessFixture {
   }
 
   const fixture = new URLSearchParams(window.location.search).get("fixture");
-  return fixture === "drag-wiring" ? "drag-wiring" : "base";
+  if (fixture === "drag-wiring") {
+    return "drag-wiring";
+  }
+
+  if (fixture === "medium-hardening") {
+    return "medium-hardening";
+  }
+
+  return "base";
 }
 
 function isTextEntryFocused(activeElement: Element | null): boolean {
@@ -161,6 +214,7 @@ function isTextEntryFocused(activeElement: Element | null): boolean {
 
 function resetHarnessStore(fixture: HarnessFixture) {
   const document = FIXTURES[fixture];
+  const viewport = FIXTURE_VIEWPORTS[fixture];
 
   useSchematicStore.setState((state) => ({
     ...state,
@@ -175,7 +229,7 @@ function resetHarnessStore(fixture: HarnessFixture) {
       hitTestCache: createHitTestCache(document.symbols),
     },
     chrome: {
-      viewport: { offsetX: 200, offsetY: 150, zoom: 1 / 12_700 },
+      viewport,
       selectedEntityIds: new Set(),
       activeTool: "select",
       popoverEntityId: null,
@@ -207,8 +261,6 @@ function DebugValue({
 }
 
 import { schematicToScreen } from "@/components/pcb/canvas/viewport";
-
-// ... [rest unchanged until E2EDebugPanel] ...
 
 function E2EDebugPanel({ fixture }: { fixture: HarnessFixture }) {
   const schematicDocument = useSchematicStore(

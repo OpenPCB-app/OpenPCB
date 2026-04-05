@@ -1,0 +1,44 @@
+{
+  "formatVersion": "openpcb.e2e.fixture-manifest/v1",
+  "fixtureId": "medium-hardening",
+  "fixtureFile": "tests/e2e/fixtures/medium-hardening.json",
+  "seed": "openpcb-medium-hardening-v1",
+  "generationTimestamp": "2026-04-05T00:00:00.000Z",
+  "documentFormatVersion": "pcb.schematic-project-document/v1",
+  "viewportSeed": {
+    "offsetX": 320,
+    "offsetY": 180,
+    "zoom": 0.00007874015748031496
+  },
+  "counts": {
+    "symbols": 500,
+    "wires": 1000,
+    "labels": 120
+  },
+  "symbolMix": {
+    "resistor": 200,
+    "capacitor": 120,
+    "connector": 100,
+    "generic_ic": {
+      "total": 80,
+      "byPinCount": {
+        "8": 16,
+        "14": 16,
+        "16": 16,
+        "20": 16,
+        "24": 16
+      }
+    }
+  },
+  "reproducibility": {
+    "runs": 3,
+    "stable": true,
+    "hashAlgorithm": "sha256",
+    "hashes": [
+      "ab3d4802920982620a1ca5dfc253faa76f780eefd6cc29c85fff50bf8fa568d6",
+      "ab3d4802920982620a1ca5dfc253faa76f780eefd6cc29c85fff50bf8fa568d6",
+      "ab3d4802920982620a1ca5dfc253faa76f780eefd6cc29c85fff50bf8fa568d6"
+    ],
+    "fixtureHash": "ab3d4802920982620a1ca5dfc253faa76f780eefd6cc29c85fff50bf8fa568d6"
+  }
+}
