@@ -491,6 +491,57 @@ describe("SchematicCanvas wiring flow", () => {
     ]);
   });
 
+  it("keeps additive selection and clears on empty click", () => {
+    const { container } = render(<SchematicCanvas />);
+    const canvas = getCanvas(container);
+    const symbol1Start = getSymbolBodyCenterScreen("symbol-1");
+    const symbol2Start = getSymbolBodyCenterScreen("symbol-2");
+
+    fireEvent.mouseDown(canvas, {
+      button: 0,
+      clientX: symbol1Start.x,
+      clientY: symbol1Start.y,
+    });
+    fireEvent.mouseUp(canvas, {
+      button: 0,
+      clientX: symbol1Start.x,
+      clientY: symbol1Start.y,
+    });
+
+    fireEvent.mouseDown(canvas, {
+      button: 0,
+      clientX: symbol2Start.x,
+      clientY: symbol2Start.y,
+      shiftKey: true,
+    });
+    fireEvent.mouseUp(canvas, {
+      button: 0,
+      clientX: symbol2Start.x,
+      clientY: symbol2Start.y,
+      shiftKey: true,
+    });
+
+    expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(
+      new Set(["symbol-1", "symbol-2"]),
+    );
+
+    fireEvent.mouseDown(canvas, {
+      button: 0,
+      clientX: 760,
+      clientY: 560,
+    });
+    fireEvent.mouseUp(canvas, {
+      button: 0,
+      clientX: 760,
+      clientY: 560,
+    });
+
+    expect(useSchematicStore.getState().chrome.selectedEntityIds).toEqual(
+      new Set(),
+    );
+    expect(useSchematicStore.getState().session).toBeNull();
+  });
+
   it("adds a snapped waypoint when clicking canvas during a wire session", () => {
     const { container } = render(<SchematicCanvas />);
     const canvas = getCanvas(container);
