@@ -132,6 +132,13 @@ export class ComponentController {
     const forceUsedDelete = ctx.query.get("force") === "true";
 
     try {
+      const existing = await this.repo.getComponent(id);
+      if (existing?.component.scope === "builtin") {
+        return ResponseBuilder.badRequest(
+          "Built-in components cannot be deleted",
+        );
+      }
+
       const impact = await this.repo.getDeleteImpact(id);
       if (impact.usageCount > 0 && !forceUsedDelete) {
         return ResponseBuilder.conflict(
@@ -193,10 +200,17 @@ export class ComponentController {
     let deletedCount = 0;
     let skippedNotFoundCount = 0;
 
+    let skippedBuiltinCount = 0;
+
     for (const id of ids) {
       const existing = await this.repo.getComponent(id);
       if (!existing) {
         skippedNotFoundCount++;
+        continue;
+      }
+
+      if (existing.component.scope === "builtin") {
+        skippedBuiltinCount++;
         continue;
       }
 
@@ -223,13 +237,15 @@ export class ComponentController {
     }
 
     const skippedUsedCount = skippedUsed.length;
-    const skippedCount = skippedNotFoundCount + skippedUsedCount;
+    const skippedCount =
+      skippedNotFoundCount + skippedUsedCount + skippedBuiltinCount;
 
     return ResponseBuilder.success({
       deleted: true,
       deletedCount,
       skippedCount,
       skippedNotFoundCount,
+      skippedBuiltinCount,
       skippedUsedCount,
       skippedUsed,
       deletedUsedCount: deletedUsed.length,

@@ -43,7 +43,6 @@ export interface SchematicSymbol {
   variantId?: string | null;
   /** @deprecated Use componentId instead. Kept for backward compatibility with old documents. */
   libraryPartId?: string | null;
-  symbolTemplate?: string | null;
   reference?: string | null;
   position: ProjectPoint;
   rotation?: number;

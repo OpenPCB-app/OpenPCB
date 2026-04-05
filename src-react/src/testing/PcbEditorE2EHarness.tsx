@@ -1,9 +1,12 @@
 import { useEffect, useMemo } from "react";
-import { PcbCanvas } from "@/components/pcb-editor/canvas/PcbCanvas";
+import { PcbCanvasR3F as PcbCanvas } from "@/lib/render-engine/wrappers/PcbCanvasR3F";
 import { PcbSidebar } from "@/components/pcb-editor/PcbSidebar";
 import { PcbToolbar } from "@/components/pcb-editor/PcbToolbar";
 import { usePcbStore } from "@/stores/pcb-store";
-import type { PcbDocument, PcbPlacement } from "@/components/pcb-editor/pcb-types";
+import type {
+  PcbDocument,
+  PcbPlacement,
+} from "@/components/pcb-editor/pcb-types";
 import type { ParsedKicadFootprint } from "@/lib/api/component-api";
 
 function createFootprint(): ParsedKicadFootprint {

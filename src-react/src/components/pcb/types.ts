@@ -31,8 +31,6 @@ export interface BaseEntity {
   mirrored?: boolean;
 }
 
-export type SymbolTemplate = string;
-
 export type RenderedSymbolPin = SchematicSymbolPin & {
   number?: string;
   side?: PinSide;
@@ -45,15 +43,14 @@ export type EditorSchematicSymbol = Omit<SharedSchematicSymbol, "pins"> & {
   componentId?: string;
   variantId?: string;
   linkStatus?: "ok" | "missing";
-  symbolTemplate?: SymbolTemplate | null;
   mirrored?: boolean;
   reference: string;
   rotation: number;
   value: string;
   pinCount?: number;
   pins: RenderedSymbolPin[];
-  importedGraphics?: ImportedSymbolGraphic[];
-  importedBodyBounds?: Bounds | null;
+  graphics?: ImportedSymbolGraphic[];
+  bodyBounds?: Bounds | null;
 };
 
 export type SymbolEntity = EditorSchematicSymbol;
@@ -213,7 +210,6 @@ export function normalizeSymbolEntity(symbol: SymbolEntity): SymbolEntity {
     ...symbol,
     rotation: normalizeRotationValue(symbol.rotation),
     mirrored: symbol.mirrored ?? false,
-    symbolTemplate: symbol.symbolTemplate ?? "generic_ic",
     reference: normalizeReferenceValue(symbol.reference, symbol.id),
     componentId: normalizeOptionalString(symbol.componentId),
     variantId: normalizeOptionalString(symbol.variantId),
@@ -237,7 +233,6 @@ export function toEditorSchematicSymbol(
     symbolKind: inferSymbolKind(reference),
     componentId,
     variantId,
-    symbolTemplate: symbol.symbolTemplate ?? null,
     reference,
     rotation: normalizeRotationValue(symbol.rotation),
     mirrored: false,
@@ -304,7 +299,6 @@ export function toSchematicProjectDocument(
         id: s.id,
         componentId: s.componentId ?? null,
         variantId: s.variantId ?? null,
-        symbolTemplate: s.symbolTemplate ?? null,
         reference: s.reference,
         position: s.position,
         rotation: s.rotation,

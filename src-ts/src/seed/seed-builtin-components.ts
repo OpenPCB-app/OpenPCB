@@ -6,7 +6,6 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type * as schema from "../db/schema";
 import { component } from "../db/schema";
 import type { ComponentRepository } from "../db/repositories/component-repository";
-import { parseKicadSymbolLib } from "../infrastructure/parsers/kicad/kicad-symbol-parser";
 import { parseKicadFootprint } from "../infrastructure/parsers/kicad/kicad-footprint-parser";
 import type { FootprintOption } from "../db/schema/component-variant";
 
@@ -18,8 +17,7 @@ interface BuiltinComponentDef {
   description: string;
   categoryPath: string;
   tags: string[];
-  symbolFile: string;
-  symbolName: string;
+  symbolData: Record<string, unknown>;
   variants?: BuiltinVariantDef[];
 }
 
@@ -31,6 +29,164 @@ interface BuiltinVariantDef {
   footprintFile: string;
 }
 
+// ---------------------------------------------------------------------------
+// Hand-crafted symbol data (primitives-only, no KiCad files)
+// ---------------------------------------------------------------------------
+
+// Pin span: 2.54mm (100mil) standard
+const PIN_SPAN = 2_540_000;
+const HALF_SPAN = PIN_SPAN / 2;
+
+/**
+ * GND: pin at top (y=0), stem going down, three horizontal bars of decreasing width.
+ * Coordinates in Y-UP convention (KiCad-like) — cloneImportedGraphic will negate Y
+ * so bars end up pointing downward on screen.
+ */
+const GND_SYMBOL: Record<string, unknown> = {
+  referencePrefix: "GND",
+  pinDefinitions: [{ name: "GND", electricalType: "power_in" }],
+  pins: [
+    {
+      name: "GND",
+      number: "1",
+      position: { x: 0, y: 0 },
+      side: "top",
+      length: 0,
+      electricalType: "power_in",
+    },
+  ],
+  properties: { value: "GND" },
+  unitCount: 1,
+  bodyGraphics: [
+    // Stem: pin (0,0) down to bars (Y-UP: negative Y = down)
+    { type: "line", x1: 0, y1: 0, x2: 0, y2: -200_000, strokeWidth: 0.254 },
+    // Bars: widest at top, narrowest at bottom (in Y-UP: decreasing Y)
+    {
+      type: "line",
+      x1: -300_000,
+      y1: -200_000,
+      x2: 300_000,
+      y2: -200_000,
+      strokeWidth: 0.254,
+    },
+    {
+      type: "line",
+      x1: -180_000,
+      y1: -320_000,
+      x2: 180_000,
+      y2: -320_000,
+      strokeWidth: 0.254,
+    },
+    {
+      type: "line",
+      x1: -60_000,
+      y1: -440_000,
+      x2: 60_000,
+      y2: -440_000,
+      strokeWidth: 0.254,
+    },
+  ],
+};
+
+/**
+ * VCC: pin at bottom (y=0), stem going up, V-arrow pointing up.
+ * Coordinates in Y-UP convention — positive Y = up.
+ */
+const VCC_SYMBOL: Record<string, unknown> = {
+  referencePrefix: "VCC",
+  pinDefinitions: [{ name: "VCC", electricalType: "power_in" }],
+  pins: [
+    {
+      name: "VCC",
+      number: "1",
+      position: { x: 0, y: 0 },
+      side: "bottom",
+      length: 0,
+      electricalType: "power_in",
+    },
+  ],
+  properties: { value: "VCC" },
+  unitCount: 1,
+  bodyGraphics: [
+    // Stem: pin (0,0) up to arrow tip (Y-UP: positive Y = up)
+    { type: "line", x1: 0, y1: 0, x2: 0, y2: 200_000, strokeWidth: 0.254 },
+    // V-arrow: two lines converging at top
+    {
+      type: "line",
+      x1: -200_000,
+      y1: 40_000,
+      x2: 0,
+      y2: 240_000,
+      strokeWidth: 0.254,
+    },
+    {
+      type: "line",
+      x1: 200_000,
+      y1: 40_000,
+      x2: 0,
+      y2: 240_000,
+      strokeWidth: 0.254,
+    },
+  ],
+};
+
+/**
+ * Resistor (ANSI): compact 3-peak zigzag.
+ * Body fills ~90% of pin span. Pin renderer draws the short lead stubs via pin.length.
+ * No explicit lead lines in bodyGraphics — only the zigzag polygon.
+ */
+const BODY_LEFT = -1_143_000; // 90% of HALF_SPAN
+const BODY_RIGHT = 1_143_000;
+const ZZ_HALF = (BODY_RIGHT - BODY_LEFT) / 6; // ~381_000
+const ZZ_AMP = 230_000;
+
+const RESISTOR_SYMBOL: Record<string, unknown> = {
+  referencePrefix: "R",
+  pinDefinitions: [
+    { name: "1", electricalType: "passive" },
+    { name: "2", electricalType: "passive" },
+  ],
+  pins: [
+    {
+      name: "1",
+      number: "1",
+      position: { x: -HALF_SPAN, y: 0 },
+      side: "left",
+      length: HALF_SPAN - -BODY_LEFT,
+      electricalType: "passive",
+    },
+    {
+      name: "2",
+      number: "2",
+      position: { x: HALF_SPAN, y: 0 },
+      side: "right",
+      length: HALF_SPAN - BODY_RIGHT,
+      electricalType: "passive",
+    },
+  ],
+  properties: { value: "R" },
+  unitCount: 1,
+  bodyGraphics: [
+    // Zigzag only — pin renderer handles lead stubs
+    {
+      type: "polygon",
+      points: [
+        { x: BODY_LEFT, y: 0 },
+        { x: BODY_LEFT + ZZ_HALF * 0.5, y: ZZ_AMP },
+        { x: BODY_LEFT + ZZ_HALF * 1.5, y: -ZZ_AMP },
+        { x: BODY_LEFT + ZZ_HALF * 2.5, y: ZZ_AMP },
+        { x: BODY_LEFT + ZZ_HALF * 3.5, y: -ZZ_AMP },
+        { x: BODY_LEFT + ZZ_HALF * 4.5, y: ZZ_AMP },
+        { x: BODY_LEFT + ZZ_HALF * 5.5, y: -ZZ_AMP },
+        { x: BODY_RIGHT, y: 0 },
+      ],
+      filled: false,
+      closed: false,
+      strokeWidth: 0.254,
+    },
+  ],
+};
+
 const BUILTIN_COMPONENTS: BuiltinComponentDef[] = [
   {
     canonicalKey: "builtin:gnd",
@@ -38,8 +194,7 @@ const BUILTIN_COMPONENTS: BuiltinComponentDef[] = [
     description: "Ground reference symbol",
     categoryPath: "Power/Ground",
     tags: ["power", "ground"],
-    symbolFile: "symbols/GND.kicad_sym",
-    symbolName: "GND",
+    symbolData: GND_SYMBOL,
   },
   {
     canonicalKey: "builtin:vcc",
@@ -47,8 +202,7 @@ const BUILTIN_COMPONENTS: BuiltinComponentDef[] = [
     description: "Positive supply voltage symbol",
     categoryPath: "Power/Supply",
     tags: ["power", "supply"],
-    symbolFile: "symbols/VCC.kicad_sym",
-    symbolName: "VCC",
+    symbolData: VCC_SYMBOL,
   },
   {
     canonicalKey: "builtin:resistor",
@@ -56,8 +210,7 @@ const BUILTIN_COMPONENTS: BuiltinComponentDef[] = [
     description: "Generic resistor — set value after placement",
     categoryPath: "Passives/Resistors",
     tags: ["passive", "resistor"],
-    symbolFile: "symbols/R.kicad_sym",
-    symbolName: "R",
+    symbolData: RESISTOR_SYMBOL,
     variants: [
       {
         canonicalCode: "0402",
@@ -87,23 +240,6 @@ const BUILTIN_COMPONENTS: BuiltinComponentDef[] = [
   },
 ];
 
-function loadSymbol(
-  symbolFile: string,
-  symbolName: string,
-): Record<string, unknown> {
-  const content = readFileSync(join(LIB_ROOT, symbolFile), "utf-8");
-  const parsed = parseKicadSymbolLib(content);
-  const symbol = parsed.symbols.find((s) => s.name === symbolName);
-
-  if (!symbol) {
-    throw new Error(
-      `Symbol "${symbolName}" not found in ${symbolFile}. Available: ${parsed.symbols.map((s) => s.name).join(", ")}`,
-    );
-  }
-
-  return symbol as unknown as Record<string, unknown>;
-}
-
 function loadFootprint(footprintFile: string): Record<string, unknown> {
   const content = readFileSync(join(LIB_ROOT, footprintFile), "utf-8");
   const parsed = parseKicadFootprint(content);
@@ -114,17 +250,17 @@ function generateUUID(): string {
   return crypto.randomUUID();
 }
 
-async function isComponentSeeded(
+async function getExistingComponentId(
   db: BunSQLiteDatabase<typeof schema>,
   canonicalKey: string,
-): Promise<boolean> {
+): Promise<string | null> {
   const existing = await db
     .select({ id: component.id })
     .from(component)
     .where(eq(component.canonicalKey, canonicalKey))
     .limit(1);
 
-  return existing.length > 0;
+  return existing[0]?.id ?? null;
 }
 
 export async function seedBuiltinComponents(
@@ -136,14 +272,14 @@ export async function seedBuiltinComponents(
 
   for (const def of BUILTIN_COMPONENTS) {
     try {
-      const alreadySeeded = await isComponentSeeded(db, def.canonicalKey);
+      const existingId = await getExistingComponentId(db, def.canonicalKey);
+      const symbolData = def.symbolData;
 
-      if (alreadySeeded) {
+      if (existingId) {
+        await repository.updateComponent(existingId, { symbolData });
         skipped += 1;
         continue;
       }
-
-      const symbolData = loadSymbol(def.symbolFile, def.symbolName);
 
       const variants =
         def.variants?.map((v) => {

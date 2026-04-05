@@ -13,7 +13,6 @@ import {
   type HistoryState,
   type Viewport,
   type EditorTool,
-  type BodyPresetKind,
   type Point,
   type Nanometers,
   createEmptyDraft,
@@ -21,10 +20,6 @@ import {
   createDefaultHistory,
   MIN_ZOOM,
   MAX_ZOOM,
-  DEFAULT_BODY_WIDTH,
-  DEFAULT_BODY_HEIGHT,
-  PASSIVE_BODY_WIDTH,
-  PASSIVE_BODY_HEIGHT,
 } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -45,8 +40,6 @@ interface SymbolEditorState {
   setDraft: (draft: SymbolDraft) => void;
   resetDraft: (id?: string) => void;
   updateMetadata: (updates: Partial<SymbolDraft["metadata"]>) => void;
-  setBodyPreset: (kind: BodyPresetKind) => void;
-  resizeBody: (width: Nanometers, height: Nanometers) => void;
 
   // Pin actions
   addPin: (pin: SymbolPin) => void;
@@ -56,6 +49,7 @@ interface SymbolEditorState {
   movePin: (id: string, position: Point) => void;
 
   // Graphic actions
+  addGraphic: (graphic: SymbolDraft["graphics"][number]) => void;
   setGraphics: (graphics: SymbolDraft["graphics"]) => void;
   updateGraphic: (id: string, graphic: SymbolDraft["graphics"][number]) => void;
   removeGraphics: (ids: string[]) => void;
@@ -98,38 +92,10 @@ function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
 
-function getBodyDimensionsForPreset(kind: BodyPresetKind): {
-  width: Nanometers;
-  height: Nanometers;
-} {
-  switch (kind) {
-    case "blank":
-      return { width: DEFAULT_BODY_WIDTH, height: DEFAULT_BODY_HEIGHT };
-    case "ic_box":
-      return { width: DEFAULT_BODY_WIDTH, height: DEFAULT_BODY_HEIGHT };
-    case "opamp":
-      return { width: DEFAULT_BODY_WIDTH, height: DEFAULT_BODY_HEIGHT };
-    case "two_pin_passive":
-      return { width: PASSIVE_BODY_WIDTH, height: PASSIVE_BODY_HEIGHT };
-    case "transistor":
-      return { width: DEFAULT_BODY_WIDTH, height: DEFAULT_BODY_WIDTH };
-    case "diode":
-      return { width: PASSIVE_BODY_WIDTH * 2, height: PASSIVE_BODY_HEIGHT * 2 };
-    case "connector":
-      return { width: DEFAULT_BODY_WIDTH, height: DEFAULT_BODY_HEIGHT };
-    case "voltage_regulator":
-      return { width: DEFAULT_BODY_WIDTH, height: DEFAULT_BODY_HEIGHT };
-    default:
-      kind satisfies never;
-      return { width: DEFAULT_BODY_WIDTH, height: DEFAULT_BODY_HEIGHT };
-  }
-}
-
 function createHistorySnapshot(draft: SymbolDraft): SymbolDraft {
   return {
     ...draft,
     metadata: { ...draft.metadata },
-    body: { ...draft.body },
     pins: draft.pins.map((p) => ({ ...p, position: { ...p.position } })),
     graphics: draft.graphics.map(cloneGraphic),
     importPreservation: draft.importPreservation
@@ -141,14 +107,21 @@ function createHistorySnapshot(draft: SymbolDraft): SymbolDraft {
   };
 }
 
-function cloneGraphic(graphic: SymbolDraft["graphics"][number]): SymbolDraft["graphics"][number] {
+function cloneGraphic(
+  graphic: SymbolDraft["graphics"][number],
+): SymbolDraft["graphics"][number] {
   if (graphic.type === "polygon") {
-    return { ...graphic, points: graphic.points.map((point) => ({ ...point })) };
+    return {
+      ...graphic,
+      points: graphic.points.map((point) => ({ ...point })),
+    };
   }
   if (graphic.type === "bezier") {
     return {
       ...graphic,
-      points: graphic.points.map((point) => ({ ...point })) as typeof graphic.points,
+      points: graphic.points.map((point) => ({
+        ...point,
+      })) as typeof graphic.points,
     };
   }
   return { ...graphic };
@@ -194,31 +167,6 @@ export function createSymbolEditorStore(initialDraftId?: string) {
         draft: {
           ...state.draft,
           metadata: { ...state.draft.metadata, ...updates },
-        },
-        isDirty: true,
-      });
-    },
-
-    setBodyPreset: (kind) => {
-      const state = get();
-      state.pushHistory();
-      const dimensions = getBodyDimensionsForPreset(kind);
-      set({
-        draft: {
-          ...state.draft,
-          body: { kind, ...dimensions },
-        },
-        isDirty: true,
-      });
-    },
-
-    resizeBody: (width, height) => {
-      const state = get();
-      state.pushHistory();
-      set({
-        draft: {
-          ...state.draft,
-          body: { ...state.draft.body, width, height },
         },
         isDirty: true,
       });
@@ -314,6 +262,18 @@ export function createSymbolEditorStore(initialDraftId?: string) {
       });
     },
 
+    addGraphic: (graphic) => {
+      const state = get();
+      state.pushHistory();
+      set({
+        draft: {
+          ...state.draft,
+          graphics: [...state.draft.graphics, cloneGraphic(graphic)],
+        },
+        isDirty: true,
+      });
+    },
+
     setGraphics: (graphics) => {
       const state = get();
       state.pushHistory();
@@ -338,14 +298,18 @@ export function createSymbolEditorStore(initialDraftId?: string) {
       set({
         draft: {
           ...state.draft,
-          graphics: state.draft.graphics.filter((graphic) => !idSet.has(graphic.id)),
+          graphics: state.draft.graphics.filter(
+            (graphic) => !idSet.has(graphic.id),
+          ),
         },
         chrome: {
           ...state.chrome,
           selection: {
             ...state.chrome.selection,
             selectedGraphicIds: new Set(
-              [...state.chrome.selection.selectedGraphicIds].filter((gid) => !idSet.has(gid)),
+              [...state.chrome.selection.selectedGraphicIds].filter(
+                (gid) => !idSet.has(gid),
+              ),
             ),
           },
         },

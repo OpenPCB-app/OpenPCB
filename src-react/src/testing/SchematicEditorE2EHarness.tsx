@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import { ComponentPalette } from "@/components/pcb/palette/ComponentPalette";
 import { FloatingPropertiesPopover } from "@/components/pcb/properties/FloatingPropertiesPopover";
 import { useSchematicInteractionController } from "@/components/pcb/useSchematicInteractionController";
-import { SchematicCanvas } from "@/components/pcb/canvas/SchematicCanvas";
+import { SchematicCanvasR3F as SchematicCanvas } from "@/lib/render-engine/wrappers/SchematicCanvasR3F";
 import { createHitTestCache } from "@/components/pcb/canvas/hit-test";
 import { collectDirectlyAttachedPinIds } from "@/components/pcb/canvas/wires";
 import { useSchematicStore } from "@/stores/schematic-store";
@@ -23,7 +23,7 @@ const BASE_FIXTURE: SchematicDocument = {
       id: "symbol-1",
       entityType: "symbol",
       symbolKind: "resistor",
-      symbolTemplate: "resistor",
+
       reference: "R1",
       value: "10k",
       position: { x: 0, y: 0 },
@@ -42,7 +42,7 @@ const BASE_FIXTURE: SchematicDocument = {
       id: "symbol-2",
       entityType: "symbol",
       symbolKind: "connector",
-      symbolTemplate: "connector",
+
       reference: "J1",
       value: "HDR2",
       position: { x: 1_905_000, y: 635_000 },
@@ -70,7 +70,7 @@ const DRAG_WIRING_FIXTURE: SchematicDocument = {
       id: "symbol-3",
       entityType: "symbol",
       symbolKind: "connector",
-      symbolTemplate: "connector",
+
       reference: "J2",
       value: "HDR2",
       position: { x: 3_810_000, y: 0 },

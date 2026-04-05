@@ -2,29 +2,25 @@
  * Symbol Editor Types
  *
  * Data model for the New Component wizard Step 1 symbol editor.
- * Designed for presets-first MVP with schema extensibility for future primitives.
+ * Coordinate types and graphic primitives re-exported from canvas-core.
  */
 
+import type {
+  Nanometers as _Nanometers,
+  Point as _Point,
+  Bounds as _Bounds,
+  PinSide as _PinSide,
+  SymbolGraphic as _SymbolGraphic,
+} from "@/lib/canvas-core/types";
+
 // ---------------------------------------------------------------------------
-// Coordinate System
+// Coordinate System (re-exported from canvas-core)
 // ---------------------------------------------------------------------------
 
-/** Internal units: nanometers (same as schematic editor for consistency) */
-export type Nanometers = number;
-
-/** 2D point in internal coordinate space */
-export interface Point {
-  x: Nanometers;
-  y: Nanometers;
-}
-
-/** Axis-aligned bounding box */
-export interface Bounds {
-  minX: Nanometers;
-  minY: Nanometers;
-  maxX: Nanometers;
-  maxY: Nanometers;
-}
+export type Nanometers = _Nanometers;
+export type Point = _Point;
+export type Bounds = _Bounds;
+export type PinSide = _PinSide;
 
 // ---------------------------------------------------------------------------
 // Pin Model
@@ -42,9 +38,6 @@ export type PinElectricalType =
   | "open_emitter"
   | "unspecified";
 
-/** Pin side relative to symbol body */
-export type PinSide = "left" | "right" | "top" | "bottom";
-
 /** Pin definition in the symbol editor */
 export interface SymbolPin {
   id: string;
@@ -59,108 +52,19 @@ export interface SymbolPin {
 }
 
 // ---------------------------------------------------------------------------
-// Body Model (Preset-based MVP)
+// Graphics Primitives (re-exported from canvas-core)
 // ---------------------------------------------------------------------------
 
-/** Body preset kinds */
-export type BodyPresetKind =
-  | "blank"
-  | "ic_box"
-  | "opamp"
-  | "two_pin_passive"
-  | "transistor"
-  | "diode"
-  | "connector"
-  | "voltage_regulator";
-
-/** Body preset configuration */
-export interface BodyPreset {
-  kind: BodyPresetKind;
-  /** Width of the body (for ic_box, opamp, two_pin_passive) */
-  width: Nanometers;
-  /** Height of the body (for ic_box, opamp) */
-  height: Nanometers;
-}
-
-// ---------------------------------------------------------------------------
-// Graphics Primitives (Future extensibility)
-// ---------------------------------------------------------------------------
-
-/** Base for all graphics primitives */
-interface GraphicBase {
-  id: string;
-  zIndex: number;
-}
-
-export interface LineGraphic extends GraphicBase {
-  type: "line";
-  x1: Nanometers;
-  y1: Nanometers;
-  x2: Nanometers;
-  y2: Nanometers;
-  strokeWidth: number;
-}
-
-export interface RectGraphic extends GraphicBase {
-  type: "rect";
-  x: Nanometers;
-  y: Nanometers;
-  width: Nanometers;
-  height: Nanometers;
-  filled: boolean;
-  strokeWidth: number;
-}
-
-export interface ArcGraphic extends GraphicBase {
-  type: "arc";
-  cx: Nanometers;
-  cy: Nanometers;
-  radius: Nanometers;
-  startAngle: number;
-  endAngle: number;
-  strokeWidth: number;
-}
-
-export interface CircleGraphic extends GraphicBase {
-  type: "circle";
-  cx: Nanometers;
-  cy: Nanometers;
-  radius: Nanometers;
-  filled: boolean;
-  strokeWidth: number;
-}
-
-export interface PolygonGraphic extends GraphicBase {
-  type: "polygon";
-  points: Point[];
-  filled: boolean;
-  closed: boolean;
-  strokeWidth: number;
-}
-
-export interface BezierGraphic extends GraphicBase {
-  type: "bezier";
-  points: [Point, Point, Point, Point];
-  strokeWidth: number;
-}
-
-export interface TextGraphic extends GraphicBase {
-  type: "text";
-  x: Nanometers;
-  y: Nanometers;
-  content: string;
-  fontSize: number;
-  rotation: number;
-}
-
-export type SymbolGraphic =
-  | LineGraphic
-  | RectGraphic
-  | ArcGraphic
-  | CircleGraphic
-  | PolygonGraphic
-  | BezierGraphic
-  | TextGraphic;
+export type SymbolGraphic = _SymbolGraphic;
+export type {
+  LineGraphic,
+  RectGraphic,
+  ArcGraphic,
+  CircleGraphic,
+  PolygonGraphic,
+  BezierGraphic,
+  TextGraphic,
+} from "@/lib/canvas-core/types";
 
 // ---------------------------------------------------------------------------
 // Symbol Draft Model
@@ -194,11 +98,9 @@ export interface SymbolDraft {
   id: string;
   /** Symbol metadata */
   metadata: SymbolMetadata;
-  /** Body preset or custom body */
-  body: BodyPreset;
   /** Pin definitions */
   pins: SymbolPin[];
-  /** Custom graphics (future: lines, arcs, etc.) */
+  /** Symbol graphics — THE symbol definition (lines, circles, arcs, etc.) */
   graphics: SymbolGraphic[];
   /** Import preservation data */
   importPreservation: ImportPreservation | null;
@@ -216,7 +118,7 @@ export interface Viewport {
 }
 
 /** Editor tool modes */
-export type EditorTool = "select" | "pan";
+export type EditorTool = "select" | "pan" | "line" | "rect" | "circle";
 
 /** Grid size presets (in nanometers) */
 export const GRID_SIZES = {
@@ -280,18 +182,12 @@ export interface PinTemplate {
 /** Default pin length */
 export const DEFAULT_PIN_LENGTH: Nanometers = 2_540_000; // 0.1 inch
 
-/** Default body dimensions */
-export const DEFAULT_BODY_WIDTH: Nanometers = 7_620_000; // 0.3 inch
-export const DEFAULT_BODY_HEIGHT: Nanometers = 10_160_000; // 0.4 inch
-
-/** Two-pin passive body dimensions */
-export const PASSIVE_BODY_WIDTH: Nanometers = 2_540_000; // 0.1 inch
-export const PASSIVE_BODY_HEIGHT: Nanometers = 1_270_000; // 0.05 inch
-
 /** Minimum zoom level (5 pixels/mm - very zoomed out) */
 export const MIN_ZOOM = 5;
 /** Maximum zoom level (200 pixels/mm - very zoomed in) */
 export const MAX_ZOOM = 200;
+/** Default zoom level (50 pixels/mm - comfortable editing) */
+export const DEFAULT_ZOOM = 50;
 
 // ---------------------------------------------------------------------------
 // Factory Functions
@@ -304,11 +200,6 @@ export function createEmptyDraft(id: string): SymbolDraft {
       name: "",
       referencePrefix: "U",
       description: "",
-    },
-    body: {
-      kind: "ic_box",
-      width: DEFAULT_BODY_WIDTH,
-      height: DEFAULT_BODY_HEIGHT,
     },
     pins: [],
     graphics: [],
@@ -335,7 +226,7 @@ export function createDefaultViewport(): Viewport {
   return {
     offsetX: 0,
     offsetY: 0,
-    zoom: 1,
+    zoom: DEFAULT_ZOOM,
   };
 }
 

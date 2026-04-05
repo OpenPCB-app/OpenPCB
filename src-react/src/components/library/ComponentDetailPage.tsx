@@ -13,8 +13,8 @@ import { useComponentDetail } from "@/hooks/useComponents";
 import { createComponent } from "@/lib/api/component-api";
 import { toast } from "@/components/ui/use-toast";
 import { useNavigationStore } from "../../stores/navigation-store";
-import { SymbolPreview } from "./SymbolPreview";
-import { FootprintPreview } from "./FootprintPreview";
+import { SymbolPreviewR3F as SymbolPreview } from "@/lib/render-engine/wrappers/SymbolPreviewR3F";
+import { FootprintPreviewR3F as FootprintPreview } from "@/lib/render-engine/wrappers/FootprintPreviewR3F";
 import { Model3dPlaceholder } from "./Model3dPlaceholder";
 import { PinTable } from "./PinTable";
 import { getSymbolReferenceDisplay } from "./symbolDataDisplay";
@@ -31,7 +31,9 @@ export function ComponentDetailPage({
   onEditComponent,
 }: ComponentDetailPageProps) {
   const navigateBack = useNavigationStore((state) => state.navigateBack);
-  const navigateToDesign = useNavigationStore((state) => state.navigateToDesign);
+  const navigateToDesign = useNavigationStore(
+    (state) => state.navigateToDesign,
+  );
   const navigateToComponentDetail = useNavigationStore(
     (state) => state.navigateToComponentDetail,
   );
@@ -250,7 +252,10 @@ export function ComponentDetailPage({
           dimensions: variant.dimensions,
           isDefault: variant.isDefault,
           pinRemapTable: variant.pinRemapTable,
-          defaultFootprintOptionId: variant.footprintOptions.find((option) => option.isDefault)?.id ?? variant.footprintOptions[0]?.id ?? null,
+          defaultFootprintOptionId:
+            variant.footprintOptions.find((option) => option.isDefault)?.id ??
+            variant.footprintOptions[0]?.id ??
+            null,
           footprintOptions: variant.footprintOptions.map((option) => ({
             id: crypto.randomUUID(),
             variantId: "",
@@ -652,11 +657,13 @@ export function ComponentDetailPage({
 }
 
 function toSafeFileBase(label: string): string {
-  return label
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "component";
+  return (
+    label
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "component"
+  );
 }
 
 function downloadTextFile(

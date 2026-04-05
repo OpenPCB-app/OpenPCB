@@ -4,8 +4,6 @@ import {
 } from "@/lib/api/component-api";
 import { convertParsedKicadSymbolToDraft } from "@/components/symbol-editor/kicad-import";
 import {
-  DEFAULT_BODY_HEIGHT,
-  DEFAULT_BODY_WIDTH,
   DEFAULT_PIN_LENGTH,
   createEmptyDraft,
   type SymbolDraft,
@@ -281,8 +279,8 @@ function toFallbackPins(
     }
   }
 
-  const bodyMinX = bounds?.minX ?? -DEFAULT_BODY_WIDTH / 2;
-  const bodyMaxX = bounds?.maxX ?? DEFAULT_BODY_WIDTH / 2;
+  const bodyMinX = bounds?.minX ?? -7_620_000 / 2;
+  const bodyMaxX = bounds?.maxX ?? 7_620_000 / 2;
   const bodyCenterY = bounds ? (bounds.minY + bounds.maxY) / 2 : 0;
 
   const layout = (
@@ -326,14 +324,6 @@ function createFallbackDraftFromSymbolData(
     .filter((graphic): graphic is BackendSymbolGraphic => graphic !== null);
   const graphics = backendGraphics.map(backendGraphicToEditor);
   const bounds = toBodyBounds(graphics);
-  const width = Math.max(
-    DEFAULT_BODY_WIDTH,
-    bounds ? bounds.maxX - bounds.minX : DEFAULT_BODY_WIDTH,
-  );
-  const height = Math.max(
-    DEFAULT_BODY_HEIGHT,
-    bounds ? bounds.maxY - bounds.minY : DEFAULT_BODY_HEIGHT,
-  );
 
   return {
     ...createEmptyDraft(component.id),
@@ -341,11 +331,6 @@ function createFallbackDraftFromSymbolData(
       name: component.displayLabel,
       description: component.description,
       referencePrefix: symbolData.referencePrefix || "U",
-    },
-    body: {
-      kind: graphics.length === 0 ? "ic_box" : "blank",
-      width,
-      height,
     },
     pins: toFallbackPins(symbolData.pinDefinitions, bounds),
     graphics,
@@ -360,56 +345,6 @@ function createFallbackDraftFromSymbolData(
         }
       : null,
   };
-}
-
-function transformBodyPresetToGraphics(
-  body: SymbolDraft["body"],
-): BackendSymbolGraphic[] {
-  const halfWidth = body.width / 2;
-  const halfHeight = body.height / 2;
-
-  switch (body.kind) {
-    case "blank":
-      return [];
-    case "opamp":
-    case "diode":
-      return [
-        {
-          type: "polygon",
-          points: [
-            { x: -halfWidth, y: -halfHeight },
-            { x: halfWidth, y: 0 },
-            { x: -halfWidth, y: halfHeight },
-          ],
-          filled: false,
-          closed: true,
-          strokeWidth: 0.254,
-        },
-      ];
-    case "transistor":
-      return [
-        {
-          type: "circle",
-          cx: 0,
-          cy: 0,
-          radius: Math.max(halfWidth, halfHeight),
-          filled: false,
-          strokeWidth: 0.254,
-        },
-      ];
-    default:
-      return [
-        {
-          type: "rect",
-          x: -halfWidth,
-          y: -halfHeight,
-          width: body.width,
-          height: body.height,
-          filled: false,
-          strokeWidth: 0.254,
-        },
-      ];
-  }
 }
 
 function transformDraftGraphics(
@@ -499,14 +434,10 @@ export function transformSymbolDraftToComponentSymbolData(
     ),
     unitCount:
       draft.importPreservation?.unitCount ?? existingSymbolData?.unitCount ?? 1,
-    bodyGraphics: [
-      ...transformBodyPresetToGraphics(draft.body),
-      ...transformDraftGraphics(draft.graphics),
-    ],
+    bodyGraphics: transformDraftGraphics(draft.graphics),
     rawKicadSource:
       draft.importPreservation?.rawSource ??
       existingSymbolData?.rawKicadSource ??
       null,
-    symbolTemplate: existingSymbolData?.symbolTemplate ?? null,
   };
 }

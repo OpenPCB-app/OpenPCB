@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useCanvasColors, type CanvasColors } from "@/lib/canvas-theme";
+import { renderGraphicWorld } from "@/lib/canvas-core/graphics";
 import type { ComponentType } from "@shared/types/component-library-schema.types";
 import type { SymbolGraphic as BackendSymbolGraphic } from "@shared/types/component-semantics.types";
 import { parseKicadSymbolImport } from "../../lib/api/component-api";
@@ -7,10 +8,7 @@ import {
   convertParsedKicadSymbolToDraft,
   convertBodyGraphic,
 } from "../symbol-editor/kicad-import";
-import {
-  getSymbolPreviewLabel,
-  isPowerSymbolData,
-} from "./symbolDataDisplay";
+import { getSymbolPreviewLabel, isPowerSymbolData } from "./symbolDataDisplay";
 import type {
   SymbolPin,
   SymbolGraphic,
@@ -197,140 +195,6 @@ function renderGrid(
     ctx.lineTo(width, y);
     ctx.stroke();
   }
-}
-
-function graphicStrokeWidthPx(strokeWidth: number, viewport: Viewport): number {
-  return Math.max(1, strokeWidth * viewport.zoom);
-}
-
-function renderGraphic(
-  ctx: CanvasRenderingContext2D,
-  graphic: SymbolGraphic,
-  viewport: Viewport,
-  colors: CanvasColors,
-) {
-  ctx.save();
-  ctx.strokeStyle = colors.bodyStroke;
-  ctx.fillStyle = colors.bodyFill;
-  ctx.lineWidth =
-    "strokeWidth" in graphic
-      ? graphicStrokeWidthPx(graphic.strokeWidth, viewport)
-      : 1;
-
-  switch (graphic.type) {
-    case "line": {
-      const start = symbolToScreen(graphic.x1, graphic.y1, viewport);
-      const end = symbolToScreen(graphic.x2, graphic.y2, viewport);
-      ctx.beginPath();
-      ctx.moveTo(start.x, start.y);
-      ctx.lineTo(end.x, end.y);
-      ctx.stroke();
-      break;
-    }
-    case "rect": {
-      const topLeft = symbolToScreen(
-        graphic.x,
-        graphic.y + graphic.height,
-        viewport,
-      );
-      const bottomRight = symbolToScreen(
-        graphic.x + graphic.width,
-        graphic.y,
-        viewport,
-      );
-      ctx.beginPath();
-      ctx.rect(
-        topLeft.x,
-        topLeft.y,
-        bottomRight.x - topLeft.x,
-        bottomRight.y - topLeft.y,
-      );
-      if (graphic.filled) ctx.fill();
-      ctx.stroke();
-      break;
-    }
-    case "circle": {
-      const center = symbolToScreen(graphic.cx, graphic.cy, viewport);
-      const edge = symbolToScreen(
-        graphic.cx + graphic.radius,
-        graphic.cy,
-        viewport,
-      );
-      ctx.beginPath();
-      ctx.arc(center.x, center.y, Math.abs(edge.x - center.x), 0, Math.PI * 2);
-      if (graphic.filled) ctx.fill();
-      ctx.stroke();
-      break;
-    }
-    case "arc": {
-      const center = symbolToScreen(graphic.cx, graphic.cy, viewport);
-      const edge = symbolToScreen(
-        graphic.cx + graphic.radius,
-        graphic.cy,
-        viewport,
-      );
-      const startAngle = (-graphic.startAngle * Math.PI) / 180;
-      const endAngle = (-graphic.endAngle * Math.PI) / 180;
-      ctx.beginPath();
-      ctx.arc(
-        center.x,
-        center.y,
-        Math.abs(edge.x - center.x),
-        startAngle,
-        endAngle,
-        false,
-      );
-      ctx.stroke();
-      break;
-    }
-    case "polygon": {
-      if (graphic.points.length < 2) break;
-      const first = symbolToScreen(
-        graphic.points[0]!.x,
-        graphic.points[0]!.y,
-        viewport,
-      );
-      ctx.beginPath();
-      ctx.moveTo(first.x, first.y);
-      for (let i = 1; i < graphic.points.length; i++) {
-        const pt = graphic.points[i]!;
-        const screen = symbolToScreen(pt.x, pt.y, viewport);
-        ctx.lineTo(screen.x, screen.y);
-      }
-      if (graphic.closed) ctx.closePath();
-      if (graphic.filled) ctx.fill();
-      ctx.stroke();
-      break;
-    }
-    case "bezier": {
-      const [p0, p1, p2, p3] = graphic.points;
-      const s0 = symbolToScreen(p0.x, p0.y, viewport);
-      const s1 = symbolToScreen(p1.x, p1.y, viewport);
-      const s2 = symbolToScreen(p2.x, p2.y, viewport);
-      const s3 = symbolToScreen(p3.x, p3.y, viewport);
-      ctx.beginPath();
-      ctx.moveTo(s0.x, s0.y);
-      ctx.bezierCurveTo(s1.x, s1.y, s2.x, s2.y, s3.x, s3.y);
-      ctx.stroke();
-      break;
-    }
-    case "text": {
-      const point = symbolToScreen(graphic.x, graphic.y, viewport);
-      const fontSize = Math.max(8, graphic.fontSize * viewport.zoom);
-      const angle = (-graphic.rotation * Math.PI) / 180;
-      ctx.save();
-      ctx.translate(point.x, point.y);
-      ctx.rotate(angle);
-      ctx.font = `${fontSize}px monospace`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = colors.pinLabel;
-      ctx.fillText(graphic.content, 0, 0);
-      ctx.restore();
-      break;
-    }
-  }
-  ctx.restore();
 }
 
 function renderPin(
@@ -669,7 +533,15 @@ export function SymbolPreview({ symbolData }: SymbolPreviewProps) {
     const labelY = isPowerSymbolData(symbolData) ? height - 20 : 16;
 
     for (const g of graphics)
-      renderGraphic(ctx, g, viewportState, canvasColors);
+      renderGraphicWorld(
+        ctx,
+        g,
+        viewportState,
+        symbolToScreen,
+        canvasColors.bodyStroke,
+        canvasColors.bodyFill,
+        canvasColors.pinLabel,
+      );
     for (const pin of pins)
       renderPin(ctx, pin, viewportState, canvasColors, !hidePowerPinText);
 

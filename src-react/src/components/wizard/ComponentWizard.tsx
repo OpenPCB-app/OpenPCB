@@ -39,7 +39,6 @@ import {
   SymbolEditorCanvas,
   PinPalette,
   PinPropertiesPanel,
-  BodyPresetSelector,
   SymbolEditorToolbar,
   SymbolMetadataEditor,
 } from "@/components/symbol-editor";
@@ -564,10 +563,7 @@ function SymbolEditorStepContent({
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar */}
         <div className="w-56 flex-shrink-0 overflow-y-auto border-r border-border-default bg-bg-secondary p-3 space-y-4">
-          <BodyPresetSelector />
-          <div className="border-t border-border-default pt-4">
-            <PinPalette />
-          </div>
+          <PinPalette />
         </div>
 
         {/* Canvas */}

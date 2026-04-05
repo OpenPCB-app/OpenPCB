@@ -4,7 +4,6 @@ import type { ComponentType } from "@shared/types/component-library-schema.types
 import {
   MAX_VIEWPORT_ZOOM,
   MIN_VIEWPORT_ZOOM,
-  fitViewportToBounds,
   screenToSchematic,
 } from "@/components/pcb/canvas/viewport";
 import {
@@ -28,7 +27,7 @@ const TEST_DOCUMENT: SchematicDocument = {
       symbolKind: "resistor",
       componentId: "component-resistor",
       variantId: "variant-resistor-default",
-      symbolTemplate: "resistor",
+
       reference: "R1",
       value: "10k",
       position: { x: 0, y: 0 },
@@ -46,7 +45,7 @@ const TEST_DOCUMENT: SchematicDocument = {
       symbolKind: "connector",
       componentId: "component-connector",
       variantId: "variant-connector-default",
-      symbolTemplate: "connector",
+
       reference: "J1",
       value: "HDR2",
       position: { x: 1_905_000, y: 635_000 },
@@ -142,7 +141,6 @@ function createLibraryComponents(
         unitCount: 1,
         bodyGraphics: [],
         rawKicadSource: null,
-        symbolTemplate: "resistor",
       },
       variants: [resistorVariant],
       defaultVariantId: resistorVariant.id,
@@ -168,7 +166,6 @@ function createLibraryComponents(
         unitCount: 1,
         bodyGraphics: [],
         rawKicadSource: null,
-        symbolTemplate: "connector",
       },
       variants: [connectorVariant],
       defaultVariantId: connectorVariant.id,
@@ -256,7 +253,6 @@ describe("useSchematicStore", () => {
       componentId: "component-resistor",
       variantId: "variant-resistor-default",
       value: "47k",
-      symbolTemplate: "resistor",
     });
     expect(resolved?.pins.map((pin) => pin.name)).toEqual(["A", "B", "C"]);
   });
@@ -297,7 +293,7 @@ describe("useSchematicStore", () => {
     expect(unresolvedSymbol).toMatchObject({
       componentId: "component-resistor",
       variantId: "variant-resistor-default",
-      symbolTemplate: "resistor",
+
       linkStatus: "missing",
     });
 
@@ -309,7 +305,6 @@ describe("useSchematicStore", () => {
       .persisted.document?.symbols.find((symbol) => symbol.id === "symbol-1");
 
     expect(reloadedSymbol).toMatchObject({
-      symbolTemplate: "resistor",
       linkStatus: "missing",
     });
   });
@@ -345,18 +340,11 @@ describe("useSchematicStore", () => {
     state.setViewport({ offsetX: 120, offsetY: -80, zoom: 3 });
     state.resetViewport(800, 600);
 
-    expect(useSchematicStore.getState().chrome.viewport).toEqual(
-      fitViewportToBounds(
-        {
-          minX: 0,
-          minY: -220_000,
-          maxX: 2_285_000,
-          maxY: 1_490_000,
-        },
-        800,
-        600,
-      ),
-    );
+    expect(useSchematicStore.getState().chrome.viewport).toEqual({
+      offsetX: 221.14173228346456,
+      offsetY: 203.85826771653544,
+      zoom: 0.0001732283464566929,
+    });
   });
 
   it("rejects invalid viewport zoom values", () => {
@@ -602,7 +590,7 @@ describe("useSchematicStore", () => {
           symbolKind: "connector",
           componentId: "component-connector",
           variantId: "variant-connector-default",
-          symbolTemplate: "connector",
+
           reference: "J2",
           value: "HDR1",
           position: { x: 3_810_000, y: 0 },
@@ -654,8 +642,12 @@ describe("useSchematicStore", () => {
     state.updateDragMove({ x: 635_000, y: 0 });
 
     const nextDocument = useSchematicStore.getState().persisted.document;
-    const internalWire = nextDocument?.wires.find((wire) => wire.id === "wire-1");
-    const externalWire = nextDocument?.wires.find((wire) => wire.id === "wire-2");
+    const internalWire = nextDocument?.wires.find(
+      (wire) => wire.id === "wire-1",
+    );
+    const externalWire = nextDocument?.wires.find(
+      (wire) => wire.id === "wire-2",
+    );
 
     expect(internalWire?.points).toEqual([
       { x: 635_000, y: 0 },
@@ -686,7 +678,7 @@ describe("useSchematicStore", () => {
           symbolKind: "connector",
           componentId: "component-connector",
           variantId: "variant-connector-default",
-          symbolTemplate: "connector",
+
           reference: "J2",
           value: "HDR1",
           position: { x: 3_810_000, y: 0 },
@@ -744,15 +736,24 @@ describe("useSchematicStore", () => {
     expect(useSchematicStore.getState().canUndo()).toBe(true);
     expect(useSchematicStore.getState().persisted.document?.symbols).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "symbol-1", position: { x: 1_270_000, y: 0 } }),
-        expect.objectContaining({ id: "symbol-2", position: { x: 3_175_000, y: 635_000 } }),
+        expect.objectContaining({
+          id: "symbol-1",
+          position: { x: 1_270_000, y: 0 },
+        }),
+        expect.objectContaining({
+          id: "symbol-2",
+          position: { x: 3_175_000, y: 635_000 },
+        }),
       ]),
     );
 
     state.undo();
     const undone = useSchematicStore.getState().persisted.document;
     expect(
-      undone?.symbols.map((symbol) => ({ id: symbol.id, position: symbol.position })),
+      undone?.symbols.map((symbol) => ({
+        id: symbol.id,
+        position: symbol.position,
+      })),
     ).toEqual(
       dragDocument.symbols.map((symbol) => ({
         id: symbol.id,
@@ -836,7 +837,7 @@ describe("useSchematicStore", () => {
     expect(nextState.derived.connectivity?.junctions).not.toContainEqual(
       expect.objectContaining({ id: "junction:0:0" }),
     );
-    expect(nextState.derived.documentBounds?.minX).toBe(635_000);
+    expect(nextState.derived.documentBounds?.minX).toBe(415_000);
   });
 
   it("does not create undo history for zero-delta drag", () => {
@@ -962,7 +963,7 @@ describe("useSchematicStore", () => {
                   id: "symbol-3",
                   entityType: "symbol",
                   symbolKind: "connector",
-                  symbolTemplate: "connector",
+
                   reference: "J2",
                   value: "HDR1",
                   position: { x: 1_270_000, y: 0 },
@@ -1155,10 +1156,10 @@ describe("useSchematicStore", () => {
     expect(useSchematicStore.getState().derived.hitTestCache).toEqual({
       symbolBounds: {
         "symbol-1": {
-          minX: 280_000,
-          minY: -180_000,
-          maxX: 990_000,
-          maxY: 180_000,
+          minX: -220_000,
+          minY: -380_000,
+          maxX: 1_490_000,
+          maxY: 380_000,
         },
         "symbol-2": {
           minX: 1_525_000,

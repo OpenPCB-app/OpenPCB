@@ -103,7 +103,6 @@ function cloneSymbolDraft(draft: SymbolDraft): SymbolDraft {
   return {
     ...draft,
     metadata: { ...draft.metadata },
-    body: { ...draft.body },
     pins: draft.pins.map(cloneSymbolPin),
     graphics: draft.graphics.map(cloneSymbolGraphic),
     importPreservation: draft.importPreservation
@@ -216,7 +215,7 @@ function transformSymbolData(draft: WizardDraftPayload): BackendSymbolData {
 }
 
 /**
- * Transform body/graphics to KiCad-compatible format
+ * Strip editor-only fields (id, zIndex) from graphics for backend storage.
  */
 function transformBodyGraphics(
   symbolData: WizardDraftPayload["symbolData"],
@@ -225,50 +224,6 @@ function transformBodyGraphics(
 
   const graphics: BackendSymbolGraphic[] = [];
 
-  // Add body rectangle if present
-  if (symbolData.body) {
-    const { kind, width, height } = symbolData.body;
-    const halfW = width / 2;
-    const halfH = height / 2;
-
-    if (kind === "ic_box") {
-      graphics.push({
-        type: "rect",
-        x: -halfW,
-        y: -halfH,
-        width,
-        height,
-        filled: false,
-        strokeWidth: 0.254,
-      });
-    } else if (kind === "opamp") {
-      // Triangle for op-amp
-      graphics.push({
-        type: "polygon",
-        points: [
-          { x: -halfW, y: -halfH },
-          { x: halfW, y: 0 },
-          { x: -halfW, y: halfH },
-        ],
-        filled: false,
-        closed: true,
-        strokeWidth: 0.254,
-      });
-    } else if (kind === "two_pin_passive") {
-      // Simple resistor zigzag (simplified)
-      graphics.push({
-        type: "rect",
-        x: -halfW,
-        y: -halfH,
-        width,
-        height,
-        filled: false,
-        strokeWidth: 0.254,
-      });
-    }
-  }
-
-  // Add any custom graphics
   for (const graphic of symbolData.graphics) {
     if (graphic.type === "bezier") {
       continue;

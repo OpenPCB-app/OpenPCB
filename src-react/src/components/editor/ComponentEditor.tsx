@@ -13,7 +13,6 @@ import {
   useComponents,
 } from "@/hooks/useComponents";
 import {
-  BodyPresetSelector,
   PinPalette,
   PinPropertiesPanel,
   SymbolEditorCanvas,
@@ -114,10 +113,7 @@ function ComponentSymbolEditor() {
       <SymbolEditorToolbar />
       <div className="flex flex-1 overflow-hidden">
         <div className="w-56 flex-shrink-0 space-y-4 overflow-y-auto border-r border-border-default bg-bg-secondary p-3">
-          <BodyPresetSelector />
-          <div className="border-t border-border-default pt-4">
-            <PinPalette />
-          </div>
+          <PinPalette />
         </div>
 
         <div className="flex-1 overflow-hidden">

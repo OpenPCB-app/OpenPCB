@@ -4,7 +4,6 @@ import type {
   RenderedSymbolPin,
   Rotation,
   SymbolEntity,
-  SymbolTemplate,
 } from "./types";
 import type {
   ComponentType,
@@ -14,11 +13,10 @@ import type {
   SymbolDraft,
   SymbolGraphic,
 } from "@/components/symbol-editor/types";
-import {
-  DEFAULT_BODY_HEIGHT,
-  DEFAULT_BODY_WIDTH,
-  DEFAULT_PIN_LENGTH,
-} from "@/components/symbol-editor/types";
+import { DEFAULT_PIN_LENGTH } from "@/components/symbol-editor/types";
+
+const DEFAULT_BODY_WIDTH = 7_620_000;
+const DEFAULT_BODY_HEIGHT = 10_160_000;
 import { hasDraftImportedSymbolNormalization } from "@/components/symbol-editor/import-normalization";
 
 export const PALETTE_SYMBOL_KIND_MIME = "application/x-openpcb-symbol-kind";
@@ -49,7 +47,9 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function getComponentProperties(component: ComponentType): Record<string, string> {
+function getComponentProperties(
+  component: ComponentType,
+): Record<string, string> {
   const symbolData = asRecord(component.symbolData);
   const properties = asRecord(symbolData?.properties);
   if (!properties) {
@@ -66,7 +66,10 @@ function getComponentProperties(component: ComponentType): Record<string, string
 function getReferencePrefix(component: ComponentType): string {
   const symbolData = asRecord(component.symbolData);
   const referencePrefix = symbolData?.referencePrefix;
-  if (typeof referencePrefix === "string" && referencePrefix.trim().length > 0) {
+  if (
+    typeof referencePrefix === "string" &&
+    referencePrefix.trim().length > 0
+  ) {
     return referencePrefix;
   }
 
@@ -82,18 +85,6 @@ function getReferencePrefix(component: ComponentType): string {
 function getComponentValue(component: ComponentType): string {
   const properties = getComponentProperties(component);
   return properties.value ?? properties.Value ?? component.displayLabel;
-}
-
-function getTemplateHint(component: ComponentType): string {
-  return [
-    component.displayLabel,
-    component.categoryPath ?? "",
-    component.canonicalKey ?? "",
-    getReferencePrefix(component),
-    getComponentValue(component),
-  ]
-    .join(" ")
-    .toLowerCase();
 }
 
 function getNormalizedSymbolKind(component: ComponentType): string {
@@ -117,13 +108,23 @@ function getNormalizedSymbolKind(component: ComponentType): string {
   return component.id;
 }
 
-function isTwoTerminalTemplate(template: SymbolTemplate): boolean {
-  return ["resistor", "capacitor", "inductor", "diode", "led"].includes(
-    template,
-  );
+function isTwoTerminalTemplate(template: string): boolean {
+  return [
+    "resistor",
+    "capacitor",
+    "inductor",
+    "diode",
+    "led",
+    "r",
+    "c",
+    "l",
+    "d",
+  ].includes(template);
 }
 
-function getKiCadPins(component: ComponentType): Array<Record<string, unknown>> {
+function getKiCadPins(
+  component: ComponentType,
+): Array<Record<string, unknown>> {
   const symbolData = asRecord(component.symbolData);
   const pins = symbolData?.pins;
   if (!Array.isArray(pins)) {
@@ -135,7 +136,7 @@ function getKiCadPins(component: ComponentType): Array<Record<string, unknown>> 
     .filter((pin): pin is Record<string, unknown> => pin !== null);
 }
 
-function getPinPositions(template: SymbolTemplate, pinCount: number): Point[] {
+function getPinPositions(template: string, pinCount: number): Point[] {
   if (pinCount === 2 && isTwoTerminalTemplate(template)) {
     return DEFAULT_TWO_TERMINAL_PIN_POSITIONS;
   }
@@ -146,7 +147,7 @@ function getPinPositions(template: SymbolTemplate, pinCount: number): Point[] {
 function getComponentPins(
   component: ComponentType,
   symbolId: string,
-  template: SymbolTemplate,
+  template: string,
 ): SymbolEntity["pins"] {
   const symbolData = asRecord(component.symbolData);
   const pinDefinitions = Array.isArray(symbolData?.pinDefinitions)
@@ -181,53 +182,6 @@ function getComponentPins(
   }));
 }
 
-function inferSymbolTemplate(component: ComponentType): SymbolTemplate {
-  const explicit = component.symbolData?.symbolTemplate;
-  if (explicit && typeof explicit === "string" && explicit.trim().length > 0) {
-    return explicit;
-  }
-
-  const prefix = getReferencePrefix(component).toUpperCase();
-  const hint = getTemplateHint(component);
-
-  switch (prefix) {
-    case "R":
-      return "resistor";
-    case "C":
-      return "capacitor";
-    case "L":
-      return "inductor";
-    case "D":
-      return "diode";
-    case "LED":
-      return "led";
-    case "Q": {
-      if (hint.includes("pnp")) return "pnp";
-      if (hint.includes("pmos") || hint.includes("p-mos"))
-        return "pmos";
-      if (hint.includes("nmos") || hint.includes("n-mos"))
-        return "nmos";
-      return "npn";
-    }
-    case "U": {
-      if (
-        hint.includes("opamp") ||
-        hint.includes("op-amp") ||
-        hint.includes("op amp")
-      ) {
-        return "opamp";
-      }
-      return "generic_ic";
-    }
-    case "J":
-    case "P":
-    case "CON":
-      return "connector";
-    default:
-      return "generic_ic";
-  }
-}
-
 const GRID_STEP_NM = 1_270_000;
 const HALF_GRID_STEP_NM = GRID_STEP_NM / 2;
 const IMPORTED_GRID_PITCH_NM = GRID_STEP_NM * 2;
@@ -238,7 +192,6 @@ interface EmbeddedSymbolDef {
   label: string;
   prefix: string | null;
   value: string;
-  symbolTemplate: SymbolTemplate;
   pins: Array<{ name: string; position: Point }>;
 }
 
@@ -247,14 +200,12 @@ const EMBEDDED_SYMBOLS: Record<string, EmbeddedSymbolDef> = {
     label: "Ground",
     prefix: null,
     value: "GND",
-    symbolTemplate: "connector",
     pins: [{ name: "GND", position: { x: 0, y: 0 } }],
   },
   vcc: {
     label: "VCC",
     prefix: null,
     value: "VCC",
-    symbolTemplate: "connector",
     pins: [{ name: "VCC", position: { x: 0, y: 0 } }],
   },
 };
@@ -274,8 +225,10 @@ export const EMPTY_COMPONENT_LIBRARY_INDEX: ComponentLibraryIndex = {
 
 export function createComponentLibraryIndex(
   components: ComponentType[],
-  importedSymbolLayoutsByComponentId: ReadonlyMap<string, ImportedSymbolLayout> =
-    EMPTY_IMPORTED_SYMBOL_LAYOUTS,
+  importedSymbolLayoutsByComponentId: ReadonlyMap<
+    string,
+    ImportedSymbolLayout
+  > = EMPTY_IMPORTED_SYMBOL_LAYOUTS,
 ): ComponentLibraryIndex {
   const componentsById = new Map<string, ComponentType>();
   for (const component of components) {
@@ -293,9 +246,9 @@ function toSchematicPoint(point: Point): Point {
   return { x: point.x, y: -point.y };
 }
 
-function toSchematicPinSide(side: RenderedSymbolPin["side"]): RenderedSymbolPin["side"] {
-  if (side === "top") return "bottom";
-  if (side === "bottom") return "top";
+function toSchematicPinSide(
+  side: RenderedSymbolPin["side"],
+): RenderedSymbolPin["side"] {
   return side;
 }
 
@@ -343,7 +296,11 @@ function cloneImportedGraphic(graphic: SymbolGraphic): SymbolGraphic {
   }
 }
 
-function cloneImportedPin(pin: RenderedSymbolPin, symbolId: string, index: number): RenderedSymbolPin {
+function cloneImportedPin(
+  pin: RenderedSymbolPin,
+  symbolId: string,
+  index: number,
+): RenderedSymbolPin {
   return {
     id: `${symbolId}-pin-${index + 1}`,
     name: pin.name,
@@ -391,16 +348,22 @@ function computeImportedBodyBounds(graphics: SymbolGraphic[]): Bounds | null {
   for (const graphic of graphics) {
     switch (graphic.type) {
       case "line":
-        bounds = includePoint(includePoint(bounds, { x: graphic.x1, y: graphic.y1 }), {
-          x: graphic.x2,
-          y: graphic.y2,
-        });
+        bounds = includePoint(
+          includePoint(bounds, { x: graphic.x1, y: graphic.y1 }),
+          {
+            x: graphic.x2,
+            y: graphic.y2,
+          },
+        );
         break;
       case "rect":
-        bounds = includePoint(includePoint(bounds, { x: graphic.x, y: graphic.y }), {
-          x: graphic.x + graphic.width,
-          y: graphic.y + graphic.height,
-        });
+        bounds = includePoint(
+          includePoint(bounds, { x: graphic.x, y: graphic.y }),
+          {
+            x: graphic.x + graphic.width,
+            y: graphic.y + graphic.height,
+          },
+        );
         break;
       case "circle":
         bounds = includePoint(
@@ -717,7 +680,7 @@ function createSymbolFromComponent(
   const componentId = component.id;
   const variantId = variant.id;
   const symbolKind = getNormalizedSymbolKind(component);
-  const symbolTemplate = inferSymbolTemplate(component);
+  const pinTemplateHint = getReferencePrefix(component).toLowerCase();
   const properties = { ...getComponentProperties(component) };
   delete properties.component_id;
   delete properties.variant_id;
@@ -730,17 +693,18 @@ function createSymbolFromComponent(
     variantId,
     linkStatus: "ok",
     libraryPartId: componentId,
-    symbolTemplate,
     reference,
     value: getComponentValue(component),
     position,
     rotation,
     mirrored,
     pins: importedLayout
-      ? importedLayout.pins.map((pin, index) => cloneImportedPin(pin, id, index))
-      : getComponentPins(component, id, symbolTemplate),
-    importedGraphics: importedLayout?.graphics.map(cloneImportedGraphic),
-    importedBodyBounds: cloneImportedBounds(importedLayout?.bodyBounds),
+      ? importedLayout.pins.map((pin, index) =>
+          cloneImportedPin(pin, id, index),
+        )
+      : getComponentPins(component, id, pinTemplateHint),
+    graphics: importedLayout?.graphics.map((g) => ({ ...g })),
+    bodyBounds: cloneImportedBounds(importedLayout?.bodyBounds),
     properties,
   };
 }
@@ -757,7 +721,6 @@ function createEmbeddedSymbol(
     id,
     entityType: "symbol",
     symbolKind: kind,
-    symbolTemplate: def.symbolTemplate,
     reference,
     value: def.value,
     position,
@@ -817,7 +780,6 @@ export function resolveSymbolEntityFromLibrary(
     return {
       ...symbol,
       linkStatus: "missing",
-      symbolTemplate: symbol.symbolTemplate ?? "generic_ic",
       value:
         symbol.value && symbol.value.trim().length > 0
           ? symbol.value
@@ -942,11 +904,9 @@ export function getSymbolPrefix(
       return embeddedDef.prefix;
     }
 
-    return (
-      findComponentInLibrary(index, kindOrComponent)
-        ? getReferencePrefix(findComponentInLibrary(index, kindOrComponent)!)
-        : null
-    );
+    return findComponentInLibrary(index, kindOrComponent)
+      ? getReferencePrefix(findComponentInLibrary(index, kindOrComponent)!)
+      : null;
   }
 
   return getReferencePrefix(kindOrComponent);

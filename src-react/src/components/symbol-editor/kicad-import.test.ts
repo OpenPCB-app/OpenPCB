@@ -8,13 +8,11 @@ import {
   classifyImportedSymbol,
   convertParsedKicadSymbolToDraft,
 } from "./kicad-import";
-import {
-  DEFAULT_BODY_HEIGHT,
-  DEFAULT_PIN_LENGTH,
-  GRID_SIZES,
-  PASSIVE_BODY_HEIGHT,
-  PASSIVE_BODY_WIDTH,
-} from "./types";
+import { DEFAULT_PIN_LENGTH } from "./types";
+
+const DEFAULT_BODY_HEIGHT = 10_160_000;
+const PASSIVE_BODY_WIDTH = 2_540_000;
+const PASSIVE_BODY_HEIGHT = 1_270_000;
 
 const FIXTURES_DIR = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -374,11 +372,6 @@ describe("convertParsedKicadSymbolToDraft", () => {
       "attiny13a.kicad_sym",
     );
 
-    expect(draft.body).toMatchObject({
-      kind: "blank",
-      width: DEFAULT_BODY_HEIGHT,
-      height: GRID_SIZES.normal * 10,
-    });
     expect(draft.pins[0]).toMatchObject({
       side: "left",
       length: DEFAULT_PIN_LENGTH,
@@ -414,11 +407,6 @@ describe("convertParsedKicadSymbolToDraft", () => {
     expect(classifyImportedSymbol(parsed)).toEqual({
       kind: "two-terminal-passive",
       reason: null,
-    });
-    expect(draft.body).toEqual({
-      kind: "blank",
-      width: PASSIVE_BODY_HEIGHT,
-      height: PASSIVE_BODY_WIDTH,
     });
     expect(draft.pins).toMatchObject([
       {
@@ -459,11 +447,6 @@ describe("convertParsedKicadSymbolToDraft", () => {
     expect(draft.metadata.name).toBe("LM317T");
     expect(draft.pins).toHaveLength(3);
     expect(draft.graphics).toHaveLength(1);
-    expect(draft.body).toEqual({
-      kind: "blank",
-      width: DEFAULT_BODY_HEIGHT,
-      height: DEFAULT_BODY_HEIGHT,
-    });
     expect(draft.graphics).toMatchObject([
       {
         type: "rect",

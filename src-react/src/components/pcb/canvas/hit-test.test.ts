@@ -14,7 +14,6 @@ const symbols: SymbolEntity[] = [
     id: "symbol-1",
     entityType: "symbol",
     symbolKind: "resistor",
-    symbolTemplate: "resistor",
     reference: "R1",
     value: "10k",
     position: { x: 0, y: 0 },

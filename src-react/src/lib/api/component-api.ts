@@ -103,7 +103,6 @@ function ensureSymbolData(
       unitCount: 1,
       bodyGraphics: [],
       rawKicadSource: null,
-      symbolTemplate: "generic_ic",
     }
   );
 }
@@ -232,8 +231,9 @@ async function syncWorkspaceComponent(
   }
 
   const currentVariant =
-    component.variants.find((variant) => variant.id === component.defaultVariantId) ??
-    component.variants[0];
+    component.variants.find(
+      (variant) => variant.id === component.defaultVariantId,
+    ) ?? component.variants[0];
 
   if (currentVariant) {
     await updateComponentVariant(id, currentVariant.id, {
@@ -342,10 +342,9 @@ export async function deleteComponentWithOptions(
   const forceQuery = options?.forceUsed ? "?force=true" : "";
   const response = await customFetch<
     ApiResponse<{ deleted: boolean; usageCount: number; designNames: string[] }>
-  >(
-    `/api/components/${encodeURIComponent(id)}${forceQuery}`,
-    { method: "DELETE" },
-  );
+  >(`/api/components/${encodeURIComponent(id)}${forceQuery}`, {
+    method: "DELETE",
+  });
   return unwrapResponse(response);
 }
 

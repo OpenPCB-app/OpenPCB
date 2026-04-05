@@ -171,7 +171,6 @@ const symbol: SymbolEntity = {
   id: "symbol-1",
   entityType: "symbol",
   symbolKind: "resistor",
-  symbolTemplate: "resistor",
   reference: "R1",
   value: "10k",
   position: { x: 1_270_000, y: 2_540_000 },
@@ -199,11 +198,12 @@ describe("symbol helpers", () => {
   });
 
   it("computes body bounds for popover anchoring and selection", () => {
+    // Pin-based fallback bounds (no bodyBounds on fixture)
     expect(getSymbolBodyBounds(symbol)).toEqual({
-      minX: 1_090_000,
-      minY: 2_820_000,
-      maxX: 1_450_000,
-      maxY: 3_530_000,
+      minX: 890_000,
+      minY: 2_320_000,
+      maxX: 1_650_000,
+      maxY: 4_030_000,
     });
   });
 
@@ -304,7 +304,6 @@ describe("symbol helpers", () => {
       {
         ...symbol,
         symbolKind: "gnd",
-        symbolTemplate: "connector",
         reference: "GND",
         value: "GND",
         rotation: 0,

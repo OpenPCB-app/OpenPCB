@@ -99,11 +99,12 @@ npm run gen                # All codegen (modules, bindings, bridge, SDK, OpenAP
 # Test
 npm run test:ts            # Bun tests (src-ts/, colocated *.test.ts)
 npm run test:react         # Vitest (src-react/, happy-dom)
-npm run test:e2e           # Playwright (not yet populated)
+npm run test:e2e           # Playwright (tests/e2e/)
 
 # Single test
 cd src-ts && bun test path/to/file.test.ts
 cd src-react && npx vitest run path/to/file.test.ts
+npx playwright test tests/e2e/your-feature.spec.ts
 
 # Typecheck
 npm run typecheck          # All workspaces
@@ -130,6 +131,16 @@ npm run db:studio          # Drizzle Studio GUI
 
 Never edit files marked `// @generated` or `// @ts-nocheck`.
 
+## TypeScript Path Aliases
+
+```
+@/            → src-react/src/
+@shared/types → src-ts/shared/types/
+@shared/generated → src-ts/shared/generated/
+@shared/sdk   → src-ts/shared/sdk/
+@modules/*    → modules/*/
+```
+
 ## Architecture
 
 ### Three-Layer Runtime
@@ -137,6 +148,8 @@ Never edit files marked `// @generated` or `// @ts-nocheck`.
 ```
 React (Vite :1420) ──HTTP──▶ Bun Sidecar (dynamic port) ◀──IPC──▶ Tauri Rust Shell
 ```
+
+In dev mode, Vite proxies `/api/*` and `/ws/*` to `http://127.0.0.1:3000` (Bun sidecar).
 
 ### Bun Sidecar DDD (`src-ts/src/`)
 
@@ -165,8 +178,28 @@ React (Vite :1420) ──HTTP──▶ Bun Sidecar (dynamic port) ◀──IPC�
 ### Schematic Canvas (`src-react/src/components/pcb/canvas/`)
 
 - Custom Canvas2D renderer for schematic capture
-- Viewport transforms, hit-testing, wire routing, symbol rendering
+- Viewport transforms, hit-testing, orthogonal wire routing, symbol rendering
 - State in `src-react/src/stores/schematic-store.ts` (Zustand)
+- Coordinate systems: DOM → Screen → Schematic (grid-snapped)
+
+### PCB Editor Canvas (`src-react/src/components/pcb-editor/canvas/`)
+
+- Separate Canvas2D renderer for PCB layout (pads, traces, silkscreen)
+- IPC-7351 compliant land pattern rendering
+
+### State Management
+
+- **Zustand stores** — Global UI state (schematic, sidebar, theme)
+- **React Context** — Environment values (BackendURL, ChatContext)
+- **SSE streaming** — Chat token/reasoning delivery via Server-Sent Events
+
+### Entry Points
+
+| Layer | File                     | Role                           |
+| ----- | ------------------------ | ------------------------------ |
+| React | `src-react/src/main.tsx` | React 19 mount, e2e routing    |
+| Bun   | `src-ts/src/main.ts`     | Hono server, DI, module loader |
+| Rust  | `src-tauri/src/lib.rs`   | Tauri builder, sidecar spawn   |
 
 ## Package Managers
 

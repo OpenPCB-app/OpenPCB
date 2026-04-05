@@ -1,5 +1,4 @@
 import { v7 as uuidv7 } from "uuid";
-import type { SymbolTemplate } from "../../core/schemas/component-semantics";
 
 interface PinDef {
   name: string;
@@ -22,7 +21,6 @@ interface ComponentFamilySeed {
   categoryPath: string;
   tags: string[];
   referencePrefix: string;
-  symbolTemplate: SymbolTemplate;
   pinDefinitions: PinDef[];
   defaultValue: string;
 }
@@ -47,7 +45,6 @@ export interface ComponentFamilySeedRow {
     unitCount: number;
     bodyGraphics: unknown[];
     rawKicadSource: null;
-    symbolTemplate: SymbolTemplate;
   };
   defaultPackageVariantId: null;
   categoryPath: string;
@@ -68,7 +65,6 @@ export function generateBuiltinComponentFamilySeed(): ComponentFamilySeedRow[] {
       unitCount: 1,
       bodyGraphics: [],
       rawKicadSource: null,
-      symbolTemplate: family.symbolTemplate,
     },
     defaultPackageVariantId: null,
     categoryPath: family.categoryPath,

@@ -6,10 +6,19 @@
 
 import { useCallback, useRef } from "react";
 import { toast } from "@/components/ui/use-toast";
-import { useSymbolEditorStore, useCanUndo, useCanRedo } from "./symbol-editor-store";
+import {
+  useSymbolEditorStore,
+  useCanUndo,
+  useCanRedo,
+} from "./symbol-editor-store";
 import { GRID_SIZES, type GridSizeKey } from "./types";
 import { importKicadSymbolFile } from "./kicad-import";
 import type { SymbolDraft } from "./types";
+import {
+  distributeVertically,
+  distributeHorizontally,
+  mirrorPinsX,
+} from "./tools/pin-tools";
 
 interface SymbolEditorToolbarProps {
   onImportedDraft?: (draft: SymbolDraft) => void;
@@ -19,7 +28,9 @@ interface SymbolEditorToolbarProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export function SymbolEditorToolbar({ onImportedDraft }: SymbolEditorToolbarProps) {
+export function SymbolEditorToolbar({
+  onImportedDraft,
+}: SymbolEditorToolbarProps) {
   const undo = useSymbolEditorStore((s) => s.undo);
   const redo = useSymbolEditorStore((s) => s.redo);
   const setDraft = useSymbolEditorStore((s) => s.setDraft);
@@ -27,11 +38,48 @@ export function SymbolEditorToolbar({ onImportedDraft }: SymbolEditorToolbarProp
   const canRedo = useCanRedo();
   const importInputRef = useRef<HTMLInputElement>(null);
 
+  const activeTool = useSymbolEditorStore((s) => s.chrome.activeTool);
+  const setTool = useSymbolEditorStore((s) => s.setTool);
   const gridSize = useSymbolEditorStore((s) => s.chrome.gridSize);
   const showGrid = useSymbolEditorStore((s) => s.chrome.showGrid);
   const setGridSize = useSymbolEditorStore((s) => s.setGridSize);
   const toggleGrid = useSymbolEditorStore((s) => s.toggleGrid);
   const resetViewport = useSymbolEditorStore((s) => s.resetViewport);
+
+  const handleDistributeV = useCallback(() => {
+    const store = useSymbolEditorStore.getState();
+    const selectedIds = store.chrome.selection.selectedPinIds;
+    if (selectedIds.size < 2) return;
+    store.pushHistory();
+    const newPins = distributeVertically(
+      store.draft.pins,
+      selectedIds,
+      store.chrome.gridSize,
+    );
+    store.setDraft({ ...store.draft, pins: newPins });
+  }, []);
+
+  const handleDistributeH = useCallback(() => {
+    const store = useSymbolEditorStore.getState();
+    const selectedIds = store.chrome.selection.selectedPinIds;
+    if (selectedIds.size < 2) return;
+    store.pushHistory();
+    const newPins = distributeHorizontally(
+      store.draft.pins,
+      selectedIds,
+      store.chrome.gridSize,
+    );
+    store.setDraft({ ...store.draft, pins: newPins });
+  }, []);
+
+  const handleMirrorX = useCallback(() => {
+    const store = useSymbolEditorStore.getState();
+    const selectedIds = store.chrome.selection.selectedPinIds;
+    if (selectedIds.size === 0) return;
+    store.pushHistory();
+    const newPins = mirrorPinsX(store.draft.pins, selectedIds);
+    store.setDraft({ ...store.draft, pins: newPins });
+  }, []);
 
   const handleGridSizeChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -58,26 +106,30 @@ export function SymbolEditorToolbar({ onImportedDraft }: SymbolEditorToolbarProp
       e.target.value = "";
       if (!file) return;
 
-        try {
-          const imported = await importKicadSymbolFile(file);
-          onImportedDraft?.(imported);
-          if (!onImportedDraft) {
-            setDraft(imported);
-          }
-          const warningCount = imported.importPreservation?.warnings.length ?? 0;
+      try {
+        const imported = await importKicadSymbolFile(file);
+        onImportedDraft?.(imported);
+        if (!onImportedDraft) {
+          setDraft(imported);
+        }
+        const warningCount = imported.importPreservation?.warnings.length ?? 0;
 
         toast({
           title: "Symbol imported",
           description:
             warningCount > 0
-              ? imported.importPreservation?.warnings.map((warning) => warning.message).join(" • ")
+              ? imported.importPreservation?.warnings
+                  .map((warning) => warning.message)
+                  .join(" • ")
               : `Imported ${file.name}`,
         });
       } catch (error) {
         toast({
           title: "Import failed",
           description:
-            error instanceof Error ? error.message : "Unable to parse KiCAD symbol",
+            error instanceof Error
+              ? error.message
+              : "Unable to parse KiCAD symbol",
           variant: "destructive",
         });
       }
@@ -102,6 +154,67 @@ export function SymbolEditorToolbar({ onImportedDraft }: SymbolEditorToolbarProp
       >
         <UploadIcon />
       </button>
+
+      <div className="h-4 w-px bg-border" />
+
+      {/* Drawing Tools */}
+      <div className="flex items-center gap-0.5">
+        <ToolButton
+          active={activeTool === "select"}
+          onClick={() => setTool("select")}
+          title="Select (V)"
+        >
+          <SelectIcon />
+        </ToolButton>
+        <ToolButton
+          active={activeTool === "line"}
+          onClick={() => setTool("line")}
+          title="Line (L)"
+        >
+          <LineIcon />
+        </ToolButton>
+        <ToolButton
+          active={activeTool === "rect"}
+          onClick={() => setTool("rect")}
+          title="Rectangle (R)"
+        >
+          <RectIcon />
+        </ToolButton>
+        <ToolButton
+          active={activeTool === "circle"}
+          onClick={() => setTool("circle")}
+          title="Circle (C)"
+        >
+          <CircleIcon />
+        </ToolButton>
+      </div>
+
+      <div className="h-4 w-px bg-border" />
+
+      {/* Pin Arrangement */}
+      <div className="flex items-center gap-0.5">
+        <button
+          onClick={handleDistributeV}
+          className="rounded p-1.5 text-xs transition-colors hover:bg-accent"
+          title="Distribute pins vertically"
+        >
+          <DistributeVIcon />
+        </button>
+        <button
+          onClick={handleDistributeH}
+          className="rounded p-1.5 text-xs transition-colors hover:bg-accent"
+          title="Distribute pins horizontally"
+        >
+          <DistributeHIcon />
+        </button>
+        <button
+          onClick={handleMirrorX}
+          className="rounded p-1.5 text-xs transition-colors hover:bg-accent"
+          title="Mirror pins horizontally"
+        >
+          <MirrorIcon />
+        </button>
+      </div>
 
       <div className="h-4 w-px bg-border" />
 
@@ -173,7 +286,13 @@ export function SymbolEditorToolbar({ onImportedDraft }: SymbolEditorToolbarProp
 
 function UploadIcon() {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <path d="M12 16V4" />
       <path d="M7 9l5-5 5 5" />
       <path d="M4 20h16" />
@@ -187,7 +306,13 @@ function UploadIcon() {
 
 function UndoIcon() {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <path d="M3 10h10a5 5 0 0 1 5 5v2" />
       <path d="M3 10l5-5M3 10l5 5" />
     </svg>
@@ -196,7 +321,13 @@ function UndoIcon() {
 
 function RedoIcon() {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <path d="M21 10H11a5 5 0 0 0-5 5v2" />
       <path d="M21 10l-5-5M21 10l-5 5" />
     </svg>
@@ -205,7 +336,13 @@ function RedoIcon() {
 
 function GridIcon() {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <line x1="3" y1="9" x2="21" y2="9" />
       <line x1="3" y1="15" x2="21" y2="15" />
@@ -217,9 +354,149 @@ function GridIcon() {
 
 function CenterIcon() {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <circle cx="12" cy="12" r="3" />
       <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Drawing Tool Icons & Button
+// ---------------------------------------------------------------------------
+
+function ToolButton({
+  active,
+  onClick,
+  title,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded p-1.5 text-sm transition-colors ${
+        active ? "bg-accent text-accent-foreground" : "hover:bg-accent"
+      }`}
+      title={title}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SelectIcon() {
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path d="M5 3l14 9-7 2-3 7z" />
+    </svg>
+  );
+}
+
+function LineIcon() {
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <line x1="5" y1="19" x2="19" y2="5" />
+    </svg>
+  );
+}
+
+function RectIcon() {
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <rect x="4" y="4" width="16" height="16" rx="1" />
+    </svg>
+  );
+}
+
+function CircleIcon() {
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <circle cx="12" cy="12" r="9" />
+    </svg>
+  );
+}
+
+function DistributeVIcon() {
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <line x1="12" y1="3" x2="12" y2="21" />
+      <line x1="8" y1="7" x2="16" y2="7" />
+      <line x1="8" y1="12" x2="16" y2="12" />
+      <line x1="8" y1="17" x2="16" y2="17" />
+    </svg>
+  );
+}
+
+function DistributeHIcon() {
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="7" y1="8" x2="7" y2="16" />
+      <line x1="12" y1="8" x2="12" y2="16" />
+      <line x1="17" y1="8" x2="17" y2="16" />
+    </svg>
+  );
+}
+
+function MirrorIcon() {
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <line x1="12" y1="3" x2="12" y2="21" strokeDasharray="2 2" />
+      <path d="M7 8l-3 4 3 4" />
+      <path d="M17 8l3 4-3 4" />
     </svg>
   );
 }

@@ -5,8 +5,6 @@ export const ComponentScopeSchema = z
   .enum(["workspace", "builtin"])
   .openapi("ComponentScope");
 
-export const SymbolTemplateSchema = z.string().min(1).openapi("SymbolTemplate");
-
 export const MountTypeSchema = z
   .enum(["smd", "through_hole", "virtual"])
   .openapi("MountType");
@@ -58,7 +56,6 @@ export const SymbolDataSchema = z
     unitCount: z.number().int().min(1).default(1),
     bodyGraphics: z.array(z.unknown()).optional().default([]),
     rawKicadSource: z.string().nullable().optional(),
-    symbolTemplate: SymbolTemplateSchema.nullable().optional(),
   })
   .strict()
   .openapi("SymbolData");
@@ -154,7 +151,6 @@ export const ComponentFamilyListResponseSchema = z
   .object({ families: z.array(ComponentSchema) })
   .openapi("ComponentFamilyListResponse");
 
-export type SymbolTemplateType = z.infer<typeof SymbolTemplateSchema>;
 export type ComponentType = z.infer<typeof ComponentSchema>;
 export type ComponentVariantType = z.infer<typeof ComponentVariantSchema>;
 export type ComponentFootprintType = z.infer<typeof ComponentFootprintSchema>;

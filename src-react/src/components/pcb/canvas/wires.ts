@@ -30,7 +30,12 @@ export function collapseRedundantWirePoints(points: Point[]): Point[] {
     const current = deduped[index];
     const next = deduped[index + 1];
 
-    if (!previous || !current || !next || isCollinear(previous, current, next)) {
+    if (
+      !previous ||
+      !current ||
+      !next ||
+      isCollinear(previous, current, next)
+    ) {
       continue;
     }
 
@@ -42,7 +47,9 @@ export function collapseRedundantWirePoints(points: Point[]): Point[] {
 }
 
 export function collectDirectlyAttachedPinIds(wires: WireEntity[]): string[] {
-  return [...new Set(wires.flatMap((wire) => [wire.sourcePinId, wire.targetPinId]))].sort();
+  return [
+    ...new Set(wires.flatMap((wire) => [wire.sourcePinId, wire.targetPinId])),
+  ].sort();
 }
 
 export function translateWirePoints(points: Point[], delta: Point): Point[] {
@@ -65,18 +72,19 @@ export function rerouteWireWithMovedEndpoint(
     return initialPoints;
   }
 
-  const sourcePoint = sourceMoved ? getAnchor(wire.sourcePinId) : initialPoints[0] ?? null;
-  const targetPoint = targetMoved ? getAnchor(wire.targetPinId) : initialPoints[initialPoints.length - 1] ?? null;
+  const sourcePoint = sourceMoved
+    ? getAnchor(wire.sourcePinId)
+    : initialPoints[0] ?? null;
+  const targetPoint = targetMoved
+    ? getAnchor(wire.targetPinId)
+    : initialPoints[initialPoints.length - 1] ?? null;
 
   if (!sourcePoint || !targetPoint) {
     return initialPoints;
   }
 
-  return collapseRedundantWirePoints([
-    sourcePoint,
-    ...initialPoints.slice(1, -1),
-    targetPoint,
-  ]);
+  // Rebuild full Manhattan route between the new endpoints
+  return buildOrthogonalWirePathWithWaypoints(sourcePoint, [], targetPoint);
 }
 
 export function buildOrthogonalWirePath(source: Point, target: Point): Point[] {
@@ -115,7 +123,8 @@ export function getWireLength(points: Point[]): number {
       continue;
     }
 
-    totalLength += Math.abs(current.x - previous.x) + Math.abs(current.y - previous.y);
+    totalLength +=
+      Math.abs(current.x - previous.x) + Math.abs(current.y - previous.y);
   }
 
   return totalLength;
@@ -192,10 +201,10 @@ export function renderWire(
   });
 
   ctx.strokeStyle = options.preview
-    ? (colors?.wirePreview ?? "#38bdf8")
+    ? colors?.wirePreview ?? "#38bdf8"
     : options.selected
-      ? (colors?.wireSelected ?? "#e0f2fe")
-      : (colors?.wireDefault ?? "#cbd5e1");
+      ? colors?.wireSelected ?? "#e0f2fe"
+      : colors?.wireDefault ?? "#cbd5e1";
   ctx.lineWidth = options.preview ? 2.5 : 2;
   ctx.setLineDash(options.preview ? [10, 6] : []);
   ctx.globalAlpha = options.preview ? 0.9 : 1;

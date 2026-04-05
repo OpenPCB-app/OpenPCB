@@ -65,8 +65,10 @@ export function LibraryScreen() {
     search: searchQuery.trim() || undefined,
   });
   const hasSelection = selectedIds.size > 0;
+  const deletableComponents = components.filter((c) => c.scope !== "builtin");
   const isAllSelected =
-    components.length > 0 && selectedIds.size === components.length;
+    deletableComponents.length > 0 &&
+    selectedIds.size === deletableComponents.length;
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -113,7 +115,9 @@ export function LibraryScreen() {
       return;
     }
 
-    setSelectedIds(new Set(components.map((component) => component.id)));
+    setSelectedIds(
+      new Set(deletableComponents.map((component) => component.id)),
+    );
   };
 
   const clearSelection = () => {

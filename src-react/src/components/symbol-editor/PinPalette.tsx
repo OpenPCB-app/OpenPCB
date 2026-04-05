@@ -103,7 +103,11 @@ interface PinPaletteItemProps {
   onClick: (template: PinTypeTemplate) => void;
 }
 
-function PinPaletteItem({ template, onDragStart, onClick }: PinPaletteItemProps) {
+function PinPaletteItem({
+  template,
+  onDragStart,
+  onClick,
+}: PinPaletteItemProps) {
   return (
     <div
       draggable
@@ -141,9 +145,43 @@ export function PinPalette() {
 
   const calculatePinPosition = useCallback(
     (side: PinSide): { x: number; y: number } => {
-      // Get body dimensions
-      const halfWidth = draft.body.width / 2;
-      const halfHeight = draft.body.height / 2;
+      // Compute body bounds from graphics (rects); fall back to default 10x10mm
+      let minX = 0,
+        minY = 0,
+        maxX = 0,
+        maxY = 0;
+      let hasRect = false;
+      for (const g of draft.graphics) {
+        if (g.type === "rect") {
+          const rx = g.x,
+            ry = g.y;
+          const rx2 = g.x + g.width,
+            ry2 = g.y + g.height;
+          if (!hasRect) {
+            minX = rx;
+            minY = ry;
+            maxX = rx2;
+            maxY = ry2;
+            hasRect = true;
+          } else {
+            minX = Math.min(minX, rx);
+            minY = Math.min(minY, ry);
+            maxX = Math.max(maxX, rx2);
+            maxY = Math.max(maxY, ry2);
+          }
+        }
+      }
+      if (!hasRect) {
+        // Default 10mm x 10mm body centered at origin
+        minX = -5_000_000;
+        minY = -5_000_000;
+        maxX = 5_000_000;
+        maxY = 5_000_000;
+      }
+      const halfWidth = (maxX - minX) / 2;
+      const halfHeight = (maxY - minY) / 2;
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
 
       // Count existing pins on this side
       const pinsOnSide = draft.pins.filter((p) => p.side === side);
@@ -153,27 +191,27 @@ export function PinPalette() {
       switch (side) {
         case "left":
           return {
-            x: -halfWidth - DEFAULT_PIN_LENGTH,
-            y: halfHeight - gridSize * (pinIndex + 1),
+            x: cx - halfWidth - DEFAULT_PIN_LENGTH,
+            y: cy + halfHeight - gridSize * (pinIndex + 1),
           };
         case "right":
           return {
-            x: halfWidth + DEFAULT_PIN_LENGTH,
-            y: halfHeight - gridSize * (pinIndex + 1),
+            x: cx + halfWidth + DEFAULT_PIN_LENGTH,
+            y: cy + halfHeight - gridSize * (pinIndex + 1),
           };
         case "top":
           return {
-            x: -halfWidth + gridSize * (pinIndex + 1),
-            y: halfHeight + DEFAULT_PIN_LENGTH,
+            x: cx - halfWidth + gridSize * (pinIndex + 1),
+            y: cy + halfHeight + DEFAULT_PIN_LENGTH,
           };
         case "bottom":
           return {
-            x: -halfWidth + gridSize * (pinIndex + 1),
-            y: -halfHeight - DEFAULT_PIN_LENGTH,
+            x: cx - halfWidth + gridSize * (pinIndex + 1),
+            y: cy - halfHeight - DEFAULT_PIN_LENGTH,
           };
       }
     },
-    [draft.body.width, draft.body.height, draft.pins, gridSize],
+    [draft.graphics, draft.pins, gridSize],
   );
 
   const createNewPin = useCallback(

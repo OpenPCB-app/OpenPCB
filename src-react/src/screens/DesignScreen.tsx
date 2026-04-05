@@ -10,12 +10,11 @@ import { useAppStore } from "@/stores/app-store";
 import { useDesigns } from "@/hooks/useDesigns";
 import { DesignHeader } from "./design/DesignHeader";
 import { EditorToolbar } from "@/components/pcb/toolbar/EditorToolbar";
-import { SchematicCanvas } from "@/components/pcb/canvas/SchematicCanvas";
+import { SchematicCanvasR3F as SchematicCanvas } from "@/lib/render-engine/wrappers/SchematicCanvasR3F";
 import { ComponentPalette } from "@/components/pcb/palette/ComponentPalette";
 import { StatusBar } from "@/components/pcb/StatusBar";
 import { useSchematicInteractionController } from "@/components/pcb/useSchematicInteractionController";
-import { FloatingPropertiesPopover } from "@/components/pcb/properties/FloatingPropertiesPopover";
-import { PcbCanvas } from "@/components/pcb-editor/canvas/PcbCanvas";
+import { PcbCanvasR3F as PcbCanvas } from "@/lib/render-engine/wrappers/PcbCanvasR3F";
 import { PcbSidebar } from "@/components/pcb-editor/PcbSidebar";
 import { PcbToolbar } from "@/components/pcb-editor/PcbToolbar";
 import { useSchematicStore } from "@/stores/schematic-store";
@@ -99,7 +98,6 @@ export function DesignScreen() {
   const lastLoadedDesignIdRef = useRef<string | null>(null);
   const controller = useSchematicInteractionController();
   const { toast } = useToast();
-  const popoverEntityId = useSchematicStore((s) => s.chrome.popoverEntityId);
   const currentDocument = useSchematicStore((s) => s.persisted.document);
   const componentLibraryIndex = useSchematicStore(
     (s) => s.componentLibraryIndex,
@@ -111,7 +109,6 @@ export function DesignScreen() {
   const setDocument = useSchematicStore((s) => s.setDocument);
   const clearDocument = useSchematicStore((s) => s.clearDocument);
   const setProjectContext = useSchematicStore((s) => s.setProjectContext);
-  const setPopoverTarget = useSchematicStore((s) => s.setPopoverTarget);
   const setPcbDocument = usePcbStore((s) => s.setDocument);
   const syncFromSchematic = usePcbStore((s) => s.syncFromSchematic);
   const isUnsavedDraft =
@@ -441,8 +438,11 @@ export function DesignScreen() {
         }
 
         if (event.key === "r" || event.key === "R") {
-          const selectedPlacementId = Array.from(pcbStore.selectedIds).find((id) =>
-            pcbStore.document?.placements.some((placement) => placement.id === id),
+          const selectedPlacementId = Array.from(pcbStore.selectedIds).find(
+            (id) =>
+              pcbStore.document?.placements.some(
+                (placement) => placement.id === id,
+              ),
           );
           if (selectedPlacementId) {
             pcbStore.rotatePlacement(selectedPlacementId, 90);
@@ -450,9 +450,15 @@ export function DesignScreen() {
           }
         }
 
-        if ((event.key === "f" || event.key === "F") && !pcbStore.routingSession) {
-          const selectedPlacementId = Array.from(pcbStore.selectedIds).find((id) =>
-            pcbStore.document?.placements.some((placement) => placement.id === id),
+        if (
+          (event.key === "f" || event.key === "F") &&
+          !pcbStore.routingSession
+        ) {
+          const selectedPlacementId = Array.from(pcbStore.selectedIds).find(
+            (id) =>
+              pcbStore.document?.placements.some(
+                (placement) => placement.id === id,
+              ),
           );
           if (selectedPlacementId) {
             pcbStore.flipPlacement(selectedPlacementId);
@@ -489,11 +495,6 @@ export function DesignScreen() {
 
       // Schematic tab keyboard handling
       if (event.key === "Escape") {
-        if (popoverEntityId) {
-          setPopoverTarget(null);
-          return;
-        }
-
         controller.cancelSession();
         return;
       }
@@ -538,7 +539,7 @@ export function DesignScreen() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [controller, designTab, popoverEntityId, setPopoverTarget]);
+  }, [controller, designTab]);
 
   return (
     <div className="flex h-full flex-col">
@@ -706,7 +707,6 @@ export function DesignScreen() {
                     </div>
                   )}
                   <SchematicCanvas controller={controller} />
-                  <FloatingPropertiesPopover />
                 </div>
               ) : null}
 

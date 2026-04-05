@@ -61,7 +61,6 @@ function makeComponent(id: string): ComponentType {
       unitCount: 1,
       bodyGraphics: [],
       rawKicadSource: null,
-      symbolTemplate: null,
     },
     defaultVariantId: variantId,
     createdAt: new Date().toISOString(),
@@ -228,10 +227,9 @@ describe("syncSchematicToPcb", () => {
       { width: 100, height: 80 },
     );
 
-    expect(result.placements.map((placement) => placement.schematicSymbolId)).toEqual([
-      "s1",
-      "s2",
-    ]);
+    expect(
+      result.placements.map((placement) => placement.schematicSymbolId),
+    ).toEqual(["s1", "s2"]);
     expect(result.added).toEqual(["R2"]);
     expect(result.removed).toContain("R9");
     expect(result.nets[0]?.padRefs).toEqual([

@@ -2,14 +2,11 @@
  * Symbol Editor Canvas
  *
  * HTML5 Canvas 2D component for rendering and editing symbol drafts.
- * Renders body presets, pins, and handles user interaction.
+ * Renders graphics, pins, and handles user interaction.
  */
 
 import { useRef, useEffect, useCallback } from "react";
-import {
-  useCanvasColors,
-  type CanvasColors,
-} from "@/lib/canvas-theme";
+import { useCanvasColors, type CanvasColors } from "@/lib/canvas-theme";
 import { useSymbolEditorStore } from "./symbol-editor-store";
 import {
   symbolToScreen,
@@ -22,7 +19,6 @@ import {
 import type {
   SymbolPin,
   SymbolGraphic,
-  BodyPreset,
   Viewport,
   Nanometers,
   Point,
@@ -30,11 +26,17 @@ import type {
   PinSide,
 } from "./types";
 import { PIN_DRAG_MIME, DEFAULT_PIN_LENGTH, createPin } from "./types";
+import {
+  type DrawingToolState,
+  createDrawingToolState,
+  handleDrawingMouseDown,
+  handleDrawingMouseMove,
+  getDrawingPreview,
+  commitDrawing,
+} from "./tools/drawing-tools";
 
 const PIN_DOT_RADIUS = 4;
 const PIN_LINE_WIDTH = 2;
-const BODY_LINE_WIDTH = 2;
-
 function graphicStrokeWidthPx(strokeWidth: number, viewport: Viewport): number {
   return Math.max(1, strokeWidth * viewport.zoom);
 }
@@ -81,7 +83,7 @@ function renderGrid(
   colors: CanvasColors,
 ): void {
   const gridPx = getGridPixelSpacing(gridSize, viewport);
-  if (gridPx < 4) return;
+  if (!Number.isFinite(gridPx) || gridPx < 4) return;
 
   const bounds = getVisibleSymbolBounds(width, height, viewport);
   const snappedLeft = Math.floor(bounds.left / gridSize) * gridSize;
@@ -151,232 +153,6 @@ function renderGrid(
 }
 
 // ---------------------------------------------------------------------------
-// Body Rendering
-// ---------------------------------------------------------------------------
-
-function renderBody(
-  ctx: CanvasRenderingContext2D,
-  body: BodyPreset,
-  viewport: Viewport,
-  colors: CanvasColors,
-): void {
-  const halfWidth = body.width / 2;
-  const halfHeight = body.height / 2;
-
-  switch (body.kind) {
-    case "blank":
-      // No body drawn
-      break;
-
-    case "ic_box": {
-      const topLeft = symbolToScreen(-halfWidth, halfHeight, viewport);
-      const bottomRight = symbolToScreen(halfWidth, -halfHeight, viewport);
-      const w = bottomRight.x - topLeft.x;
-      const h = bottomRight.y - topLeft.y;
-
-      ctx.fillStyle = colors.bodyFill;
-      ctx.strokeStyle = colors.bodyStroke;
-      ctx.lineWidth = BODY_LINE_WIDTH;
-      ctx.fillRect(topLeft.x, topLeft.y, w, h);
-      ctx.strokeRect(topLeft.x, topLeft.y, w, h);
-      break;
-    }
-
-    case "opamp": {
-      // Triangle shape pointing right
-      const topCorner = symbolToScreen(-halfWidth, halfHeight, viewport);
-      const bottomCorner = symbolToScreen(-halfWidth, -halfHeight, viewport);
-      const tip = symbolToScreen(halfWidth, 0, viewport);
-
-      ctx.fillStyle = colors.bodyFill;
-      ctx.strokeStyle = colors.bodyStroke;
-      ctx.lineWidth = BODY_LINE_WIDTH;
-
-      ctx.beginPath();
-      ctx.moveTo(topCorner.x, topCorner.y);
-      ctx.lineTo(tip.x, tip.y);
-      ctx.lineTo(bottomCorner.x, bottomCorner.y);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // + and - labels
-      const labelOffset = halfWidth * 0.3;
-      const plusPos = symbolToScreen(
-        -halfWidth + labelOffset,
-        halfHeight * 0.5,
-        viewport,
-      );
-      const minusPos = symbolToScreen(
-        -halfWidth + labelOffset,
-        -halfHeight * 0.5,
-        viewport,
-      );
-
-      ctx.font = `${Math.max(10, viewport.zoom * 0.012)}px monospace`;
-      ctx.fillStyle = colors.pinLabel;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("+", plusPos.x, plusPos.y);
-      ctx.fillText("−", minusPos.x, minusPos.y);
-      break;
-    }
-
-    case "two_pin_passive": {
-      // Simple horizontal rectangle
-      const topLeft = symbolToScreen(-halfWidth, halfHeight, viewport);
-      const bottomRight = symbolToScreen(halfWidth, -halfHeight, viewport);
-      const w = bottomRight.x - topLeft.x;
-      const h = bottomRight.y - topLeft.y;
-
-      ctx.fillStyle = colors.bodyFill;
-      ctx.strokeStyle = colors.bodyStroke;
-      ctx.lineWidth = BODY_LINE_WIDTH;
-      ctx.fillRect(topLeft.x, topLeft.y, w, h);
-      ctx.strokeRect(topLeft.x, topLeft.y, w, h);
-      break;
-    }
-
-    case "transistor": {
-      // Circle with 3-terminal internal lines
-      const center = symbolToScreen(0, 0, viewport);
-      const radius = Math.abs(
-        symbolToScreen(halfWidth, 0, viewport).x - center.x,
-      );
-
-      ctx.fillStyle = colors.bodyFill;
-      ctx.strokeStyle = colors.bodyStroke;
-      ctx.lineWidth = BODY_LINE_WIDTH;
-      ctx.beginPath();
-      ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // Vertical bar (base contact)
-      const barX = center.x - radius * 0.3;
-      const barTop = center.y - radius * 0.5;
-      const barBottom = center.y + radius * 0.5;
-      ctx.beginPath();
-      ctx.moveTo(barX, barTop);
-      ctx.lineTo(barX, barBottom);
-      ctx.stroke();
-
-      // Collector line (up-right from bar)
-      ctx.beginPath();
-      ctx.moveTo(barX, barTop + (barBottom - barTop) * 0.3);
-      ctx.lineTo(center.x + radius * 0.5, center.y - radius * 0.6);
-      ctx.stroke();
-
-      // Emitter line (down-right from bar)
-      ctx.beginPath();
-      ctx.moveTo(barX, barTop + (barBottom - barTop) * 0.7);
-      ctx.lineTo(center.x + radius * 0.5, center.y + radius * 0.6);
-      ctx.stroke();
-      break;
-    }
-
-    case "diode": {
-      // Triangle + bar pointing right
-      const topCorner = symbolToScreen(
-        -halfWidth * 0.6,
-        halfHeight * 0.8,
-        viewport,
-      );
-      const bottomCorner = symbolToScreen(
-        -halfWidth * 0.6,
-        -halfHeight * 0.8,
-        viewport,
-      );
-      const tip = symbolToScreen(halfWidth * 0.6, 0, viewport);
-
-      ctx.fillStyle = colors.bodyFill;
-      ctx.strokeStyle = colors.bodyStroke;
-      ctx.lineWidth = BODY_LINE_WIDTH;
-
-      // Triangle (anode)
-      ctx.beginPath();
-      ctx.moveTo(topCorner.x, topCorner.y);
-      ctx.lineTo(tip.x, tip.y);
-      ctx.lineTo(bottomCorner.x, bottomCorner.y);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // Cathode bar
-      const barTop = symbolToScreen(
-        halfWidth * 0.6,
-        halfHeight * 0.8,
-        viewport,
-      );
-      const barBottom = symbolToScreen(
-        halfWidth * 0.6,
-        -halfHeight * 0.8,
-        viewport,
-      );
-      ctx.beginPath();
-      ctx.moveTo(barTop.x, barTop.y);
-      ctx.lineTo(barBottom.x, barBottom.y);
-      ctx.stroke();
-      break;
-    }
-
-    case "connector": {
-      // Dashed rectangle
-      const topLeft = symbolToScreen(-halfWidth, halfHeight, viewport);
-      const bottomRight = symbolToScreen(halfWidth, -halfHeight, viewport);
-      const w = bottomRight.x - topLeft.x;
-      const h = bottomRight.y - topLeft.y;
-
-      ctx.fillStyle = colors.bodyFill;
-      ctx.strokeStyle = colors.bodyStroke;
-      ctx.lineWidth = BODY_LINE_WIDTH;
-      ctx.setLineDash([6, 3]);
-      ctx.fillRect(topLeft.x, topLeft.y, w, h);
-      ctx.strokeRect(topLeft.x, topLeft.y, w, h);
-      ctx.setLineDash([]);
-      break;
-    }
-
-    case "voltage_regulator": {
-      // IC box with VIN/VOUT/GND labels
-      const topLeft = symbolToScreen(-halfWidth, halfHeight, viewport);
-      const bottomRight = symbolToScreen(halfWidth, -halfHeight, viewport);
-      const w = bottomRight.x - topLeft.x;
-      const h = bottomRight.y - topLeft.y;
-
-      ctx.fillStyle = colors.bodyFill;
-      ctx.strokeStyle = colors.bodyStroke;
-      ctx.lineWidth = BODY_LINE_WIDTH;
-      ctx.fillRect(topLeft.x, topLeft.y, w, h);
-      ctx.strokeRect(topLeft.x, topLeft.y, w, h);
-
-      // Labels
-      const fontSize = Math.max(8, viewport.zoom * 0.008);
-      ctx.font = `${fontSize}px monospace`;
-      ctx.fillStyle = colors.pinLabel;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
-      const vinPos = symbolToScreen(
-        -halfWidth * 0.4,
-        halfHeight * 0.4,
-        viewport,
-      );
-      const voutPos = symbolToScreen(
-        halfWidth * 0.4,
-        halfHeight * 0.4,
-        viewport,
-      );
-      const gndPos = symbolToScreen(0, -halfHeight * 0.4, viewport);
-      ctx.fillText("IN", vinPos.x, vinPos.y);
-      ctx.fillText("OUT", voutPos.x, voutPos.y);
-      ctx.fillText("GND", gndPos.x, gndPos.y);
-      break;
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Pin Rendering
 // ---------------------------------------------------------------------------
 
@@ -433,7 +209,10 @@ function renderPin(
   }
 
   // Pin labels
-  const fontSize = Math.max(10, viewport.zoom * 0.01);
+  const fontSize = Math.max(
+    10,
+    Number.isFinite(viewport.zoom) ? viewport.zoom * 0.01 : 10,
+  );
   ctx.font = `${fontSize}px monospace`;
   ctx.textBaseline = "middle";
 
@@ -500,7 +279,11 @@ function renderPin(
   }
 }
 
-function renderLineGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "line" }, viewport: Viewport): void {
+function renderLineGraphic(
+  ctx: CanvasRenderingContext2D,
+  graphic: SymbolGraphic & { type: "line" },
+  viewport: Viewport,
+): void {
   const start = symbolToScreen(graphic.x1, graphic.y1, viewport);
   const end = symbolToScreen(graphic.x2, graphic.y2, viewport);
   ctx.beginPath();
@@ -509,37 +292,85 @@ function renderLineGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic
   ctx.stroke();
 }
 
-function renderRectGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "rect" }, viewport: Viewport): void {
-  const topLeft = symbolToScreen(graphic.x, graphic.y + graphic.height, viewport);
-  const bottomRight = symbolToScreen(graphic.x + graphic.width, graphic.y, viewport);
+function renderRectGraphic(
+  ctx: CanvasRenderingContext2D,
+  graphic: SymbolGraphic & { type: "rect" },
+  viewport: Viewport,
+): void {
+  const topLeft = symbolToScreen(
+    graphic.x,
+    graphic.y + graphic.height,
+    viewport,
+  );
+  const bottomRight = symbolToScreen(
+    graphic.x + graphic.width,
+    graphic.y,
+    viewport,
+  );
   ctx.beginPath();
-  ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  ctx.rect(
+    topLeft.x,
+    topLeft.y,
+    bottomRight.x - topLeft.x,
+    bottomRight.y - topLeft.y,
+  );
   if (graphic.filled) ctx.fill();
   ctx.stroke();
 }
 
-function renderCircleGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "circle" }, viewport: Viewport): void {
+function renderCircleGraphic(
+  ctx: CanvasRenderingContext2D,
+  graphic: SymbolGraphic & { type: "circle" },
+  viewport: Viewport,
+): void {
   const center = symbolToScreen(graphic.cx, graphic.cy, viewport);
-  const edge = symbolToScreen(graphic.cx + graphic.radius, graphic.cy, viewport);
+  const edge = symbolToScreen(
+    graphic.cx + graphic.radius,
+    graphic.cy,
+    viewport,
+  );
   ctx.beginPath();
   ctx.arc(center.x, center.y, Math.abs(edge.x - center.x), 0, Math.PI * 2);
   if (graphic.filled) ctx.fill();
   ctx.stroke();
 }
 
-function renderArcGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "arc" }, viewport: Viewport): void {
+function renderArcGraphic(
+  ctx: CanvasRenderingContext2D,
+  graphic: SymbolGraphic & { type: "arc" },
+  viewport: Viewport,
+): void {
   const center = symbolToScreen(graphic.cx, graphic.cy, viewport);
-  const edge = symbolToScreen(graphic.cx + graphic.radius, graphic.cy, viewport);
+  const edge = symbolToScreen(
+    graphic.cx + graphic.radius,
+    graphic.cy,
+    viewport,
+  );
   const startAngle = (-graphic.startAngle * Math.PI) / 180;
   const endAngle = (-graphic.endAngle * Math.PI) / 180;
   ctx.beginPath();
-  ctx.arc(center.x, center.y, Math.abs(edge.x - center.x), startAngle, endAngle, false);
+  ctx.arc(
+    center.x,
+    center.y,
+    Math.abs(edge.x - center.x),
+    startAngle,
+    endAngle,
+    false,
+  );
   ctx.stroke();
 }
 
-function renderPolygonGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "polygon" }, viewport: Viewport): void {
+function renderPolygonGraphic(
+  ctx: CanvasRenderingContext2D,
+  graphic: SymbolGraphic & { type: "polygon" },
+  viewport: Viewport,
+): void {
   if (graphic.points.length < 2) return;
-  const first = symbolToScreen(graphic.points[0]!.x, graphic.points[0]!.y, viewport);
+  const first = symbolToScreen(
+    graphic.points[0]!.x,
+    graphic.points[0]!.y,
+    viewport,
+  );
   ctx.beginPath();
   ctx.moveTo(first.x, first.y);
   for (let i = 1; i < graphic.points.length; i++) {
@@ -552,7 +383,11 @@ function renderPolygonGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGrap
   ctx.stroke();
 }
 
-function renderBezierGraphic(ctx: CanvasRenderingContext2D, graphic: SymbolGraphic & { type: "bezier" }, viewport: Viewport): void {
+function renderBezierGraphic(
+  ctx: CanvasRenderingContext2D,
+  graphic: SymbolGraphic & { type: "bezier" },
+  viewport: Viewport,
+): void {
   const [p0, p1, p2, p3] = graphic.points;
   const s0 = symbolToScreen(p0.x, p0.y, viewport);
   const s1 = symbolToScreen(p1.x, p1.y, viewport);
@@ -571,7 +406,8 @@ function renderTextGraphic(
   colors: CanvasColors,
 ): void {
   const point = symbolToScreen(graphic.x, graphic.y, viewport);
-  const fontSize = Math.max(10, graphic.fontSize * viewport.zoom);
+  const zoomSafe = Number.isFinite(viewport.zoom) ? viewport.zoom : 50;
+  const fontSize = Math.max(10, graphic.fontSize * zoomSafe);
   const angle = (-graphic.rotation * Math.PI) / 180;
   ctx.save();
   ctx.translate(point.x, point.y);
@@ -593,9 +429,10 @@ function renderGraphic(
   ctx.save();
   ctx.strokeStyle = colors.bodyStroke;
   ctx.fillStyle = colors.bodyFill;
-  ctx.lineWidth = "strokeWidth" in graphic
-    ? graphicStrokeWidthPx(graphic.strokeWidth, viewport)
-    : 1;
+  ctx.lineWidth =
+    "strokeWidth" in graphic
+      ? graphicStrokeWidthPx(graphic.strokeWidth, viewport)
+      : 1;
 
   switch (graphic.type) {
     case "line":
@@ -657,7 +494,9 @@ function findPinAtScreen(
   return null;
 }
 
-function getDraftBounds(draft: ReturnType<typeof useSymbolEditorStore.getState>["draft"]) {
+function getDraftBounds(
+  draft: ReturnType<typeof useSymbolEditorStore.getState>["draft"],
+) {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -669,9 +508,6 @@ function getDraftBounds(draft: ReturnType<typeof useSymbolEditorStore.getState>[
     maxX = Math.max(maxX, x);
     maxY = Math.max(maxY, y);
   };
-
-  addPoint(-draft.body.width / 2, -draft.body.height / 2);
-  addPoint(draft.body.width / 2, draft.body.height / 2);
 
   for (const pin of draft.pins) {
     addPoint(pin.position.x, pin.position.y);
@@ -757,17 +593,29 @@ function getGraphicBounds(graphic: SymbolGraphic) {
   }
 }
 
-function hitTestGraphic(screenX: number, screenY: number, graphic: SymbolGraphic, viewport: Viewport): boolean {
+function hitTestGraphic(
+  screenX: number,
+  screenY: number,
+  graphic: SymbolGraphic,
+  viewport: Viewport,
+): boolean {
   const bounds = getGraphicBounds(graphic);
   const min = symbolToScreen(bounds.minX, bounds.maxY, viewport);
   const max = symbolToScreen(bounds.maxX, bounds.minY, viewport);
-  return screenX >= Math.min(min.x, max.x) - 8 &&
+  return (
+    screenX >= Math.min(min.x, max.x) - 8 &&
     screenX <= Math.max(min.x, max.x) + 8 &&
     screenY >= Math.min(min.y, max.y) - 8 &&
-    screenY <= Math.max(min.y, max.y) + 8;
+    screenY <= Math.max(min.y, max.y) + 8
+  );
 }
 
-function findGraphicAtScreen(screenX: number, screenY: number, graphics: SymbolGraphic[], viewport: Viewport): SymbolGraphic | null {
+function findGraphicAtScreen(
+  screenX: number,
+  screenY: number,
+  graphics: SymbolGraphic[],
+  viewport: Viewport,
+): SymbolGraphic | null {
   for (let i = graphics.length - 1; i >= 0; i--) {
     const graphic = graphics[i];
     if (graphic && hitTestGraphic(screenX, screenY, graphic, viewport)) {
@@ -777,10 +625,20 @@ function findGraphicAtScreen(screenX: number, screenY: number, graphics: SymbolG
   return null;
 }
 
-function translateGraphic(graphic: SymbolGraphic, dx: number, dy: number): SymbolGraphic {
+function translateGraphic(
+  graphic: SymbolGraphic,
+  dx: number,
+  dy: number,
+): SymbolGraphic {
   switch (graphic.type) {
     case "line":
-      return { ...graphic, x1: graphic.x1 + dx, y1: graphic.y1 + dy, x2: graphic.x2 + dx, y2: graphic.y2 + dy };
+      return {
+        ...graphic,
+        x1: graphic.x1 + dx,
+        y1: graphic.y1 + dy,
+        x2: graphic.x2 + dx,
+        y2: graphic.y2 + dy,
+      };
     case "rect":
       return { ...graphic, x: graphic.x + dx, y: graphic.y + dy };
     case "circle":
@@ -788,9 +646,21 @@ function translateGraphic(graphic: SymbolGraphic, dx: number, dy: number): Symbo
     case "arc":
       return { ...graphic, cx: graphic.cx + dx, cy: graphic.cy + dy };
     case "polygon":
-      return { ...graphic, points: graphic.points.map((point) => ({ x: point.x + dx, y: point.y + dy })) };
+      return {
+        ...graphic,
+        points: graphic.points.map((point) => ({
+          x: point.x + dx,
+          y: point.y + dy,
+        })),
+      };
     case "bezier":
-      return { ...graphic, points: graphic.points.map((point) => ({ x: point.x + dx, y: point.y + dy })) as typeof graphic.points };
+      return {
+        ...graphic,
+        points: graphic.points.map((point) => ({
+          x: point.x + dx,
+          y: point.y + dy,
+        })) as typeof graphic.points,
+      };
     case "text":
       return { ...graphic, x: graphic.x + dx, y: graphic.y + dy };
   }
@@ -810,6 +680,7 @@ export function SymbolEditorCanvas() {
   const draggedPinId = useRef<string | null>(null);
   const isDraggingGraphic = useRef(false);
   const draggedGraphicId = useRef<string | null>(null);
+  const drawingState = useRef<DrawingToolState | null>(null);
 
   const draft = useSymbolEditorStore((s) => s.draft);
   const pan = useSymbolEditorStore((s) => s.pan);
@@ -821,6 +692,7 @@ export function SymbolEditorCanvas() {
   const movePin = useSymbolEditorStore((s) => s.movePin);
   const updateGraphic = useSymbolEditorStore((s) => s.updateGraphic);
   const addPin = useSymbolEditorStore((s) => s.addPin);
+  const addGraphic = useSymbolEditorStore((s) => s.addGraphic);
   const canvasColors = useCanvasColors();
 
   // Resize canvas to fill container
@@ -858,19 +730,28 @@ export function SymbolEditorCanvas() {
 
     const store = useSymbolEditorStore.getState();
     const { viewport, gridSize, showGrid, selection } = store.chrome;
-    const { body, pins, graphics } = store.draft;
+    const { pins, graphics } = store.draft;
 
     // Grid
     if (showGrid) {
       renderGrid(ctx, width, height, viewport, gridSize, canvasColors);
     }
 
-    // Body
-    renderBody(ctx, body, viewport, canvasColors);
-
-    // Imported/custom graphics
+    // Graphics (body shape + imported/custom primitives)
     for (const graphic of graphics) {
       renderGraphic(ctx, graphic, viewport, canvasColors);
+    }
+
+    // Drawing tool preview
+    if (drawingState.current?.startPoint) {
+      const preview = getDrawingPreview(drawingState.current);
+      if (preview) {
+        ctx.save();
+        ctx.setLineDash([6, 4]);
+        ctx.globalAlpha = 0.7;
+        renderGraphic(ctx, preview, viewport, canvasColors);
+        ctx.restore();
+      }
     }
 
     // Pins
@@ -888,7 +769,11 @@ export function SymbolEditorCanvas() {
 
     const loop = () => {
       if (!running) return;
-      render();
+      try {
+        render();
+      } catch (err) {
+        console.error("[SymbolEditorCanvas] Render error:", err);
+      }
       rafRef.current = requestAnimationFrame(loop);
     };
 
@@ -907,11 +792,7 @@ export function SymbolEditorCanvas() {
 
     resizeCanvas();
 
-    const observer = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
-        resizeCanvas();
-      });
-    });
+    const observer = new ResizeObserver(() => resizeCanvas());
     observer.observe(container);
 
     return () => observer.disconnect();
@@ -931,7 +812,9 @@ export function SymbolEditorCanvas() {
     if (!container || !draft.importPreservation) return;
 
     const rect = container.getBoundingClientRect();
-    setViewport(fitViewportToBounds(getDraftBounds(draft), rect.width, rect.height));
+    setViewport(
+      fitViewportToBounds(getDraftBounds(draft), rect.width, rect.height),
+    );
   }, [draft.id, draft.importPreservation?.sourceFileName, setViewport]);
 
   // Mouse handlers
@@ -956,6 +839,24 @@ export function SymbolEditorCanvas() {
         e.clientY,
         canvas.getBoundingClientRect(),
       );
+
+      // Drawing tool mode
+      const tool = store.chrome.activeTool;
+      if (tool === "line" || tool === "rect" || tool === "circle") {
+        const symbolPoint = screenToSymbol(
+          screenPoint.x,
+          screenPoint.y,
+          store.chrome.viewport,
+        );
+        const snapped = snapToGrid(symbolPoint, store.chrome.gridSize);
+        drawingState.current = handleDrawingMouseDown(
+          drawingState.current ?? createDrawingToolState(tool),
+          snapped,
+        );
+        return;
+      }
+
+      // Select/pan mode — hit test
       const hitPin = findPinAtScreen(
         screenPoint.x,
         screenPoint.y,
@@ -974,7 +875,6 @@ export function SymbolEditorCanvas() {
       if (hitPin) {
         store.pushHistory();
         selectPin(hitPin.id, e.ctrlKey || e.metaKey);
-        // Start dragging
         isDraggingPin.current = true;
         draggedPinId.current = hitPin.id;
         lastMouse.current = { x: e.clientX, y: e.clientY };
@@ -1004,8 +904,35 @@ export function SymbolEditorCanvas() {
         return;
       }
 
+      // Drawing tool preview
+      if (drawingState.current?.startPoint) {
+        const store = useSymbolEditorStore.getState();
+        const screenPoint = domEventToScreen(
+          e.clientX,
+          e.clientY,
+          canvas.getBoundingClientRect(),
+        );
+        const symbolPoint = screenToSymbol(
+          screenPoint.x,
+          screenPoint.y,
+          store.chrome.viewport,
+        );
+        const snapped = snapToGrid(symbolPoint, store.chrome.gridSize);
+        drawingState.current = handleDrawingMouseMove(
+          drawingState.current,
+          snapped,
+        );
+        return;
+      }
+
       if (isDraggingPin.current && draggedPinId.current) {
         const store = useSymbolEditorStore.getState();
+        const pin = store.draft.pins.find((p) => p.id === draggedPinId.current);
+        if (!pin) {
+          isDraggingPin.current = false;
+          draggedPinId.current = null;
+          return;
+        }
         const screenPoint = domEventToScreen(
           e.clientX,
           e.clientY,
@@ -1023,6 +950,14 @@ export function SymbolEditorCanvas() {
 
       if (isDraggingGraphic.current && draggedGraphicId.current) {
         const store = useSymbolEditorStore.getState();
+        const graphic = store.draft.graphics.find(
+          (entry) => entry.id === draggedGraphicId.current,
+        );
+        if (!graphic) {
+          isDraggingGraphic.current = false;
+          draggedGraphicId.current = null;
+          return;
+        }
         const previous = domEventToScreen(
           lastMouse.current.x,
           lastMouse.current.y,
@@ -1033,27 +968,41 @@ export function SymbolEditorCanvas() {
           e.clientY,
           canvas.getBoundingClientRect(),
         );
-        const previousPoint = screenToSymbol(previous.x, previous.y, store.chrome.viewport);
-        const currentPoint = screenToSymbol(current.x, current.y, store.chrome.viewport);
+        const previousPoint = screenToSymbol(
+          previous.x,
+          previous.y,
+          store.chrome.viewport,
+        );
+        const currentPoint = screenToSymbol(
+          current.x,
+          current.y,
+          store.chrome.viewport,
+        );
         const dx = currentPoint.x - previousPoint.x;
         const dy = currentPoint.y - previousPoint.y;
-        const graphic = store.draft.graphics.find((entry) => entry.id === draggedGraphicId.current);
-        if (graphic) {
-          updateGraphic(graphic.id, translateGraphic(graphic, dx, dy));
-          lastMouse.current = { x: e.clientX, y: e.clientY };
-        }
+        updateGraphic(graphic.id, translateGraphic(graphic, dx, dy));
+        lastMouse.current = { x: e.clientX, y: e.clientY };
       }
     },
     [pan, movePin, updateGraphic],
   );
 
   const handleMouseUp = useCallback(() => {
+    // Commit drawing tool
+    if (drawingState.current?.startPoint) {
+      const graphic = commitDrawing(drawingState.current);
+      if (graphic) {
+        addGraphic(graphic);
+      }
+      drawingState.current = null;
+    }
+
     isPanning.current = false;
     isDraggingPin.current = false;
     draggedPinId.current = null;
     isDraggingGraphic.current = false;
     draggedGraphicId.current = null;
-  }, []);
+  }, [addGraphic]);
 
   const handleMouseLeave = useCallback(() => {
     isPanning.current = false;
@@ -1085,7 +1034,9 @@ export function SymbolEditorCanvas() {
       if (e.key === "Delete" || e.key === "Backspace") {
         const store = useSymbolEditorStore.getState();
         const selectedIds = [...store.chrome.selection.selectedPinIds];
-        const selectedGraphicIds = [...store.chrome.selection.selectedGraphicIds];
+        const selectedGraphicIds = [
+          ...store.chrome.selection.selectedGraphicIds,
+        ];
         if (selectedIds.length > 0) {
           store.removePins(selectedIds);
           e.preventDefault();

@@ -154,7 +154,7 @@ const INITIAL_CHROME_STATE: EditorChromeState = {
   activeTool: "select",
   popoverEntityId: null,
   gridSize: DEFAULT_GRID_NM,
-  showGrid: true,
+  showGrid: false,
   placementRotation: 0,
   gridPresetId: "small",
 };
@@ -595,8 +595,8 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
           symbolId,
           document.symbols.find((symbol) => symbol.id === symbolId)
             ?.position ?? {
-          x: 0,
-          y: 0,
+            x: 0,
+            y: 0,
           },
         ]),
       ) as Record<string, Point>;
@@ -985,10 +985,7 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         chrome: {
           ...state.chrome,
           selectedEntityIds: nextIds,
-          popoverEntityId: derivePopoverTargetId(
-            state.persisted.document,
-            nextIds,
-          ),
+          popoverEntityId: null,
         },
       };
     }),

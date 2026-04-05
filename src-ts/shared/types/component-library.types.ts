@@ -27,7 +27,6 @@ export interface SymbolData {
   unitCount: number;
   bodyGraphics: unknown[];
   rawKicadSource?: string | null;
-  symbolTemplate?: string | null;
 }
 
 export interface ComponentFootprint {

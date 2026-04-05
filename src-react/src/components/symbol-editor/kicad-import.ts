@@ -16,15 +16,13 @@ import type {
   SymbolPin,
   TextGraphic,
 } from "./types";
-import {
-  DEFAULT_BODY_HEIGHT,
-  DEFAULT_BODY_WIDTH,
-  DEFAULT_PIN_LENGTH,
-  GRID_SIZES,
-  createEmptyDraft,
-  PASSIVE_BODY_WIDTH,
-  PASSIVE_BODY_HEIGHT,
-} from "./types";
+import { DEFAULT_PIN_LENGTH, GRID_SIZES, createEmptyDraft } from "./types";
+
+/** Inline body-size constants (removed from types — no longer in SymbolDraft) */
+const DEFAULT_BODY_WIDTH = 7_620_000;
+const DEFAULT_BODY_HEIGHT = 10_160_000;
+const PASSIVE_BODY_WIDTH = 2_540_000;
+const PASSIVE_BODY_HEIGHT = 1_270_000;
 
 type KicadNode = unknown[];
 
@@ -588,37 +586,6 @@ function addGraphicBounds(
   bounds.maxY = Math.max(bounds.maxY, graphic.y);
 }
 
-function getBodyDimensions(
-  pins: SymbolPin[],
-  graphics: SymbolGraphic[],
-): { width: number; height: number } {
-  if (pins.length === 0 && graphics.length === 0) {
-    return { width: DEFAULT_BODY_WIDTH, height: DEFAULT_BODY_HEIGHT };
-  }
-
-  const bounds = {
-    minX: Number.POSITIVE_INFINITY,
-    minY: Number.POSITIVE_INFINITY,
-    maxX: Number.NEGATIVE_INFINITY,
-    maxY: Number.NEGATIVE_INFINITY,
-  };
-
-  for (const pin of pins) {
-    bounds.minX = Math.min(bounds.minX, pin.position.x);
-    bounds.minY = Math.min(bounds.minY, pin.position.y);
-    bounds.maxX = Math.max(bounds.maxX, pin.position.x);
-    bounds.maxY = Math.max(bounds.maxY, pin.position.y);
-  }
-
-  for (const graphic of graphics) {
-    addGraphicBounds(graphic, bounds);
-  }
-
-  const width = Math.max(DEFAULT_BODY_WIDTH, bounds.maxX - bounds.minX);
-  const height = Math.max(DEFAULT_BODY_HEIGHT, bounds.maxY - bounds.minY);
-  return { width, height };
-}
-
 function getContentBounds(
   pins: SymbolPin[],
   graphics: SymbolGraphic[],
@@ -934,50 +901,6 @@ function scaleGraphicsIntoBounds(
   });
 }
 
-function getBodyGraphicBoundsForDraft(
-  graphics: SymbolGraphic[],
-): { width: number; height: number } | null {
-  const bounds = getGraphicBounds(graphics, false);
-  if (!bounds) {
-    return null;
-  }
-
-  return {
-    width: bounds.maxX - bounds.minX,
-    height: bounds.maxY - bounds.minY,
-  };
-}
-
-function getNormalizedDraftBodyDimensions(
-  classification: ImportedSymbolClassification,
-  pins: SymbolPin[],
-  graphics: SymbolGraphic[],
-): { width: number; height: number } {
-  const graphicBounds = getBodyGraphicBoundsForDraft(graphics);
-  if (classification.kind === "two-terminal-passive") {
-    return (
-      graphicBounds ?? {
-        width: PASSIVE_BODY_WIDTH,
-        height: PASSIVE_BODY_HEIGHT,
-      }
-    );
-  }
-
-  if (
-    classification.kind === "rectangular-ic" ||
-    classification.kind === "multi-unit-rectangular-ic"
-  ) {
-    return (
-      graphicBounds ?? {
-        width: DEFAULT_BODY_WIDTH,
-        height: DEFAULT_BODY_HEIGHT,
-      }
-    );
-  }
-
-  return getBodyDimensions(pins, graphics);
-}
-
 function normalizeTwoTerminalPassiveLayout(
   pins: SymbolPin[],
   graphics: SymbolGraphic[],
@@ -1249,7 +1172,9 @@ function combineUnits(
   const unitClassification =
     classification.kind === "multi-unit-rectangular-ic"
       ? createSupportedClassification("rectangular-ic")
-      : createUnsupportedClassification("unit-level normalization not required");
+      : createUnsupportedClassification(
+          "unit-level normalization not required",
+        );
   const normalizedUnits = [] as Array<{
     pins: SymbolPin[];
     graphics: SymbolGraphic[];
@@ -1280,7 +1205,8 @@ function combineUnits(
 
   if (normalizedUnits.length <= 1) {
     const single =
-      normalizedUnits[0] ?? getNormalizedUnitContent([], [], unitClassification);
+      normalizedUnits[0] ??
+      getNormalizedUnitContent([], [], unitClassification);
     return {
       pins: single.pins,
       graphics: single.graphics,
@@ -1362,7 +1288,10 @@ export function convertParsedKicadSymbolToDraft(
 ): SymbolDraft {
   const draft = createEmptyDraft(crypto.randomUUID());
   const classification = classifyImportedSymbol(parsed);
-  const { pins, graphics, droppedGraphics } = combineUnits(parsed, classification);
+  const { pins, graphics, droppedGraphics } = combineUnits(
+    parsed,
+    classification,
+  );
   const centered =
     parsed.units > 1
       ? { pins, graphics }
@@ -1380,23 +1309,12 @@ export function convertParsedKicadSymbolToDraft(
     throw new Error("Imported symbol contains no renderable pins or graphics");
   }
 
-  const bodyDimensions = getNormalizedDraftBodyDimensions(
-    classification,
-    normalized.pins,
-    normalized.graphics,
-  );
-
   return {
     ...draft,
     metadata: {
       name: parsed.properties.Value ?? parsed.name,
       referencePrefix: parsed.properties.Reference ?? "U",
       description: parsed.properties.Description ?? "",
-    },
-    body: {
-      kind: "blank",
-      width: bodyDimensions.width,
-      height: bodyDimensions.height,
     },
     pins: normalized.pins,
     graphics: normalized.graphics,

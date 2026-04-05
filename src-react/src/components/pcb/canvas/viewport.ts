@@ -1,45 +1,58 @@
+/**
+ * Schematic Canvas Viewport
+ *
+ * Re-exports shared canvas-core viewport utilities with schematic-specific aliases.
+ */
+
 import type { Bounds, Point, Viewport } from "../types";
+import {
+  worldToScreen,
+  screenToWorld,
+  domEventToScreen as coreDomEventToScreen,
+  clampZoom as coreClampZoom,
+  snapToGrid as coreSnapToGrid,
+  createCenteredViewport as coreCreateCenteredViewport,
+  fitViewportToBounds as coreFitViewportToBounds,
+  isWithinRoundTripTolerance as coreIsWithinRoundTripTolerance,
+  nmToMm as coreNmToMm,
+  mmToNm as coreMmToNm,
+  MIN_VIEWPORT_ZOOM,
+  MAX_VIEWPORT_ZOOM,
+  DEFAULT_SCHEMATIC_ZOOM,
+  DEFAULT_VIEWPORT_WIDTH_PX,
+  DEFAULT_VIEWPORT_HEIGHT_PX,
+  ROUND_TRIP_TOLERANCE_NM,
+} from "@/lib/canvas-core";
+import type { CanvasBounds } from "@/lib/canvas-core";
 
-export const SCHEMATIC_ROUND_TRIP_TOLERANCE_NM = 1e-6;
-export const DEFAULT_SCHEMATIC_ZOOM = 1 / 12_700;
-export const MIN_VIEWPORT_ZOOM = 1 / 1_000_000;
-export const MAX_VIEWPORT_ZOOM = 50;
-export const DEFAULT_VIEWPORT_WIDTH_PX = 800;
-export const DEFAULT_VIEWPORT_HEIGHT_PX = 600;
+// Re-export constants
+export {
+  MIN_VIEWPORT_ZOOM,
+  MAX_VIEWPORT_ZOOM,
+  DEFAULT_SCHEMATIC_ZOOM,
+  DEFAULT_VIEWPORT_WIDTH_PX,
+  DEFAULT_VIEWPORT_HEIGHT_PX,
+};
 
-export type CanvasBounds = Pick<DOMRect, "left" | "top">;
+export const SCHEMATIC_ROUND_TRIP_TOLERANCE_NM = ROUND_TRIP_TOLERANCE_NM;
 
+export type { CanvasBounds };
+
+// Re-export with schematic-specific names (backward compat)
 export function domEventToScreen(
   clientX: number,
   clientY: number,
   canvasBounds: CanvasBounds,
 ): Point {
-  return {
-    x: clientX - canvasBounds.left,
-    y: clientY - canvasBounds.top,
-  };
+  return coreDomEventToScreen(clientX, clientY, canvasBounds);
 }
 
 export function canvasToScreen(canvasX: number, canvasY: number): Point {
-  return {
-    x: canvasX,
-    y: canvasY,
-  };
-}
-
-function ensureZoom(zoom: number): number {
-  if (zoom <= 0) {
-    throw new RangeError("viewport.zoom must be greater than 0");
-  }
-  return zoom;
+  return { x: canvasX, y: canvasY };
 }
 
 export function clampViewportZoom(zoom: number): number {
-  if (!Number.isFinite(zoom)) {
-    throw new RangeError("viewport.zoom must be a finite number");
-  }
-
-  return Math.max(MIN_VIEWPORT_ZOOM, Math.min(MAX_VIEWPORT_ZOOM, zoom));
+  return coreClampZoom(zoom);
 }
 
 export function createCenteredViewport(
@@ -47,11 +60,7 @@ export function createCenteredViewport(
   height: number = DEFAULT_VIEWPORT_HEIGHT_PX,
   zoom: number = DEFAULT_SCHEMATIC_ZOOM,
 ): Viewport {
-  return {
-    offsetX: width / 2,
-    offsetY: height / 2,
-    zoom: clampViewportZoom(zoom),
-  };
+  return coreCreateCenteredViewport(width, height, zoom);
 }
 
 export function fitViewportToBounds(
@@ -60,25 +69,7 @@ export function fitViewportToBounds(
   height: number = DEFAULT_VIEWPORT_HEIGHT_PX,
   paddingPx: number = 80,
 ): Viewport {
-  if (!bounds) {
-    return createCenteredViewport(width, height);
-  }
-
-  const contentWidth = Math.max(bounds.maxX - bounds.minX, 2_540_000);
-  const contentHeight = Math.max(bounds.maxY - bounds.minY, 2_540_000);
-  const usableWidth = Math.max(width - paddingPx * 2, 1);
-  const usableHeight = Math.max(height - paddingPx * 2, 1);
-  const zoom = clampViewportZoom(
-    Math.min(usableWidth / contentWidth, usableHeight / contentHeight),
-  );
-  const centerX = (bounds.minX + bounds.maxX) / 2;
-  const centerY = (bounds.minY + bounds.maxY) / 2;
-
-  return {
-    offsetX: width / 2 - centerX * zoom,
-    offsetY: height / 2 - centerY * zoom,
-    zoom,
-  };
+  return coreFitViewportToBounds(bounds, width, height, paddingPx);
 }
 
 export function screenToSchematic(
@@ -86,12 +77,7 @@ export function screenToSchematic(
   screenY: number,
   viewport: Viewport,
 ): Point {
-  const zoom = ensureZoom(viewport.zoom);
-
-  return {
-    x: (screenX - viewport.offsetX) / zoom,
-    y: (screenY - viewport.offsetY) / zoom,
-  };
+  return screenToWorld(screenX, screenY, viewport);
 }
 
 export function schematicToScreen(
@@ -99,31 +85,19 @@ export function schematicToScreen(
   schematicY: number,
   viewport: Viewport,
 ): Point {
-  const zoom = ensureZoom(viewport.zoom);
-
-  return {
-    x: schematicX * zoom + viewport.offsetX,
-    y: schematicY * zoom + viewport.offsetY,
-  };
+  return worldToScreen(schematicX, schematicY, viewport);
 }
 
 export function nmToMm(nm: number): number {
-  return nm / 1_000_000;
+  return coreNmToMm(nm);
 }
 
 export function mmToNm(mm: number): number {
-  return mm * 1_000_000;
+  return coreMmToNm(mm);
 }
 
 export function snapToGrid(point: Point, gridSize: number): Point {
-  if (gridSize <= 0) {
-    throw new RangeError("gridSize must be greater than 0");
-  }
-
-  return {
-    x: Math.round(point.x / gridSize) * gridSize,
-    y: Math.round(point.y / gridSize) * gridSize,
-  };
+  return coreSnapToGrid(point, gridSize);
 }
 
 export function isWithinRoundTripTolerance(
@@ -131,8 +105,5 @@ export function isWithinRoundTripTolerance(
   expected: Point,
   toleranceNm: number = SCHEMATIC_ROUND_TRIP_TOLERANCE_NM,
 ): boolean {
-  return (
-    Math.abs(actual.x - expected.x) <= toleranceNm &&
-    Math.abs(actual.y - expected.y) <= toleranceNm
-  );
+  return coreIsWithinRoundTripTolerance(actual, expected, toleranceNm);
 }

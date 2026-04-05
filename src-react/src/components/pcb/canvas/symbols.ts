@@ -3,17 +3,14 @@ import type { SymbolColors } from "@/lib/canvas-theme";
 import { schematicToScreen } from "./viewport";
 import { DEFAULT_SCHEMATIC_ZOOM } from "./viewport";
 import { getSymbolKindLabel } from "../symbol-display";
+import { renderGraphicLocal } from "@/lib/canvas-core/graphics";
+import { renderPinsLocal } from "@/lib/canvas-core/pins";
 
-const DEFAULT_PIN_SPAN = 1_270_000;
-const TWO_TERMINAL_LEAD_INSET = 280_000;
-const TWO_TERMINAL_HALF_HEIGHT = 180_000;
 const RECT_PADDING_X = 220_000;
 const RECT_PADDING_Y = 220_000;
 const MIN_RECT_WIDTH = 760_000;
 const MIN_RECT_HEIGHT = 760_000;
-const CONNECTOR_RADIUS_PX = 5;
 const STROKE_WIDTH_PX = 1.75;
-const PIN_LINE_WIDTH_PX = 1.5;
 const BODY_LABEL_OFFSET_NM = 420_000;
 const PIN_LABEL_OFFSET_NM = 220_000;
 
@@ -31,16 +28,6 @@ interface PinExtents {
   maxY: number;
 }
 
-interface TwoTerminalMetrics {
-  startX: number;
-  endX: number;
-  centerY: number;
-  bodyLeft: number;
-  bodyRight: number;
-  bodyTop: number;
-  bodyBottom: number;
-}
-
 interface SymbolTextLabel {
   text: string;
   point: Point;
@@ -48,7 +35,7 @@ interface SymbolTextLabel {
 }
 
 function hasImportedSymbolBody(symbol: SymbolEntity): boolean {
-  return Boolean(symbol.importedGraphics && symbol.importedGraphics.length > 0);
+  return Boolean(symbol.graphics && symbol.graphics.length > 0);
 }
 
 function hasImportedPinMetadata(symbol: SymbolEntity): boolean {
@@ -88,141 +75,33 @@ function getLocalCenter(symbol: SymbolEntity): Point {
   };
 }
 
-function getTwoTerminalMetrics(symbol: SymbolEntity): TwoTerminalMetrics {
-  const firstPin = symbol.pins[0]?.position ?? {
-    x: -DEFAULT_PIN_SPAN / 2,
-    y: 0,
-  };
-  const lastPin = symbol.pins[symbol.pins.length - 1]?.position ?? {
-    x: DEFAULT_PIN_SPAN / 2,
-    y: 0,
-  };
-
-  const startX = Math.min(firstPin.x, lastPin.x);
-  const endX = Math.max(firstPin.x, lastPin.x);
-  const centerY = (firstPin.y + lastPin.y) / 2;
-  const span = Math.max(endX - startX, DEFAULT_PIN_SPAN);
-  const leadInset = Math.min(TWO_TERMINAL_LEAD_INSET, span * 0.3);
-  const bodyLeft = startX + leadInset;
-  const bodyRight = endX - leadInset;
-
-  return {
-    startX,
-    endX,
-    centerY,
-    bodyLeft,
-    bodyRight,
-    bodyTop: centerY - TWO_TERMINAL_HALF_HEIGHT,
-    bodyBottom: centerY + TWO_TERMINAL_HALF_HEIGHT,
-  };
-}
-
-function expandRect(
-  centerX: number,
-  centerY: number,
-  width: number,
-  height: number,
-): Bounds {
-  return {
-    minX: centerX - width / 2,
-    minY: centerY - height / 2,
-    maxX: centerX + width / 2,
-    maxY: centerY + height / 2,
-  };
-}
-
-function getRectBodyLocalBounds(symbol: SymbolEntity): Bounds {
-  const center = getLocalCenter(symbol);
-  const extents = getPinExtents(symbol);
-  const width = extents
-    ? Math.max(extents.maxX - extents.minX - RECT_PADDING_X, MIN_RECT_WIDTH)
-    : MIN_RECT_WIDTH;
-  const height = extents
-    ? Math.max(
-        extents.maxY - extents.minY + RECT_PADDING_Y * 2,
-        MIN_RECT_HEIGHT,
-      )
-    : MIN_RECT_HEIGHT;
-
-  return expandRect(center.x, center.y, width, height);
-}
-
-function getTriangleBodyLocalBounds(symbol: SymbolEntity): Bounds {
-  const extents = getPinExtents(symbol);
-  const center = getLocalCenter(symbol);
-  const width = extents
-    ? Math.max(extents.maxX - extents.minX + RECT_PADDING_X * 2, 900_000)
-    : 900_000;
-  const height = extents
-    ? Math.max(extents.maxY - extents.minY + RECT_PADDING_Y * 2, 900_000)
-    : 900_000;
-
-  return expandRect(center.x, center.y, width, height);
-}
-
-function getSinglePinBodyLocalBounds(
-  symbol: SymbolEntity,
-  width: number,
-  height: number,
-): Bounds {
-  const pin = symbol.pins[0]?.position ?? { x: 0, y: 0 };
-
-  return {
-    minX: pin.x - width / 2,
-    minY: pin.y,
-    maxX: pin.x + width / 2,
-    maxY: pin.y + height,
-  };
-}
-
 export function getSymbolBodyLocalBounds(symbol: SymbolEntity): Bounds {
-  if (symbol.importedBodyBounds) {
-    return symbol.importedBodyBounds;
+  // Use pre-computed bounds from the component library (always present for primitives-based symbols)
+  if (symbol.bodyBounds) {
+    return symbol.bodyBounds;
   }
 
-  if (!symbol.symbolTemplate) {
-    throw new Error(`Symbol ${symbol.id} missing symbolTemplate`);
+  // Fallback: compute bounds from pin positions
+  const extents = getPinExtents(symbol);
+  if (!extents) {
+    return { minX: -380_000, minY: -380_000, maxX: 380_000, maxY: 380_000 };
   }
-  switch (symbol.symbolTemplate) {
-    case "resistor":
-    case "capacitor":
-    case "inductor":
-    case "diode":
-    case "led": {
-      const metrics = getTwoTerminalMetrics(symbol);
-      return {
-        minX: metrics.bodyLeft,
-        minY: metrics.bodyTop,
-        maxX: metrics.bodyRight,
-        maxY: metrics.bodyBottom,
-      };
-    }
-    case "opamp":
-      return getTriangleBodyLocalBounds(symbol);
-    case "generic_ic":
-    case "connector": {
-      if (symbol.symbolKind === "gnd") {
-        return getSinglePinBodyLocalBounds(symbol, 480_000, 420_000);
-      }
-      if (symbol.symbolKind === "vcc") {
-        return {
-          ...getSinglePinBodyLocalBounds(symbol, 420_000, 360_000),
-          minY: (symbol.pins[0]?.position.y ?? 0) - 360_000,
-          maxY: symbol.pins[0]?.position.y ?? 0,
-        };
-      }
-      return getRectBodyLocalBounds(symbol);
-    }
-    case "npn":
-    case "pnp":
-    case "nmos":
-    case "pmos": {
-      const center = getLocalCenter(symbol);
-      return expandRect(center.x, center.y, 760_000, 760_000);
-    }
-    default:
-      return getRectBodyLocalBounds(symbol);
-  }
+
+  const center = getLocalCenter(symbol);
+  const width = Math.max(
+    extents.maxX - extents.minX + RECT_PADDING_X * 2,
+    MIN_RECT_WIDTH,
+  );
+  const height = Math.max(
+    extents.maxY - extents.minY + RECT_PADDING_Y * 2,
+    MIN_RECT_HEIGHT,
+  );
+  return {
+    minX: center.x - width / 2,
+    minY: center.y - height / 2,
+    maxX: center.x + width / 2,
+    maxY: center.y + height / 2,
+  };
 }
 
 function normalizeRotation(rotation: number): 0 | 90 | 180 | 270 {
@@ -313,432 +192,17 @@ function applySymbolTransform(
   ctx.lineCap = "round";
 }
 
-function strokeTwoTerminalLeads(
-  ctx: CanvasRenderingContext2D,
-  metrics: TwoTerminalMetrics,
-): void {
-  ctx.beginPath();
-  ctx.moveTo(metrics.startX, metrics.centerY);
-  ctx.lineTo(metrics.bodyLeft, metrics.centerY);
-  ctx.moveTo(metrics.bodyRight, metrics.centerY);
-  ctx.lineTo(metrics.endX, metrics.centerY);
-  ctx.stroke();
-}
-
-function drawRect(ctx: CanvasRenderingContext2D, bounds: Bounds): void {
-  ctx.beginPath();
-  ctx.rect(
-    bounds.minX,
-    bounds.minY,
-    bounds.maxX - bounds.minX,
-    bounds.maxY - bounds.minY,
-  );
-  ctx.stroke();
-}
-
-function renderResistor(
-  ctx: CanvasRenderingContext2D,
-  symbol: SymbolEntity,
-): void {
-  const metrics = getTwoTerminalMetrics(symbol);
-  const zigzagWidth = (metrics.bodyRight - metrics.bodyLeft) / 6;
-  const amplitude = (metrics.bodyBottom - metrics.bodyTop) / 2;
-
-  strokeTwoTerminalLeads(ctx, metrics);
-
-  ctx.beginPath();
-  ctx.moveTo(metrics.bodyLeft, metrics.centerY);
-  for (let index = 0; index < 6; index += 1) {
-    const x = metrics.bodyLeft + zigzagWidth * (index + 1);
-    const y = metrics.centerY + (index % 2 === 0 ? -amplitude : amplitude);
-    ctx.lineTo(x, y);
-  }
-  ctx.lineTo(metrics.bodyRight, metrics.centerY);
-  ctx.stroke();
-}
-
-function renderCapacitor(
-  ctx: CanvasRenderingContext2D,
-  symbol: SymbolEntity,
-): void {
-  const metrics = getTwoTerminalMetrics(symbol);
-  const plateGap = (metrics.bodyRight - metrics.bodyLeft) * 0.18;
-
-  strokeTwoTerminalLeads(ctx, metrics);
-
-  ctx.beginPath();
-  ctx.moveTo(metrics.bodyLeft + plateGap, metrics.bodyTop);
-  ctx.lineTo(metrics.bodyLeft + plateGap, metrics.bodyBottom);
-  ctx.moveTo(metrics.bodyRight - plateGap, metrics.bodyTop);
-  ctx.lineTo(metrics.bodyRight - plateGap, metrics.bodyBottom);
-  ctx.stroke();
-}
-
-function renderInductor(
-  ctx: CanvasRenderingContext2D,
-  symbol: SymbolEntity,
-): void {
-  const metrics = getTwoTerminalMetrics(symbol);
-  const coilWidth = (metrics.bodyRight - metrics.bodyLeft) / 4;
-
-  strokeTwoTerminalLeads(ctx, metrics);
-
-  for (let index = 0; index < 4; index += 1) {
-    const centerX = metrics.bodyLeft + coilWidth * index + coilWidth / 2;
-    ctx.beginPath();
-    ctx.arc(centerX, metrics.centerY, coilWidth / 2, Math.PI, 0);
-    ctx.stroke();
-  }
-}
-
-function renderDiode(
-  ctx: CanvasRenderingContext2D,
-  symbol: SymbolEntity,
-  led: boolean,
-): void {
-  const metrics = getTwoTerminalMetrics(symbol);
-  const lineX =
-    metrics.bodyRight - (metrics.bodyRight - metrics.bodyLeft) * 0.18;
-
-  strokeTwoTerminalLeads(ctx, metrics);
-
-  ctx.beginPath();
-  ctx.moveTo(metrics.bodyLeft, metrics.bodyTop);
-  ctx.lineTo(lineX, metrics.centerY);
-  ctx.lineTo(metrics.bodyLeft, metrics.bodyBottom);
-  ctx.closePath();
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(lineX, metrics.bodyTop);
-  ctx.lineTo(lineX, metrics.bodyBottom);
-  ctx.stroke();
-
-  if (!led) {
-    return;
-  }
-
-  const arrowOffset = 110_000;
-  const arrowLength = 160_000;
-
-  ctx.beginPath();
-  ctx.moveTo(metrics.bodyRight - arrowLength, metrics.bodyTop - arrowOffset);
-  ctx.lineTo(metrics.bodyRight, metrics.bodyTop - arrowOffset - arrowLength);
-  ctx.moveTo(
-    metrics.bodyRight - 80_000,
-    metrics.bodyTop - arrowOffset - arrowLength,
-  );
-  ctx.lineTo(metrics.bodyRight, metrics.bodyTop - arrowOffset - arrowLength);
-  ctx.lineTo(
-    metrics.bodyRight - 10_000,
-    metrics.bodyTop - arrowOffset - 80_000,
-  );
-
-  ctx.moveTo(metrics.bodyRight - arrowLength * 1.3, metrics.bodyTop + 40_000);
-  ctx.lineTo(
-    metrics.bodyRight - 40_000,
-    metrics.bodyTop - arrowLength + 40_000,
-  );
-  ctx.moveTo(
-    metrics.bodyRight - 120_000,
-    metrics.bodyTop - arrowLength + 40_000,
-  );
-  ctx.lineTo(
-    metrics.bodyRight - 40_000,
-    metrics.bodyTop - arrowLength + 40_000,
-  );
-  ctx.lineTo(metrics.bodyRight - 50_000, metrics.bodyTop - 40_000);
-  ctx.stroke();
-}
-
-function renderGround(
-  ctx: CanvasRenderingContext2D,
-  symbol: SymbolEntity,
-): void {
-  const pin = symbol.pins[0]?.position ?? { x: 0, y: 0 };
-  const stemHeight = 120_000;
-  const halfWidth = 160_000;
-  const tipY = pin.y + 280_000;
-
-  ctx.beginPath();
-  ctx.moveTo(pin.x, pin.y);
-  ctx.lineTo(pin.x, pin.y + stemHeight);
-  ctx.lineTo(pin.x + halfWidth, pin.y + stemHeight);
-  ctx.lineTo(pin.x, tipY);
-  ctx.lineTo(pin.x - halfWidth, pin.y + stemHeight);
-  ctx.lineTo(pin.x, pin.y + stemHeight);
-  ctx.stroke();
-}
-
-function renderPower(
-  ctx: CanvasRenderingContext2D,
-  symbol: SymbolEntity,
-): void {
-  const pin = symbol.pins[0]?.position ?? { x: 0, y: 0 };
-
-  ctx.beginPath();
-  ctx.moveTo(pin.x, pin.y);
-  ctx.lineTo(pin.x, pin.y - 180_000);
-  ctx.lineTo(pin.x - 160_000, pin.y - 20_000);
-  ctx.moveTo(pin.x, pin.y - 180_000);
-  ctx.lineTo(pin.x + 160_000, pin.y - 20_000);
-  ctx.stroke();
-}
-
-function renderOpAmp(
-  ctx: CanvasRenderingContext2D,
-  symbol: SymbolEntity,
-): void {
-  const bounds = getTriangleBodyLocalBounds(symbol);
-
-  ctx.beginPath();
-  ctx.moveTo(bounds.minX, bounds.minY);
-  ctx.lineTo(bounds.maxX, (bounds.minY + bounds.maxY) / 2);
-  ctx.lineTo(bounds.minX, bounds.maxY);
-  ctx.closePath();
-  ctx.stroke();
-}
-
-function renderRectangularSymbol(
-  ctx: CanvasRenderingContext2D,
-  symbol: SymbolEntity,
-): void {
-  drawRect(ctx, getRectBodyLocalBounds(symbol));
-}
-
-function setImportedGraphicStroke(
-  ctx: CanvasRenderingContext2D,
-  strokeWidth: number,
-  viewport: Viewport,
-): void {
-  ctx.lineWidth = Math.max(
-    strokeWidth,
-    1 / Math.max(viewport.zoom, Number.EPSILON),
-  );
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-}
-
-function renderImportedGraphic(
-  ctx: CanvasRenderingContext2D,
-  graphic: NonNullable<SymbolEntity["importedGraphics"]>[number],
-  viewport: Viewport,
-): void {
-  setImportedGraphicStroke(
-    ctx,
-    "strokeWidth" in graphic
-      ? graphic.strokeWidth
-      : STROKE_WIDTH_PX / viewport.zoom,
-    viewport,
-  );
-
-  switch (graphic.type) {
-    case "line":
-      ctx.beginPath();
-      ctx.moveTo(graphic.x1, graphic.y1);
-      ctx.lineTo(graphic.x2, graphic.y2);
-      ctx.stroke();
-      return;
-    case "rect":
-      ctx.beginPath();
-      ctx.rect(graphic.x, graphic.y, graphic.width, graphic.height);
-      if (graphic.filled) {
-        ctx.fill();
-      }
-      ctx.stroke();
-      return;
-    case "circle":
-      ctx.beginPath();
-      ctx.arc(graphic.cx, graphic.cy, graphic.radius, 0, Math.PI * 2);
-      if (graphic.filled) {
-        ctx.fill();
-      }
-      ctx.stroke();
-      return;
-    case "arc":
-      ctx.beginPath();
-      ctx.arc(
-        graphic.cx,
-        graphic.cy,
-        graphic.radius,
-        (graphic.startAngle * Math.PI) / 180,
-        (graphic.endAngle * Math.PI) / 180,
-        false,
-      );
-      ctx.stroke();
-      return;
-    case "polygon":
-      if (graphic.points.length < 2) {
-        return;
-      }
-      ctx.beginPath();
-      ctx.moveTo(graphic.points[0]!.x, graphic.points[0]!.y);
-      for (let index = 1; index < graphic.points.length; index += 1) {
-        const point = graphic.points[index]!;
-        ctx.lineTo(point.x, point.y);
-      }
-      if (graphic.closed) {
-        ctx.closePath();
-      }
-      if (graphic.filled) {
-        ctx.fill();
-      }
-      ctx.stroke();
-      return;
-    case "bezier": {
-      const [p0, p1, p2, p3] = graphic.points;
-      ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
-      ctx.stroke();
-      return;
-    }
-    case "text": {
-      ctx.save();
-      ctx.translate(graphic.x, graphic.y);
-      ctx.rotate((graphic.rotation * Math.PI) / 180);
-      ctx.font = `${Math.max(graphic.fontSize, 8 / Math.max(viewport.zoom, Number.EPSILON))}px monospace`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(graphic.content, 0, 0);
-      ctx.restore();
-      return;
-    }
-  }
-}
-
-function renderImportedBody(
-  ctx: CanvasRenderingContext2D,
-  symbol: SymbolEntity,
-  viewport: Viewport,
-): boolean {
-  if (!symbol.importedGraphics || symbol.importedGraphics.length === 0) {
-    return false;
-  }
-
-  for (const graphic of symbol.importedGraphics) {
-    renderImportedGraphic(ctx, graphic, viewport);
-  }
-
-  return true;
-}
-
-function renderBjt(
-  ctx: CanvasRenderingContext2D,
-  symbol: SymbolEntity,
-  inwardArrow: boolean,
-): void {
-  const center = getLocalCenter(symbol);
-  const radius = 320_000;
-  const arrowDirection = inwardArrow ? -1 : 1;
-
-  ctx.beginPath();
-  ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
-  ctx.moveTo(center.x - radius - 220_000, center.y);
-  ctx.lineTo(center.x - radius, center.y);
-  ctx.moveTo(center.x + 40_000, center.y - 80_000);
-  ctx.lineTo(center.x + radius + 180_000, center.y - radius);
-  ctx.moveTo(center.x + 40_000, center.y + 80_000);
-  ctx.lineTo(center.x + radius + 180_000, center.y + radius);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(center.x + radius - 120_000, center.y + arrowDirection * 60_000);
-  ctx.lineTo(center.x + radius + 20_000, center.y + arrowDirection * 180_000);
-  ctx.lineTo(center.x + radius - 40_000, center.y + arrowDirection * 200_000);
-  ctx.stroke();
-}
-
-function renderMosfet(
-  ctx: CanvasRenderingContext2D,
-  symbol: SymbolEntity,
-  pChannel: boolean,
-): void {
-  const center = getLocalCenter(symbol);
-  const halfHeight = 280_000;
-
-  ctx.beginPath();
-  ctx.moveTo(center.x - 260_000, center.y - halfHeight);
-  ctx.lineTo(center.x - 260_000, center.y + halfHeight);
-  ctx.moveTo(center.x - 520_000, center.y);
-  ctx.lineTo(center.x - 260_000, center.y);
-  ctx.moveTo(center.x + 120_000, center.y - halfHeight);
-  ctx.lineTo(center.x + 120_000, center.y + halfHeight);
-  ctx.moveTo(center.x + 120_000, center.y - halfHeight);
-  ctx.lineTo(center.x + 420_000, center.y - halfHeight);
-  ctx.moveTo(center.x + 120_000, center.y + halfHeight);
-  ctx.lineTo(center.x + 420_000, center.y + halfHeight);
-  ctx.stroke();
-
-  if (!pChannel) {
-    return;
-  }
-
-  ctx.beginPath();
-  ctx.arc(center.x - 130_000, center.y, 70_000, 0, Math.PI * 2);
-  ctx.stroke();
-}
-
 function renderBody(
   ctx: CanvasRenderingContext2D,
   symbol: SymbolEntity,
   viewport: Viewport,
 ): void {
-  if (renderImportedBody(ctx, symbol, viewport)) {
+  if (!symbol.graphics || symbol.graphics.length === 0) {
     return;
   }
 
-  if (!symbol.symbolTemplate) {
-    throw new Error(`Symbol ${symbol.id} missing symbolTemplate`);
-  }
-
-  switch (symbol.symbolTemplate) {
-    case "resistor":
-      renderResistor(ctx, symbol);
-      return;
-    case "capacitor":
-      renderCapacitor(ctx, symbol);
-      return;
-    case "inductor":
-      renderInductor(ctx, symbol);
-      return;
-    case "diode":
-      renderDiode(ctx, symbol, false);
-      return;
-    case "led":
-      renderDiode(ctx, symbol, true);
-      return;
-    case "npn":
-      renderBjt(ctx, symbol, false);
-      return;
-    case "pnp":
-      renderBjt(ctx, symbol, true);
-      return;
-    case "nmos":
-      renderMosfet(ctx, symbol, false);
-      return;
-    case "pmos":
-      renderMosfet(ctx, symbol, true);
-      return;
-    case "opamp":
-      renderOpAmp(ctx, symbol);
-      return;
-    case "generic_ic":
-    case "connector": {
-      if (symbol.symbolKind === "gnd") {
-        renderGround(ctx, symbol);
-        return;
-      }
-      if (symbol.symbolKind === "vcc") {
-        renderPower(ctx, symbol);
-        return;
-      }
-      renderRectangularSymbol(ctx, symbol);
-      return;
-    }
-    default:
-      renderRectangularSymbol(ctx, symbol);
-      return;
+  for (const graphic of symbol.graphics) {
+    renderGraphicLocal(ctx, graphic, viewport.zoom, STROKE_WIDTH_PX);
   }
 }
 
@@ -748,99 +212,19 @@ function renderPins(
   viewport: Viewport,
   options: SymbolRenderOptions = {},
 ): void {
-  const selected = options.selected ?? false;
-  const colors = options.colors;
-
-  if (hasImportedPinMetadata(symbol)) {
-    const connectorRadius =
-      CONNECTOR_RADIUS_PX / Math.max(viewport.zoom, Number.EPSILON);
-    const pinLineWidth =
-      PIN_LINE_WIDTH_PX / Math.max(viewport.zoom, Number.EPSILON);
-
-    for (const pin of symbol.pins) {
-      const side = pin.side;
-      const length = pin.length;
-
-      if (side && typeof length === "number") {
-        let bodyEnd = { x: pin.position.x, y: pin.position.y };
-        switch (side) {
-          case "left":
-            bodyEnd = { x: pin.position.x + length, y: pin.position.y };
-            break;
-          case "right":
-            bodyEnd = { x: pin.position.x - length, y: pin.position.y };
-            break;
-          case "top":
-            bodyEnd = { x: pin.position.x, y: pin.position.y + length };
-            break;
-          case "bottom":
-            bodyEnd = { x: pin.position.x, y: pin.position.y - length };
-            break;
+  renderPinsLocal(ctx, symbol.pins, viewport.zoom, {
+    selected: options.selected,
+    connectedPinIds: options.connectedPinIds,
+    colors: options.colors
+      ? {
+          pinDot: options.colors.pinDot,
+          pinLabel: options.colors.pinLabel,
+          pinConnected: options.colors.pinConnected,
+          selectionStroke: options.colors.selectionStroke,
+          background: options.colors.background,
         }
-
-        ctx.beginPath();
-        ctx.lineWidth = pinLineWidth;
-        ctx.moveTo(pin.position.x, pin.position.y);
-        ctx.lineTo(bodyEnd.x, bodyEnd.y);
-        ctx.stroke();
-      }
-
-      if (options.connectedPinIds?.has(pin.id)) {
-        const outerRadius =
-          connectorRadius + 2 / Math.max(viewport.zoom, Number.EPSILON);
-        const outerLineWidth = 1.5 / Math.max(viewport.zoom, Number.EPSILON);
-        ctx.beginPath();
-        ctx.strokeStyle = colors?.pinConnected ?? "#22c55e";
-        ctx.lineWidth = outerLineWidth;
-        ctx.arc(pin.position.x, pin.position.y, outerRadius, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      ctx.beginPath();
-      ctx.lineWidth = pinLineWidth;
-      ctx.fillStyle = selected
-        ? colors?.background ?? "#0f172a"
-        : colors?.pinLabel ?? "#f8fafc";
-      ctx.strokeStyle = selected
-        ? colors?.selectionStroke ?? "#38bdf8"
-        : colors?.pinDot ?? "#f59e0b";
-      ctx.arc(pin.position.x, pin.position.y, connectorRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-
-    return;
-  }
-
-  const connectorRadius =
-    CONNECTOR_RADIUS_PX / Math.max(viewport.zoom, Number.EPSILON);
-  const pinLineWidth =
-    PIN_LINE_WIDTH_PX / Math.max(viewport.zoom, Number.EPSILON);
-
-  for (const pin of symbol.pins) {
-    if (options.connectedPinIds?.has(pin.id)) {
-      const outerRadius =
-        connectorRadius + 2 / Math.max(viewport.zoom, Number.EPSILON);
-      const outerLineWidth = 1.5 / Math.max(viewport.zoom, Number.EPSILON);
-      ctx.beginPath();
-      ctx.strokeStyle = colors?.pinConnected ?? "#22c55e";
-      ctx.lineWidth = outerLineWidth;
-      ctx.arc(pin.position.x, pin.position.y, outerRadius, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    ctx.beginPath();
-    ctx.lineWidth = pinLineWidth;
-    ctx.fillStyle = selected
-      ? colors?.background ?? "#0f172a"
-      : colors?.pinLabel ?? "#f8fafc";
-    ctx.strokeStyle = selected
-      ? colors?.selectionStroke ?? "#38bdf8"
-      : colors?.pinDot ?? "#f59e0b";
-    ctx.arc(pin.position.x, pin.position.y, connectorRadius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
+      : undefined,
+  });
 }
 
 function getLabelFontSizePx(viewport: Viewport): number {
@@ -898,30 +282,15 @@ function getBodyTextAnchors(symbol: SymbolEntity): {
     };
   }
 
-  if (symbol.importedBodyBounds) {
-    return {
-      primary: {
-        x:
-          (symbol.importedBodyBounds.minX + symbol.importedBodyBounds.maxX) / 2,
-        y: symbol.importedBodyBounds.minY - BODY_LABEL_OFFSET_NM,
-      },
-      secondary: {
-        x:
-          (symbol.importedBodyBounds.minX + symbol.importedBodyBounds.maxX) / 2,
-        y: symbol.importedBodyBounds.maxY + BODY_LABEL_OFFSET_NM,
-      },
-    };
-  }
-
-  const metrics = getTwoTerminalMetrics(symbol);
+  const bounds = getSymbolBodyLocalBounds(symbol);
   return {
     primary: {
-      x: (metrics.startX + metrics.endX) / 2,
-      y: metrics.bodyTop - BODY_LABEL_OFFSET_NM,
+      x: (bounds.minX + bounds.maxX) / 2,
+      y: bounds.minY - BODY_LABEL_OFFSET_NM,
     },
     secondary: {
-      x: (metrics.startX + metrics.endX) / 2,
-      y: metrics.bodyBottom + BODY_LABEL_OFFSET_NM,
+      x: (bounds.minX + bounds.maxX) / 2,
+      y: bounds.maxY + BODY_LABEL_OFFSET_NM,
     },
   };
 }

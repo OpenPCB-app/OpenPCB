@@ -13,6 +13,7 @@ import { GlobalStateProvider } from "./components/GlobalStateProvider.tsx";
 import { SidebarButtonsProvider } from "./contexts/SidebarButtonsContext.tsx";
 import { PcbEditorE2EHarness } from "@/testing/PcbEditorE2EHarness";
 import { SchematicEditorE2EHarness } from "@/testing/SchematicEditorE2EHarness";
+import { SymbolEditorE2EHarness } from "@/testing/SymbolEditorE2EHarness";
 
 const e2eMode = new URLSearchParams(window.location.search).get("e2e");
 
@@ -35,6 +36,14 @@ ReactDOM.createRoot(root).render(
       <BackendURLProvider>
         <ThemeProvider>
           <PcbEditorE2EHarness />
+        </ThemeProvider>
+      </BackendURLProvider>
+    </React.StrictMode>
+  ) : e2eMode === "symbol-editor" ? (
+    <React.StrictMode>
+      <BackendURLProvider>
+        <ThemeProvider>
+          <SymbolEditorE2EHarness />
         </ThemeProvider>
       </BackendURLProvider>
     </React.StrictMode>

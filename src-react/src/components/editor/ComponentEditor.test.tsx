@@ -75,7 +75,6 @@ const transformedSymbolData = {
   unitCount: 1,
   bodyGraphics: [],
   rawKicadSource: null,
-  symbolTemplate: null,
 };
 
 function createMockFootprintDraft(id = "footprint-draft-1") {
@@ -168,7 +167,6 @@ vi.mock("@/lib/api/component-api", async () => {
 vi.mock("@/components/symbol-editor", () => ({
   SymbolEditorToolbar: () => <div data-testid="symbol-editor-toolbar" />,
   SymbolEditorCanvas: () => <div data-testid="symbol-editor-canvas" />,
-  BodyPresetSelector: () => <div data-testid="symbol-editor-body-preset" />,
   PinPalette: () => <div data-testid="symbol-editor-pin-palette" />,
   SymbolMetadataEditor: () => <div data-testid="symbol-editor-metadata" />,
   PinPropertiesPanel: () => <div data-testid="symbol-editor-pin-properties" />,

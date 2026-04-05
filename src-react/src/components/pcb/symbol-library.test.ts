@@ -12,12 +12,11 @@ import {
 import { toSchematicProjectDocument, type SymbolEntity } from "./types";
 import type { ComponentType } from "@shared/types/component-library-schema.types";
 import { convertParsedKicadSymbolToDraft } from "../symbol-editor/kicad-import";
-import {
-  DEFAULT_BODY_HEIGHT,
-  DEFAULT_PIN_LENGTH,
-  PASSIVE_BODY_HEIGHT,
-  PASSIVE_BODY_WIDTH,
-} from "../symbol-editor/types";
+import { DEFAULT_PIN_LENGTH } from "../symbol-editor/types";
+
+const DEFAULT_BODY_HEIGHT = 10_160_000;
+const PASSIVE_BODY_WIDTH = 2_540_000;
+const PASSIVE_BODY_HEIGHT = 1_270_000;
 
 const FIXTURES_DIR = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -44,7 +43,6 @@ function makeComponent(): ComponentType {
       unitCount: 1,
       bodyGraphics: [],
       rawKicadSource: "(symbol ATTINY13A)",
-      symbolTemplate: null,
     },
     defaultVariantId: "variant-1",
     createdAt: new Date().toISOString(),
@@ -105,7 +103,10 @@ describe("symbol-library imported symbol layouts", () => {
           number: "1",
           electricalType: "input",
           side: "left",
-          position: { x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH), y: 3_810_000 },
+          position: {
+            x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH),
+            y: 3_810_000,
+          },
           length: DEFAULT_PIN_LENGTH,
         },
         {
@@ -114,7 +115,10 @@ describe("symbol-library imported symbol layouts", () => {
           number: "2",
           electricalType: "input",
           side: "left",
-          position: { x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH), y: 1_270_000 },
+          position: {
+            x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH),
+            y: 1_270_000,
+          },
           length: DEFAULT_PIN_LENGTH,
         },
         {
@@ -123,7 +127,10 @@ describe("symbol-library imported symbol layouts", () => {
           number: "3",
           electricalType: "input",
           side: "left",
-          position: { x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH), y: -1_270_000 },
+          position: {
+            x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH),
+            y: -1_270_000,
+          },
           length: DEFAULT_PIN_LENGTH,
         },
         {
@@ -132,7 +139,10 @@ describe("symbol-library imported symbol layouts", () => {
           number: "4",
           electricalType: "power_in",
           side: "left",
-          position: { x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH), y: -3_810_000 },
+          position: {
+            x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH),
+            y: -3_810_000,
+          },
           length: DEFAULT_PIN_LENGTH,
         },
         {
@@ -141,7 +151,10 @@ describe("symbol-library imported symbol layouts", () => {
           number: "8",
           electricalType: "power_in",
           side: "right",
-          position: { x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH, y: 3_810_000 },
+          position: {
+            x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH,
+            y: 3_810_000,
+          },
           length: DEFAULT_PIN_LENGTH,
         },
         {
@@ -150,7 +163,10 @@ describe("symbol-library imported symbol layouts", () => {
           number: "7",
           electricalType: "input",
           side: "right",
-          position: { x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH, y: 1_270_000 },
+          position: {
+            x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH,
+            y: 1_270_000,
+          },
           length: DEFAULT_PIN_LENGTH,
         },
         {
@@ -159,7 +175,10 @@ describe("symbol-library imported symbol layouts", () => {
           number: "6",
           electricalType: "input",
           side: "right",
-          position: { x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH, y: -1_270_000 },
+          position: {
+            x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH,
+            y: -1_270_000,
+          },
           length: DEFAULT_PIN_LENGTH,
         },
         {
@@ -168,7 +187,10 @@ describe("symbol-library imported symbol layouts", () => {
           number: "5",
           electricalType: "input",
           side: "right",
-          position: { x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH, y: -3_810_000 },
+          position: {
+            x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH,
+            y: -3_810_000,
+          },
           length: DEFAULT_PIN_LENGTH,
         },
       ],
@@ -196,12 +218,18 @@ describe("symbol-library imported symbol layouts", () => {
     expect(importedLayout.pins[0]).toMatchObject({
       side: "left",
       length: DEFAULT_PIN_LENGTH,
-      position: { x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH), y: -3_810_000 },
+      position: {
+        x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH),
+        y: -3_810_000,
+      },
     });
     expect(importedLayout.pins[7]).toMatchObject({
       side: "right",
       length: DEFAULT_PIN_LENGTH,
-      position: { x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH, y: 3_810_000 },
+      position: {
+        x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH,
+        y: 3_810_000,
+      },
     });
     expect(importedLayout.graphics).toEqual([
       {
@@ -244,18 +272,13 @@ describe("symbol-library imported symbol layouts", () => {
         id: `${symbol.id}-pin-${index + 1}`,
         name: pin.name,
         number: pin.number,
-        side:
-          pin.side === "top"
-            ? "bottom"
-            : pin.side === "bottom"
-              ? "top"
-              : pin.side,
+        side: pin.side,
         length: pin.length,
         position: { x: pin.position.x, y: -pin.position.y },
       })),
     );
-    expect(symbol.importedGraphics).toEqual(importedLayout.graphics);
-    expect(symbol.importedBodyBounds).toEqual(importedLayout.bodyBounds);
+    expect(symbol.graphics).toEqual(importedLayout.graphics);
+    expect(symbol.bodyBounds).toEqual(importedLayout.bodyBounds);
   });
 
   it("keeps the legacy IC normalization path for imports missing normalization metadata", () => {
@@ -359,12 +382,18 @@ describe("symbol-library imported symbol layouts", () => {
     expect(importedLayout.pins[0]).toMatchObject({
       side: "left",
       length: DEFAULT_PIN_LENGTH,
-      position: { x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH), y: -3_810_000 },
+      position: {
+        x: -(DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH),
+        y: -3_810_000,
+      },
     });
     expect(importedLayout.pins[7]).toMatchObject({
       side: "right",
       length: DEFAULT_PIN_LENGTH,
-      position: { x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH, y: 3_810_000 },
+      position: {
+        x: DEFAULT_BODY_HEIGHT / 2 + DEFAULT_PIN_LENGTH,
+        y: 3_810_000,
+      },
     });
   });
 
@@ -414,12 +443,12 @@ describe("symbol-library imported symbol layouts", () => {
     });
     expect(importedLayout.pins).toMatchObject([
       {
-        side: "bottom",
+        side: "top",
         length: DEFAULT_PIN_LENGTH,
         position: { x: 0, y: -(PASSIVE_BODY_WIDTH / 2 + DEFAULT_PIN_LENGTH) },
       },
       {
-        side: "top",
+        side: "bottom",
         length: DEFAULT_PIN_LENGTH,
         position: { x: 0, y: PASSIVE_BODY_WIDTH / 2 + DEFAULT_PIN_LENGTH },
       },
@@ -495,7 +524,7 @@ describe("symbol-library imported symbol layouts", () => {
         length: 2_540_000,
       },
     ]);
-    expect(symbol.importedGraphics).toEqual([
+    expect(symbol.graphics).toEqual([
       {
         id: "rect-1",
         zIndex: 0,
@@ -508,7 +537,7 @@ describe("symbol-library imported symbol layouts", () => {
         strokeWidth: 25_400,
       },
     ]);
-    expect(symbol.importedBodyBounds).toEqual({
+    expect(symbol.bodyBounds).toEqual({
       minX: -1_270_000,
       minY: -635_000,
       maxX: 1_270_000,
@@ -523,7 +552,6 @@ describe("symbol-library imported symbol layouts", () => {
       symbolKind: "component-attiny13a",
       componentId: "component-attiny13a",
       variantId: "variant-1",
-      symbolTemplate: "generic_ic",
       reference: "IC1",
       position: { x: 0, y: 0 },
       rotation: 0,
@@ -540,8 +568,8 @@ describe("symbol-library imported symbol layouts", () => {
         },
       ],
       properties: {},
-      importedGraphics: [],
-      importedBodyBounds: null,
+      graphics: [],
+      bodyBounds: null,
     };
 
     const serialized = toSchematicProjectDocument({
@@ -595,7 +623,6 @@ describe("symbol-library imported symbol layouts", () => {
         symbolKind: component.id,
         componentId: component.id,
         variantId: "variant-1",
-        symbolTemplate: "generic_ic",
         reference: "IC1",
         position: { x: 100, y: 200 },
         rotation: 0,
