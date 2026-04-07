@@ -4,6 +4,12 @@
  * Custom wheel/trackpad handler that preserves the existing useCanvasWheel
  * normalization (browser-specific delta handling, pinch-to-zoom, Figma-style pan)
  * and pipes results into Three.js OrthographicCamera via CameraControls.
+ *
+ * Input device handling:
+ * - Mouse wheel: Zoom by default (inverted from traditional Figma-style)
+ * - Trackpad (detected via delta pattern): Pan on scroll, zoom on pinch (Ctrl+wheel)
+ * - Middle-click drag: Pan for all devices
+ * - Shift+wheel: Alternative pan for mouse users
  */
 
 import { useThree } from "@react-three/fiber";
@@ -16,6 +22,33 @@ import type * as THREE from "three";
 
 const LINE_HEIGHT = 40;
 const PAGE_HEIGHT = 800;
+
+/** Threshold for trackpad vs mouse detection. Trackpads emit smaller deltas. */
+const TRACKPAD_DELTA_THRESHOLD = 50;
+
+/**
+ * Detects if the wheel event likely came from a trackpad vs a mouse wheel.
+ *
+ * Trackpad characteristics:
+ * - Smaller delta values (typically < 50 per event)
+ * - Usually DOM_DELTA_PIXEL mode (0)
+ * - More frequent events with smaller increments
+ *
+ * Mouse wheel characteristics:
+ * - Larger delta values (often 100+ per notch)
+ * - Can be DOM_DELTA_LINE (1) on Firefox
+ */
+function isTrackpadEvent(e: WheelEvent): boolean {
+  // Pinch gestures on macOS trackpads set ctrlKey
+  if (e.ctrlKey) return true;
+
+  // Trackpads typically have small deltas in pixel mode
+  const absDeltaY = Math.abs(e.deltaY);
+  const isSmallDelta = absDeltaY > 0 && absDeltaY < TRACKPAD_DELTA_THRESHOLD;
+  const isPixelMode = e.deltaMode === 0; // DOM_DELTA_PIXEL
+
+  return isSmallDelta && isPixelMode;
+}
 
 /** Returns a logarithmic zoom delta suitable for `Math.pow(2, result)`. */
 export function normalizeZoomDelta(e: WheelEvent): number {
@@ -79,7 +112,17 @@ export function useEdaWheel(): void {
 
       const cam = cameraRef.current;
 
-      if (e.ctrlKey || e.metaKey) {
+      // Determine if this is a zoom or pan action based on input device and modifiers
+      // Ctrl/Cmd+wheel = zoom (pinch gesture on trackpads)
+      // Shift+wheel = pan (alternative for mouse users)
+      // Trackpad without modifiers = pan (two-finger scroll)
+      // Mouse wheel without modifiers = zoom (PC mouse expectation)
+      const isZoomAction =
+        e.ctrlKey || e.metaKey || (!e.shiftKey && !isTrackpadEvent(e));
+      const isPanAction =
+        e.shiftKey || (!e.ctrlKey && !e.metaKey && isTrackpadEvent(e));
+
+      if (isZoomAction && !isPanAction) {
         // Zoom to cursor
         const delta = normalizeZoomDelta(e);
         const factor = Math.pow(2, delta);

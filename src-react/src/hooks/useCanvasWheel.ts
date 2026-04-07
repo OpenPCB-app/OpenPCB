@@ -3,6 +3,21 @@ import { type RefObject, useEffect } from "react";
 const LINE_HEIGHT = 40;
 const PAGE_HEIGHT = 800;
 
+/** Threshold for trackpad vs mouse detection. Trackpads emit smaller deltas. */
+const TRACKPAD_DELTA_THRESHOLD = 50;
+
+/**
+ * Detects if the wheel event likely came from a trackpad vs a mouse wheel.
+ * Trackpads typically emit smaller deltas in PIXEL mode.
+ */
+function isTrackpadEvent(e: WheelEvent): boolean {
+  if (e.ctrlKey) return true;
+  const absDeltaY = Math.abs(e.deltaY);
+  const isSmallDelta = absDeltaY > 0 && absDeltaY < TRACKPAD_DELTA_THRESHOLD;
+  const isPixelMode = e.deltaMode === 0;
+  return isSmallDelta && isPixelMode;
+}
+
 /** Returns a logarithmic zoom delta suitable for `Math.pow(2, result)`. */
 export function normalizeZoomDelta(e: WheelEvent): number {
   const modeScale =
@@ -41,8 +56,11 @@ interface CanvasWheelCallbacks {
 
 /**
  * Attaches a non-passive native wheel listener to a canvas element.
- * - ctrlKey (pinch / Ctrl+scroll) → zoom to cursor
- * - no ctrlKey (two-finger scroll / mouse wheel) → pan
+ *
+ * Input device handling:
+ * - Mouse wheel: Zoom by default (Shift+wheel to pan)
+ * - Trackpad: Pan on two-finger scroll, zoom on pinch (Ctrl+wheel)
+ * - Ctrl/Cmd+wheel: Zoom for all devices
  */
 export function useCanvasWheel(
   canvasRef: RefObject<HTMLCanvasElement | null>,
@@ -61,7 +79,12 @@ export function useCanvasWheel(
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
-      if (e.ctrlKey || e.metaKey) {
+      const isZoomAction =
+        e.ctrlKey || e.metaKey || (!e.shiftKey && !isTrackpadEvent(e));
+      const isPanAction =
+        e.shiftKey || (!e.ctrlKey && !e.metaKey && isTrackpadEvent(e));
+
+      if (isZoomAction && !isPanAction) {
         const delta = normalizeZoomDelta(e);
         const factor = Math.pow(2, delta);
         zoomAt(mouseX, mouseY, factor);

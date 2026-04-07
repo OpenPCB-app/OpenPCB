@@ -161,6 +161,7 @@ function EdaCanvasInternals({
   children: ReactNode;
 }) {
   const camera = useThree((s) => s.camera) as THREE.OrthographicCamera;
+  const gl = useThree((s) => s.gl);
   const invalidate = useThree((s) => s.invalidate);
 
   // Keep camera ref in sync
@@ -172,6 +173,57 @@ function EdaCanvasInternals({
 
   // Custom wheel handler (preserving existing normalization)
   useEdaWheel();
+
+  // Middle-click pan state
+  const isPanningRef = useRef(false);
+  const lastPointerRef = useRef({ x: 0, y: 0 });
+
+  // Middle-click pan handlers
+  useEffect(() => {
+    if (readOnly) return;
+
+    const canvas = gl.domElement;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (e.button === 1) {
+        isPanningRef.current = true;
+        lastPointerRef.current = { x: e.clientX, y: e.clientY };
+        canvas.setPointerCapture(e.pointerId);
+        canvas.style.cursor = "grabbing";
+      }
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!isPanningRef.current) return;
+
+      const dx = e.clientX - lastPointerRef.current.x;
+      const dy = e.clientY - lastPointerRef.current.y;
+      lastPointerRef.current = { x: e.clientX, y: e.clientY };
+
+      camera.position.x -= dx / camera.zoom;
+      camera.position.y += dy / camera.zoom;
+      camera.updateProjectionMatrix();
+      invalidate();
+    };
+
+    const handlePointerUp = (e: PointerEvent) => {
+      if (e.button === 1 && isPanningRef.current) {
+        isPanningRef.current = false;
+        canvas.releasePointerCapture(e.pointerId);
+        canvas.style.cursor = "crosshair";
+      }
+    };
+
+    canvas.addEventListener("pointerdown", handlePointerDown);
+    canvas.addEventListener("pointermove", handlePointerMove);
+    canvas.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      canvas.removeEventListener("pointerdown", handlePointerDown);
+      canvas.removeEventListener("pointermove", handlePointerMove);
+      canvas.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [gl, camera, invalidate, readOnly]);
 
   // Pointer leave handler
   const handlePointerLeave = useCallback(() => {
@@ -229,10 +281,34 @@ function BackgroundHitPlane({
       renderOrder={RENDER_ORDER.HIT_PLANE}
       onPointerDown={(e) => {
         if (!interactionHandler?.onPointerDown) return;
-        if (e.button !== 0) return;
+        if (
+          typeof window !== "undefined" &&
+          window.location.search.includes("e2e=schematic")
+        ) {
+          console.log("[hit-plane-down-raw]", {
+            button: e.button,
+            buttons: e.buttons,
+            clientX: e.clientX,
+            clientY: e.clientY,
+          });
+        }
+        if (e.button > 0) return;
         e.stopPropagation();
         const wx = sceneToNm(e.point.x);
         const wy = sceneToNm(e.point.y);
+        if (
+          typeof window !== "undefined" &&
+          window.location.search.includes("e2e=schematic")
+        ) {
+          console.log("[hit-plane-down]", {
+            clientX: e.clientX,
+            clientY: e.clientY,
+            sceneX: e.point.x,
+            sceneY: e.point.y,
+            worldX: wx,
+            worldY: wy,
+          });
+        }
         interactionHandler.onPointerDown({
           worldPoint: { x: wx, y: wy },
           snappedPoint: { x: wx, y: wy },
