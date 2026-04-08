@@ -22,6 +22,7 @@ import {
   getDrawingPreview,
   commitDrawing,
 } from "@/components/symbol-editor/tools/drawing-tools";
+import { PIN_DRAG_MIME } from "@/components/symbol-editor/types";
 import type { SymbolGraphic } from "@/lib/canvas-core/types";
 import { useCanvasColors } from "@/lib/canvas-theme";
 import { EdaCanvas } from "../interaction/EdaCanvas";
@@ -36,8 +37,6 @@ import type {
 } from "../interaction/types";
 import { snapToGrid, Units, nmToScene, NM_TO_SCENE } from "../coords";
 import { RENDER_ORDER } from "../layers";
-
-const PIN_DRAG_MIME = "application/x-openpcb-pin";
 
 export function SymbolEditorCanvasR3F() {
   const draft = useSymbolDraft();
