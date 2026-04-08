@@ -8,14 +8,20 @@
 
 import { useCallback, useEffect, useRef, type CSSProperties } from "react";
 import type * as THREE from "three";
-import type { DragDropEvent, InteractionHandler } from "./types";
-import { snapToGrid, sceneToNm, type Vec2 } from "../coords";
+import {
+  DEFAULT_INTERACTION_COORDINATE_TRANSFORM,
+  type DragDropEvent,
+  type InteractionCoordinateTransform,
+  type InteractionHandler,
+} from "./types";
+import { snapPointToGridNm, type Vec2 } from "../coords";
 
 interface DragDropOverlayProps {
   cameraRef: React.RefObject<THREE.OrthographicCamera | null>;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   handler: InteractionHandler | null;
   gridSize?: number;
+  interactionCoordinateTransform?: InteractionCoordinateTransform;
   enabled?: boolean;
 }
 
@@ -34,6 +40,7 @@ export function DragDropOverlay({
   canvasRef,
   handler,
   gridSize = 0,
+  interactionCoordinateTransform = DEFAULT_INTERACTION_COORDINATE_TRANSFORM,
   enabled = true,
 }: DragDropOverlayProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -53,9 +60,12 @@ export function DragDropOverlay({
       const sceneY =
         camera.position.y + (ndcY * rect.height) / (2 * camera.zoom);
 
-      return { x: sceneToNm(sceneX), y: sceneToNm(sceneY) };
+      return interactionCoordinateTransform.scenePointToWorldPoint({
+        x: sceneX,
+        y: sceneY,
+      });
     },
-    [canvasRef, cameraRef],
+    [canvasRef, cameraRef, interactionCoordinateTransform],
   );
 
   const buildEvent = useCallback(
@@ -63,7 +73,7 @@ export function DragDropOverlay({
       if (!e.dataTransfer) return null;
       const worldPoint = screenToWorld(e.clientX, e.clientY);
       const snappedPoint =
-        gridSize > 0 ? snapToGrid(worldPoint, gridSize) : worldPoint;
+        gridSize > 0 ? snapPointToGridNm(worldPoint, gridSize) : worldPoint;
 
       return {
         worldPoint,

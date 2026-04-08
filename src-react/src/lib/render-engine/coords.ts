@@ -1,8 +1,9 @@
 /**
  * Render Engine — Coordinate System
  *
- * Canonical coordinate types and unit conversions for all canvas implementations.
- * Convention: Y-up (Three.js default), units in nanometers.
+ * Canonical coordinate types and unit conversions for all render-engine canvases.
+ * Contract: world/store = nanometers, scene = millimeters, screen = pixels.
+ * Convention: Y-up (Three.js default).
  *
  * SCENE SCALE: Three.js float32 loses precision at large values.
  * All nanometer coordinates are divided by NM_TO_SCENE_SCALE before
@@ -20,30 +21,69 @@
  */
 export const NM_TO_SCENE = 1_000_000;
 
-/** Convert nanometers to scene units (mm) for Three.js rendering. */
-export function nmToScene(nm: number): number {
+/**
+ * Locked render-engine coordinate contract.
+ *
+ * Core APIs expose nanometers in world space and pixels in screen space.
+ * Scene conversion to millimeters exists only at the R3F boundary.
+ */
+export const RENDER_ENGINE_COORDINATE_CONTRACT = {
+  worldUnit: "nm",
+  sceneUnit: "mm",
+  screenUnit: "px",
+  yAxis: "up",
+} as const;
+
+/** Scene-space millimeters used at the Three.js boundary. */
+export type SceneMm = Mm;
+
+/** Convert nanometers to scene millimeters for Three.js rendering. */
+export function nmToSceneMm(nm: Nanometers): SceneMm {
   return nm / NM_TO_SCENE;
 }
 
-/** Convert scene units (mm) back to nanometers. */
-export function sceneToNm(scene: number): number {
-  return scene * NM_TO_SCENE;
+/** Convert scene millimeters back to nanometers. */
+export function sceneMmToNm(sceneMm: SceneMm): Nanometers {
+  return sceneMm * NM_TO_SCENE;
+}
+
+export function scenePointMmToWorldPointNm(scenePointMm: {
+  readonly x: SceneMm;
+  readonly y: SceneMm;
+}): Vec2 {
+  return {
+    x: sceneMmToNm(scenePointMm.x),
+    y: sceneMmToNm(scenePointMm.y),
+  };
+}
+
+/** @deprecated Use nmToSceneMm() to keep the scene-mm boundary explicit. */
+export function nmToScene(nm: Nanometers): SceneMm {
+  return nmToSceneMm(nm);
+}
+
+/** @deprecated Use sceneMmToNm() to keep the scene-mm boundary explicit. */
+export function sceneToNm(sceneMm: SceneMm): Nanometers {
+  return sceneMmToNm(sceneMm);
 }
 
 // ---------------------------------------------------------------------------
 // Unit Types
 // ---------------------------------------------------------------------------
 
-/** Internal units: nanometers. All entity positions use this. */
+/**
+ * Documentation-only nominal alias for world-space nanometers.
+ * All render-engine domain positions use this unit.
+ */
 export type Nanometers = number;
 
-/** Millimeters — used at display boundaries and IPC-7351 formulas. */
+/** Documentation-only nominal alias for millimeters. */
 export type Mm = number;
 
 /** Thousandths of an inch — used for grid presets and legacy compatibility. */
 export type Mils = number;
 
-/** Screen pixels — used for viewport transforms. */
+/** Documentation-only nominal alias for screen pixels. */
 export type ScreenPx = number;
 
 // ---------------------------------------------------------------------------
@@ -166,8 +206,8 @@ export function boundsSize(bounds: Bounds): {
 // Grid Snapping
 // ---------------------------------------------------------------------------
 
-/** Snap a point to the nearest grid intersection. */
-export function snapToGrid(point: Vec2, gridSize: Nanometers): Vec2 {
+/** Snap a nanometer-space point to the nearest nanometer grid intersection. */
+export function snapPointToGridNm(point: Vec2, gridSize: Nanometers): Vec2 {
   if (gridSize <= 0) {
     throw new RangeError("gridSize must be greater than 0");
   }
@@ -175,6 +215,11 @@ export function snapToGrid(point: Vec2, gridSize: Nanometers): Vec2 {
     x: Math.round(point.x / gridSize) * gridSize,
     y: Math.round(point.y / gridSize) * gridSize,
   };
+}
+
+/** @deprecated Use snapPointToGridNm() to keep the unit boundary explicit. */
+export function snapToGrid(point: Vec2, gridSize: Nanometers): Vec2 {
+  return snapPointToGridNm(point, gridSize);
 }
 
 // ---------------------------------------------------------------------------

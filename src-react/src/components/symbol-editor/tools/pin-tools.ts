@@ -5,7 +5,7 @@
  */
 
 import type { SymbolPin } from "../types";
-import type { Point, Nanometers } from "@/lib/canvas-core/types";
+import type { Point, Nanometers } from "../types";
 
 // ---------------------------------------------------------------------------
 // Distribute

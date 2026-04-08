@@ -207,7 +207,6 @@ function resetStore() {
       gridSize: 1_270_000,
       showGrid: true,
       placementRotation: 0,
-      gridPresetId: "small",
     },
     session: null,
   }));
@@ -1022,15 +1021,16 @@ describe("useSchematicStore", () => {
     state.selectEntities(["symbol-1"]);
     state.addToSelection(["symbol-2"]);
 
-    expect(Array.from(useSchematicStore.getState().chrome.selectedEntityIds)).toEqual([
-      "symbol-1",
-      "symbol-2",
-    ]);
+    expect(
+      Array.from(useSchematicStore.getState().chrome.selectedEntityIds),
+    ).toEqual(["symbol-1", "symbol-2"]);
     expect(useSchematicStore.getState().chrome.popoverEntityId).toBeNull();
 
     state.clearSelection();
 
-    expect(Array.from(useSchematicStore.getState().chrome.selectedEntityIds)).toEqual([]);
+    expect(
+      Array.from(useSchematicStore.getState().chrome.selectedEntityIds),
+    ).toEqual([]);
     expect(useSchematicStore.getState().chrome.popoverEntityId).toBeNull();
   });
 
@@ -1039,12 +1039,9 @@ describe("useSchematicStore", () => {
 
     state.selectAll();
 
-    expect(Array.from(useSchematicStore.getState().chrome.selectedEntityIds)).toEqual([
-      "symbol-1",
-      "symbol-2",
-      "wire-1",
-      "label-1",
-    ]);
+    expect(
+      Array.from(useSchematicStore.getState().chrome.selectedEntityIds),
+    ).toEqual(["symbol-1", "symbol-2", "wire-1", "label-1"]);
   });
 
   it("undo and redo clear selection and popover invariants", () => {
@@ -1054,16 +1051,22 @@ describe("useSchematicStore", () => {
     state.commitPlacement({ x: 1_270_000, y: 2_540_000 });
     state.selectEntities(["symbol-1"]);
 
-    expect(useSchematicStore.getState().chrome.popoverEntityId).toBe("symbol-1");
+    expect(useSchematicStore.getState().chrome.popoverEntityId).toBe(
+      "symbol-1",
+    );
 
     state.undo();
 
-    expect(Array.from(useSchematicStore.getState().chrome.selectedEntityIds)).toEqual([]);
+    expect(
+      Array.from(useSchematicStore.getState().chrome.selectedEntityIds),
+    ).toEqual([]);
     expect(useSchematicStore.getState().chrome.popoverEntityId).toBeNull();
 
     state.redo();
 
-    expect(Array.from(useSchematicStore.getState().chrome.selectedEntityIds)).toEqual([]);
+    expect(
+      Array.from(useSchematicStore.getState().chrome.selectedEntityIds),
+    ).toEqual([]);
     expect(useSchematicStore.getState().chrome.popoverEntityId).toBeNull();
   });
 

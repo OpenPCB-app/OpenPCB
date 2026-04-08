@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from "react";
-import { PcbCanvasR3F as PcbCanvas } from "@/lib/render-engine/wrappers/PcbCanvasR3F";
+import { useEffect, useMemo, useState } from "react";
+import { PcbCanvasR3F as PcbCanvas } from "@/lib/render-engine/adapters/PcbCanvasR3F";
 import { PcbSidebar } from "@/components/pcb-editor/PcbSidebar";
 import { PcbToolbar } from "@/components/pcb-editor/PcbToolbar";
 import { usePcbStore } from "@/stores/pcb-store";
@@ -79,38 +79,39 @@ const TEST_DOCUMENT: PcbDocument = {
   zones: [],
 };
 
-function isTextEntryFocused(activeElement: Element | null): boolean {
-  if (!(activeElement instanceof HTMLElement)) {
-    return false;
-  }
-
-  if (
-    activeElement.isContentEditable ||
-    activeElement instanceof HTMLTextAreaElement
-  ) {
-    return true;
-  }
-
-  if (!(activeElement instanceof HTMLInputElement)) {
-    return false;
-  }
-
-  return ![
-    "button",
-    "checkbox",
-    "color",
-    "file",
-    "hidden",
-    "image",
-    "radio",
-    "range",
-    "reset",
-    "submit",
-  ].includes(activeElement.type);
-}
-
 function resetHarnessStore() {
   usePcbStore.getState().setDocument(TEST_DOCUMENT);
+}
+
+interface PcbViewportProof {
+  camera: {
+    x: number;
+    y: number;
+    zoom: number;
+  };
+  points: {
+    boardCenter: { x: number; y: number };
+    leftPad: { x: number; y: number } | null;
+    rightPad: { x: number; y: number } | null;
+  };
+}
+
+function readViewportProof(): PcbViewportProof | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return (
+    (
+      window as Window & {
+        __OPENPCB_PCB_VIEWPORT_PROOF__?: PcbViewportProof;
+      }
+    ).__OPENPCB_PCB_VIEWPORT_PROOF__ ?? null
+  );
+}
+
+function formatProofValue(value: number | null | undefined, digits = 2) {
+  return typeof value === "number" ? value.toFixed(digits) : "pending";
 }
 
 function DebugValue({
@@ -138,6 +139,29 @@ function E2EDebugPanel() {
   const activeLayer = usePcbStore((state) => state.activeLayer);
   const ratsnest = usePcbStore((state) => state.ratsnest);
   const viewport = usePcbStore((state) => state.viewport);
+  const [viewportProof, setViewportProof] = useState<PcbViewportProof | null>(
+    () => readViewportProof(),
+  );
+
+  useEffect(() => {
+    setViewportProof(readViewportProof());
+
+    const handleViewportProof = (event: Event) => {
+      setViewportProof((event as CustomEvent<PcbViewportProof>).detail);
+    };
+
+    window.addEventListener(
+      "openpcb:pcb-viewport-proof",
+      handleViewportProof as EventListener,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "openpcb:pcb-viewport-proof",
+        handleViewportProof as EventListener,
+      );
+    };
+  }, []);
 
   const routingSummary = useMemo(() => {
     if (!routingSession) {
@@ -146,6 +170,20 @@ function E2EDebugPanel() {
 
     return `${routingSession.netId}:${routingSession.layer}:${routingSession.committedSegments.length}`;
   }, [routingSession]);
+
+  const visiblePadSpanX = useMemo(() => {
+    if (!viewportProof?.points.leftPad || !viewportProof.points.rightPad) {
+      return "pending";
+    }
+
+    return Math.abs(
+      viewportProof.points.rightPad.x - viewportProof.points.leftPad.x,
+    ).toFixed(2);
+  }, [viewportProof]);
+
+  const cameraX = viewportProof?.camera.x ?? viewport.offsetX;
+  const cameraY = viewportProof?.camera.y ?? viewport.offsetY;
+  const cameraZoom = viewportProof?.camera.zoom ?? viewport.zoom;
 
   return (
     <div className="pointer-events-none absolute left-4 top-4 z-30 flex w-72 flex-col gap-3 rounded-lg border border-slate-700 bg-slate-950/90 p-3 shadow-xl">
@@ -168,9 +206,22 @@ function E2EDebugPanel() {
       />
       <DebugValue label="tool" value={activeTool} />
       <DebugValue label="layer" value={activeLayer} />
-      <DebugValue label="offset-x" value={viewport.offsetX.toFixed(2)} />
-      <DebugValue label="offset-y" value={viewport.offsetY.toFixed(2)} />
-      <DebugValue label="zoom" value={viewport.zoom.toFixed(4)} />
+      <DebugValue label="offset-x" value={cameraX.toFixed(2)} />
+      <DebugValue label="offset-y" value={cameraY.toFixed(2)} />
+      <DebugValue label="zoom" value={cameraZoom.toFixed(4)} />
+      <DebugValue
+        label="proof-left-pad-x"
+        value={formatProofValue(viewportProof?.points.leftPad?.x)}
+      />
+      <DebugValue
+        label="proof-left-pad-y"
+        value={formatProofValue(viewportProof?.points.leftPad?.y)}
+      />
+      <DebugValue
+        label="proof-right-pad-x"
+        value={formatProofValue(viewportProof?.points.rightPad?.x)}
+      />
+      <DebugValue label="proof-span-x" value={visiblePadSpanX} />
       <DebugValue label="routing" value={routingSummary} />
       <DebugValue label="width" value={routingSession?.width ?? "none"} />
       <DebugValue
@@ -184,88 +235,6 @@ function E2EDebugPanel() {
 export function PcbEditorE2EHarness() {
   useEffect(() => {
     resetHarnessStore();
-  }, []);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (isTextEntryFocused(globalThis.document.activeElement)) {
-        return;
-      }
-
-      const pcbStore = usePcbStore.getState();
-
-      if (pcbStore.routingSession) {
-        if ((event.ctrlKey || event.metaKey) && !event.altKey) {
-          if (event.key === "z" && !event.shiftKey) {
-            event.preventDefault();
-            pcbStore.cancelRouting();
-            return;
-          }
-          if ((event.key === "z" && event.shiftKey) || event.key === "y") {
-            event.preventDefault();
-            return;
-          }
-        }
-      }
-
-      if ((event.ctrlKey || event.metaKey) && !event.altKey) {
-        if (event.key === "z" && !event.shiftKey) {
-          event.preventDefault();
-          pcbStore.undo();
-          return;
-        }
-        if ((event.key === "z" && event.shiftKey) || event.key === "y") {
-          event.preventDefault();
-          pcbStore.redo();
-          return;
-        }
-      }
-
-      if (event.key === "Delete" || event.key === "Backspace") {
-        if (!pcbStore.routingSession && pcbStore.selectedIds.size > 0) {
-          if (event.key === "Backspace") {
-            event.preventDefault();
-          }
-          pcbStore.deleteSelectedEntities();
-        }
-        return;
-      }
-
-      if (event.key === "Escape") {
-        if (pcbStore.routingSession) {
-          pcbStore.cancelRouting();
-          pcbStore.setActiveTool("select");
-        } else if (pcbStore.selectedIds.size > 0) {
-          pcbStore.clearSelection();
-        } else {
-          pcbStore.setActiveTool("select");
-        }
-        return;
-      }
-
-      if (pcbStore.routingSession) {
-        if (event.key === "v" || event.key === "V") {
-          if (pcbStore.lastCursorPosition) {
-            pcbStore.placeRoutingVia(pcbStore.lastCursorPosition);
-          }
-          return;
-        }
-        if (event.key === "w") {
-          pcbStore.cycleTraceWidth(1);
-          return;
-        }
-        if (event.key === "W") {
-          pcbStore.cycleTraceWidth(-1);
-          return;
-        }
-        if (event.key === "f" || event.key === "F") {
-          pcbStore.flipElbowDirection();
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   return (

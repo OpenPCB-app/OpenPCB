@@ -251,7 +251,6 @@ function resetStore() {
       gridSize: 1_270_000,
       showGrid: true,
       placementRotation: 0,
-      gridPresetId: "small",
     },
     session: null,
     draggedSymbolKind: null,

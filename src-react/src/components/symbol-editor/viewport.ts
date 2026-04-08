@@ -1,18 +1,8 @@
-/**
- * Symbol Editor Viewport Utilities
- *
- * Adapts shared canvas-core viewport for symbol authoring.
- * Key differences from core:
- *  - zoom stored as px/mm (editor-friendly), converted to px/nm at boundary
- *  - Y-axis flipped (positive Y = up in symbol space)
- */
-
 import type { Point, Viewport, Nanometers, Bounds } from "./types";
 import { MIN_ZOOM, MAX_ZOOM, DEFAULT_ZOOM } from "./types";
-import {
-  snapToGrid as coreSnapToGrid,
-  domEventToScreen as coreDomEventToScreen,
-} from "@/lib/canvas-core";
+import { snapPointToGridNm } from "@/lib/render-engine/coords";
+
+export type CanvasBounds = Pick<DOMRect, "left" | "top">;
 
 // ---------------------------------------------------------------------------
 // Coordinate Transforms (Y-flipped, zoom in px/mm)
@@ -57,9 +47,12 @@ export function screenToSymbol(
 export function domEventToScreen(
   clientX: number,
   clientY: number,
-  canvasRect: DOMRect,
+  canvasRect: CanvasBounds,
 ): Point {
-  return coreDomEventToScreen(clientX, clientY, canvasRect);
+  return {
+    x: clientX - canvasRect.left,
+    y: clientY - canvasRect.top,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +60,7 @@ export function domEventToScreen(
 // ---------------------------------------------------------------------------
 
 export function snapToGrid(point: Point, gridSize: Nanometers): Point {
-  return coreSnapToGrid(point, gridSize);
+  return snapPointToGridNm(point, gridSize);
 }
 
 export function snapValueToGrid(

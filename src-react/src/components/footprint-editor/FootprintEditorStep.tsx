@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
 import {
-  FootprintEditorCanvas,
   FootprintEditorToolbar,
   FootprintPresetSelector,
   PresetConfigPanel,
   PadPropertiesPanel,
   useFootprintEditorStore,
 } from "./index";
+import { FootprintEditorCanvasR3F } from "@/lib/render-engine/adapters/FootprintEditorCanvasR3F";
 import type { FootprintDraft } from "./types";
 import { VariantListPanel } from "@/components/wizard/VariantListPanel";
 import { VariantMetadataForm } from "@/components/wizard/VariantMetadataForm";
@@ -89,7 +89,7 @@ export function FootprintEditorStep({
             </div>
 
             <div className="flex-1 overflow-hidden">
-              <FootprintEditorCanvas />
+              <FootprintEditorCanvasR3F />
             </div>
 
             <div className="w-64 flex-shrink-0 overflow-y-auto border-l border-border-default bg-bg-secondary p-3">

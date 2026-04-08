@@ -10,11 +10,11 @@ import { useAppStore } from "@/stores/app-store";
 import { useDesigns } from "@/hooks/useDesigns";
 import { DesignHeader } from "./design/DesignHeader";
 import { EditorToolbar } from "@/components/pcb/toolbar/EditorToolbar";
-import { SchematicCanvasR3F as SchematicCanvas } from "@/lib/render-engine/wrappers/SchematicCanvasR3F";
+import { SchematicCanvasR3F as SchematicCanvas } from "@/lib/render-engine/adapters/SchematicCanvasR3F";
 import { ComponentPalette } from "@/components/pcb/palette/ComponentPalette";
 import { StatusBar } from "@/components/pcb/StatusBar";
 import { useSchematicInteractionController } from "@/components/pcb/useSchematicInteractionController";
-import { PcbCanvasR3F as PcbCanvas } from "@/lib/render-engine/wrappers/PcbCanvasR3F";
+import { PcbCanvasR3F as PcbCanvas } from "@/lib/render-engine/adapters/PcbCanvasR3F";
 import { PcbSidebar } from "@/components/pcb-editor/PcbSidebar";
 import { PcbToolbar } from "@/components/pcb-editor/PcbToolbar";
 import { useSchematicStore } from "@/stores/schematic-store";
@@ -376,121 +376,8 @@ export function DesignScreen() {
         return;
       }
 
-      // Tab-aware keyboard dispatch
       if (designTab === "pcb") {
-        const pcbStore = usePcbStore.getState();
-
-        if (pcbStore.routingSession) {
-          if ((event.ctrlKey || event.metaKey) && !event.altKey) {
-            if (event.key === "z" && !event.shiftKey) {
-              event.preventDefault();
-              pcbStore.cancelRouting();
-              return;
-            }
-            if ((event.key === "z" && event.shiftKey) || event.key === "y") {
-              event.preventDefault();
-              return;
-            }
-          }
-        }
-
-        // Undo/Redo (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y)
-        if ((event.ctrlKey || event.metaKey) && !event.altKey) {
-          if (event.key === "z" && !event.shiftKey) {
-            event.preventDefault();
-            pcbStore.undo();
-            return;
-          }
-          if ((event.key === "z" && event.shiftKey) || event.key === "y") {
-            event.preventDefault();
-            pcbStore.redo();
-            return;
-          }
-          if (event.key === "a") {
-            event.preventDefault();
-            pcbStore.selectAllPlacements();
-            return;
-          }
-        }
-
-        if (event.key === "Delete" || event.key === "Backspace") {
-          if (!pcbStore.routingSession && pcbStore.selectedIds.size > 0) {
-            if (event.key === "Backspace") {
-              event.preventDefault();
-            }
-
-            pcbStore.deleteSelectedEntities();
-          }
-          return;
-        }
-
-        // Escape — cancel routing or switch to select
-        if (event.key === "Escape") {
-          if (pcbStore.routingSession) {
-            pcbStore.cancelRouting();
-            pcbStore.setActiveTool("select");
-          } else if (pcbStore.selectedIds.size > 0) {
-            pcbStore.clearSelection();
-          } else {
-            pcbStore.setActiveTool("select");
-          }
-          return;
-        }
-
-        if (event.key === "r" || event.key === "R") {
-          const selectedPlacementId = Array.from(pcbStore.selectedIds).find(
-            (id) =>
-              pcbStore.document?.placements.some(
-                (placement) => placement.id === id,
-              ),
-          );
-          if (selectedPlacementId) {
-            pcbStore.rotatePlacement(selectedPlacementId, 90);
-            return;
-          }
-        }
-
-        if (
-          (event.key === "f" || event.key === "F") &&
-          !pcbStore.routingSession
-        ) {
-          const selectedPlacementId = Array.from(pcbStore.selectedIds).find(
-            (id) =>
-              pcbStore.document?.placements.some(
-                (placement) => placement.id === id,
-              ),
-          );
-          if (selectedPlacementId) {
-            pcbStore.flipPlacement(selectedPlacementId);
-            return;
-          }
-        }
-
-        // Routing-specific keys (only when routing session active)
-        if (pcbStore.routingSession) {
-          if (event.key === "v" || event.key === "V") {
-            if (pcbStore.lastCursorPosition) {
-              pcbStore.placeRoutingVia(pcbStore.lastCursorPosition);
-            }
-            return;
-          }
-
-          if (event.key === "w") {
-            pcbStore.cycleTraceWidth(1);
-            return;
-          }
-          if (event.key === "W") {
-            pcbStore.cycleTraceWidth(-1);
-            return;
-          }
-
-          if (event.key === "f" || event.key === "F") {
-            pcbStore.flipElbowDirection();
-            return;
-          }
-        }
-
-        return; // PCB tab handled, don't fall through to schematic
+        return;
       }
 
       // Schematic tab keyboard handling

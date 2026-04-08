@@ -9,14 +9,19 @@
 export {
   type Nanometers,
   type Mm,
+  type SceneMm,
   type Mils,
   type ScreenPx,
   type Vec2,
   type Bounds,
   type Rotation,
+  RENDER_ENGINE_COORDINATE_CONTRACT,
   Units,
+  nmToSceneMm,
+  sceneMmToNm,
   degreesToRadians,
   radiansToDegrees,
+  snapPointToGridNm,
   snapToGrid,
   mergeBounds,
   expandBounds,
@@ -41,21 +46,46 @@ export {
 export {
   useEdaWheel,
   fitCameraToBounds,
+  getWheelNavigationAction,
+  isTrackpadWheelEvent,
   normalizeZoomDelta,
   normalizePanDelta,
   MIN_ZOOM,
   MAX_ZOOM,
 } from "./camera/use-eda-camera";
 
+export {
+  DEFAULT_NORMALIZED_RGB,
+  parseShaderColor,
+  isDeleteShortcut,
+  isEditableShortcutTarget,
+  isEscapeShortcut,
+  isRedoShortcut,
+  isSelectAllShortcut,
+  isUndoShortcut,
+  matchesKey,
+  useWindowKeyboardShortcuts,
+  type NormalizedRgb,
+  type KeyboardShortcutBinding,
+  type KeyboardShortcutEvent,
+  type KeyboardShortcutOptions,
+} from "./utils";
+
 // Interaction
 export {
   EdaCanvas,
   type EdaCanvasProps,
   DragDropOverlay,
+  INTERACTION_COORDINATE_CONTRACT,
   type HitResult,
   type InteractionEvent,
   type DragDropEvent,
   type InteractionHandler,
+  type WorldPointNm,
+  type ScreenPointPx,
+  type AdapterPointMm,
+  type AdapterPointNm,
+  type InteractionAdapterTransform,
   DRAG_THRESHOLD_PX,
   CONNECTOR_HIT_RADIUS_PX,
 } from "./interaction";
@@ -86,7 +116,7 @@ export {
   type PcbSceneConfig,
 } from "./scenes";
 
-// Ready-to-use Canvas Wrappers (drop-in replacements for old Canvas 2D components)
+// Ready-to-use Canvas Adapters (drop-in replacements for old Canvas 2D components)
 export {
   SchematicCanvasR3F,
   PcbCanvasR3F,
@@ -94,4 +124,4 @@ export {
   FootprintEditorCanvasR3F,
   SymbolPreviewR3F,
   FootprintPreviewR3F,
-} from "./wrappers";
+} from "./adapters";

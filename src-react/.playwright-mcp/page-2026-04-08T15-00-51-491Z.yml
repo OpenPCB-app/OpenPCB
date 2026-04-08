@@ -1,0 +1,77 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e7]:
+      - paragraph [ref=e8]: Drag To Canvas
+      - button "Refresh components" [ref=e9] [cursor=pointer]:
+        - img
+  - main [ref=e22]:
+    - generic:
+      - generic [ref=e23]:
+        - paragraph [ref=e24]: Schematic E2E
+        - generic [ref=e25]:
+          - button "Replay" [ref=e26]
+          - button "Reset" [ref=e27]
+      - generic:
+        - generic: theme
+        - generic: light
+      - generic:
+        - generic: scenario
+        - generic: base
+      - generic:
+        - generic: active-tool
+        - generic: select
+      - generic:
+        - generic: state-hash
+        - generic: 9c291398871042a0fb7bde1c95a28e425afda2212b1a23cfb828382cf9064a30
+      - generic: "{\"algorithm\":\"sha256\",\"fixture\":\"base\",\"hash\":\"9c291398871042a0fb7bde1c95a28e425afda2212b1a23cfb828382cf9064a30\",\"scenarioId\":\"base\"}"
+      - generic: "{\"environment\":{\"devicePixelRatio\":1,\"hardwareConcurrency\":14,\"href\":\"http://127.0.0.1:1420/?e2e=schematic\",\"language\":\"en-US\",\"platform\":\"MacIntel\",\"timestampIso\":\"2026-04-08T15:00:51.440Z\",\"userAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36\",\"viewport\":{\"height\":1227,\"width\":1200},\"webdriver\":false},\"fixture\":\"base\",\"panZoomFrameTimeMs\":{\"count\":0,\"dropped\":0,\"median\":null,\"p50\":null,\"p95\":null,\"pan\":{\"count\":0,\"dropped\":0,\"median\":null,\"p50\":null,\"p95\":null,\"samples\":[]},\"samples\":[],\"zoom\":{\"count\":0,\"dropped\":0,\"median\":null,\"p50\":null,\"p95\":null,\"samples\":[]}},\"pointerToVisualLatencyMs\":{\"count\":0,\"dropped\":0,\"median\":null,\"p50\":null,\"p95\":null,\"samples\":[]},\"scenarioId\":\"base\",\"schemaVersion\":\"schematic-e2e-perf/v1\",\"syntheticDelayMs\":0}"
+      - generic:
+        - generic: perf-pointer-count
+        - generic: "0"
+      - generic:
+        - generic: perf-pointer-p95
+        - generic: na
+      - generic:
+        - generic: perf-frame-count
+        - generic: "0"
+      - generic:
+        - generic: perf-frame-median
+        - generic: na
+      - generic:
+        - generic: perf-delay-ms
+        - generic: "0.00"
+      - generic:
+        - generic: wire-points
+      - generic:
+        - generic: connected-pins
+        - generic: "[]"
+      - generic:
+        - generic: symbols
+        - generic: "2"
+      - generic:
+        - generic: wires
+        - generic: "0"
+      - generic:
+        - generic: selected
+        - generic: none
+      - generic:
+        - generic: session
+        - generic: none
+      - generic:
+        - generic: popover
+        - generic: none
+      - generic:
+        - generic: symbol1
+        - generic: 432,300
+      - generic:
+        - generic: symbol2
+        - generic: 495,268
+      - generic:
+        - generic: first-symbol
+        - generic: 400,300
+      - generic:
+        - generic: pin2
+        - generic: 464,300
+      - generic:
+        - generic: pin3
+        - generic: 495,237

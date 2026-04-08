@@ -24,7 +24,7 @@ export {
 } from "./footprint-editor-store";
 
 // Components
-export { FootprintEditorCanvasR3F as FootprintEditorCanvas } from "@/lib/render-engine/wrappers/FootprintEditorCanvasR3F";
+export { FootprintEditorCanvasR3F as FootprintEditorCanvas } from "@/lib/render-engine/adapters/FootprintEditorCanvasR3F";
 export { FootprintPresetSelector } from "./FootprintPresetSelector";
 export { PresetConfigPanel } from "./PresetConfigPanel";
 export { DensitySelector } from "./DensitySelector";

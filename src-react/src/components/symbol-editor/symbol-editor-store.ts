@@ -332,6 +332,9 @@ export function createSymbolEditorStore(initialDraftId?: string) {
           selection: {
             ...state.chrome.selection,
             selectedPinIds: newSelection,
+            selectedGraphicIds: additive
+              ? state.chrome.selection.selectedGraphicIds
+              : new Set(),
           },
         },
       });
@@ -347,6 +350,9 @@ export function createSymbolEditorStore(initialDraftId?: string) {
           ...state.chrome,
           selection: {
             ...state.chrome.selection,
+            selectedPinIds: additive
+              ? state.chrome.selection.selectedPinIds
+              : new Set(),
             selectedGraphicIds: newSelection,
           },
         },
@@ -361,6 +367,7 @@ export function createSymbolEditorStore(initialDraftId?: string) {
           selection: {
             ...state.chrome.selection,
             selectedPinIds: new Set(ids),
+            selectedGraphicIds: new Set(),
           },
         },
       });
@@ -387,6 +394,7 @@ export function createSymbolEditorStore(initialDraftId?: string) {
           selection: {
             ...state.chrome.selection,
             selectedPinIds: new Set(state.draft.pins.map((p) => p.id)),
+            selectedGraphicIds: new Set(),
           },
         },
       });

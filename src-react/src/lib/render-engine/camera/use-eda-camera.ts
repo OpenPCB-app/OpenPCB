@@ -1,7 +1,7 @@
 /**
  * Render Engine — EDA Camera Configuration
  *
- * Custom wheel/trackpad handler that preserves the existing useCanvasWheel
+ * Custom wheel/trackpad handler that preserves the existing wheel
  * normalization (browser-specific delta handling, pinch-to-zoom, Figma-style pan)
  * and pipes results into Three.js OrthographicCamera via CameraControls.
  *
@@ -15,10 +15,6 @@
 import { useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useRef } from "react";
 import type * as THREE from "three";
-
-// ---------------------------------------------------------------------------
-// Wheel Normalization (preserved from useCanvasWheel.ts)
-// ---------------------------------------------------------------------------
 
 const LINE_HEIGHT = 40;
 const PAGE_HEIGHT = 800;
@@ -38,7 +34,7 @@ const TRACKPAD_DELTA_THRESHOLD = 50;
  * - Larger delta values (often 100+ per notch)
  * - Can be DOM_DELTA_LINE (1) on Firefox
  */
-function isTrackpadEvent(e: WheelEvent): boolean {
+export function isTrackpadWheelEvent(e: WheelEvent): boolean {
   // Pinch gestures on macOS trackpads set ctrlKey
   if (e.ctrlKey) return true;
 
@@ -48,6 +44,17 @@ function isTrackpadEvent(e: WheelEvent): boolean {
   const isPixelMode = e.deltaMode === 0; // DOM_DELTA_PIXEL
 
   return isSmallDelta && isPixelMode;
+}
+
+export type WheelNavigationAction = "zoom" | "pan";
+
+export function getWheelNavigationAction(e: WheelEvent): WheelNavigationAction {
+  const isZoomAction =
+    e.ctrlKey || e.metaKey || (!e.shiftKey && !isTrackpadWheelEvent(e));
+  const isPanAction =
+    e.shiftKey || (!e.ctrlKey && !e.metaKey && isTrackpadWheelEvent(e));
+
+  return isZoomAction && !isPanAction ? "zoom" : "pan";
 }
 
 /** Returns a logarithmic zoom delta suitable for `Math.pow(2, result)`. */
@@ -117,12 +124,7 @@ export function useEdaWheel(): void {
       // Shift+wheel = pan (alternative for mouse users)
       // Trackpad without modifiers = pan (two-finger scroll)
       // Mouse wheel without modifiers = zoom (PC mouse expectation)
-      const isZoomAction =
-        e.ctrlKey || e.metaKey || (!e.shiftKey && !isTrackpadEvent(e));
-      const isPanAction =
-        e.shiftKey || (!e.ctrlKey && !e.metaKey && isTrackpadEvent(e));
-
-      if (isZoomAction && !isPanAction) {
+      if (getWheelNavigationAction(e) === "zoom") {
         // Zoom to cursor
         const delta = normalizeZoomDelta(e);
         const factor = Math.pow(2, delta);

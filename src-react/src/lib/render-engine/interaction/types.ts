@@ -6,7 +6,66 @@
  */
 
 import type { ThreeEvent } from "@react-three/fiber";
-import type { Vec2 } from "../coords";
+import {
+  scenePointMmToWorldPointNm,
+  type Mm,
+  type Nanometers,
+  type ScreenPx,
+  type Vec2,
+} from "../coords";
+
+export const INTERACTION_COORDINATE_CONTRACT = {
+  worldUnit: "nm",
+  screenUnit: "px",
+  yAxis: "up",
+  adapterBoundary: "adapter-local-only",
+} as const;
+
+export type WorldPointNm = Vec2;
+
+export interface ScreenPointPx {
+  readonly x: ScreenPx;
+  readonly y: ScreenPx;
+}
+
+export interface AdapterPointMm {
+  readonly x: Mm;
+  readonly y: Mm;
+}
+
+export interface AdapterPointNm {
+  readonly x: Nanometers;
+  readonly y: Nanometers;
+}
+
+/**
+ * Adapter-local transform between render-engine world points and adapter units.
+ *
+ * Core render-engine events stay in nanometers + Y-up. Adapters may translate
+ * those points to their own units, but only locally. PCB may use millimeters
+ * inside its adapter, and must not surface millimeter points through core APIs.
+ */
+export interface InteractionAdapterTransform<TAdapterPoint> {
+  readonly adapterUnit: "nm" | "mm";
+  readonly yAxis: "up";
+  readonly boundary: "adapter-local-only";
+  toAdapterPoint(worldPointNm: WorldPointNm): TAdapterPoint;
+  fromAdapterPoint(adapterPoint: TAdapterPoint): WorldPointNm;
+}
+
+export interface InteractionCoordinateTransform {
+  readonly sceneUnit: "mm";
+  readonly worldUnit: "nm";
+  readonly yAxis: "up";
+  scenePointToWorldPoint(scenePointMm: AdapterPointMm): WorldPointNm;
+}
+
+export const DEFAULT_INTERACTION_COORDINATE_TRANSFORM = {
+  sceneUnit: "mm",
+  worldUnit: "nm",
+  yAxis: "up",
+  scenePointToWorldPoint: scenePointMmToWorldPointNm,
+} satisfies InteractionCoordinateTransform;
 
 // ---------------------------------------------------------------------------
 // Hit Result
@@ -27,9 +86,9 @@ export interface HitResult {
     | "via"
     | "graphic";
   /** World-space position of the hit */
-  worldPoint: Vec2;
+  worldPoint: WorldPointNm;
   /** Distance from click point in screen pixels */
-  distancePx: number;
+  distancePx: ScreenPx;
 }
 
 // ---------------------------------------------------------------------------
@@ -38,11 +97,11 @@ export interface HitResult {
 
 export interface InteractionEvent {
   /** World-space coordinates of the pointer (nanometers) */
-  worldPoint: Vec2;
+  worldPoint: WorldPointNm;
   /** Grid-snapped world-space coordinates */
-  snappedPoint: Vec2;
+  snappedPoint: WorldPointNm;
   /** Screen-space coordinates (pixels from canvas top-left) */
-  screenPoint: { x: number; y: number };
+  screenPoint: ScreenPointPx;
   /** Modifier keys */
   modifiers: {
     shift: boolean;
@@ -62,9 +121,9 @@ export interface InteractionEvent {
 
 export interface DragDropEvent {
   /** World-space coordinates of the drag position */
-  worldPoint: Vec2;
+  worldPoint: WorldPointNm;
   /** Grid-snapped world-space coordinates */
-  snappedPoint: Vec2;
+  snappedPoint: WorldPointNm;
   /** MIME types available in the drag */
   types: readonly string[];
   /** Read data for a specific MIME type */

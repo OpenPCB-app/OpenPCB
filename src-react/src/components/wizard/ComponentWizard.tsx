@@ -36,12 +36,12 @@ import {
   transformWizardToSymbolDraft,
 } from "./transformers";
 import {
-  SymbolEditorCanvas,
   PinPalette,
   PinPropertiesPanel,
   SymbolEditorToolbar,
   SymbolMetadataEditor,
 } from "@/components/symbol-editor";
+import { SymbolEditorCanvasR3F } from "@/lib/render-engine/adapters/SymbolEditorCanvasR3F";
 import type { SymbolDraft } from "@/components/symbol-editor/types";
 import type { FootprintDraft } from "@/components/footprint-editor/types";
 import {
@@ -568,7 +568,7 @@ function SymbolEditorStepContent({
 
         {/* Canvas */}
         <div className="flex-1 overflow-hidden">
-          <SymbolEditorCanvas />
+          <SymbolEditorCanvasR3F />
         </div>
 
         {/* Right sidebar */}

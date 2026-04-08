@@ -13,8 +13,8 @@ import { useComponentDetail } from "@/hooks/useComponents";
 import { createComponent } from "@/lib/api/component-api";
 import { toast } from "@/components/ui/use-toast";
 import { useNavigationStore } from "../../stores/navigation-store";
-import { SymbolPreviewR3F as SymbolPreview } from "@/lib/render-engine/wrappers/SymbolPreviewR3F";
-import { FootprintPreviewR3F as FootprintPreview } from "@/lib/render-engine/wrappers/FootprintPreviewR3F";
+import { SymbolPreviewR3F } from "@/lib/render-engine/adapters/SymbolPreviewR3F";
+import { FootprintPreviewR3F } from "@/lib/render-engine/adapters/FootprintPreviewR3F";
 import { Model3dPlaceholder } from "./Model3dPlaceholder";
 import { PinTable } from "./PinTable";
 import { getSymbolReferenceDisplay } from "./symbolDataDisplay";
@@ -373,7 +373,7 @@ export function ComponentDetailPage({
                 </span>
               </div>
               <div className="p-4">
-                <SymbolPreview symbolData={component.symbolData} />
+                <SymbolPreviewR3F symbolData={component.symbolData} />
               </div>
             </section>
 
@@ -412,13 +412,7 @@ export function ComponentDetailPage({
                 )}
               </div>
               <div className="p-4">
-                {selectedFootprint ? (
-                  <FootprintPreview footprint={selectedFootprint} />
-                ) : (
-                  <div className="py-12 text-center text-text-tertiary">
-                    No footprint available
-                  </div>
-                )}
+                <FootprintPreviewR3F footprint={selectedFootprint} />
               </div>
             </section>
           </div>

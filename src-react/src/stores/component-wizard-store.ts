@@ -68,7 +68,6 @@ export interface WizardDraftPayload {
     gltfPreviewPath?: string | null;
   } | null;
 
-  // Specs data (step 4)
   specs?: {
     name?: string;
     category?: string;
@@ -90,6 +89,14 @@ export interface ComponentWorkspaceRecord {
   componentId?: string | null;
   createdAt: string;
   updatedAt: string;
+  // Specs data (step 4)
+  specs?: {
+    name?: string;
+    category?: string;
+    mpn?: string;
+    manufacturer?: string;
+    datasheetUrl?: string;
+  } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +376,7 @@ export const useComponentWizardStore = create<ComponentWizardState>(
       set({
         variants: newVariants,
         activeVariantId: removedWasActive
-          ? newVariants[0]?.id ?? null
+          ? (newVariants[0]?.id ?? null)
           : state.activeVariantId,
         isDirty: true,
       });

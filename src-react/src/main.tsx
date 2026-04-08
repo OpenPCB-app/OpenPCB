@@ -14,6 +14,7 @@ import { SidebarButtonsProvider } from "./contexts/SidebarButtonsContext.tsx";
 import { PcbEditorE2EHarness } from "@/testing/PcbEditorE2EHarness";
 import { SchematicEditorE2EHarness } from "@/testing/SchematicEditorE2EHarness";
 import { SymbolEditorE2EHarness } from "@/testing/SymbolEditorE2EHarness";
+import { FootprintEditorE2EHarness } from "@/testing/FootprintEditorE2EHarness";
 
 const e2eMode = new URLSearchParams(window.location.search).get("e2e");
 
@@ -44,6 +45,14 @@ ReactDOM.createRoot(root).render(
       <BackendURLProvider>
         <ThemeProvider>
           <SymbolEditorE2EHarness />
+        </ThemeProvider>
+      </BackendURLProvider>
+    </React.StrictMode>
+  ) : e2eMode === "footprint-editor" ? (
+    <React.StrictMode>
+      <BackendURLProvider>
+        <ThemeProvider>
+          <FootprintEditorE2EHarness />
         </ThemeProvider>
       </BackendURLProvider>
     </React.StrictMode>

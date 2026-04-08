@@ -1,13 +1,3 @@
-/**
- * SymbolBody — Renders SymbolGraphic[] as Three.js geometry.
- *
- * Converts canvas-core graphic primitives (line, rect, circle, arc, polygon,
- * bezier, text) into ShapeGeometry + LineSegments for Three.js rendering.
- *
- * Uses global geometry cache keyed by symbol kind to avoid rebuilding
- * identical geometry for multiple instances of the same component.
- */
-
 import { useMemo } from "react";
 import * as THREE from "three";
 import type {
@@ -15,7 +5,7 @@ import type {
   RectGraphic,
   CircleGraphic,
   PolygonGraphic,
-} from "../../canvas-core/types";
+} from "../symbol-graphics";
 import { degreesToRadians } from "../coords";
 import { RENDER_ORDER } from "../layers";
 

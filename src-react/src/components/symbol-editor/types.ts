@@ -1,21 +1,12 @@
-/**
- * Symbol Editor Types
- *
- * Data model for the New Component wizard Step 1 symbol editor.
- * Coordinate types and graphic primitives re-exported from canvas-core.
- */
-
 import type {
-  Nanometers as _Nanometers,
-  Point as _Point,
   Bounds as _Bounds,
+  Nanometers as _Nanometers,
+  Vec2 as _Point,
+} from "@/lib/render-engine/coords";
+import type {
   PinSide as _PinSide,
   SymbolGraphic as _SymbolGraphic,
-} from "@/lib/canvas-core/types";
-
-// ---------------------------------------------------------------------------
-// Coordinate System (re-exported from canvas-core)
-// ---------------------------------------------------------------------------
+} from "@/lib/render-engine/symbol-graphics";
 
 export type Nanometers = _Nanometers;
 export type Point = _Point;
@@ -51,10 +42,6 @@ export interface SymbolPin {
   length: Nanometers;
 }
 
-// ---------------------------------------------------------------------------
-// Graphics Primitives (re-exported from canvas-core)
-// ---------------------------------------------------------------------------
-
 export type SymbolGraphic = _SymbolGraphic;
 export type {
   LineGraphic,
@@ -64,7 +51,7 @@ export type {
   PolygonGraphic,
   BezierGraphic,
   TextGraphic,
-} from "@/lib/canvas-core/types";
+} from "@/lib/render-engine/symbol-graphics";
 
 // ---------------------------------------------------------------------------
 // Symbol Draft Model

@@ -1,0 +1,49 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - paragraph [ref=e5]: Presets
+  - main [ref=e6]:
+    - generic [ref=e7]:
+      - button "Import KiCAD Footprint (.kicad_mod)" [ref=e8]:
+        - img [ref=e9]
+      - generic [ref=e12]:
+        - button "Zoom out" [ref=e13]:
+          - img [ref=e14]
+        - generic [ref=e17]: 100%
+        - button "Zoom in" [ref=e18]:
+          - img [ref=e19]
+        - button "Fit to view" [ref=e22]:
+          - img [ref=e23]
+      - generic [ref=e29]:
+        - button "Hide grid" [ref=e30]:
+          - img [ref=e31]
+        - combobox [ref=e33]:
+          - option "0.05mm"
+          - option "0.1mm" [selected]
+          - option "0.25mm"
+          - option "0.5mm"
+      - generic [ref=e35]:
+        - button "Undo (Ctrl+Z)" [disabled] [ref=e36]:
+          - img [ref=e37]
+        - button "Redo (Ctrl+Shift+Z)" [disabled] [ref=e40]:
+          - img [ref=e41]
+    - generic [ref=e44]:
+      - generic:
+        - generic [ref=e45]:
+          - paragraph [ref=e46]: Footprint Editor E2E
+          - button "Reset" [ref=e47]
+        - generic:
+          - generic: pads-count
+          - generic: "2"
+        - generic:
+          - generic: selected-pads
+          - generic: "0"
+        - generic:
+          - generic: grid-size
+          - generic: "0.1"
+        - generic:
+          - generic: viewport-zoom
+          - generic: "1.0"
+  - complementary [ref=e53]:
+    - generic [ref=e54]:
+      - heading "Pad Properties" [level=3] [ref=e55]
+      - paragraph [ref=e56]: Select a pad to edit its properties

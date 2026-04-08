@@ -1,0 +1,94 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]: Pin Types
+      - generic [ref=e8]:
+        - generic "Input signal pin" [ref=e9]:
+          - generic [ref=e11]: Input
+        - generic "Output signal pin" [ref=e12]:
+          - generic [ref=e14]: Output
+        - generic "Bidirectional I/O pin" [ref=e15]:
+          - generic [ref=e17]: Bidirectional
+        - generic "Passive component pin" [ref=e18]:
+          - generic [ref=e20]: Passive
+        - generic "Power input (VCC, VDD)" [ref=e21]:
+          - generic [ref=e23]: Power In
+        - generic "Power output" [ref=e24]:
+          - generic [ref=e26]: Power Out
+        - generic "Open collector output" [ref=e27]:
+          - generic [ref=e29]: Open Collector
+        - generic "Open emitter output" [ref=e30]:
+          - generic [ref=e32]: Open Emitter
+        - generic "Unspecified pin type" [ref=e33]:
+          - generic [ref=e35]: Unspecified
+      - generic [ref=e36]: Click to add or drag to position
+  - main [ref=e37]:
+    - generic [ref=e38]:
+      - button "Import KiCAD Symbol (.kicad_sym)" [ref=e39]:
+        - img [ref=e40]
+      - generic [ref=e43]:
+        - button "Select (V)" [ref=e44]:
+          - img [ref=e45]
+        - button "Line (L)" [ref=e47]:
+          - img [ref=e48]
+        - button "Rectangle (R)" [ref=e50]:
+          - img [ref=e51]
+        - button "Circle (C)" [ref=e53]:
+          - img [ref=e54]
+      - generic [ref=e57]:
+        - button "Distribute pins vertically" [ref=e58]:
+          - img [ref=e59]
+        - button "Distribute pins horizontally" [ref=e60]:
+          - img [ref=e61]
+        - button "Mirror pins horizontally" [ref=e62]:
+          - img [ref=e63]
+      - generic [ref=e67]:
+        - button "Undo (Ctrl+Z)" [disabled] [ref=e68]:
+          - img [ref=e69]
+        - button "Redo (Ctrl+Shift+Z)" [disabled] [ref=e72]:
+          - img [ref=e73]
+      - generic [ref=e77]:
+        - button "Toggle Grid" [ref=e78]:
+          - img [ref=e79]
+        - combobox "Grid Size" [ref=e81]:
+          - option "Fine (0.025\")"
+          - option "Normal (0.05\")" [selected]
+          - option "Coarse (0.1\")"
+      - button "Reset View" [ref=e83]:
+        - img [ref=e84]
+      - generic [ref=e87]: Shift+drag to pan | Scroll to zoom | Del to delete
+    - generic [ref=e88]:
+      - generic:
+        - generic [ref=e89]:
+          - paragraph [ref=e90]: Symbol Editor E2E
+          - button "Reset" [ref=e91]
+        - generic:
+          - generic: theme
+          - generic: light
+        - generic:
+          - generic: graphics-count
+          - generic: "0"
+        - generic:
+          - generic: pins-count
+          - generic: "0"
+        - generic:
+          - generic: active-tool
+          - generic: select
+        - generic:
+          - generic: last-graphic-type
+          - generic: none
+        - generic:
+          - generic: selected-pins
+          - generic: "0"
+        - generic:
+          - generic: selected-graphics
+          - generic: "0"
+        - generic:
+          - generic: viewport-zoom
+          - generic: "50.0"
+        - generic:
+          - generic: grid-size
+          - generic: "1270000"
+        - generic:
+          - generic: pin1
+          - generic: 0,0

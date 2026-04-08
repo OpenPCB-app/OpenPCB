@@ -3,8 +3,10 @@ import type { SymbolColors } from "@/lib/canvas-theme";
 import { schematicToScreen } from "./viewport";
 import { DEFAULT_SCHEMATIC_ZOOM } from "./viewport";
 import { getSymbolKindLabel } from "../symbol-display";
-import { renderGraphicLocal } from "@/lib/canvas-core/graphics";
-import { renderPinsLocal } from "@/lib/canvas-core/pins";
+import {
+  renderGraphicLocal,
+  renderPinsLocal,
+} from "./canvas2d-symbol-rendering";
 
 const RECT_PADDING_X = 220_000;
 const RECT_PADDING_Y = 220_000;

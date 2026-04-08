@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { normalizeZoomDelta, normalizePanDelta } from "./useCanvasWheel";
+import {
+  getWheelNavigationAction,
+  normalizeZoomDelta,
+  normalizePanDelta,
+} from "@/lib/render-engine/camera/use-eda-camera";
 
 function makeWheelEvent(
   overrides: Partial<
@@ -70,5 +74,32 @@ describe("normalizePanDelta", () => {
   it("returns zero deltas for zero input", () => {
     const e = makeWheelEvent({ deltaX: 0, deltaY: 0 });
     expect(normalizePanDelta(e)).toEqual({ dx: 0, dy: 0 });
+  });
+});
+
+describe("getWheelNavigationAction", () => {
+  it("treats plain mouse-wheel input as zoom", () => {
+    const e = makeWheelEvent({ deltaY: 100, deltaMode: 1, ctrlKey: false });
+    expect(getWheelNavigationAction(e)).toBe("zoom");
+  });
+
+  it("treats shift-wheel input as pan", () => {
+    const e = makeWheelEvent({
+      deltaY: 100,
+      deltaMode: 0,
+      ctrlKey: false,
+      shiftKey: true,
+    } as Partial<WheelEvent>);
+    expect(getWheelNavigationAction(e as WheelEvent)).toBe("pan");
+  });
+
+  it("treats trackpad-like pixel deltas as pan", () => {
+    const e = makeWheelEvent({ deltaY: 20, deltaMode: 0, ctrlKey: false });
+    expect(getWheelNavigationAction(e)).toBe("pan");
+  });
+
+  it("treats pinch gestures as zoom", () => {
+    const e = makeWheelEvent({ deltaY: 3, deltaMode: 0, ctrlKey: true });
+    expect(getWheelNavigationAction(e)).toBe("zoom");
   });
 });

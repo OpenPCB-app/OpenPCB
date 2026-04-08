@@ -5,7 +5,7 @@
  * Each tool manages its own preview state and produces a SymbolGraphic on commit.
  */
 
-import type { Point, SymbolGraphic } from "@/lib/canvas-core/types";
+import type { Point, SymbolGraphic } from "../types";
 
 const DEFAULT_STROKE_WIDTH_MM = 0.254;
 

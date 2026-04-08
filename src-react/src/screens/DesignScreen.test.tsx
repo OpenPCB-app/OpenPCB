@@ -254,7 +254,6 @@ function resetStore() {
       gridSize: 1_270_000,
       showGrid: true,
       placementRotation: 0,
-      gridPresetId: "small",
     },
     session: null,
   }));
@@ -449,9 +448,13 @@ describe("DesignScreen schematic shell", () => {
     render(<DesignScreen />);
 
     await waitFor(() =>
-      expect(screen.queryByText("Failed to open design")).not.toBeInTheDocument(),
+      expect(
+        screen.queryByText("Failed to open design"),
+      ).not.toBeInTheDocument(),
     );
-    expect(screen.getByRole("button", { name: "Begin wire" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Begin wire" }),
+    ).toBeInTheDocument();
   });
 
   it("routes palette drag starts through the shared placement controller", () => {

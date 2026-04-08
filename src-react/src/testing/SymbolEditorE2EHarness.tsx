@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo } from "react";
-import { SymbolEditorCanvasR3F as SymbolEditorCanvas } from "@/lib/render-engine/wrappers/SymbolEditorCanvasR3F";
+import { SymbolEditorCanvasR3F as SymbolEditorCanvas } from "@/lib/render-engine/adapters/SymbolEditorCanvasR3F";
 import { SymbolEditorToolbar } from "@/components/symbol-editor/SymbolEditorToolbar";
 import { PinPalette } from "@/components/symbol-editor/PinPalette";
 import {

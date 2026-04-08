@@ -14,7 +14,7 @@
  * as children of this component.
  */
 
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import {
   useCallback,
@@ -25,9 +25,12 @@ import {
 } from "react";
 import { useEdaWheel } from "../camera/use-eda-camera";
 import { DragDropOverlay } from "./DragDropOverlay";
-import type { InteractionHandler } from "./types";
+import {
+  DEFAULT_INTERACTION_COORDINATE_TRANSFORM,
+  type InteractionCoordinateTransform,
+  type InteractionHandler,
+} from "./types";
 import { RENDER_ORDER } from "../layers";
-import { sceneToNm } from "../coords";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -40,6 +43,7 @@ export interface EdaCanvasProps {
   interactionHandler?: InteractionHandler | null;
   /** Grid size for drag-drop snapping (nm) */
   gridSize?: number;
+  interactionCoordinateTransform?: InteractionCoordinateTransform;
   /** Enable drag-drop overlay */
   enableDragDrop?: boolean;
   /** Read-only mode (disables all interaction) */
@@ -64,6 +68,7 @@ export function EdaCanvas({
   children,
   interactionHandler = null,
   gridSize = 0,
+  interactionCoordinateTransform = DEFAULT_INTERACTION_COORDINATE_TRANSFORM,
   enableDragDrop = false,
   readOnly = false,
   className,
@@ -76,10 +81,18 @@ export function EdaCanvas({
   const cameraRef = useRef<THREE.OrthographicCamera>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Prevent context menu on the container
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+  const handleContextMenu = useCallback((e: MouseEvent) => {
     e.preventDefault();
   }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.addEventListener("contextmenu", handleContextMenu);
+    return () =>
+      container.removeEventListener("contextmenu", handleContextMenu);
+  }, [handleContextMenu]);
 
   const containerStyle: CSSProperties = {
     position: "relative",
@@ -96,7 +109,6 @@ export function EdaCanvas({
       className={className}
       data-testid={testId}
       style={containerStyle}
-      onContextMenu={handleContextMenu}
     >
       <Canvas
         orthographic
@@ -127,6 +139,7 @@ export function EdaCanvas({
           readOnly={readOnly}
           cameraRef={cameraRef}
           interactionHandler={interactionHandler}
+          interactionCoordinateTransform={interactionCoordinateTransform}
         >
           {children}
         </EdaCanvasInternals>
@@ -139,6 +152,7 @@ export function EdaCanvas({
           canvasRef={canvasRef}
           handler={interactionHandler}
           gridSize={gridSize}
+          interactionCoordinateTransform={interactionCoordinateTransform}
         />
       )}
     </div>
@@ -153,11 +167,13 @@ function EdaCanvasInternals({
   readOnly,
   cameraRef,
   interactionHandler,
+  interactionCoordinateTransform,
   children,
 }: {
   readOnly: boolean;
   cameraRef: React.RefObject<THREE.OrthographicCamera | null>;
   interactionHandler: InteractionHandler | null;
+  interactionCoordinateTransform: InteractionCoordinateTransform;
   children: ReactNode;
 }) {
   const camera = useThree((s) => s.camera) as THREE.OrthographicCamera;
@@ -239,6 +255,7 @@ function EdaCanvasInternals({
       {!readOnly && (
         <BackgroundHitPlane
           interactionHandler={interactionHandler}
+          interactionCoordinateTransform={interactionCoordinateTransform}
           invalidate={invalidate}
         />
       )}
@@ -271,11 +288,37 @@ function SceneBackground({ color }: { color: string }) {
 
 function BackgroundHitPlane({
   interactionHandler,
+  interactionCoordinateTransform,
   invalidate,
 }: {
   interactionHandler: InteractionHandler | null;
+  interactionCoordinateTransform: InteractionCoordinateTransform;
   invalidate: () => void;
 }) {
+  const buildInteractionEvent = useCallback(
+    (e: ThreeEvent<PointerEvent>) => {
+      const worldPoint = interactionCoordinateTransform.scenePointToWorldPoint({
+        x: e.point.x,
+        y: e.point.y,
+      });
+
+      return {
+        worldPoint,
+        snappedPoint: worldPoint,
+        screenPoint: { x: e.clientX, y: e.clientY },
+        modifiers: {
+          shift: e.shiftKey ?? false,
+          ctrl: e.ctrlKey ?? false,
+          meta: e.metaKey ?? false,
+          alt: e.altKey ?? false,
+        },
+        button: e.button,
+        nativeEvent: e,
+      };
+    },
+    [interactionCoordinateTransform],
+  );
+
   return (
     <mesh
       renderOrder={RENDER_ORDER.HIT_PLANE}
@@ -294,8 +337,7 @@ function BackgroundHitPlane({
         }
         if (e.button > 0) return;
         e.stopPropagation();
-        const wx = sceneToNm(e.point.x);
-        const wy = sceneToNm(e.point.y);
+        const interactionEvent = buildInteractionEvent(e);
         if (
           typeof window !== "undefined" &&
           window.location.search.includes("e2e=schematic")
@@ -305,60 +347,20 @@ function BackgroundHitPlane({
             clientY: e.clientY,
             sceneX: e.point.x,
             sceneY: e.point.y,
-            worldX: wx,
-            worldY: wy,
+            worldX: interactionEvent.worldPoint.x,
+            worldY: interactionEvent.worldPoint.y,
           });
         }
-        interactionHandler.onPointerDown({
-          worldPoint: { x: wx, y: wy },
-          snappedPoint: { x: wx, y: wy },
-          screenPoint: { x: e.clientX, y: e.clientY },
-          modifiers: {
-            shift: e.shiftKey ?? false,
-            ctrl: e.ctrlKey ?? false,
-            meta: e.metaKey ?? false,
-            alt: e.altKey ?? false,
-          },
-          button: e.button,
-          nativeEvent: e,
-        });
+        interactionHandler.onPointerDown(interactionEvent);
         invalidate();
       }}
       onPointerMove={(e) => {
         if (!interactionHandler?.onPointerMove) return;
-        const wx = sceneToNm(e.point.x);
-        const wy = sceneToNm(e.point.y);
-        interactionHandler.onPointerMove({
-          worldPoint: { x: wx, y: wy },
-          snappedPoint: { x: wx, y: wy },
-          screenPoint: { x: e.clientX, y: e.clientY },
-          modifiers: {
-            shift: e.shiftKey ?? false,
-            ctrl: e.ctrlKey ?? false,
-            meta: e.metaKey ?? false,
-            alt: e.altKey ?? false,
-          },
-          button: e.button,
-          nativeEvent: e,
-        });
+        interactionHandler.onPointerMove(buildInteractionEvent(e));
       }}
       onPointerUp={(e) => {
         if (!interactionHandler?.onPointerUp) return;
-        const wx = sceneToNm(e.point.x);
-        const wy = sceneToNm(e.point.y);
-        interactionHandler.onPointerUp({
-          worldPoint: { x: wx, y: wy },
-          snappedPoint: { x: wx, y: wy },
-          screenPoint: { x: e.clientX, y: e.clientY },
-          modifiers: {
-            shift: e.shiftKey ?? false,
-            ctrl: e.ctrlKey ?? false,
-            meta: e.metaKey ?? false,
-            alt: e.altKey ?? false,
-          },
-          button: e.button,
-          nativeEvent: e,
-        });
+        interactionHandler.onPointerUp(buildInteractionEvent(e));
         invalidate();
       }}
     >

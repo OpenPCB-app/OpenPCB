@@ -108,23 +108,23 @@ const VCC_SYMBOL: Record<string, unknown> = {
   properties: { value: "VCC" },
   unitCount: 1,
   bodyGraphics: [
-    // Stem: pin (0,0) up to arrow tip (Y-UP: positive Y = up)
-    { type: "line", x1: 0, y1: 0, x2: 0, y2: 200_000, strokeWidth: 0.254 },
+    // Stem: pin (0,0) up to arrow base (Y-UP: positive Y = up) - longer leg for better visibility
+    { type: "line", x1: 0, y1: 0, x2: 0, y2: 400_000, strokeWidth: 0.254 },
     // V-arrow: two lines converging at top
     {
       type: "line",
       x1: -200_000,
-      y1: 40_000,
+      y1: 240_000,
       x2: 0,
-      y2: 240_000,
+      y2: 440_000,
       strokeWidth: 0.254,
     },
     {
       type: "line",
       x1: 200_000,
-      y1: 40_000,
+      y1: 240_000,
       x2: 0,
-      y2: 240_000,
+      y2: 440_000,
       strokeWidth: 0.254,
     },
   ],

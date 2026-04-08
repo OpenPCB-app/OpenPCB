@@ -8,7 +8,6 @@ import {
   type ComponentLibraryIndex,
 } from "@/components/pcb/symbol-library";
 import {
-  GRID_PRESETS,
   normalizeSchematicDocument,
   toEditorSchematicDocument,
 } from "@/components/pcb/types";
@@ -130,7 +129,6 @@ interface SchematicState {
 
   setGridSize: (size: number) => void;
   toggleGrid: () => void;
-  setGridPreset: (presetId: string) => void;
 
   updateSymbolValue: (symbolId: string, value: string) => void;
 }
@@ -156,7 +154,6 @@ const INITIAL_CHROME_STATE: EditorChromeState = {
   gridSize: DEFAULT_GRID_NM,
   showGrid: false,
   placementRotation: 0,
-  gridPresetId: "small",
 };
 
 function derivePopoverTargetId(
@@ -1240,19 +1237,6 @@ export const useSchematicStore = create<SchematicState>((set, get) => ({
         showGrid: !state.chrome.showGrid,
       },
     })),
-
-  setGridPreset: (presetId: string) =>
-    set((state) => {
-      const preset = GRID_PRESETS.find((p) => p.id === presetId);
-      if (!preset) return state;
-      return {
-        chrome: {
-          ...state.chrome,
-          gridPresetId: presetId,
-          gridSize: preset.size,
-        },
-      };
-    }),
 
   updateSymbolValue: (symbolId: string, value: string) =>
     set((state) => {

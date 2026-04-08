@@ -17,6 +17,7 @@ export interface CanvasColors {
   background: string;
   gridDot: string;
   gridDotFaint: string;
+  gridIntermediateLine: string;
   gridMajorLine: string;
   originCross: string;
 
@@ -67,9 +68,10 @@ export interface CanvasColors {
 export const CANVAS_COLORS_DARK: CanvasColors = {
   // Background & Grid
   background: "#0f172a",
-  gridDot: "rgba(148, 163, 184, 0.3)",
-  gridDotFaint: "rgba(148, 163, 184, 0.15)",
-  gridMajorLine: "rgba(148, 163, 184, 0.08)",
+  gridDot: "rgba(148, 163, 184, 0.12)",
+  gridDotFaint: "rgba(148, 163, 184, 0.06)",
+  gridIntermediateLine: "rgba(148, 163, 184, 0.18)",
+  gridMajorLine: "rgba(148, 163, 184, 0.28)",
   originCross: "rgba(148, 163, 184, 0.4)",
 
   // Symbol Body
@@ -119,9 +121,10 @@ export const CANVAS_COLORS_DARK: CanvasColors = {
 export const CANVAS_COLORS_LIGHT: CanvasColors = {
   // Background & Grid
   background: "#fafafe",
-  gridDot: "rgba(100, 116, 139, 0.35)",
-  gridDotFaint: "rgba(100, 116, 139, 0.2)",
-  gridMajorLine: "rgba(100, 116, 139, 0.12)",
+  gridDot: "rgba(100, 116, 139, 0.15)",
+  gridDotFaint: "rgba(100, 116, 139, 0.08)",
+  gridIntermediateLine: "rgba(100, 116, 139, 0.22)",
+  gridMajorLine: "rgba(100, 116, 139, 0.32)",
   originCross: "rgba(100, 116, 139, 0.5)",
 
   // Symbol Body
@@ -192,6 +195,7 @@ export function useCanvasColors(): CanvasColors {
 export interface GridColors {
   dot: string;
   dotFaint: string;
+  intermediateLine: string;
   majorLine: string;
   originCross: string;
 }
@@ -200,6 +204,7 @@ export function getGridColors(colors: CanvasColors): GridColors {
   return {
     dot: colors.gridDot,
     dotFaint: colors.gridDotFaint,
+    intermediateLine: colors.gridIntermediateLine,
     majorLine: colors.gridMajorLine,
     originCross: colors.originCross,
   };

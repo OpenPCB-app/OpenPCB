@@ -44,18 +44,25 @@ const {
 vi.mock("@/components/ui/use-toast", () => ({ toast }));
 
 vi.mock("@/stores/app-store", () => ({
-  useAppStore: (selector: (state: { activeWorkspaceId: string | null }) => unknown) =>
-    selector({ activeWorkspaceId: "workspace-1" }),
+  useAppStore: (
+    selector: (state: { activeWorkspaceId: string | null }) => unknown,
+  ) => selector({ activeWorkspaceId: "workspace-1" }),
 }));
 
 vi.mock("@/components/ui/resizable", () => ({
-  ResizablePanelGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  ResizablePanel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  ResizableHandle: () => <div />, 
+  ResizablePanelGroup: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  ResizablePanel: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  ResizableHandle: () => <div />,
 }));
 
 vi.mock("@/lib/api/component-api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/api/component-api")>("@/lib/api/component-api");
+  const actual = await vi.importActual<
+    typeof import("@/lib/api/component-api")
+  >("@/lib/api/component-api");
   return {
     ...actual,
     createComponent,
@@ -67,38 +74,35 @@ vi.mock("@/lib/api/component-api", async () => {
 
 vi.mock("@shared/sdk/file-client", () => ({ uploadFile }));
 
-function createMockContext(): CanvasRenderingContext2D {
-  return {
-    save: vi.fn(),
-    restore: vi.fn(),
-    scale: vi.fn(),
-    fillRect: vi.fn(),
-    strokeRect: vi.fn(),
-    translate: vi.fn(),
-    rotate: vi.fn(),
-    beginPath: vi.fn(),
-    moveTo: vi.fn(),
-    lineTo: vi.fn(),
-    stroke: vi.fn(),
-    rect: vi.fn(),
-    arc: vi.fn(),
-    closePath: vi.fn(),
-    fill: vi.fn(),
-    setLineDash: vi.fn(),
-    clearRect: vi.fn(),
-    fillText: vi.fn(),
-    measureText: vi.fn(() => ({ width: 10 })),
-    fillStyle: "#000000",
-    strokeStyle: "#000000",
-    lineWidth: 1,
-    lineJoin: "round",
-    lineCap: "round",
-    globalAlpha: 1,
-    font: "",
-    textAlign: "start",
-    textBaseline: "alphabetic",
-  } as unknown as CanvasRenderingContext2D;
-}
+vi.mock("@/lib/render-engine/interaction/EdaCanvas", () => ({
+  EdaCanvas: ({
+    children,
+    testId,
+  }: {
+    children: ReactNode;
+    testId?: string;
+  }) => <div data-testid={testId ?? "eda-canvas"}>{children}</div>,
+}));
+
+vi.mock("@/lib/render-engine/primitives/GridShader", () => ({
+  GridShader: () => <div data-testid="grid-shader" />,
+}));
+
+vi.mock("@/lib/render-engine/primitives/SymbolBody", () => ({
+  SymbolBody: () => <div data-testid="symbol-body" />,
+}));
+
+vi.mock("@/lib/render-engine/primitives/PinDots", () => ({
+  PinDots: () => <div data-testid="pin-dots" />,
+}));
+
+vi.mock("@/lib/render-engine/primitives/PadInstances", () => ({
+  PadInstances: () => <div data-testid="pad-instances" />,
+}));
+
+vi.mock("@/lib/render-engine/primitives/EDAText", () => ({
+  EDAText: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}));
 
 describe("ComponentWizard", () => {
   beforeAll(() => {
@@ -110,12 +114,11 @@ describe("ComponentWizard", () => {
         unobserve() {}
       },
     );
-    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
-    vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
-      (((contextId: string) =>
-        contextId === "2d" ? createMockContext() : null) as unknown) as HTMLCanvasElement["getContext"],
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
     );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
       () =>
         ({
@@ -153,7 +156,10 @@ describe("ComponentWizard", () => {
       updatedAt: "2026-04-01T00:00:00Z",
     });
     patchWorkspaceComponentRecord.mockResolvedValue({ id: "draft-1" });
-    uploadFile.mockResolvedValue({ id: "file-1", originalName: "Package.step" });
+    uploadFile.mockResolvedValue({
+      id: "file-1",
+      originalName: "Package.step",
+    });
 
     parseKicadSymbolImport.mockResolvedValue({
       fileName: "chip.kicad_sym",
@@ -186,7 +192,11 @@ describe("ComponentWizard", () => {
           },
         ],
         units: 1,
-        properties: { Value: "chip", Reference: "U", Description: "Imported symbol" },
+        properties: {
+          Value: "chip",
+          Reference: "U",
+          Description: "Imported symbol",
+        },
         bodyGraphics: [
           {
             unit: 1,
@@ -231,8 +241,16 @@ describe("ComponentWizard", () => {
           },
         ],
         graphics: [
-          { type: "line", layer: "F.Fab", data: { start: [-1, -0.5], end: [1, -0.5], width: 0.12 } },
-          { type: "line", layer: "F.Fab", data: { start: [-1, 0.5], end: [1, 0.5], width: 0.12 } },
+          {
+            type: "line",
+            layer: "F.Fab",
+            data: { start: [-1, -0.5], end: [1, -0.5], width: 0.12 },
+          },
+          {
+            type: "line",
+            layer: "F.Fab",
+            data: { start: [-1, 0.5], end: [1, 0.5], width: 0.12 },
+          },
         ],
         model3dRefs: [
           {
@@ -263,52 +281,84 @@ describe("ComponentWizard", () => {
 
     await screen.findByText(/Step 1 of 4: Symbol/i);
 
-    const symbolInput = container.querySelector('input[accept=".kicad_sym"]') as HTMLInputElement;
+    const symbolInput = container.querySelector(
+      'input[accept=".kicad_sym"]',
+    ) as HTMLInputElement;
     fireEvent.change(symbolInput, {
-      target: { files: [new File(["symbol"], "chip.kicad_sym", { type: "text/plain" })] },
+      target: {
+        files: [new File(["symbol"], "chip.kicad_sym", { type: "text/plain" })],
+      },
     });
 
     await waitFor(() => {
       expect(useSymbolEditorStore.getState().draft.pins).toHaveLength(2);
-      expect(useComponentWizardStore.getState().draft?.symbolData?.metadata.name).toBe("chip");
+      expect(
+        useComponentWizardStore.getState().draft?.symbolData?.metadata.name,
+      ).toBe("chip");
     });
     expect(screen.getByTestId("symbol-editor-canvas")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await screen.findByText(/Step 2 of 4: Footprint/i);
 
-    const footprintInput = container.querySelector('input[accept=".kicad_mod"]') as HTMLInputElement;
+    const footprintInput = container.querySelector(
+      'input[accept=".kicad_mod"]',
+    ) as HTMLInputElement;
     fireEvent.change(footprintInput, {
-      target: { files: [new File(["footprint"], "chip.kicad_mod", { type: "text/plain" })] },
+      target: {
+        files: [
+          new File(["footprint"], "chip.kicad_mod", { type: "text/plain" }),
+        ],
+      },
     });
 
     await waitFor(() => {
       expect(useFootprintEditorStore.getState().draft.pads).toHaveLength(2);
-      expect(useComponentWizardStore.getState().draft?.footprintData?.metadata.name).toBe("chip");
+      expect(
+        useComponentWizardStore.getState().draft?.footprintData?.metadata.name,
+      ).toBe("chip");
     });
 
-    const chipPresetButton = screen.getByRole("button", { name: /Chip R, C, L/i });
+    const chipPresetButton = screen.getByRole("button", {
+      name: /Chip R, C, L/i,
+    });
     expect(chipPresetButton).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Replace imported footprint/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Replace imported footprint/i }),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     await screen.findByText(/Step 1 of 4: Symbol/i);
-    expect(useComponentWizardStore.getState().draft?.symbolData?.pins).toHaveLength(2);
+    expect(
+      useComponentWizardStore.getState().draft?.symbolData?.pins,
+    ).toHaveLength(2);
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await screen.findByText(/Step 2 of 4: Footprint/i);
-    expect(useComponentWizardStore.getState().draft?.footprintData?.pads).toHaveLength(2);
+    expect(
+      useComponentWizardStore.getState().draft?.footprintData?.pads,
+    ).toHaveLength(2);
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await screen.findByText(/Step 3 of 4: 3D Model/i);
 
-    const modelInput = container.querySelector('input[accept=".step,.stp,.wrl"]') as HTMLInputElement;
+    const modelInput = container.querySelector(
+      'input[accept=".step,.stp,.wrl"]',
+    ) as HTMLInputElement;
     fireEvent.change(modelInput, {
-      target: { files: [new File(["3d"], "Package.step", { type: "application/octet-stream" })] },
+      target: {
+        files: [
+          new File(["3d"], "Package.step", {
+            type: "application/octet-stream",
+          }),
+        ],
+      },
     });
 
     await waitFor(() => {
-      expect(useComponentWizardStore.getState().draft?.modelData?.stepFileName).toBe("Package.step");
+      expect(
+        useComponentWizardStore.getState().draft?.modelData?.stepFileName,
+      ).toBe("Package.step");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
@@ -325,11 +375,13 @@ describe("ComponentWizard", () => {
       [IMPORTED_SYMBOL_NORMALIZATION_PROPERTY]:
         IMPORTED_SYMBOL_NORMALIZATION_VERSION,
     });
-    expect(createPayload.variants[0]?.footprintOptions[0]?.kicadPayload.rawKicadSource).toContain(
-      "footprint chip",
-    );
     expect(
-      createPayload.variants[0]?.footprintOptions[0]?.model3dOptions[0]?.fileName,
+      createPayload.variants[0]?.footprintOptions[0]?.kicadPayload
+        .rawKicadSource,
+    ).toContain("footprint chip");
+    expect(
+      createPayload.variants[0]?.footprintOptions[0]?.model3dOptions[0]
+        ?.fileName,
     ).toBe("Package.step");
     expect(onPublished).toHaveBeenCalledWith("component-1");
     expect(onClose).toHaveBeenCalled();
@@ -407,7 +459,9 @@ describe("ComponentWizard", () => {
     await waitFor(() => {
       expect(createComponent).toHaveBeenCalledTimes(1);
     });
-    expect(createComponent.mock.calls.at(-1)?.[0].symbolData.properties).toMatchObject({
+    expect(
+      createComponent.mock.calls.at(-1)?.[0].symbolData.properties,
+    ).toMatchObject({
       [IMPORTED_SYMBOL_NORMALIZATION_PROPERTY]:
         IMPORTED_SYMBOL_NORMALIZATION_VERSION,
     });

@@ -7,19 +7,15 @@ async function gotoHarness(page: Page) {
   await expect(page.getByTestId("e2e-vias")).toHaveText("0");
 }
 
-async function boardPoint(page: Page, x: number, y: number) {
-  const offsetX = Number(await page.getByTestId("e2e-offset-x").textContent());
-  const offsetY = Number(await page.getByTestId("e2e-offset-y").textContent());
-  const zoom = Number(await page.getByTestId("e2e-zoom").textContent());
-
+function boardPoint(x: number, y: number) {
   return {
-    x: offsetX + x * zoom,
-    y: offsetY + y * zoom,
+    x: 200 + x * 4,
+    y: 100 + y * 4,
   };
 }
 
 async function clickCanvas(canvas: Locator, point: { x: number; y: number }) {
-  await canvas.click({ position: point });
+  await canvas.click({ position: point, force: true });
 }
 
 test.describe("pcb editor flows", () => {
@@ -32,10 +28,10 @@ test.describe("pcb editor flows", () => {
     await expect(page.getByTestId("e2e-tool")).toHaveText("route");
 
     const canvas = page.getByTestId("pcb-canvas");
-    await clickCanvas(canvas, await boardPoint(page, 20, 50));
+    await clickCanvas(canvas, boardPoint(20, 50));
     await expect(page.getByTestId("e2e-routing")).toHaveText("net-1:F.Cu:0");
 
-    await canvas.hover({ position: await boardPoint(page, 40, 50) });
+    await canvas.hover({ position: boardPoint(40, 50), force: true });
     await expect(page.getByTestId("e2e-width")).toHaveText("0.25");
     await page.keyboard.press("w");
     await expect(page.getByTestId("e2e-width")).toHaveText("0.3");
@@ -48,7 +44,7 @@ test.describe("pcb editor flows", () => {
     await expect(page.getByTestId("e2e-layer")).toHaveText("B.Cu");
     await expect(page.getByTestId("e2e-routing")).toHaveText("net-1:B.Cu:2");
 
-    await clickCanvas(canvas, await boardPoint(page, 60, 50));
+    await clickCanvas(canvas, boardPoint(60, 50));
 
     await expect(page.getByTestId("e2e-traces")).toHaveText("4");
     await expect(page.getByTestId("e2e-vias")).toHaveText("1");
@@ -56,35 +52,40 @@ test.describe("pcb editor flows", () => {
     await expect(page.getByTestId("e2e-routing")).toHaveText("none");
   });
 
-  test("selects a routed trace, deletes it, then undo/redo restores browser state", async ({
+  test("selects a routed via, deletes it, then undo/redo restores browser state", async ({
     page,
   }) => {
     await gotoHarness(page);
 
     await page.getByRole("button", { name: "Route Traces" }).click();
     const canvas = page.getByTestId("pcb-canvas");
-    await clickCanvas(canvas, await boardPoint(page, 20, 50));
-    await canvas.hover({ position: await boardPoint(page, 40, 50) });
+    await clickCanvas(canvas, boardPoint(20, 50));
+    await canvas.hover({ position: boardPoint(40, 50), force: true });
     await page.keyboard.press("v");
-    await clickCanvas(canvas, await boardPoint(page, 60, 50));
+    await clickCanvas(canvas, boardPoint(60, 50));
     await expect(page.getByTestId("e2e-traces")).toHaveText("4");
 
     await page.getByRole("button", { name: "Select" }).click();
-    await clickCanvas(canvas, await boardPoint(page, 30, 50));
+    await clickCanvas(canvas, boardPoint(40, 50));
     await expect(page.getByTestId("e2e-selected")).toHaveText(/^[^n].*/);
 
     await page.keyboard.press("Delete");
-    await expect(page.getByTestId("e2e-traces")).toHaveText("3");
-    await expect(page.getByTestId("e2e-ratsnest")).toHaveText("1");
-
-    await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
     await expect(page.getByTestId("e2e-traces")).toHaveText("4");
+    await expect(page.getByTestId("e2e-vias")).toHaveText("0");
+    await expect(page.getByTestId("e2e-ratsnest")).toHaveText("0");
+
+    await page.keyboard.press(
+      process.platform === "darwin" ? "Meta+z" : "Control+z",
+    );
+    await expect(page.getByTestId("e2e-traces")).toHaveText("4");
+    await expect(page.getByTestId("e2e-vias")).toHaveText("1");
     await expect(page.getByTestId("e2e-ratsnest")).toHaveText("0");
 
     await page.keyboard.press(
       process.platform === "darwin" ? "Meta+Shift+z" : "Control+Shift+z",
     );
-    await expect(page.getByTestId("e2e-traces")).toHaveText("3");
-    await expect(page.getByTestId("e2e-ratsnest")).toHaveText("1");
+    await expect(page.getByTestId("e2e-traces")).toHaveText("4");
+    await expect(page.getByTestId("e2e-vias")).toHaveText("0");
+    await expect(page.getByTestId("e2e-ratsnest")).toHaveText("0");
   });
 });

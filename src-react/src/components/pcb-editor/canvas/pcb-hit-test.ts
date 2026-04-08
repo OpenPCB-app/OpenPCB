@@ -17,7 +17,7 @@ interface PlacementBounds {
   maxY: number;
 }
 
-function transformPoint(
+export function transformPlacementPoint(
   placement: PcbPlacement,
   localX: number,
   localY: number,
@@ -59,7 +59,11 @@ function computePlacementBounds(placement: PcbPlacement): PlacementBounds {
   }
 
   for (const pad of footprint.pads) {
-    const worldPos = transformPoint(placement, pad.position.x, pad.position.y);
+    const worldPos = transformPlacementPoint(
+      placement,
+      pad.position.x,
+      pad.position.y,
+    );
     const halfW = pad.size.width / 2;
     const halfH = pad.size.height / 2;
 
@@ -75,8 +79,8 @@ function computePlacementBounds(placement: PcbPlacement): PlacementBounds {
         start: { x: number; y: number };
         end: { x: number; y: number };
       };
-      const p1 = transformPoint(placement, data.start.x, data.start.y);
-      const p2 = transformPoint(placement, data.end.x, data.end.y);
+      const p1 = transformPlacementPoint(placement, data.start.x, data.start.y);
+      const p2 = transformPlacementPoint(placement, data.end.x, data.end.y);
       minX = Math.min(minX, p1.x, p2.x);
       minY = Math.min(minY, p1.y, p2.y);
       maxX = Math.max(maxX, p1.x, p2.x);
@@ -87,10 +91,10 @@ function computePlacementBounds(placement: PcbPlacement): PlacementBounds {
         end: { x: number; y: number };
       };
       const corners = [
-        transformPoint(placement, data.start.x, data.start.y),
-        transformPoint(placement, data.end.x, data.start.y),
-        transformPoint(placement, data.start.x, data.end.y),
-        transformPoint(placement, data.end.x, data.end.y),
+        transformPlacementPoint(placement, data.start.x, data.start.y),
+        transformPlacementPoint(placement, data.end.x, data.start.y),
+        transformPlacementPoint(placement, data.start.x, data.end.y),
+        transformPlacementPoint(placement, data.end.x, data.end.y),
       ];
       for (const c of corners) {
         minX = Math.min(minX, c.x);
@@ -104,7 +108,11 @@ function computePlacementBounds(placement: PcbPlacement): PlacementBounds {
         radius?: number;
         end?: { x: number; y: number };
       };
-      const center = transformPoint(placement, data.center.x, data.center.y);
+      const center = transformPlacementPoint(
+        placement,
+        data.center.x,
+        data.center.y,
+      );
       let radius: number;
       if (data.radius !== undefined) {
         radius = data.radius;
@@ -145,7 +153,11 @@ function hitTestPad(
   pad: ParsedPad,
   worldPoint: Point2D,
 ): boolean {
-  const padWorld = transformPoint(placement, pad.position.x, pad.position.y);
+  const padWorld = transformPlacementPoint(
+    placement,
+    pad.position.x,
+    pad.position.y,
+  );
   const halfW = pad.size.width / 2;
   const halfH = pad.size.height / 2;
 
@@ -204,7 +216,10 @@ function pointToSegmentDistance(
 }
 
 function hitTestTrace(trace: TraceSegment, worldPoint: Point2D): boolean {
-  return pointToSegmentDistance(worldPoint, trace.start, trace.end) < trace.width / 2 + 0.1;
+  return (
+    pointToSegmentDistance(worldPoint, trace.start, trace.end) <
+    trace.width / 2 + 0.1
+  );
 }
 
 function hitTestVia(via: Via, worldPoint: Point2D): boolean {
@@ -249,8 +264,12 @@ export function hitTestPcb(
     }
   }
 
-  const activeLayerTraces = traces.filter((trace) => trace.layer === activeLayer);
-  const otherLayerTraces = traces.filter((trace) => trace.layer !== activeLayer);
+  const activeLayerTraces = traces.filter(
+    (trace) => trace.layer === activeLayer,
+  );
+  const otherLayerTraces = traces.filter(
+    (trace) => trace.layer !== activeLayer,
+  );
 
   for (const trace of [...activeLayerTraces, ...otherLayerTraces]) {
     if (hitTestTrace(trace, worldPoint)) {
@@ -283,7 +302,7 @@ export function getPadWorldPosition(
   const pad = placement.footprintData.pads.find((p) => p.number === padNumber);
   if (!pad) return null;
 
-  return transformPoint(placement, pad.position.x, pad.position.y);
+  return transformPlacementPoint(placement, pad.position.x, pad.position.y);
 }
 
 export function getPadRoutingLayer(
