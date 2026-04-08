@@ -1,0 +1,44 @@
+{
+  "id": "component-library",
+  "label": "Component Library",
+  "version": "0.1.0",
+  "apiVersion": 2,
+  "namespace": "space.componentlibrary",
+  "kind": "space",
+  "tags": [],
+  "runner": {
+    "mode": "inproc",
+    "rust": {
+      "crate": "module_component_library",
+      "enableEvents": false
+    }
+  },
+  "fs": {
+    "root": "/modules/component-library",
+    "permissions": [
+      "read",
+      "write"
+    ]
+  },
+  "db": {
+    "prefix": "component_library",
+    "migrations": true,
+    "rawAccess": true
+  },
+  "coreCapabilities": [
+    "projects",
+    "contentEditor",
+    "toolRegistry"
+  ],
+  "ui": {
+    "moduleEntry": "ts/module.ts",
+    "primarySpace": "react/Space.tsx",
+    "registerAsSpaceInTopBar": true
+  },
+  "dependsOn": [],
+  "exports": {
+    "services": [],
+    "widgets": []
+  },
+  "defaultPinned": false
+}
