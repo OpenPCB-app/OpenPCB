@@ -1,0 +1,24 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "baseUrl": ".",
+    "types": ["bun-types"],
+    "typeRoots": ["./node_modules", "../../../node_modules"],
+    "module": "esnext",
+    "moduleResolution": "bundler"
+  },
+  "include": [
+    "main.ts",
+    "index.ts",
+    "http/**/*.ts",
+    "router/**/*.ts",
+    "middleware/**/*.ts",
+    "diagnostics/**/*.ts",
+    "controllers/**/*.ts",
+    "modules/**/*.ts",
+    "contracts/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

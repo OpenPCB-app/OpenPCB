@@ -14,12 +14,7 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/generated": ["src-ts/shared/generated"],
-      "@shared/generated/*": ["src-ts/shared/generated/*"],
-      "@shared/types": ["src-ts/shared/types"],
-      "@shared/types/*": ["src-ts/shared/types/*"],
-      "@modules/*": ["modules/*"],
-      "@component-library/*": ["modules/component-library/*"]
+      "@modules/*": ["src/modules/*"]
     }
   }
 }
