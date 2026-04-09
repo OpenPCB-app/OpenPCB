@@ -15,8 +15,6 @@ describe("Core Tools - Smoke Test", () => {
     expect(mockDb.projects).toBeDefined();
     expect(mockDb.chats).toBeDefined();
     expect(mockDb.fileRecords).toBeDefined();
-    expect(mockDb.bookmarks).toBeDefined();
-    expect(mockDb.favorites).toBeDefined();
   });
 
   test("mock repos can store and retrieve data", async () => {

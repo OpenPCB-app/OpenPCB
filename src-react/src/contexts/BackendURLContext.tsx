@@ -15,6 +15,7 @@ interface BackendURLContextType {
   startupContractVersion: number | null;
   startupLicenseState: "active" | "grace" | "restricted" | "blocked" | null;
   startupLicenseCode: string | null;
+  loadedModules: string[];
 }
 
 const BackendURLContext = createContext<BackendURLContextType>({
@@ -23,6 +24,7 @@ const BackendURLContext = createContext<BackendURLContextType>({
   startupContractVersion: null,
   startupLicenseState: null,
   startupLicenseCode: null,
+  loadedModules: [],
 });
 
 function isTauriRuntime(): boolean {
@@ -47,6 +49,7 @@ export const BackendURLProvider: React.FC<{ children: React.ReactNode }> = ({
   const [startupLicenseCode, setStartupLicenseCode] = useState<string | null>(
     null,
   );
+  const [loadedModules, setLoadedModules] = useState<string[]>([]);
 
   useEffect(() => {
     // Electron runtime: receive backend URL via IPC from main process
@@ -133,11 +136,15 @@ export const BackendURLProvider: React.FC<{ children: React.ReactNode }> = ({
             startupContractVersion?: number;
             startupLicenseState?: "active" | "grace" | "restricted" | "blocked";
             startupLicenseCode?: string;
+            loadedModules?: string[];
           };
 
           setStartupContractVersion(payload.startupContractVersion ?? 1);
           setStartupLicenseState(payload.startupLicenseState ?? "active");
           setStartupLicenseCode(payload.startupLicenseCode ?? "WEB_MODE");
+          setLoadedModules(
+            Array.isArray(payload.loadedModules) ? payload.loadedModules : [],
+          );
           setIsReady(true);
         } catch (error) {
           console.error(
@@ -263,6 +270,29 @@ export const BackendURLProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
+  useEffect(() => {
+    if (!backendURL || !isReady) return;
+
+    const refreshLoadedModules = async () => {
+      try {
+        const response = await fetch(`${backendURL}/api`);
+        if (!response.ok) {
+          return;
+        }
+        const payload = (await response.json()) as {
+          loadedModules?: string[];
+        };
+        setLoadedModules(
+          Array.isArray(payload.loadedModules) ? payload.loadedModules : [],
+        );
+      } catch {
+        // no-op
+      }
+    };
+
+    void refreshLoadedModules();
+  }, [backendURL, isReady]);
+
   return (
     <BackendURLContext.Provider
       value={{
@@ -271,6 +301,7 @@ export const BackendURLProvider: React.FC<{ children: React.ReactNode }> = ({
         startupContractVersion,
         startupLicenseState,
         startupLicenseCode,
+        loadedModules,
       }}
     >
       {children}

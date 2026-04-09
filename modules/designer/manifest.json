@@ -3,6 +3,7 @@
   "label": "Designer",
   "version": "0.1.0",
   "apiVersion": 2,
+  "enabled": false,
   "namespace": "space.designer",
   "kind": "space",
   "tags": [],
@@ -35,7 +36,20 @@
     "primarySpace": "react/Space.tsx",
     "registerAsSpaceInTopBar": true
   },
-  "dependsOn": [],
+  "runtime": {
+    "backendEntry": "core/backend-entry.ts",
+    "frontendEntry": "core/frontend-entry.tsx"
+  },
+  "dependsOn": [
+    {
+      "id": "component-library",
+      "optional": false
+    },
+    {
+      "id": "ai-service",
+      "optional": false
+    }
+  ],
   "exports": {
     "services": [],
     "widgets": []

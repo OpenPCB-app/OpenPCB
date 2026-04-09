@@ -3,9 +3,8 @@
  * Scaffolds new modules with interactive prompts
  */
 
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import * as TOML from "@iarna/toml";
 import type { ScaffoldOptions } from "../types.js";
 import { promptForModuleOptions, confirmScaffold } from "../prompts.js";
 import { validateScaffoldOptions, ValidationError } from "../validation.js";
@@ -14,9 +13,6 @@ import {
     generateManifest,
     generateReactComponent,
     generateModuleEntry,
-    generateRustLib,
-    generateRustCargoToml,
-    generateRustExportTypes,
 } from "../templates.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..", "..", "..");
@@ -57,59 +53,7 @@ async function scaffoldModule(opts: ScaffoldOptions, rollback: RollbackManager):
     const moduleCode = generateModuleEntry(opts);
     await writeTextFile(path.join(moduleDir, "ts", "module.ts"), moduleCode, rollback);
 
-    if (opts.hasRustCommands) {
-        console.log("  🦀 Creating Rust crate...");
-
-        const cargoToml = generateRustCargoToml(opts);
-        await writeTextFile(path.join(moduleDir, "rust", "Cargo.toml"), cargoToml, rollback);
-
-        const libRs = generateRustLib(opts);
-        await writeTextFile(path.join(moduleDir, "rust", "src", "lib.rs"), libRs, rollback);
-
-        const exportTypes = generateRustExportTypes(opts);
-        await writeTextFile(
-            path.join(moduleDir, "rust", "src", "bin", "export_types.rs"),
-            exportTypes,
-            rollback,
-        );
-
-        console.log("  📋 Registering in Cargo workspace...");
-        await updateCargoWorkspace(opts.id, rollback);
-    }
-
     console.log("\n✅ Module scaffolded successfully!\n");
-}
-
-async function updateCargoWorkspace(moduleId: string, rollback: RollbackManager): Promise<void> {
-    const cargoPath = path.join(repoRoot, "Cargo.toml");
-    const originalContent = await readFile(cargoPath, "utf8");
-
-    rollback.trackCargoTomlBackup(originalContent);
-
-    const toml = TOML.parse(originalContent) as {
-        workspace?: { members?: string[] };
-    };
-
-    if (!toml.workspace) {
-        toml.workspace = { members: [] };
-    }
-    if (!toml.workspace.members) {
-        toml.workspace.members = [];
-    }
-
-    const entryPath = `modules/${moduleId}/rust`;
-
-    if (toml.workspace.members.includes(entryPath)) {
-        console.log(`    ℹ️  Already in workspace: ${entryPath}`);
-        return;
-    }
-
-    toml.workspace.members.push(entryPath);
-
-    const updatedContent = TOML.stringify(toml as TOML.JsonMap);
-    await writeFile(cargoPath, updatedContent, "utf8");
-
-    console.log(`    ✓ Added to Cargo workspace: ${entryPath}`);
 }
 
 function printSuccessSummary(opts: ScaffoldOptions): void {
@@ -131,12 +75,6 @@ function printSuccessSummary(opts: ScaffoldOptions): void {
         console.log(`   - modules/${opts.id}/react/Space.tsx`);
     }
 
-    if (opts.hasRustCommands) {
-        console.log(`   - modules/${opts.id}/rust/src/lib.rs`);
-        console.log(`   - modules/${opts.id}/rust/Cargo.toml`);
-        console.log(`   - modules/${opts.id}/rust/src/bin/export_types.rs`);
-    }
-
     console.log();
     console.log("🔧 Next steps:");
     console.log();
@@ -154,13 +92,6 @@ function printSuccessSummary(opts: ScaffoldOptions): void {
         console.log(`   ${step}. Implement HTTP endpoints:`);
         console.log(`      Edit: modules/${opts.id}/ts/module.ts`);
         console.log(`      Test: curl http://localhost:3000/api/modules/${opts.id}/example`);
-        console.log();
-        step++;
-    }
-
-    if (opts.hasRustCommands) {
-        console.log(`   ${step}. Implement Rust logic:`);
-        console.log(`      Edit: modules/${opts.id}/rust/src/lib.rs`);
         console.log();
         step++;
     }

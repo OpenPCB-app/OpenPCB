@@ -1,5 +1,8 @@
 import type { ReactElement } from "react";
-import type { ModuleSpaceProps } from "@modules/_kit/createModule";
+interface ModuleSpaceProps {
+    moduleId: string;
+    namespace?: string;
+}
 
 export function AiServiceSpace({ moduleId, namespace }: ModuleSpaceProps): ReactElement {
     return (

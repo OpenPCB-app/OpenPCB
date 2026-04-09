@@ -31,11 +31,7 @@ export default defineConfig({
     },
   },
   // Env variable support removed. Use fixed defaults below.
-  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
-  //
-  // 1. prevent Vite from obscuring rust errors
   clearScreen: false,
-  // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: 1420,
     strictPort: true,
@@ -44,8 +40,7 @@ export default defineConfig({
     fs: {
       allow: [path.resolve(__dirname), path.resolve(__dirname, "..")],
     },
-    // Proxy API and WebSocket requests to Bun sidecar for browser-first dev mode
-    // In Tauri mode, BackendURLContext uses dynamic port discovery; proxy is ignored
+    // Proxy API and WebSocket requests to Bun backend during frontend dev
     proxy: {
       "/api": {
         target: "http://127.0.0.1:3000",
@@ -64,7 +59,6 @@ export default defineConfig({
     watch: {
       // Ignore unnecessary directories to reduce CPU usage
       ignored: [
-        "**/src-tauri/**",
         "**/node_modules/**",
         "**/.git/**",
         "**/dist/**",
@@ -83,12 +77,9 @@ export default defineConfig({
       "@radix-ui/react-dropdown-menu",
       "lucide-react",
     ],
-    // Exclude native Tauri modules from bundling
-    exclude: ["@tauri-apps/api", "@tauri-apps/plugin-opener"],
+    exclude: [],
   },
   build: {
-    // Align generated bundles with the runtime engines shipped with Tauri
-    // Fixed build settings (environment-driven options removed)
     target: "safari13",
     // Use esbuild minification by default
     minify: "esbuild",

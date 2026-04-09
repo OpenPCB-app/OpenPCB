@@ -6,6 +6,8 @@ directories:
 files:
   - dist/**/*
 extraResources:
+  - from: ../core/frontend/dist/
+    to: frontend-dist/
   - from: ../bin/
     to: bin/
     filter:

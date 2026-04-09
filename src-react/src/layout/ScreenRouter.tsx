@@ -1,56 +1,55 @@
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import {
   useNavigationStore,
   initializeNavigationFromHash,
   setupHashChangeListener,
 } from "@/stores/navigation-store";
+import { useBackendURL } from "@/contexts/BackendURLContext";
 import { HomeScreen } from "@/screens/HomeScreen";
-import { ChatScreen } from "@/screens/ChatScreen";
-import { DesignScreen } from "@/screens/DesignScreen";
-import { NotesScreen } from "@/screens/NotesScreen";
-import { LibraryScreen } from "@/screens/LibraryScreen";
-import { ComponentDetailPage } from "@/components/library/ComponentDetailPage";
+import { ModuleSpace } from "@/modules/ModuleSpace";
+import { getSpaceModules } from "@shared/generated/modules";
+
+function resolveModuleId(screen: string, currentModuleId: string | null): string | null {
+  return screen === "module" ? currentModuleId : null;
+}
+
+function ModuleUnavailable({ moduleId }: { moduleId: string }) {
+  return (
+    <div className="flex h-full w-full items-center justify-center p-8">
+      <div className="max-w-lg rounded-lg border border-border-default bg-bg-input p-6 text-center">
+        <h2 className="text-lg font-medium text-text-primary">Module unavailable</h2>
+        <p className="mt-2 text-sm text-text-secondary">
+          Route targets "{moduleId}", but module is not loaded.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export function ScreenRouter() {
   const currentScreen = useNavigationStore((s) => s.currentScreen);
-  const currentComponentId = useNavigationStore((s) => s.currentComponentId);
-  const navigateToComponentEdit = useNavigationStore(
-    (s) => s.navigateToComponentEdit,
-  );
+  const currentModuleId = useNavigationStore((s) => s.currentModuleId);
+  const { loadedModules } = useBackendURL();
+  const knownSpaceModuleIds = getSpaceModules().map((m) => m.id);
 
   useEffect(() => {
     initializeNavigationFromHash();
     return setupHashChangeListener();
   }, []);
 
-  const handleEditComponent = useCallback(
-    (componentId: string) => {
-      navigateToComponentEdit(componentId);
-    },
-    [navigateToComponentEdit],
-  );
+  const moduleId = resolveModuleId(currentScreen, currentModuleId);
+  const isKnownModule = moduleId ? knownSpaceModuleIds.includes(moduleId) : false;
+  const isLoadedModule = moduleId ? loadedModules.includes(moduleId) : false;
+  const showModule = Boolean(moduleId && isKnownModule);
 
-  switch (currentScreen) {
-    case "home":
-      return <HomeScreen />;
-    case "project":
-      return <HomeScreen />;
-    case "design":
-      return <DesignScreen />;
-    case "notes":
-      return <NotesScreen />;
-    case "chat":
-      return <ChatScreen />;
-    case "library":
-      return <LibraryScreen />;
-    case "import":
-      return <LibraryScreen />;
-    case "component-detail":
-      if (currentComponentId) {
-        return <ComponentDetailPage onEditComponent={handleEditComponent} />;
-      }
-      return <LibraryScreen />;
-    default:
-      return <HomeScreen />;
+  if (showModule) {
+    if (!isLoadedModule && moduleId) {
+      return <ModuleUnavailable moduleId={moduleId} />;
+    }
+    if (moduleId) {
+      return <ModuleSpace moduleId={moduleId} />;
+    }
   }
+
+  return <HomeScreen />;
 }

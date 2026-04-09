@@ -1,0 +1,103 @@
+OPENPCB MIGRATION PLAN REVIEW - EXECUTIVE SUMMARY
+==================================================
+
+REVIEW SCOPE: Frontend (React) migration - src-react/src only
+PLAN REVIEWED: Core keeps workspace/project, removes folders/favorites/branches, moves bookmarks/MCP/OAuth to ai-service, keeps usage/secrets in core
+
+---
+
+FINDINGS:
+
+1. CRITICAL BLOCKERS (Fix before implementation):
+   ✗ Settings panel architecture incomplete - panels exist but not registered
+   ✗ Secrets API still references non-existent Tauri bindings
+   ✗ app-store.ts oversized (366 lines) with mixed concerns - will block module isolation
+   ✗ Unclear: are folders/favorites/bookmarks being deleted or moved?
+   ✗ OAuth integration missing - code exists but no UI
+
+2. MAJOR RISKS:
+   - Workspace/project centralization will couple all modules to core store
+   - No import path strategy defined for module boundaries
+   - Folder/favorite removal plan vague (affects home screen)
+   - Settings panels movement not architecturally designed
+
+3. MISSING STEPS:
+   - Settings registry system (dynamic panel loading)
+   - app-store refactoring (split into 3 separate stores)
+   - Home screen redesign for removed features
+   - Secrets migration from Tauri → Electron IPC
+   - OAuth UI integration into settings
+
+4. ORDERING PROBLEMS:
+   - Can't move MCP/OAuth before settings architecture
+   - Can't remove folders/favorites before home screen refactor
+   - Can't move secrets without Electron migration first
+   - MUST split app-store before module extraction
+
+5. HOT SPOT FILES (Highest refactor risk):
+   - app-store.ts (366 lines) - SPLIT
+   - SettingsDialog.tsx - REFACTOR to registry
+   - secrets-api.ts (81 lines) - REWRITE for Electron
+   - nav.ts - UPDATE with missing panels
+   - FolderSection/FavoritesSection - DELETE or REFACTOR
+   - McpServersPanel (449 lines) - MOVE + register
+   - UsagePanel (120 lines) - DECISION NEEDED
+
+---
+
+KEY QUESTIONS FOR USER (BLOCKING):
+
+Q1: Are folders/favorites chat-based or project-based? (affects 4 files + UI)
+Q2: Keep or delete bookmarks? (affects import strategy)
+Q3: Usage panel stays in core or moves? (affects settings design)
+Q4: electron-keytar or encrypted file for secrets? (Electron migration)
+Q5: What is MCP server panel for? (affects settings architecture)
+Q6: Split app-store before or during extraction? (affects timeline)
+Q7: Dynamic settings registry now or hardcode? (affects extensibility)
+
+---
+
+RECOMMENDED SEQUENCE (CORRECTED):
+
+Phase 0: PREPARATION (Answer questions + migrate Tauri)
+  - Decide on folder/favorite/bookmark scope
+  - Decide on secrets storage (electron-keytar vs file)
+  - Split app-store into navigation + data stores
+  - Migrate secrets-api.ts from Tauri → Electron IPC
+
+Phase 1: SETTINGS INFRASTRUCTURE
+  - Refactor SettingsDialog to use registry pattern
+  - Register core panels (General, About)
+  - Create AI settings panel stub
+
+Phase 2: REMOVE DEPRECATED FEATURES
+  - Delete folder/favorite/branch files if removing
+  - Delete or move bookmark files
+  - Update home screen layout
+
+Phase 3: MOVE TO MODULES
+  - Move MCP → ai-service module
+  - Move OAuth → ai-service module
+  - Export settings panels from modules
+
+Phase 4: KEEP IN CORE (No changes)
+  - Workspace/project (no movement)
+  - Usage (if staying in core)
+  - Secrets (Electron-based)
+
+---
+
+CRITICAL ACTION ITEMS (BEFORE IMPLEMENTATION):
+
+1. Clarify feature scope (Q1-Q5 above)
+2. Split app-store.ts into separate concerns
+3. Design settings panel registry system
+4. Migrate secrets-api.ts to Electron IPC
+5. Define frontend import path conventions
+6. Update SettingsDialog architecture
+
+DO NOT START MODULE EXTRACTION WITHOUT THESE DONE.
+
+---
+
+FULL DETAILED REVIEW: See accompanying markdown file

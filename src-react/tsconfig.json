@@ -41,14 +41,13 @@
     }
   },
   "include": [
-    "src",
-    "scripts",
+    "src/main.tsx",
+    "src/vite-env.d.ts",
+    "src/types",
     "vite.config.ts",
-    "tailwind.config.ts",
-    "../modules/**/*.ts",
-    "../modules/knowledge/react/components/Chat/**/*.tsx"
+    "tailwind.config.ts"
   ],
   "exclude": [
-    "../modules/**/*.test.ts"
+    "../modules/**"
   ]
 }

@@ -1,9 +1,5 @@
 import {
   LayoutDashboard,
-  PenTool,
-  FileText,
-  MessageSquare,
-  Package,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -18,10 +14,6 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { screen: "home", icon: LayoutDashboard, label: "Home" },
-  { screen: "design", icon: PenTool, label: "Design" },
-  { screen: "library", icon: Package, label: "Library" },
-  { screen: "chat", icon: MessageSquare, label: "Chat" },
-  { screen: "notes", icon: FileText, label: "Notes" },
 ];
 
 interface LeftSidebarProps {
@@ -31,27 +23,14 @@ interface LeftSidebarProps {
 export default function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
   const currentScreen = useNavigationStore((s) => s.currentScreen);
   const navigateToHome = useNavigationStore((s) => s.navigateToHome);
-  const navigateToDesign = useNavigationStore((s) => s.navigateToDesign);
-  const navigateToNotes = useNavigationStore((s) => s.navigateToNotes);
-  const navigateToNewChat = useNavigationStore((s) => s.navigateToNewChat);
-  const navigateToLibrary = useNavigationStore((s) => s.navigateToLibrary);
 
   const navigate = (screen: Screen) => {
     switch (screen) {
       case "home":
         navigateToHome();
         break;
-      case "design":
-        navigateToDesign();
-        break;
-      case "notes":
-        navigateToNotes();
-        break;
-      case "chat":
-        navigateToNewChat();
-        break;
-      case "library":
-        navigateToLibrary();
+      default:
+        navigateToHome();
         break;
     }
   };
@@ -61,6 +40,7 @@ export default function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
       {/* Logo + Tauri drag region */}
       <div className="flex flex-col items-center w-full">
         <button
+          type="button"
           className="flex h-16 w-16 items-center justify-center"
           onClick={navigateToHome}
           aria-label="OpenPCB Home"
@@ -102,6 +82,7 @@ export default function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
             const isActive = currentScreen === item.screen;
             return (
               <button
+                type="button"
                 key={item.screen}
                 className={cn(
                   "flex flex-col items-center justify-center w-16 rounded-xl py-2 transition-colors",
@@ -130,6 +111,7 @@ export default function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
       {/* Bottom actions */}
       <div className="flex flex-col items-center gap-2 pb-3">
         <button
+          type="button"
           className="flex flex-col items-center justify-center w-16 rounded-xl py-2 text-icon-muted hover:bg-rail-hover hover:text-icon-default transition-colors"
           aria-label="Settings"
           onClick={onSettingsClick}

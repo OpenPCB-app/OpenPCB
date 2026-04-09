@@ -3,9 +3,7 @@ import type { Project } from "../../db/schema/project";
 import { NotFoundError, ValidationError } from "../../core/errors";
 import { project as projectTable } from "../../db/schema/project";
 import { design as designTable } from "../../db/schema/design";
-import { chat as chatTable } from "../../db/schema/chat";
 import { file as fileTable } from "../../db/schema/file";
-import { PageRepository } from "../../../../modules/knowledge/ts/db/repositories/page-repository";
 import { and, eq, isNull } from "drizzle-orm";
 import type {
   CreateProjectInput,
@@ -138,17 +136,9 @@ export class ProjectService implements IProjectService {
         );
 
       await client
-        .update(chatTable)
-        .set({ projectId: null, updatedAt: now } as never)
-        .where(and(eq(chatTable.projectId, id), isNull(chatTable.deletedAt)));
-
-      await client
         .update(fileTable)
         .set({ projectId: null, updatedAt: now } as never)
         .where(eq(fileTable.projectId, id));
-
-      const knowledgePages = new PageRepository(client as never);
-      await knowledgePages.detachProjectPages(project.workspaceId, id);
 
       await client
         .update(projectTable)

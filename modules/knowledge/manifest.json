@@ -11,13 +11,22 @@
     "primarySpace": "react/Space.tsx",
     "registerAsSpaceInTopBar": true
   },
+  "runtime": {
+    "backendEntry": "core/backend-entry.ts",
+    "frontendEntry": "core/frontend-entry.tsx"
+  },
   "db": {
     "prefix": "knowledge_",
     "migrations": true,
     "rawAccess": true
   },
   "coreCapabilities": ["contentEditor", "toolRegistry"],
-  "dependsOn": [],
+  "dependsOn": [
+    {
+      "id": "ai-service",
+      "optional": false
+    }
+  ],
   "exports": {
     "services": [
       {

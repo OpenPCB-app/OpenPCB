@@ -10,9 +10,6 @@ import { settingsNavItems, type SettingsNavItem } from "./nav";
 
 import { GeneralPanel } from "./panels/GeneralPanel";
 import { AboutPanel } from "./panels/AboutPanel";
-import { ApiKeysPanel } from "./panels/ApiKeysPanel";
-import { UsagePanel } from "./panels/UsagePanel";
-import { McpServersPanel } from "./panels/McpServersPanel";
 
 type SettingsPanelId = SettingsNavItem["id"];
 
@@ -26,15 +23,9 @@ type SettingsDialogProps = {
 
 const panelComponents: {
   general: () => React.JSX.Element;
-  "api-keys": () => React.JSX.Element;
-  "mcp-servers": () => React.JSX.Element;
-  usage: () => React.JSX.Element;
   about: () => React.JSX.Element;
 } = {
   general: GeneralPanel,
-  "api-keys": ApiKeysPanel,
-  "mcp-servers": McpServersPanel,
-  usage: UsagePanel,
   about: AboutPanel,
 };
 

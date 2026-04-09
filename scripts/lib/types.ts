@@ -12,7 +12,6 @@ export interface ScaffoldOptions {
     kind: ModuleKind;
     tags: string[];
     hasHttpEndpoints: boolean;
-    hasRustCommands: boolean;
     hasReactUI: boolean;
     runCodegen: boolean;
 }
@@ -27,10 +26,6 @@ export interface ModuleManifest {
     tags: string[];
     runner: {
         mode: string;
-        rust: {
-            crate: string;
-            enableEvents: boolean;
-        };
     };
     fs: {
         root: string;

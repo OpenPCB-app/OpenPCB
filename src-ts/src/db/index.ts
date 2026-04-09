@@ -37,18 +37,10 @@ import { FileRetentionPolicyRepository } from "./repositories/file-retention-pol
 import { ModuleDbHandle } from "./module-handle";
 import { ProviderApiKeyRepository } from "./repositories/provider-api-key";
 import { ProviderRepository } from "./repositories/provider";
-import { FolderRepository } from "./repositories/folder";
-import { FavoriteRepository } from "./repositories/favorite";
 import { TagRepository } from "./repositories/tag";
-import { BookmarkRepository } from "./repositories/bookmark";
-import {
-  UsageRecordRepository,
-  UsageBudgetRepository,
-} from "./repositories/usage";
 import { MentionRepository } from "./repositories/mention";
 import { ContentEditSnapshotRepository } from "./repositories/content-edit-snapshot";
 import { ContentEditLockRepository } from "./repositories/content-edit-lock";
-import { McpServerRepository } from "./repositories/mcp-server";
 import { ComponentFamilyRepository } from "./repositories/component-family-repository";
 import { ComponentRepository } from "./repositories/component-repository";
 import { ComponentDraftRepository } from "./repositories/component-draft-repository";
@@ -125,16 +117,10 @@ export class DatabaseAccess {
   private _retentionPolicies?: FileRetentionPolicyRepository;
   private _providerApiKeys?: ProviderApiKeyRepository;
   private _providers?: ProviderRepository;
-  private _folders?: FolderRepository;
-  private _favorites?: FavoriteRepository;
   private _tags?: TagRepository;
-  private _bookmarks?: BookmarkRepository;
-  private _usageRecords?: UsageRecordRepository;
-  private _usageBudgets?: UsageBudgetRepository;
   private _mentions?: MentionRepository;
   private _contentEditSnapshots?: ContentEditSnapshotRepository;
   private _contentEditLocks?: ContentEditLockRepository;
-  private _mcpServers?: McpServerRepository;
   private _componentFamilies?: ComponentFamilyRepository;
   private _components?: ComponentRepository;
   private _componentDrafts?: ComponentDraftRepository;
@@ -525,46 +511,11 @@ export class DatabaseAccess {
     return this._providers;
   }
 
-  get folders(): FolderRepository {
-    if (!this._folders) {
-      this._folders = new FolderRepository(this.db, this.queryLogger);
-    }
-    return this._folders;
-  }
-
-  get favorites(): FavoriteRepository {
-    if (!this._favorites) {
-      this._favorites = new FavoriteRepository(this.db, this.queryLogger);
-    }
-    return this._favorites;
-  }
-
   get tags(): TagRepository {
     if (!this._tags) {
       this._tags = new TagRepository(this.db, this.queryLogger);
     }
     return this._tags;
-  }
-
-  get bookmarks(): BookmarkRepository {
-    if (!this._bookmarks) {
-      this._bookmarks = new BookmarkRepository(this.db, this.queryLogger);
-    }
-    return this._bookmarks;
-  }
-
-  get usageRecords(): UsageRecordRepository {
-    if (!this._usageRecords) {
-      this._usageRecords = new UsageRecordRepository(this.db, this.queryLogger);
-    }
-    return this._usageRecords;
-  }
-
-  get usageBudgets(): UsageBudgetRepository {
-    if (!this._usageBudgets) {
-      this._usageBudgets = new UsageBudgetRepository(this.db, this.queryLogger);
-    }
-    return this._usageBudgets;
   }
 
   get mentions(): MentionRepository {
@@ -592,13 +543,6 @@ export class DatabaseAccess {
       );
     }
     return this._contentEditLocks;
-  }
-
-  get mcpServers(): McpServerRepository {
-    if (!this._mcpServers) {
-      this._mcpServers = new McpServerRepository(this.db, this.queryLogger);
-    }
-    return this._mcpServers;
   }
 
   get componentFamilies(): ComponentFamilyRepository {

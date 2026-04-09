@@ -35,6 +35,10 @@
     "primarySpace": "react/Space.tsx",
     "registerAsSpaceInTopBar": true
   },
+  "runtime": {
+    "backendEntry": "core/backend-entry.ts",
+    "frontendEntry": "core/frontend-entry.tsx"
+  },
   "dependsOn": [],
   "exports": {
     "services": [],

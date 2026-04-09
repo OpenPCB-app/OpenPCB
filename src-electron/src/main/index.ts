@@ -23,10 +23,8 @@ function createWindow(): void {
     mainWindow.loadURL("http://127.0.0.1:1420");
     mainWindow.webContents.openDevTools();
   } else {
-    // Prod: load pre-built React app
-    mainWindow.loadFile(
-      join(import.meta.dirname, "..", "..", "src-react", "dist", "index.html"),
-    );
+    // Prod: load pre-built frontend app packaged as extra resource
+    mainWindow.loadFile(join(process.resourcesPath, "frontend-dist", "index.html"));
   }
 
   mainWindow.on("closed", () => {
@@ -40,8 +38,6 @@ ipcMain.handle("get-backend-url", () => {
 });
 
 app.whenReady().then(async () => {
-  createWindow();
-
   // In dev mode, the backend runs separately via `npm run dev:backend`
   // and Vite proxies /api and /ws to it. No sidecar spawn needed.
   // In prod, we spawn the compiled sidecar binary ourselves.
@@ -55,6 +51,8 @@ app.whenReady().then(async () => {
   } else {
     console.log("[electron] Dev mode: using external backend via Vite proxy");
   }
+
+  createWindow();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

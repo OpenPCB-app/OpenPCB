@@ -1,0 +1,17 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - button "OpenPCB Home" [ref=e5]: OP
+    - navigation [ref=e6]:
+      - button "Home" [ref=e7]
+    - button "Settings" [ref=e9]:
+      - img [ref=e10]
+  - main [ref=e14]:
+    - generic [ref=e16]:
+      - heading "Home" [level=1] [ref=e17]
+      - paragraph [ref=e18]: Core workspace
+      - generic [ref=e19]:
+        - heading "Quick actions" [level=2] [ref=e20]
+        - generic [ref=e21]:
+          - button "New design (disabled)" [disabled] [ref=e22]
+          - button "New note (disabled)" [disabled] [ref=e23]
+          - button "New chat (disabled)" [disabled] [ref=e24]

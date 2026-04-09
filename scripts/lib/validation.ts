@@ -48,17 +48,7 @@ export async function validateScaffoldOptions(
         );
     }
 
-    // 5. Validate Cargo.toml exists if Rust commands enabled
-    if (opts.hasRustCommands) {
-        const cargoTomlPath = path.join(repoRoot, "Cargo.toml");
-        if (!existsSync(cargoTomlPath)) {
-            throw new ValidationError(
-                "Cargo.toml not found in repository root. Rust workspace required for Rust commands.",
-            );
-        }
-    }
-
-    // 6. Check Bun version
+    // 5. Check Bun version
     try {
         const bunVersion = await getBunVersion();
         const versionMatch = bunVersion.match(/^(\d+)\.(\d+)\.(\d+)/);

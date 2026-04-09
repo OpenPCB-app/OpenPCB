@@ -35,7 +35,16 @@
     "primarySpace": "react/Space.tsx",
     "registerAsSpaceInTopBar": true
   },
-  "dependsOn": [],
+  "runtime": {
+    "backendEntry": "core/backend-entry.ts",
+    "frontendEntry": "core/frontend-entry.tsx"
+  },
+  "dependsOn": [
+    {
+      "id": "ai-service",
+      "optional": false
+    }
+  ],
   "exports": {
     "services": [],
     "widgets": []

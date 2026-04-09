@@ -5,8 +5,9 @@
     "module": "esnext"
   },
   "references": [
+    { "path": "./core/backend/tsconfig.json" },
     { "path": "./src-ts/tsconfig.json" },
-    { "path": "./src-react/tsconfig.json" },
-    { "path": "./src-react/tsconfig.node.json" }
+    { "path": "./core/frontend/tsconfig.json" },
+    { "path": "./core/frontend/tsconfig.node.json" }
   ]
 }

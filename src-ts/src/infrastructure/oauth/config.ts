@@ -6,7 +6,7 @@
  * variables or secure storage for production.
  */
 
-// TODO: Move to environment variables or Tauri stronghold for production
+// TODO: Move to environment variables or secure storage for production
 
 /**
  * OpenAI Codex OAuth client ID

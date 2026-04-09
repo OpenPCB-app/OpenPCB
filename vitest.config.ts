@@ -12,12 +12,11 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     globals: true,
-    setupFiles: ["./src-react/src/test-setup.ts"],
-    include: ["src-react/src/**/*.test.{ts,tsx}"],
+    include: ["core/frontend/src/**/*.test.{ts,tsx}"],
   },
   resolve: {
     alias: {
-      "@/": path.resolve(__dirname, "./src-react/src") + "/",
+      "@/": path.resolve(__dirname, "./core/frontend/src") + "/",
       "@shared/types": path.resolve(__dirname, "./src-ts/shared/types"),
       "@shared/sdk": path.resolve(__dirname, "./src-ts/shared/sdk"),
       "@shared/generated": path.resolve(__dirname, "./src-ts/shared/generated"),

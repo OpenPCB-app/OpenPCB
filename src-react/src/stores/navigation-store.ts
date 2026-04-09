@@ -11,6 +11,7 @@ export type DesignTab = "schematic" | "pcb" | "3d" | "bom";
 
 interface NavigationState {
   currentScreen: Screen;
+  currentModuleId: string | null;
   chatId: string | null;
   currentProjectId: string | null;
   currentDesignId: string | null;
@@ -24,6 +25,7 @@ interface NavigationState {
   setScreen: (screen: Screen) => void;
   navigateToHome: () => void;
   navigateToProject: (projectId: string | null) => void;
+  navigateToModule: (moduleId: string) => void;
   navigateToDesign: (
     projectId?: string | null,
     designId?: string | null,
@@ -63,7 +65,6 @@ function persistSidebarState(collapsed: boolean): void {
 function updateUrlHash(route: NavigationRoute): void {
   const hash = routeToHash(route);
   if (!hash) {
-    // Clear hash for home
     history.pushState(
       "",
       document.title,
@@ -77,8 +78,24 @@ function updateUrlHash(route: NavigationRoute): void {
   }
 }
 
+function moduleForLegacyScreen(screen: Screen): string | null {
+  switch (screen) {
+    case "design":
+      return "designer";
+    case "notes":
+      return "knowledge";
+    case "chat":
+      return "ai-service";
+    case "library":
+      return "component-library";
+    default:
+      return null;
+  }
+}
+
 export const useNavigationStore = create<NavigationState>((set, get) => ({
   currentScreen: "home",
+  currentModuleId: null,
   chatId: null,
   currentProjectId: null,
   currentDesignId: null,
@@ -94,18 +111,21 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   navigateToHome: () => {
     set({
       currentScreen: "home",
+      currentModuleId: null,
       chatId: null,
       currentProjectId: null,
       currentDesignId: null,
+      currentNotePageId: null,
+      currentComponentId: null,
     });
     updateUrlHash({ screen: "home" });
   },
 
   navigateToProject: (_projectId) => {
-    // Projects feature is temporarily disabled - redirect to home
     set({
       previousScreen: get().currentScreen,
       currentScreen: "home",
+      currentModuleId: null,
       currentProjectId: null,
       currentDesignId: null,
       chatId: null,
@@ -113,96 +133,48 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     updateUrlHash({ screen: "home" });
   },
 
-  navigateToDesign: (projectId, designId) => {
-    const nextProjectId =
-      projectId === undefined ? get().currentProjectId : projectId;
-    const nextDesignId =
-      designId === undefined ? get().currentDesignId : designId;
-
+  navigateToModule: (moduleId) => {
     set({
       previousScreen: get().currentScreen,
-      currentScreen: "design",
-      currentProjectId: nextProjectId,
-      currentDesignId: nextDesignId,
+      currentScreen: "module",
+      currentModuleId: moduleId,
       chatId: null,
+      currentNotePageId: null,
+      currentComponentId: null,
     });
-    updateUrlHash({
-      screen: "design",
-      projectId: nextProjectId,
-      designId: nextDesignId,
-    });
+    updateUrlHash({ screen: "module", moduleId });
   },
 
-  navigateToNotes: (pageId) => {
-    set({
-      previousScreen: get().currentScreen,
-      currentScreen: "notes",
-      currentNotePageId: pageId ?? get().currentNotePageId,
-      chatId: null,
-    });
-    updateUrlHash({
-      screen: "notes",
-      pageId: pageId ?? get().currentNotePageId,
-    });
+  navigateToDesign: (_projectId, _designId) => {
+    get().navigateToModule("designer");
   },
 
-  navigateToChat: (chatId) => {
-    set({
-      previousScreen: get().currentScreen,
-      currentScreen: "chat",
-      chatId,
-    });
-    updateUrlHash({ screen: "chat", chatId });
+  navigateToNotes: (_pageId) => {
+    get().navigateToModule("knowledge");
+  },
+
+  navigateToChat: (_chatId) => {
+    get().navigateToModule("ai-service");
   },
 
   navigateToNewChat: () => {
-    set({
-      previousScreen: get().currentScreen,
-      currentScreen: "chat",
-      chatId: null,
-    });
-    updateUrlHash({ screen: "chat", chatId: null });
+    get().navigateToModule("ai-service");
   },
 
   navigateToLibrary: () => {
-    set({
-      previousScreen: get().currentScreen,
-      currentScreen: "library",
-      chatId: null,
-    });
-    updateUrlHash({ screen: "library" });
+    get().navigateToModule("component-library");
   },
 
   navigateToImport: () => {
-    set({
-      previousScreen: get().currentScreen,
-      currentScreen: "import",
-      chatId: null,
-    });
-    updateUrlHash({ screen: "import" });
+    get().navigateToHome();
   },
 
-  navigateToComponentDetail: (componentId) => {
-    set({
-      previousScreen: get().currentScreen,
-      currentScreen: "component-detail",
-      currentComponentId: componentId ?? null,
-      chatId: null,
-    });
-    updateUrlHash({
-      screen: "component-detail",
-      componentId: componentId ?? null,
-    });
+  navigateToComponentDetail: (_componentId) => {
+    get().navigateToModule("component-library");
   },
 
-  navigateToComponentEdit: (componentId) => {
-    set({
-      previousScreen: get().currentScreen,
-      currentScreen: "library",
-      editComponentId: componentId,
-      chatId: null,
-    });
-    updateUrlHash({ screen: "library" });
+  navigateToComponentEdit: (_componentId) => {
+    get().navigateToModule("component-library");
   },
 
   clearEditComponentId: () => {
@@ -210,25 +182,23 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   },
 
   navigateBack: () => {
-    const { previousScreen } = get();
-    if (previousScreen) {
-      // Navigate to the previous screen
-      switch (previousScreen) {
-        case "library":
-          get().navigateToLibrary();
-          break;
-        case "home":
-          get().navigateToHome();
-          break;
-        case "design":
-          get().navigateToDesign();
-          break;
-        default:
-          get().navigateToHome();
-      }
-    } else {
+    const previousScreen = get().previousScreen;
+    if (!previousScreen) {
       get().navigateToHome();
+      return;
     }
+
+    const moduleId = moduleForLegacyScreen(previousScreen);
+    if (previousScreen === "module" && get().currentModuleId) {
+      get().navigateToModule(get().currentModuleId as string);
+      return;
+    }
+    if (moduleId) {
+      get().navigateToModule(moduleId);
+      return;
+    }
+
+    get().navigateToHome();
   },
 
   setDesignTab: (tab) => set({ designTab: tab }),
@@ -249,18 +219,15 @@ export function initializeNavigationFromHash(): void {
   if (typeof window === "undefined") return;
 
   const route = parseHashToRoute(window.location.hash);
-  if (!route) {
-    return;
-  }
+  if (!route) return;
 
   const state = useNavigationStore.getState();
   switch (route.screen) {
+    case "module":
+      state.navigateToModule(route.moduleId);
+      break;
     case "chat":
-      if (route.chatId) {
-        state.navigateToChat(route.chatId);
-      } else {
-        state.navigateToNewChat();
-      }
+      state.navigateToChat(route.chatId);
       break;
     case "design":
       state.navigateToDesign(route.projectId, route.designId);
@@ -275,11 +242,7 @@ export function initializeNavigationFromHash(): void {
       state.navigateToImport();
       break;
     case "component-detail":
-      if (route.componentId) {
-        state.navigateToComponentDetail(route.componentId);
-      } else {
-        state.navigateToLibrary();
-      }
+      state.navigateToComponentDetail(route.componentId);
       break;
     case "project":
       state.navigateToProject(route.projectId);
@@ -294,63 +257,55 @@ export function initializeNavigationFromHash(): void {
 export function setupHashChangeListener(): () => void {
   const handleHashChange = () => {
     const route = parseHashToRoute(window.location.hash);
-    if (!route) {
-      return;
-    }
+    if (!route) return;
 
     const state = useNavigationStore.getState();
 
     switch (route.screen) {
-      case "chat":
-        if (state.currentScreen !== "chat" || state.chatId !== route.chatId) {
+      case "module":
+        if (
+          state.currentScreen !== "module" ||
+          state.currentModuleId !== route.moduleId
+        ) {
           useNavigationStore.setState({
-            currentScreen: "chat",
+            currentScreen: "module",
+            currentModuleId: route.moduleId,
+          });
+        }
+        break;
+      case "chat":
+        if (state.currentScreen !== "module" || state.currentModuleId !== "ai-service") {
+          useNavigationStore.setState({
+            currentScreen: "module",
+            currentModuleId: "ai-service",
             chatId: route.chatId,
           });
         }
         break;
       case "design":
-        if (
-          state.currentScreen !== "design" ||
-          state.currentProjectId !== route.projectId ||
-          state.currentDesignId !== route.designId
-        ) {
+        if (state.currentScreen !== "module" || state.currentModuleId !== "designer") {
           useNavigationStore.setState({
-            currentScreen: "design",
-            currentProjectId: route.projectId,
-            currentDesignId: route.designId,
+            currentScreen: "module",
+            currentModuleId: "designer",
           });
         }
         break;
       case "notes":
-        if (
-          state.currentScreen !== "notes" ||
-          state.currentNotePageId !== route.pageId
-        ) {
+        if (state.currentScreen !== "module" || state.currentModuleId !== "knowledge") {
           useNavigationStore.setState({
-            currentScreen: "notes",
-            currentNotePageId: route.pageId,
+            currentScreen: "module",
+            currentModuleId: "knowledge",
           });
         }
         break;
       case "library":
-        if (state.currentScreen !== "library") {
-          useNavigationStore.setState({ currentScreen: "library" });
-        }
-        break;
-      case "import":
-        if (state.currentScreen !== "import") {
-          useNavigationStore.setState({ currentScreen: "import" });
-        }
-        break;
-      case "component-detail":
         if (
-          state.currentScreen !== "component-detail" ||
-          state.currentComponentId !== route.componentId
+          state.currentScreen !== "module" ||
+          state.currentModuleId !== "component-library"
         ) {
           useNavigationStore.setState({
-            currentScreen: "component-detail",
-            currentComponentId: route.componentId,
+            currentScreen: "module",
+            currentModuleId: "component-library",
           });
         }
         break;
@@ -359,11 +314,13 @@ export function setupHashChangeListener(): () => void {
       default:
         if (
           state.currentScreen !== "home" ||
+          state.currentModuleId !== null ||
           state.currentProjectId !== null ||
           state.currentDesignId !== null
         ) {
           useNavigationStore.setState({
             currentScreen: "home",
+            currentModuleId: null,
             currentProjectId: null,
             currentDesignId: null,
           });

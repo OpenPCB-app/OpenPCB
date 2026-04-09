@@ -16,8 +16,6 @@ import process from "node:process";
 import { createModuleCommand } from "./lib/commands/create.js";
 import { generateRegistryCommand } from "./lib/commands/generate-registry.js";
 import { generateSDKCommand } from "./lib/commands/generate-sdk.js";
-import { generateTypesCommand } from "./lib/commands/generate-types.js";
-import { generateBridgeCommand } from "./lib/commands/generate-bridge.js";
 
 // =============================================================================
 // CLI Commands
@@ -29,8 +27,6 @@ type Command =
     | "codegen"
     | "codegen-registry"
     | "codegen-sdk"
-    | "codegen-types"
-    | "codegen-bridge"
     | "exit";
 
 interface CommandDefinition {
@@ -53,22 +49,12 @@ const COMMANDS: CommandDefinition[] = [
     {
         name: "Run all codegen",
         value: "codegen",
-        description: "Generate registry + types + bridge + SDK",
+        description: "Generate registry + SDK",
     },
     {
         name: "Generate module registry",
         value: "codegen-registry",
         description: "Generate React module catalog",
-    },
-    {
-        name: "Generate Rust types",
-        value: "codegen-types",
-        description: "Export TypeScript types from Rust Specta",
-    },
-    {
-        name: "Generate bridge bindings",
-        value: "codegen-bridge",
-        description: "Generate TypeScript bindings for Rust bridge",
     },
     {
         name: "Generate module SDKs",
@@ -100,10 +86,6 @@ async function executeCommand(command: Command): Promise<void> {
             console.log("═".repeat(60));
             await generateRegistryCommand();
             console.log("═".repeat(60));
-            await generateTypesCommand();
-            console.log("═".repeat(60));
-            await generateBridgeCommand();
-            console.log("═".repeat(60));
             await generateSDKCommand();
             console.log("═".repeat(60));
             console.log("\n✅ Full codegen complete!\n");
@@ -115,14 +97,6 @@ async function executeCommand(command: Command): Promise<void> {
 
         case "codegen-sdk":
             await generateSDKCommand();
-            break;
-
-        case "codegen-types":
-            await generateTypesCommand();
-            break;
-
-        case "codegen-bridge":
-            await generateBridgeCommand();
             break;
 
         case "exit":
@@ -149,8 +123,6 @@ function parseCliArgs(): Command | null {
     if (args.includes("--codegen")) return "codegen";
     if (args.includes("--codegen-registry")) return "codegen-registry";
     if (args.includes("--codegen-sdk")) return "codegen-sdk";
-    if (args.includes("--codegen-types")) return "codegen-types";
-    if (args.includes("--codegen-bridge")) return "codegen-bridge";
 
     // Help flag
     if (args.includes("--help") || args.includes("-h")) {
@@ -178,10 +150,8 @@ Usage:
 Commands:
   --create              Create new module interactively
   --validate            Validate all module manifests
-  --codegen             Run full codegen (registry + types + bridge + SDK)
+  --codegen             Run full codegen (registry + SDK)
   --codegen-registry    Generate module registry only
-  --codegen-types       Generate Rust types only
-  --codegen-bridge      Generate bridge bindings only
   --codegen-sdk         Generate module SDKs only
   --help, -h            Show this help message
 

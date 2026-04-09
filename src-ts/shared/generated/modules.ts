@@ -49,6 +49,57 @@ export interface GeneratedModuleManifest {
 
 export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
     {
+        id: "ai-service",
+        label: "Ai Service",
+        namespace: "space.aiservice",
+        version: "0.1.0",
+        moduleEntry: "modules/ai-service/ts/module.ts",
+        kind: "space",
+        apiVersion: 2,
+        tags: [],
+        coreCapabilities: ["projects","contentEditor","toolRegistry"],
+        dependsOn: [],
+        exports: {"services":[],"widgets":[]},
+        registerAsSpaceInTopBar: true,
+        defaultPinned: false,
+        resolvedDependencies: [],
+        loadOrder: 0
+    },
+    {
+        id: "component-library",
+        label: "Component Library",
+        namespace: "space.componentlibrary",
+        version: "0.1.0",
+        moduleEntry: "modules/component-library/ts/module.ts",
+        kind: "space",
+        apiVersion: 2,
+        tags: [],
+        coreCapabilities: ["projects","contentEditor","toolRegistry"],
+        dependsOn: [],
+        exports: {"services":[],"widgets":[]},
+        registerAsSpaceInTopBar: true,
+        defaultPinned: false,
+        resolvedDependencies: [],
+        loadOrder: 1
+    },
+    {
+        id: "designer",
+        label: "Designer",
+        namespace: "space.designer",
+        version: "0.1.0",
+        moduleEntry: "modules/designer/ts/module.ts",
+        kind: "space",
+        apiVersion: 2,
+        tags: [],
+        coreCapabilities: ["projects","contentEditor","toolRegistry"],
+        dependsOn: [],
+        exports: {"services":[],"widgets":[]},
+        registerAsSpaceInTopBar: true,
+        defaultPinned: false,
+        resolvedDependencies: [],
+        loadOrder: 2
+    },
+    {
         id: "knowledge",
         label: "Knowledge",
         namespace: "space.knowledge",
@@ -63,7 +114,7 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
         registerAsSpaceInTopBar: true,
         defaultPinned: true,
         resolvedDependencies: [],
-        loadOrder: 0
+        loadOrder: 3
     }
 ];
 

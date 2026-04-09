@@ -1,0 +1,45 @@
+- generic:
+  - generic:
+    - generic:
+      - complementary:
+        - button: OP
+        - navigation:
+          - button: Home
+        - generic:
+          - button:
+            - img
+      - main:
+        - generic:
+          - generic:
+            - heading [level=1]: Home
+            - paragraph: Core workspace
+            - generic:
+              - heading [level=2]: Quick actions
+              - generic:
+                - button [disabled]: New design (disabled)
+                - button [disabled]: New note (disabled)
+                - button [disabled]: New chat (disabled)
+  - dialog "Settings" [ref=e26]:
+    - heading "Settings" [level=2] [ref=e27]
+    - generic [ref=e29]:
+      - complementary [ref=e30]:
+        - tablist [ref=e31]:
+          - tab "General" [active] [selected] [ref=e32]:
+            - img [ref=e33]
+            - text: General
+          - tab "About" [ref=e36]:
+            - img [ref=e37]
+            - text: About
+      - tabpanel "General" [ref=e44]:
+        - generic [ref=e45]:
+          - paragraph [ref=e46]: General Settings
+          - generic [ref=e48]:
+            - button "Light" [ref=e49] [cursor=pointer]:
+              - generic [ref=e50]: Light
+            - button "Dark" [ref=e51] [cursor=pointer]:
+              - generic [ref=e52]: Dark
+            - button "System" [ref=e53] [cursor=pointer]:
+              - generic [ref=e54]: System
+    - button "Close" [ref=e55]:
+      - img [ref=e56]
+      - generic [ref=e59]: Close

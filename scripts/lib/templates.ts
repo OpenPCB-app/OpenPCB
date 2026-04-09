@@ -3,7 +3,7 @@
  */
 
 import type { ScaffoldOptions, ModuleManifest } from "./types.js";
-import { toPascalCase, toCamelCase, getCrateName } from "./utils.js";
+import { toPascalCase, toCamelCase } from "./utils.js";
 
 export function generateManifest(opts: ScaffoldOptions): ModuleManifest {
     return {
@@ -16,10 +16,6 @@ export function generateManifest(opts: ScaffoldOptions): ModuleManifest {
         tags: opts.tags,
         runner: {
             mode: "inproc",
-            rust: {
-                crate: getCrateName(opts.id),
-                enableEvents: false,
-            },
         },
         fs: {
             root: `/modules/${opts.id}`,
@@ -185,60 +181,5 @@ ${endpointsSection}
 });
 
 export default ${constName};
-`;
-}
-
-export function generateRustLib(opts: ScaffoldOptions): string {
-    return `//! ${opts.label} Module
-//!
-//! Kind: ${opts.kind}
-//! Namespace: ${opts.namespace}
-
-use specta::Type;
-
-#[derive(Debug, Type, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExampleResponse {
-    pub message: String,
-}
-
-pub fn example_message(name: &str) -> ExampleResponse {
-    ExampleResponse {
-        message: format!("Hello, {name} from ${opts.id}!"),
-    }
-}
-`;
-}
-
-export function generateRustCargoToml(opts: ScaffoldOptions): string {
-    const crateName = getCrateName(opts.id);
-    return `[package]
-name = "${crateName}"
-version = "${opts.version}"
-edition = "2021"
-
-[dependencies]
-anyhow = "1"
-serde = { version = "1", features = ["derive"] }
-specta = { version = "=2.0.0-rc.22", features = ["derive"] }
-specta-typescript = "0.0.9"
-one_mind_module_support = { path = "../../../src-tauri/crates/common-modules" }
-`;
-}
-
-export function generateRustExportTypes(opts: ScaffoldOptions): string {
-    const crateName = getCrateName(opts.id);
-    return `use anyhow::Result;
-use one_mind_module_support::export_types;
-
-fn main() -> Result<()> {
-    export_types(
-        "${crateName}",
-        Some("${crateName}::export_types"),
-        |typescript| {
-            Ok(vec![specta_typescript::export::<${crateName}::ExampleResponse>(typescript)?])
-        },
-    )
-}
 `;
 }

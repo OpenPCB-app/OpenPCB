@@ -14,7 +14,6 @@ export * from "./workspace";
 export * from "./project";
 export * from "./design";
 export * from "./design-sheet";
-export * from "./folder";
 export * from "./chat";
 export * from "./message";
 
@@ -23,8 +22,6 @@ export * from "./task";
 export * from "./task-tool-event";
 
 // Organization and metadata
-export * from "./favorite";
-export * from "./bookmark";
 export * from "./tag";
 
 // Files
@@ -36,12 +33,7 @@ export * from "./file-retention-policy";
 
 // Settings
 export * from "./provider-api-key";
-export * from "./provider-oauth";
 export * from "./provider";
-export * from "./mcp-server";
-
-// Usage tracking
-export * from "./usage";
 
 // Mentions
 export * from "./mention";

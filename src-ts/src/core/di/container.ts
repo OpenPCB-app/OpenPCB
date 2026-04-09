@@ -76,8 +76,6 @@ export const TOKENS = {
   ProviderApiKeyStore: Symbol("ProviderApiKeyStore"),
   TaskManager: Symbol("TaskManager"),
   TaskOrchestrator: Symbol("TaskOrchestrator"),
-  UsageTracker: Symbol("UsageTracker"),
-  MetricsCollector: Symbol("MetricsCollector"),
 
   // Services
   ChatService: Symbol("ChatService"),
@@ -94,7 +92,6 @@ export const TOKENS = {
   TagService: Symbol("TagService"),
   BookmarkService: Symbol("BookmarkService"),
   BranchService: Symbol("BranchService"),
-  UsageService: Symbol("UsageService"),
   FileService: Symbol("FileService"),
   FileStorage: Symbol("FileStorage"),
 
@@ -114,7 +111,6 @@ export const TOKENS = {
   TagController: Symbol("TagController"),
   BookmarkController: Symbol("BookmarkController"),
   BranchController: Symbol("BranchController"),
-  UsageController: Symbol("UsageController"),
   FileController: Symbol("FileController"),
   MentionController: Symbol("MentionController"),
   ContentEditorController: Symbol("ContentEditorController"),

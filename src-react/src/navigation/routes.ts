@@ -1,6 +1,7 @@
 export type Screen =
   | "home"
   | "project"
+  | "module"
   | "design"
   | "notes"
   | "chat"
@@ -11,6 +12,7 @@ export type Screen =
 export type NavigationRoute =
   | { screen: "home" }
   | { screen: "project"; projectId: string | null }
+  | { screen: "module"; moduleId: string }
   | { screen: "design"; projectId: string | null; designId: string | null }
   | { screen: "notes"; pageId: string | null }
   | { screen: "chat"; chatId: string | null }
@@ -21,28 +23,21 @@ export type NavigationRoute =
 export function routeToHash(route: NavigationRoute): string {
   switch (route.screen) {
     case "project":
-      return route.projectId ? `#project-${route.projectId}` : "#project";
+      return "";
+    case "module":
+      return route.moduleId ? `#space-${route.moduleId}` : "";
     case "design":
-      if (route.designId && route.projectId) {
-        return `#design-project:${route.projectId}:${route.designId}`;
-      }
-      if (route.designId) {
-        return `#design-workspace:${route.designId}`;
-      }
-      if (route.projectId) {
-        return `#design-project:${route.projectId}`;
-      }
-      return "#design";
+      return "#space-designer";
     case "notes":
-      return route.pageId ? `#notes-${route.pageId}` : "#notes";
+      return "#space-knowledge";
     case "chat":
-      return route.chatId ? `#chat-${route.chatId}` : "#chat";
+      return "#space-ai-service";
     case "library":
-      return "#library";
+      return "#space-component-library";
     case "import":
-      return "#import";
+      return "";
     case "component-detail":
-      return route.componentId ? `#component-${route.componentId}` : "#component-new";
+      return "#space-component-library";
     case "home":
     default:
       return "";
@@ -50,76 +45,10 @@ export function routeToHash(route: NavigationRoute): string {
 }
 
 export function parseHashToRoute(hash: string): NavigationRoute | null {
-  if (hash.startsWith("#chat-")) {
-    return { screen: "chat", chatId: hash.substring(6) };
-  }
-  if (hash === "#chat") {
-    return { screen: "chat", chatId: null };
-  }
-
-  if (hash.startsWith("#project-")) {
-    // Projects are disabled; keep hash compatibility but route to home.
-    return { screen: "home" };
-  }
-  if (hash === "#project") {
-    return { screen: "home" };
-  }
-
-  if (hash.startsWith("#design-project:")) {
-    const payload = hash.substring(16);
-    const [projectId, designId] = payload.split(":");
-    return {
-      screen: "design",
-      projectId: projectId || null,
-      designId: designId || null,
-    };
-  }
-  if (hash.startsWith("#design-workspace:")) {
-    const designId = hash.substring(18);
-    return {
-      screen: "design",
-      projectId: null,
-      designId: designId || null,
-    };
-  }
-  if (hash.startsWith("#design-")) {
-    const payload = hash.substring(8);
-    const [projectId, designId] = payload.split(":");
-    return {
-      screen: "design",
-      projectId: projectId || null,
-      designId: designId || null,
-    };
-  }
-  if (hash === "#design") {
-    return { screen: "design", projectId: null, designId: null };
-  }
-
-  if (hash.startsWith("#notes-")) {
-    return { screen: "notes", pageId: hash.substring(7) || null };
-  }
-  if (hash === "#notes") {
-    return { screen: "notes", pageId: null };
-  }
-
-  if (hash === "#library") {
-    return { screen: "library" };
-  }
-
-  if (hash === "#import") {
-    return { screen: "import" };
-  }
-
-  if (hash === "#component-new") {
-    // New component flow lives in Library screen.
-    return { screen: "library" };
-  }
-  if (hash.startsWith("#component-")) {
-    const componentId = hash.substring(11);
-    if (!componentId) {
-      return { screen: "library" };
-    }
-    return { screen: "component-detail", componentId };
+  if (hash.startsWith("#space-")) {
+    const moduleId = hash.substring(7);
+    if (!moduleId) return { screen: "home" };
+    return { screen: "module", moduleId };
   }
 
   return null;

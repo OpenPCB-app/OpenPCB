@@ -48,12 +48,6 @@ export async function promptForModuleOptions(): Promise<ScaffoldOptions> {
         default: defaultHttpEndpoints,
     });
 
-    // Rust commands
-    const hasRustCommands = await confirm({
-        message: "Add Rust Tauri commands?",
-        default: false,
-    });
-
     // React UI (only ask for non-space kinds)
     let hasReactUI = kind === "space"; // Space always has UI
     if (kind !== "space") {
@@ -115,7 +109,6 @@ export async function promptForModuleOptions(): Promise<ScaffoldOptions> {
         kind,
         tags,
         hasHttpEndpoints,
-        hasRustCommands,
         hasReactUI,
         runCodegen,
     };
@@ -134,7 +127,6 @@ export async function confirmScaffold(opts: ScaffoldOptions): Promise<boolean> {
     console.log();
     console.log("📦 Features:");
     console.log(`  HTTP Endpoints:  ${opts.hasHttpEndpoints ? "✅ Yes" : "❌ No"}`);
-    console.log(`  Rust Commands:   ${opts.hasRustCommands ? "✅ Yes" : "❌ No"}`);
     console.log(`  React UI:        ${opts.hasReactUI ? "✅ Yes" : "❌ No"}`);
     console.log(`  Run Codegen:     ${opts.runCodegen ? "✅ Yes" : "❌ No"}`);
     console.log();

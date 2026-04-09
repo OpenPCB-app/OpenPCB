@@ -46,8 +46,8 @@
     "src/types/bun-sqlite.d.ts"
   ],
   "include": [
-    "src",
-    "test"
+    "src/main.ts",
+    "src/types/**/*.d.ts"
   ],
   "exclude": [
     "node_modules",

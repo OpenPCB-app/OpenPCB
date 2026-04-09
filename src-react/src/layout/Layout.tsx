@@ -15,49 +15,13 @@ export default function Layout() {
   const [searchOpen, setSearchOpen] = React.useState(false);
 
   const navigateToHome = useNavigationStore((s) => s.navigateToHome);
-  const navigateToDesign = useNavigationStore((s) => s.navigateToDesign);
-  const navigateToNotes = useNavigationStore((s) => s.navigateToNotes);
-  const navigateToNewChat = useNavigationStore((s) => s.navigateToNewChat);
-  const navigateToLibrary = useNavigationStore((s) => s.navigateToLibrary);
 
-  // Global hotkeys: Ctrl/Cmd+1-5 for view switching
+  // Global hotkeys: keep core-only shortcuts
   useHotkeys("ctrl+1", () => navigateToHome(), {
     enableOnFormTags: true,
     preventDefault: true,
   });
   useHotkeys("meta+1", () => navigateToHome(), {
-    enableOnFormTags: true,
-    preventDefault: true,
-  });
-  useHotkeys("ctrl+2", () => navigateToDesign(), {
-    enableOnFormTags: true,
-    preventDefault: true,
-  });
-  useHotkeys("meta+2", () => navigateToDesign(), {
-    enableOnFormTags: true,
-    preventDefault: true,
-  });
-  useHotkeys("ctrl+3", () => navigateToNotes(), {
-    enableOnFormTags: true,
-    preventDefault: true,
-  });
-  useHotkeys("meta+3", () => navigateToNotes(), {
-    enableOnFormTags: true,
-    preventDefault: true,
-  });
-  useHotkeys("ctrl+4", () => navigateToNewChat(), {
-    enableOnFormTags: true,
-    preventDefault: true,
-  });
-  useHotkeys("meta+4", () => navigateToNewChat(), {
-    enableOnFormTags: true,
-    preventDefault: true,
-  });
-  useHotkeys("ctrl+5", () => navigateToLibrary(), {
-    enableOnFormTags: true,
-    preventDefault: true,
-  });
-  useHotkeys("meta+5", () => navigateToLibrary(), {
     enableOnFormTags: true,
     preventDefault: true,
   });
