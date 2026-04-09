@@ -41,6 +41,7 @@ export interface ModuleManifest {
         moduleEntry: string;
         primarySpace?: string;
         registerAsSpaceInTopBar: boolean;
+        sidebarLabel?: string;
     };
     dependsOn: string[];
     exports: {

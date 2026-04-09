@@ -3,6 +3,7 @@
   "label": "Ai Service",
   "version": "0.1.0",
   "apiVersion": 2,
+  "enabled": false,
   "namespace": "space.aiservice",
   "kind": "space",
   "tags": [],
@@ -33,7 +34,8 @@
   "ui": {
     "moduleEntry": "ts/module.ts",
     "primarySpace": "react/Space.tsx",
-    "registerAsSpaceInTopBar": true
+    "registerAsSpaceInTopBar": true,
+    "sidebarLabel": "Chat"
   },
   "runtime": {
     "backendEntry": "core/backend-entry.ts",

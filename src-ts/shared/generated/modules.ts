@@ -32,6 +32,7 @@ export interface ModuleExports {
 export interface GeneratedModuleManifest {
     id: string;
     label: string;
+    sidebarLabel?: string;
     namespace: string;
     version: string;
     moduleEntry: string;
@@ -51,6 +52,7 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
     {
         id: "ai-service",
         label: "Ai Service",
+        sidebarLabel: "Chat",
         namespace: "space.aiservice",
         version: "0.1.0",
         moduleEntry: "modules/ai-service/ts/module.ts",
@@ -68,6 +70,7 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
     {
         id: "component-library",
         label: "Component Library",
+        sidebarLabel: "Library",
         namespace: "space.componentlibrary",
         version: "0.1.0",
         moduleEntry: "modules/component-library/ts/module.ts",
@@ -75,16 +78,17 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
         apiVersion: 2,
         tags: [],
         coreCapabilities: ["projects","contentEditor","toolRegistry"],
-        dependsOn: [],
+        dependsOn: [{"id":"ai-service","optional":true}],
         exports: {"services":[],"widgets":[]},
         registerAsSpaceInTopBar: true,
         defaultPinned: false,
-        resolvedDependencies: [],
+        resolvedDependencies: [{"id":"ai-service","optional":true,"version":"0.1.0","missing":false,"satisfied":true}],
         loadOrder: 1
     },
     {
         id: "designer",
         label: "Designer",
+        sidebarLabel: "Design",
         namespace: "space.designer",
         version: "0.1.0",
         moduleEntry: "modules/designer/ts/module.ts",
@@ -92,16 +96,17 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
         apiVersion: 2,
         tags: [],
         coreCapabilities: ["projects","contentEditor","toolRegistry"],
-        dependsOn: [],
+        dependsOn: [{"id":"component-library","optional":false},{"id":"ai-service","optional":false}],
         exports: {"services":[],"widgets":[]},
         registerAsSpaceInTopBar: true,
         defaultPinned: false,
-        resolvedDependencies: [],
+        resolvedDependencies: [{"id":"component-library","optional":false,"version":"0.1.0","missing":false,"satisfied":true},{"id":"ai-service","optional":false,"version":"0.1.0","missing":false,"satisfied":true}],
         loadOrder: 2
     },
     {
         id: "knowledge",
         label: "Knowledge",
+        sidebarLabel: "Notes",
         namespace: "space.knowledge",
         version: "1.0.0",
         moduleEntry: "modules/knowledge/ts/module.ts",
@@ -109,11 +114,11 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
         apiVersion: 2,
         tags: ["productivity","notes","knowledge-base"],
         coreCapabilities: ["contentEditor","toolRegistry"],
-        dependsOn: [],
+        dependsOn: [{"id":"ai-service","optional":false}],
         exports: {"services":[{"id":"knowledge.pages","kind":"http","description":"Page CRUD API"},{"id":"knowledge.search","kind":"http","description":"Page search API"}],"widgets":[]},
         registerAsSpaceInTopBar: true,
         defaultPinned: true,
-        resolvedDependencies: [],
+        resolvedDependencies: [{"id":"ai-service","optional":false,"version":"0.1.0","missing":false,"satisfied":true}],
         loadOrder: 3
     }
 ];

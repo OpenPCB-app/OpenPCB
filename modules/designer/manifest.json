@@ -34,7 +34,8 @@
   "ui": {
     "moduleEntry": "ts/module.ts",
     "primarySpace": "react/Space.tsx",
-    "registerAsSpaceInTopBar": true
+    "registerAsSpaceInTopBar": true,
+    "sidebarLabel": "Design"
   },
   "runtime": {
     "backendEntry": "core/backend-entry.ts",

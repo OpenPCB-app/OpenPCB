@@ -61,6 +61,7 @@ interface ModuleManifestFile {
     primarySpace?: string;
     widgets?: ManifestWidgetDef[];
     registerAsSpaceInTopBar?: boolean;
+    sidebarLabel?: string;
   };
   dependsOn?: ModuleDependency[];
   dependencies?: string[]; // V1 legacy
@@ -71,6 +72,7 @@ interface ModuleManifestFile {
 interface GeneratedModuleManifest {
   id: string;
   label: string;
+  sidebarLabel?: string;
   namespace: string;
   version: string;
   moduleEntry: string;
@@ -255,6 +257,7 @@ function normalizeToV2(
   return {
     id: parsed.id,
     label: parsed.label ?? parsed.id,
+    sidebarLabel: parsed.ui.sidebarLabel,
     namespace: parsed.namespace,
     version: parsed.version,
     moduleEntry: toPosixPath(
@@ -635,6 +638,7 @@ export interface ModuleExports {
 export interface GeneratedModuleManifest {
     id: string;
     label: string;
+    sidebarLabel?: string;
     namespace: string;
     version: string;
     moduleEntry: string;
@@ -659,10 +663,12 @@ export interface GeneratedModuleManifest {
       const tagsStr = JSON.stringify(mod.tags);
       const coreCapabilitiesStr = JSON.stringify(mod.coreCapabilities);
       const resolvedDepsStr = JSON.stringify(mod.resolvedDependencies);
+      const sidebarLabelStr = JSON.stringify(mod.sidebarLabel);
 
       return `    {
         id: "${mod.id}",
         label: "${mod.label}",
+        sidebarLabel: ${sidebarLabelStr},
         namespace: "${mod.namespace}",
         version: "${mod.version}",
         moduleEntry: "${mod.moduleEntry}",

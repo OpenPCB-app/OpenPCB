@@ -28,6 +28,10 @@ export default defineConfig({
       ),
       "@shared/sdk": path.resolve(__dirname, "../src-ts/shared/sdk"),
       "@modules": path.resolve(__dirname, "../modules"),
+      "@component-library": path.resolve(
+        __dirname,
+        "../modules/component-library",
+      ),
     },
   },
   // Env variable support removed. Use fixed defaults below.

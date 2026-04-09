@@ -24,6 +24,7 @@ import { RuntimeSdkRegistry } from "./sdk-registry";
 interface ModuleLoadRecord {
   id: string;
   label: string;
+  sidebarLabel?: string;
   namespace: string;
   version: string;
   kind: NormalizedModuleManifest["kind"];
@@ -100,6 +101,7 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
       this.records.set(failure.moduleId, {
         id: failure.moduleId,
         label: failure.moduleId,
+        sidebarLabel: failure.moduleId,
         namespace: `invalid.${failure.moduleId}`,
         version: "0.0.0",
         kind: "space",
@@ -198,6 +200,7 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
       .map((record) => ({
         id: record.id,
         label: record.label,
+        sidebarLabel: record.sidebarLabel,
         namespace: record.namespace,
         version: record.version,
         kind: record.kind,
@@ -228,6 +231,7 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
     return {
       id: manifest.id,
       label: manifest.label,
+      sidebarLabel: manifest.ui.sidebarLabel,
       namespace: manifest.namespace,
       version: manifest.version,
       kind: manifest.kind,

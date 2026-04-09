@@ -11,6 +11,10 @@ import type {
   ComponentLibrarySymbol,
 } from "../../../core/contracts/modules/sdk";
 import { MODULE_SDK_TOKENS } from "../../../core/contracts/modules/sdk-map";
+import { ensureComponentLibrarySchema, getTypedDb } from "../backend/db/bridge";
+import { ComponentRepository } from "../backend/db/repositories/component-repository";
+import { ComponentController } from "../backend/handlers/component-controller";
+import { QueryLogger } from "../backend/db/query-logger";
 
 interface PartRow {
   id: string;
@@ -281,7 +285,9 @@ async function getFootprint(
   return row ? mapFootprint(row) : null;
 }
 
-function createComponentLibrarySdk(ctx: CoreBackendModuleContext): ComponentLibrarySDK {
+function createComponentLibrarySdk(
+  ctx: CoreBackendModuleContext,
+): ComponentLibrarySDK {
   return {
     resolvePart: async (partId) => resolvePart(ctx, partId),
     getSymbol: async (symbolId) => getSymbol(ctx, symbolId),
@@ -292,14 +298,38 @@ function createComponentLibrarySdk(ctx: CoreBackendModuleContext): ComponentLibr
 
 export const backendModule: CoreBackendModuleDefinition = {
   id: "component-library",
+  async onActivate(ctx) {
+    const typedDb = getTypedDb(ctx);
+    await ensureComponentLibrarySchema(typedDb);
+    ctx.logger.info(
+      "component-library: components + component_variants tables ready",
+    );
+  },
   async registerSdk(ctx) {
     await ensureSchema(ctx);
     if (!ctx.sdk.has(MODULE_SDK_TOKENS.COMPONENT_LIBRARY)) {
-      ctx.sdk.registerValue(MODULE_SDK_TOKENS.COMPONENT_LIBRARY, createComponentLibrarySdk(ctx));
+      ctx.sdk.registerValue(
+        MODULE_SDK_TOKENS.COMPONENT_LIBRARY,
+        createComponentLibrarySdk(ctx),
+      );
     }
   },
   async registerRoutes(router, ctx) {
     await ensureSchema(ctx);
+
+    // Real components endpoint backed by Drizzle ComponentRepository.
+    // Schema init runs in onActivate; here we only mount handlers.
+    const typedDb = getTypedDb(ctx);
+    const queryLogger = new QueryLogger({ enableLogging: false });
+    const componentRepo = new ComponentRepository(typedDb, queryLogger);
+    const componentController = new ComponentController(componentRepo);
+
+    router.post("/components", (routeCtx) =>
+      componentController.createComponent(routeCtx),
+    );
+    router.get("/components", (routeCtx) =>
+      componentController.listComponents(routeCtx),
+    );
 
     router.get("/status", async () => {
       const counts = await ctx.db.query<{ count: number }>(
@@ -332,15 +362,24 @@ export const backendModule: CoreBackendModuleDefinition = {
     router.get("/parts/:partId", async (routeCtx) => {
       const part = await resolvePart(ctx, routeCtx.params.getOrThrow("partId"));
       if (!part) {
-        return Response.json({ ok: false, error: "Part not found" }, { status: 404 });
+        return Response.json(
+          { ok: false, error: "Part not found" },
+          { status: 404 },
+        );
       }
       return success({ part });
     });
 
     router.get("/symbols/:symbolId", async (routeCtx) => {
-      const symbol = await getSymbol(ctx, routeCtx.params.getOrThrow("symbolId"));
+      const symbol = await getSymbol(
+        ctx,
+        routeCtx.params.getOrThrow("symbolId"),
+      );
       if (!symbol) {
-        return Response.json({ ok: false, error: "Symbol not found" }, { status: 404 });
+        return Response.json(
+          { ok: false, error: "Symbol not found" },
+          { status: 404 },
+        );
       }
       return success({ symbol });
     });
@@ -351,7 +390,10 @@ export const backendModule: CoreBackendModuleDefinition = {
         routeCtx.params.getOrThrow("footprintId"),
       );
       if (!footprint) {
-        return Response.json({ ok: false, error: "Footprint not found" }, { status: 404 });
+        return Response.json(
+          { ok: false, error: "Footprint not found" },
+          { status: 404 },
+        );
       }
       return success({ footprint });
     });

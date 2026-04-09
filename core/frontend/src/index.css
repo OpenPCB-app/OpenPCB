@@ -1,8 +1,15 @@
 @import "tailwindcss";
+@source "../../../modules";
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
   color: #111827;
   background-color: #f8fafc;
 }

@@ -371,7 +371,7 @@ export function LibraryScreen() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">
                 {components.map((component) => {
                   const variants = getComponentVariants(component);
                   const isSelected = selectedIds.has(component.id);
@@ -381,12 +381,15 @@ export function LibraryScreen() {
                     <div
                       key={component.id}
                       className={cn(
-                        "group relative rounded-lg",
-                        isSelected && "ring-1 ring-brand",
+                        "group relative flex h-[220px] flex-col overflow-hidden rounded-lg border transition-all",
+                        isSelected
+                          ? "border-brand ring-1 ring-brand"
+                          : "border-border-default hover:border-border-strong",
                       )}
                     >
-                      {!isBuiltin && (
-                        <div className="absolute left-2 top-2 z-10">
+                      {/* Checkbox or Built-in badge */}
+                      <div className="absolute left-2 top-2 z-10">
+                        {!isBuiltin ? (
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -394,15 +397,14 @@ export function LibraryScreen() {
                             className="h-4 w-4 rounded border-border-default text-brand focus:ring-brand"
                             aria-label={`Select ${component.displayLabel}`}
                           />
-                        </div>
-                      )}
-                      {isBuiltin && (
-                        <div className="absolute left-2 top-2 z-10">
+                        ) : (
                           <span className="rounded bg-bg-input px-1.5 py-0.5 text-[9px] font-medium text-text-tertiary">
                             Built-in
                           </span>
-                        </div>
-                      )}
+                        )}
+                      </div>
+
+                      {/* Delete button for non-builtin */}
                       {!isBuiltin && (
                         <span className="absolute right-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100">
                           <button
@@ -422,37 +424,41 @@ export function LibraryScreen() {
                           </button>
                         </span>
                       )}
+
+                      {/* Card content */}
                       <button
                         type="button"
-                        className={cn(
-                          "w-full overflow-hidden rounded-lg border bg-bg-elevated text-left transition-colors hover:border-border-strong",
-                          isSelected ? "border-brand" : "border-border-default",
-                        )}
+                        className="flex h-full flex-col bg-bg-elevated text-left"
                         onClick={() => navigateToComponentDetail(component.id)}
                       >
-                        <div className="flex h-20 items-center justify-center rounded-t-lg bg-bg-input">
-                          <div className="text-4xl text-text-tertiary">
+                        {/* Preview area */}
+                        <div className="flex h-[88px] flex-shrink-0 items-center justify-center border-b border-border-default bg-bg-input">
+                          <span className="text-3xl font-semibold text-text-tertiary">
                             {component.symbolData.referencePrefix}
-                          </div>
+                          </span>
                         </div>
-                        <div className="space-y-1 p-2.5">
-                          <p className="truncate pr-6 text-[13px] font-medium text-text-primary">
+
+                        {/* Info area */}
+                        <div className="flex min-h-0 flex-1 flex-col p-3">
+                          <h3 className="truncate pr-6 text-[15px] font-semibold leading-tight text-text-primary">
                             {component.displayLabel}
-                          </p>
-                          <p className="line-clamp-2 text-[11px] text-text-muted">
+                          </h3>
+                          <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-text-muted">
                             {component.description || "No description"}
                           </p>
-                          <div className="mt-1.5 flex flex-wrap gap-1">
+
+                          {/* Variants */}
+                          <div className="mt-auto flex flex-wrap items-center gap-1 pt-2">
                             {variants.slice(0, 2).map((variant) => (
                               <span
                                 key={variant.id}
-                                className="rounded bg-bg-input px-1.5 py-0.5 text-[9px] text-text-tertiary"
+                                className="rounded bg-bg-input px-1.5 py-0.5 text-[10px] text-text-tertiary"
                               >
                                 {variant.humanLabel}
                               </span>
                             ))}
                             {variants.length > 2 && (
-                              <span className="text-[9px] text-text-tertiary">
+                              <span className="text-[10px] text-text-tertiary">
                                 +{variants.length - 2}
                               </span>
                             )}

@@ -158,6 +158,11 @@
           "default": false,
           "description": "Show module in top navigation bar"
         },
+        "sidebarLabel": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional short label for sidebar navigation"
+        },
         "routes": {
           "type": "array",
           "items": { "type": "object" },

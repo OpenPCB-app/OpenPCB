@@ -9,6 +9,7 @@ export interface ResolvedModuleDependency extends ModuleDependency {
 export interface ModuleRegistryItem {
   id: string;
   label: string;
+  sidebarLabel?: string;
   namespace: string;
   version: string;
   kind: ModuleKind;

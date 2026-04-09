@@ -10,6 +10,7 @@ export interface ModuleUiManifest {
   moduleEntry: string;
   primarySpace?: string;
   registerAsSpaceInTopBar?: boolean;
+  sidebarLabel?: string;
 }
 
 export interface ModuleManifest {

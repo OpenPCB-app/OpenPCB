@@ -1,17 +1,14 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { and, eq, isNull, like, or, sql } from "drizzle-orm";
+import { and, eq, like, or, sql } from "drizzle-orm";
 import type * as schema from "../schema";
 import type { QueryLogger } from "../query-logger";
 import { withQueryLogging } from "../decorators";
 import { BaseRepository } from "./base";
 import {
   component,
-  componentUsage,
   type ComponentRow,
   type NewComponentRow,
 } from "../schema/component";
-import { design } from "../schema/design";
-import { designSheet } from "../schema/design-sheet";
 import {
   componentVariant,
   type ComponentVariantRow,
@@ -62,17 +59,6 @@ export interface ComponentListFilters {
   categoryPath?: string;
   tags?: string[];
   mountType?: MountType;
-}
-
-export interface ComponentUsageInput {
-  componentId: string;
-  designId: string;
-  variantId: string;
-}
-
-export interface ComponentDeleteImpact {
-  usageCount: number;
-  designNames: string[];
 }
 
 type DbExecutor = BunSQLiteDatabase<typeof schema>;
@@ -482,95 +468,6 @@ export class ComponentRepository extends BaseRepository<
     );
   }
 
-  async getDeleteImpact(componentId: string): Promise<ComponentDeleteImpact> {
-    return withQueryLogging(
-      this.logger,
-      this.entityName,
-      "getDeleteImpact",
-      async () => {
-        await this.findByIdOrThrow(componentId);
-
-        const usageRows = await this.db
-          .select({
-            designId: design.id,
-            designName: design.name,
-            content: designSheet.content,
-          })
-          .from(designSheet)
-          .innerJoin(
-            design,
-            and(eq(design.id, designSheet.designId), isNull(design.deletedAt)),
-          )
-          .where(isNull(designSheet.deletedAt));
-
-        const designNames = new Set<string>();
-
-        for (const row of usageRows) {
-          const schematicDoc =
-            row.content &&
-            typeof row.content === "object" &&
-            "docs" in row.content &&
-            row.content.docs &&
-            typeof row.content.docs === "object" &&
-            "schematic" in row.content.docs
-              ? row.content.docs.schematic
-              : row.content;
-
-          const symbols =
-            schematicDoc &&
-            typeof schematicDoc === "object" &&
-            "symbols" in schematicDoc
-              ? schematicDoc.symbols
-              : undefined;
-
-          if (!Array.isArray(symbols)) {
-            continue;
-          }
-
-          const hasReference = symbols.some((symbol) => {
-            if (!symbol || typeof symbol !== "object") {
-              return false;
-            }
-
-            const candidate = symbol as {
-              componentId?: unknown;
-              libraryPartId?: unknown;
-              properties?: Record<string, unknown>;
-            };
-
-            if (candidate.componentId === componentId) {
-              return true;
-            }
-
-            const properties = candidate.properties;
-            const propertyComponentId =
-              typeof properties?.component_id === "string"
-                ? properties.component_id
-                : typeof properties?.componentId === "string"
-                  ? properties.componentId
-                  : null;
-
-            return (
-              candidate.libraryPartId === componentId ||
-              propertyComponentId === componentId
-            );
-          });
-
-          if (hasReference) {
-            designNames.add(row.designName);
-          }
-        }
-
-        return {
-          usageCount: designNames.size,
-          designNames: Array.from(designNames).sort((a, b) =>
-            a.localeCompare(b),
-          ),
-        };
-      },
-    );
-  }
-
   async listComponents(
     filters: ComponentListFilters = {},
   ): Promise<ComponentWithVariants[]> {
@@ -659,77 +556,6 @@ export class ComponentRepository extends BaseRepository<
         return this.getComponentOrThrow(componentId);
       },
     );
-  }
-
-  async recordUsage(input: ComponentUsageInput): Promise<void> {
-    return withQueryLogging(
-      this.logger,
-      this.entityName,
-      "recordUsage",
-      async () => {
-        await this.findByIdOrThrow(input.componentId);
-
-        const variant = await this.variantsRepo.findByIdOrThrow(
-          input.variantId,
-        );
-        if (variant.componentId !== input.componentId) {
-          throw new DbConflictError(
-            "Variant does not belong to component",
-            "ComponentVariant",
-            input.variantId,
-          );
-        }
-
-        await this.db
-          .insert(componentUsage)
-          .values({
-            id: generateUUIDv7(),
-            componentId: input.componentId,
-            designId: input.designId,
-            variantId: input.variantId,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .onConflictDoNothing({
-            target: [
-              componentUsage.designId,
-              componentUsage.componentId,
-              componentUsage.variantId,
-            ],
-          });
-      },
-    );
-  }
-
-  async removeUsage(input: {
-    componentId: string;
-    designId: string;
-    variantId?: string;
-  }): Promise<void> {
-    return withQueryLogging(
-      this.logger,
-      this.entityName,
-      "removeUsage",
-      async () => {
-        const whereCondition = input.variantId
-          ? and(
-              eq(componentUsage.componentId, input.componentId),
-              eq(componentUsage.designId, input.designId),
-              eq(componentUsage.variantId, input.variantId),
-            )
-          : and(
-              eq(componentUsage.componentId, input.componentId),
-              eq(componentUsage.designId, input.designId),
-            );
-
-        await this.db.delete(componentUsage).where(whereCondition!);
-      },
-    );
-  }
-
-  async getUsageCount(componentId: string): Promise<number> {
-    const impact = await this.getDeleteImpact(componentId);
-    return impact.usageCount;
   }
 
   get variants(): ComponentVariantRepository {

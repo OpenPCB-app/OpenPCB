@@ -3,11 +3,7 @@
     "target": "ES2022",
     "module": "esnext",
     "moduleResolution": "bundler",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "resolveJsonModule": true,
     "strict": true,
     "skipLibCheck": true,
@@ -18,21 +14,12 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/generated": [
-        "src-ts/shared/generated"
-      ],
-      "@shared/generated/*": [
-        "src-ts/shared/generated/*"
-      ],
-      "@shared/types": [
-        "src-ts/shared/types"
-      ],
-      "@shared/types/*": [
-        "src-ts/shared/types/*"
-      ],
-      "@modules/*": [
-        "modules/*"
-      ]
+      "@shared/generated": ["src-ts/shared/generated"],
+      "@shared/generated/*": ["src-ts/shared/generated/*"],
+      "@shared/types": ["src-ts/shared/types"],
+      "@shared/types/*": ["src-ts/shared/types/*"],
+      "@modules/*": ["modules/*"],
+      "@component-library/*": ["modules/component-library/*"]
     }
   }
 }

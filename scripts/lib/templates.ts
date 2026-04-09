@@ -31,6 +31,7 @@ export function generateManifest(opts: ScaffoldOptions): ModuleManifest {
             moduleEntry: "ts/module.ts",
             primarySpace: opts.kind === "space" || opts.hasReactUI ? "react/Space.tsx" : undefined,
             registerAsSpaceInTopBar: opts.kind === "space",
+            sidebarLabel: opts.kind === "space" ? opts.label : undefined,
         },
         dependsOn: [],
         exports: {

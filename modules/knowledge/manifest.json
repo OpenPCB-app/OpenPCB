@@ -3,13 +3,15 @@
   "label": "Knowledge",
   "version": "1.0.0",
   "apiVersion": 2,
+  "enabled": false,
   "namespace": "space.knowledge",
   "kind": "space",
   "tags": ["productivity", "notes", "knowledge-base"],
   "ui": {
     "moduleEntry": "ts/module.ts",
     "primarySpace": "react/Space.tsx",
-    "registerAsSpaceInTopBar": true
+    "registerAsSpaceInTopBar": true,
+    "sidebarLabel": "Notes"
   },
   "runtime": {
     "backendEntry": "core/backend-entry.ts",

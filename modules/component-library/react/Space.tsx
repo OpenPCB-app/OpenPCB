@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { Filter, Plus, Search, Upload, type LucideIcon } from "lucide-react";
 
 interface ComponentLibraryPart {
   id: string;
@@ -15,27 +16,222 @@ interface ModuleSpaceProps {
   backendURL?: string | null;
 }
 
+type MountFilter = "SMD" | "Through-hole" | "Virtual";
+
+const MOUNT_FILTERS: MountFilter[] = ["SMD", "Through-hole", "Virtual"];
+
+function useDebouncedValue(value: string, delayMs: number): string {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebounced(value);
+    }, delayMs);
+
+    return () => window.clearTimeout(handle);
+  }, [delayMs, value]);
+
+  return debounced;
+}
+
+function buildSearchUrl(
+  backendURL: string | null | undefined,
+  query: string,
+  mountFilter?: MountFilter,
+): string | null {
+  if (!backendURL) {
+    return null;
+  }
+
+  const url = new URL(`${backendURL}/api/modules/component-library/parts`);
+  const trimmed = query.trim();
+  if (trimmed.length > 0) {
+    url.searchParams.set("q", trimmed);
+  }
+  if (mountFilter) {
+    url.searchParams.set("mount", mountFilter.toLowerCase().replace("-", "_"));
+  }
+  url.searchParams.set("limit", "60");
+  return url.toString();
+}
+
+function compactToken(id: string): string {
+  return id
+    .replace(/^(sym|fp|part)-/i, "")
+    .replace(/-/g, " ")
+    .trim();
+}
+
+const SYMBOL_GLYPHS: Array<[RegExp, string]> = [
+  [/(^|[-_/])ground($|[-_/])/, "GND"],
+  [/(^|[-_/])vcc($|[-_/])/, "VCC"],
+  [/(^|[-_/])resistor($|[-_/])/, "R"],
+  [/(^|[-_/])capacitor($|[-_/])/, "C"],
+  [/(^|[-_/])inductor($|[-_/])/, "L"],
+];
+
+function previewGlyph(part: ComponentLibraryPart): string {
+  const symbol = part.symbolId.toLowerCase();
+  for (const [pattern, glyph] of SYMBOL_GLYPHS) {
+    if (pattern.test(symbol)) {
+      return glyph;
+    }
+  }
+
+  const fallback = part.name.trim().charAt(0).toUpperCase();
+  return fallback.length > 0 ? fallback : "U";
+}
+
+const MOUNT_TAGS = new Set(["smd", "through-hole", "tht", "virtual"]);
+
+function cardChips(part: ComponentLibraryPart): string[] {
+  const chips: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: string) => {
+    const value = raw.trim();
+    if (value.length === 0) {
+      return;
+    }
+    const key = value.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    chips.push(value);
+  };
+
+  const packageTag = part.tags.find((tag) => /^\d{4}$/.test(tag));
+  if (packageTag) {
+    push(packageTag);
+  }
+  const mountTag = part.tags.find((tag) => MOUNT_TAGS.has(tag.toLowerCase()));
+  if (mountTag) {
+    push(mountTag);
+  }
+  push(compactToken(part.footprintId));
+
+  return chips.slice(0, 2);
+}
+
+function ActionButton({
+  icon: Icon,
+  label,
+  primary,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  primary?: boolean;
+  onClick?: () => void;
+}): ReactElement {
+  const base =
+    "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-4 text-sm font-medium transition-all active:scale-[0.98]";
+  const style = primary
+    ? "border-violet-600 bg-violet-600 text-white hover:bg-violet-700 hover:border-violet-700"
+    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700";
+
+  return (
+    <button type="button" className={`${base} ${style}`} onClick={onClick}>
+      <Icon className="h-4 w-4" />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active?: boolean;
+  onClick?: () => void;
+}): ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3 py-1 text-xs font-medium transition-all active:scale-95 ${
+        active
+          ? "bg-violet-600 text-white"
+          : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function LibraryCard({ part }: { part: ComponentLibraryPart }): ReactElement {
+  const glyph = previewGlyph(part);
+  const chips = cardChips(part);
+
+  return (
+    <article className="group relative flex h-56 w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white transition-all hover:border-slate-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700">
+      {/* Checkbox */}
+      <div className="absolute left-3 top-3 z-10">
+        <input
+          type="checkbox"
+          className="h-4 w-4 cursor-pointer rounded border-slate-300 text-violet-600 focus:ring-violet-600 dark:border-slate-600 dark:bg-slate-950"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+
+      {/* Built-in Badge */}
+      <div className="absolute right-3 top-3 z-10">
+        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+          Built-in
+        </span>
+      </div>
+
+      {/* Preview Area - Compact */}
+      <div className="relative flex h-22 items-center justify-center border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40">
+        <span className="text-3xl font-semibold tracking-tight text-slate-400 dark:text-slate-500">
+          {glyph}
+        </span>
+      </div>
+
+      {/* Content Area */}
+      <div className="flex min-h-0 flex-1 flex-col p-3">
+        <h3 className="truncate text-sm font-semibold leading-tight text-slate-900 dark:text-slate-100">
+          {part.name}
+        </h3>
+        <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-500 dark:text-slate-400">
+          {part.description || "No description"}
+        </p>
+
+        {/* Chips */}
+        <div className="mt-auto flex flex-wrap items-center gap-1 pt-2">
+          {chips.map((chip) => (
+            <span
+              key={`${part.id}-${chip}`}
+              className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[0.6875rem] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+            >
+              {chip}
+            </span>
+          ))}
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export function ComponentLibrarySpace({
-  moduleId,
-  namespace,
   backendURL,
 }: ModuleSpaceProps): ReactElement {
   const [query, setQuery] = useState("");
+  const [activeMountFilter, setActiveMountFilter] = useState<
+    MountFilter | undefined
+  >(undefined);
+  const debouncedQuery = useDebouncedValue(query, 180);
   const [parts, setParts] = useState<ComponentLibraryPart[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const searchUrl = useMemo(() => {
-    if (!backendURL) {
-      return null;
-    }
-    const url = new URL(`${backendURL}/api/modules/component-library/parts`);
-    if (query.trim().length > 0) {
-      url.searchParams.set("q", query.trim());
-    }
-    url.searchParams.set("limit", "50");
-    return url.toString();
-  }, [backendURL, query]);
+  const searchUrl = useMemo(
+    () => buildSearchUrl(backendURL, debouncedQuery, activeMountFilter),
+    [backendURL, debouncedQuery, activeMountFilter],
+  );
 
   useEffect(() => {
     if (!searchUrl) {
@@ -63,7 +259,12 @@ export function ComponentLibrarySpace({
         if (controller.signal.aborted) {
           return;
         }
-        setError(fetchError instanceof Error ? fetchError.message : "Failed to load parts");
+        setParts([]);
+        setError(
+          fetchError instanceof Error
+            ? fetchError.message
+            : "Failed to load parts",
+        );
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -75,63 +276,99 @@ export function ComponentLibrarySpace({
     return () => controller.abort();
   }, [searchUrl]);
 
-  return (
-    <div className="h-full w-full overflow-auto bg-slate-50 dark:bg-slate-950">
-      <div className="mx-auto max-w-5xl px-8 py-8">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-              Component Library
-            </h1>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {moduleId} · {namespace}
-            </p>
-          </div>
+  const toggleMountFilter = (filter: MountFilter) => {
+    setActiveMountFilter((current) =>
+      current === filter ? undefined : filter,
+    );
+  };
 
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search parts"
-            className="w-64 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          />
+  return (
+    <div className="flex h-full w-full flex-col bg-slate-50 dark:bg-slate-950">
+      {/* Header */}
+      <header className="flex items-center justify-between gap-6 border-b border-slate-200 bg-white px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
+        <h1 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+          Component Library
+        </h1>
+
+        <div className="flex items-center gap-2">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search components..."
+              className="h-9 w-72 rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-violet-500"
+            />
+          </label>
+
+          <ActionButton icon={Plus} label="New" primary />
+          <ActionButton icon={Upload} label="Import" />
+        </div>
+      </header>
+
+      {/* Filter Bar */}
+      <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50/80 px-6 py-2.5 dark:border-slate-800 dark:bg-slate-900/50">
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-slate-400" />
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Mount:
+          </span>
+          <div className="flex items-center gap-1.5">
+            {MOUNT_FILTERS.map((filter) => (
+              <FilterChip
+                key={filter}
+                label={filter}
+                active={activeMountFilter === filter}
+                onClick={() => toggleMountFilter(filter)}
+              />
+            ))}
+          </div>
         </div>
 
-        <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Parts</h2>
+        <label className="flex cursor-pointer select-none items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <input
+            type="checkbox"
+            className="h-4 w-4 cursor-pointer rounded border-slate-300 text-violet-600 focus:ring-violet-600 dark:border-slate-600"
+          />
+          <span>Select All</span>
+        </label>
+      </div>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto p-6">
+        <section className="space-y-4">
           {loading && (
-            <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Loading...</p>
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" />
+              Loading components...
+            </div>
           )}
-          {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+              {error}
+            </div>
+          )}
 
           {!loading && !error && parts.length === 0 && (
-            <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">No parts found.</p>
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-12 text-center dark:border-slate-700 dark:bg-slate-900">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No components found.
+              </p>
+              <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                Try adjusting your filters or search query.
+              </p>
+            </div>
           )}
 
           {!loading && !error && parts.length > 0 && (
-            <ul className="mt-3 space-y-2">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-5">
               {parts.map((part) => (
-                <li
-                  key={part.id}
-                  className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                      {part.name}
-                    </p>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{part.id}</span>
-                  </div>
-                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                    {part.description}
-                  </p>
-                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                    symbol: {part.symbolId} · footprint: {part.footprintId}
-                  </p>
-                </li>
+                <LibraryCard key={part.id} part={part} />
               ))}
-            </ul>
+            </div>
           )}
         </section>
-      </div>
+      </main>
     </div>
   );
 }

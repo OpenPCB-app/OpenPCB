@@ -1,20 +1,27 @@
-import type { RouteContext } from "../router";
+import type { RouteContext } from "@shared/types/http";
 import {
   type ComponentListFilters,
   type ComponentRepository,
   type ComponentWithVariants,
   type CreateComponentInput,
   type CreateVariantInput,
-  type UpdateComponentInput,
-  type UpdateVariantInput,
-} from "../../db/repositories/component-repository";
-import type { FootprintOption } from "../../db/schema/component-variant";
+} from "../db/repositories/component-repository";
+import type { FootprintOption } from "../db/schema/component-variant";
 import {
   DbConflictError,
   DbNotFoundError,
   UniqueConstraintError,
-} from "../../db/errors";
-import { ResponseBuilder } from "../../core/utils/response-builder";
+} from "../db/errors";
+import { ResponseBuilder } from "../core/utils/response-builder";
+
+/**
+ * ComponentController — first-pass minimal surface covering only the
+ * create + list flows exercised by the New Component Wizard.
+ *
+ * Out of scope for this pass: update, delete, bulk delete, delete impact,
+ * variant CRUD, preset import. Those live in the richer legacy controller
+ * and will be reintroduced in a follow-up once the edit flow is back.
+ */
 
 type ComponentRequestVariant = {
   id?: string;
@@ -54,6 +61,8 @@ type ComponentRequestBody = {
   variants?: ComponentRequestVariant[];
 };
 
+const CANONICAL_KEY_RETRY_LIMIT = 20;
+
 export class ComponentController {
   constructor(private repo: ComponentRepository) {}
 
@@ -70,38 +79,19 @@ export class ComponentController {
 
       const components = await this.repo.listComponents(filters);
       return ResponseBuilder.success({
-        components: components.map((component) =>
-          serializeComponent(component),
-        ),
+        components: components.map(serializeComponent),
       });
     } catch (error) {
       return this.handleRepositoryError(error, "Component");
     }
   }
 
-  async getComponent(ctx: RouteContext): Promise<Response> {
-    const id = ctx.params.getOrThrow("id");
-
-    try {
-      const component = await this.repo.getComponent(id);
-      if (!component) {
-        return ResponseBuilder.notFound("Component", id);
-      }
-
-      return ResponseBuilder.success({
-        component: serializeComponent(component),
-      });
-    } catch (error) {
-      return this.handleRepositoryError(error, "Component", id);
-    }
-  }
-
   async createComponent(ctx: RouteContext): Promise<Response> {
     try {
       const body = (await ctx.req.json()) as ComponentRequestBody;
-      const component = await this.repo.createComponent(
-        parseCreateComponentInput(body),
-      );
+      const baseInput = parseCreateComponentInput(body);
+
+      const component = await this.createWithCanonicalKeyFallback(baseInput);
       return ResponseBuilder.created({
         component: serializeComponent(component),
       });
@@ -110,237 +100,35 @@ export class ComponentController {
     }
   }
 
-  async updateComponent(ctx: RouteContext): Promise<Response> {
-    const id = ctx.params.getOrThrow("id");
+  /**
+   * Publish with automatic canonicalKey disambiguation. Client-supplied keys
+   * are attempted once; client omissions retry with `-2`, `-3`, … suffixes
+   * on UniqueConstraintError. Caps at CANONICAL_KEY_RETRY_LIMIT.
+   */
+  private async createWithCanonicalKeyFallback(
+    input: CreateComponentInput,
+  ): Promise<ComponentWithVariants> {
+    let attempt = 0;
+    const baseKey = input.canonicalKey;
 
-    try {
-      const body = (await ctx.req.json()) as ComponentRequestBody;
-      const component = await this.repo.updateComponent(
-        id,
-        parseUpdateComponentInput(body),
-      );
-      return ResponseBuilder.success({
-        component: serializeComponent(component),
-      });
-    } catch (error) {
-      return this.handleRepositoryError(error, "Component", id);
-    }
-  }
-
-  async deleteComponent(ctx: RouteContext): Promise<Response> {
-    const id = ctx.params.getOrThrow("id");
-    const forceUsedDelete = ctx.query.get("force") === "true";
-
-    try {
-      const existing = await this.repo.getComponent(id);
-      if (existing?.component.scope === "builtin") {
-        return ResponseBuilder.badRequest(
-          "Built-in components cannot be deleted",
-        );
-      }
-
-      const impact = await this.repo.getDeleteImpact(id);
-      if (impact.usageCount > 0 && !forceUsedDelete) {
-        return ResponseBuilder.conflict(
-          `Component is in use by ${impact.usageCount} design(s)`,
-          {
-            resource: "Component",
-            id,
-            usageCount: impact.usageCount,
-            designNames: impact.designNames,
-          },
-        );
-      }
-
-      await this.repo.deleteComponent(id);
-      return ResponseBuilder.success({
-        deleted: true,
-        usageCount: impact.usageCount,
-        designNames: impact.designNames,
-      });
-    } catch (error) {
-      return this.handleRepositoryError(error, "Component", id);
-    }
-  }
-
-  async getDeleteImpact(ctx: RouteContext): Promise<Response> {
-    const id = ctx.params.getOrThrow("id");
-
-    try {
-      const impact = await this.repo.getDeleteImpact(id);
-      return ResponseBuilder.success(impact);
-    } catch (error) {
-      return this.handleRepositoryError(error, "Component", id);
-    }
-  }
-
-  async bulkDeleteComponents(ctx: RouteContext): Promise<Response> {
-    const body = (await ctx.req.json()) as {
-      ids?: string[];
-      forceUsed?: boolean;
-    };
-    const ids = body.ids ?? [];
-    const forceUsed = body.forceUsed === true;
-
-    if (ids.length === 0) {
-      return ResponseBuilder.badRequest("No component IDs provided");
-    }
-
-    const skippedUsed: Array<{
-      id: string;
-      usageCount: number;
-      designNames: string[];
-    }> = [];
-    const deletedUsed: Array<{
-      id: string;
-      usageCount: number;
-      designNames: string[];
-    }> = [];
-
-    let deletedCount = 0;
-    let skippedNotFoundCount = 0;
-
-    let skippedBuiltinCount = 0;
-
-    for (const id of ids) {
-      const existing = await this.repo.getComponent(id);
-      if (!existing) {
-        skippedNotFoundCount++;
-        continue;
-      }
-
-      if (existing.component.scope === "builtin") {
-        skippedBuiltinCount++;
-        continue;
-      }
-
-      const impact = await this.repo.getDeleteImpact(id);
-      if (impact.usageCount > 0 && !forceUsed) {
-        skippedUsed.push({
-          id,
-          usageCount: impact.usageCount,
-          designNames: impact.designNames,
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const candidate = attempt === 0 ? baseKey : `${baseKey}-${attempt + 1}`;
+      try {
+        return await this.repo.createComponent({
+          ...input,
+          canonicalKey: candidate,
         });
-        continue;
+      } catch (error) {
+        if (
+          error instanceof UniqueConstraintError &&
+          attempt < CANONICAL_KEY_RETRY_LIMIT
+        ) {
+          attempt += 1;
+          continue;
+        }
+        throw error;
       }
-
-      await this.repo.deleteComponent(id);
-      deletedCount++;
-
-      if (impact.usageCount > 0) {
-        deletedUsed.push({
-          id,
-          usageCount: impact.usageCount,
-          designNames: impact.designNames,
-        });
-      }
-    }
-
-    const skippedUsedCount = skippedUsed.length;
-    const skippedCount =
-      skippedNotFoundCount + skippedUsedCount + skippedBuiltinCount;
-
-    return ResponseBuilder.success({
-      deleted: true,
-      deletedCount,
-      skippedCount,
-      skippedNotFoundCount,
-      skippedBuiltinCount,
-      skippedUsedCount,
-      skippedUsed,
-      deletedUsedCount: deletedUsed.length,
-      deletedUsed,
-    });
-  }
-
-  async addVariant(ctx: RouteContext): Promise<Response> {
-    const componentId = ctx.params.getOrThrow("id");
-
-    try {
-      const body = (await ctx.req.json()) as ComponentRequestVariant;
-      const variant = await this.repo.variants.addVariant(
-        componentId,
-        parseCreateVariantInput(body),
-      );
-      return ResponseBuilder.created({ variant: serializeVariant(variant) });
-    } catch (error) {
-      return this.handleRepositoryError(error, "Component", componentId);
-    }
-  }
-
-  async updateVariant(ctx: RouteContext): Promise<Response> {
-    const componentId = ctx.params.getOrThrow("id");
-    const variantId = ctx.params.getOrThrow("variantId");
-
-    try {
-      await this.ensureVariantBelongsToComponent(componentId, variantId);
-      const body = (await ctx.req.json()) as ComponentRequestVariant;
-      const variant = await this.repo.variants.updateVariant(
-        variantId,
-        parseUpdateVariantInput(body),
-      );
-      return ResponseBuilder.success({ variant: serializeVariant(variant) });
-    } catch (error) {
-      return this.handleRepositoryError(error, "ComponentVariant", variantId);
-    }
-  }
-
-  async removeVariant(ctx: RouteContext): Promise<Response> {
-    const componentId = ctx.params.getOrThrow("id");
-    const variantId = ctx.params.getOrThrow("variantId");
-
-    try {
-      await this.ensureVariantBelongsToComponent(componentId, variantId);
-      await this.repo.variants.removeVariant(variantId);
-      return ResponseBuilder.success({ deleted: true });
-    } catch (error) {
-      return this.handleRepositoryError(error, "ComponentVariant", variantId);
-    }
-  }
-
-  async setDefaultVariant(ctx: RouteContext): Promise<Response> {
-    const componentId = ctx.params.getOrThrow("id");
-
-    try {
-      const body = (await ctx.req.json()) as { variantId?: string };
-      if (!body.variantId) {
-        return ResponseBuilder.badRequest("variantId is required");
-      }
-
-      const component = await this.repo.setDefaultVariant(
-        componentId,
-        body.variantId,
-      );
-      return ResponseBuilder.success({
-        component: serializeComponent(component),
-      });
-    } catch (error) {
-      return this.handleRepositoryError(error, "Component", componentId);
-    }
-  }
-
-  private async ensureVariantBelongsToComponent(
-    componentId: string,
-    variantId: string,
-  ): Promise<void> {
-    const component = await this.repo.getComponent(componentId);
-    if (!component) {
-      throw new DbNotFoundError(
-        "Component not found",
-        "Component",
-        componentId,
-      );
-    }
-
-    const belongsToComponent = component.variants.some(
-      (variant) => variant.id === variantId,
-    );
-    if (!belongsToComponent) {
-      throw new DbNotFoundError(
-        "Variant not found for component",
-        "ComponentVariant",
-        variantId,
-      );
     }
   }
 
@@ -357,21 +145,25 @@ export class ComponentController {
       error instanceof DbConflictError ||
       error instanceof UniqueConstraintError
     ) {
-      return ResponseBuilder.conflict(error.message, {
-        resource,
-        id,
-      });
+      return ResponseBuilder.conflict(error.message, { resource, id });
     }
 
-    throw error;
+    console.error("[ComponentController] unhandled error:", error);
+    return ResponseBuilder.internalError(
+      error instanceof Error ? error.message : "Unknown error",
+    );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Request parsing
+// ---------------------------------------------------------------------------
 
 function parseCreateComponentInput(
   body: ComponentRequestBody,
 ): CreateComponentInput {
   const displayLabel = body.displayLabel?.trim() || "Untitled Component";
-  const variants = getRequestVariants(body);
+  const variants = body.variants ?? [];
 
   return {
     canonicalKey:
@@ -386,30 +178,6 @@ function parseCreateComponentInput(
         ? variants.map(parseCreateVariantInput)
         : [createPlaceholderVariant(displayLabel)],
   };
-}
-
-function parseUpdateComponentInput(
-  body: ComponentRequestBody,
-): UpdateComponentInput {
-  const updates: UpdateComponentInput = {};
-
-  if (body.canonicalKey !== undefined) updates.canonicalKey = body.canonicalKey;
-  if (body.displayLabel !== undefined) updates.displayLabel = body.displayLabel;
-  if (body.description !== undefined) updates.description = body.description;
-  if (body.symbolData !== undefined) updates.symbolData = body.symbolData;
-  if (body.categoryPath !== undefined || body.symbolData !== undefined) {
-    updates.categoryPath = resolveCategoryPath(
-      body.categoryPath,
-      body.symbolData,
-    );
-  }
-  if (body.tags !== undefined) updates.tags = body.tags;
-
-  if (body.defaultVariantId !== undefined) {
-    updates.defaultVariantId = body.defaultVariantId;
-  }
-
-  return updates;
 }
 
 function parseCreateVariantInput(
@@ -435,42 +203,14 @@ function parseCreateVariantInput(
   };
 }
 
-function parseUpdateVariantInput(
-  variant: ComponentRequestVariant,
-): UpdateVariantInput {
-  const updates: UpdateVariantInput = {};
-
-  if (variant.canonicalCode !== undefined)
-    updates.canonicalCode = variant.canonicalCode;
-  if (variant.humanLabel !== undefined) updates.humanLabel = variant.humanLabel;
-  if (variant.imperialAlias !== undefined)
-    updates.imperialAlias = variant.imperialAlias;
-  if (variant.metricAlias !== undefined)
-    updates.metricAlias = variant.metricAlias;
-  if (variant.mountType !== undefined) updates.mountType = variant.mountType;
-  if (variant.dimensions !== undefined) updates.dimensions = variant.dimensions;
-  if (variant.isDefault !== undefined) updates.isDefault = variant.isDefault;
-  if (variant.pinRemapTable !== undefined)
-    updates.pinRemapTable = variant.pinRemapTable;
-  if (variant.footprintOptions !== undefined) {
-    updates.footprintOptions = getVariantFootprintOptions(variant);
-    updates.defaultFootprintOptionId = getVariantDefaultFootprintOptionId(
-      variant,
-      updates.footprintOptions,
-    );
-  }
-
-  return updates;
-}
+// ---------------------------------------------------------------------------
+// Serialization
+// ---------------------------------------------------------------------------
 
 function serializeComponent(component: ComponentWithVariants) {
-  const variants = component.variants.map((variant) =>
-    serializeVariant(variant),
-  );
-
   return {
     ...component.component,
-    variants,
+    variants: component.variants.map(serializeVariant),
     defaultVariantId: component.component.defaultVariantId,
   };
 }
@@ -483,11 +223,9 @@ function serializeVariant(variant: ComponentWithVariants["variants"][number]) {
   };
 }
 
-function getRequestVariants(
-  body: ComponentRequestBody,
-): ComponentRequestVariant[] {
-  return body.variants ?? [];
-}
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function getVariantFootprintOptions(
   variant: ComponentRequestVariant,
@@ -511,7 +249,6 @@ function getVariantDefaultFootprintOptionId(
   if (variant.defaultFootprintOptionId !== undefined) {
     return variant.defaultFootprintOptionId;
   }
-
   const defaultOption = footprintOptions.find((opt) => opt.isDefault);
   return defaultOption?.id ?? footprintOptions[0]?.id ?? null;
 }
@@ -555,9 +292,10 @@ function resolveCategoryPath(
     properties &&
     typeof properties === "object" &&
     "__openpcbCategoryPath" in properties &&
-    typeof properties.__openpcbCategoryPath === "string"
+    typeof (properties as Record<string, unknown>).__openpcbCategoryPath ===
+      "string"
   ) {
-    return properties.__openpcbCategoryPath;
+    return (properties as Record<string, string>).__openpcbCategoryPath;
   }
 
   return null;

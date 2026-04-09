@@ -2,78 +2,30 @@ import { createModuleV2 } from "@modules/_kit/createModule";
 import { ComponentLibrarySpace } from "../react/Space";
 
 /**
- * Component Library Module
- * Kind: space
- * Namespace: space.componentlibrary
+ * Component Library Module (V2 wrapper)
+ *
+ * Real backend routes and SDK registration live in `core/backend-entry.ts`
+ * and are mounted via the `CoreBackendModuleDefinition` loader. This file
+ * only exists to satisfy the V2 manifest's `ui.moduleEntry` pointer and
+ * expose the React space component to the frontend entry glob.
+ *
+ * Do not add endpoints here — they belong in core/backend-entry.ts so the
+ * module has a single canonical backend registration path.
  */
 export const componentLibraryModule = createModuleV2("component-library", {
-    label: "Component Library",
-    namespace: "space.componentlibrary",
-    version: "0.1.0",
-    kind: "space",
-    spaceComponent: ComponentLibrarySpace,
+  label: "Component Library",
+  namespace: "space.componentlibrary",
+  version: "0.1.0",
+  kind: "space",
+  spaceComponent: ComponentLibrarySpace,
 
-    // HTTP and WebSocket endpoints
-    endpoints(ctx, http, ws) {
-        // HTTP endpoint example
-        http.get("/example", async (req) => {
-            const url = new URL(req.url);
-            const name = url.searchParams.get("name") || "World";
+  onActivate: async (ctx) => {
+    ctx.logger.info("Component Library module activated (V2 wrapper)");
+  },
 
-            ctx.logger.info(`Example endpoint called with name: ${name}`);
-            ctx.events.emit("exampleCalled", { name });
-
-            return new Response(JSON.stringify({
-                message: `Hello, ${name} from Component Library!`,
-                timestamp: new Date().toISOString(),
-            }), {
-                headers: { "Content-Type": "application/json" },
-            });
-        });
-
-        // WebSocket message handler example
-        ws.on("echo", async (msg, client) => {
-            ctx.logger.info("Echo message received:", msg.payload);
-            client.send({
-                type: "echo",
-                payload: msg.payload,
-            });
-        });
-
-        // WebSocket with event bus integration
-        ws.on("subscribe", async (msg, client) => {
-            ctx.events.on("exampleCalled", (data) => {
-                client.send({
-                    type: "event",
-                    channel: "exampleCalled",
-                    payload: data,
-                });
-            });
-        });
-
-        // TODO: Add your HTTP and WebSocket endpoints here
-    },
-
-    // Lifecycle hooks
-    onActivate: async (ctx) => {
-        ctx.logger.info("Component Library module activated");
-    },
-
-    onDeactivate: async (ctx) => {
-        ctx.logger.info("Component Library module deactivated");
-    },
-
-    // Services (for service/integration modules)
-    // services: (ctx) => ({
-    //     "space.componentlibrary.exampleService": async (input: unknown) => {
-    //         return { result: "success" };
-    //     },
-    // }),
-
-    // Widgets
-    // widgets: {
-    //     "example-widget": ExampleWidget,
-    // },
+  onDeactivate: async (ctx) => {
+    ctx.logger.info("Component Library module deactivated (V2 wrapper)");
+  },
 });
 
 export default componentLibraryModule;

@@ -12,6 +12,17 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@shared/types": path.resolve(__dirname, "../../src-ts/shared/types"),
+      "@shared/generated": path.resolve(
+        __dirname,
+        "../../src-ts/shared/generated",
+      ),
+      "@shared/sdk": path.resolve(__dirname, "../../src-ts/shared/sdk"),
+      "@modules": path.resolve(__dirname, "../../modules"),
+      "@component-library": path.resolve(
+        __dirname,
+        "../../modules/component-library",
+      ),
     },
   },
   clearScreen: false,
