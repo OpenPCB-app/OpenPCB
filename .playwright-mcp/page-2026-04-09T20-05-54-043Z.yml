@@ -1,0 +1,49 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - button "OpenPCB Home" [ref=e5]: OP
+    - navigation [ref=e6]:
+      - button "Home" [ref=e7]:
+        - img [ref=e8]
+        - generic [ref=e13]: Home
+      - button "Library" [ref=e15]:
+        - img [ref=e16]
+        - generic [ref=e19]: Library
+    - button "Settings" [ref=e21]:
+      - img [ref=e22]
+      - generic [ref=e25]: Settings
+  - main [ref=e27]:
+    - generic [ref=e38]:
+      - generic [ref=e39]:
+        - heading "Library" [level=1] [ref=e40]
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - img
+            - textbox [active] [ref=e43]:
+              - /placeholder: Search components...
+              - text: resistor
+          - button "New" [disabled] [ref=e44]:
+            - img [ref=e45]
+            - generic [ref=e46]: New
+          - button "Import" [disabled] [ref=e47]:
+            - img [ref=e48]
+            - generic [ref=e51]: Import
+      - generic [ref=e52]:
+        - generic [ref=e53]:
+          - img [ref=e54]
+          - generic [ref=e56]: "Mount:"
+          - generic [ref=e57]:
+            - button "SMD" [disabled] [ref=e58]
+            - button "Through-hole" [disabled] [ref=e59]
+            - button "Virtual" [disabled] [ref=e60]
+        - generic "Coming soon" [ref=e61]:
+          - checkbox "Select All" [disabled] [ref=e62]
+          - generic [ref=e63]: Select All
+      - main [ref=e64]:
+        - article [ref=e101]:
+          - checkbox "Coming soon" [disabled] [ref=e103]
+          - generic [ref=e104]: Built-in
+          - generic [ref=e106]: R
+          - generic [ref=e107]:
+            - heading "Resistor 10k" [level=3] [ref=e108]
+            - paragraph [ref=e109]: General-purpose resistor
+            - generic [ref=e111]: "0603"

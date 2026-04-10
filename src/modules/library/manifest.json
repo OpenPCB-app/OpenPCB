@@ -1,0 +1,20 @@
+{
+  "id": "library",
+  "label": "Library",
+  "version": "0.1.0",
+  "apiVersion": 2,
+  "namespace": "space.library",
+  "kind": "space",
+  "sidebar": {
+    "label": "Library",
+    "icon": "Box",
+    "order": 20,
+    "group": "design"
+  },
+  "runtime": {
+    "backendEntry": "module.backend.ts",
+    "frontendEntry": "module.frontend.ts"
+  },
+  "dependsOn": [],
+  "defaultPinned": false
+}

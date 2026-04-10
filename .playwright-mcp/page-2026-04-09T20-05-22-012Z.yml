@@ -1,0 +1,65 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - button "OpenPCB Home" [ref=e5]: OP
+    - navigation [ref=e6]:
+      - button "Home" [ref=e7]:
+        - img [ref=e8]
+        - generic [ref=e13]: Home
+      - button "Library" [active] [ref=e15]:
+        - img [ref=e16]
+        - generic [ref=e19]: Library
+    - button "Settings" [ref=e21]:
+      - img [ref=e22]
+      - generic [ref=e25]: Settings
+  - main [ref=e27]:
+    - generic [ref=e38]:
+      - generic [ref=e39]:
+        - heading "Library" [level=1] [ref=e40]
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - img
+            - textbox [ref=e43]:
+              - /placeholder: Search components...
+          - button "New" [disabled] [ref=e44]:
+            - img [ref=e45]
+            - generic [ref=e46]: New
+          - button "Import" [disabled] [ref=e47]:
+            - img [ref=e48]
+            - generic [ref=e51]: Import
+      - generic [ref=e52]:
+        - generic [ref=e53]:
+          - img [ref=e54]
+          - generic [ref=e56]: "Mount:"
+          - generic [ref=e57]:
+            - button "SMD" [disabled] [ref=e58]
+            - button "Through-hole" [disabled] [ref=e59]
+            - button "Virtual" [disabled] [ref=e60]
+        - generic "Coming soon" [ref=e61]:
+          - checkbox "Select All" [disabled] [ref=e62]
+          - generic [ref=e63]: Select All
+      - main [ref=e64]:
+        - generic [ref=e66]:
+          - article [ref=e67]:
+            - checkbox "Coming soon" [disabled] [ref=e69]
+            - generic [ref=e70]: Built-in
+            - generic [ref=e72]: C
+            - generic [ref=e73]:
+              - heading "Capacitor 100nF" [level=3] [ref=e74]
+              - paragraph [ref=e75]: Decoupling capacitor
+              - generic [ref=e77]: "0603"
+          - article [ref=e78]:
+            - checkbox "Coming soon" [disabled] [ref=e80]
+            - generic [ref=e81]: Built-in
+            - generic [ref=e83]: C
+            - generic [ref=e84]:
+              - heading "Capacitor 10uF" [level=3] [ref=e85]
+              - paragraph [ref=e86]: Bulk capacitor
+              - generic [ref=e88]: "0805"
+          - article [ref=e89]:
+            - checkbox "Coming soon" [disabled] [ref=e91]
+            - generic [ref=e92]: Built-in
+            - generic [ref=e94]: R
+            - generic [ref=e95]:
+              - heading "Resistor 10k" [level=3] [ref=e96]
+              - paragraph [ref=e97]: General-purpose resistor
+              - generic [ref=e99]: "0603"

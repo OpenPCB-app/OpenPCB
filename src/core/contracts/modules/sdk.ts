@@ -1,12 +1,8 @@
 /**
  * Public SDK contracts modules implement or consume via ctx.sdk.
- *
- * Each SDK represents a stable, cross-module public API for a given
- * feature module. Implementations live inside their owning module's
- * backend and are registered with the sdk registry during activation.
  */
 
-export interface ComponentLibraryPart {
+export interface LibraryComponent {
   id: string;
   name: string;
   description: string;
@@ -15,29 +11,27 @@ export interface ComponentLibraryPart {
   tags: string[];
 }
 
-export interface ComponentLibrarySymbol {
+export interface LibrarySymbol {
   id: string;
   name: string;
   data: Record<string, unknown>;
 }
 
-export interface ComponentLibraryFootprint {
+export interface LibraryFootprint {
   id: string;
   name: string;
   data: Record<string, unknown>;
 }
 
-export interface ComponentLibrarySearchParams {
+export interface LibrarySearchParams {
   query?: string;
   limit?: number;
   tags?: string[];
 }
 
-export interface ComponentLibrarySDK {
-  resolvePart(partId: string): Promise<ComponentLibraryPart | null>;
-  getSymbol(symbolId: string): Promise<ComponentLibrarySymbol | null>;
-  getFootprint(footprintId: string): Promise<ComponentLibraryFootprint | null>;
-  searchParts(
-    params: ComponentLibrarySearchParams,
-  ): Promise<ComponentLibraryPart[]>;
+export interface LibrarySDK {
+  resolveComponent(componentId: string): Promise<LibraryComponent | null>;
+  getSymbol(symbolId: string): Promise<LibrarySymbol | null>;
+  getFootprint(footprintId: string): Promise<LibraryFootprint | null>;
+  searchComponents(params: LibrarySearchParams): Promise<LibraryComponent[]>;
 }
