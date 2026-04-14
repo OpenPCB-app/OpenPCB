@@ -4,27 +4,42 @@ import type * as THREE from "three";
 
 const LINE_HEIGHT = 40;
 const PAGE_HEIGHT = 800;
-const TRACKPAD_DELTA_THRESHOLD = 50;
+const TRACKPAD_PIXEL_DELTA_THRESHOLD = 10;
 
-export function isTrackpadWheelEvent(e: WheelEvent): boolean {
-  if (e.ctrlKey) return true;
-  const absDeltaY = Math.abs(e.deltaY);
-  const isSmallDelta = absDeltaY > 0 && absDeltaY < TRACKPAD_DELTA_THRESHOLD;
-  const isPixelMode = e.deltaMode === 0;
-  return isSmallDelta && isPixelMode;
+export interface EdaWheelOptions {
+  readonly enabled?: boolean;
+  readonly pinchZoom?: boolean;
+  readonly ignoreTrackpadScroll?: boolean;
+  readonly zoomAnchor?: "cursor" | "center";
 }
 
-export type WheelNavigationAction = "zoom" | "pan";
+export const DEFAULT_EDA_WHEEL_OPTIONS: Required<EdaWheelOptions> = {
+  enabled: true,
+  pinchZoom: true,
+  ignoreTrackpadScroll: true,
+  zoomAnchor: "cursor",
+};
 
-export function getWheelNavigationAction(e: WheelEvent): WheelNavigationAction {
-  const isZoomAction = e.ctrlKey || e.metaKey || (!e.shiftKey && !isTrackpadWheelEvent(e));
-  const isPanAction = e.shiftKey || (!e.ctrlKey && !e.metaKey && isTrackpadWheelEvent(e));
-  return isZoomAction && !isPanAction ? "zoom" : "pan";
+export function isLikelyTrackpadWheelEvent(e: WheelEvent): boolean {
+  if (e.ctrlKey || e.metaKey) {
+    return false;
+  }
+
+  if (e.deltaMode !== 0) {
+    return false;
+  }
+
+  const absX = Math.abs(e.deltaX);
+  const absY = Math.abs(e.deltaY);
+  const maxDelta = Math.max(absX, absY);
+  const hasFractional = absX % 1 !== 0 || absY % 1 !== 0;
+
+  return hasFractional || (maxDelta > 0 && maxDelta < TRACKPAD_PIXEL_DELTA_THRESHOLD);
 }
 
 export function normalizeZoomDelta(e: WheelEvent): number {
   const modeScale = e.deltaMode === 1 ? 0.05 : e.deltaMode === 2 ? 1 : 0.002;
-  const pinchScale = e.ctrlKey ? 10 : 1;
+  const pinchScale = e.ctrlKey || e.metaKey ? 10 : 1;
   return -e.deltaY * modeScale * pinchScale;
 }
 
@@ -44,7 +59,35 @@ export function normalizePanDelta(e: WheelEvent): { dx: number; dy: number } {
 export const MIN_ZOOM = 0.01;
 export const MAX_ZOOM = 5000;
 
-export function useEdaWheel(): void {
+function zoomToCursor(
+  camera: THREE.OrthographicCamera,
+  canvas: HTMLCanvasElement,
+  event: WheelEvent,
+  zoom: number,
+): void {
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = event.clientX - rect.left;
+  const mouseY = event.clientY - rect.top;
+  const canvasW = rect.width;
+  const canvasH = rect.height;
+  const ndcX = (mouseX / canvasW) * 2 - 1;
+  const ndcY = -(mouseY / canvasH) * 2 + 1;
+
+  const worldX = camera.position.x + (ndcX * canvasW) / (2 * camera.zoom);
+  const worldY = camera.position.y + (ndcY * canvasH) / (2 * camera.zoom);
+  const newWorldX = camera.position.x + (ndcX * canvasW) / (2 * zoom);
+  const newWorldY = camera.position.y + (ndcY * canvasH) / (2 * zoom);
+
+  camera.position.x += worldX - newWorldX;
+  camera.position.y += worldY - newWorldY;
+  camera.zoom = zoom;
+}
+
+function zoomToCenter(camera: THREE.OrthographicCamera, zoom: number): void {
+  camera.zoom = zoom;
+}
+
+export function useEdaWheel(options: EdaWheelOptions = {}): void {
   const gl = useThree((s) => s.gl);
   const camera = useThree((s) => s.camera) as THREE.OrthographicCamera;
   const invalidate = useThree((s) => s.invalidate);
@@ -52,36 +95,47 @@ export function useEdaWheel(): void {
   const cameraRef = useRef(camera);
   cameraRef.current = camera;
 
+  const optionsRef = useRef<Required<EdaWheelOptions>>({
+    ...DEFAULT_EDA_WHEEL_OPTIONS,
+    ...options,
+  });
+  optionsRef.current = {
+    ...DEFAULT_EDA_WHEEL_OPTIONS,
+    ...options,
+  };
+
   const handleWheel = useCallback(
     (e: WheelEvent) => {
       e.preventDefault();
+      const activeOptions = optionsRef.current;
+      if (!activeOptions.enabled) {
+        return;
+      }
+
+      const isPinch = e.ctrlKey || e.metaKey;
+      if (isPinch && !activeOptions.pinchZoom) {
+        return;
+      }
+
+      if (!isPinch && activeOptions.ignoreTrackpadScroll && isLikelyTrackpadWheelEvent(e)) {
+        return;
+      }
+
       const cam = cameraRef.current;
+      const delta = normalizeZoomDelta(e);
+      if (delta === 0) {
+        return;
+      }
+      const factor = Math.pow(2, delta);
+      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, cam.zoom * factor));
+      if (newZoom === cam.zoom) {
+        return;
+      }
 
-      if (getWheelNavigationAction(e) === "zoom") {
-        const delta = normalizeZoomDelta(e);
-        const factor = Math.pow(2, delta);
-        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, cam.zoom * factor));
-
-        const rect = gl.domElement.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        const canvasW = rect.width;
-        const canvasH = rect.height;
-        const ndcX = (mouseX / canvasW) * 2 - 1;
-        const ndcY = -(mouseY / canvasH) * 2 + 1;
-
-        const worldX = cam.position.x + (ndcX * canvasW) / (2 * cam.zoom);
-        const worldY = cam.position.y + (ndcY * canvasH) / (2 * cam.zoom);
-        const newWorldX = cam.position.x + (ndcX * canvasW) / (2 * newZoom);
-        const newWorldY = cam.position.y + (ndcY * canvasH) / (2 * newZoom);
-
-        cam.position.x += worldX - newWorldX;
-        cam.position.y += worldY - newWorldY;
-        cam.zoom = newZoom;
+      if (activeOptions.zoomAnchor === "center") {
+        zoomToCenter(cam, newZoom);
       } else {
-        const { dx, dy } = normalizePanDelta(e);
-        cam.position.x += dx / cam.zoom;
-        cam.position.y -= dy / cam.zoom;
+        zoomToCursor(cam, gl.domElement, e, newZoom);
       }
 
       cam.updateProjectionMatrix();

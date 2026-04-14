@@ -8,7 +8,7 @@ import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
 
 describe("library module integration", () => {
-  test("boots, seeds, serves routes, registers SDK", async () => {
+  test("boots, serves routes, registers SDK", async () => {
     const repoRoot = path.resolve(import.meta.dir, "../../..");
     const moduleRegistry = new ModuleRouterRegistry();
     const moduleRuntime = new ModuleRuntime({
@@ -31,9 +31,9 @@ describe("library module integration", () => {
       query: "capacitor",
       limit: 20,
     });
-    expect(components.length).toBeGreaterThan(0);
-    const resolved = await librarySdk.resolveComponent(components[0]!.id);
-    expect(resolved?.id).toBe(components[0]!.id);
+    expect(Array.isArray(components)).toBe(true);
+    const missingResolved = await librarySdk.resolveComponent("missing-component-id");
+    expect(missingResolved).toBeNull();
 
     const server = createHttpServer({
       diagnosticsStore: new DiagnosticsStore(),
@@ -48,7 +48,7 @@ describe("library module integration", () => {
     const statusBody = (await statusResponse.json()) as {
       data: { componentCount: number };
     };
-    expect(statusBody.data.componentCount).toBeGreaterThanOrEqual(3);
+    expect(statusBody.data.componentCount).toBeGreaterThanOrEqual(0);
 
     const searchResponse = await server.fetch(
       new Request("http://localhost/api/modules/library/components?q=resistor"),
@@ -56,28 +56,144 @@ describe("library module integration", () => {
     expect(searchResponse.status).toBe(200);
     const searchBody = (await searchResponse.json()) as {
       data?: {
-        components?: Array<{
-          id: string;
-          symbolId: string;
-          footprintId: string;
-        }>;
+        components?: Array<{ id: string }>;
       };
     };
-    const first = searchBody.data?.components?.[0];
-    expect(first?.id).toBeDefined();
+    expect(Array.isArray(searchBody.data?.components)).toBe(true);
+  });
 
-    const symbolResponse = await server.fetch(
+  test("imports component via inspect and commit routes", async () => {
+    const repoRoot = path.resolve(import.meta.dir, "../../..");
+    const moduleRegistry = new ModuleRouterRegistry();
+    const moduleRuntime = new ModuleRuntime({
+      moduleRegistry,
+      workspaceRoot: repoRoot,
+    });
+    await moduleRuntime.bootstrap();
+
+    const server = createHttpServer({
+      diagnosticsStore: new DiagnosticsStore(),
+      moduleRegistry,
+      moduleRuntime,
+    });
+
+    const symbolPath = path.resolve(import.meta.dir, "../../../../data/C.kicad_sym");
+    const footprintPath = path.resolve(
+      import.meta.dir,
+      "../../../../data/C_1210_3225Metric.kicad_mod",
+    );
+    const symbolContent = await Bun.file(symbolPath).text();
+    const footprintContent = await Bun.file(footprintPath).text();
+
+    const inspectResponse = await server.fetch(
+      new Request("http://localhost/api/modules/library/imports/kicad/inspect", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          symbolLibrary: {
+            fileName: "C.kicad_sym",
+            content: symbolContent,
+          },
+          footprints: [
+            {
+              fileName: "C_1210_3225Metric.kicad_mod",
+              content: footprintContent,
+            },
+          ],
+        }),
+      }),
+    );
+    expect(inspectResponse.status).toBe(200);
+    const inspectBody = (await inspectResponse.json()) as {
+      data?: {
+        symbols?: Array<{ id: string; name: string; preview?: { kind?: string } }>;
+        footprints?: Array<{ id: string; name: string; preview?: { kind?: string } }>;
+      };
+    };
+    const selectedSymbol = inspectBody.data?.symbols?.[0];
+    const selectedFootprint = inspectBody.data?.footprints?.[0];
+    expect(selectedSymbol?.name).toBe("C");
+    expect(selectedFootprint?.name).toBe("C_1210_3225Metric");
+    expect(selectedSymbol?.id).toBeDefined();
+    expect(selectedFootprint?.id).toBeDefined();
+    expect(selectedSymbol?.preview?.kind).toBe("symbol");
+    expect(selectedFootprint?.preview?.kind).toBe("footprint");
+    if (!selectedSymbol?.id || !selectedFootprint?.id) {
+      throw new Error("Inspect route did not return stable ids");
+    }
+
+    const commitResponse = await server.fetch(
+      new Request("http://localhost/api/modules/library/imports/kicad", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          symbolLibrary: {
+            fileName: "C.kicad_sym",
+            content: symbolContent,
+          },
+          footprints: [
+            {
+              fileName: "C_1210_3225Metric.kicad_mod",
+              content: footprintContent,
+            },
+          ],
+          selection: {
+            symbolId: selectedSymbol.id,
+            footprintId: selectedFootprint.id,
+          },
+          component: {
+            name: "Capacitor 1210 Imported",
+            description: "Imported from KiCad fixtures",
+          },
+        }),
+      }),
+    );
+    expect(commitResponse.status).toBe(201);
+    const commitBody = (await commitResponse.json()) as {
+      data?: { componentId?: string };
+    };
+    const importedComponentId = commitBody.data?.componentId;
+    expect(importedComponentId).toBeDefined();
+    if (!importedComponentId) {
+      throw new Error("Commit route did not return component id");
+    }
+
+    const listResponse = await server.fetch(
       new Request(
-        `http://localhost/api/modules/library/symbols/${first?.symbolId}`,
+        "http://localhost/api/modules/library/components?q=Capacitor%201210%20Imported",
       ),
     );
-    expect(symbolResponse.status).toBe(200);
+    expect(listResponse.status).toBe(200);
+    const listBody = (await listResponse.json()) as {
+      data?: {
+        components?: Array<{ name: string; symbolId: string; footprintId: string }>;
+      };
+    };
 
-    const footprintResponse = await server.fetch(
+    const imported = listBody.data?.components?.find(
+      (component) => component.name === "Capacitor 1210 Imported",
+    );
+    expect(imported).toBeDefined();
+    expect(imported?.symbolId).toBeDefined();
+    expect(imported?.footprintId).toBeDefined();
+
+    const detailResponse = await server.fetch(
       new Request(
-        `http://localhost/api/modules/library/footprints/${first?.footprintId}`,
+        `http://localhost/api/modules/library/components/${importedComponentId}/detail`,
       ),
     );
-    expect(footprintResponse.status).toBe(200);
+    expect(detailResponse.status).toBe(200);
+    const detailBody = (await detailResponse.json()) as {
+      data?: {
+        detail?: {
+          component?: { id?: string };
+          symbol?: { preview?: { kind?: string } | null };
+          footprint?: { preview?: { kind?: string } | null };
+        };
+      };
+    };
+    expect(detailBody.data?.detail?.component?.id).toBe(importedComponentId);
+    expect(detailBody.data?.detail?.symbol?.preview?.kind).toBe("symbol");
+    expect(detailBody.data?.detail?.footprint?.preview?.kind).toBe("footprint");
   });
 });

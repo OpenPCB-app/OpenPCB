@@ -7,7 +7,11 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { useEdaWheel } from "../camera/use-eda-camera";
+import {
+  DEFAULT_EDA_WHEEL_OPTIONS,
+  useEdaWheel,
+  type EdaWheelOptions,
+} from "../camera/use-eda-camera";
 import { RENDER_ORDER } from "../layers";
 import { DragDropOverlay } from "./DragDropOverlay";
 import {
@@ -28,6 +32,10 @@ export interface EdaCanvasProps {
   backgroundColor?: string;
   style?: CSSProperties;
   initialZoom?: number;
+  navigation?: {
+    readonly wheel?: EdaWheelOptions;
+    readonly middleButtonPan?: boolean;
+  };
 }
 
 export function EdaCanvas({
@@ -42,6 +50,7 @@ export function EdaCanvas({
   backgroundColor = "#0f172a",
   style,
   initialZoom = 50,
+  navigation,
 }: EdaCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cameraRef = useRef<THREE.OrthographicCamera>(null);
@@ -66,6 +75,12 @@ export function EdaCanvas({
     overflow: "hidden",
     ...style,
   };
+
+  const resolvedWheelOptions = {
+    ...DEFAULT_EDA_WHEEL_OPTIONS,
+    ...(navigation?.wheel ?? {}),
+  };
+  const middleButtonPanEnabled = navigation?.middleButtonPan ?? true;
 
   return (
     <div
@@ -104,6 +119,8 @@ export function EdaCanvas({
           cameraRef={cameraRef}
           interactionHandler={interactionHandler}
           interactionCoordinateTransform={interactionCoordinateTransform}
+          wheelOptions={resolvedWheelOptions}
+          middleButtonPanEnabled={middleButtonPanEnabled}
         >
           {children}
         </EdaCanvasInternals>
@@ -127,12 +144,16 @@ function EdaCanvasInternals({
   cameraRef,
   interactionHandler,
   interactionCoordinateTransform,
+  wheelOptions,
+  middleButtonPanEnabled,
   children,
 }: {
   readOnly: boolean;
   cameraRef: React.RefObject<THREE.OrthographicCamera | null>;
   interactionHandler: InteractionHandler | null;
   interactionCoordinateTransform: InteractionCoordinateTransform;
+  wheelOptions: Required<EdaWheelOptions>;
+  middleButtonPanEnabled: boolean;
   children: ReactNode;
 }) {
   const camera = useThree((s) => s.camera) as THREE.OrthographicCamera;
@@ -143,23 +164,41 @@ function EdaCanvasInternals({
     (cameraRef as React.MutableRefObject<THREE.OrthographicCamera | null>).current = camera;
   }, [camera, cameraRef]);
 
-  useEdaWheel();
+  useEdaWheel(wheelOptions);
 
   const isPanningRef = useRef(false);
   const lastPointerRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
-    if (readOnly) return;
+    if (!middleButtonPanEnabled) {
+      return;
+    }
 
     const canvas = gl.domElement;
+    const stopPanning = (pointerId?: number) => {
+      if (!isPanningRef.current) {
+        return;
+      }
+      isPanningRef.current = false;
+      if (typeof pointerId === "number") {
+        try {
+          canvas.releasePointerCapture(pointerId);
+        } catch {
+          // ignore: pointer capture can already be released
+        }
+      }
+      canvas.style.cursor = "crosshair";
+    };
 
     const handlePointerDown = (e: PointerEvent) => {
-      if (e.button === 1) {
-        isPanningRef.current = true;
-        lastPointerRef.current = { x: e.clientX, y: e.clientY };
-        canvas.setPointerCapture(e.pointerId);
-        canvas.style.cursor = "grabbing";
+      if (e.button !== 1) {
+        return;
       }
+      e.preventDefault();
+      isPanningRef.current = true;
+      lastPointerRef.current = { x: e.clientX, y: e.clientY };
+      canvas.setPointerCapture(e.pointerId);
+      canvas.style.cursor = "grabbing";
     };
 
     const handlePointerMove = (e: PointerEvent) => {
@@ -175,23 +214,36 @@ function EdaCanvasInternals({
     };
 
     const handlePointerUp = (e: PointerEvent) => {
-      if (e.button === 1 && isPanningRef.current) {
-        isPanningRef.current = false;
-        canvas.releasePointerCapture(e.pointerId);
-        canvas.style.cursor = "crosshair";
+      if (e.button === 1) {
+        stopPanning(e.pointerId);
       }
+    };
+
+    const handlePointerCancel = (e: PointerEvent) => {
+      if (e.button === 1 || isPanningRef.current) {
+        stopPanning(e.pointerId);
+      }
+    };
+
+    const handleWindowBlur = () => {
+      stopPanning();
     };
 
     canvas.addEventListener("pointerdown", handlePointerDown);
     canvas.addEventListener("pointermove", handlePointerMove);
     canvas.addEventListener("pointerup", handlePointerUp);
+    canvas.addEventListener("pointercancel", handlePointerCancel);
+    window.addEventListener("blur", handleWindowBlur);
 
     return () => {
       canvas.removeEventListener("pointerdown", handlePointerDown);
       canvas.removeEventListener("pointermove", handlePointerMove);
       canvas.removeEventListener("pointerup", handlePointerUp);
+      canvas.removeEventListener("pointercancel", handlePointerCancel);
+      window.removeEventListener("blur", handleWindowBlur);
+      stopPanning();
     };
-  }, [camera, gl, invalidate, readOnly]);
+  }, [camera, gl, invalidate, middleButtonPanEnabled]);
 
   const handlePointerLeave = useCallback(() => {
     interactionHandler?.onPointerLeave?.();

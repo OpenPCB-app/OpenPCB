@@ -2,13 +2,11 @@ import type { ModuleDefinition } from "../../../core/contracts/modules/backend-m
 import { MODULE_SDK_TOKENS } from "../../../core/contracts/modules/sdk-map";
 import { buildSdk } from "./queries";
 import { registerRoutes } from "./routes";
-import { seedIfEmpty } from "./seed";
 
 export const definition: ModuleDefinition = {
   id: "library",
 
   async onActivate(ctx) {
-    seedIfEmpty(ctx);
     ctx.logger.info("library activated", {
       tablePrefix: ctx.db.tablePrefix,
     });

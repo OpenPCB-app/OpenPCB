@@ -3,7 +3,7 @@ import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { RENDER_ORDER } from "../layers";
 
-interface PadData {
+export interface PadData {
   id: string;
   x: number;
   y: number;
@@ -15,7 +15,7 @@ interface PadData {
   selected?: boolean;
 }
 
-interface PadInstancesProps {
+export interface PadInstancesProps {
   pads: readonly PadData[];
   defaultColor?: string;
   selectedColor?: string;

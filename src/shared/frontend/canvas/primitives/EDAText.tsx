@@ -2,7 +2,7 @@ import { Text } from "@react-three/drei";
 import type { ReactNode } from "react";
 import { RENDER_ORDER } from "../layers";
 
-interface EDATextProps {
+export interface EDATextProps {
   position: [number, number, number];
   children: ReactNode;
   fontSize?: number;

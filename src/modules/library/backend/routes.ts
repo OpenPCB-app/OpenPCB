@@ -2,16 +2,44 @@ import type {
   CoreBackendModuleContext,
   ModuleRouterHandle,
 } from "../../../core/contracts/modules/backend-module";
-import { success } from "../../../core/backend/http/response";
 import { sql } from "drizzle-orm";
 import {
   getDb,
+  getComponentDetail,
   resolveComponent,
   getSymbol,
   getFootprint,
   searchComponents,
 } from "./queries";
 import { components } from "./schema";
+import { commitKicadImport } from "./import/commit-kicad";
+import {
+  buildInspectResponse,
+  ImportValidationError,
+} from "./import/inspect-kicad";
+import type { CommitKicadRequest, InspectKicadRequest } from "./import/types";
+
+function success<T>(data: T, status = 200): Response {
+  return Response.json({ ok: true, data }, { status });
+}
+
+async function parseJsonBody<T>(req: Request): Promise<T> {
+  try {
+    return (await req.json()) as T;
+  } catch {
+    throw new ImportValidationError("Request body must be valid JSON");
+  }
+}
+
+function importErrorResponse(error: unknown): Response {
+  if (error instanceof ImportValidationError) {
+    return Response.json({ ok: false, error: error.message }, { status: 400 });
+  }
+  if (error instanceof Error) {
+    return Response.json({ ok: false, error: error.message }, { status: 400 });
+  }
+  return Response.json({ ok: false, error: "Invalid import payload" }, { status: 400 });
+}
 
 export function registerRoutes(
   router: ModuleRouterHandle,
@@ -46,6 +74,24 @@ export function registerRoutes(
     return success({ components: result });
   });
 
+  router.post("/imports/kicad/inspect", async (routeCtx) => {
+    try {
+      const body = await parseJsonBody<InspectKicadRequest>(routeCtx.req);
+      return success(buildInspectResponse(body));
+    } catch (error) {
+      return importErrorResponse(error);
+    }
+  });
+
+  router.post("/imports/kicad", async (routeCtx) => {
+    try {
+      const body = await parseJsonBody<CommitKicadRequest>(routeCtx.req);
+      return success(commitKicadImport(ctx, body), 201);
+    } catch (error) {
+      return importErrorResponse(error);
+    }
+  });
+
   router.get("/components/:componentId", async (routeCtx) => {
     const component = await resolveComponent(
       ctx,
@@ -58,6 +104,20 @@ export function registerRoutes(
       );
     }
     return success({ component });
+  });
+
+  router.get("/components/:componentId/detail", async (routeCtx) => {
+    const detail = await getComponentDetail(
+      ctx,
+      routeCtx.params.getOrThrow("componentId"),
+    );
+    if (!detail) {
+      return Response.json(
+        { ok: false, error: "Component detail not found" },
+        { status: 404 },
+      );
+    }
+    return success({ detail });
   });
 
   router.get("/symbols/:symbolId", async (routeCtx) => {
