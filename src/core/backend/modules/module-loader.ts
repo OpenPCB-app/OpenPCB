@@ -1,4 +1,5 @@
 import { access } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
@@ -62,6 +63,31 @@ const FALLBACK_SIDEBAR = {
   order: 999,
 } as const;
 
+function hasModulesDirectory(workspaceRoot: string): boolean {
+  return existsSync(path.join(workspaceRoot, "modules"));
+}
+
+function resolveWorkspaceRoot(options: ModuleLoaderOptions): string {
+  const explicit = options.workspaceRoot ?? process.env.OPENPCB_WORKSPACE_ROOT;
+  if (explicit) {
+    return explicit;
+  }
+
+  const candidates = [
+    path.resolve(import.meta.dir, "../../.."),
+    path.resolve(process.cwd(), "src"),
+    process.cwd(),
+  ];
+
+  for (const candidate of candidates) {
+    if (hasModulesDirectory(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0]!;
+}
+
 export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
   private readonly moduleRegistry: ModuleRouterRegistry;
 
@@ -75,10 +101,7 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
 
   constructor(options: ModuleLoaderOptions) {
     this.moduleRegistry = options.moduleRegistry;
-    this.workspaceRoot =
-      options.workspaceRoot ??
-      process.env.OPENPCB_WORKSPACE_ROOT ??
-      path.resolve(import.meta.dir, "../../..");
+    this.workspaceRoot = resolveWorkspaceRoot(options);
     this.sdkRegistry = options.sdkRegistry ?? new RuntimeSdkRegistry();
   }
 

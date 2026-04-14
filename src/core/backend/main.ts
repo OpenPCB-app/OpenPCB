@@ -4,6 +4,7 @@ import {
   ModuleRouterRegistry,
   ModuleRuntime,
 } from "./index";
+import path from "node:path";
 
 const port = Number.parseInt(process.env.PORT ?? "3000", 10);
 const host = process.env.HOST ?? "127.0.0.1";
@@ -12,6 +13,8 @@ const diagnosticsStore = new DiagnosticsStore(100);
 const moduleRegistry = new ModuleRouterRegistry();
 const moduleRuntime = new ModuleRuntime({
   moduleRegistry,
+  workspaceRoot:
+    process.env.OPENPCB_WORKSPACE_ROOT ?? path.resolve(import.meta.dir, "../.."),
 });
 
 await moduleRuntime.bootstrap();

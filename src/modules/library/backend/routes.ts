@@ -41,6 +41,36 @@ function importErrorResponse(error: unknown): Response {
   return Response.json({ ok: false, error: "Invalid import payload" }, { status: 400 });
 }
 
+function parseLimit(limitRaw: string | null): number | undefined {
+  if (!limitRaw) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(limitRaw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+  return parsed;
+}
+
+function parseTags(tagsRaw: string | null): string[] | undefined {
+  if (!tagsRaw) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  const tags = tagsRaw
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length > 0)
+    .filter((value) => {
+      if (seen.has(value)) {
+        return false;
+      }
+      seen.add(value);
+      return true;
+    });
+  return tags.length > 0 ? tags : undefined;
+}
+
 export function registerRoutes(
   router: ModuleRouterHandle,
   ctx: CoreBackendModuleContext,
@@ -61,15 +91,8 @@ export function registerRoutes(
 
   router.get("/components", async (routeCtx) => {
     const query = routeCtx.query.get("q") ?? undefined;
-    const limitRaw = routeCtx.query.get("limit");
-    const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
-    const tagsRaw = routeCtx.query.get("tags");
-    const tags = tagsRaw
-      ? tagsRaw
-          .split(",")
-          .map((value) => value.trim())
-          .filter((value) => value.length > 0)
-      : undefined;
+    const limit = parseLimit(routeCtx.query.get("limit"));
+    const tags = parseTags(routeCtx.query.get("tags"));
     const result = await searchComponents(ctx, { query, limit, tags });
     return success({ components: result });
   });
@@ -86,7 +109,8 @@ export function registerRoutes(
   router.post("/imports/kicad", async (routeCtx) => {
     try {
       const body = await parseJsonBody<CommitKicadRequest>(routeCtx.req);
-      return success(commitKicadImport(ctx, body), 201);
+      const result = commitKicadImport(ctx, body);
+      return success(result, result.reused ? 200 : 201);
     } catch (error) {
       return importErrorResponse(error);
     }

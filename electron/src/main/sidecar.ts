@@ -40,7 +40,7 @@ function getSidecarPath(): string {
   }
 
   // Dev mode: binary in project root bin/
-  // app.getAppPath() returns src-electron/, so go up one level to project root
+  // app.getAppPath() returns electron/, so go up one level to project root
   const devPath = join(app.getAppPath(), "..", "bin", binaryName);
   if (existsSync(devPath)) return devPath;
 
@@ -58,6 +58,13 @@ function getAppDataDir(): string {
   return app.isPackaged ? base : join(base, "dev");
 }
 
+function getBackendWorkspaceRoot(): string {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, "src");
+  }
+  return join(app.getAppPath(), "..", "src");
+}
+
 export function getBackendPayload(): BackendReadyPayload | null {
   return backendPayload;
 }
@@ -66,18 +73,21 @@ export function spawnSidecar(): Promise<BackendReadyPayload> {
   return new Promise((resolve, reject) => {
     const binaryPath = getSidecarPath();
     const appDataDir = getAppDataDir();
+    const workspaceRoot = getBackendWorkspaceRoot();
 
     // Ensure data directory exists before sidecar tries to create DB
     mkdirSync(appDataDir, { recursive: true });
 
     console.log(`[sidecar] Spawning: ${binaryPath}`);
     console.log(`[sidecar] APP_DATA_DIR: ${appDataDir}`);
+    console.log(`[sidecar] OPENPCB_WORKSPACE_ROOT: ${workspaceRoot}`);
 
     const child = spawn(binaryPath, [], {
       env: {
         ...process.env,
         PORT: "0",
         APP_DATA_DIR: appDataDir,
+        OPENPCB_WORKSPACE_ROOT: workspaceRoot,
         NODE_ENV: app.isPackaged ? "production" : "development",
         OPENPCB_ALLOW_UNAUTHENTICATED_API: "true",
       },

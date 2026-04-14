@@ -12,9 +12,25 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(__filename), "..");
-const MODULES_DIR = path.join(ROOT, "modules");
-const SDK_OUTPUT_DIR = path.join(ROOT, "src-react", "src", "generated", "sdk");
-const MANIFESTS_FILE = path.join(ROOT, "src-react", "src", "generated", "modules.ts");
+const MODULES_DIR = path.join(ROOT, "src", "modules");
+const SDK_OUTPUT_DIR = path.join(
+  ROOT,
+  "src",
+  "core",
+  "frontend",
+  "src",
+  "generated",
+  "sdk",
+);
+const MANIFESTS_FILE = path.join(
+  ROOT,
+  "src",
+  "core",
+  "frontend",
+  "src",
+  "generated",
+  "modules.ts",
+);
 
 // =============================================================================
 // Types

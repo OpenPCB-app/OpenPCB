@@ -65,4 +65,5 @@ export interface CommitKicadRequest extends InspectKicadRequest {
 export interface CommitKicadResponse {
   componentId: string;
   componentName: string;
+  reused: boolean;
 }

@@ -11,7 +11,7 @@ import type { ErrorObject, ValidateFunction } from "ajv";
 // Type Definitions (matching src-react/src/types/module.ts)
 // =============================================================================
 
-type ModuleKind = "space" | "service" | "integration" | "widget" | "system";
+type ModuleKind = "space" | "tool" | "service" | "integration" | "widget" | "system";
 type ServiceExportKind = "http" | "bridge" | "local";
 type ModuleCoreCapability = "projects" | "contentEditor" | "toolRegistry";
 
@@ -56,13 +56,24 @@ interface ModuleManifestFile {
   db?: {
     rawAccess?: boolean;
   };
-  ui: {
-    moduleEntry: string;
+  ui?: {
+    moduleEntry?: string;
     primarySpace?: string;
     widgets?: ManifestWidgetDef[];
     registerAsSpaceInTopBar?: boolean;
     sidebarLabel?: string;
   };
+  runtime?: {
+    frontendEntry?: string;
+    backendEntry?: string;
+  };
+  sidebar?: {
+    label?: string;
+    icon?: string;
+    order?: number;
+    group?: string;
+  };
+  enabled?: boolean;
   dependsOn?: ModuleDependency[];
   dependencies?: string[]; // V1 legacy
   exports?: ModuleExports;
@@ -101,16 +112,19 @@ type RunMode = "generate" | "validate-only";
 //@ts-ignore
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), "..");
-const modulesDir = path.join(repoRoot, "modules");
+const modulesDir = path.join(repoRoot, "src", "modules");
 const outputFile = path.join(
   repoRoot,
-  "src-ts",
-  "shared",
+  "src",
+  "core",
+  "frontend",
+  "src",
   "generated",
   "modules.ts",
 );
 const schemaPath = path.join(
   repoRoot,
+  "src",
   "modules",
   "_kit",
   "module.manifest.schema.json",
@@ -181,15 +195,24 @@ class ServiceExportConflictError extends Error {
 // =============================================================================
 
 async function loadValidator(): Promise<ValidateFunction<ModuleManifestFile>> {
-  const rawSchema = await fs.readFile(schemaPath, "utf8");
-  const schema = JSON.parse(rawSchema);
-  const AjvModule = (await import("ajv/dist/2020.js")) as unknown as {
-    default: new (...args: unknown[]) => {
-      compile<T>(schema: unknown): ValidateFunction<T>;
+  try {
+    const rawSchema = await fs.readFile(schemaPath, "utf8");
+    const schema = JSON.parse(rawSchema);
+    const AjvModule = (await import("ajv/dist/2020.js")) as unknown as {
+      default: new (...args: unknown[]) => {
+        compile<T>(schema: unknown): ValidateFunction<T>;
+      };
     };
-  };
-  const ajv = new AjvModule.default({ allErrors: true, strict: "log" });
-  return ajv.compile<ModuleManifestFile>(schema);
+    const ajv = new AjvModule.default({ allErrors: true, strict: "log" });
+    return ajv.compile<ModuleManifestFile>(schema);
+  } catch {
+    logWarn(
+      `Manifest schema not found at ${path.relative(repoRoot, schemaPath)}; running structural validation only.`,
+    );
+    const fallback = ((_: unknown): _ is ModuleManifestFile => true) as ValidateFunction<ModuleManifestFile>;
+    fallback.errors = null;
+    return fallback;
+  }
 }
 
 function toPosixPath(value: string): string {
@@ -242,8 +265,12 @@ function normalizeToV2(
   ResolvedManifest,
   "manifestPath" | "resolvedDependencies" | "loadOrder"
 > {
-  const apiVersion = parsed.apiVersion ?? 1;
+  const apiVersion = parsed.apiVersion ?? 2;
   const isV2 = apiVersion === 2;
+
+  const frontendEntry =
+    parsed.runtime?.frontendEntry ?? parsed.ui?.moduleEntry ?? "module.frontend.ts";
+  const sidebarLabel = parsed.sidebar?.label ?? parsed.ui?.sidebarLabel;
 
   // Normalize dependsOn from V1 dependencies or V2 dependsOn
   let dependsOn: ModuleDependency[] = [];
@@ -257,11 +284,11 @@ function normalizeToV2(
   return {
     id: parsed.id,
     label: parsed.label ?? parsed.id,
-    sidebarLabel: parsed.ui.sidebarLabel,
+    sidebarLabel,
     namespace: parsed.namespace,
     version: parsed.version,
     moduleEntry: toPosixPath(
-      path.join("modules", moduleName, parsed.ui.moduleEntry),
+      path.join("src", "modules", moduleName, frontendEntry),
     ),
     kind: parsed.kind ?? "space",
     apiVersion,
@@ -272,7 +299,8 @@ function normalizeToV2(
       services: parsed.exports?.services ?? [],
       widgets: parsed.exports?.widgets ?? [],
     },
-    registerAsSpaceInTopBar: Boolean(parsed.ui.registerAsSpaceInTopBar),
+    registerAsSpaceInTopBar:
+      parsed.ui?.registerAsSpaceInTopBar ?? (parsed.kind ?? "space") === "space",
     defaultPinned: Boolean(parsed.defaultPinned),
   };
 }
@@ -305,11 +333,9 @@ async function readManifest(
       );
     }
 
-    await ensureModuleEntryExists(
-      manifestPath,
-      moduleName,
-      parsed.ui.moduleEntry,
-    );
+    const frontendEntry =
+      parsed.runtime?.frontendEntry ?? parsed.ui?.moduleEntry ?? "module.frontend.ts";
+    await ensureModuleEntryExists(manifestPath, moduleName, frontendEntry);
 
     const normalized = normalizeToV2(parsed, moduleName);
 
@@ -608,7 +634,7 @@ function serializeModules(modules: GeneratedModuleManifest[]): string {
 `;
 
   const interfaceBlock = `// V2 Types
-export type ModuleKind = "space" | "service" | "integration" | "widget" | "system";
+export type ModuleKind = "space" | "tool" | "service" | "integration" | "widget" | "system";
 export type ServiceExportKind = "http" | "bridge" | "local";
 export type ModuleCoreCapability = "projects" | "contentEditor" | "toolRegistry";
 

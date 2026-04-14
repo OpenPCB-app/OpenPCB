@@ -1,14 +1,26 @@
 import { describe, expect, test } from "bun:test";
+import os from "node:os";
 import path from "node:path";
 import type { LibrarySDK } from "../../contracts/modules/sdk";
 import { MODULE_SDK_TOKENS } from "../../contracts/modules/sdk-map";
+import { resetSharedSqliteForTesting } from "../db/sqlite-client";
 import { createHttpServer } from "../http/create-http-server";
 import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
 
+function isolateTestDb(testLabel: string): void {
+  resetSharedSqliteForTesting();
+  const dbFile = path.join(
+    os.tmpdir(),
+    `${testLabel}-${Date.now()}-${crypto.randomUUID()}.sqlite`,
+  );
+  process.env.OPENPCB_DB_PATH = dbFile;
+}
+
 describe("library module integration", () => {
   test("boots, serves routes, registers SDK", async () => {
+    isolateTestDb("library-integration-bootstrap");
     const repoRoot = path.resolve(import.meta.dir, "../../..");
     const moduleRegistry = new ModuleRouterRegistry();
     const moduleRuntime = new ModuleRuntime({
@@ -60,9 +72,15 @@ describe("library module integration", () => {
       };
     };
     expect(Array.isArray(searchBody.data?.components)).toBe(true);
+
+    const invalidLimitResponse = await server.fetch(
+      new Request("http://localhost/api/modules/library/components?limit=not-a-number"),
+    );
+    expect(invalidLimitResponse.status).toBe(200);
   });
 
   test("imports component via inspect and commit routes", async () => {
+    isolateTestDb("library-integration-import");
     const repoRoot = path.resolve(import.meta.dir, "../../..");
     const moduleRegistry = new ModuleRouterRegistry();
     const moduleRuntime = new ModuleRuntime({
@@ -150,13 +168,47 @@ describe("library module integration", () => {
     );
     expect(commitResponse.status).toBe(201);
     const commitBody = (await commitResponse.json()) as {
-      data?: { componentId?: string };
+      data?: { componentId?: string; reused?: boolean };
     };
     const importedComponentId = commitBody.data?.componentId;
     expect(importedComponentId).toBeDefined();
+    expect(commitBody.data?.reused).toBe(false);
     if (!importedComponentId) {
       throw new Error("Commit route did not return component id");
     }
+
+    const commitReuseResponse = await server.fetch(
+      new Request("http://localhost/api/modules/library/imports/kicad", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          symbolLibrary: {
+            fileName: "C.kicad_sym",
+            content: symbolContent,
+          },
+          footprints: [
+            {
+              fileName: "C_1210_3225Metric.kicad_mod",
+              content: footprintContent,
+            },
+          ],
+          selection: {
+            symbolId: selectedSymbol.id,
+            footprintId: selectedFootprint.id,
+          },
+          component: {
+            name: "Capacitor 1210 Imported Duplicate Attempt",
+            description: "Should reuse existing component",
+          },
+        }),
+      }),
+    );
+    expect(commitReuseResponse.status).toBe(200);
+    const commitReuseBody = (await commitReuseResponse.json()) as {
+      data?: { componentId?: string; reused?: boolean };
+    };
+    expect(commitReuseBody.data?.componentId).toBe(importedComponentId);
+    expect(commitReuseBody.data?.reused).toBe(true);
 
     const listResponse = await server.fetch(
       new Request(

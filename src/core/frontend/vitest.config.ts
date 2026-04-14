@@ -9,12 +9,12 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    include: ["src/core/frontend/src/**/*.test.{ts,tsx,js,jsx}"],
+    include: ["src/**/*.test.{ts,tsx,js,jsx}"],
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src/core/frontend/src"),
-      "@modules": path.resolve(__dirname, "./src/modules"),
+      "@": path.resolve(__dirname, "./src"),
+      "@modules": path.resolve(__dirname, "../../modules"),
     },
   },
 });

@@ -8,8 +8,8 @@
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit --pretty false --project tsconfig.json",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.config.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",

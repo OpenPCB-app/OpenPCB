@@ -3,7 +3,7 @@
 /**
  * Compile Bun TypeScript sidecar to platform-specific binary
  *
- * This script compiles core/backend/main.ts using Bun and names it according to Tauri conventions:
+ * This script compiles src/core/backend/main.ts using Bun and names it according to Tauri conventions:
  * bin/bun-backend-{TARGET_TRIPLE}[.exe]
  *
  * Shared by both Tauri and Electron desktop targets.
@@ -50,7 +50,7 @@ function compileBunSidecar(): void {
   const extension = process.platform === "win32" ? ".exe" : "";
   const outputName = `bun-backend-${targetTriple}${extension}`;
 
-  const entrypoint = join(projectRoot, "core", "backend", "main.ts");
+  const entrypoint = join(projectRoot, "src", "core", "backend", "main.ts");
   const binariesDir = join(projectRoot, "bin");
   const outputPath = join(binariesDir, outputName);
 

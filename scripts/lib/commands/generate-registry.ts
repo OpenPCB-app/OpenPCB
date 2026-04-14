@@ -12,9 +12,23 @@ import type { ErrorObject, ValidateFunction } from "ajv";
 // This is a thin wrapper for the CLI
 
 const repoRoot = path.resolve(import.meta.dir, "..", "..", "..");
-const modulesDir = path.join(repoRoot, "modules");
-const outputFile = path.join(repoRoot, "src-react", "src", "generated", "modules.ts");
-const schemaPath = path.join(repoRoot, "modules", "_kit", "module.manifest.schema.json");
+const modulesDir = path.join(repoRoot, "src", "modules");
+const outputFile = path.join(
+  repoRoot,
+  "src",
+  "core",
+  "frontend",
+  "src",
+  "generated",
+  "modules.ts",
+);
+const schemaPath = path.join(
+  repoRoot,
+  "src",
+  "modules",
+  "_kit",
+  "module.manifest.schema.json",
+);
 
 interface GenerateRegistryOptions {
     validateOnly?: boolean;

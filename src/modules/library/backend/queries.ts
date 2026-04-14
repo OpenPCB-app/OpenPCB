@@ -197,11 +197,15 @@ export async function searchComponents(
   const db = getDb(ctx);
   const query = params.query?.trim().toLowerCase() ?? "";
   const limit = Math.max(1, Math.min(100, params.limit ?? 25));
+  const requestedTags = (params.tags ?? [])
+    .map((tag) => tag.trim().toLowerCase())
+    .filter((tag, index, all) => tag.length > 0 && all.indexOf(tag) === index);
+  const hasTagFilter = requestedTags.length > 0;
 
   let rows: ComponentRow[];
   if (query.length > 0) {
     const needle = `%${query}%`;
-    rows = await db
+    const baseQuery = db
       .select()
       .from(components)
       .where(
@@ -210,22 +214,19 @@ export async function searchComponents(
           like(sql`lower(${components.description})`, needle),
         ),
       )
-      .orderBy(components.name)
-      .limit(limit);
+      .orderBy(components.name);
+    rows = hasTagFilter ? await baseQuery.all() : await baseQuery.limit(limit);
   } else {
-    rows = await db
-      .select()
-      .from(components)
-      .orderBy(components.name)
-      .limit(limit);
+    const baseQuery = db.select().from(components).orderBy(components.name);
+    rows = hasTagFilter ? await baseQuery.all() : await baseQuery.limit(limit);
   }
 
   const mapped = rows.map(mapComponent);
-  if (!params.tags || params.tags.length === 0) {
+  if (!hasTagFilter) {
     return mapped;
   }
-  const expected = new Set(params.tags.map((tag) => tag.toLowerCase()));
-  return mapped.filter((component) => {
+  const expected = new Set(requestedTags);
+  const filtered = mapped.filter((component) => {
     const have = new Set(component.tags.map((tag) => tag.toLowerCase()));
     for (const tag of expected) {
       if (!have.has(tag)) {
@@ -234,6 +235,7 @@ export async function searchComponents(
     }
     return true;
   });
+  return filtered.slice(0, limit);
 }
 
 export async function resolveComponent(
