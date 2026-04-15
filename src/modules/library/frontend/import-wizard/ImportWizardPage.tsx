@@ -13,8 +13,18 @@ import { SymbolStep } from "./steps/SymbolStep";
 import { FootprintStep } from "./steps/FootprintStep";
 import { ModelStep } from "./steps/ModelStep";
 import { MetadataStep } from "./steps/MetadataStep";
+import {
+  isEscapeShortcut,
+  matchesKey,
+  useWindowKeyboardShortcuts,
+  type KeyboardShortcutBinding,
+} from "../../../../shared/frontend/canvas/utils/keyboard-shortcuts";
 import { isAbortError, fileSignature, filesSignature } from "../utils";
-import { commitKicadImportRequest, inspectKicadImport } from "./import-api";
+import {
+  commitGeneratedImportRequest,
+  commitKicadImportRequest,
+  inspectKicadImport,
+} from "./import-api";
 
 const STEP_SYMBOL = 0;
 const STEP_FOOTPRINT = 1;
@@ -49,6 +59,7 @@ export function ImportWizardPage({
   const currentStep = useImportWizardStore((s) => s.currentStep);
   const loadingCommit = useImportWizardStore((s) => s.loadingCommit);
   const commitError = useImportWizardStore((s) => s.commitError);
+  const commitResult = useImportWizardStore((s) => s.commitResult);
 
   // Single derived selector — avoids 3 separate subscriptions for inspectStatus,
   // selectedSymbolId, componentName that only feed readyForAdvancedSteps / canProceed.
@@ -78,6 +89,16 @@ export function ImportWizardPage({
       // destroying wizard state mid-session. Store resets via handleClose instead.
     };
   }, []);
+
+  useEffect(() => {
+    if (!symbolFile) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [symbolFile]);
 
   useEffect(() => {
     const store = useImportWizardStore.getState();
@@ -193,37 +214,66 @@ export function ImportWizardPage({
         fileName: symbolFile.name,
         content: await symbolFile.text(),
       };
-      const footprints = await Promise.all(
-        footprintFiles.map(async (file) => ({
-          fileName: file.name,
-          content: await file.text(),
-        })),
-      );
 
-      await commitKicadImportRequest(
-        backendURL,
-        moduleId,
-        {
-          symbolLibrary,
-          footprints,
-          selection: {
-            symbolId: store.selectedSymbolId,
-            footprintId:
-              store.selectedFootprintId.length > 0
-                ? store.selectedFootprintId
-                : null,
-          },
-          component: {
-            name: store.componentName.trim(),
-            description: store.description.trim(),
-          },
-        },
-        controller.signal,
-      );
+      let result;
 
-      store.reset();
+      if (store.footprintSource === "preset" && store.generatedFootprint) {
+        // Preset-generated footprint path
+        result = await commitGeneratedImportRequest(
+          backendURL,
+          moduleId,
+          {
+            symbolLibrary,
+            selection: { symbolId: store.selectedSymbolId },
+            generatedFootprint: {
+              source: store.generatedFootprint.source,
+              metadata: store.generatedFootprint.metadata,
+            },
+            component: {
+              name: store.componentName.trim(),
+              description: store.description.trim(),
+            },
+          },
+          controller.signal,
+        );
+      } else {
+        // KiCad file import path
+        const footprints = await Promise.all(
+          footprintFiles.map(async (file) => ({
+            fileName: file.name,
+            content: await file.text(),
+          })),
+        );
+
+        result = await commitKicadImportRequest(
+          backendURL,
+          moduleId,
+          {
+            symbolLibrary,
+            footprints,
+            selection: {
+              symbolId: store.selectedSymbolId,
+              footprintId:
+                store.selectedFootprintId.length > 0
+                  ? store.selectedFootprintId
+                  : null,
+            },
+            component: {
+              name: store.componentName.trim(),
+              description: store.description.trim(),
+            },
+          },
+          controller.signal,
+        );
+      }
+
       onImported();
-      onClose();
+      if (result.reused) {
+        store.setCommitResult(result);
+      } else {
+        store.reset();
+        onClose();
+      }
     } catch (err) {
       if (isAbortError(err)) {
         return;
@@ -241,12 +291,21 @@ export function ImportWizardPage({
     }
   }, [backendURL, moduleId, symbolFile, footprintFiles, onImported, onClose]);
 
-  const handleClose = useCallback(() => {
-    inspectAbortRef.current?.abort();
-    commitAbortRef.current?.abort();
-    useImportWizardStore.getState().reset();
-    onClose();
-  }, [onClose]);
+  const handleClose = useCallback(
+    (skipConfirm = false) => {
+      if (!skipConfirm && useImportWizardStore.getState().symbolFile !== null) {
+        const confirmed = window.confirm(
+          "Close the wizard? Unsaved changes will be lost.",
+        );
+        if (!confirmed) return;
+      }
+      inspectAbortRef.current?.abort();
+      commitAbortRef.current?.abort();
+      useImportWizardStore.getState().reset();
+      onClose();
+    },
+    [onClose],
+  );
 
   const canOpenStep = useCallback(
     (step: number): boolean => {
@@ -288,6 +347,26 @@ export function ImportWizardPage({
     }
     useImportWizardStore.getState().goNext();
   };
+
+  const keyboardBindings = useMemo<KeyboardShortcutBinding[]>(
+    () => [
+      {
+        matches: (e) => isEscapeShortcut(e),
+        run: () => handleClose(),
+      },
+      {
+        matches: (e) => matchesKey(e, "Enter"),
+        run: (e) => {
+          e.preventDefault();
+          handleNext();
+        },
+      },
+    ],
+    [handleClose, handleNext],
+  );
+  useWindowKeyboardShortcuts(keyboardBindings, {
+    ignoreEditableTarget: true,
+  });
 
   return (
     <div className="flex h-full w-full flex-col bg-slate-50 dark:bg-slate-950">
@@ -353,7 +432,21 @@ export function ImportWizardPage({
         {currentStep === STEP_METADATA && <MetadataStep />}
       </div>
 
-      {commitError && currentStep === STEP_METADATA ? (
+      {commitResult?.reused && currentStep === STEP_METADATA ? (
+        <div className="flex items-center justify-between border-t border-amber-200 bg-amber-50 px-6 py-2 dark:border-amber-900 dark:bg-amber-950">
+          <span className="text-sm text-amber-700 dark:text-amber-300">
+            Component &ldquo;{commitResult.componentName}&rdquo; already exists
+            &mdash; reused existing record.
+          </span>
+          <button
+            type="button"
+            onClick={() => handleClose(true)}
+            className="ml-4 shrink-0 rounded-md border border-amber-300 bg-white px-3 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:bg-amber-900 dark:text-amber-300"
+          >
+            Close
+          </button>
+        </div>
+      ) : commitError && currentStep === STEP_METADATA ? (
         <div className="border-t border-red-200 bg-red-50 px-6 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
           {commitError}
         </div>

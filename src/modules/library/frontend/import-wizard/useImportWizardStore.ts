@@ -1,4 +1,13 @@
 import { create } from "zustand";
+import type {
+  FootprintRenderModel,
+  FootprintRenderSource,
+} from "../../../../shared/rendering/types";
+import type {
+  DensityLevel,
+  GeneratedFootprintMetadata,
+  PackageFamily,
+} from "../../../../shared/rendering/ipc7351b";
 import type { InspectPayload } from "../types";
 
 export type InspectStatus = "idle" | "loading" | "success" | "error";
@@ -13,6 +22,11 @@ export interface ImportWizardState {
   inspectError: string | null;
   loadingCommit: boolean;
   commitError: string | null;
+  commitResult: {
+    componentId: string;
+    componentName: string;
+    reused: boolean;
+  } | null;
 
   selectedSymbolId: string;
   selectedFootprintId: string;
@@ -20,6 +34,16 @@ export interface ImportWizardState {
   description: string;
   componentNameDirty: boolean;
   descriptionDirty: boolean;
+
+  footprintSource: "import" | "preset";
+  presetFamily: PackageFamily | null;
+  presetSize: string | null;
+  presetDensity: DensityLevel;
+  generatedFootprint: {
+    source: FootprintRenderSource;
+    model: FootprintRenderModel;
+    metadata: GeneratedFootprintMetadata;
+  } | null;
 
   symbolGridVisible: boolean;
   footprintGridVisible: boolean;
@@ -50,6 +74,25 @@ export interface ImportWizardState {
   setLoadingCommit: (loading: boolean) => void;
   setCommitError: (error: string | null) => void;
   clearCommitError: () => void;
+  setCommitResult: (
+    result: {
+      componentId: string;
+      componentName: string;
+      reused: boolean;
+    } | null,
+  ) => void;
+
+  setFootprintSource: (source: "import" | "preset") => void;
+  setPresetFamily: (family: PackageFamily | null) => void;
+  setPresetSize: (size: string | null) => void;
+  setPresetDensity: (density: DensityLevel) => void;
+  setGeneratedFootprint: (
+    fp: {
+      source: FootprintRenderSource;
+      model: FootprintRenderModel;
+      metadata: GeneratedFootprintMetadata;
+    } | null,
+  ) => void;
 
   setSymbolGridVisible: (visible: boolean) => void;
   setFootprintGridVisible: (visible: boolean) => void;
@@ -68,12 +111,18 @@ const INITIAL_STATE = {
   inspectError: null,
   loadingCommit: false,
   commitError: null,
+  commitResult: null,
   selectedSymbolId: "",
   selectedFootprintId: "",
   componentName: "",
   description: "",
   componentNameDirty: false,
   descriptionDirty: false,
+  footprintSource: "import" as const,
+  presetFamily: null,
+  presetSize: null,
+  presetDensity: "nominal" as DensityLevel,
+  generatedFootprint: null,
   symbolGridVisible: true,
   footprintGridVisible: true,
 };
@@ -150,6 +199,15 @@ export const useImportWizardStore = create<ImportWizardState>((set) => ({
   setLoadingCommit: (loading) => set({ loadingCommit: loading }),
   setCommitError: (error) => set({ commitError: error }),
   clearCommitError: () => set({ commitError: null }),
+  setCommitResult: (result) => set({ commitResult: result }),
+
+  setFootprintSource: (source) =>
+    set({ footprintSource: source, generatedFootprint: null }),
+  setPresetFamily: (family) =>
+    set({ presetFamily: family, presetSize: null, generatedFootprint: null }),
+  setPresetSize: (size) => set({ presetSize: size }),
+  setPresetDensity: (density) => set({ presetDensity: density }),
+  setGeneratedFootprint: (fp) => set({ generatedFootprint: fp }),
 
   setSymbolGridVisible: (visible) => set({ symbolGridVisible: visible }),
   setFootprintGridVisible: (visible) => set({ footprintGridVisible: visible }),

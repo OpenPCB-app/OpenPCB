@@ -1,21 +1,35 @@
 import { Grid3X3 } from "lucide-react";
 import { memo, type ReactElement } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { SymbolPreviewCanvas } from "../../../../../shared/frontend/canvas/preview";
+import { WarningsPanel } from "../components/WarningsPanel";
 import { CanvasStepLayout } from "../layout/CanvasStepLayout";
 import { useImportWizardStore } from "../useImportWizardStore";
 
 export const SymbolStep = memo(function SymbolStep(): ReactElement {
-  const symbolFile = useImportWizardStore((s) => s.symbolFile);
-  const setSymbolFile = useImportWizardStore((s) => s.setSymbolFile);
-  const inspectData = useImportWizardStore((s) => s.inspectData);
-  const selectedSymbolId = useImportWizardStore((s) => s.selectedSymbolId);
-  const setSelectedSymbolId = useImportWizardStore(
-    (s) => s.setSelectedSymbolId,
+  const {
+    symbolFile,
+    setSymbolFile,
+    inspectData,
+    selectedSymbolId,
+    setSelectedSymbolId,
+    inspectStatus,
+    inspectError,
+    gridVisible,
+    setGridVisible,
+  } = useImportWizardStore(
+    useShallow((s) => ({
+      symbolFile: s.symbolFile,
+      setSymbolFile: s.setSymbolFile,
+      inspectData: s.inspectData,
+      selectedSymbolId: s.selectedSymbolId,
+      setSelectedSymbolId: s.setSelectedSymbolId,
+      inspectStatus: s.inspectStatus,
+      inspectError: s.inspectError,
+      gridVisible: s.symbolGridVisible,
+      setGridVisible: s.setSymbolGridVisible,
+    })),
   );
-  const inspectStatus = useImportWizardStore((s) => s.inspectStatus);
-  const inspectError = useImportWizardStore((s) => s.inspectError);
-  const gridVisible = useImportWizardStore((s) => s.symbolGridVisible);
-  const setGridVisible = useImportWizardStore((s) => s.setSymbolGridVisible);
 
   const handleSymbolFileSelect = (files: FileList | null) => {
     setSymbolFile(files?.[0] ?? null);
@@ -141,21 +155,9 @@ export const SymbolStep = memo(function SymbolStep(): ReactElement {
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
               {inspectError}
             </div>
-          ) : selectedWarnings.length > 0 ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950">
-              <div className="text-xs font-medium text-amber-800 dark:text-amber-300">
-                {selectedWarnings.length} warning
-                {selectedWarnings.length !== 1 ? "s" : ""}
-              </div>
-              <div className="mt-1 space-y-1 text-xs text-amber-700 dark:text-amber-400">
-                {selectedWarnings.slice(0, 2).map((warning) => (
-                  <div key={warning.code + warning.message}>
-                    {warning.message}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+          ) : (
+            <WarningsPanel warnings={selectedWarnings} />
+          )}
 
           {selectedSymbol ? (
             <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
