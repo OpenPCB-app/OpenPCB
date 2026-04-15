@@ -1,6 +1,17 @@
 import { Text } from "@react-three/drei";
+import { preloadFont } from "troika-three-text";
 import type { ReactNode } from "react";
 import { RENDER_ORDER } from "../layers";
+
+// Eagerly preload the default Troika font so drei's <Text> suspend() call
+// finds a cached result on first render, avoiding a Suspense flash.
+preloadFont(
+  {
+    characters:
+      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-+/()[]{}#~:;,!?@$%^&*=<>_ ",
+  },
+  () => {},
+);
 
 export interface EDATextProps {
   position: [number, number, number];

@@ -1,18 +1,18 @@
 import {
-  buildFootprintPreviewModel,
-  buildSymbolPreviewModel,
-  type FootprintPreviewModel,
-  type FootprintPreviewSource,
-  type FootprintPreviewSourcePad,
+  buildFootprintRenderModel,
+  buildSymbolRenderModel,
+  type FootprintRenderModel,
+  type FootprintRenderSource,
+  type FootprintRenderSourcePad,
   type PointMm,
   type PreviewGraphic,
   type PreviewLabel,
   type PreviewWarning,
-  type SymbolPreviewModel,
-  type SymbolPreviewSource,
-  type SymbolPreviewSourceGraphic,
-  type SymbolPreviewSourceLabel,
-  type SymbolPreviewSourcePin,
+  type SymbolRenderModel,
+  type SymbolRenderSource,
+  type SymbolRenderSourceGraphic,
+  type SymbolRenderSourceLabel,
+  type SymbolRenderSourcePin,
 } from "../../../../shared/rendering";
 import type { ParsedKicadFootprint } from "../infrastructure/parsers/kicad/kicad-footprint-parser";
 import type { ParsedKicadSymbol } from "../infrastructure/parsers/kicad/kicad-symbol-parser";
@@ -166,7 +166,11 @@ function symbolGraphicFromNode(
     }
     const first = points[0];
     const last = points[points.length - 1];
-    const closed = !!first && !!last && first.x === last.x && first.y === last.y;
+    const closed =
+      !!first &&
+      !!last &&
+      Math.abs(first.x - last.x) < 1e-6 &&
+      Math.abs(first.y - last.y) < 1e-6;
     return {
       kind: "polyline",
       points,
@@ -349,9 +353,7 @@ function footprintGraphicFromParsed(
   }
 
   if (graphic.type === "poly") {
-    const rawPoints = Array.isArray(graphic.data.pts)
-      ? graphic.data.pts
-      : [];
+    const rawPoints = Array.isArray(graphic.data.pts) ? graphic.data.pts : [];
     const points: PointMm[] = [];
     for (const rawPoint of rawPoints) {
       if (!Array.isArray(rawPoint)) {
@@ -428,10 +430,10 @@ function normalizeFootprintText(raw: string): string {
 
 export function buildSymbolPreviewFromParsed(
   symbol: ParsedKicadSymbol,
-): SymbolPreviewModel {
+): SymbolRenderModel {
   const warnings: PreviewWarning[] = [...symbol.warnings];
 
-  const pins: SymbolPreviewSourcePin[] = symbol.pins.map((pin, index) => {
+  const pins: SymbolRenderSourcePin[] = symbol.pins.map((pin, index) => {
     const number = pin.number.trim().length > 0 ? pin.number : null;
     const id =
       number !== null
@@ -453,8 +455,8 @@ export function buildSymbolPreviewFromParsed(
     };
   });
 
-  const graphics: SymbolPreviewSourceGraphic[] = [];
-  const labels: SymbolPreviewSourceLabel[] = [];
+  const graphics: SymbolRenderSourceGraphic[] = [];
+  const labels: SymbolRenderSourceLabel[] = [];
 
   for (const bodyGraphic of symbol.bodyGraphics) {
     const node = asSNode(bodyGraphic.node);
@@ -497,7 +499,7 @@ export function buildSymbolPreviewFromParsed(
     });
   }
 
-  const source: SymbolPreviewSource = {
+  const source: SymbolRenderSource = {
     name: symbol.name,
     unitCount: Math.max(symbol.units, 1),
     referenceText: symbol.properties.Reference ?? "",
@@ -508,7 +510,7 @@ export function buildSymbolPreviewFromParsed(
     warnings,
   };
 
-  const model = buildSymbolPreviewModel(source, {
+  const model = buildSymbolRenderModel(source, {
     composeAllUnits: true,
     includeHiddenPins: false,
   });
@@ -518,10 +520,10 @@ export function buildSymbolPreviewFromParsed(
 
 export function buildFootprintPreviewFromParsed(
   footprint: ParsedKicadFootprint,
-): FootprintPreviewModel {
+): FootprintRenderModel {
   const warnings: PreviewWarning[] = [...footprint.warnings];
 
-  const pads: FootprintPreviewSourcePad[] = footprint.pads.map((pad, index) => {
+  const pads: FootprintRenderSourcePad[] = footprint.pads.map((pad, index) => {
     const isRenderedShape =
       pad.shape === "circle" ||
       pad.shape === "rect" ||
@@ -562,7 +564,7 @@ export function buildFootprintPreviewFromParsed(
     }
   }
 
-  const source: FootprintPreviewSource = {
+  const source: FootprintRenderSource = {
     name: footprint.name,
     pads,
     graphics,
@@ -570,8 +572,17 @@ export function buildFootprintPreviewFromParsed(
     warnings,
   };
 
-  return buildFootprintPreviewModel(source, {
-    includeLayerNames: ["F.SilkS", "B.SilkS", "F.Fab", "B.Fab"],
+  return buildFootprintRenderModel(source, {
+    includeLayerNames: [
+      "F.SilkS",
+      "B.SilkS", // KiCad 7
+      "F.Silkscreen",
+      "B.Silkscreen", // KiCad 8+
+      "F.Fab",
+      "B.Fab", // KiCad 7
+      "F.Fabrication",
+      "B.Fabrication", // KiCad 8+
+    ],
     includePadLayerNames: ["F.Cu", "B.Cu"],
   });
 }

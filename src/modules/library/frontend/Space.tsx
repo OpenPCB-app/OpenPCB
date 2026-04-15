@@ -1,9 +1,17 @@
-import { useEffect, useMemo, useState, type ReactElement } from "react";
-import { Filter, Plus, Search, Upload, type LucideIcon } from "lucide-react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+} from "react";
+import { Filter, Plus, Search, Trash2, X, type LucideIcon } from "lucide-react";
 import type { LibraryComponent } from "../../../core/contracts/modules/sdk";
 import { ComponentDetailPage } from "./ComponentDetailPage";
-import { ImportWizard } from "./ImportWizard";
+import { ImportWizardPage } from "./import-wizard";
 import { LibraryCard } from "./LibraryCard";
+import { toUserError } from "./utils";
 
 interface ModuleSpaceProps {
   moduleId: string;
@@ -101,15 +109,86 @@ function FilterChip({
   );
 }
 
-export function LibrarySpace({ backendURL, moduleId }: ModuleSpaceProps): ReactElement {
+export function LibrarySpace({
+  backendURL,
+  moduleId,
+}: ModuleSpaceProps): ReactElement {
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query, 180);
   const [components, setComponents] = useState<LibraryComponent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
-  const [detailComponentId, setDetailComponentId] = useState<string | null>(null);
+  const [detailComponentId, setDetailComponentId] = useState<string | null>(
+    null,
+  );
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+
+  const selectionMode = selectedIds.size > 0;
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === components.length && components.length > 0) {
+        return new Set();
+      }
+      return new Set(components.map((c) => c.id));
+    });
+  }, [components]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedIds.size === 0 || !backendURL) return;
+
+    const confirmed = window.confirm(
+      `Delete ${selectedIds.size} component${selectedIds.size > 1 ? "s" : ""}? This will also remove orphaned symbols and footprints.`,
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      const response = await fetch(
+        `${backendURL}/api/modules/${moduleId}/components/delete`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: [...selectedIds] }),
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as unknown;
+      if (!response.ok) {
+        throw new Error(
+          toUserError(payload, `Delete failed (HTTP ${response.status})`),
+        );
+      }
+      setSelectedIds(new Set());
+      setRefreshTick((v) => v + 1);
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Failed to delete components",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }, [selectedIds, backendURL, moduleId]);
 
   const searchUrl = useMemo(
     () => buildSearchUrl(backendURL, moduleId, debouncedQuery),
@@ -159,6 +238,10 @@ export function LibrarySpace({ backendURL, moduleId }: ModuleSpaceProps): ReactE
     return () => controller.abort();
   }, [searchUrl, refreshTick]);
 
+  useEffect(() => {
+    setSelectedIds((prev) => (prev.size === 0 ? prev : new Set()));
+  }, [components]);
+
   if (detailComponentId) {
     return (
       <ComponentDetailPage
@@ -170,16 +253,29 @@ export function LibrarySpace({ backendURL, moduleId }: ModuleSpaceProps): ReactE
     );
   }
 
+  if (wizardOpen) {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex h-full w-full items-center justify-center bg-slate-50 dark:bg-slate-950">
+            <div className="text-sm text-slate-500 dark:text-slate-400">
+              Loading wizard...
+            </div>
+          </div>
+        }
+      >
+        <ImportWizardPage
+          backendURL={backendURL}
+          moduleId={moduleId}
+          onClose={() => setWizardOpen(false)}
+          onImported={() => setRefreshTick((value) => value + 1)}
+        />
+      </Suspense>
+    );
+  }
+
   return (
     <div className="flex h-full w-full flex-col bg-slate-50 dark:bg-slate-950">
-      <ImportWizard
-        backendURL={backendURL}
-        moduleId={moduleId}
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        onImported={() => setRefreshTick((value) => value + 1)}
-      />
-
       <header className="flex items-center justify-between gap-6 border-b border-slate-200 bg-white px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
         <h1 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
           Library
@@ -200,13 +296,7 @@ export function LibrarySpace({ backendURL, moduleId }: ModuleSpaceProps): ReactE
             icon={Plus}
             label="New"
             primary
-            disabled
-            title="Coming soon"
-          />
-          <ActionButton
-            icon={Upload}
-            label="Import"
-            onClick={() => setImportOpen(true)}
+            onClick={() => setWizardOpen(true)}
           />
         </div>
       </header>
@@ -224,18 +314,44 @@ export function LibrarySpace({ backendURL, moduleId }: ModuleSpaceProps): ReactE
           </div>
         </div>
 
-        <label
-          className="flex select-none items-center gap-2 text-xs text-slate-400 dark:text-slate-500 cursor-not-allowed"
-          title="Coming soon"
-        >
+        <label className="flex select-none items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
           <input
             type="checkbox"
-            disabled
-            className="h-4 w-4 cursor-not-allowed rounded border-slate-300 text-violet-600 focus:ring-violet-600 dark:border-slate-600 opacity-50"
+            checked={
+              components.length > 0 && selectedIds.size === components.length
+            }
+            onChange={toggleSelectAll}
+            disabled={components.length === 0}
+            className="h-4 w-4 cursor-pointer rounded border-slate-300 text-violet-600 focus:ring-violet-600 dark:border-slate-600"
           />
           <span>Select All</span>
         </label>
       </div>
+
+      {selectionMode && (
+        <div className="flex items-center gap-3 border-b border-violet-200 bg-violet-50 px-6 py-2 dark:border-violet-900 dark:bg-violet-950/50">
+          <span className="text-sm font-medium text-violet-700 dark:text-violet-300">
+            {selectedIds.size} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => void handleBulkDelete()}
+            disabled={deleting}
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-red-300 bg-white px-3 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {deleting ? "Deleting..." : "Delete"}
+          </button>
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+          >
+            <X className="h-3.5 w-3.5" />
+            Clear
+          </button>
+        </div>
+      )}
 
       <main className="flex-1 overflow-auto p-6">
         <section className="space-y-4">
@@ -268,7 +384,9 @@ export function LibrarySpace({ backendURL, moduleId }: ModuleSpaceProps): ReactE
                 <LibraryCard
                   key={component.id}
                   component={component}
+                  selected={selectedIds.has(component.id)}
                   onOpen={setDetailComponentId}
+                  onToggleSelect={toggleSelect}
                 />
               ))}
             </div>
