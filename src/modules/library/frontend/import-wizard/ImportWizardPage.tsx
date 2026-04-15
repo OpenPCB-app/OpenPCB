@@ -21,10 +21,12 @@ import {
 } from "../../../../shared/frontend/canvas/utils/keyboard-shortcuts";
 import { isAbortError, fileSignature, filesSignature } from "../utils";
 import {
+  commitDrawnImportRequest,
   commitGeneratedImportRequest,
   commitKicadImportRequest,
   inspectKicadImport,
 } from "./import-api";
+import { useSymbolEditorStore } from "./editor";
 
 const STEP_SYMBOL = 0;
 const STEP_FOOTPRINT = 1;
@@ -67,9 +69,10 @@ export function ImportWizardPage({
     useImportWizardStore(
       useShallow((s) => ({
         readyForAdvancedSteps:
-          !!s.symbolFile &&
-          s.inspectStatus === "success" &&
-          s.selectedSymbolId.length > 0,
+          s.symbolSource === "draw" ||
+          (!!s.symbolFile &&
+            s.inspectStatus === "success" &&
+            s.selectedSymbolId.length > 0),
         canProceedMetadata: s.componentName.trim().length > 0,
         loadingInspect: s.inspectStatus === "loading",
       })),
@@ -197,8 +200,14 @@ export function ImportWizardPage({
 
   const runCommit = useCallback(async () => {
     const store = useImportWizardStore.getState();
-    if (!backendURL || !symbolFile) {
+    const isDrawMode = store.symbolSource === "draw";
+
+    if (!backendURL) {
       store.setCommitError("Backend URL unavailable");
+      return;
+    }
+    if (!isDrawMode && !symbolFile) {
+      store.setCommitError("No symbol file selected");
       return;
     }
 
@@ -210,15 +219,54 @@ export function ImportWizardPage({
     store.setLoadingCommit(true);
 
     try {
-      const symbolLibrary = {
-        fileName: symbolFile.name,
-        content: await symbolFile.text(),
-      };
-
       let result;
 
-      if (store.footprintSource === "preset" && store.generatedFootprint) {
-        // Preset-generated footprint path
+      if (isDrawMode) {
+        // Drawn symbol path
+        const editorState = useSymbolEditorStore.getState();
+        const symbolRenderSource = editorState.toSymbolRenderSource();
+
+        let footprintMode: "import" | "generated" | "none" = "none";
+        let footprintFiles2;
+        let footprintSelection;
+        let generatedFp;
+
+        if (store.footprintSource === "preset" && store.generatedFootprint) {
+          footprintMode = "generated";
+          generatedFp = {
+            source: store.generatedFootprint.source,
+            metadata: store.generatedFootprint.metadata,
+          };
+        }
+
+        result = await commitDrawnImportRequest(
+          backendURL,
+          moduleId,
+          {
+            drawnSymbol: {
+              source: symbolRenderSource,
+              referencePrefix: editorState.referencePrefix,
+            },
+            footprintMode,
+            footprintFiles: footprintFiles2,
+            footprintSelection,
+            generatedFootprint: generatedFp,
+            component: {
+              name: store.componentName.trim(),
+              description: store.description.trim(),
+            },
+          },
+          controller.signal,
+        );
+      } else if (
+        store.footprintSource === "preset" &&
+        store.generatedFootprint
+      ) {
+        // Imported symbol + generated footprint
+        const symbolLibrary = {
+          fileName: symbolFile!.name,
+          content: await symbolFile!.text(),
+        };
         result = await commitGeneratedImportRequest(
           backendURL,
           moduleId,
@@ -237,20 +285,23 @@ export function ImportWizardPage({
           controller.signal,
         );
       } else {
-        // KiCad file import path
-        const footprints = await Promise.all(
+        // Imported symbol + imported footprint (or no footprint)
+        const symbolLibrary = {
+          fileName: symbolFile!.name,
+          content: await symbolFile!.text(),
+        };
+        const footprintsData = await Promise.all(
           footprintFiles.map(async (file) => ({
             fileName: file.name,
             content: await file.text(),
           })),
         );
-
         result = await commitKicadImportRequest(
           backendURL,
           moduleId,
           {
             symbolLibrary,
-            footprints,
+            footprints: footprintsData,
             selection: {
               symbolId: store.selectedSymbolId,
               footprintId:
@@ -272,6 +323,7 @@ export function ImportWizardPage({
         store.setCommitResult(result);
       } else {
         store.reset();
+        useSymbolEditorStore.getState().reset();
         onClose();
       }
     } catch (err) {
@@ -293,7 +345,13 @@ export function ImportWizardPage({
 
   const handleClose = useCallback(
     (skipConfirm = false) => {
-      if (!skipConfirm && useImportWizardStore.getState().symbolFile !== null) {
+      const wizardState = useImportWizardStore.getState();
+      const editorState = useSymbolEditorStore.getState();
+      const hasWork =
+        wizardState.symbolFile !== null ||
+        (wizardState.symbolSource === "draw" &&
+          (editorState.graphics.length > 0 || editorState.pins.length > 0));
+      if (!skipConfirm && hasWork) {
         const confirmed = window.confirm(
           "Close the wizard? Unsaved changes will be lost.",
         );
@@ -302,6 +360,7 @@ export function ImportWizardPage({
       inspectAbortRef.current?.abort();
       commitAbortRef.current?.abort();
       useImportWizardStore.getState().reset();
+      useSymbolEditorStore.getState().reset();
       onClose();
     },
     [onClose],

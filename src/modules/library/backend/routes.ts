@@ -22,6 +22,10 @@ import {
   commitGeneratedImport,
   type CommitGeneratedRequest,
 } from "./import/commit-generated";
+import {
+  commitDrawnImport,
+  type CommitDrawnRequest,
+} from "./import/commit-drawn";
 import { buildInspectResponse } from "./import/inspect-kicad";
 import type { CommitKicadRequest, InspectKicadRequest } from "./import/types";
 
@@ -331,6 +335,17 @@ export function registerRoutes(
       await parseJsonBody<unknown>(routeCtx.req),
     );
     const result = commitGeneratedImport(ctx, body);
+    return success(result, 201);
+  });
+
+  router.post("/imports/drawn", async (routeCtx) => {
+    const body = (await parseJsonBody<unknown>(
+      routeCtx.req,
+    )) as CommitDrawnRequest;
+    if (!body || typeof body !== "object") {
+      throw new ValidationError("Request body must be an object");
+    }
+    const result = commitDrawnImport(ctx, body);
     return success(result, 201);
   });
 

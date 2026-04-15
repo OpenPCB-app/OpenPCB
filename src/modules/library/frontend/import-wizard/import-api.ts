@@ -1,4 +1,7 @@
-import type { FootprintRenderSource } from "../../../../shared/rendering/types";
+import type {
+  FootprintRenderSource,
+  SymbolRenderSource,
+} from "../../../../shared/rendering/types";
 import type { GeneratedFootprintMetadata } from "../../../../shared/rendering/ipc7351b";
 import type {
   CommitKicadRequest,
@@ -99,6 +102,47 @@ export async function commitGeneratedImportRequest(
   if (!response.ok || !payload?.ok || !payload.data) {
     throw new Error(
       toUserError(payload, `Generated import failed (HTTP ${response.status})`),
+    );
+  }
+  return payload.data;
+}
+
+export interface CommitDrawnBody {
+  drawnSymbol: {
+    source: SymbolRenderSource;
+    referencePrefix: string;
+  };
+  footprintMode: "import" | "generated" | "none";
+  footprintFiles?: { fileName: string; content: string }[];
+  footprintSelection?: { footprintId: string };
+  generatedFootprint?: {
+    source: FootprintRenderSource;
+    metadata: GeneratedFootprintMetadata;
+  };
+  component: { name: string; description: string };
+}
+
+export async function commitDrawnImportRequest(
+  backendURL: string,
+  moduleId: string,
+  body: CommitDrawnBody,
+  signal: AbortSignal,
+): Promise<CommitKicadResponse> {
+  const url = `${backendURL}/api/modules/${moduleId}/imports/drawn`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  const payload = (await parseJson(response)) as {
+    ok?: boolean;
+    data?: CommitKicadResponse;
+    error?: string;
+  };
+  if (!response.ok || !payload?.ok || !payload.data) {
+    throw new Error(
+      toUserError(payload, `Drawn import failed (HTTP ${response.status})`),
     );
   }
   return payload.data;

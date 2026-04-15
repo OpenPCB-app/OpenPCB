@@ -35,6 +35,8 @@ export interface ImportWizardState {
   componentNameDirty: boolean;
   descriptionDirty: boolean;
 
+  symbolSource: "import" | "draw";
+
   footprintSource: "import" | "preset";
   presetFamily: PackageFamily | null;
   presetSize: string | null;
@@ -82,6 +84,8 @@ export interface ImportWizardState {
     } | null,
   ) => void;
 
+  setSymbolSource: (source: "import" | "draw") => void;
+
   setFootprintSource: (source: "import" | "preset") => void;
   setPresetFamily: (family: PackageFamily | null) => void;
   setPresetSize: (size: string | null) => void;
@@ -118,6 +122,7 @@ const INITIAL_STATE = {
   description: "",
   componentNameDirty: false,
   descriptionDirty: false,
+  symbolSource: "import" as const,
   footprintSource: "import" as const,
   presetFamily: null,
   presetSize: null,
@@ -200,6 +205,8 @@ export const useImportWizardStore = create<ImportWizardState>((set) => ({
   setCommitError: (error) => set({ commitError: error }),
   clearCommitError: () => set({ commitError: null }),
   setCommitResult: (result) => set({ commitResult: result }),
+
+  setSymbolSource: (source) => set({ symbolSource: source }),
 
   setFootprintSource: (source) =>
     set({ footprintSource: source, generatedFootprint: null }),
