@@ -5,12 +5,15 @@ import {
   Minus,
   MousePointer2,
   Redo2,
+  RotateCcw,
+  RotateCw,
   Spline,
   Square,
   Undo2,
   Pin,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { rotateSelection } from "./actions";
 import { useSymbolEditorStore } from "./useSymbolEditorStore";
 import type { EditorToolId } from "./types";
 
@@ -61,6 +64,8 @@ export const EditorToolbar = memo(function EditorToolbar(): ReactElement {
   const undoStack = useSymbolEditorStore((s) => s.undoStack);
   const redoStack = useSymbolEditorStore((s) => s.redoStack);
   const gridVisible = useSymbolEditorStore((s) => s.gridVisible);
+  const selectionSize = useSymbolEditorStore((s) => s.selectedIds.size);
+  const rotateDisabled = selectionSize === 0;
 
   return (
     <div className="mx-auto inline-flex items-center gap-1 rounded-lg border border-slate-200/90 bg-white/95 px-2 py-1 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/90">
@@ -72,6 +77,27 @@ export const EditorToolbar = memo(function EditorToolbar(): ReactElement {
           onClick={() => useSymbolEditorStore.getState().setActiveTool(tool.id)}
         />
       ))}
+
+      <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
+
+      <button
+        type="button"
+        onClick={() => rotateSelection(90)}
+        disabled={rotateDisabled}
+        title="Rotate selection 90° CCW (R)"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
+      >
+        <RotateCcw className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => rotateSelection(-90)}
+        disabled={rotateDisabled}
+        title="Rotate selection 90° CW (Shift+R)"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
+      >
+        <RotateCw className="h-3.5 w-3.5" />
+      </button>
 
       <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
 

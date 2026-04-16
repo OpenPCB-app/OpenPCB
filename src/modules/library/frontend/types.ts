@@ -1,46 +1,14 @@
 import type { LibraryComponent } from "../../../core/contracts/modules/sdk";
 import type {
-  FootprintPreviewModel,
-  SymbolPreviewModel,
+  FootprintRenderModel,
+  SymbolRenderModel,
 } from "../../../shared/rendering";
-
-export interface ImportWarning {
-  scope: "symbol" | "footprint";
-  itemId: string;
-  itemName: string;
-  code: string;
-  message: string;
-}
-
-export interface InspectSymbolItem {
-  id: string;
-  name: string;
-  referencePrefix: string;
-  pinCount: number;
-  description: string | null;
-  warningCount: number;
-  preview: SymbolPreviewModel;
-}
-
-export interface InspectFootprintItem {
-  id: string;
-  fileName: string;
-  name: string;
-  mountType: string;
-  padCount: number;
-  packageCode: {
-    imperial: string | null;
-    metric: string | null;
-  };
-  warningCount: number;
-  preview: FootprintPreviewModel;
-}
-
-export interface InspectPayload {
-  symbols: InspectSymbolItem[];
-  footprints: InspectFootprintItem[];
-  warnings: ImportWarning[];
-}
+export type {
+  ImportWarning,
+  InspectSymbolItem,
+  InspectFootprintItem,
+  InspectPayload,
+} from "../contracts/import";
 
 export interface ComponentSourceProvenance {
   sourceKind: string | null;
@@ -61,7 +29,7 @@ export interface ComponentSymbolDetail {
   referencePrefix: string | null;
   pinCount: number;
   warnings: DetailWarning[];
-  preview: SymbolPreviewModel | null;
+  preview: SymbolRenderModel | null;
   provenance: ComponentSourceProvenance | null;
 }
 
@@ -75,7 +43,7 @@ export interface ComponentFootprintDetail {
     metric: string | null;
   };
   warnings: DetailWarning[];
-  preview: FootprintPreviewModel | null;
+  preview: FootprintRenderModel | null;
   provenance: ComponentSourceProvenance | null;
 }
 

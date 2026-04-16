@@ -22,7 +22,7 @@ export function createRectTool(): EditorTool {
 
     onPointerDown(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm);
+      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
 
       if (!startPoint) {
         startPoint = point;
@@ -54,7 +54,7 @@ export function createRectTool(): EditorTool {
     onPointerMove(event: InteractionEvent) {
       if (!startPoint) return;
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm);
+      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
 
       const x = Math.min(startPoint.x, point.x);
       const y = Math.min(startPoint.y, point.y);

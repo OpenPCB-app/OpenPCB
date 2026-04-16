@@ -45,3 +45,7 @@ data/
 # Archived source directories
 OneMind/
 pcb_draft/
+
+# Local Playwright artifacts
+.playwright-mcp/
+wizard-*.png

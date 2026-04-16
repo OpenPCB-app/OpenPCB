@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
+import { ValidationError } from "../../../../core/backend/contracts/errors";
 import type {
-  FootprintPreviewModel,
-  SymbolPreviewModel,
+  FootprintRenderModel,
+  SymbolRenderModel,
 } from "../../../../shared/rendering";
 import { extractPackageCode } from "../infrastructure/parsers/kicad/heuristics";
 import {
@@ -12,17 +13,19 @@ import {
   parseKicadSymbolLib,
   type ParsedKicadSymbol,
 } from "../infrastructure/parsers/kicad/kicad-symbol-parser";
-import { buildFootprintPreviewFromParsed, buildSymbolPreviewFromParsed } from "./build-preview-models";
+import {
+  buildFootprintPreviewFromParsed,
+  buildSymbolPreviewFromParsed,
+} from "./build-preview-models";
 import type {
   ImportWarning,
   InspectKicadRequest,
   InspectKicadResponse,
 } from "./types";
 
-export class ImportValidationError extends Error {
+export class ImportValidationError extends ValidationError {
   constructor(message: string) {
     super(message);
-    this.name = "ImportValidationError";
   }
 }
 
@@ -41,7 +44,7 @@ export interface NormalizedImportedSymbol {
     unit: number;
   }>;
   warnings: Array<{ code: string; message: string }>;
-  preview: SymbolPreviewModel;
+  preview: SymbolRenderModel;
 }
 
 export interface NormalizedImportedFootprint {
@@ -58,7 +61,7 @@ export interface NormalizedImportedFootprint {
   tags: string[];
   sourceHash: string;
   warnings: Array<{ code: string; message: string }>;
-  preview: FootprintPreviewModel;
+  preview: FootprintRenderModel;
 }
 
 export interface ParsedImportBundle {
@@ -183,16 +186,17 @@ function normalizeFootprint(
   };
 }
 
-export function parseImportBundle(input: InspectKicadRequest): ParsedImportBundle {
+export function parseImportBundle(
+  input: InspectKicadRequest,
+): ParsedImportBundle {
   requireNonEmptyText(input.symbolLibrary.fileName, "symbolLibrary.fileName");
   requireNonEmptyText(input.symbolLibrary.content, "symbolLibrary.content");
-  if (input.footprints.length === 0) {
-    throw new ImportValidationError("At least one footprint file is required");
-  }
 
   const symbolLibrary = parseKicadSymbolLib(input.symbolLibrary.content);
   if (symbolLibrary.symbols.length === 0) {
-    throw new ImportValidationError("Symbol library does not contain any symbols");
+    throw new ImportValidationError(
+      "Symbol library does not contain any symbols",
+    );
   }
 
   const symbolSourceHash = sha256(input.symbolLibrary.content);
@@ -277,7 +281,9 @@ export function parseImportBundle(input: InspectKicadRequest): ParsedImportBundl
   };
 }
 
-export function buildInspectResponse(input: InspectKicadRequest): InspectKicadResponse {
+export function buildInspectResponse(
+  input: InspectKicadRequest,
+): InspectKicadResponse {
   const parsed = parseImportBundle(input);
   return {
     symbols: parsed.normalizedSymbols.map((symbol) => ({

@@ -8,6 +8,7 @@ import {
 } from "../../../../../shared/frontend/canvas/utils/keyboard-shortcuts";
 import type { EditorTool, EditorToolId } from "./types";
 import { useSymbolEditorStore } from "./useSymbolEditorStore";
+import { rotateSelection } from "./actions";
 import {
   createSelectTool,
   createLineTool,
@@ -76,6 +77,21 @@ export function useEditorToolHandler(): InteractionHandler {
         event.preventDefault();
         useSymbolEditorStore.getState().redo();
         return;
+      }
+
+      // Contextual rotation: R / Shift+R while Select tool has a selection
+      if (
+        matchesKey(event, "r") &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        const state = useSymbolEditorStore.getState();
+        if (state.activeTool === "select" && state.selectedIds.size > 0) {
+          event.preventDefault();
+          rotateSelection(event.shiftKey ? -90 : 90);
+          return;
+        }
       }
 
       for (const [key, toolId] of Object.entries(TOOL_SHORTCUTS)) {

@@ -378,7 +378,7 @@ function DrawModeSidebar(): ReactElement {
           </div>
           <div>
             <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">R</kbd>{" "}
-            Rectangle
+            Rectangle (Rotate when selection active)
           </div>
           <div>
             <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">C</kbd>{" "}
@@ -387,6 +387,10 @@ function DrawModeSidebar(): ReactElement {
           <div>
             <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">P</kbd>{" "}
             Pin
+          </div>
+          <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">R</kbd>{" "}
+            Rotate selection (Shift+R = CW)
           </div>
           <div>
             <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">

@@ -101,7 +101,7 @@ export interface PreviewLabel {
     | "footprint-text";
 }
 
-export interface SymbolPreviewSourcePin {
+export interface SymbolRenderSourcePin {
   readonly id: string;
   readonly name: string;
   readonly number: string | null;
@@ -113,28 +113,28 @@ export interface SymbolPreviewSourcePin {
   readonly hidden: boolean;
 }
 
-export interface SymbolPreviewSourceGraphic {
+export interface SymbolRenderSourceGraphic {
   readonly unit: number;
   readonly graphic: PreviewGraphic;
 }
 
-export interface SymbolPreviewSourceLabel {
+export interface SymbolRenderSourceLabel {
   readonly unit: number;
   readonly label: PreviewLabel;
 }
 
-export interface SymbolPreviewSource {
+export interface SymbolRenderSource {
   readonly name: string;
   readonly unitCount: number;
   readonly referenceText: string;
   readonly valueText: string;
-  readonly pins: readonly SymbolPreviewSourcePin[];
-  readonly graphics: readonly SymbolPreviewSourceGraphic[];
-  readonly labels?: readonly SymbolPreviewSourceLabel[];
+  readonly pins: readonly SymbolRenderSourcePin[];
+  readonly graphics: readonly SymbolRenderSourceGraphic[];
+  readonly labels?: readonly SymbolRenderSourceLabel[];
   readonly warnings: readonly PreviewWarning[];
 }
 
-export interface SymbolPreviewModelPin {
+export interface SymbolRenderModelPin {
   readonly id: string;
   readonly name: string;
   readonly number: string | null;
@@ -145,19 +145,19 @@ export interface SymbolPreviewModelPin {
   readonly rotationDeg: number;
 }
 
-export interface SymbolPreviewModel {
+export interface SymbolRenderModel {
   readonly kind: "symbol";
   readonly units: "mm";
   readonly name: string;
   readonly unitCount: number;
   readonly graphics: readonly PreviewGraphic[];
-  readonly pins: readonly SymbolPreviewModelPin[];
+  readonly pins: readonly SymbolRenderModelPin[];
   readonly labels: readonly PreviewLabel[];
   readonly bounds: BoundsMm | null;
   readonly warnings: readonly PreviewWarning[];
 }
 
-export interface FootprintPreviewSourcePad {
+export interface FootprintRenderSourcePad {
   readonly id: string;
   readonly number: string;
   readonly shape:
@@ -176,32 +176,34 @@ export interface FootprintPreviewSourcePad {
   readonly layer?: string;
 }
 
-export interface FootprintPreviewSource {
+export interface FootprintRenderSource {
   readonly name: string;
-  readonly pads: readonly FootprintPreviewSourcePad[];
+  readonly pads: readonly FootprintRenderSourcePad[];
   readonly graphics: readonly PreviewGraphic[];
   readonly labels: readonly PreviewLabel[];
   readonly warnings: readonly PreviewWarning[];
 }
 
-export interface FootprintPreviewModel {
+export interface FootprintRenderModel {
   readonly kind: "footprint";
   readonly units: "mm";
   readonly name: string;
-  readonly pads: readonly FootprintPreviewSourcePad[];
+  readonly pads: readonly FootprintRenderSourcePad[];
   readonly graphics: readonly PreviewGraphic[];
   readonly labels: readonly PreviewLabel[];
   readonly bounds: BoundsMm | null;
   readonly warnings: readonly PreviewWarning[];
 }
 
-export interface BuildSymbolPreviewModelOptions {
+export interface BuildSymbolRenderModelOptions {
   readonly composeAllUnits?: boolean;
   readonly includeHiddenPins?: boolean;
   readonly unitGapMm?: number;
+  /** When true, do not left-align each unit's graphics to x=0. Use for live-drawn editors where the user's coordinates must be preserved. */
+  readonly preserveOrigin?: boolean;
 }
 
-export interface BuildFootprintPreviewModelOptions {
+export interface BuildFootprintRenderModelOptions {
   readonly includeLayerNames?: readonly string[];
   readonly includePadLayerNames?: readonly string[];
 }

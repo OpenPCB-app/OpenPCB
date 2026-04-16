@@ -44,7 +44,7 @@ function EditorCanvasContent({
   );
 
   const model = useMemo(
-    () => buildSymbolRenderModel(renderSource),
+    () => buildSymbolRenderModel(renderSource, { preserveOrigin: true }),
     [renderSource],
   );
 

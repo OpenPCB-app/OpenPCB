@@ -9,12 +9,12 @@ import {
 } from "./geometry";
 import type {
   BoundsMm,
-  BuildSymbolPreviewModelOptions,
+  BuildSymbolRenderModelOptions,
   PreviewGraphic,
   PreviewLabel,
-  SymbolPreviewModel,
-  SymbolPreviewModelPin,
-  SymbolPreviewSource,
+  SymbolRenderModel,
+  SymbolRenderModelPin,
+  SymbolRenderSource,
 } from "./types";
 
 const DEFAULT_UNIT_GAP_MM = 2.0;
@@ -26,7 +26,9 @@ function normalizeRotation(rotationDeg: number): number {
   return normalized < 0 ? normalized + 360 : normalized;
 }
 
-function rotationToSide(rotationDeg: number): "left" | "right" | "top" | "bottom" {
+function rotationToSide(
+  rotationDeg: number,
+): "left" | "right" | "top" | "bottom" {
   const normalized = normalizeRotation(rotationDeg);
   if (normalized === 0) return "left";
   if (normalized === 180) return "right";
@@ -47,7 +49,7 @@ function pinBodyEnd(pin: {
   };
 }
 
-function createPinLabels(pin: SymbolPreviewModelPin): PreviewLabel[] {
+function createPinLabels(pin: SymbolRenderModelPin): PreviewLabel[] {
   const side = rotationToSide(pin.rotationDeg);
   const out: PreviewLabel[] = [];
 
@@ -98,7 +100,10 @@ function createPinLabels(pin: SymbolPreviewModelPin): PreviewLabel[] {
   return out;
 }
 
-function translatedGraphic(graphic: PreviewGraphic, dx: number): PreviewGraphic {
+function translatedGraphic(
+  graphic: PreviewGraphic,
+  dx: number,
+): PreviewGraphic {
   switch (graphic.kind) {
     case "line":
       return {
@@ -123,7 +128,10 @@ function translatedGraphic(graphic: PreviewGraphic, dx: number): PreviewGraphic 
     case "polyline":
       return {
         ...graphic,
-        points: graphic.points.map((point) => ({ x: point.x + dx, y: point.y })),
+        points: graphic.points.map((point) => ({
+          x: point.x + dx,
+          y: point.y,
+        })),
       };
     case "bezier":
       return {
@@ -140,7 +148,7 @@ function translatedGraphic(graphic: PreviewGraphic, dx: number): PreviewGraphic 
 
 function withFallbackBody(
   graphics: readonly PreviewGraphic[],
-  pins: readonly SymbolPreviewModelPin[],
+  pins: readonly SymbolRenderModelPin[],
 ): readonly PreviewGraphic[] {
   if (graphics.length > 0 || pins.length === 0) {
     return graphics;
@@ -177,7 +185,7 @@ function withFallbackBody(
 
 function composeBounds(
   graphics: readonly PreviewGraphic[],
-  pins: readonly SymbolPreviewModelPin[],
+  pins: readonly SymbolRenderModelPin[],
   labels: readonly PreviewLabel[],
 ): BoundsMm | null {
   let bounds = boundsFromGraphics(graphics) ?? emptyBoundsMm();
@@ -197,19 +205,20 @@ function composeBounds(
   return normalizeBounds(bounds, 1.5);
 }
 
-export function buildSymbolPreviewModel(
-  source: SymbolPreviewSource,
-  options: BuildSymbolPreviewModelOptions = {},
-): SymbolPreviewModel {
+export function buildSymbolRenderModel(
+  source: SymbolRenderSource,
+  options: BuildSymbolRenderModelOptions = {},
+): SymbolRenderModel {
   const composeAllUnits = options.composeAllUnits ?? true;
   const includeHiddenPins = options.includeHiddenPins ?? false;
   const unitGapMm = options.unitGapMm ?? DEFAULT_UNIT_GAP_MM;
+  const preserveOrigin = options.preserveOrigin ?? false;
 
   const unitCount = Math.max(source.unitCount, 1);
   const effectiveUnitCount = composeAllUnits ? unitCount : 1;
 
   const graphicsOut: PreviewGraphic[] = [];
-  const pinsOut: SymbolPreviewModelPin[] = [];
+  const pinsOut: SymbolRenderModelPin[] = [];
   const labelsOut: PreviewLabel[] = [];
 
   let cursorX = 0;
@@ -219,7 +228,7 @@ export function buildSymbolPreviewModel(
     const localPins = source.pins
       .filter((pin) => (includeHiddenPins ? true : !pin.hidden))
       .filter((pin) => pin.unit === unit || pin.unit === 0)
-      .map<SymbolPreviewModelPin>((pin) => {
+      .map<SymbolRenderModelPin>((pin) => {
         const bodyEnd = pinBodyEnd(pin);
         return {
           id: pin.id,
@@ -239,15 +248,22 @@ export function buildSymbolPreviewModel(
 
     const graphicsWithFallback = withFallbackBody(unitGraphics, localPins);
 
-    const localLabelsFromPins = localPins.flatMap((pin) => createPinLabels(pin));
+    const localLabelsFromPins = localPins.flatMap((pin) =>
+      createPinLabels(pin),
+    );
     const localLabelsFromSource = (source.labels ?? [])
       .filter((entry) => entry.unit === 0 || entry.unit === unit)
       .map((entry) => entry.label);
     const localLabels = [...localLabelsFromPins, ...localLabelsFromSource];
-    const localBounds = composeBounds(graphicsWithFallback, localPins, localLabels);
+    const localBounds = composeBounds(
+      graphicsWithFallback,
+      localPins,
+      localLabels,
+    );
 
-    const shiftX =
-      localBounds === null
+    const shiftX = preserveOrigin
+      ? 0
+      : localBounds === null
         ? cursorX
         : cursorX - localBounds.minX + (unit > 1 ? unitGapMm : 0);
 
@@ -289,14 +305,20 @@ export function buildSymbolPreviewModel(
 
   const composedBounds = composeBounds(graphicsOut, pinsOut, labelsOut);
   const finalBounds =
-    composedBounds ?? (isFiniteBoundsMm(globalBounds) ? normalizeBounds(globalBounds, 1.5) : null);
+    composedBounds ??
+    (isFiniteBoundsMm(globalBounds)
+      ? normalizeBounds(globalBounds, 1.5)
+      : null);
 
   if (finalBounds) {
     if (source.referenceText.trim().length > 0) {
       labelsOut.push({
         id: "symbol:reference",
         text: source.referenceText,
-        at: { x: (finalBounds.minX + finalBounds.maxX) / 2, y: finalBounds.maxY + 0.4 },
+        at: {
+          x: (finalBounds.minX + finalBounds.maxX) / 2,
+          y: finalBounds.maxY + 0.4,
+        },
         fontSizeMm: 0.2,
         rotationDeg: 0,
         anchorX: "center",
@@ -304,11 +326,17 @@ export function buildSymbolPreviewModel(
         role: "reference",
       });
     }
-    if (source.valueText.trim().length > 0 && source.valueText !== source.referenceText) {
+    if (
+      source.valueText.trim().length > 0 &&
+      source.valueText !== source.referenceText
+    ) {
       labelsOut.push({
         id: "symbol:value",
         text: source.valueText,
-        at: { x: (finalBounds.minX + finalBounds.maxX) / 2, y: finalBounds.minY - 0.4 },
+        at: {
+          x: (finalBounds.minX + finalBounds.maxX) / 2,
+          y: finalBounds.minY - 0.4,
+        },
         fontSizeMm: 0.18,
         rotationDeg: 0,
         anchorX: "center",

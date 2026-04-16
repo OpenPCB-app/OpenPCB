@@ -7,9 +7,9 @@ import {
   normalizeBounds,
 } from "./geometry";
 import type {
-  BuildFootprintPreviewModelOptions,
-  FootprintPreviewModel,
-  FootprintPreviewSource,
+  BuildFootprintRenderModelOptions,
+  FootprintRenderModel,
+  FootprintRenderSource,
 } from "./types";
 
 function filterByLayer(
@@ -41,10 +41,10 @@ function rotatedPadHalfExtents(
   };
 }
 
-export function buildFootprintPreviewModel(
-  source: FootprintPreviewSource,
-  options: BuildFootprintPreviewModelOptions = {},
-): FootprintPreviewModel {
+export function buildFootprintRenderModel(
+  source: FootprintRenderSource,
+  options: BuildFootprintRenderModelOptions = {},
+): FootprintRenderModel {
   const graphics = source.graphics.filter((graphic) =>
     filterByLayer(options.includeLayerNames, graphic.layer),
   );

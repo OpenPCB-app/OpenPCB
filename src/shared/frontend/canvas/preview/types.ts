@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import type {
-  FootprintPreviewModel,
-  SymbolPreviewModel,
+  FootprintRenderModel,
+  SymbolRenderModel,
 } from "../../../rendering";
 
 export interface PreviewCanvasBaseProps {
@@ -15,11 +15,14 @@ export interface PreviewCanvasBaseProps {
 }
 
 export interface SymbolPreviewCanvasProps extends PreviewCanvasBaseProps {
-  model: SymbolPreviewModel | null;
+  model: SymbolRenderModel | null;
+  emptyMessage?: string;
 }
 
 export interface FootprintPreviewCanvasProps extends PreviewCanvasBaseProps {
-  model: FootprintPreviewModel | null;
+  model: FootprintRenderModel | null;
+  emptyMessage?: string;
+  fitToGeometryOnly?: boolean;
 }
 
 export interface SceneBoundsMm {

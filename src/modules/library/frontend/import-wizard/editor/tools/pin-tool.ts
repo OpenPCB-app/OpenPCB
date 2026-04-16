@@ -27,7 +27,7 @@ export function createPinTool(): EditorTool {
 
     onPointerDown(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm);
+      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
 
       store.pushSnapshot();
       store.addPin({
@@ -43,7 +43,7 @@ export function createPinTool(): EditorTool {
 
     onPointerMove(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm);
+      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
 
       // Show a preview dot at the cursor position
       store.setPreviewGraphic({

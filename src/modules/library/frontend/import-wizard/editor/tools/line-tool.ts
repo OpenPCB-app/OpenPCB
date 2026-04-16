@@ -22,7 +22,7 @@ export function createLineTool(): EditorTool {
 
     onPointerDown(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm);
+      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
 
       if (!startPoint) {
         startPoint = point;
@@ -44,7 +44,7 @@ export function createLineTool(): EditorTool {
     onPointerMove(event: InteractionEvent) {
       if (!startPoint) return;
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm);
+      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
 
       store.setPreviewGraphic({
         kind: "line",

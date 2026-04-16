@@ -57,6 +57,9 @@ export interface SymbolEditorState {
   // Actions — document
   addGraphic: (graphic: PreviewGraphic) => void;
   addPin: (pin: Omit<EditorPinElement, "id">) => void;
+  setGraphic: (id: string, graphic: PreviewGraphic) => void;
+  setPinPosition: (id: string, positionMm: PointMm) => void;
+  updatePin: (id: string, patch: Partial<Omit<EditorPinElement, "id">>) => void;
   removeSelected: () => void;
   setReferencePrefix: (prefix: string) => void;
 
@@ -123,6 +126,29 @@ export const useSymbolEditorStore = create<SymbolEditorState>((set, get) => ({
     set({
       pins: [...state.pins, element],
       redoStack: [],
+    });
+  },
+
+  setGraphic: (id, graphic) => {
+    const state = get();
+    set({
+      graphics: state.graphics.map((g) =>
+        g.id === id ? { ...g, graphic } : g,
+      ),
+    });
+  },
+
+  setPinPosition: (id, positionMm) => {
+    const state = get();
+    set({
+      pins: state.pins.map((p) => (p.id === id ? { ...p, positionMm } : p)),
+    });
+  },
+
+  updatePin: (id, patch) => {
+    const state = get();
+    set({
+      pins: state.pins.map((p) => (p.id === id ? { ...p, ...patch } : p)),
     });
   },
 

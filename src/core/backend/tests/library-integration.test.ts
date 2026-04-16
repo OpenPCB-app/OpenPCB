@@ -247,5 +247,80 @@ describe("library module integration", () => {
     expect(detailBody.data?.detail?.component?.id).toBe(importedComponentId);
     expect(detailBody.data?.detail?.symbol?.preview?.kind).toBe("symbol");
     expect(detailBody.data?.detail?.footprint?.preview?.kind).toBe("footprint");
+
+    const inspectSymbolOnlyResponse = await server.fetch(
+      new Request("http://localhost/api/modules/library/imports/kicad/inspect", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          symbolLibrary: {
+            fileName: "C.kicad_sym",
+            content: symbolContent,
+          },
+          footprints: [],
+        }),
+      }),
+    );
+    expect(inspectSymbolOnlyResponse.status).toBe(200);
+    const inspectSymbolOnlyBody = (await inspectSymbolOnlyResponse.json()) as {
+      data?: {
+        symbols?: Array<{ id: string; name: string }>;
+      };
+    };
+    const symbolOnlySelection = inspectSymbolOnlyBody.data?.symbols?.[0];
+    if (!symbolOnlySelection?.id) {
+      throw new Error("Symbol-only inspect did not return symbol id");
+    }
+
+    const commitSymbolOnlyResponse = await server.fetch(
+      new Request("http://localhost/api/modules/library/imports/kicad", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          symbolLibrary: {
+            fileName: "C.kicad_sym",
+            content: symbolContent,
+          },
+          footprints: [],
+          selection: {
+            symbolId: symbolOnlySelection.id,
+            footprintId: null,
+          },
+          component: {
+            name: "Capacitor Symbol Only",
+            description: "No footprint selected",
+          },
+        }),
+      }),
+    );
+    expect(commitSymbolOnlyResponse.status).toBe(201);
+    const commitSymbolOnlyBody = (await commitSymbolOnlyResponse.json()) as {
+      data?: { componentId?: string; reused?: boolean };
+    };
+    const symbolOnlyComponentId = commitSymbolOnlyBody.data?.componentId;
+    expect(symbolOnlyComponentId).toBeDefined();
+    expect(commitSymbolOnlyBody.data?.reused).toBe(false);
+
+    const symbolOnlyDetailResponse = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/library/components/${symbolOnlyComponentId}/detail`,
+      ),
+    );
+    expect(symbolOnlyDetailResponse.status).toBe(200);
+    const symbolOnlyDetailBody = (await symbolOnlyDetailResponse.json()) as {
+      data?: {
+        detail?: {
+          component?: { tags?: string[] };
+          footprint?: { name?: string; mountType?: string | null };
+        };
+      };
+    };
+    expect(symbolOnlyDetailBody.data?.detail?.footprint?.name).toBe("No footprint yet");
+    expect(symbolOnlyDetailBody.data?.detail?.footprint?.mountType).toBe("virtual");
+    expect(
+      symbolOnlyDetailBody.data?.detail?.component?.tags?.includes(
+        "placeholder-footprint",
+      ),
+    ).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import { eq, like, or, sql } from "drizzle-orm";
+import { eq, inArray, like, or, sql } from "drizzle-orm";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
 import type {
   LibraryComponent,
@@ -151,7 +151,8 @@ export function mapSymbolDetail(row: SymbolRow): LibrarySymbolDetail {
   const data = parseJsonObject(row.dataJson);
   const normalized = asRecord(data.normalized);
   const fallbackPins = Array.isArray(data.pins) ? data.pins : [];
-  const normalizedPins = normalized && Array.isArray(normalized.pins) ? normalized.pins : null;
+  const normalizedPins =
+    normalized && Array.isArray(normalized.pins) ? normalized.pins : null;
 
   const previewCandidate = normalized?.preview ?? data.preview;
   const preview = asRecord(previewCandidate);
@@ -171,7 +172,8 @@ export function mapSymbolDetail(row: SymbolRow): LibrarySymbolDetail {
 export function mapFootprintDetail(row: FootprintRow): LibraryFootprintDetail {
   const data = parseJsonObject(row.dataJson);
   const normalized = asRecord(data.normalized);
-  const normalizedPads = normalized && Array.isArray(normalized.pads) ? normalized.pads : null;
+  const normalizedPads =
+    normalized && Array.isArray(normalized.pads) ? normalized.pads : null;
   const previewCandidate = normalized?.preview ?? data.preview;
   const preview = asRecord(previewCandidate);
 
@@ -182,7 +184,8 @@ export function mapFootprintDetail(row: FootprintRow): LibraryFootprintDetail {
     id: row.id,
     name: row.name,
     mountType,
-    padCount: padCountFromNormalized ?? (normalizedPads ? normalizedPads.length : 0),
+    padCount:
+      padCountFromNormalized ?? (normalizedPads ? normalizedPads.length : 0),
     packageCode: parsePackageCode(normalized?.packageCode ?? data.packageCode),
     warnings: parseWarnings(normalized?.warnings ?? data.warnings),
     preview,
@@ -310,6 +313,91 @@ export async function getFootprint(
     .where(eq(footprints.id, footprintId))
     .get();
   return row ? mapFootprint(row) : null;
+}
+
+export interface DeleteComponentsResult {
+  deletedComponents: number;
+  deletedSymbols: number;
+  deletedFootprints: number;
+}
+
+export function deleteComponents(
+  ctx: CoreBackendModuleContext,
+  ids: string[],
+): DeleteComponentsResult {
+  if (ids.length === 0) {
+    return { deletedComponents: 0, deletedSymbols: 0, deletedFootprints: 0 };
+  }
+
+  const db = getDb(ctx);
+
+  let summary: DeleteComponentsResult = {
+    deletedComponents: 0,
+    deletedSymbols: 0,
+    deletedFootprints: 0,
+  };
+
+  db.transaction((tx) => {
+    const transactionalDb = tx as typeof db;
+
+    // Collect symbol/footprint IDs referenced by the components to delete
+    const toDelete = transactionalDb
+      .select({
+        symbolId: components.symbolId,
+        footprintId: components.footprintId,
+      })
+      .from(components)
+      .where(inArray(components.id, ids))
+      .all();
+
+    const symbolIds = [...new Set(toDelete.map((r) => r.symbolId))];
+    const footprintIds = [...new Set(toDelete.map((r) => r.footprintId))];
+
+    // Delete the components
+    transactionalDb
+      .delete(components)
+      .where(inArray(components.id, ids))
+      .run();
+
+    // Delete orphaned symbols (not referenced by any remaining component)
+    let deletedSymbols = 0;
+    for (const symbolId of symbolIds) {
+      const still = transactionalDb
+        .select({ id: components.id })
+        .from(components)
+        .where(eq(components.symbolId, symbolId))
+        .get();
+      if (!still) {
+        transactionalDb.delete(symbols).where(eq(symbols.id, symbolId)).run();
+        deletedSymbols++;
+      }
+    }
+
+    // Delete orphaned footprints
+    let deletedFootprints = 0;
+    for (const footprintId of footprintIds) {
+      const still = transactionalDb
+        .select({ id: components.id })
+        .from(components)
+        .where(eq(components.footprintId, footprintId))
+        .get();
+      if (!still) {
+        transactionalDb
+          .delete(footprints)
+          .where(eq(footprints.id, footprintId))
+          .run();
+        deletedFootprints++;
+      }
+    }
+
+    summary = {
+      deletedComponents: toDelete.length,
+      deletedSymbols,
+      deletedFootprints,
+    };
+  });
+
+  return summary;
 }
 
 export function buildSdk(ctx: CoreBackendModuleContext): LibrarySDK {

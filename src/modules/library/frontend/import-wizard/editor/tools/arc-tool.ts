@@ -25,7 +25,7 @@ export function createArcTool(): EditorTool {
 
     onPointerDown(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm);
+      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
 
       if (!startPoint) {
         startPoint = point;
@@ -54,7 +54,7 @@ export function createArcTool(): EditorTool {
     onPointerMove(event: InteractionEvent) {
       if (!startPoint) return;
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm);
+      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
 
       if (!midPoint) {
         // Show line from start to cursor

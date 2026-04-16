@@ -3,7 +3,15 @@ import { and, eq } from "drizzle-orm";
 import { components, footprints, symbols } from "../schema";
 import { getDb } from "../queries";
 import { ImportValidationError, parseImportBundle } from "./inspect-kicad";
-import type { CommitKicadRequest, CommitKicadResponse } from "./types";
+import type {
+  CommitKicadRequest,
+  CommitKicadResponse,
+} from "./types";
+
+const PLACEHOLDER_FOOTPRINT_ID = "fp-no-footprint-yet";
+const PLACEHOLDER_FOOTPRINT_NAME = "No footprint yet";
+const PLACEHOLDER_SOURCE_HASH = "placeholder:no-footprint-yet";
+const PLACEHOLDER_TAGS = ["placeholder-footprint", "virtual", "no-footprint-yet"] as const;
 
 function trimOrEmpty(value: string): string {
   return value.trim();
@@ -94,6 +102,74 @@ function findExistingFootprintId(
   return null;
 }
 
+function findPlaceholderFootprintId(ctx: CoreBackendModuleContext): string | null {
+  const db = getDb(ctx);
+  const byId = db
+    .select({ id: footprints.id })
+    .from(footprints)
+    .where(eq(footprints.id, PLACEHOLDER_FOOTPRINT_ID))
+    .get();
+  if (byId) {
+    return byId.id;
+  }
+
+  const rows = db
+    .select({ id: footprints.id, dataJson: footprints.dataJson })
+    .from(footprints)
+    .where(eq(footprints.name, PLACEHOLDER_FOOTPRINT_NAME))
+    .all();
+
+  for (const row of rows) {
+    const data = parseJsonObject(row.dataJson);
+    const normalized = asRecord(data.normalized);
+    if (asString(normalized?.id) === PLACEHOLDER_FOOTPRINT_ID) {
+      return row.id;
+    }
+  }
+  return null;
+}
+
+function buildPlaceholderFootprintDataJson(now: string): string {
+  return JSON.stringify({
+    provenance: {
+      sourceKind: "system",
+      sourceFormat: "placeholder",
+      fileName: null,
+      importedAt: now,
+      sourceHash: PLACEHOLDER_SOURCE_HASH,
+    },
+    parser: {
+      warnings: [],
+    },
+    normalized: {
+      id: PLACEHOLDER_FOOTPRINT_ID,
+      fileName: "",
+      name: PLACEHOLDER_FOOTPRINT_NAME,
+      description: "Component was imported without a real PCB footprint.",
+      mountType: "virtual",
+      padCount: 0,
+      packageCode: {
+        imperial: null,
+        metric: null,
+      },
+      tags: [...PLACEHOLDER_TAGS],
+      sourceHash: PLACEHOLDER_SOURCE_HASH,
+      warnings: [],
+      preview: null,
+    },
+    raw: {
+      kind: "placeholder-footprint",
+      name: PLACEHOLDER_FOOTPRINT_NAME,
+    },
+  });
+}
+
+function dedupeTags(values: readonly string[]): string[] {
+  return values
+    .map((tag) => tag.trim().toLowerCase())
+    .filter((tag, index, all) => tag.length > 0 && all.indexOf(tag) === index);
+}
+
 export function commitKicadImport(
   ctx: CoreBackendModuleContext,
   input: CommitKicadRequest,
@@ -104,10 +180,8 @@ export function commitKicadImport(
     input.selection.symbolId,
     "selection.symbolId",
   );
-  const selectedFootprintId = requireNonEmpty(
-    input.selection.footprintId,
-    "selection.footprintId",
-  );
+  const selectedFootprintId = trimOrEmpty(input.selection.footprintId ?? "");
+  const symbolOnlyImport = selectedFootprintId.length === 0;
   const componentName = requireNonEmpty(input.component.name, "component.name");
   const componentDescription = trimOrEmpty(input.component.description);
 
@@ -120,10 +194,12 @@ export function commitKicadImport(
     );
   }
 
-  const selectedFootprint = parsed.normalizedFootprints.find(
-    (footprint) => footprint.id === selectedFootprintId,
-  );
-  if (!selectedFootprint) {
+  const selectedFootprint = symbolOnlyImport
+    ? null
+    : parsed.normalizedFootprints.find(
+        (footprint) => footprint.id === selectedFootprintId,
+      ) ?? null;
+  if (!symbolOnlyImport && !selectedFootprint) {
     throw new ImportValidationError(
       "Selected footprint is not present in import payload",
     );
@@ -134,8 +210,10 @@ export function commitKicadImport(
     throw new ImportValidationError("Failed to map selected symbol raw payload");
   }
 
-  const rawFootprint = parsed.raw.footprintById[selectedFootprintId];
-  if (!rawFootprint) {
+  const rawFootprint = selectedFootprint
+    ? parsed.raw.footprintById[selectedFootprint.id]
+    : null;
+  if (selectedFootprint && !rawFootprint) {
     throw new ImportValidationError(
       "Failed to map selected footprint raw payload",
     );
@@ -148,22 +226,31 @@ export function commitKicadImport(
     selectedSymbol.id,
     selectedSymbol.name,
   );
-  const existingFootprintId = findExistingFootprintId(
-    ctx,
-    selectedFootprint.sourceHash,
-    selectedFootprint.id,
-    selectedFootprint.name,
-  );
+  const existingFootprintId = selectedFootprint
+    ? findExistingFootprintId(
+        ctx,
+        selectedFootprint.sourceHash,
+        selectedFootprint.id,
+        selectedFootprint.name,
+      )
+    : findPlaceholderFootprintId(ctx);
 
   const symbolId = existingSymbolId ?? crypto.randomUUID();
-  const footprintId = existingFootprintId ?? crypto.randomUUID();
+  const footprintId = selectedFootprint
+    ? existingFootprintId ?? crypto.randomUUID()
+    : existingFootprintId ?? PLACEHOLDER_FOOTPRINT_ID;
   const componentId = crypto.randomUUID();
   const warningCount =
-    selectedSymbol.warnings.length + selectedFootprint.warnings.length;
+    selectedSymbol.warnings.length + (selectedFootprint?.warnings.length ?? 0);
 
-  const tags = [...selectedFootprint.tags, warningCount > 0 ? "has-warnings" : ""]
-    .map((tag) => tag.trim().toLowerCase())
-    .filter((tag, index, all) => tag.length > 0 && all.indexOf(tag) === index);
+  const footprintTags = selectedFootprint
+    ? selectedFootprint.tags
+    : ([...PLACEHOLDER_TAGS] as string[]);
+
+  const tags = dedupeTags([
+    ...footprintTags,
+    warningCount > 0 ? "has-warnings" : "",
+  ]);
 
   const symbolDataJson = JSON.stringify({
     provenance: {
@@ -182,20 +269,22 @@ export function commitKicadImport(
     raw: rawSymbol,
   });
 
-  const footprintDataJson = JSON.stringify({
-    provenance: {
-      sourceKind: "imported",
-      sourceFormat: "kicad_mod",
-      fileName: parsed.raw.footprintFileByName[selectedFootprint.name],
-      importedAt: now,
-      sourceHash: selectedFootprint.sourceHash,
-    },
-    parser: {
-      warnings: rawFootprint.warnings,
-    },
-    normalized: selectedFootprint,
-    raw: rawFootprint,
-  });
+  const footprintDataJson = selectedFootprint
+    ? JSON.stringify({
+        provenance: {
+          sourceKind: "imported",
+          sourceFormat: "kicad_mod",
+          fileName: parsed.raw.footprintFileByName[selectedFootprint.name],
+          importedAt: now,
+          sourceHash: selectedFootprint.sourceHash,
+        },
+        parser: {
+          warnings: rawFootprint?.warnings ?? [],
+        },
+        normalized: selectedFootprint,
+        raw: rawFootprint,
+      })
+    : buildPlaceholderFootprintDataJson(now);
 
   const db = getDb(ctx);
 
@@ -238,7 +327,7 @@ export function commitKicadImport(
         .insert(footprints)
         .values({
           id: footprintId,
-          name: selectedFootprint.name,
+          name: selectedFootprint?.name ?? PLACEHOLDER_FOOTPRINT_NAME,
           dataJson: footprintDataJson,
           createdAt: now,
         })
@@ -253,7 +342,9 @@ export function commitKicadImport(
         description:
           componentDescription.length > 0
             ? componentDescription
-            : (selectedSymbol.description ?? selectedFootprint.description),
+            : (selectedSymbol.description ??
+              selectedFootprint?.description ??
+              "No footprint yet"),
         symbolId,
         footprintId,
         tagsJson: JSON.stringify(tags),

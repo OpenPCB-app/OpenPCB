@@ -1,4 +1,4 @@
 export * from "./types";
 export * from "./geometry";
-export { buildSymbolPreviewModel } from "./symbol-preview-builder";
-export { buildFootprintPreviewModel } from "./footprint-preview-builder";
+export { buildSymbolRenderModel } from "./symbol-preview-builder";
+export { buildFootprintRenderModel } from "./footprint-preview-builder";

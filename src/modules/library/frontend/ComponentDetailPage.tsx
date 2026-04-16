@@ -5,52 +5,26 @@ import {
   SymbolPreviewCanvas,
 } from "../../../shared/frontend/canvas/preview";
 import type {
-  FootprintPreviewModel,
-  SymbolPreviewModel,
+  FootprintRenderModel,
+  SymbolRenderModel,
 } from "../../../shared/rendering";
 import type { ComponentDetailPayload } from "./types";
+import { toUserError } from "./utils";
 
-function toUserError(response: unknown, fallback: string): string {
-  if (!response || typeof response !== "object") {
-    return fallback;
-  }
-  const payload = response as {
-    error?: unknown;
-    detail?: unknown;
-    title?: unknown;
-    message?: unknown;
-  };
-  if (typeof payload.error === "string" && payload.error.length > 0) {
-    return payload.error;
-  }
-  if (typeof payload.detail === "string" && payload.detail.length > 0) {
-    return payload.detail;
-  }
-  if (typeof payload.message === "string" && payload.message.length > 0) {
-    return payload.message;
-  }
-  if (typeof payload.title === "string" && payload.title.length > 0) {
-    return payload.title;
-  }
-  return fallback;
-}
-
-function asSymbolPreview(value: unknown): SymbolPreviewModel | null {
+function asSymbolRender(value: unknown): SymbolRenderModel | null {
   if (!value || typeof value !== "object") {
     return null;
   }
   const record = value as { kind?: unknown };
-  return record.kind === "symbol" ? (value as SymbolPreviewModel) : null;
+  return record.kind === "symbol" ? (value as SymbolRenderModel) : null;
 }
 
-function asFootprintPreview(value: unknown): FootprintPreviewModel | null {
+function asFootprintRender(value: unknown): FootprintRenderModel | null {
   if (!value || typeof value !== "object") {
     return null;
   }
   const record = value as { kind?: unknown };
-  return record.kind === "footprint"
-    ? (value as FootprintPreviewModel)
-    : null;
+  return record.kind === "footprint" ? (value as FootprintRenderModel) : null;
 }
 
 export function ComponentDetailPage({
@@ -92,7 +66,10 @@ export function ComponentDetailPage({
         };
         if (!response.ok || !payload.ok || !payload.data?.detail) {
           throw new Error(
-            toUserError(payload, `Detail fetch failed (HTTP ${response.status})`),
+            toUserError(
+              payload,
+              `Detail fetch failed (HTTP ${response.status})`,
+            ),
           );
         }
         setDetail(payload.data.detail);
@@ -118,13 +95,15 @@ export function ComponentDetailPage({
   }, [backendURL, componentId, moduleId]);
 
   const symbolPreview = useMemo(
-    () => asSymbolPreview(detail?.symbol.preview),
+    () => asSymbolRender(detail?.symbol.preview),
     [detail?.symbol.preview],
   );
   const footprintPreview = useMemo(
-    () => asFootprintPreview(detail?.footprint.preview),
+    () => asFootprintRender(detail?.footprint.preview),
     [detail?.footprint.preview],
   );
+  const isPlaceholderFootprint =
+    detail?.component.tags.some((tag) => tag.toLowerCase() === "placeholder-footprint") ?? false;
 
   return (
     <div className="flex h-full w-full flex-col bg-slate-50 dark:bg-slate-950">
@@ -138,7 +117,9 @@ export function ComponentDetailPage({
           Back
         </button>
         <h1 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-          {loading ? "Loading component..." : detail?.component.name ?? "Component"}
+          {loading
+            ? "Loading component..."
+            : (detail?.component.name ?? "Component")}
         </h1>
       </header>
 
@@ -192,8 +173,13 @@ export function ComponentDetailPage({
                 </div>
               </div>
               <div className="space-y-1">
-                <div className="text-xs text-slate-600 dark:text-slate-400">
+                <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
                   Footprint preview
+                  {isPlaceholderFootprint ? (
+                    <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300">
+                      No footprint yet
+                    </span>
+                  ) : null}
                 </div>
                 <div className="h-64 overflow-hidden rounded-xl border border-slate-200 bg-slate-900 dark:border-slate-800">
                   <FootprintPreviewCanvas model={footprintPreview} />
@@ -208,14 +194,22 @@ export function ComponentDetailPage({
                 </h3>
                 <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
                   <dt className="text-slate-500 dark:text-slate-400">Name</dt>
-                  <dd className="text-slate-800 dark:text-slate-200">{detail.symbol.name}</dd>
-                  <dt className="text-slate-500 dark:text-slate-400">Reference</dt>
+                  <dd className="text-slate-800 dark:text-slate-200">
+                    {detail.symbol.name}
+                  </dd>
+                  <dt className="text-slate-500 dark:text-slate-400">
+                    Reference
+                  </dt>
                   <dd className="text-slate-800 dark:text-slate-200">
                     {detail.symbol.referencePrefix ?? "—"}
                   </dd>
                   <dt className="text-slate-500 dark:text-slate-400">Pins</dt>
-                  <dd className="text-slate-800 dark:text-slate-200">{detail.symbol.pinCount}</dd>
-                  <dt className="text-slate-500 dark:text-slate-400">Warnings</dt>
+                  <dd className="text-slate-800 dark:text-slate-200">
+                    {detail.symbol.pinCount}
+                  </dd>
+                  <dt className="text-slate-500 dark:text-slate-400">
+                    Warnings
+                  </dt>
                   <dd className="text-slate-800 dark:text-slate-200">
                     {detail.symbol.warnings.length}
                   </dd>
@@ -230,6 +224,7 @@ export function ComponentDetailPage({
                   <dt className="text-slate-500 dark:text-slate-400">Name</dt>
                   <dd className="text-slate-800 dark:text-slate-200">
                     {detail.footprint.name}
+                    {isPlaceholderFootprint ? " (No footprint yet)" : ""}
                   </dd>
                   <dt className="text-slate-500 dark:text-slate-400">Mount</dt>
                   <dd className="text-slate-800 dark:text-slate-200">
@@ -239,13 +234,17 @@ export function ComponentDetailPage({
                   <dd className="text-slate-800 dark:text-slate-200">
                     {detail.footprint.padCount}
                   </dd>
-                  <dt className="text-slate-500 dark:text-slate-400">Package</dt>
+                  <dt className="text-slate-500 dark:text-slate-400">
+                    Package
+                  </dt>
                   <dd className="text-slate-800 dark:text-slate-200">
                     {detail.footprint.packageCode.metric ??
                       detail.footprint.packageCode.imperial ??
                       "—"}
                   </dd>
-                  <dt className="text-slate-500 dark:text-slate-400">Warnings</dt>
+                  <dt className="text-slate-500 dark:text-slate-400">
+                    Warnings
+                  </dt>
                   <dd className="text-slate-800 dark:text-slate-200">
                     {detail.footprint.warnings.length}
                   </dd>

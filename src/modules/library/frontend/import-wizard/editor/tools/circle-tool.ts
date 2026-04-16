@@ -22,7 +22,7 @@ export function createCircleTool(): EditorTool {
 
     onPointerDown(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm);
+      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
 
       if (!center) {
         center = point;
@@ -49,7 +49,7 @@ export function createCircleTool(): EditorTool {
     onPointerMove(event: InteractionEvent) {
       if (!center) return;
       const store = useSymbolEditorStore.getState();
-      const point = eventToMm(event, store.gridSizeMm);
+      const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
 
       const radius = Math.sqrt(
         (point.x - center.x) ** 2 + (point.y - center.y) ** 2,
