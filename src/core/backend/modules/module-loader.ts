@@ -63,6 +63,48 @@ const FALLBACK_SIDEBAR = {
   order: 999,
 } as const;
 
+interface ParsedSemver {
+  major: number;
+  minor: number;
+  patch: number;
+}
+
+function parseSemver(value: string): ParsedSemver | null {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/);
+  if (!match) {
+    return null;
+  }
+
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  if (
+    !Number.isInteger(major) ||
+    !Number.isInteger(minor) ||
+    !Number.isInteger(patch)
+  ) {
+    return null;
+  }
+  return { major, minor, patch };
+}
+
+function isVersionAtLeast(actual: string, minVersion: string): boolean {
+  const actualParsed = parseSemver(actual);
+  const minParsed = parseSemver(minVersion);
+  if (!actualParsed || !minParsed) {
+    return false;
+  }
+
+  if (actualParsed.major !== minParsed.major) {
+    return actualParsed.major > minParsed.major;
+  }
+  if (actualParsed.minor !== minParsed.minor) {
+    return actualParsed.minor > minParsed.minor;
+  }
+  return actualParsed.patch >= minParsed.patch;
+}
+
 function hasModulesDirectory(workspaceRoot: string): boolean {
   return existsSync(path.join(workspaceRoot, "modules"));
 }
@@ -282,6 +324,21 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
           status: "missing",
         };
       }
+
+      const hasVersionMismatch =
+        record.status === "loaded" &&
+        typeof dep.minVersion === "string" &&
+        dep.minVersion.trim().length > 0 &&
+        !isVersionAtLeast(record.version, dep.minVersion);
+
+      if (hasVersionMismatch) {
+        return {
+          ...dep,
+          optional: Boolean(dep.optional),
+          status: "failed",
+        };
+      }
+
       return {
         ...dep,
         optional: Boolean(dep.optional),

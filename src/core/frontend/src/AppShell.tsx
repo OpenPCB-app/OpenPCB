@@ -54,7 +54,7 @@ export function AppShell() {
     <>
       <div className="grid h-full w-full grid-cols-[80px_1fr]">
         <LeftSidebar onSettingsClick={() => setSettingsOpen(true)} />
-        <main className="min-w-0">
+        <main className="h-full min-h-0 min-w-0">
           <AppRouter />
         </main>
       </div>

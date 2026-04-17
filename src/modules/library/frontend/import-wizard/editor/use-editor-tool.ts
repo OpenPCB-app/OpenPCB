@@ -1,21 +1,18 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback } from "react";
 import type { InteractionHandler } from "../../../../../shared/frontend/canvas/interaction/types";
-import {
-  isUndoShortcut,
-  isRedoShortcut,
-  isEditableShortcutTarget,
-  matchesKey,
-} from "../../../../../shared/frontend/canvas/utils/keyboard-shortcuts";
-import type { EditorTool, EditorToolId } from "./types";
-import { useSymbolEditorStore } from "./useSymbolEditorStore";
+import { matchesKey } from "../../../../../shared/frontend/canvas/utils/keyboard-shortcuts";
+import { useToolDispatch } from "../../../../../shared/frontend/canvas/tools/use-tool-dispatch";
 import { rotateSelection } from "./actions";
+import { useSymbolEditorStore } from "./useSymbolEditorStore";
+import type { EditorTool, EditorToolId } from "./types";
 import {
-  createSelectTool,
-  createLineTool,
-  createRectTool,
-  createCircleTool,
   createArcTool,
+  createCircleTool,
+  createLineTool,
   createPinTool,
+  createRectTool,
+  createSelectTool,
+  createTextTool,
 } from "./tools";
 
 const TOOL_SHORTCUTS: Record<string, EditorToolId> = {
@@ -25,9 +22,10 @@ const TOOL_SHORTCUTS: Record<string, EditorToolId> = {
   c: "circle",
   a: "arc",
   p: "pin",
+  t: "text",
 };
 
-function createTool(id: EditorToolId): EditorTool {
+function createSymbolEditorTool(id: EditorToolId): EditorTool {
   switch (id) {
     case "select":
       return createSelectTool();
@@ -41,86 +39,76 @@ function createTool(id: EditorToolId): EditorTool {
       return createArcTool();
     case "pin":
       return createPinTool();
+    case "text":
+      return createTextTool();
   }
 }
 
 /**
- * Bridges the active EditorTool to an InteractionHandler for EdaCanvas.
- * Also handles keyboard shortcuts for tool switching and undo/redo.
- *
- * Note: No useThree here — this hook runs outside the R3F Canvas.
- * Invalidation is handled by EdaCanvas (pointer events) and React re-renders
- * triggered by Zustand store changes (keyboard actions).
+ * Bridges the Symbol editor's active tool to an InteractionHandler for EdaCanvas
+ * and registers keyboard shortcuts. Tool dispatch + undo/redo/tool-switch are
+ * handled by the shared useToolDispatch hook; contextual rotation (R/Shift+R
+ * with a selection) is supplied here because it's domain-specific.
  */
 export function useEditorToolHandler(): InteractionHandler {
   const activeTool = useSymbolEditorStore((s) => s.activeTool);
-  const toolRef = useRef<EditorTool>(createTool(activeTool));
 
-  // Switch tool when activeTool changes
-  useEffect(() => {
-    toolRef.current.onDeactivate?.();
-    toolRef.current = createTool(activeTool);
-    toolRef.current.onActivate?.();
-  }, [activeTool]);
-
-  // Global keyboard handler
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (isEditableShortcutTarget(event.target)) return;
-
-      if (isUndoShortcut(event)) {
-        event.preventDefault();
-        useSymbolEditorStore.getState().undo();
-        return;
-      }
-      if (isRedoShortcut(event)) {
-        event.preventDefault();
-        useSymbolEditorStore.getState().redo();
-        return;
-      }
-
-      // Contextual rotation: R / Shift+R while Select tool has a selection
-      if (
-        matchesKey(event, "r") &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey
-      ) {
-        const state = useSymbolEditorStore.getState();
-        if (state.activeTool === "select" && state.selectedIds.size > 0) {
-          event.preventDefault();
-          rotateSelection(event.shiftKey ? -90 : 90);
-          return;
-        }
-      }
-
-      for (const [key, toolId] of Object.entries(TOOL_SHORTCUTS)) {
-        if (matchesKey(event, key) && !event.ctrlKey && !event.metaKey) {
-          event.preventDefault();
-          useSymbolEditorStore.getState().setActiveTool(toolId);
-          return;
-        }
-      }
-
-      toolRef.current.onKeyDown?.(event);
-    };
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
-
-  return useMemo<InteractionHandler>(
-    () => ({
-      onPointerDown(event) {
-        toolRef.current.onPointerDown?.(event);
-      },
-      onPointerMove(event) {
-        toolRef.current.onPointerMove?.(event);
-      },
-      onPointerUp(event) {
-        toolRef.current.onPointerUp?.(event);
-      },
-    }),
+  const onUndo = useCallback(() => useSymbolEditorStore.getState().undo(), []);
+  const onRedo = useCallback(() => useSymbolEditorStore.getState().redo(), []);
+  const setActiveTool = useCallback(
+    (id: EditorToolId) => useSymbolEditorStore.getState().setActiveTool(id),
     [],
   );
+
+  const onContextualKey = useCallback((event: KeyboardEvent): boolean => {
+    // Clipboard + select-all: Cmd/Ctrl+A/C/V/D
+    if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+      if (matchesKey(event, "a") && !event.shiftKey) {
+        event.preventDefault();
+        useSymbolEditorStore.getState().selectAll();
+        return true;
+      }
+      if (matchesKey(event, "c") && !event.shiftKey) {
+        event.preventDefault();
+        useSymbolEditorStore.getState().copySelection();
+        return true;
+      }
+      if (matchesKey(event, "v") && !event.shiftKey) {
+        event.preventDefault();
+        useSymbolEditorStore.getState().paste();
+        return true;
+      }
+      if (matchesKey(event, "d") && !event.shiftKey) {
+        event.preventDefault();
+        useSymbolEditorStore.getState().duplicateSelection();
+        return true;
+      }
+    }
+
+    // Contextual R / Shift+R = rotate selection (only when Select tool has one).
+    if (
+      matchesKey(event, "r") &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      const state = useSymbolEditorStore.getState();
+      if (state.activeTool === "select" && state.selectedIds.size > 0) {
+        event.preventDefault();
+        rotateSelection(event.shiftKey ? -90 : 90);
+        return true;
+      }
+    }
+    return false;
+  }, []);
+
+  return useToolDispatch<EditorToolId>({
+    activeToolId: activeTool,
+    createTool: createSymbolEditorTool,
+    toolShortcuts: TOOL_SHORTCUTS,
+    onUndo,
+    onRedo,
+    onContextualKey,
+    setActiveTool,
+  });
 }

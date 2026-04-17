@@ -10,26 +10,37 @@ import {
   normalizeRotationDeg,
   rotateGraphicAround,
   rotatePoint,
-} from "./tools/tool-utils";
+} from "../../../../../shared/frontend/canvas/tools/tool-utils";
 import { useSymbolEditorStore } from "./useSymbolEditorStore";
+import type {
+  EditorGraphicElement,
+  EditorLabelElement,
+  EditorPinElement,
+} from "./types";
 
 /**
- * Rotate all currently selected graphics and pins by `angleDeg` (CCW in Y-up).
- * Pivot is:
+ * Rotate all currently selected graphics, pins, and labels by `angleDeg`
+ * (CCW in Y-up). Pivot is:
  *   - the element's own anchor/center when exactly one item is selected
  *   - the combined bbox center for multi-selection
  * Pushes an undo snapshot before mutating.
  */
 export function rotateSelection(angleDeg: number): void {
   const store = useSymbolEditorStore.getState();
-  const { selectedIds, graphics, pins } = store;
+  const { selectedIds, graphics, pins, labels } = store;
   if (selectedIds.size === 0) return;
 
   const selectedGraphics = graphics.filter((g) => selectedIds.has(g.id));
   const selectedPins = pins.filter((p) => selectedIds.has(p.id));
-  if (selectedGraphics.length === 0 && selectedPins.length === 0) return;
+  const selectedLabels = labels.filter((l) => selectedIds.has(l.id));
+  if (
+    selectedGraphics.length === 0 &&
+    selectedPins.length === 0 &&
+    selectedLabels.length === 0
+  )
+    return;
 
-  const pivot = computePivot(selectedGraphics, selectedPins);
+  const pivot = computePivot(selectedGraphics, selectedPins, selectedLabels);
   if (!pivot) return;
 
   store.pushSnapshot();
@@ -46,17 +57,26 @@ export function rotateSelection(angleDeg: number): void {
       rotationDeg: normalizeRotationDeg(pin.rotationDeg + angleDeg),
     });
   }
+  for (const element of selectedLabels) {
+    store.updateLabel(element.id, {
+      at: rotatePoint(element.label.at, pivot, angleDeg),
+      rotationDeg: normalizeRotationDeg(element.label.rotationDeg + angleDeg),
+    });
+  }
 }
 
 function computePivot(
-  selectedGraphics: ReturnType<
-    typeof useSymbolEditorStore.getState
-  >["graphics"],
-  selectedPins: ReturnType<typeof useSymbolEditorStore.getState>["pins"],
+  selectedGraphics: readonly EditorGraphicElement[],
+  selectedPins: readonly EditorPinElement[],
+  selectedLabels: readonly EditorLabelElement[],
 ): PointMm | null {
+  const totalCount =
+    selectedGraphics.length + selectedPins.length + selectedLabels.length;
+
   // Single item → rotate around its own anchor/center
-  if (selectedGraphics.length + selectedPins.length === 1) {
+  if (totalCount === 1) {
     if (selectedPins.length === 1) return selectedPins[0]!.positionMm;
+    if (selectedLabels.length === 1) return selectedLabels[0]!.label.at;
     const g = selectedGraphics[0]!.graphic;
     switch (g.kind) {
       case "rect":
@@ -89,6 +109,9 @@ function computePivot(
   }
   for (const pin of selectedPins) {
     bounds = includePoint(bounds, pin.positionMm);
+  }
+  for (const element of selectedLabels) {
+    bounds = includePoint(bounds, element.label.at);
   }
   if (!isFiniteBoundsMm(bounds)) return null;
   return {

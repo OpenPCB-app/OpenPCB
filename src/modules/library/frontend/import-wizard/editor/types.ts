@@ -1,9 +1,9 @@
-import type { ReactNode } from "react";
-import type { InteractionEvent } from "../../../../../shared/frontend/canvas/interaction/types";
 import type {
   PreviewGraphic,
+  PreviewLabel,
   PointMm,
 } from "../../../../../shared/rendering/types";
+import type { EditorTool as SharedEditorTool } from "../../../../../shared/frontend/canvas/tools/types";
 
 export type EditorToolId =
   | "select"
@@ -11,7 +11,10 @@ export type EditorToolId =
   | "rect"
   | "circle"
   | "arc"
-  | "pin";
+  | "pin"
+  | "text";
+
+export type EditorTool = SharedEditorTool<EditorToolId>;
 
 export interface EditorGraphicElement {
   readonly id: string;
@@ -28,20 +31,22 @@ export interface EditorPinElement {
   readonly rotationDeg: number;
 }
 
-export interface EditorTool {
-  readonly id: EditorToolId;
-  readonly cursor: string;
-  onActivate?(): void;
-  onDeactivate?(): void;
-  onPointerDown?(event: InteractionEvent): void;
-  onPointerMove?(event: InteractionEvent): void;
-  onPointerUp?(event: InteractionEvent): void;
-  onKeyDown?(event: KeyboardEvent): void;
-  /** Rubber-band preview rendered in canvas during interaction */
-  render?(): ReactNode;
+export interface EditorLabelElement {
+  readonly id: string;
+  readonly label: PreviewLabel;
+}
+
+export interface EditorTextEditorState {
+  /** null when creating a new label; non-null when editing an existing label's text. */
+  readonly labelId: string | null;
+  readonly worldMm: PointMm;
+  readonly screenX: number;
+  readonly screenY: number;
+  readonly initialText: string;
 }
 
 export interface EditorSnapshot {
   readonly graphics: readonly EditorGraphicElement[];
   readonly pins: readonly EditorPinElement[];
+  readonly labels: readonly EditorLabelElement[];
 }

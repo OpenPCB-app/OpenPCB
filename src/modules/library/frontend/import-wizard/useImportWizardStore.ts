@@ -221,13 +221,13 @@ export const useImportWizardStore = create<ImportWizardState>((set) => ({
 
   goNext: () =>
     set((state) => ({
-      currentStep: Math.min(state.currentStep + 1, 3),
+      currentStep: Math.min(state.currentStep + 1, 2),
     })),
   goBack: () =>
     set((state) => ({
       currentStep: Math.max(state.currentStep - 1, 0),
     })),
-  goToStep: (step) => set({ currentStep: Math.max(0, Math.min(step, 3)) }),
+  goToStep: (step) => set({ currentStep: Math.max(0, Math.min(step, 2)) }),
 
   reset: () => set({ ...INITIAL_STATE }),
 }));

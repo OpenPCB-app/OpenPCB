@@ -95,8 +95,25 @@ function parseInspectRequestBody(value: unknown): InspectKicadRequest {
   }
 
   const symbolLibraryRaw = value.symbolLibrary;
-  if (!isRecord(symbolLibraryRaw)) {
-    throw new ValidationError("symbolLibrary must be an object");
+  // symbolLibrary is optional: when absent or null, only footprints are parsed.
+  // When present, it must be an object with non-empty fileName + content.
+  let symbolLibrary: InspectKicadRequest["symbolLibrary"] = null;
+  if (symbolLibraryRaw !== undefined && symbolLibraryRaw !== null) {
+    if (!isRecord(symbolLibraryRaw)) {
+      throw new ValidationError("symbolLibrary must be an object");
+    }
+    symbolLibrary = {
+      fileName: readStringField(
+        symbolLibraryRaw,
+        "fileName",
+        "symbolLibrary.fileName",
+      ),
+      content: readStringField(
+        symbolLibraryRaw,
+        "content",
+        "symbolLibrary.content",
+      ),
+    };
   }
 
   const footprintsRaw = value.footprints;
@@ -122,21 +139,7 @@ function parseInspectRequestBody(value: unknown): InspectKicadRequest {
     };
   });
 
-  return {
-    symbolLibrary: {
-      fileName: readStringField(
-        symbolLibraryRaw,
-        "fileName",
-        "symbolLibrary.fileName",
-      ),
-      content: readStringField(
-        symbolLibraryRaw,
-        "content",
-        "symbolLibrary.content",
-      ),
-    },
-    footprints,
-  };
+  return { symbolLibrary, footprints };
 }
 
 function parseCommitRequestBody(value: unknown): CommitKicadRequest {
@@ -164,8 +167,14 @@ function parseCommitRequestBody(value: unknown): CommitKicadRequest {
     throw new ValidationError("selection.footprintId must be a string or null");
   }
 
+  // /imports/kicad commit requires a real symbol library
+  if (!inspect.symbolLibrary) {
+    throw new ValidationError("symbolLibrary must be an object");
+  }
+
   return {
-    ...inspect,
+    symbolLibrary: inspect.symbolLibrary,
+    footprints: inspect.footprints,
     selection: {
       symbolId: readStringField(selectionRaw, "symbolId", "selection.symbolId"),
       footprintId:

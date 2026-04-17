@@ -11,7 +11,6 @@ import { useImportWizardStore } from "./useImportWizardStore";
 import { WizardProgressBar } from "./WizardProgressBar";
 import { SymbolStep } from "./steps/SymbolStep";
 import { FootprintStep } from "./steps/FootprintStep";
-import { ModelStep } from "./steps/ModelStep";
 import { MetadataStep } from "./steps/MetadataStep";
 import {
   isEscapeShortcut,
@@ -30,13 +29,11 @@ import { useSymbolEditorStore } from "./editor";
 
 const STEP_SYMBOL = 0;
 const STEP_FOOTPRINT = 1;
-const STEP_MODEL = 2;
-const STEP_METADATA = 3;
+const STEP_METADATA = 2;
 
 const STEPS = [
   { label: "Symbol" },
   { label: "Footprints" },
-  { label: "Model" },
   { label: "Metadata" },
 ] as const;
 
@@ -62,6 +59,7 @@ export function ImportWizardPage({
   const loadingCommit = useImportWizardStore((s) => s.loadingCommit);
   const commitError = useImportWizardStore((s) => s.commitError);
   const commitResult = useImportWizardStore((s) => s.commitResult);
+  const symbolSource = useImportWizardStore((s) => s.symbolSource);
 
   // Single derived selector — avoids 3 separate subscriptions for inspectStatus,
   // selectedSymbolId, componentName that only feed readyForAdvancedSteps / canProceed.
@@ -105,18 +103,28 @@ export function ImportWizardPage({
 
   useEffect(() => {
     const store = useImportWizardStore.getState();
+    const isDrawMode = symbolSource === "draw";
 
-    if (!symbolFile) {
+    // Draw mode: no symbol file to inspect. Parse footprints only (when any);
+    // otherwise reset the inspect session. Never redirect — user may be on the
+    // Footprint step importing .kicad_mod files after drawing a symbol.
+    if (!isDrawMode && !symbolFile) {
       inspectAbortRef.current?.abort();
       store.resetInspectSession();
       store.goToStep(STEP_SYMBOL);
       return;
     }
 
+    if (isDrawMode && footprintFiles.length === 0) {
+      inspectAbortRef.current?.abort();
+      store.resetInspectSession();
+      return;
+    }
+
     if (!backendURL) {
       inspectAbortRef.current?.abort();
       store.finishInspectError("Backend URL unavailable");
-      store.goToStep(STEP_SYMBOL);
+      if (!isDrawMode) store.goToStep(STEP_SYMBOL);
       return;
     }
 
@@ -130,10 +138,12 @@ export function ImportWizardPage({
 
       try {
         const previous = useImportWizardStore.getState();
-        const symbolLibrary = {
-          fileName: symbolFile.name,
-          content: await symbolFile.text(),
-        };
+        const symbolLibrary = symbolFile
+          ? {
+              fileName: symbolFile.name,
+              content: await symbolFile.text(),
+            }
+          : null;
         const footprints = await Promise.all(
           footprintFiles.map(async (file) => ({
             fileName: file.name,
@@ -181,7 +191,9 @@ export function ImportWizardPage({
         store.finishInspectError(
           err instanceof Error ? err.message : "Failed to inspect KiCad files",
         );
-        store.goToStep(STEP_SYMBOL);
+        // Only rewind to Symbol step when the user IS using imports; in draw
+        // mode the symbol step has nothing file-related to fix.
+        if (!isDrawMode) store.goToStep(STEP_SYMBOL);
       } finally {
         if (inspectAbortRef.current === controller) {
           inspectAbortRef.current = null;
@@ -196,7 +208,7 @@ export function ImportWizardPage({
     };
     // symbolSig/footprintSig capture file identity — no need for symbolFile/footprintFiles
     // as separate deps. Fewer deps = fewer StrictMode double-fires.
-  }, [symbolSig, footprintSig, backendURL, moduleId]);
+  }, [symbolSig, footprintSig, backendURL, moduleId, symbolSource]);
 
   const runCommit = useCallback(async () => {
     const store = useImportWizardStore.getState();
@@ -222,13 +234,15 @@ export function ImportWizardPage({
       let result;
 
       if (isDrawMode) {
-        // Drawn symbol path
+        // Drawn symbol path: footprint from preset, imported files, or none.
         const editorState = useSymbolEditorStore.getState();
         const symbolRenderSource = editorState.toSymbolRenderSource();
 
         let footprintMode: "import" | "generated" | "none" = "none";
-        let footprintFiles2;
-        let footprintSelection;
+        let footprintFilesPayload:
+          | { fileName: string; content: string }[]
+          | undefined;
+        let footprintSelection: { footprintId: string } | undefined;
         let generatedFp;
 
         if (store.footprintSource === "preset" && store.generatedFootprint) {
@@ -237,6 +251,19 @@ export function ImportWizardPage({
             source: store.generatedFootprint.source,
             metadata: store.generatedFootprint.metadata,
           };
+        } else if (
+          store.footprintSource === "import" &&
+          footprintFiles.length > 0 &&
+          store.selectedFootprintId.length > 0
+        ) {
+          footprintMode = "import";
+          footprintFilesPayload = await Promise.all(
+            footprintFiles.map(async (file) => ({
+              fileName: file.name,
+              content: await file.text(),
+            })),
+          );
+          footprintSelection = { footprintId: store.selectedFootprintId };
         }
 
         result = await commitDrawnImportRequest(
@@ -248,7 +275,7 @@ export function ImportWizardPage({
               referencePrefix: editorState.referencePrefix,
             },
             footprintMode,
-            footprintFiles: footprintFiles2,
+            footprintFiles: footprintFilesPayload,
             footprintSelection,
             generatedFootprint: generatedFp,
             component: {
@@ -383,7 +410,6 @@ export function ImportWizardPage({
     switch (currentStep) {
       case STEP_SYMBOL:
       case STEP_FOOTPRINT:
-      case STEP_MODEL:
         return readyForAdvancedSteps;
       case STEP_METADATA:
         return readyForAdvancedSteps && canProceedMetadata;
@@ -487,7 +513,6 @@ export function ImportWizardPage({
       >
         {currentStep === STEP_SYMBOL && <SymbolStep />}
         {currentStep === STEP_FOOTPRINT && <FootprintStep />}
-        {currentStep === STEP_MODEL && <ModelStep />}
         {currentStep === STEP_METADATA && <MetadataStep />}
       </div>
 

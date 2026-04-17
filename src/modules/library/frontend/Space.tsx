@@ -37,6 +37,7 @@ function buildSearchUrl(
   backendURL: string | null | undefined,
   moduleId: string,
   query: string,
+  tags: readonly string[],
 ): string | null {
   if (!backendURL) {
     return null;
@@ -46,6 +47,9 @@ function buildSearchUrl(
   const trimmed = query.trim();
   if (trimmed.length > 0) {
     url.searchParams.set("q", trimmed);
+  }
+  if (tags.length > 0) {
+    url.searchParams.set("tags", tags.join(","));
   }
   url.searchParams.set("limit", "60");
   return url.toString();
@@ -92,22 +96,33 @@ function ActionButton({
 
 function FilterChip({
   label,
-  disabled,
+  active,
+  onClick,
 }: {
   label: string;
-  disabled?: boolean;
+  active: boolean;
+  onClick: () => void;
 }): ReactElement {
   return (
     <button
       type="button"
-      disabled={disabled}
-      title="Coming soon"
-      className="rounded-full px-3 py-1 text-xs font-medium bg-slate-100 text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500"
+      onClick={onClick}
+      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+        active
+          ? "bg-violet-600 text-white hover:bg-violet-700"
+          : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+      }`}
     >
       {label}
     </button>
   );
 }
+
+const FILTER_TAGS = [
+  { label: "SMD", tag: "smd" },
+  { label: "Through-hole", tag: "through-hole" },
+  { label: "Virtual", tag: "placeholder-footprint" },
+] as const;
 
 export function LibrarySpace({
   backendURL,
@@ -115,6 +130,7 @@ export function LibrarySpace({
 }: ModuleSpaceProps): ReactElement {
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query, 180);
+  const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const [components, setComponents] = useState<LibraryComponent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -190,10 +206,26 @@ export function LibrarySpace({
     }
   }, [selectedIds, backendURL, moduleId]);
 
+  const tagsKey = useMemo(() => [...activeTags].sort().join(","), [activeTags]);
   const searchUrl = useMemo(
-    () => buildSearchUrl(backendURL, moduleId, debouncedQuery),
-    [backendURL, moduleId, debouncedQuery],
+    () =>
+      buildSearchUrl(
+        backendURL,
+        moduleId,
+        debouncedQuery,
+        tagsKey.length > 0 ? tagsKey.split(",") : [],
+      ),
+    [backendURL, moduleId, debouncedQuery, tagsKey],
   );
+
+  const toggleTag = useCallback((tag: string) => {
+    setActiveTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!searchUrl) {
@@ -308,9 +340,14 @@ export function LibrarySpace({
             Mount:
           </span>
           <div className="flex items-center gap-1.5">
-            <FilterChip label="SMD" disabled />
-            <FilterChip label="Through-hole" disabled />
-            <FilterChip label="Virtual" disabled />
+            {FILTER_TAGS.map((f) => (
+              <FilterChip
+                key={f.tag}
+                label={f.label}
+                active={activeTags.has(f.tag)}
+                onClick={() => toggleTag(f.tag)}
+              />
+            ))}
           </div>
         </div>
 

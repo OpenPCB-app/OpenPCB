@@ -18,6 +18,9 @@
     "controllers/**/*.ts",
     "modules/**/*.ts",
     "contracts/**/*.ts",
+    "../../contracts/**/*.ts",
+    "../../shared/domain/**/*.ts",
+    "../../shared/rendering/types.ts",
     "tests/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]

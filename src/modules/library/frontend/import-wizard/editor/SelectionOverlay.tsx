@@ -1,6 +1,10 @@
 import { useMemo, type ReactElement } from "react";
 import { RENDER_ORDER } from "../../../../../shared/frontend/canvas/layers";
-import type { EditorGraphicElement, EditorPinElement } from "./types";
+import type {
+  EditorGraphicElement,
+  EditorLabelElement,
+  EditorPinElement,
+} from "./types";
 
 const SELECTION_COLOR = "#f472b6"; // pink-400
 const SELECTION_PADDING = 0.3;
@@ -12,10 +16,12 @@ export function SelectionOverlay({
   selectedIds,
   graphics,
   pins,
+  labels,
 }: {
   selectedIds: Set<string>;
   graphics: readonly EditorGraphicElement[];
   pins: readonly EditorPinElement[];
+  labels: readonly EditorLabelElement[];
 }): ReactElement | null {
   const positions = useMemo(() => {
     if (selectedIds.size === 0) return null;
@@ -133,9 +139,46 @@ export function SelectionOverlay({
       );
     }
 
+    for (const element of labels) {
+      if (!selectedIds.has(element.id)) continue;
+      const l = element.label;
+      const halfText = Math.max(l.text.length * l.fontSizeMm * 0.31, 0.3);
+      const halfHeight = Math.max(l.fontSizeMm * 0.6, 0.3);
+      const x1 = l.at.x - halfText - SELECTION_PADDING;
+      const y1 = l.at.y - halfHeight - SELECTION_PADDING;
+      const x2 = l.at.x + halfText + SELECTION_PADDING;
+      const y2 = l.at.y + halfHeight + SELECTION_PADDING;
+      segments.push(
+        x1,
+        y1,
+        0,
+        x2,
+        y1,
+        0,
+        x2,
+        y1,
+        0,
+        x2,
+        y2,
+        0,
+        x2,
+        y2,
+        0,
+        x1,
+        y2,
+        0,
+        x1,
+        y2,
+        0,
+        x1,
+        y1,
+        0,
+      );
+    }
+
     if (segments.length === 0) return null;
     return new Float32Array(segments);
-  }, [selectedIds, graphics, pins]);
+  }, [selectedIds, graphics, pins, labels]);
 
   if (!positions) return null;
 

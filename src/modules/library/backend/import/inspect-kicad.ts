@@ -189,20 +189,35 @@ function normalizeFootprint(
 export function parseImportBundle(
   input: InspectKicadRequest,
 ): ParsedImportBundle {
-  requireNonEmptyText(input.symbolLibrary.fileName, "symbolLibrary.fileName");
-  requireNonEmptyText(input.symbolLibrary.content, "symbolLibrary.content");
+  const hasSymbolLibrary =
+    input.symbolLibrary !== null && input.symbolLibrary !== undefined;
 
-  const symbolLibrary = parseKicadSymbolLib(input.symbolLibrary.content);
-  if (symbolLibrary.symbols.length === 0) {
-    throw new ImportValidationError(
-      "Symbol library does not contain any symbols",
+  let symbolLibrary: ReturnType<typeof parseKicadSymbolLib> = {
+    symbols: [],
+    version: null,
+    generator: null,
+  };
+  let normalizedSymbols: NormalizedImportedSymbol[] = [];
+  let symbolFileName = "";
+
+  if (hasSymbolLibrary) {
+    const lib = input.symbolLibrary!;
+    requireNonEmptyText(lib.fileName, "symbolLibrary.fileName");
+    requireNonEmptyText(lib.content, "symbolLibrary.content");
+
+    symbolLibrary = parseKicadSymbolLib(lib.content);
+    if (symbolLibrary.symbols.length === 0) {
+      throw new ImportValidationError(
+        "Symbol library does not contain any symbols",
+      );
+    }
+
+    const symbolSourceHash = sha256(lib.content);
+    normalizedSymbols = symbolLibrary.symbols.map((symbol, index) =>
+      normalizeSymbol(symbol, symbolSourceHash, index),
     );
+    symbolFileName = lib.fileName;
   }
-
-  const symbolSourceHash = sha256(input.symbolLibrary.content);
-  const normalizedSymbols = symbolLibrary.symbols.map((symbol, index) =>
-    normalizeSymbol(symbol, symbolSourceHash, index),
-  );
 
   const normalizedFootprints: NormalizedImportedFootprint[] = [];
   const warnings: ImportWarning[] = [];
@@ -271,7 +286,7 @@ export function parseImportBundle(
     normalizedFootprints,
     warnings,
     raw: {
-      symbolFileName: input.symbolLibrary.fileName,
+      symbolFileName,
       symbolLibrary,
       symbolById,
       footprintByName,

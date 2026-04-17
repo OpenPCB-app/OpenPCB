@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import os from "node:os";
 import path from "node:path";
-import type { LibrarySDK } from "../../contracts/modules/sdk";
+import type { DesignerSDK, LibrarySDK } from "../../contracts/modules/sdk";
 import { MODULE_SDK_TOKENS } from "../../contracts/modules/sdk-map";
 import { resetSharedSqliteForTesting } from "../db/sqlite-client";
 import { createHttpServer } from "../http/create-http-server";
@@ -31,21 +31,34 @@ describe("library module integration", () => {
 
     const snapshot = moduleRuntime.snapshot();
     expect(snapshot.loadedModules.includes("library")).toBe(true);
+    expect(snapshot.loadedModules.includes("designer")).toBe(true);
 
     const sdkRegistry = moduleRuntime.getSdkRegistry();
     expect(sdkRegistry.has(MODULE_SDK_TOKENS.LIBRARY)).toBe(true);
+    expect(sdkRegistry.has(MODULE_SDK_TOKENS.DESIGNER)).toBe(true);
 
     const librarySdk = sdkRegistry.resolve<LibrarySDK>(
       MODULE_SDK_TOKENS.LIBRARY,
     );
+    const designerSdk = sdkRegistry.resolve<DesignerSDK>(
+      MODULE_SDK_TOKENS.DESIGNER,
+    );
 
     const components = await librarySdk.searchComponents({
-      query: "capacitor",
+      query: "",
       limit: 20,
     });
     expect(Array.isArray(components)).toBe(true);
     const missingResolved = await librarySdk.resolveComponent("missing-component-id");
     expect(missingResolved).toBeNull();
+
+    const createdDesign = await designerSdk.createDesign({
+      name: "Designer Integration Smoke",
+    });
+    expect(createdDesign.name).toBe("Designer Integration Smoke");
+    const projection = await designerSdk.getSchematicProjection(createdDesign.id);
+    expect(projection?.parts).toEqual([]);
+    expect(projection?.wires).toEqual([]);
 
     const server = createHttpServer({
       diagnosticsStore: new DiagnosticsStore(),
@@ -77,6 +90,21 @@ describe("library module integration", () => {
       new Request("http://localhost/api/modules/library/components?limit=not-a-number"),
     );
     expect(invalidLimitResponse.status).toBe(200);
+
+    const designerStatusResponse = await server.fetch(
+      new Request("http://localhost/api/modules/designer/status"),
+    );
+    expect(designerStatusResponse.status).toBe(200);
+
+    const designerListResponse = await server.fetch(
+      new Request("http://localhost/api/modules/designer/designs"),
+    );
+    expect(designerListResponse.status).toBe(200);
+
+    const designerLibrarySearchResponse = await server.fetch(
+      new Request("http://localhost/api/modules/designer/library/components?limit=5"),
+    );
+    expect(designerLibrarySearchResponse.status).toBe(200);
   });
 
   test("imports component via inspect and commit routes", async () => {
@@ -176,6 +204,170 @@ describe("library module integration", () => {
     if (!importedComponentId) {
       throw new Error("Commit route did not return component id");
     }
+
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const placementDetail = await designerSdk.resolveLibraryComponentForPlacement(
+      importedComponentId,
+    );
+    expect(placementDetail).not.toBeNull();
+
+    let wireableComponentId = importedComponentId;
+    if ((placementDetail?.symbol.pins.length ?? 0) < 1) {
+      let foundWireable = false;
+      const candidates = await designerSdk.searchLibraryComponents({ limit: 50 });
+      for (const candidate of candidates) {
+        const candidateDetail =
+          await designerSdk.resolveLibraryComponentForPlacement(candidate.id);
+        if ((candidateDetail?.symbol.pins.length ?? 0) >= 1) {
+          wireableComponentId = candidate.id;
+          foundWireable = true;
+          break;
+        }
+      }
+
+      if (!foundWireable) {
+        const drawnCreateResponse = await server.fetch(
+          new Request("http://localhost/api/modules/library/imports/drawn", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              drawnSymbol: {
+                source: {
+                  name: "DrawnWireableIntegration",
+                  unitCount: 1,
+                  referenceText: "U?",
+                  valueText: "DrawnWireableIntegration",
+                  pins: [
+                    {
+                      id: "pin-1",
+                      name: "A",
+                      number: "1",
+                      electricalType: "passive",
+                      positionMm: { x: -2, y: 0 },
+                      lengthMm: 1,
+                      rotationDeg: 0,
+                      unit: 1,
+                      hidden: false,
+                    },
+                    {
+                      id: "pin-2",
+                      name: "B",
+                      number: "2",
+                      electricalType: "passive",
+                      positionMm: { x: 2, y: 0 },
+                      lengthMm: 1,
+                      rotationDeg: 180,
+                      unit: 1,
+                      hidden: false,
+                    },
+                  ],
+                  graphics: [
+                    {
+                      unit: 1,
+                      graphic: {
+                        kind: "rect",
+                        x: -1,
+                        y: -0.8,
+                        width: 2,
+                        height: 1.6,
+                        fill: "none",
+                        strokeWidthMm: 0.12,
+                      },
+                    },
+                  ],
+                  warnings: [],
+                },
+                referencePrefix: "U",
+              },
+              footprintMode: "none",
+              component: {
+                name: "Drawn Wireable Integration",
+                description: "Used to guarantee wireable placement in integration test",
+              },
+            }),
+          }),
+        );
+        expect(drawnCreateResponse.status).toBe(201);
+        const drawnBody = (await drawnCreateResponse.json()) as {
+          data?: { componentId?: string };
+        };
+        const drawnComponentId = drawnBody.data?.componentId;
+        if (!drawnComponentId) {
+          throw new Error("Drawn wireable component creation did not return componentId");
+        }
+        wireableComponentId = drawnComponentId;
+      }
+    }
+    expect(wireableComponentId.length).toBeGreaterThan(0);
+
+    const createdDesign = await designerSdk.createDesign({
+      name: "Imported Component Wiring",
+    });
+
+    const placeResultA = await designerSdk.dispatchCommand(createdDesign.id, {
+      commandId: crypto.randomUUID(),
+      sessionId: "integration",
+      aggregateId: createdDesign.id,
+      baseRevision: 0,
+      issuedAt: Date.now(),
+      command: {
+        type: "place_part",
+        componentId: wireableComponentId,
+        positionNm: { x: 0, y: 0 },
+      },
+    });
+    expect(placeResultA.ok).toBe(true);
+
+    const placeResultB = await designerSdk.dispatchCommand(createdDesign.id, {
+      commandId: crypto.randomUUID(),
+      sessionId: "integration",
+      aggregateId: createdDesign.id,
+      baseRevision: 1,
+      issuedAt: Date.now(),
+      command: {
+        type: "place_part",
+        componentId: wireableComponentId,
+        positionNm: { x: 8_000_000, y: 0 },
+      },
+    });
+    expect(placeResultB.ok).toBe(true);
+
+    const afterPlacement = await designerSdk.getSchematicProjection(createdDesign.id);
+    expect(afterPlacement?.parts.length).toBeGreaterThanOrEqual(2);
+    const pinA = afterPlacement?.parts[0]?.pins[0];
+    const pinB = afterPlacement?.parts[1]?.pins[0];
+    expect(pinA?.id).toBeDefined();
+    expect(pinB?.id).toBeDefined();
+    if (!pinA || !pinB) {
+      throw new Error("Placed parts must expose pin ids for wiring");
+    }
+
+    const wireResult = await designerSdk.dispatchCommand(createdDesign.id, {
+      commandId: crypto.randomUUID(),
+      sessionId: "integration",
+      aggregateId: createdDesign.id,
+      baseRevision: 2,
+      issuedAt: Date.now(),
+      command: {
+        type: "create_wire",
+        sourcePinId: pinA.id,
+        targetPinId: pinB.id,
+      },
+    });
+    expect(wireResult.ok).toBe(true);
+
+    const afterWire = await designerSdk.getSchematicProjection(createdDesign.id);
+    expect(afterWire?.wires.length).toBeGreaterThanOrEqual(1);
+
+    const designerPlacementResponse = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/designer/library/components/${importedComponentId}/placement`,
+      ),
+    );
+    expect(designerPlacementResponse.status).toBe(200);
 
     const commitReuseResponse = await server.fetch(
       new Request("http://localhost/api/modules/library/imports/kicad", {

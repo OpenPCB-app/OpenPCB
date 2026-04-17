@@ -12,6 +12,13 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "vite.config.ts", "../contracts/**/*.ts"],
+  "include": [
+    "src",
+    "vite.config.ts",
+    "../contracts/**/*.ts",
+    "../../contracts/**/*.ts",
+    "../../shared/domain/**/*.ts",
+    "../../shared/rendering/types.ts"
+  ],
   "exclude": ["../backend/**", "../../src-react/**", "../../src-ts/**", "../../modules/**"]
 }

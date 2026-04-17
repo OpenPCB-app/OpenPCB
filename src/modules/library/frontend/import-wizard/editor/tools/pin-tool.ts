@@ -1,7 +1,7 @@
 import type { InteractionEvent } from "../../../../../../shared/frontend/canvas/interaction/types";
 import type { EditorTool } from "../types";
 import { useSymbolEditorStore } from "../useSymbolEditorStore";
-import { eventToMm } from "./tool-utils";
+import { eventToMm } from "../../../../../../shared/frontend/canvas/tools/tool-utils";
 
 /**
  * Pin tool — click to place a pin at the snapped location.
@@ -28,15 +28,16 @@ export function createPinTool(): EditorTool {
     onPointerDown(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
       const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
+      const defaults = store.pinDefaults;
 
       store.pushSnapshot();
       store.addPin({
         name: String(pinCounter),
         number: String(pinCounter),
-        electricalType: "passive",
+        electricalType: defaults.electricalType,
         positionMm: point,
-        lengthMm: 2.54,
-        rotationDeg: 180,
+        lengthMm: defaults.lengthMm,
+        rotationDeg: defaults.rotationDeg,
       });
       pinCounter++;
     },

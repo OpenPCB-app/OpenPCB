@@ -74,7 +74,9 @@ export function commitDrawnImport(
     throw new ImportValidationError("Drawn symbol must have at least one pin");
   }
 
-  const symbolModel = buildSymbolRenderModel(symbolSource);
+  const symbolModel = buildSymbolRenderModel(symbolSource, {
+    preserveOrigin: true,
+  });
   const symbolHash = hashString(JSON.stringify(symbolSource));
   const now = new Date().toISOString();
 
@@ -153,12 +155,9 @@ export function commitDrawnImport(
     input.footprintFiles &&
     input.footprintSelection
   ) {
-    // Parse footprint from KiCad files
+    // Parse footprint from KiCad files (no symbol library — drawn-symbol flow)
     const parsed = parseImportBundle({
-      symbolLibrary: {
-        fileName: "dummy.kicad_sym",
-        content: "(kicad_symbol_lib)",
-      },
+      symbolLibrary: null,
       footprints: input.footprintFiles,
     });
     const selectedFp = parsed.normalizedFootprints.find(

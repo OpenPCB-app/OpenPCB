@@ -2,16 +2,23 @@ import { eq, inArray, like, or, sql } from "drizzle-orm";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
 import type {
   LibraryComponent,
+  LibraryComponentPlacementDetail,
   LibraryComponentDetail,
   LibraryFootprint,
   LibraryFootprintDetail,
+  LibraryFootprintPlacementSnapshot,
   LibraryPreviewWarning,
   LibrarySearchParams,
   LibrarySourceProvenance,
   LibrarySDK,
   LibrarySymbol,
+  LibrarySymbolPlacementSnapshot,
   LibrarySymbolDetail,
 } from "../../../core/contracts/modules/sdk";
+import type {
+  FootprintRenderModel,
+  SymbolRenderModel,
+} from "../../../shared/rendering";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { components, footprints, symbols } from "./schema";
 
@@ -65,6 +72,211 @@ function asNumber(value: unknown): number | null {
     return null;
   }
   return value;
+}
+
+function isSymbolRenderModel(value: unknown): value is SymbolRenderModel {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  return (value as { kind?: unknown }).kind === "symbol";
+}
+
+function isFootprintRenderModel(value: unknown): value is FootprintRenderModel {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  return (value as { kind?: unknown }).kind === "footprint";
+}
+
+function translatePreviewGraphic(
+  graphic: SymbolRenderModel["graphics"][number],
+  dx: number,
+  dy: number,
+): SymbolRenderModel["graphics"][number] {
+  switch (graphic.kind) {
+    case "line":
+      return {
+        ...graphic,
+        a: { x: graphic.a.x + dx, y: graphic.a.y + dy },
+        b: { x: graphic.b.x + dx, y: graphic.b.y + dy },
+      };
+    case "rect":
+      return {
+        ...graphic,
+        x: graphic.x + dx,
+        y: graphic.y + dy,
+      };
+    case "circle":
+      return {
+        ...graphic,
+        center: {
+          x: graphic.center.x + dx,
+          y: graphic.center.y + dy,
+        },
+      };
+    case "arc3":
+      return {
+        ...graphic,
+        start: { x: graphic.start.x + dx, y: graphic.start.y + dy },
+        mid: { x: graphic.mid.x + dx, y: graphic.mid.y + dy },
+        end: { x: graphic.end.x + dx, y: graphic.end.y + dy },
+      };
+    case "polyline":
+      return {
+        ...graphic,
+        points: graphic.points.map((point) => ({
+          x: point.x + dx,
+          y: point.y + dy,
+        })),
+      };
+    case "bezier":
+      return {
+        ...graphic,
+        points: [
+          { x: graphic.points[0].x + dx, y: graphic.points[0].y + dy },
+          { x: graphic.points[1].x + dx, y: graphic.points[1].y + dy },
+          { x: graphic.points[2].x + dx, y: graphic.points[2].y + dy },
+          { x: graphic.points[3].x + dx, y: graphic.points[3].y + dy },
+        ],
+      };
+  }
+}
+
+function alignPreviewToPinSnapshot(
+  preview: SymbolRenderModel,
+  pins: LibrarySymbolPlacementSnapshot["pins"],
+): SymbolRenderModel {
+  if (preview.pins.length === 0 || pins.length === 0) {
+    return preview;
+  }
+
+  const pairs = Math.min(preview.pins.length, pins.length);
+  let deltaX = 0;
+  let deltaY = 0;
+  for (let index = 0; index < pairs; index += 1) {
+    const previewPin = preview.pins[index];
+    const localPin = pins[index];
+    if (!previewPin || !localPin) {
+      continue;
+    }
+    deltaX += previewPin.anchor.x - localPin.localPositionMm.x;
+    deltaY += previewPin.anchor.y - localPin.localPositionMm.y;
+  }
+
+  const dx = deltaX / pairs;
+  const dy = deltaY / pairs;
+  if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) {
+    return preview;
+  }
+
+  return {
+    ...preview,
+    graphics: preview.graphics.map((graphic) =>
+      translatePreviewGraphic(graphic, -dx, -dy),
+    ),
+    pins: preview.pins.map((pin) => ({
+      ...pin,
+      anchor: { x: pin.anchor.x - dx, y: pin.anchor.y - dy },
+      bodyEnd: { x: pin.bodyEnd.x - dx, y: pin.bodyEnd.y - dy },
+    })),
+    labels: preview.labels.map((label) => ({
+      ...label,
+      at: { x: label.at.x - dx, y: label.at.y - dy },
+    })),
+    bounds: preview.bounds
+      ? {
+          minX: preview.bounds.minX - dx,
+          minY: preview.bounds.minY - dy,
+          maxX: preview.bounds.maxX - dx,
+          maxY: preview.bounds.maxY - dy,
+        }
+      : null,
+  };
+}
+
+function parseSymbolPlacementSnapshot(
+  row: SymbolRow,
+): LibrarySymbolPlacementSnapshot {
+  const data = parseJsonObject(row.dataJson);
+  const normalized = asRecord(data.normalized);
+
+  // Require normalized data only - no legacy fallback
+  if (!normalized) {
+    throw new Error(
+      `Symbol ${row.id} (${row.name}) missing normalized data. ` +
+        `Only normalized-format symbols are supported for schematic placement.`
+    );
+  }
+
+  const pinsRaw = Array.isArray(normalized.pins) ? normalized.pins : [];
+  const previewRaw = normalized.preview;
+  const provenance = asRecord(data.provenance);
+
+  // Require valid preview for schematic rendering
+  if (!isSymbolRenderModel(previewRaw)) {
+    throw new Error(
+      `Symbol ${row.id} (${row.name}) missing valid preview model. ` +
+        `Symbol must have a renderable preview for schematic placement.`
+    );
+  }
+
+  const pins = pinsRaw
+    .map((entry) => {
+      const pin = asRecord(entry);
+      if (!pin) {
+        return null;
+      }
+      const local = asRecord(pin.localPosition);
+      const x = asNumber(local?.x);
+      const y = asNumber(local?.y);
+      if (x === null || y === null) {
+        return null;
+      }
+
+      const originPinKey = asString(pin.originPinKey);
+      const name = asString(pin.name);
+      if (!originPinKey || !name) {
+        return null;
+      }
+
+      return {
+        originPinKey,
+        number: asString(pin.number),
+        name,
+        localPositionMm: { x, y },
+        electricalType: asString(pin.electricalType) ?? "passive",
+        unit: asNumber(pin.unit) ?? 1,
+      };
+    })
+    .filter((pin): pin is LibrarySymbolPlacementSnapshot["pins"][number] => pin !== null);
+
+  return {
+    symbolId: row.id,
+    name: row.name,
+    referencePrefix: asString(normalized.referencePrefix) ?? "",
+    sourceHash: asString(provenance?.sourceHash),
+    pins,
+    preview: alignPreviewToPinSnapshot(previewRaw, pins),
+  };
+}
+
+function parseFootprintPlacementSnapshot(
+  row: FootprintRow,
+): LibraryFootprintPlacementSnapshot {
+  // TODO: Tighten footprint preview invariants when PCB editor starts consuming placement snapshots.
+  // For now, footprint preview is optional (null allowed) since schematic-only workflow is the priority.
+  const data = parseJsonObject(row.dataJson);
+  const normalized = asRecord(data.normalized);
+  const provenance = asRecord(data.provenance);
+  const previewRaw = normalized?.preview;
+
+  return {
+    footprintId: row.id,
+    name: row.name,
+    mountType: asString(normalized?.mountType) ?? asString(data.mountType),
+    sourceHash: asString(provenance?.sourceHash),
+    preview: isFootprintRenderModel(previewRaw) ? previewRaw : null,
+  };
 }
 
 function parseWarnings(value: unknown): LibraryPreviewWarning[] {
@@ -150,20 +362,19 @@ export function mapFootprint(row: FootprintRow): LibraryFootprint {
 export function mapSymbolDetail(row: SymbolRow): LibrarySymbolDetail {
   const data = parseJsonObject(row.dataJson);
   const normalized = asRecord(data.normalized);
-  const fallbackPins = Array.isArray(data.pins) ? data.pins : [];
+
+  // Only use normalized data - no legacy fallback
   const normalizedPins =
     normalized && Array.isArray(normalized.pins) ? normalized.pins : null;
 
-  const previewCandidate = normalized?.preview ?? data.preview;
-  const preview = asRecord(previewCandidate);
+  const preview = asRecord(normalized?.preview);
 
   return {
     id: row.id,
     name: row.name,
-    referencePrefix:
-      asString(normalized?.referencePrefix) ?? asString(data.referencePrefix),
-    pinCount: normalizedPins ? normalizedPins.length : fallbackPins.length,
-    warnings: parseWarnings(normalized?.warnings ?? data.warnings),
+    referencePrefix: asString(normalized?.referencePrefix) ?? "",
+    pinCount: normalizedPins ? normalizedPins.length : 0,
+    warnings: parseWarnings(normalized?.warnings),
     preview,
     provenance: parseSourceProvenance(data),
   };
@@ -289,6 +500,42 @@ export async function getComponentDetail(
   };
 }
 
+export async function resolveComponentForPlacement(
+  ctx: CoreBackendModuleContext,
+  componentId: string,
+): Promise<LibraryComponentPlacementDetail | null> {
+  const db = getDb(ctx);
+  const componentRow = await db
+    .select()
+    .from(components)
+    .where(eq(components.id, componentId))
+    .get();
+  if (!componentRow) {
+    return null;
+  }
+
+  const symbolRow = await db
+    .select()
+    .from(symbols)
+    .where(eq(symbols.id, componentRow.symbolId))
+    .get();
+  const footprintRow = await db
+    .select()
+    .from(footprints)
+    .where(eq(footprints.id, componentRow.footprintId))
+    .get();
+  if (!symbolRow || !footprintRow) {
+    return null;
+  }
+
+  return {
+    component: mapComponent(componentRow),
+    symbol: parseSymbolPlacementSnapshot(symbolRow),
+    footprint: parseFootprintPlacementSnapshot(footprintRow),
+    resolvedAt: new Date().toISOString(),
+  };
+}
+
 export async function getSymbol(
   ctx: CoreBackendModuleContext,
   symbolId: string,
@@ -407,5 +654,7 @@ export function buildSdk(ctx: CoreBackendModuleContext): LibrarySDK {
     getFootprint: (footprintId) => getFootprint(ctx, footprintId),
     getComponentDetail: (componentId) => getComponentDetail(ctx, componentId),
     searchComponents: (params) => searchComponents(ctx, params),
+    resolveComponentForPlacement: (componentId) =>
+      resolveComponentForPlacement(ctx, componentId),
   };
 }

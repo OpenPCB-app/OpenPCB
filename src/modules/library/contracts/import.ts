@@ -47,13 +47,16 @@ export interface InspectPayload {
 }
 
 export interface InspectKicadRequest {
-  symbolLibrary: ImportFileInput;
+  /** Optional — when omitted, only footprint files are parsed (draw-symbol flow). */
+  symbolLibrary?: ImportFileInput | null;
   footprints: ImportFileInput[];
 }
 
 export interface InspectKicadResponse extends InspectPayload {}
 
-export interface CommitKicadRequest extends InspectKicadRequest {
+export interface CommitKicadRequest {
+  symbolLibrary: ImportFileInput;
+  footprints: ImportFileInput[];
   selection: {
     symbolId: string;
     footprintId?: string | null;

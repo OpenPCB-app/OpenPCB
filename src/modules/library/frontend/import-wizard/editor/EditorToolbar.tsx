@@ -9,6 +9,7 @@ import {
   RotateCw,
   Spline,
   Square,
+  Type,
   Undo2,
   Pin,
 } from "lucide-react";
@@ -31,6 +32,7 @@ const TOOLS: ToolDef[] = [
   { id: "circle", icon: Circle, label: "Circle", shortcut: "C" },
   { id: "arc", icon: Spline, label: "Arc", shortcut: "A" },
   { id: "pin", icon: Pin, label: "Pin", shortcut: "P" },
+  { id: "text", icon: Type, label: "Text", shortcut: "T" },
 ];
 
 function ToolButton({

@@ -1,0 +1,26 @@
+{
+  "id": "designer",
+  "label": "Designer",
+  "version": "0.1.0",
+  "apiVersion": 2,
+  "namespace": "space.designer",
+  "kind": "space",
+  "sidebar": {
+    "label": "Designer",
+    "icon": "PenTool",
+    "order": 10,
+    "group": "design"
+  },
+  "runtime": {
+    "backendEntry": "module.backend.ts",
+    "frontendEntry": "module.frontend.ts"
+  },
+  "dependsOn": [
+    {
+      "id": "library",
+      "minVersion": "0.1.0",
+      "optional": false
+    }
+  ],
+  "defaultPinned": true
+}

@@ -2,7 +2,7 @@ import type { InteractionEvent } from "../../../../../../shared/frontend/canvas/
 import type { PointMm } from "../../../../../../shared/rendering/types";
 import type { EditorTool } from "../types";
 import { useSymbolEditorStore } from "../useSymbolEditorStore";
-import { eventToMm } from "./tool-utils";
+import { eventToMm } from "../../../../../../shared/frontend/canvas/tools/tool-utils";
 
 export function createCircleTool(): EditorTool {
   let center: PointMm | null = null;

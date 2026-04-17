@@ -1,10 +1,11 @@
-import { memo, type ReactElement } from "react";
+import { memo, useEffect, useState, type ReactElement } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { SymbolPreviewCanvas } from "../../../../../shared/frontend/canvas/preview";
 import { WarningsPanel } from "../components/WarningsPanel";
 import {
   SymbolEditorCanvas,
   EditorToolbar,
+  PinPropertyPanel,
   useSymbolEditorStore,
 } from "../editor";
 import { CanvasStepLayout } from "../layout/CanvasStepLayout";
@@ -313,7 +314,6 @@ function ImportModeRightSidebar({
 
 function DrawModeSidebar(): ReactElement {
   const referencePrefix = useSymbolEditorStore((s) => s.referencePrefix);
-  const pins = useSymbolEditorStore((s) => s.pins);
 
   return (
     <>
@@ -336,32 +336,7 @@ function DrawModeSidebar(): ReactElement {
         </label>
       </section>
 
-      <section className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-          Pins ({pins.length})
-        </div>
-        {pins.length === 0 ? (
-          <div className="text-xs text-slate-400 dark:text-slate-500">
-            Use the Pin tool (P) to place pins.
-          </div>
-        ) : (
-          <div className="max-h-48 space-y-1 overflow-auto">
-            {pins.map((pin) => (
-              <div
-                key={pin.id}
-                className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] dark:border-slate-700 dark:bg-slate-800/40"
-              >
-                <span className="font-medium text-slate-700 dark:text-slate-200">
-                  {pin.number}
-                </span>
-                <span className="text-slate-500 dark:text-slate-400">
-                  {pin.name}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <PinPropertyPanel />
 
       <section className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
         <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
@@ -385,14 +360,40 @@ function DrawModeSidebar(): ReactElement {
             Circle
           </div>
           <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">A</kbd>{" "}
+            Arc
+          </div>
+          <div>
             <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">P</kbd>{" "}
             Pin
+          </div>
+          <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">T</kbd>{" "}
+            Text
           </div>
           <div>
             <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">R</kbd>{" "}
             Rotate selection (Shift+R = CW)
           </div>
           <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">
+              ⌘C
+            </kbd>{" "}
+            Copy /{" "}
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">
+              ⌘V
+            </kbd>{" "}
+            Paste /{" "}
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">
+              ⌘D
+            </kbd>{" "}
+            Duplicate
+          </div>
+          <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">
+              ⌘A
+            </kbd>{" "}
+            Select all /{" "}
             <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">
               Del
             </kbd>{" "}
@@ -407,32 +408,146 @@ function DrawModeSidebar(): ReactElement {
 function DrawModeRightSidebar(): ReactElement {
   const graphics = useSymbolEditorStore((s) => s.graphics);
   const pins = useSymbolEditorStore((s) => s.pins);
+  const activeTool = useSymbolEditorStore((s) => s.activeTool);
+
+  return (
+    <>
+      {activeTool === "pin" ? <PinDefaultsPanel /> : null}
+      <section className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+          Drawing Summary
+        </h3>
+        <dl className="space-y-1.5 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-slate-500 dark:text-slate-400">Graphics</dt>
+            <dd className="font-medium text-slate-700 dark:text-slate-100">
+              {graphics.length}
+            </dd>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-slate-500 dark:text-slate-400">Pins</dt>
+            <dd className="font-medium text-slate-700 dark:text-slate-100">
+              {pins.length}
+            </dd>
+          </div>
+        </dl>
+        {graphics.length === 0 && pins.length === 0 && (
+          <div className="text-xs text-slate-400 dark:text-slate-500">
+            Use the drawing tools to create a symbol. Add at least one pin
+            before proceeding.
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
+const PIN_DEFAULT_TYPES: readonly { value: string; label: string }[] = [
+  { value: "passive", label: "Passive" },
+  { value: "input", label: "Input" },
+  { value: "output", label: "Output" },
+  { value: "bidirectional", label: "Bidirectional" },
+  { value: "tri_state", label: "Tri-state" },
+  { value: "open_collector", label: "Open collector" },
+  { value: "open_emitter", label: "Open emitter" },
+  { value: "power_in", label: "Power in" },
+  { value: "power_out", label: "Power out" },
+  { value: "unconnected", label: "Unconnected" },
+  { value: "no_connect", label: "No connect" },
+];
+
+const PIN_DEFAULT_ROTATIONS: readonly { value: number; label: string }[] = [
+  { value: 0, label: "0° →" },
+  { value: 90, label: "90° ↑" },
+  { value: 180, label: "180° ←" },
+  { value: 270, label: "270° ↓" },
+];
+
+function PinDefaultsPanel(): ReactElement {
+  const pinDefaults = useSymbolEditorStore((s) => s.pinDefaults);
+  const setPinDefaults = useSymbolEditorStore.getState().setPinDefaults;
+  const [lengthDraft, setLengthDraft] = useState(String(pinDefaults.lengthMm));
+  useEffect(
+    () => setLengthDraft(String(pinDefaults.lengthMm)),
+    [pinDefaults.lengthMm],
+  );
 
   return (
     <section className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-      <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-        Drawing Summary
-      </h3>
-      <dl className="space-y-1.5 text-xs">
-        <div className="flex items-center justify-between gap-2">
-          <dt className="text-slate-500 dark:text-slate-400">Graphics</dt>
-          <dd className="font-medium text-slate-700 dark:text-slate-100">
-            {graphics.length}
-          </dd>
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <dt className="text-slate-500 dark:text-slate-400">Pins</dt>
-          <dd className="font-medium text-slate-700 dark:text-slate-100">
-            {pins.length}
-          </dd>
-        </div>
-      </dl>
-      {graphics.length === 0 && pins.length === 0 && (
-        <div className="text-xs text-slate-400 dark:text-slate-500">
-          Use the drawing tools to create a symbol. Add at least one pin before
-          proceeding.
-        </div>
-      )}
+      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+        Next pin defaults
+      </div>
+      <label className="block space-y-0.5">
+        <span className="block text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          Type
+        </span>
+        <select
+          value={pinDefaults.electricalType}
+          onChange={(e) =>
+            setPinDefaults({ electricalType: e.currentTarget.value })
+          }
+          className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        >
+          {PIN_DEFAULT_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block space-y-0.5">
+        <span className="block text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          Rotation
+        </span>
+        <select
+          value={pinDefaults.rotationDeg}
+          onChange={(e) =>
+            setPinDefaults({ rotationDeg: Number(e.currentTarget.value) })
+          }
+          className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        >
+          {PIN_DEFAULT_ROTATIONS.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block space-y-0.5">
+        <span className="block text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          Length (mm)
+        </span>
+        <input
+          type="number"
+          step={0.635}
+          min={0}
+          value={lengthDraft}
+          onChange={(e) => setLengthDraft(e.currentTarget.value)}
+          onBlur={() => {
+            const next = Number(lengthDraft);
+            if (
+              Number.isFinite(next) &&
+              next > 0 &&
+              next !== pinDefaults.lengthMm
+            ) {
+              setPinDefaults({ lengthMm: next });
+            } else {
+              setLengthDraft(String(pinDefaults.lengthMm));
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+            else if (e.key === "Escape") {
+              setLengthDraft(String(pinDefaults.lengthMm));
+              e.currentTarget.blur();
+            }
+          }}
+          className="h-7 w-full rounded-md border border-slate-300 bg-white px-1.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        />
+      </label>
+      <div className="text-[10px] text-slate-400 dark:text-slate-500">
+        New pins placed with P tool inherit these.
+      </div>
     </section>
   );
 }

@@ -1,11 +1,23 @@
-import type { InteractionEvent } from "../../../../../../shared/frontend/canvas/interaction/types";
+import type { InteractionEvent } from "../interaction/types";
 import type {
   PointMm,
   PreviewGraphic,
-} from "../../../../../../shared/rendering/types";
-import { snapToGrid } from "../useSymbolEditorStore";
+} from "../../../../shared/rendering/types";
 
 const NM_PER_MM = 1_000_000;
+
+/** Snap a scalar to the nearest multiple of gridMm. */
+export function snapToGrid(value: number, gridMm: number): number {
+  return Math.round(value / gridMm) * gridMm;
+}
+
+/** Snap a mm-space point to the nearest grid intersection. */
+export function snapPointToGrid(point: PointMm, gridMm: number): PointMm {
+  return {
+    x: snapToGrid(point.x, gridMm),
+    y: snapToGrid(point.y, gridMm),
+  };
+}
 
 /** Convert InteractionEvent world point (nm) to scene mm. Snaps to grid when `snap` is true. */
 export function eventToMm(

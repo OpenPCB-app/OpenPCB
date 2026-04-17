@@ -1,6 +1,7 @@
 import { memo, type ReactElement } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useImportWizardStore } from "../useImportWizardStore";
+import { useSymbolEditorStore } from "../editor";
 
 export const MetadataStep = memo(function MetadataStep(): ReactElement {
   const {
@@ -9,9 +10,13 @@ export const MetadataStep = memo(function MetadataStep(): ReactElement {
     description,
     setDescription,
     inspectData,
+    selectedSymbolId,
     selectedFootprintId,
     hasFootprint,
     inputsLocked,
+    symbolSource,
+    footprintSource,
+    generatedFootprint,
   } = useImportWizardStore(
     useShallow((s) => ({
       componentName: s.componentName,
@@ -19,13 +24,39 @@ export const MetadataStep = memo(function MetadataStep(): ReactElement {
       description: s.description,
       setDescription: s.setDescription,
       inspectData: s.inspectData,
+      selectedSymbolId: s.selectedSymbolId,
       selectedFootprintId: s.selectedFootprintId,
       hasFootprint:
         s.selectedFootprintId.length > 0 ||
         (s.footprintSource === "preset" && s.generatedFootprint !== null),
       inputsLocked: s.inspectStatus === "loading",
+      symbolSource: s.symbolSource,
+      footprintSource: s.footprintSource,
+      generatedFootprint: s.generatedFootprint,
     })),
   );
+
+  // Pin count: drawn editor pins, or parsed symbol pin count
+  const drawnPinCount = useSymbolEditorStore((s) => s.pins.length);
+  const expectedPinCount =
+    symbolSource === "draw"
+      ? drawnPinCount
+      : (inspectData?.symbols.find((s) => s.id === selectedSymbolId)
+          ?.pinCount ?? null);
+
+  // Pad count: preset-generated, or parsed footprint pad count
+  const padCount =
+    footprintSource === "preset" && generatedFootprint
+      ? generatedFootprint.source.pads.length
+      : (inspectData?.footprints.find((f) => f.id === selectedFootprintId)
+          ?.padCount ?? null);
+
+  const countMismatch =
+    expectedPinCount !== null &&
+    padCount !== null &&
+    padCount > 0 &&
+    expectedPinCount > 0 &&
+    expectedPinCount !== padCount;
 
   const symbolWarningCount = inspectData
     ? inspectData.warnings.filter((w) => w.scope === "symbol").length
@@ -104,6 +135,17 @@ export const MetadataStep = memo(function MetadataStep(): ReactElement {
             Importing without a footprint. Component will use visible
             placeholder: <span className="font-semibold">No footprint yet</span>
             .
+          </div>
+        )}
+
+        {countMismatch && (
+          <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+            Pin/pad count mismatch:{" "}
+            <span className="font-semibold">{expectedPinCount}</span> pin
+            {expectedPinCount !== 1 ? "s" : ""} vs{" "}
+            <span className="font-semibold">{padCount}</span> pad
+            {padCount !== 1 ? "s" : ""}. Auto-mapping by number may leave some
+            unconnected.
           </div>
         )}
 

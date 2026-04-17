@@ -67,6 +67,43 @@ afterEach(async () => {
 });
 
 describe("module runtime bootstrap", () => {
+  test("skips module when dependency minVersion is not satisfied", async () => {
+    const workspace = await createWorkspace();
+
+    await writeModule(
+      workspace,
+      "lib",
+      {
+        ...baseManifest("lib"),
+        version: "0.1.0",
+      },
+      `export default { id: "lib", registerRoutes() {} };`,
+    );
+
+    await writeModule(
+      workspace,
+      "designer",
+      {
+        ...baseManifest("designer"),
+        dependsOn: [{ id: "lib", minVersion: "0.2.0", optional: false }],
+      },
+      `export default { id: "designer", registerRoutes() {} };`,
+    );
+
+    const moduleRegistry = new ModuleRouterRegistry();
+    const moduleRuntime = new ModuleRuntime({
+      moduleRegistry,
+      workspaceRoot: workspace,
+    });
+
+    await moduleRuntime.bootstrap();
+    const snapshot = moduleRuntime.snapshot();
+    const byId = new Map(snapshot.modules.map((item) => [item.id, item]));
+
+    expect(byId.get("lib")?.status).toBe("loaded");
+    expect(byId.get("designer")?.status).toBe("skipped");
+  });
+
   test("loads independent module and skips dependents on missing required dependencies", async () => {
     const workspace = await createWorkspace();
     await writeModule(

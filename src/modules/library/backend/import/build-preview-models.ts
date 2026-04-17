@@ -513,6 +513,7 @@ export function buildSymbolPreviewFromParsed(
   const model = buildSymbolRenderModel(source, {
     composeAllUnits: true,
     includeHiddenPins: false,
+    preserveOrigin: true,
   });
 
   return model;
