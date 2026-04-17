@@ -6,6 +6,13 @@ import { FootprintPresetPicker } from "../components/FootprintPresetPicker";
 import { WarningsPanel } from "../components/WarningsPanel";
 import { CanvasStepLayout } from "../layout/CanvasStepLayout";
 import { useImportWizardStore } from "../useImportWizardStore";
+import {
+  FootprintEditorCanvas,
+  FootprintEditorToolbar,
+  LayerPanel,
+  PadPropertyPanel,
+  useFootprintEditorStore,
+} from "../footprint-editor";
 
 export const FootprintStep = memo(function FootprintStep(): ReactElement {
   const inputId = useId();
@@ -41,6 +48,7 @@ export const FootprintStep = memo(function FootprintStep(): ReactElement {
   );
 
   const isPresetMode = footprintSource === "preset";
+  const isDrawMode = footprintSource === "draw";
 
   // Import mode data
   const variants = inspectData?.footprints ?? [];
@@ -72,6 +80,13 @@ export const FootprintStep = memo(function FootprintStep(): ReactElement {
   const displayLabel = selectedFootprint?.name ?? "-";
   const mountType = selectedFootprint?.mountType?.toUpperCase() ?? "-";
 
+  const sourceTabClass = (active: boolean) =>
+    `flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+      active
+        ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100"
+        : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+    }`;
+
   return (
     <CanvasStepLayout
       defaultLeftWidth={330}
@@ -79,54 +94,59 @@ export const FootprintStep = memo(function FootprintStep(): ReactElement {
       minSidebarWidth={240}
       maxSidebarWidth={520}
       topContent={
-        <div className="mx-auto inline-flex items-center gap-2 rounded-lg border border-slate-200/90 bg-white/95 px-2 py-1.5 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/90">
-          <button
-            type="button"
-            onClick={() => setGridVisible(!gridVisible)}
-            className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
-              gridVisible
-                ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-                : "border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            }`}
-          >
-            <Grid3X3 className="h-3.5 w-3.5" />
-            Grid
-          </button>
-          <div className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
-          <div className="text-xs text-slate-500 dark:text-slate-400">
-            Zoom: scroll wheel
+        isDrawMode ? (
+          <FootprintEditorToolbar />
+        ) : (
+          <div className="mx-auto inline-flex items-center gap-2 rounded-lg border border-slate-200/90 bg-white/95 px-2 py-1.5 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/90">
+            <button
+              type="button"
+              onClick={() => setGridVisible(!gridVisible)}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+                gridVisible
+                  ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Grid3X3 className="h-3.5 w-3.5" />
+              Grid
+            </button>
+            <div className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              Zoom: scroll wheel
+            </div>
           </div>
-        </div>
+        )
       }
       leftSidebar={
         <div className="min-h-0 space-y-3 p-3">
-          {/* Source toggle */}
+          {/* Source toggle — 3 tabs */}
           <div className="flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800">
             <button
               type="button"
               onClick={() => setFootprintSource("import")}
-              className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
-                !isPresetMode
-                  ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100"
-                  : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-              }`}
+              className={sourceTabClass(footprintSource === "import")}
             >
-              Import file
+              Import
             </button>
             <button
               type="button"
               onClick={() => setFootprintSource("preset")}
-              className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
-                isPresetMode
-                  ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100"
-                  : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-              }`}
+              className={sourceTabClass(footprintSource === "preset")}
             >
-              Generate preset
+              Preset
+            </button>
+            <button
+              type="button"
+              onClick={() => setFootprintSource("draw")}
+              className={sourceTabClass(footprintSource === "draw")}
+            >
+              Draw
             </button>
           </div>
 
-          {isPresetMode ? (
+          {isDrawMode ? (
+            <DrawFootprintSidebar />
+          ) : isPresetMode ? (
             <FootprintPresetPicker />
           ) : (
             <>
@@ -187,29 +207,36 @@ export const FootprintStep = memo(function FootprintStep(): ReactElement {
       }
       center={
         <div className="relative h-full border-x border-slate-200 bg-slate-900 dark:border-slate-800">
-          <FootprintPreviewCanvas
-            model={canvasModel}
-            className="h-full w-full"
-            showGrid={gridVisible}
-            fitToGeometryOnly
-            emptyMessage={emptyMessage}
-          />
-
-          {!isPresetMode &&
-          inspectStatus === "loading" &&
-          footprintFiles.length > 0 ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-950/35">
-              <div className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-300">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-600 border-t-violet-400" />
-                Processing footprint files...
-              </div>
-            </div>
-          ) : null}
+          {isDrawMode ? (
+            <FootprintEditorCanvas className="h-full w-full" />
+          ) : (
+            <>
+              <FootprintPreviewCanvas
+                model={canvasModel}
+                className="h-full w-full"
+                showGrid={gridVisible}
+                fitToGeometryOnly
+                emptyMessage={emptyMessage}
+              />
+              {footprintSource === "import" &&
+              inspectStatus === "loading" &&
+              footprintFiles.length > 0 ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-950/35">
+                  <div className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-300">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-600 border-t-violet-400" />
+                    Processing footprint files...
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
       }
       rightSidebar={
         <div className="min-h-0 space-y-3 p-3">
-          {isPresetMode ? (
+          {isDrawMode ? (
+            <DrawFootprintRightSidebar />
+          ) : isPresetMode ? (
             <PresetRightSidebar />
           ) : (
             <ImportRightSidebar
@@ -432,6 +459,131 @@ function ImportRightSidebar({
           Import and inspect footprints, then select a variant to view details.
         </div>
       )}
+    </>
+  );
+}
+
+// ── Draw mode sidebars ──────────────────────────────────────────────
+
+function DrawFootprintSidebar(): ReactElement {
+  const footprintName = useFootprintEditorStore((s) => s.footprintName);
+
+  return (
+    <>
+      <section className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+          Properties
+        </div>
+        <label className="block space-y-1">
+          <span className="text-xs text-slate-600 dark:text-slate-300">
+            Footprint name
+          </span>
+          <input
+            value={footprintName}
+            onChange={(e) =>
+              useFootprintEditorStore
+                .getState()
+                .setFootprintName(e.target.value)
+            }
+            placeholder="e.g. MY_0603"
+            className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          />
+        </label>
+      </section>
+
+      <LayerPanel />
+
+      <section className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+          Shortcuts
+        </div>
+        <div className="mt-2 space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+          <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">V</kbd>{" "}
+            Select
+          </div>
+          <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">L</kbd>{" "}
+            Line
+          </div>
+          <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">R</kbd>{" "}
+            Rect (Rotate when selection active)
+          </div>
+          <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">C</kbd>{" "}
+            Circle
+          </div>
+          <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">A</kbd>{" "}
+            Arc
+          </div>
+          <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">D</kbd>{" "}
+            Pad (Shift+click = mirror)
+          </div>
+          <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">T</kbd>{" "}
+            Text
+          </div>
+          <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">
+              ⌘C
+            </kbd>{" "}
+            Copy /{" "}
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">
+              ⌘V
+            </kbd>{" "}
+            Paste /{" "}
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">
+              ⌘D
+            </kbd>{" "}
+            Duplicate
+          </div>
+          <div>
+            <kbd className="rounded bg-slate-100 px-1 dark:bg-slate-800">
+              Del
+            </kbd>{" "}
+            Delete selected
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function DrawFootprintRightSidebar(): ReactElement {
+  const pads = useFootprintEditorStore((s) => s.pads);
+  const graphics = useFootprintEditorStore((s) => s.graphics);
+
+  return (
+    <>
+      <PadPropertyPanel />
+
+      <section className="space-y-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+          Drawing Summary
+        </h3>
+        <dl className="space-y-1.5 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-slate-500 dark:text-slate-400">Pads</dt>
+            <dd className="font-medium text-slate-700 dark:text-slate-100">
+              {pads.length}
+            </dd>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-slate-500 dark:text-slate-400">Graphics</dt>
+            <dd className="font-medium text-slate-700 dark:text-slate-100">
+              {graphics.length}
+            </dd>
+          </div>
+        </dl>
+        {pads.length === 0 && graphics.length === 0 && (
+          <div className="text-xs text-slate-400 dark:text-slate-500">
+            Use the Pad (D) and drawing tools to create a footprint.
+          </div>
+        )}
+      </section>
     </>
   );
 }

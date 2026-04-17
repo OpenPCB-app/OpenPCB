@@ -78,6 +78,7 @@ export interface CommitGeneratedBody {
     source: FootprintRenderSource;
     metadata: GeneratedFootprintMetadata;
   };
+  footprintProvenance?: "generated" | "drawn";
   component: { name: string; description: string };
 }
 
@@ -112,10 +113,14 @@ export interface CommitDrawnBody {
     source: SymbolRenderSource;
     referencePrefix: string;
   };
-  footprintMode: "import" | "generated" | "none";
+  footprintMode: "import" | "generated" | "drawn" | "none";
   footprintFiles?: { fileName: string; content: string }[];
   footprintSelection?: { footprintId: string };
   generatedFootprint?: {
+    source: FootprintRenderSource;
+    metadata: GeneratedFootprintMetadata;
+  };
+  drawnFootprint?: {
     source: FootprintRenderSource;
     metadata: GeneratedFootprintMetadata;
   };

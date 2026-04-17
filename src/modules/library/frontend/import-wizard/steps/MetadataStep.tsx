@@ -2,6 +2,7 @@ import { memo, type ReactElement } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useImportWizardStore } from "../useImportWizardStore";
 import { useSymbolEditorStore } from "../editor";
+import { useFootprintEditorStore } from "../footprint-editor";
 
 export const MetadataStep = memo(function MetadataStep(): ReactElement {
   const {
@@ -44,12 +45,15 @@ export const MetadataStep = memo(function MetadataStep(): ReactElement {
       : (inspectData?.symbols.find((s) => s.id === selectedSymbolId)
           ?.pinCount ?? null);
 
-  // Pad count: preset-generated, or parsed footprint pad count
+  // Pad count: drawn editor, preset-generated, or parsed footprint
+  const drawnFpPadCount = useFootprintEditorStore((s) => s.pads.length);
   const padCount =
-    footprintSource === "preset" && generatedFootprint
-      ? generatedFootprint.source.pads.length
-      : (inspectData?.footprints.find((f) => f.id === selectedFootprintId)
-          ?.padCount ?? null);
+    footprintSource === "draw"
+      ? drawnFpPadCount
+      : footprintSource === "preset" && generatedFootprint
+        ? generatedFootprint.source.pads.length
+        : (inspectData?.footprints.find((f) => f.id === selectedFootprintId)
+            ?.padCount ?? null);
 
   const countMismatch =
     expectedPinCount !== null &&

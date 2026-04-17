@@ -26,6 +26,8 @@ export interface CommitGeneratedRequest {
       tags: string[];
     };
   };
+  /** "generated" (default) for IPC presets; "drawn" for user-drawn footprints with imported symbol. */
+  footprintProvenance?: "generated" | "drawn";
   component: { name: string; description: string };
 }
 
@@ -106,7 +108,10 @@ export function commitGeneratedImport(
   const footprintId = crypto.randomUUID();
   const componentId = crypto.randomUUID();
 
-  const tags = dedupeTags([...fpMeta.tags, "generated", "ipc-7351b"]);
+  const isDrawn = input.footprintProvenance === "drawn";
+  const tags = isDrawn
+    ? dedupeTags([...fpMeta.tags, "drawn-footprint"])
+    : dedupeTags([...fpMeta.tags, "generated", "ipc-7351b"]);
 
   const symbolDataJson = JSON.stringify({
     provenance: {
@@ -127,8 +132,8 @@ export function commitGeneratedImport(
 
   const footprintDataJson = JSON.stringify({
     provenance: {
-      sourceKind: "generated",
-      sourceFormat: "ipc-7351b",
+      sourceKind: isDrawn ? "drawn" : "generated",
+      sourceFormat: isDrawn ? "openpcb-editor" : "ipc-7351b",
       fileName: null,
       importedAt: now,
       sourceHash: sourceHash,
@@ -138,7 +143,9 @@ export function commitGeneratedImport(
       id: footprintId,
       fileName: "",
       name: fpMeta.name,
-      description: `Generated ${fpMeta.name} footprint (IPC-7351B)`,
+      description: isDrawn
+        ? `Drawn ${fpMeta.name} footprint`
+        : `Generated ${fpMeta.name} footprint (IPC-7351B)`,
       mountType: fpMeta.mountType,
       padCount: fpSource.pads.length,
       packageCode: fpMeta.packageCode,

@@ -52,3 +52,20 @@ export function createDefaultLayerVisibility(): Set<PcbLayerId> {
     "Edge.Cuts",
   ]);
 }
+
+/**
+ * Soft tool hints per layer — tools that are "conventional" for each layer.
+ * Used by toolbar to show a subtle indicator on recommended tools.
+ * No hard restrictions — all tools remain available on every layer.
+ */
+export const LAYER_TOOL_HINTS: Record<string, ReadonlySet<string>> = {
+  "F.Cu": new Set(["pad", "select"]),
+  "B.Cu": new Set(["pad", "select"]),
+  "F.SilkS": new Set(["line", "rect", "circle", "arc", "text", "select"]),
+  "B.SilkS": new Set(["line", "rect", "circle", "arc", "text", "select"]),
+  "F.CrtYd": new Set(["line", "rect", "select"]),
+  "B.CrtYd": new Set(["line", "rect", "select"]),
+  "F.Fab": new Set(["line", "rect", "circle", "arc", "text", "select"]),
+  "B.Fab": new Set(["line", "rect", "circle", "arc", "text", "select"]),
+  "Edge.Cuts": new Set(["line", "arc", "circle", "select"]),
+};

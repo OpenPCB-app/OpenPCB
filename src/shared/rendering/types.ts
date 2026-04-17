@@ -206,4 +206,6 @@ export interface BuildSymbolRenderModelOptions {
 export interface BuildFootprintRenderModelOptions {
   readonly includeLayerNames?: readonly string[];
   readonly includePadLayerNames?: readonly string[];
+  /** Reserved for live editors. Footprint builder currently preserves origin by default (no translation applied), so this is a semantic no-op — but it aligns the API with `BuildSymbolRenderModelOptions.preserveOrigin`. */
+  readonly preserveOrigin?: boolean;
 }

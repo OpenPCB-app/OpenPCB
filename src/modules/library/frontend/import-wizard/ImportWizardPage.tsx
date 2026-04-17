@@ -26,6 +26,7 @@ import {
   inspectKicadImport,
 } from "./import-api";
 import { useSymbolEditorStore } from "./editor";
+import { useFootprintEditorStore } from "./footprint-editor";
 
 const STEP_SYMBOL = 0;
 const STEP_FOOTPRINT = 1;
@@ -234,18 +235,35 @@ export function ImportWizardPage({
       let result;
 
       if (isDrawMode) {
-        // Drawn symbol path: footprint from preset, imported files, or none.
+        // Drawn symbol path: footprint from preset, imported files, drawn, or none.
         const editorState = useSymbolEditorStore.getState();
         const symbolRenderSource = editorState.toSymbolRenderSource();
 
-        let footprintMode: "import" | "generated" | "none" = "none";
+        let footprintMode: "import" | "generated" | "drawn" | "none" = "none";
         let footprintFilesPayload:
           | { fileName: string; content: string }[]
           | undefined;
         let footprintSelection: { footprintId: string } | undefined;
         let generatedFp;
+        let drawnFp;
 
-        if (store.footprintSource === "preset" && store.generatedFootprint) {
+        if (store.footprintSource === "draw") {
+          const fpEditor = useFootprintEditorStore.getState();
+          const fpSource = fpEditor.toFootprintRenderSource();
+          footprintMode = "drawn";
+          drawnFp = {
+            source: fpSource,
+            metadata: {
+              name: fpEditor.footprintName || "FP",
+              mountType: fpEditor.derivedMountType(),
+              packageCode: { imperial: null, metric: null },
+              tags: ["drawn-footprint"],
+            },
+          };
+        } else if (
+          store.footprintSource === "preset" &&
+          store.generatedFootprint
+        ) {
           footprintMode = "generated";
           generatedFp = {
             source: store.generatedFootprint.source,
@@ -278,6 +296,38 @@ export function ImportWizardPage({
             footprintFiles: footprintFilesPayload,
             footprintSelection,
             generatedFootprint: generatedFp,
+            drawnFootprint: drawnFp,
+            component: {
+              name: store.componentName.trim(),
+              description: store.description.trim(),
+            },
+          },
+          controller.signal,
+        );
+      } else if (store.footprintSource === "draw") {
+        // Imported symbol + drawn footprint → use generated endpoint with provenance
+        const symbolLibrary = {
+          fileName: symbolFile!.name,
+          content: await symbolFile!.text(),
+        };
+        const fpEditor = useFootprintEditorStore.getState();
+        const fpSource = fpEditor.toFootprintRenderSource();
+        result = await commitGeneratedImportRequest(
+          backendURL,
+          moduleId,
+          {
+            symbolLibrary,
+            selection: { symbolId: store.selectedSymbolId },
+            generatedFootprint: {
+              source: fpSource,
+              metadata: {
+                name: fpEditor.footprintName || "FP",
+                mountType: fpEditor.derivedMountType(),
+                packageCode: { imperial: null, metric: null },
+                tags: ["drawn-footprint"],
+              },
+            },
+            footprintProvenance: "drawn",
             component: {
               name: store.componentName.trim(),
               description: store.description.trim(),
@@ -351,6 +401,7 @@ export function ImportWizardPage({
       } else {
         store.reset();
         useSymbolEditorStore.getState().reset();
+        useFootprintEditorStore.getState().reset();
         onClose();
       }
     } catch (err) {
@@ -388,6 +439,7 @@ export function ImportWizardPage({
       commitAbortRef.current?.abort();
       useImportWizardStore.getState().reset();
       useSymbolEditorStore.getState().reset();
+      useFootprintEditorStore.getState().reset();
       onClose();
     },
     [onClose],

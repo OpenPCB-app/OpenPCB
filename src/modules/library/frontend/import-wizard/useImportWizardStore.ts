@@ -37,7 +37,7 @@ export interface ImportWizardState {
 
   symbolSource: "import" | "draw";
 
-  footprintSource: "import" | "preset";
+  footprintSource: "import" | "preset" | "draw";
   presetFamily: PackageFamily | null;
   presetSize: string | null;
   presetDensity: DensityLevel;

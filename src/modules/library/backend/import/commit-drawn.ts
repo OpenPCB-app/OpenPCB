@@ -22,12 +22,22 @@ export interface CommitDrawnRequest {
     source: SymbolRenderSource;
     referencePrefix: string;
   };
-  footprintMode: "import" | "generated" | "none";
+  footprintMode: "import" | "generated" | "drawn" | "none";
   // For import mode
   footprintFiles?: { fileName: string; content: string }[];
   footprintSelection?: { footprintId: string };
-  // For generated mode
+  // For generated or drawn mode
   generatedFootprint?: {
+    source: FootprintRenderSource;
+    metadata: {
+      name: string;
+      mountType: string;
+      packageCode: { imperial: string | null; metric: string | null };
+      tags: string[];
+    };
+  };
+  // For drawn mode (identical shape to generatedFootprint)
+  drawnFootprint?: {
     source: FootprintRenderSource;
     metadata: {
       name: string;
@@ -140,6 +150,38 @@ export function commitDrawnImport(
         fileName: "",
         name: fpMeta.name,
         description: `Generated ${fpMeta.name} footprint`,
+        mountType: fpMeta.mountType,
+        padCount: fpSource.pads.length,
+        packageCode: fpMeta.packageCode,
+        tags: fpMeta.tags,
+        sourceHash: fpHash,
+        warnings: [],
+        preview: fpModel,
+      },
+      raw: { source: fpSource },
+    });
+  } else if (input.footprintMode === "drawn" && input.drawnFootprint) {
+    const fpSource = input.drawnFootprint.source;
+    const fpMeta = input.drawnFootprint.metadata;
+    const fpModel = buildFootprintRenderModel(fpSource);
+    const fpHash = hashString(JSON.stringify(fpSource));
+    footprintName = fpMeta.name;
+    tags = dedupeTags([...fpMeta.tags, "drawn-symbol", "drawn-footprint"]);
+
+    footprintDataJson = JSON.stringify({
+      provenance: {
+        sourceKind: "drawn",
+        sourceFormat: "openpcb-editor",
+        fileName: null,
+        importedAt: now,
+        sourceHash: fpHash,
+      },
+      parser: { warnings: [] },
+      normalized: {
+        id: footprintId,
+        fileName: "",
+        name: fpMeta.name,
+        description: `Drawn ${fpMeta.name} footprint`,
         mountType: fpMeta.mountType,
         padCount: fpSource.pads.length,
         packageCode: fpMeta.packageCode,
