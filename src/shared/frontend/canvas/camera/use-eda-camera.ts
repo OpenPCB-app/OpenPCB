@@ -9,14 +9,14 @@ const TRACKPAD_PIXEL_DELTA_THRESHOLD = 10;
 export interface EdaWheelOptions {
   readonly enabled?: boolean;
   readonly pinchZoom?: boolean;
-  readonly ignoreTrackpadScroll?: boolean;
+  readonly trackpadScroll?: "ignore" | "pan" | "zoom";
   readonly zoomAnchor?: "cursor" | "center";
 }
 
 export const DEFAULT_EDA_WHEEL_OPTIONS: Required<EdaWheelOptions> = {
   enabled: true,
   pinchZoom: true,
-  ignoreTrackpadScroll: true,
+  trackpadScroll: "pan",
   zoomAnchor: "cursor",
 };
 
@@ -34,7 +34,12 @@ export function isLikelyTrackpadWheelEvent(e: WheelEvent): boolean {
   const maxDelta = Math.max(absX, absY);
   const hasFractional = absX % 1 !== 0 || absY % 1 !== 0;
 
-  return hasFractional || (maxDelta > 0 && maxDelta < TRACKPAD_PIXEL_DELTA_THRESHOLD);
+  const hasHorizontalComponent = absX > 0.5;
+  return (
+    hasFractional ||
+    hasHorizontalComponent ||
+    (maxDelta > 0 && maxDelta < TRACKPAD_PIXEL_DELTA_THRESHOLD)
+  );
 }
 
 export function normalizeZoomDelta(e: WheelEvent): number {
@@ -117,8 +122,18 @@ export function useEdaWheel(options: EdaWheelOptions = {}): void {
         return;
       }
 
-      if (!isPinch && activeOptions.ignoreTrackpadScroll && isLikelyTrackpadWheelEvent(e)) {
-        return;
+      if (!isPinch && isLikelyTrackpadWheelEvent(e)) {
+        if (activeOptions.trackpadScroll === "ignore") return;
+        if (activeOptions.trackpadScroll === "pan") {
+          const cam = cameraRef.current;
+          const { dx, dy } = normalizePanDelta(e);
+          cam.position.x += dx / cam.zoom;
+          cam.position.y -= dy / cam.zoom;
+          cam.updateProjectionMatrix();
+          invalidate();
+          return;
+        }
+        // "zoom" falls through to zoom logic below
       }
 
       const cam = cameraRef.current;
@@ -165,7 +180,10 @@ export function fitCameraToBounds(
 
   const zoom = Math.min(
     MAX_ZOOM,
-    Math.max(MIN_ZOOM, Math.min(usableWidth / contentWidth, usableHeight / contentHeight)),
+    Math.max(
+      MIN_ZOOM,
+      Math.min(usableWidth / contentWidth, usableHeight / contentHeight),
+    ),
   );
 
   camera.position.x = (bounds.minX + bounds.maxX) / 2;

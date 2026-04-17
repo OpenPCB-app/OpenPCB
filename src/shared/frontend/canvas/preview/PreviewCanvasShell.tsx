@@ -12,7 +12,7 @@ const PREVIEW_NAVIGATION = {
   wheel: {
     enabled: true,
     pinchZoom: true,
-    ignoreTrackpadScroll: true,
+    trackpadScroll: "pan" as const,
     zoomAnchor: "cursor" as const,
   },
   middleButtonPan: true,
