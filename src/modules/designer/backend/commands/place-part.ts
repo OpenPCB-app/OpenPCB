@@ -2,7 +2,7 @@ import type {
   DesignerPin,
   DesignerPlacedPart,
   LibraryComponentPlacementDetail,
-} from "../../../../contracts/modules/sdk";
+} from "../../../../sdks";
 import type { PersistedPartPayload } from "../payload-types";
 
 const NM_PER_MM = 1_000_000;

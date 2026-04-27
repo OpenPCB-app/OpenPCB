@@ -14,7 +14,7 @@ import type {
   LibrarySymbol,
   LibrarySymbolPlacementSnapshot,
   LibrarySymbolDetail,
-} from "../../../core/contracts/modules/sdk";
+} from "../../../sdks/library";
 import type {
   FootprintRenderModel,
   SymbolRenderModel,

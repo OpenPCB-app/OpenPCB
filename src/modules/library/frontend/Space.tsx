@@ -7,7 +7,7 @@ import {
   type ReactElement,
 } from "react";
 import { Filter, Plus, Search, Trash2, X, type LucideIcon } from "lucide-react";
-import type { LibraryComponent } from "../../../core/contracts/modules/sdk";
+import type { LibraryComponent } from "../../../sdks/library";
 import { ComponentDetailPage } from "./ComponentDetailPage";
 import { ImportWizardPage } from "./import-wizard";
 import { LibraryCard } from "./LibraryCard";

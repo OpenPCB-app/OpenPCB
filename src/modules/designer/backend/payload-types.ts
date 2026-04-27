@@ -1,7 +1,7 @@
 import type {
   DesignerPin,
   LibraryComponentPlacementDetail,
-} from "../../../contracts/modules/sdk";
+} from "../../../sdks";
 
 export interface PersistedPartPayload {
   id: string;

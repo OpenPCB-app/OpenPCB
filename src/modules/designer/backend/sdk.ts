@@ -1,7 +1,7 @@
 import type {
   CoreBackendModuleContext,
 } from "../../../core/contracts/modules/backend-module";
-import type { DesignerSDK } from "../../../contracts/modules/sdk";
+import type { DesignerSDK } from "../../../sdks/designer";
 import { createDesignerStore } from "./store";
 
 export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {

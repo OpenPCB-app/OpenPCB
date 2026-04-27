@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import type { LibraryComponent } from "../../../core/contracts/modules/sdk";
+import type { LibraryComponent } from "../../../sdks/library";
 
 const SYMBOL_GLYPHS: Array<[RegExp, string]> = [
   [/(^|[-_/])ground($|[-_/])/, "GND"],

@@ -10,9 +10,9 @@ import type {
   DesignerSchematicProjection,
   LibraryComponent,
   LibraryComponentPlacementDetail,
-} from "../../../../contracts/modules/sdk";
+} from "../../../../sdks";
 import { createDesignerApi } from "../api";
-import type { DesignerView, ToolMode } from "../types";
+import type { DesignerView } from "../types";
 
 export interface DesignerWorkspaceState {
   loadingDesigns: boolean;
@@ -24,10 +24,8 @@ export interface DesignerWorkspaceState {
   selectedDesignId: string | null;
   projection: DesignerSchematicProjection | null;
   activeView: DesignerView;
-  tool: ToolMode;
   query: string;
   components: LibraryComponent[];
-  selectedComponent: LibraryComponentPlacementDetail | null;
   selectedPartId: string | null;
   selectedPinId: string | null;
   selectedLabelId: string | null;
@@ -46,11 +44,9 @@ export interface DesignerWorkspaceActions {
   selectDesign(designId: string | null): void;
   refreshProjection(): Promise<void>;
   setActiveView(view: DesignerView): void;
-  setTool(tool: ToolMode): void;
   setQuery(value: string): void;
   setLabelDraftText(value: string): void;
   searchComponents(): Promise<void>;
-  chooseComponent(componentId: string): Promise<void>;
   beginDragComponent(componentId: string): Promise<void>;
   setDragGhostNm(point: { x: number; y: number } | null): void;
   clearDragState(): void;
@@ -92,6 +88,8 @@ function commandErrorMessage(result: Exclude<DesignerDispatchResult, { ok: true 
 export function useDesignerWorkspace(params: {
   backendURL?: string | null;
   moduleId: string;
+  initialDesignId?: string;
+  onNotify?: (message: string, variant?: "info" | "success" | "warning" | "error") => void;
 }): {
   state: DesignerWorkspaceState;
   actions: DesignerWorkspaceActions;
@@ -102,6 +100,8 @@ export function useDesignerWorkspace(params: {
     [params.backendURL, params.moduleId],
   );
 
+  const notify = params.onNotify;
+
   const [loadingDesigns, setLoadingDesigns] = useState(false);
   const [creatingDesign, setCreatingDesign] = useState(false);
   const [loadingProjection, setLoadingProjection] = useState(false);
@@ -111,11 +111,8 @@ export function useDesignerWorkspace(params: {
   const [selectedDesignId, setSelectedDesignId] = useState<string | null>(null);
   const [projection, setProjection] = useState<DesignerSchematicProjection | null>(null);
   const [activeView, setActiveView] = useState<DesignerView>("schem");
-  const [tool, setTool] = useState<ToolMode>("select");
   const [query, setQuery] = useState("");
   const [components, setComponents] = useState<LibraryComponent[]>([]);
-  const [selectedComponent, setSelectedComponent] =
-    useState<LibraryComponentPlacementDetail | null>(null);
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
@@ -142,22 +139,33 @@ export function useDesignerWorkspace(params: {
     selectedDesignIdRef.current = selectedDesignId;
   }, [selectedDesignId]);
 
+  useEffect(() => {
+    if (params.initialDesignId && params.initialDesignId !== selectedDesignId) {
+      setSelectedDesignId(params.initialDesignId);
+    }
+  }, [params.initialDesignId]);
+
   const refreshDesigns = useCallback(async () => {
     setLoadingDesigns(true);
     setError(null);
     try {
       const next = await api.listDesigns();
       setDesigns(next);
-      if (!selectedDesignId && next[0]) {
-        setSelectedDesignId(next[0].id);
+      if (!selectedDesignId) {
+        if (params.initialDesignId && next.some((d) => d.id === params.initialDesignId)) {
+          setSelectedDesignId(params.initialDesignId);
+        } else if (next[0]) {
+          setSelectedDesignId(next[0].id);
+        }
       }
     } catch (listError) {
-      setError(listError instanceof Error ? listError.message : "Failed to load designs");
+      const message = listError instanceof Error ? listError.message : "Failed to load designs";
+      setError(message);
       setDesigns([]);
     } finally {
       setLoadingDesigns(false);
     }
-  }, [api, selectedDesignId]);
+  }, [api, selectedDesignId, params.initialDesignId]);
 
   const refreshProjectionForDesign = useCallback(
     async (designId: string) => {
@@ -238,12 +246,14 @@ export function useDesignerWorkspace(params: {
       const created = await api.createDesign();
       await refreshDesigns();
       setSelectedDesignId(created.id);
+      notify?.("Design created", "success");
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Failed to create design");
+      const message = createError instanceof Error ? createError.message : "Failed to create design";
+      setError(message);
     } finally {
       setCreatingDesign(false);
     }
-  }, [api, refreshDesigns]);
+  }, [api, refreshDesigns, notify]);
 
   const searchComponents = useCallback(async () => {
     setSearchingComponents(true);
@@ -252,25 +262,12 @@ export function useDesignerWorkspace(params: {
       const found = await api.searchComponents(query, 30);
       setComponents(found);
     } catch (searchError) {
-      setError(searchError instanceof Error ? searchError.message : "Failed to search components");
+      const message = searchError instanceof Error ? searchError.message : "Failed to search components";
+      setError(message);
     } finally {
       setSearchingComponents(false);
     }
   }, [api, query]);
-
-  const chooseComponent = useCallback(
-    async (componentId: string) => {
-      setError(null);
-      try {
-        const detail = await api.resolvePlacement(componentId);
-        setSelectedComponent(detail);
-        setTool("place");
-      } catch (resolveError) {
-        setError(resolveError instanceof Error ? resolveError.message : "Failed to resolve component");
-      }
-    },
-    [api],
-  );
 
   const beginDragComponent = useCallback(
     async (componentId: string) => {
@@ -298,7 +295,6 @@ export function useDesignerWorkspace(params: {
           return;
         }
         setDragPlacementDetail(detail);
-        setSelectedComponent(detail);
       } finally {
         if (dragResolveComponentRef.current === componentId) {
           dragResolvePromiseRef.current = null;
@@ -414,10 +410,8 @@ export function useDesignerWorkspace(params: {
       selectedDesignId,
       projection,
       activeView,
-      tool,
       query,
       components,
-      selectedComponent,
       selectedPartId,
       selectedPinId,
       selectedLabelId,
@@ -435,11 +429,9 @@ export function useDesignerWorkspace(params: {
       selectDesign: setSelectedDesignId,
       refreshProjection,
       setActiveView,
-      setTool,
       setQuery,
       setLabelDraftText,
       searchComponents,
-      chooseComponent,
       beginDragComponent,
       setDragGhostNm,
       clearDragState,

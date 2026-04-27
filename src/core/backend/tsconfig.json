@@ -19,6 +19,7 @@
     "modules/**/*.ts",
     "contracts/**/*.ts",
     "../../contracts/**/*.ts",
+    "../../sdks/**/*.ts",
     "../../shared/domain/**/*.ts",
     "../../shared/rendering/types.ts",
     "tests/**/*.ts"

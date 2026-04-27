@@ -21,7 +21,7 @@ function ModuleStateMessage({
   );
 }
 
-export function ModuleScreen({ moduleId }: { moduleId: string }) {
+export function ModuleScreen({ moduleId, designId }: { moduleId: string; designId?: string }) {
   const { moduleRegistry } = useBootstrap();
 
   if (!moduleRegistry) {
@@ -54,5 +54,5 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
     );
   }
 
-  return <ModuleSpaceHost module={module} />;
+  return <ModuleSpaceHost module={module} designId={designId} />;
 }

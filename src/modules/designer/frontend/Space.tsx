@@ -11,8 +11,10 @@ import { DesignerPlaceholderView } from "./components/DesignerPlaceholderView";
 import { DesignerSidebar } from "./components/DesignerSidebar";
 import { DesignerStatusBar } from "./components/DesignerStatusBar";
 import { SchematicCanvas, type SchematicCanvasHandle } from "./components/SchematicCanvas";
+import { ToastProvider, useToast } from "./hooks/use-toast";
 import { useDesignerWorkspace } from "./hooks/useDesignerWorkspace";
 import type { ModuleSpaceProps } from "./types";
+import { SCHEMATIC_GRID_MM } from "./types";
 
 const MIN_LEFT = 240;
 const MAX_LEFT = 520;
@@ -21,11 +23,25 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-export function DesignerSpace({ moduleId, backendURL }: ModuleSpaceProps): ReactElement {
-  const { state, actions } = useDesignerWorkspace({ backendURL, moduleId });
+function CanvasEmptyState({ message }: { message: string }): ReactElement {
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-slate-950">
+      <p className="text-sm text-slate-500 dark:text-slate-400">{message}</p>
+    </div>
+  );
+}
+
+function DesignerSpaceInner({ moduleId, backendURL, designId }: ModuleSpaceProps): ReactElement {
+  const { addToast } = useToast();
+  const { state, actions } = useDesignerWorkspace({
+    backendURL,
+    moduleId,
+    initialDesignId: designId,
+    onNotify: addToast,
+  });
   const [leftWidth, setLeftWidth] = useState(300);
   const [zoomPercent, setZoomPercent] = useState(70);
-  const [gridVisible, setGridVisible] = useState(true);
+  const [gridVisible, setGridVisible] = useState(false);
   const canvasRef = useRef<SchematicCanvasHandle | null>(null);
 
   const selectedDesign = useMemo(
@@ -67,12 +83,45 @@ export function DesignerSpace({ moduleId, backendURL }: ModuleSpaceProps): React
     window.addEventListener("pointercancel", stop);
   };
 
+  const canvasContent = () => {
+    if (!state.selectedDesignId) {
+      return (
+        <CanvasEmptyState message="Select or create a design to start editing" />
+      );
+    }
+    if (!state.projection) {
+      return <CanvasEmptyState message="Loading schematic..." />;
+    }
+    return (
+      <SchematicCanvas
+        ref={canvasRef}
+        projection={state.projection}
+        selectedPartId={state.selectedPartId}
+        selectedPinId={state.selectedPinId}
+        selectedLabelId={state.selectedLabelId}
+        wireSourcePinId={state.wireSourcePinId}
+        labelDraftText={state.labelDraftText}
+        gridVisible={gridVisible}
+        draggingComponentId={state.draggingComponentId}
+        dragPlacementLoading={state.dragPlacementLoading}
+        dragPlacementDetail={state.dragPlacementDetail}
+        dragGhostNm={state.dragGhostNm}
+        actions={actions}
+        onZoomChange={setZoomPercent}
+      />
+    );
+  };
+
   return (
     <div className="flex h-full w-full flex-col bg-slate-950">
       <DesignerHeader
         activeView={state.activeView}
         selectedDesign={selectedDesign}
+        designs={state.designs}
+        creatingDesign={state.creatingDesign}
         onViewChange={actions.setActiveView}
+        onSelectDesign={actions.selectDesign}
+        onCreateDesign={actions.createDesign}
       />
 
       {state.error ? (
@@ -96,40 +145,18 @@ export function DesignerSpace({ moduleId, backendURL }: ModuleSpaceProps): React
 
         <div className="relative min-h-0 min-w-0 flex-1">
           {state.activeView === "schem" ? (
-            <SchematicCanvas
-              ref={canvasRef}
-              projection={state.projection}
-              tool={state.tool}
-              selectedPartId={state.selectedPartId}
-              selectedPinId={state.selectedPinId}
-              selectedLabelId={state.selectedLabelId}
-              selectedComponent={state.selectedComponent}
-              wireSourcePinId={state.wireSourcePinId}
-              labelDraftText={state.labelDraftText}
-              gridVisible={gridVisible}
-              draggingComponentId={state.draggingComponentId}
-              dragPlacementLoading={state.dragPlacementLoading}
-              dragPlacementDetail={state.dragPlacementDetail}
-              dragGhostNm={state.dragGhostNm}
-              actions={actions}
-              onZoomChange={setZoomPercent}
-            />
+            canvasContent()
           ) : (
             <DesignerPlaceholderView view={state.activeView} />
           )}
 
-          {state.activeView === "schem" ? (
+          {state.activeView === "schem" && state.projection ? (
             <div className="pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2">
               <div className="pointer-events-auto">
                 <DesignerFloatingToolbar
-                  tool={state.tool}
                   gridVisible={gridVisible}
                   canUndo={false}
                   canRedo={false}
-                  onToolChange={(tool) => {
-                    actions.setTool(tool);
-                    actions.setWireSourcePinId(null);
-                  }}
                   onUndo={() => {
                     actions.setError("Undo will be enabled with command history UI");
                   }}
@@ -148,11 +175,18 @@ export function DesignerSpace({ moduleId, backendURL }: ModuleSpaceProps): React
       </div>
 
       <DesignerStatusBar
-        gridMm={0.5}
+        gridMm={SCHEMATIC_GRID_MM}
         zoom={zoomPercent}
-        tool={state.tool}
         selection={selectionSummary}
       />
     </div>
+  );
+}
+
+export function DesignerSpace(props: ModuleSpaceProps): ReactElement {
+  return (
+    <ToastProvider>
+      <DesignerSpaceInner {...props} />
+    </ToastProvider>
   );
 }

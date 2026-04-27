@@ -17,7 +17,6 @@ export function DesignerSidebar({ state, actions }: DesignerSidebarProps): React
     query,
     searchingComponents,
     components,
-    selectedComponent,
     draggingComponentId,
   } = state;
 
@@ -54,7 +53,6 @@ export function DesignerSidebar({ state, actions }: DesignerSidebarProps): React
       <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
         <ul className="space-y-1.5">
           {components.map((component) => {
-            const active = selectedComponent?.component.id === component.id;
             const dragging = draggingComponentId === component.id;
             return (
               <li key={component.id}>
@@ -73,21 +71,10 @@ export function DesignerSidebar({ state, actions }: DesignerSidebarProps): React
                     });
                   }}
                   onDragEnd={() => actions.clearDragState()}
-                  onClick={() => {
-                    void actions.chooseComponent(component.id).catch((chooseError) => {
-                      actions.setError(
-                        chooseError instanceof Error
-                          ? chooseError.message
-                          : "Failed to select component",
-                      );
-                    });
-                  }}
                   className={`flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors ${
                     dragging
                       ? "border-cyan-400 bg-cyan-50 dark:border-cyan-700 dark:bg-cyan-950/40"
-                      : active
-                        ? "border-violet-400 bg-violet-50 dark:border-violet-700 dark:bg-violet-950/40"
-                        : "border-slate-200 bg-white hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
+                      : "border-slate-200 bg-white hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
                   }`}
                 >
                   <GripVertical className="h-3.5 w-3.5 shrink-0 text-slate-400" />

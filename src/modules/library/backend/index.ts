@@ -1,5 +1,5 @@
 import type { ModuleDefinition } from "../../../core/contracts/modules/backend-module";
-import { MODULE_SDK_TOKENS } from "../../../core/contracts/modules/sdk-map";
+import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { buildSdk } from "./queries";
 import { registerRoutes } from "./routes";
 

@@ -10,6 +10,7 @@ export interface ModuleSpaceProps {
   moduleId: string;
   namespace: string;
   backendURL: string | null;
+  designId?: string;
 }
 
 /**

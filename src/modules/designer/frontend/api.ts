@@ -5,7 +5,7 @@ import type {
   DesignerSchematicProjection,
   LibraryComponent,
   LibraryComponentPlacementDetail,
-} from "../../../contracts/modules/sdk";
+} from "../../../sdks";
 
 function buildModuleUrl(
   backendURL: string | null | undefined,
@@ -18,9 +18,23 @@ function buildModuleUrl(
   return `${backendURL}/api/modules/${moduleId}${path}`;
 }
 
+interface ProblemDetails {
+  type: string;
+  title: string;
+  status: number;
+  detail?: string;
+  instance?: string;
+  [key: string]: unknown;
+}
+
 async function fetchData<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/problem+json")) {
+      const problem = (await response.json()) as ProblemDetails;
+      throw new Error(problem.detail ?? problem.title ?? `HTTP ${response.status}`);
+    }
     throw new Error(`HTTP ${response.status}`);
   }
   const payload = (await response.json()) as { data?: T };

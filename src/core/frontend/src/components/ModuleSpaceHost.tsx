@@ -10,6 +10,7 @@ interface FrontendModuleEntryFile {
 type ModuleHostProps = {
   module: ModuleRegistryItem;
   backendURL: string | null;
+  designId?: string;
 };
 
 /**
@@ -61,11 +62,12 @@ function resolveModuleComponent(
     const loaded = await loader();
     const entry = loaded.default;
     const Space = entry.Space;
-    const Host: ComponentType<ModuleHostProps> = ({ module, backendURL }) => (
+    const Host: ComponentType<ModuleHostProps> = ({ module, backendURL, designId }) => (
       <Space
         moduleId={module.id}
         namespace={module.namespace}
         backendURL={backendURL}
+        designId={designId}
       />
     );
     return { default: Host };
@@ -75,7 +77,7 @@ function resolveModuleComponent(
   return LazyHost;
 }
 
-export function ModuleSpaceHost({ module }: { module: ModuleRegistryItem }) {
+export function ModuleSpaceHost({ module, designId }: { module: ModuleRegistryItem; designId?: string }) {
   const { backendURL } = useBootstrap();
   const Component = useMemo(
     () => resolveModuleComponent(module.id),
@@ -92,7 +94,7 @@ export function ModuleSpaceHost({ module }: { module: ModuleRegistryItem }) {
 
   return (
     <Suspense fallback={<ModuleLoading moduleId={module.id} />}>
-      <Component module={module} backendURL={backendURL} />
+      <Component module={module} backendURL={backendURL} designId={designId} />
     </Suspense>
   );
 }

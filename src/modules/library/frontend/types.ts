@@ -1,4 +1,4 @@
-import type { LibraryComponent } from "../../../core/contracts/modules/sdk";
+import type { LibraryComponent } from "../../../sdks/library";
 import type {
   FootprintRenderModel,
   SymbolRenderModel,

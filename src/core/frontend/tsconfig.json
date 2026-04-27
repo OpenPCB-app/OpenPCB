@@ -17,8 +17,9 @@
     "vite.config.ts",
     "../contracts/**/*.ts",
     "../../contracts/**/*.ts",
+    "../../sdks/**/*.ts",
     "../../shared/domain/**/*.ts",
     "../../shared/rendering/types.ts"
   ],
-  "exclude": ["../backend/**", "../../src-react/**", "../../src-ts/**", "../../modules/**"]
+  "exclude": ["../backend/**", "../../src-react/**", "../../src-ts/**", "../../modules/**", "**/*.test.ts", "**/*.test.tsx", "**/*.test.js", "**/*.test.jsx"]
 }

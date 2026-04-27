@@ -33,12 +33,10 @@ import type {
   DesignerSchematicProjection,
   DesignerWire,
   LibraryComponentPlacementDetail,
-} from "../../../../contracts/modules/sdk";
+} from "../../../../sdks";
 import type { DesignerWorkspaceActions } from "../hooks/useDesignerWorkspace";
-import type { ToolMode } from "../types";
+import { SCHEMATIC_GRID_NM, SCHEMATIC_GRID_MM } from "../types";
 import { COMPONENT_DND_MIME } from "./DesignerSidebar";
-
-const GRID_SIZE_NM = 500_000;
 const PIN_HIT_MM = 0.35;
 const WIRE_HIT_MM = 0.3;
 const LABEL_HIT_MM = 1.2;
@@ -86,11 +84,9 @@ export interface SchematicCanvasHandle {
 
 interface SchematicCanvasProps {
   projection: DesignerSchematicProjection | null;
-  tool: ToolMode;
   selectedPartId: string | null;
   selectedPinId: string | null;
   selectedLabelId: string | null;
-  selectedComponent: LibraryComponentPlacementDetail | null;
   wireSourcePinId: string | null;
   labelDraftText: string;
   gridVisible: boolean;
@@ -124,8 +120,8 @@ function toNm(pointMm: PointMm): PointNm {
 
 function snapNm(pointNm: PointNm): PointNm {
   return {
-    x: Math.round(pointNm.x / GRID_SIZE_NM) * GRID_SIZE_NM,
-    y: Math.round(pointNm.y / GRID_SIZE_NM) * GRID_SIZE_NM,
+    x: Math.round(pointNm.x / SCHEMATIC_GRID_NM) * SCHEMATIC_GRID_NM,
+    y: Math.round(pointNm.y / SCHEMATIC_GRID_NM) * SCHEMATIC_GRID_NM,
   };
 }
 
@@ -245,6 +241,51 @@ function worldBoundsForPart(part: DesignerPlacedPart, positionNm: PointNm): {
     maxX: Math.max(...xs),
     maxY: Math.max(...ys),
   };
+}
+
+function computeProjectionBoundsMm(
+  projection: DesignerSchematicProjection,
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const part of projection.parts) {
+    const bounds = worldBoundsForPart(part, part.positionNm);
+    if (bounds) {
+      minX = Math.min(minX, bounds.minX);
+      minY = Math.min(minY, bounds.minY);
+      maxX = Math.max(maxX, bounds.maxX);
+      maxY = Math.max(maxY, bounds.maxY);
+    }
+  }
+
+  for (const wire of projection.wires) {
+    for (const point of wire.pointsNm) {
+      const mm = Units.nmToMm(point.x);
+      const y = Units.nmToMm(point.y);
+      minX = Math.min(minX, mm);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, mm);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  for (const label of projection.labels) {
+    const mm = Units.nmToMm(label.positionNm.x);
+    const y = Units.nmToMm(label.positionNm.y);
+    minX = Math.min(minX, mm);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, mm);
+    maxY = Math.max(maxY, y);
+  }
+
+  if (!Number.isFinite(minX)) {
+    return null;
+  }
+
+  return { minX, minY, maxX, maxY };
 }
 
 function pointInRect(pointMm: PointMm, rect: { minX: number; minY: number; maxX: number; maxY: number }): boolean {
@@ -421,8 +462,6 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
   function SchematicCanvas(props, ref): ReactElement {
     const {
       projection,
-      tool,
-      selectedComponent,
       labelDraftText,
       gridVisible,
       draggingComponentId,
@@ -434,11 +473,11 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
     } = props;
 
     const [cursorNm, setCursorNm] = useState<PointNm | null>(null);
-    const [canvasKey, setCanvasKey] = useState(0);
     const [selection, setSelection] = useState<SelectionState>(emptySelection);
     const [dragSession, setDragSession] = useState<DragPartsSession | null>(null);
     const [marqueeSession, setMarqueeSession] = useState<MarqueeSession | null>(null);
     const [wireSession, setWireSession] = useState<WireSession | null>(null);
+    const [armedLabelText, setArmedLabelText] = useState<string | null>(null);
     const cameraRef = useRef<OrthographicCamera | null>(null);
 
     useEffect(() => {
@@ -498,12 +537,39 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
       },
       fit() {
         const camera = cameraRef.current;
-        if (!camera) return;
-        camera.position.set(0, 0, camera.position.z);
-        camera.zoom = 35;
+        if (!camera || !projection) return;
+
+        const bounds = computeProjectionBoundsMm(projection);
+        if (!bounds) {
+          camera.position.set(0, 0, camera.position.z);
+          camera.zoom = 35;
+          camera.updateProjectionMatrix();
+          onZoomChange?.(camera.zoom * 2);
+          return;
+        }
+
+        const canvas = cameraRef.current?.userData?.canvas as HTMLCanvasElement | undefined;
+        const width = canvas?.clientWidth ?? 800;
+        const height = canvas?.clientHeight ?? 600;
+
+        const contentWidth = bounds.maxX - bounds.minX;
+        const contentHeight = bounds.maxY - bounds.minY;
+        const padding = Math.max(contentWidth, contentHeight) * 0.1;
+
+        const paddedWidth = contentWidth + padding * 2;
+        const paddedHeight = contentHeight + padding * 2;
+
+        const zoomX = width / paddedWidth;
+        const zoomY = height / paddedHeight;
+        const zoom = Math.min(zoomX, zoomY);
+
+        const centerX = (bounds.minX + bounds.maxX) / 2;
+        const centerY = (bounds.minY + bounds.maxY) / 2;
+
+        camera.position.set(centerX, centerY, camera.position.z);
+        camera.zoom = Math.max(5, Math.min(zoom, 500));
         camera.updateProjectionMatrix();
         onZoomChange?.(camera.zoom * 2);
-        setCanvasKey((value) => value + 1);
       },
     }));
 
@@ -702,12 +768,12 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
         }
 
         if (matchesKey(event, "Escape")) {
-          if (wireSession || marqueeSession || dragSession) {
+          if (wireSession || marqueeSession || dragSession || armedLabelText) {
             event.preventDefault();
             setWireSession(null);
             setMarqueeSession(null);
             setDragSession(null);
-            actions.setTool("select");
+            setArmedLabelText(null);
             actions.setWireSourcePinId(null);
           }
           return;
@@ -731,11 +797,30 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
             return;
           }
           event.preventDefault();
+
+          // Wires connected to deleted parts are cascade-deleted by the backend.
+          // Exclude those wires from explicit deletion to avoid "not found" errors.
+          const partIdsToDelete = new Set(selection.partIds);
+          const wireIdsToDelete = new Set(selection.wireIds);
+          for (const wire of projection.wires) {
+            if (!wireIdsToDelete.has(wire.id)) {
+              continue;
+            }
+            const sourcePartId = wire.sourcePinId.split(":")[0];
+            const targetPartId = wire.targetPinId.split(":")[0];
+            if (
+              (sourcePartId && partIdsToDelete.has(sourcePartId)) ||
+              (targetPartId && partIdsToDelete.has(targetPartId))
+            ) {
+              wireIdsToDelete.delete(wire.id);
+            }
+          }
+
           const commands: DesignerCommand[] = [];
-          for (const partId of selection.partIds) {
+          for (const partId of partIdsToDelete) {
             commands.push({ type: "delete_entity", entityId: partId, entityKind: "part" });
           }
-          for (const wireId of selection.wireIds) {
+          for (const wireId of wireIdsToDelete) {
             commands.push({ type: "delete_entity", entityId: wireId, entityKind: "wire" });
           }
           for (const labelId of selection.labelIds) {
@@ -784,14 +869,9 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
           return;
         }
 
-        if (!event.ctrlKey && !event.metaKey && !event.altKey) {
-          if (matchesKey(event, "v")) {
-            actions.setTool("select");
-            return;
-          }
-          if (matchesKey(event, "w")) {
-            actions.setTool("wire");
-          }
+        if (!event.ctrlKey && !event.metaKey && !event.altKey && matchesKey(event, "l")) {
+          event.preventDefault();
+          setArmedLabelText(labelDraftText.trim() || "NET");
         }
       };
 
@@ -799,8 +879,10 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
       return () => window.removeEventListener("keydown", handleKeyDown);
     }, [
       actions,
+      armedLabelText,
       dispatchCommandsSequentially,
       dragSession,
+      labelDraftText,
       marqueeSession,
       projection,
       selection,
@@ -858,25 +940,10 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
           const partId = hitPartId(worldNm);
           const labelId = hitLabelId(worldNm);
 
-          if (tool === "place") {
-            if (!selectedComponent) {
-              return;
-            }
-            void actions
-              .dispatchCommand({
-                type: "place_part",
-                componentId: selectedComponent.component.id,
-                positionNm: snappedWorldNm,
-              })
-              .catch((err) =>
-                actions.setError(err instanceof Error ? err.message : "Failed to place"),
-              );
-            return;
-          }
-
-          if (tool === "label") {
-            const text = labelDraftText.trim();
+          if (armedLabelText) {
+            const text = armedLabelText.trim();
             if (!text) {
+              setArmedLabelText(null);
               return;
             }
             void actions
@@ -886,31 +953,21 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
                 labelId: labelId ?? undefined,
                 positionNm: snappedWorldNm,
               })
+              .then(() => {
+                setArmedLabelText(null);
+              })
               .catch((err) =>
                 actions.setError(err instanceof Error ? err.message : "Failed to label"),
               );
             return;
           }
 
-          if (tool === "wire" || wireSession) {
+          if (wireSession) {
             const activeSession = wireSession;
-            if (!activeSession) {
-              if (!pin) {
-                return;
-              }
-              setWireSession({
-                sourcePinId: pin.id,
-                waypointsNm: [],
-              });
-              actions.setWireSourcePinId(pin.id);
-              return;
-            }
-
             const sourcePin = pinById.get(activeSession.sourcePinId);
             if (!sourcePin) {
               setWireSession(null);
               actions.setWireSourcePinId(null);
-              actions.setTool("select");
               return;
             }
 
@@ -919,7 +976,6 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
                 .then(() => {
                   setWireSession(null);
                   actions.setWireSourcePinId(null);
-                  actions.setTool("select");
                 })
                 .catch((err) =>
                   actions.setError(err instanceof Error ? err.message : "Failed to wire"),
@@ -937,7 +993,6 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
                 .then(() => {
                   setWireSession(null);
                   actions.setWireSourcePinId(null);
-                  actions.setTool("select");
                 })
                 .catch((err) =>
                   actions.setError(
@@ -954,16 +1009,14 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
             return;
           }
 
-          if (tool === "select") {
-            if (pin) {
-              setWireSession({
-                sourcePinId: pin.id,
-                waypointsNm: [],
-              });
-              actions.setTool("wire");
-              actions.setWireSourcePinId(pin.id);
-              return;
-            }
+          if (pin) {
+            setWireSession({
+              sourcePinId: pin.id,
+              waypointsNm: [],
+            });
+            actions.setWireSourcePinId(pin.id);
+            return;
+          }
 
             if (partId) {
               setMarqueeSession(null);
@@ -1063,7 +1116,6 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
             if (!event.modifiers.shift) {
               setSelection(emptySelection());
             }
-          }
         },
         onPointerUp() {
           if (!projection) {
@@ -1206,6 +1258,7 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
       }),
       [
         actions,
+        armedLabelText,
         commitWireToPin,
         commitWireToWireJunction,
         dispatchCommandsSequentially,
@@ -1223,9 +1276,7 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
         pinById,
         projection,
         renderedPartPositionNm,
-        selectedComponent,
         selection,
-        tool,
         wireSession,
       ],
     );
@@ -1273,14 +1324,13 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
     return (
       <section className="relative h-full w-full min-h-0 rounded-none bg-slate-950">
         <EdaCanvas
-          key={canvasKey}
           readOnly={false}
           interactionHandler={interactionHandler}
           className="h-full w-full"
           backgroundColor="#0b1120"
           initialZoom={35}
           enableDragDrop
-          gridSize={GRID_SIZE_NM}
+          gridSize={SCHEMATIC_GRID_NM}
         >
           <CameraRefBridge cameraRef={cameraRef} onZoomChange={onZoomChange} />
           <ZoomReporter onZoomChange={onZoomChange} />
@@ -1293,7 +1343,7 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
             wireSession={wireSession}
           />
 
-          <GridShader gridSize={2.54} visible={gridVisible} alpha={0.16} />
+          <GridShader gridSize={SCHEMATIC_GRID_MM} visible={gridVisible} alpha={0.16} />
 
           {projection ? (
             <>

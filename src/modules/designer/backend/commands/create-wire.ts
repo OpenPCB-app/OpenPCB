@@ -1,4 +1,4 @@
-import type { DesignerPin } from "../../../../contracts/modules/sdk";
+import type { DesignerPin } from "../../../../sdks/designer";
 import type { PersistedWirePayload } from "../payload-types";
 
 function key(point: { x: number; y: number }): string {

@@ -10,7 +10,7 @@ export function AppRouter() {
   }
 
   if (currentRoute.kind === "module") {
-    return <ModuleScreen moduleId={currentRoute.moduleId} />;
+    return <ModuleScreen moduleId={currentRoute.moduleId} designId={currentRoute.designId} />;
   }
 
   return <HomeScreen />;

@@ -13,7 +13,7 @@ import type {
   DesignerPlacePartCommand,
   DesignerRotatePartCommand,
   DesignerUpsertLabelCommand,
-} from "../../../contracts/modules/sdk";
+} from "../../../sdks/designer";
 import { createDesignerStore } from "./store";
 
 function success<T>(data: T, status = 200): Response {
@@ -345,6 +345,12 @@ export function registerRoutes(
       throw new NotFoundError(`Design '${designId}' not found`);
     }
     return success({ design });
+  });
+
+  router.delete("/designs/:designId", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    await store.deleteDesign(designId);
+    return new Response(null, { status: 204 });
   });
 
   router.get("/designs/:designId/projection/schematic", async ({ params }) => {

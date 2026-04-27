@@ -5,6 +5,18 @@ import type {
   ModuleDbClient,
 } from "../../../core/contracts/modules/backend-module";
 import {
+  applyPatches,
+  CommandHistory,
+  invertPatchBatch,
+  type EcsPatch,
+} from "../../../shared/domain/commands";
+import {
+  asEntityId,
+  EcsWorld,
+  type EntityId,
+} from "../../../shared/domain/ecs";
+import {
+  type DesignerCommand,
   type DesignerCommandEnvelope,
   type DesignerCommandOkResult,
   type DesignerDerivedNet,
@@ -22,8 +34,8 @@ import {
   type LibraryComponent,
   type LibraryComponentPlacementDetail,
   type LibrarySDK,
-} from "../../../contracts/modules/sdk";
-import { MODULE_SDK_TOKENS } from "../../../contracts/modules/sdk-map";
+} from "../../../sdks";
+import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { buildCreateWirePayload } from "./commands/create-wire";
 import {
   buildPlacePartPayload,
@@ -517,59 +529,84 @@ function sanitizePath(points: Array<{ x: number; y: number }>): Array<{ x: numbe
   return output;
 }
 
-function stretchWireEndpoint(
-  points: Array<{ x: number; y: number }>,
-  endpoint: "source" | "target",
-  from: { x: number; y: number },
-  to: { x: number; y: number },
+function buildManhattanPathThroughAnchors(
+  anchors: Array<{ x: number; y: number }>,
 ): Array<{ x: number; y: number }> {
-  if (from.x === to.x && from.y === to.y) {
-    return points;
-  }
-  if (points.length === 0) {
-    return points;
+  if (anchors.length <= 1) {
+    return anchors;
   }
 
-  const adjusted = points.map((point) => ({ ...point }));
-  const endpointIndex = endpoint === "source" ? 0 : adjusted.length - 1;
-  const neighborIndex = endpoint === "source" ? 1 : adjusted.length - 2;
-  const endpointPoint = adjusted[endpointIndex];
-  if (!endpointPoint) {
-    return adjusted;
+  const path: Array<{ x: number; y: number }> = [{ ...anchors[0]! }];
+  for (let index = 1; index < anchors.length; index += 1) {
+    const next = anchors[index];
+    const prev = path[path.length - 1];
+    if (!next || !prev) {
+      continue;
+    }
+
+    if (prev.x === next.x || prev.y === next.y) {
+      path.push({ ...next });
+      continue;
+    }
+
+    path.push({ x: next.x, y: prev.y });
+    path.push({ ...next });
   }
 
-  endpointPoint.x = to.x;
-  endpointPoint.y = to.y;
+  return sanitizePath(path);
+}
 
-  const neighbor = adjusted[neighborIndex];
-  if (!neighbor) {
-    return adjusted;
+function simplifyCollinearPath(
+  points: Array<{ x: number; y: number }>,
+): Array<{ x: number; y: number }> {
+  const deduped = sanitizePath(points);
+  if (deduped.length <= 2) {
+    return deduped;
   }
 
-  const deltaX = to.x - from.x;
-  const deltaY = to.y - from.y;
+  const output: Array<{ x: number; y: number }> = [deduped[0]!];
+  for (let index = 1; index < deduped.length - 1; index += 1) {
+    const prev = output[output.length - 1];
+    const curr = deduped[index];
+    const next = deduped[index + 1];
+    if (!prev || !curr || !next) {
+      continue;
+    }
 
-  if (from.x === neighbor.x) {
-    neighbor.x += deltaX;
-  } else if (from.y === neighbor.y) {
-    neighbor.y += deltaY;
-  } else {
-    neighbor.x += deltaX;
-    neighbor.y += deltaY;
+    const isVertical = prev.x === curr.x && curr.x === next.x;
+    const isHorizontal = prev.y === curr.y && curr.y === next.y;
+    if (isVertical || isHorizontal) {
+      continue;
+    }
+
+    output.push(curr);
+  }
+  output.push(deduped[deduped.length - 1]!);
+  return sanitizePath(output);
+}
+
+function rerouteWireWithUpdatedEndpoints(
+  points: Array<{ x: number; y: number }>,
+  source: { x: number; y: number },
+  target: { x: number; y: number },
+): Array<{ x: number; y: number }> {
+  if (points.length <= 2) {
+    return simplifyCollinearPath(buildManhattanPathThroughAnchors([source, target]));
   }
 
-  return sanitizePath(adjusted);
+  const interiorAnchors = points.slice(1, -1).map((point) => ({ ...point }));
+  const anchors = [source, ...interiorAnchors, target];
+  return simplifyCollinearPath(buildManhattanPathThroughAnchors(anchors));
 }
 
 function updateConnectedWireGeometry(params: {
   tx: DbClient;
   designId: string;
   movedPinIds: string[];
-  oldByPinId: Map<string, { x: number; y: number }>;
   nextByPinId: Map<string, { x: number; y: number }>;
   timestamp: string;
 }): void {
-  const { tx, designId, movedPinIds, oldByPinId, nextByPinId, timestamp } = params;
+  const { tx, designId, movedPinIds, nextByPinId, timestamp } = params;
   if (movedPinIds.length === 0) {
     return;
   }
@@ -589,26 +626,21 @@ function updateConnectedWireGeometry(params: {
     .all();
 
   for (const wireRow of wireRows) {
-    let points = parseWirePointsJson(wireRow.pointsJson);
+    const points = parseWirePointsJson(wireRow.pointsJson);
     if (points.length === 0) {
       continue;
     }
 
-    const oldSource = oldByPinId.get(wireRow.sourcePinId);
-    const nextSource = nextByPinId.get(wireRow.sourcePinId);
-    if (oldSource && nextSource) {
-      points = stretchWireEndpoint(points, "source", oldSource, nextSource);
+    const source = nextByPinId.get(wireRow.sourcePinId) ?? points[0];
+    const target = nextByPinId.get(wireRow.targetPinId) ?? points[points.length - 1];
+    if (!source || !target) {
+      continue;
     }
-
-    const oldTarget = oldByPinId.get(wireRow.targetPinId);
-    const nextTarget = nextByPinId.get(wireRow.targetPinId);
-    if (oldTarget && nextTarget) {
-      points = stretchWireEndpoint(points, "target", oldTarget, nextTarget);
-    }
+    const nextPoints = rerouteWireWithUpdatedEndpoints(points, source, target);
 
     tx.update(schematicWires)
       .set({
-        pointsJson: JSON.stringify(points),
+        pointsJson: JSON.stringify(nextPoints),
         updatedAt: timestamp,
       })
       .where(eq(schematicWires.id, wireRow.id))
@@ -877,10 +909,154 @@ function toDesignRecordFromProjection(
   };
 }
 
+type DesignerWorldComponent = {
+  type: "designer.entity";
+  kind: DesignerEntityKind;
+  payload: Record<string, unknown>;
+};
+
+function toWorldEntityId(kind: DesignerEntityKind, entityId: string): EntityId {
+  return asEntityId(`${kind}:${entityId}`);
+}
+
+function cloneRecord(value: Record<string, unknown>): Record<string, unknown> {
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+}
+
+function toPayloadRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return cloneRecord(value as Record<string, unknown>);
+  }
+  return {};
+}
+
+function projectionEntityComponents(
+  projection: DesignerSchematicProjection,
+): Array<{ entityId: EntityId; component: DesignerWorldComponent }> {
+  const entries: Array<{ entityId: EntityId; component: DesignerWorldComponent }> = [];
+  for (const part of projection.parts) {
+    entries.push({
+      entityId: toWorldEntityId("part", part.id),
+      component: {
+        type: "designer.entity",
+        kind: "part",
+        payload: toPayloadRecord(part as unknown as Record<string, unknown>),
+      },
+    });
+  }
+  for (const wire of projection.wires) {
+    entries.push({
+      entityId: toWorldEntityId("wire", wire.id),
+      component: {
+        type: "designer.entity",
+        kind: "wire",
+        payload: toPayloadRecord(wire as unknown as Record<string, unknown>),
+      },
+    });
+  }
+  for (const label of projection.labels) {
+    entries.push({
+      entityId: toWorldEntityId("label", label.id),
+      component: {
+        type: "designer.entity",
+        kind: "label",
+        payload: toPayloadRecord(label as unknown as Record<string, unknown>),
+      },
+    });
+  }
+  return entries;
+}
+
+function projectionToWorld(projection: DesignerSchematicProjection): EcsWorld<DesignerWorldComponent> {
+  const world = new EcsWorld<DesignerWorldComponent>();
+  for (const entry of projectionEntityComponents(projection)) {
+    world.setComponent(entry.entityId, entry.component);
+  }
+  return world;
+}
+
+function componentEquals(left: DesignerWorldComponent, right: DesignerWorldComponent): boolean {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+  return JSON.stringify(left.payload) === JSON.stringify(right.payload);
+}
+
+function buildProjectionDiffPatches(
+  before: DesignerSchematicProjection,
+  after: DesignerSchematicProjection,
+): EcsPatch<DesignerWorldComponent>[] {
+  const beforeMap = new Map<string, DesignerWorldComponent>();
+  const afterMap = new Map<string, DesignerWorldComponent>();
+
+  for (const entry of projectionEntityComponents(before)) {
+    beforeMap.set(entry.entityId, entry.component);
+  }
+  for (const entry of projectionEntityComponents(after)) {
+    afterMap.set(entry.entityId, entry.component);
+  }
+
+  const patches: EcsPatch<DesignerWorldComponent>[] = [];
+
+  const afterKeys = [...afterMap.keys()].sort((a, b) => a.localeCompare(b));
+  for (const entityKey of afterKeys) {
+    const nextComponent = afterMap.get(entityKey);
+    if (!nextComponent) {
+      continue;
+    }
+    const previousComponent = beforeMap.get(entityKey);
+    if (!previousComponent || !componentEquals(previousComponent, nextComponent)) {
+      patches.push({
+        kind: "component.set",
+        entityId: asEntityId(entityKey),
+        component: nextComponent,
+      });
+    }
+  }
+
+  const beforeKeys = [...beforeMap.keys()].sort((a, b) => a.localeCompare(b));
+  for (const entityKey of beforeKeys) {
+    if (afterMap.has(entityKey)) {
+      continue;
+    }
+    patches.push({
+      kind: "entity.delete",
+      entityId: asEntityId(entityKey),
+    });
+  }
+
+  return patches;
+}
+
+function buildHistoryPatchSet(
+  before: DesignerSchematicProjection,
+  after: DesignerSchematicProjection,
+): {
+  forwardPatches: EcsPatch<DesignerWorldComponent>[];
+  inversePatches: EcsPatch<DesignerWorldComponent>[];
+} {
+  const forwardPatches = buildProjectionDiffPatches(before, after);
+  const world = projectionToWorld(before);
+  const applied = applyPatches(world, forwardPatches);
+  const inversePatches = invertPatchBatch(applied);
+  return {
+    forwardPatches,
+    inversePatches,
+  };
+}
+
+function historySessionKey(designId: string, sessionId: string): string {
+  return `${designId}:${sessionId}`;
+}
+
 export interface DesignerStore {
   createDesign(input?: { name?: string }): Promise<DesignerDesignSummary>;
   listDesigns(): Promise<DesignerDesignSummary[]>;
   getDesign(designId: string): Promise<DesignerDesignRecord | null>;
+  deleteDesign(designId: string): Promise<void>;
   getSchematicProjection(
     designId: string,
   ): Promise<DesignerSchematicProjection | null>;
@@ -898,6 +1074,24 @@ export interface DesignerStore {
 
 export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStore {
   const db = getDb(ctx.db);
+  const sessionHistories = new Map<
+    string,
+    CommandHistory<DesignerCommand, DesignerWorldComponent>
+  >();
+
+  function resolveSessionHistory(
+    designId: string,
+    sessionId: string,
+  ): CommandHistory<DesignerCommand, DesignerWorldComponent> {
+    const key = historySessionKey(designId, sessionId);
+    const existing = sessionHistories.get(key);
+    if (existing) {
+      return existing;
+    }
+    const created = new CommandHistory<DesignerCommand, DesignerWorldComponent>(200);
+    sessionHistories.set(key, created);
+    return created;
+  }
 
   return {
     async createDesign(input) {
@@ -947,6 +1141,15 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
       return toDesignRecordFromProjection(mapDesignSummary(head), projection);
     },
 
+    async deleteDesign(designId) {
+      db.delete(schematicPins).where(eq(schematicPins.designId, designId)).run();
+      db.delete(schematicWires).where(eq(schematicWires.designId, designId)).run();
+      db.delete(schematicLabels).where(eq(schematicLabels.designId, designId)).run();
+      db.delete(schematicParts).where(eq(schematicParts.designId, designId)).run();
+      db.delete(commandLog).where(eq(commandLog.designId, designId)).run();
+      db.delete(designHeads).where(eq(designHeads.id, designId)).run();
+    },
+
     async getSchematicProjection(designId) {
       return loadSchematicProjection(db, designId);
     },
@@ -994,6 +1197,17 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
         envelope.command.type === "place_part"
           ? await this.resolveLibraryComponentForPlacement(envelope.command.componentId)
           : null;
+
+      const pendingHistoryRef: {
+        current:
+          | {
+              revision: number;
+              createdEntityId: string | null;
+              forwardPatches: EcsPatch<DesignerWorldComponent>[];
+              inversePatches: EcsPatch<DesignerWorldComponent>[];
+            }
+          | null;
+      } = { current: null };
 
       try {
         const result = ctx.db.transaction((txRaw) => {
@@ -1406,7 +1620,6 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
                 partRow.mirrored === 1,
               );
 
-              const oldByPinId = new Map<string, { x: number; y: number }>();
               const nextByPinId = new Map<string, { x: number; y: number }>();
 
               for (let index = 0; index < pinRows.length; index += 1) {
@@ -1415,7 +1628,6 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
                 if (!pin || !world) {
                   continue;
                 }
-                oldByPinId.set(pin.id, { x: pin.worldXNm, y: pin.worldYNm });
                 nextByPinId.set(pin.id, { x: world.x, y: world.y });
                 tx.update(schematicPins)
                   .set({
@@ -1430,24 +1642,23 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
               updateConnectedWireGeometry({
                 tx,
                 designId,
-                movedPinIds: [...oldByPinId.keys()],
-                oldByPinId,
+                movedPinIds: [...nextByPinId.keys()],
                 nextByPinId,
                 timestamp,
               });
 
-              const nextRevision = head.revision + 1;
-              tx.update(designHeads)
-                .set({
-                  revision: nextRevision,
-                  updatedAt: timestamp,
-                })
-                .where(eq(designHeads.id, designId))
-                .run();
+               const nextRevision = head.revision + 1;
+               tx.update(designHeads)
+                 .set({
+                   revision: nextRevision,
+                   updatedAt: timestamp,
+                 })
+                 .where(eq(designHeads.id, designId))
+                 .run();
 
-              result = okResult(nextRevision, command.partId);
-            }
-          } else if (command.type === "rotate_part") {
+               result = okResult(nextRevision, command.partId);
+             }
+           } else if (command.type === "rotate_part") {
             const partRow = tx
               .select()
               .from(schematicParts)
@@ -1491,7 +1702,6 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
                 partRow.mirrored === 1,
               );
 
-              const oldByPinId = new Map<string, { x: number; y: number }>();
               const nextByPinId = new Map<string, { x: number; y: number }>();
 
               for (let index = 0; index < pinRows.length; index += 1) {
@@ -1500,7 +1710,6 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
                 if (!pin || !world) {
                   continue;
                 }
-                oldByPinId.set(pin.id, { x: pin.worldXNm, y: pin.worldYNm });
                 nextByPinId.set(pin.id, { x: world.x, y: world.y });
                 tx.update(schematicPins)
                   .set({
@@ -1515,8 +1724,7 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
               updateConnectedWireGeometry({
                 tx,
                 designId,
-                movedPinIds: [...oldByPinId.keys()],
-                oldByPinId,
+                movedPinIds: [...nextByPinId.keys()],
                 nextByPinId,
                 timestamp,
               });
@@ -1576,7 +1784,6 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
                 mirrored === 1,
               );
 
-              const oldByPinId = new Map<string, { x: number; y: number }>();
               const nextByPinId = new Map<string, { x: number; y: number }>();
 
               for (let index = 0; index < pinRows.length; index += 1) {
@@ -1585,7 +1792,6 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
                 if (!pin || !world) {
                   continue;
                 }
-                oldByPinId.set(pin.id, { x: pin.worldXNm, y: pin.worldYNm });
                 nextByPinId.set(pin.id, { x: world.x, y: world.y });
                 tx.update(schematicPins)
                   .set({
@@ -1600,8 +1806,7 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
               updateConnectedWireGeometry({
                 tx,
                 designId,
-                movedPinIds: [...oldByPinId.keys()],
-                oldByPinId,
+                movedPinIds: [...nextByPinId.keys()],
                 nextByPinId,
                 timestamp,
               });
@@ -1800,6 +2005,19 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
             }
           }
 
+          if (result.ok) {
+            const nextProjection = loadSchematicProjection(tx, designId);
+            if (nextProjection) {
+              const patchSet = buildHistoryPatchSet(projection, nextProjection);
+              pendingHistoryRef.current = {
+                revision: result.revision,
+                createdEntityId: result.createdEntityId,
+                forwardPatches: patchSet.forwardPatches,
+                inversePatches: patchSet.inversePatches,
+              };
+            }
+          }
+
           tx.insert(commandLog)
             .values({
               commandId: envelope.commandId,
@@ -1816,6 +2034,19 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
 
           return result;
         });
+
+        const pendingHistory = pendingHistoryRef.current;
+        if (pendingHistory) {
+          const history = resolveSessionHistory(designId, envelope.sessionId);
+          history.record({
+            envelope,
+            revision: pendingHistory.revision,
+            forwardPatches: pendingHistory.forwardPatches,
+            inversePatches: pendingHistory.inversePatches,
+            createdEntityId: pendingHistory.createdEntityId,
+            timestamp: envelope.issuedAt,
+          });
+        }
 
         return result;
       } catch {

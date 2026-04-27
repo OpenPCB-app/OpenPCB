@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import os from "node:os";
 import path from "node:path";
-import type { DesignerSDK, LibrarySDK } from "../../contracts/modules/sdk";
-import { MODULE_SDK_TOKENS } from "../../contracts/modules/sdk-map";
+import type { DesignerSDK, LibrarySDK } from "../../../sdks";
+import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { resetSharedSqliteForTesting } from "../db/sqlite-client";
 import { createHttpServer } from "../http/create-http-server";
 import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
