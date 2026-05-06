@@ -9,7 +9,7 @@ preloadFont(
   {
     characters:
       "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-+/()[]{}#~:;,!?@$%^&*=<>_ ",
-  },
+  } as unknown as Parameters<typeof preloadFont>[0],
   () => {},
 );
 
@@ -25,6 +25,8 @@ export interface EDATextProps {
   opacity?: number;
   renderOrder?: number;
   visible?: boolean;
+  outlineWidth?: number;
+  outlineColor?: string;
 }
 
 const DEFAULT_FONT_SIZE = 250_000;
@@ -41,6 +43,8 @@ export function EDAText({
   opacity = 1,
   renderOrder = RENDER_ORDER.LABELS,
   visible = true,
+  outlineWidth,
+  outlineColor,
 }: EDATextProps) {
   if (!visible) return null;
 
@@ -58,6 +62,8 @@ export function EDAText({
       material-depthWrite={false}
       material-transparent={opacity < 1}
       material-opacity={opacity}
+      outlineWidth={outlineWidth}
+      outlineColor={outlineColor}
     >
       {children}
     </Text>

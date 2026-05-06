@@ -2,6 +2,7 @@ import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { RENDER_ORDER } from "../layers";
+import { hexToNormalizedRgb } from "../theme";
 
 const vertexShader = /* glsl */ `
 varying vec2 vWorldPos;
@@ -63,13 +64,22 @@ void main() {
 interface GridShaderProps {
   gridSize: number;
   majorEvery?: number;
-  color?: [number, number, number];
+  /** Grid line color as hex string or normalized RGB array */
+  color?: string | [number, number, number];
   alpha?: number;
   majorAlpha?: number;
-  originColor?: [number, number, number];
+  /** Origin line color as hex string or normalized RGB array */
+  originColor?: string | [number, number, number];
   originAlpha?: number;
   minSpacingPx?: number;
   visible?: boolean;
+}
+
+function resolveColor(color: string | [number, number, number]): [number, number, number] {
+  if (typeof color === "string") {
+    return hexToNormalizedRgb(color);
+  }
+  return color;
 }
 
 export function GridShader({
@@ -85,36 +95,39 @@ export function GridShader({
 }: GridShaderProps) {
   const meshRef = useRef<THREE.Mesh>(null);
 
+  const resolvedColor = resolveColor(color);
+  const resolvedOriginColor = resolveColor(originColor);
+
   const uniforms = useMemo(
     () => ({
       uGridSize: { value: gridSize },
       uMajorEvery: { value: majorEvery },
-      uGridColor: { value: new THREE.Vector3(...color) },
+      uGridColor: { value: new THREE.Vector3(...resolvedColor) },
       uGridAlpha: { value: alpha },
       uMajorAlpha: { value: majorAlpha },
-      uOriginColor: { value: new THREE.Vector3(...originColor) },
+      uOriginColor: { value: new THREE.Vector3(...resolvedOriginColor) },
       uOriginAlpha: { value: originAlpha },
       uPixelsPerUnit: { value: 1.0 },
       uMinSpacingPx: { value: minSpacingPx },
     }),
     [
       alpha,
-      color,
+      resolvedColor,
       gridSize,
       majorAlpha,
       majorEvery,
       minSpacingPx,
       originAlpha,
-      originColor,
+      resolvedOriginColor,
     ],
   );
 
   uniforms.uGridSize.value = gridSize;
   uniforms.uMajorEvery.value = majorEvery;
-  uniforms.uGridColor.value.set(...color);
+  uniforms.uGridColor.value.set(...resolvedColor);
   uniforms.uGridAlpha.value = alpha;
   uniforms.uMajorAlpha.value = majorAlpha;
-  uniforms.uOriginColor.value.set(...originColor);
+  uniforms.uOriginColor.value.set(...resolvedOriginColor);
   uniforms.uOriginAlpha.value = originAlpha;
   uniforms.uMinSpacingPx.value = minSpacingPx;
 

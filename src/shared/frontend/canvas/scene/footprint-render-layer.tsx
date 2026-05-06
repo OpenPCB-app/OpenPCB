@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { EDAText, PadInstances } from "../primitives";
 import type { FootprintRenderModel, PreviewGraphic } from "../../../rendering";
 import { RENDER_ORDER, PCB_LAYER_COLORS } from "../layers";
-import { DEFAULT_PREVIEW_THEME } from "../preview/preview-theme";
+import { useCanvasTheme } from "../theme";
 import { graphicStrokeSegments } from "../preview/geometry";
 
 export interface FootprintRenderLayerProps {
@@ -13,11 +13,11 @@ export interface FootprintRenderLayerProps {
   useLayerColors?: boolean;
 }
 
-function layerColor(layer: string | undefined): string {
-  if (!layer) return DEFAULT_PREVIEW_THEME.footprintSilk;
+function layerColor(layer: string | undefined, pt: { footprintSilk: string; footprintPad: string }): string {
+  if (!layer) return pt.footprintSilk;
   return (
     PCB_LAYER_COLORS[layer as keyof typeof PCB_LAYER_COLORS] ??
-    DEFAULT_PREVIEW_THEME.footprintSilk
+    pt.footprintSilk
   );
 }
 
@@ -36,12 +36,12 @@ function dimHex(hex: string, factor: number): string {
   return `#${dr.toString(16).padStart(2, "0")}${dg.toString(16).padStart(2, "0")}${db.toString(16).padStart(2, "0")}`;
 }
 
-function padLayerColor(layer: string | undefined): string {
-  if (!layer) return DEFAULT_PREVIEW_THEME.footprintPad;
+function padLayerColor(layer: string | undefined, pt: { footprintPad: string }): string {
+  if (!layer) return pt.footprintPad;
   if (layer === "*.Cu") return ALL_CU_COLOR;
   return (
     PCB_LAYER_COLORS[layer as keyof typeof PCB_LAYER_COLORS] ??
-    DEFAULT_PREVIEW_THEME.footprintPad
+    pt.footprintPad
   );
 }
 
@@ -55,6 +55,9 @@ export function FootprintRenderLayer({
   dimmedLayers,
   useLayerColors = false,
 }: FootprintRenderLayerProps) {
+  const { theme } = useCanvasTheme();
+  const pt = theme.preview;
+
   // ── Graphics grouped by layer ──────────────────────────────────────
   const graphicGroups = useMemo(() => {
     if (!useLayerColors) {
@@ -106,7 +109,7 @@ export function FootprintRenderLayer({
 
         const padLayer = pad.layer ?? "F.Cu";
         const isDimmed = dimmedLayers?.has(padLayer) ?? false;
-        let color = useLayerColors ? padLayerColor(pad.layer) : undefined;
+        let color = useLayerColors ? padLayerColor(pad.layer, pt) : undefined;
         if (isDimmed && color) color = dimHex(color, DIM_FACTOR);
 
         return {
@@ -134,8 +137,9 @@ export function FootprintRenderLayer({
               group.layer === "__all__" || group.layer === "__none__"
                 ? undefined
                 : group.layer,
+              pt,
             )
-          : DEFAULT_PREVIEW_THEME.footprintSilk;
+          : pt.footprintSilk;
         const isDimmed =
           dimmedLayers !== undefined &&
           group.layer !== "__all__" &&
@@ -167,7 +171,7 @@ export function FootprintRenderLayer({
       {/* Pads */}
       <PadInstances
         pads={padData}
-        defaultColor={DEFAULT_PREVIEW_THEME.footprintPad}
+        defaultColor={pt.footprintPad}
       />
 
       {/* Drill holes */}
@@ -180,7 +184,7 @@ export function FootprintRenderLayer({
           >
             <circleGeometry args={[pad.drillDiameterMm / 2, 20]} />
             <meshBasicMaterial
-              color={DEFAULT_PREVIEW_THEME.footprintDrill}
+              color={pt.footprintDrill}
               depthTest={false}
               depthWrite={false}
             />
@@ -193,7 +197,7 @@ export function FootprintRenderLayer({
         <EDAText
           key={`${pad.id}:number`}
           position={[pad.centerMm.x, pad.centerMm.y, 0]}
-          color={DEFAULT_PREVIEW_THEME.footprintPadNumber}
+          color={pt.footprintPadNumber}
           fontSize={0.28}
           anchorX="center"
           anchorY="middle"
@@ -205,10 +209,10 @@ export function FootprintRenderLayer({
       {/* Labels — use per-layer color when enabled */}
       {model.labels.map((label) => {
         const color = useLayerColors
-          ? layerColor(label.layer)
+          ? layerColor(label.layer, pt)
           : label.layer?.includes("Fab")
-            ? DEFAULT_PREVIEW_THEME.footprintFab
-            : DEFAULT_PREVIEW_THEME.footprintSilk;
+            ? pt.footprintFab
+            : pt.footprintSilk;
         const isDimmed =
           dimmedLayers !== undefined &&
           label.layer !== undefined &&

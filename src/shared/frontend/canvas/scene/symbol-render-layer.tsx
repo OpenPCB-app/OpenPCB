@@ -3,10 +3,13 @@ import * as THREE from "three";
 import { EDAText, PinDots } from "../primitives";
 import type { SymbolRenderModel } from "../../../rendering";
 import { RENDER_ORDER } from "../layers";
-import { DEFAULT_PREVIEW_THEME } from "../preview/preview-theme";
+import { useCanvasTheme } from "../theme";
 import { graphicStrokeSegments } from "../preview/geometry";
 
 export function SymbolRenderLayer({ model }: { model: SymbolRenderModel }) {
+  const { theme } = useCanvasTheme();
+  const pt = theme.preview;
+
   const strokePositions = useMemo(() => {
     const values: number[] = [];
     for (const graphic of model.graphics) {
@@ -81,7 +84,7 @@ export function SymbolRenderLayer({ model }: { model: SymbolRenderModel }) {
         <mesh renderOrder={RENDER_ORDER.BODIES}>
           <shapeGeometry args={[fillShapes] as [THREE.Shape[]]} />
           <meshBasicMaterial
-            color={DEFAULT_PREVIEW_THEME.symbolFill}
+            color={pt.symbolFill}
             depthTest={false}
             depthWrite={false}
             side={THREE.DoubleSide}
@@ -95,7 +98,7 @@ export function SymbolRenderLayer({ model }: { model: SymbolRenderModel }) {
             <bufferAttribute attach="attributes-position" args={[strokePositions, 3]} />
           </bufferGeometry>
           <lineBasicMaterial
-            color={DEFAULT_PREVIEW_THEME.symbolStroke}
+            color={pt.symbolStroke}
             depthTest={false}
             depthWrite={false}
           />
@@ -105,22 +108,26 @@ export function SymbolRenderLayer({ model }: { model: SymbolRenderModel }) {
       <PinDots
         pins={pinDots}
         radius={0.1}
-        defaultColor={DEFAULT_PREVIEW_THEME.symbolPinDot}
+        defaultColor={pt.symbolPinDot}
       />
 
       {model.labels.map((label) => {
         const color =
           label.role === "pin-number"
-            ? DEFAULT_PREVIEW_THEME.symbolPinNumber
+            ? pt.symbolPinNumber
             : label.role === "reference"
-              ? DEFAULT_PREVIEW_THEME.symbolRefLabel
+              ? pt.symbolRefLabel
               : label.role === "value"
-                ? DEFAULT_PREVIEW_THEME.symbolValueLabel
-                : DEFAULT_PREVIEW_THEME.symbolPinLabel;
+                ? pt.symbolValueLabel
+                : pt.symbolPinLabel;
         const rotation =
           label.rotationDeg === 0
             ? undefined
             : ([0, 0, (label.rotationDeg * Math.PI) / 180] as [number, number, number]);
+
+        const isLight = theme.mode === "light";
+        const outlineWidth = isLight ? 0.025 : undefined;
+        const outlineColor = isLight ? "#f5f5f0" : undefined;
 
         return (
           <EDAText
@@ -131,6 +138,8 @@ export function SymbolRenderLayer({ model }: { model: SymbolRenderModel }) {
             anchorX={label.anchorX}
             anchorY={label.anchorY}
             rotation={rotation}
+            outlineWidth={outlineWidth}
+            outlineColor={outlineColor}
           >
             {label.text}
           </EDAText>

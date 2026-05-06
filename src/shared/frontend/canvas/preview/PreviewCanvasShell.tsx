@@ -137,6 +137,7 @@ export function PreviewCanvasShell({
             backgroundColor={backgroundColor}
             initialZoom={initialZoom}
             navigation={PREVIEW_NAVIGATION}
+            themeMode="dark"
           >
             <InvalidateOnMount />
             <PreviewFit

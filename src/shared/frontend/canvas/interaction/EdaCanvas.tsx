@@ -19,6 +19,11 @@ import {
   type InteractionCoordinateTransform,
   type InteractionHandler,
 } from "./types";
+import {
+  CanvasThemeProvider,
+  getDefaultCanvasBackground,
+  type CanvasThemeMode,
+} from "../theme";
 
 export interface EdaCanvasProps {
   children: ReactNode;
@@ -36,6 +41,19 @@ export interface EdaCanvasProps {
     readonly wheel?: EdaWheelOptions;
     readonly middleButtonPan?: boolean;
   };
+  /** Canvas color theme. 'auto' reads from the app's ThemeProvider via document dataset. */
+  themeMode?: CanvasThemeMode | "auto";
+}
+
+function resolveCanvasThemeMode(
+  themeMode: CanvasThemeMode | "auto" | undefined,
+): CanvasThemeMode {
+  if (themeMode === "light" || themeMode === "dark") return themeMode;
+  if (typeof document !== "undefined") {
+    const docMode = document.documentElement.dataset.colorMode;
+    if (docMode === "light" || docMode === "dark") return docMode;
+  }
+  return "dark";
 }
 
 export function EdaCanvas({
@@ -47,10 +65,11 @@ export function EdaCanvas({
   readOnly = false,
   className,
   testId,
-  backgroundColor = "#0f172a",
+  backgroundColor,
   style,
   initialZoom = 50,
   navigation,
+  themeMode = "auto",
 }: EdaCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cameraRef = useRef<THREE.OrthographicCamera>(null);
@@ -75,6 +94,9 @@ export function EdaCanvas({
     overflow: "hidden",
     ...style,
   };
+
+  const resolvedMode = resolveCanvasThemeMode(themeMode);
+  const resolvedBackground = backgroundColor ?? getDefaultCanvasBackground(resolvedMode);
 
   const resolvedWheelOptions = {
     ...DEFAULT_EDA_WHEEL_OPTIONS,
@@ -105,7 +127,7 @@ export function EdaCanvas({
           preserveDrawingBuffer: false,
           powerPreference: "high-performance",
         }}
-        style={{ background: backgroundColor }}
+        style={{ background: resolvedBackground }}
         ref={canvasRef as React.RefObject<HTMLCanvasElement>}
         onCreated={({ camera }) => {
           const cam = camera as THREE.OrthographicCamera;
@@ -113,17 +135,20 @@ export function EdaCanvas({
           cam.updateProjectionMatrix();
         }}
       >
-        <SceneBackground color={backgroundColor} />
-        <EdaCanvasInternals
-          readOnly={readOnly}
-          cameraRef={cameraRef}
-          interactionHandler={interactionHandler}
-          interactionCoordinateTransform={interactionCoordinateTransform}
-          wheelOptions={resolvedWheelOptions}
-          middleButtonPanEnabled={middleButtonPanEnabled}
-        >
-          {children}
-        </EdaCanvasInternals>
+        <SceneBackground color={resolvedBackground} />
+        <ThemeChangeInvalidator mode={resolvedMode} />
+        <CanvasThemeProvider mode={resolvedMode}>
+          <EdaCanvasInternals
+            readOnly={readOnly}
+            cameraRef={cameraRef}
+            interactionHandler={interactionHandler}
+            interactionCoordinateTransform={interactionCoordinateTransform}
+            wheelOptions={resolvedWheelOptions}
+            middleButtonPanEnabled={middleButtonPanEnabled}
+          >
+            {children}
+          </EdaCanvasInternals>
+        </CanvasThemeProvider>
       </Canvas>
 
       {enableDragDrop && !readOnly && (
@@ -261,6 +286,20 @@ function EdaCanvasInternals({
       <group onPointerLeave={handlePointerLeave}>{children}</group>
     </>
   );
+}
+
+function ThemeChangeInvalidator({ mode }: { mode: CanvasThemeMode }) {
+  const invalidate = useThree((s) => s.invalidate);
+  const modeRef = useRef(mode);
+
+  useEffect(() => {
+    if (modeRef.current !== mode) {
+      modeRef.current = mode;
+      invalidate();
+    }
+  }, [mode, invalidate]);
+
+  return null;
 }
 
 function SceneBackground({ color }: { color: string }) {

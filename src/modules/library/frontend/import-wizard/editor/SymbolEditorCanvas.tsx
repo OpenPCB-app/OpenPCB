@@ -71,6 +71,7 @@ function EditorCanvasContent({
       className="h-full w-full"
       backgroundColor="#0f172a"
       initialZoom={40}
+      themeMode="dark"
     >
       <InvalidateOnChange />
       <GridShader gridSize={gridSizeMm} visible={gridVisible} alpha={0.18} />

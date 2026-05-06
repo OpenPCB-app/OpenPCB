@@ -1,0 +1,114 @@
+import type { PreviewTheme } from "../preview/preview-theme";
+
+export type CanvasThemeMode = "light" | "dark";
+
+/** Schematic-specific color tokens */
+export interface SchematicTheme {
+  background: string;
+  gridColor: string;
+  gridAlpha: number;
+  gridMajorAlpha: number;
+  wireColor: string;
+  wireSelectedColor: string;
+  wirePreviewColor: string;
+  labelColor: string;
+  labelSelectedColor: string;
+  junctionColor: string;
+  selectionColor: string;
+  dragGhostColor: string;
+  partOutlineColor: string;
+}
+
+/** Full canvas theme for a given mode */
+export interface CanvasTheme {
+  mode: CanvasThemeMode;
+  schematic: SchematicTheme;
+  preview: PreviewTheme;
+}
+
+// ── Light mode palette ──────────────────────────────────────────────
+const SCHEMATIC_LIGHT: SchematicTheme = {
+  background: "#f5f5f0",
+  gridColor: "#475569",
+  gridAlpha: 0.55,
+  gridMajorAlpha: 0.4,
+  wireColor: "#020617",
+  wireSelectedColor: "#7c3aed",
+  wirePreviewColor: "#b45309",
+  labelColor: "#0f172a",
+  labelSelectedColor: "#7c3aed",
+  junctionColor: "#020617",
+  selectionColor: "#7c3aed",
+  dragGhostColor: "#7c3aed",
+  partOutlineColor: "#7c3aed",
+};
+
+// ── Dark mode palette (matches current hardcoded values) ────────────
+const SCHEMATIC_DARK: SchematicTheme = {
+  background: "#0b1120",
+  gridColor: "#94a3b8",
+  gridAlpha: 0.16,
+  gridMajorAlpha: 0.12,
+  wireColor: "#67e8f9",
+  wireSelectedColor: "#22d3ee",
+  wirePreviewColor: "#f59e0b",
+  labelColor: "#a5b4fc",
+  labelSelectedColor: "#22d3ee",
+  junctionColor: "#e2e8f0",
+  selectionColor: "#22d3ee",
+  dragGhostColor: "#22d3ee",
+  partOutlineColor: "#22d3ee",
+};
+
+/** Default preview theme for dark backgrounds (legacy compatibility) */
+const PREVIEW_DARK: PreviewTheme = {
+  symbolStroke: "#94a3b8",
+  symbolFill: "#1e293b",
+  symbolPinDot: "#38bdf8",
+  symbolPinLine: "#e2e8f0",
+  symbolPinLabel: "#e2e8f0",
+  symbolPinNumber: "#94a3b8",
+  symbolRefLabel: "#e0af68",
+  symbolValueLabel: "#cbd5e1",
+  footprintPad: "#c9a227",
+  footprintPadNumber: "#0f172a",
+  footprintSilk: "#cbd5e1",
+  footprintFab: "#64748b",
+  footprintDrill: "#0f172a",
+};
+
+/** Build the full canvas theme for a given mode */
+export function getCanvasTheme(mode: CanvasThemeMode): CanvasTheme {
+  if (mode === "light") {
+    return {
+      mode: "light",
+      schematic: SCHEMATIC_LIGHT,
+      preview: {
+        symbolStroke: "#0f172a",
+        symbolFill: "#e8e8e3",
+        symbolPinDot: "#0369a1",
+        symbolPinLine: "#0f172a",
+        symbolPinLabel: "#0f172a",
+        symbolPinNumber: "#0f172a",
+        symbolRefLabel: "#0f172a",
+        symbolValueLabel: "#0f172a",
+        footprintPad: "#b45309",
+        footprintPadNumber: "#f1f5f9",
+        footprintSilk: "#475569",
+        footprintFab: "#64748b",
+        footprintDrill: "#f1f5f9",
+      },
+    };
+  }
+
+  return {
+    mode: "dark",
+    schematic: SCHEMATIC_DARK,
+    preview: PREVIEW_DARK,
+  };
+}
+
+/** EdaCanvas default backgrounds per mode */
+export function getDefaultCanvasBackground(mode: CanvasThemeMode): string {
+  return mode === "light" ? "#f5f5f0" : "#0f172a";
+}

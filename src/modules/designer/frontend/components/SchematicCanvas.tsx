@@ -19,6 +19,7 @@ import { EDAText, GridShader } from "../../../../shared/frontend/canvas/primitiv
 import { SymbolRenderLayer } from "../../../../shared/frontend/canvas/scene";
 import { SelectionRectOverlay } from "../../../../shared/frontend/canvas/selection";
 import { RENDER_ORDER } from "../../../../shared/frontend/canvas/layers";
+import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
 import { Units } from "../../../../shared/frontend/canvas/coords";
 import {
   isDeleteShortcut,
@@ -34,6 +35,7 @@ import type {
   DesignerWire,
   LibraryComponentPlacementDetail,
 } from "../../../../sdks";
+import type { SymbolRenderModel } from "../../../../shared/rendering";
 import type { DesignerWorkspaceActions } from "../hooks/useDesignerWorkspace";
 import { SCHEMATIC_GRID_NM, SCHEMATIC_GRID_MM } from "../types";
 import { COMPONENT_DND_MIME } from "./DesignerSidebar";
@@ -370,7 +372,7 @@ function WireLayer({ wires, color }: { wires: DesignerWire[]; color: string }) {
   );
 }
 
-function PartSelectionOutline({ part }: { part: DesignerPlacedPart }) {
+function PartSelectionOutline({ part, color }: { part: DesignerPlacedPart; color: string }) {
   const bounds = part.symbol.preview.bounds;
   const positions = useMemo(() => {
     if (!bounds) {
@@ -413,7 +415,7 @@ function PartSelectionOutline({ part }: { part: DesignerPlacedPart }) {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
-      <lineBasicMaterial color="#22d3ee" depthTest={false} depthWrite={false} />
+      <lineBasicMaterial color={color} depthTest={false} depthWrite={false} />
     </lineSegments>
   );
 }
@@ -1322,12 +1324,11 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
       : null;
 
     return (
-      <section className="relative h-full w-full min-h-0 rounded-none bg-slate-950">
+      <section className="relative h-full w-full min-h-0 rounded-none">
         <EdaCanvas
           readOnly={false}
           interactionHandler={interactionHandler}
           className="h-full w-full"
-          backgroundColor="#0b1120"
           initialZoom={35}
           enableDragDrop
           gridSize={SCHEMATIC_GRID_NM}
@@ -1342,93 +1343,157 @@ export const SchematicCanvas = forwardRef<SchematicCanvasHandle, SchematicCanvas
             marqueeSession={marqueeSession}
             wireSession={wireSession}
           />
-
-          <GridShader gridSize={SCHEMATIC_GRID_MM} visible={gridVisible} alpha={0.16} />
-
-          {projection ? (
-            <>
-              <WireLayer wires={unselectedWires} color="#67e8f9" />
-              {selectedWires.length > 0 ? <WireLayer wires={selectedWires} color="#22d3ee" /> : null}
-              {wirePreview ? <WireLayer wires={[wirePreview]} color="#f59e0b" /> : null}
-
-              {projection.parts.map((part) => {
-                const model = part.symbol.preview;
-                const positionNm = renderedPartPositionNm(part);
-                const x = Units.nmToMm(positionNm.x);
-                const y = Units.nmToMm(positionNm.y);
-                const rotationRad = (part.rotationDeg * Math.PI) / 180;
-                const scaleX = part.mirrored ? -1 : 1;
-                const selected = selection.partIds.has(part.id);
-
-                return (
-                  <group
-                    key={part.id}
-                    position={[x, y, 0]}
-                    rotation={[0, 0, rotationRad]}
-                    scale={[scaleX, 1, 1]}
-                  >
-                    <SymbolRenderLayer model={model} />
-                    {selected ? <PartSelectionOutline part={part} /> : null}
-                  </group>
-                );
-              })}
-
-              {projection.labels.map((label) => {
-                const selected = selection.labelIds.has(label.id);
-                return (
-                  <EDAText
-                    key={label.id}
-                    position={[Units.nmToMm(label.positionNm.x), Units.nmToMm(label.positionNm.y), 0]}
-                    color={selected ? "#22d3ee" : "#a5b4fc"}
-                    fontSize={0.9}
-                    anchorX="left"
-                    anchorY="middle"
-                  >
-                    {label.text}
-                  </EDAText>
-                );
-              })}
-
-              {projection.junctions.map((junction) => (
-                <mesh
-                  key={`${junction.xNm}:${junction.yNm}`}
-                  position={[Units.nmToMm(junction.xNm), Units.nmToMm(junction.yNm), 0]}
-                  renderOrder={RENDER_ORDER.JUNCTIONS}
-                >
-                  <circleGeometry args={[0.08, 14]} />
-                  <meshBasicMaterial color="#e2e8f0" depthTest={false} depthWrite={false} />
-                </mesh>
-              ))}
-
-              {selectionRect ? (
-                <SelectionRectOverlay a={selectionRect.a} b={selectionRect.b} color="#22d3ee" />
-              ) : null}
-
-              {dragGhostNm && dragGhostModel ? (
-                <group
-                  position={[Units.nmToMm(dragGhostNm.x), Units.nmToMm(dragGhostNm.y), 0]}
-                  renderOrder={RENDER_ORDER.PREVIEW}
-                >
-                  <SymbolRenderLayer model={dragGhostModel} />
-                  <mesh>
-                    <circleGeometry args={[0.9, 24]} />
-                    <meshBasicMaterial
-                      color="#22d3ee"
-                      transparent
-                      opacity={0.2}
-                      depthTest={false}
-                      depthWrite={false}
-                    />
-                  </mesh>
-                </group>
-              ) : null}
-            </>
-          ) : null}
+          <SchematicScene
+            projection={projection}
+            gridVisible={gridVisible}
+            unselectedWires={unselectedWires}
+            selectedWires={selectedWires}
+            wirePreview={wirePreview}
+            parts={projection?.parts ?? []}
+            renderedPartPositionNm={renderedPartPositionNm}
+            selection={selection}
+            labels={projection?.labels ?? []}
+            junctions={projection?.junctions ?? []}
+            selectionRect={selectionRect}
+            dragGhostNm={dragGhostNm}
+            dragGhostModel={dragGhostModel}
+          />
         </EdaCanvas>
       </section>
     );
   },
 );
+
+interface SchematicSceneProps {
+  projection: DesignerSchematicProjection | null;
+  gridVisible: boolean;
+  unselectedWires: DesignerWire[];
+  selectedWires: DesignerWire[];
+  wirePreview: DesignerWire | null;
+  parts: DesignerPlacedPart[];
+  renderedPartPositionNm: (part: DesignerPlacedPart) => PointNm;
+  selection: SelectionState;
+  labels: DesignerSchematicProjection["labels"];
+  junctions: DesignerSchematicProjection["junctions"];
+  selectionRect: { a: PointMm; b: PointMm } | null;
+  dragGhostNm: { x: number; y: number } | null;
+  dragGhostModel: SymbolRenderModel | null;
+}
+
+function SchematicScene({
+  projection,
+  gridVisible,
+  unselectedWires,
+  selectedWires,
+  wirePreview,
+  parts,
+  renderedPartPositionNm,
+  selection,
+  labels,
+  junctions,
+  selectionRect,
+  dragGhostNm,
+  dragGhostModel,
+}: SchematicSceneProps) {
+  const { theme } = useCanvasTheme();
+  const t = theme.schematic;
+
+  return (
+    <>
+      <GridShader
+        gridSize={SCHEMATIC_GRID_MM}
+        visible={gridVisible}
+        color={t.gridColor}
+        alpha={t.gridAlpha}
+        majorAlpha={t.gridMajorAlpha}
+        originColor={t.gridColor}
+        originAlpha={t.gridMajorAlpha}
+      />
+
+      {projection ? (
+        <>
+          <WireLayer wires={unselectedWires} color={t.wireColor} />
+          {selectedWires.length > 0 ? (
+            <WireLayer wires={selectedWires} color={t.wireSelectedColor} />
+          ) : null}
+          {wirePreview ? <WireLayer wires={[wirePreview]} color={t.wirePreviewColor} /> : null}
+
+          {parts.map((part) => {
+            const model = part.symbol.preview;
+            const positionNm = renderedPartPositionNm(part);
+            const x = Units.nmToMm(positionNm.x);
+            const y = Units.nmToMm(positionNm.y);
+            const rotationRad = (part.rotationDeg * Math.PI) / 180;
+            const scaleX = part.mirrored ? -1 : 1;
+            const selected = selection.partIds.has(part.id);
+
+            return (
+              <group
+                key={part.id}
+                position={[x, y, 0]}
+                rotation={[0, 0, rotationRad]}
+                scale={[scaleX, 1, 1]}
+              >
+                <SymbolRenderLayer model={model} />
+                {selected ? <PartSelectionOutline part={part} color={t.selectionColor} /> : null}
+              </group>
+            );
+          })}
+
+          {labels.map((label) => {
+            const selected = selection.labelIds.has(label.id);
+            return (
+              <EDAText
+                key={label.id}
+                position={[Units.nmToMm(label.positionNm.x), Units.nmToMm(label.positionNm.y), 0]}
+                color={selected ? t.labelSelectedColor : t.labelColor}
+                fontSize={0.9}
+                anchorX="left"
+                anchorY="middle"
+              >
+                {label.text}
+              </EDAText>
+            );
+          })}
+
+          {junctions.map((junction) => (
+            <mesh
+              key={`${junction.xNm}:${junction.yNm}`}
+              position={[Units.nmToMm(junction.xNm), Units.nmToMm(junction.yNm), 0]}
+              renderOrder={RENDER_ORDER.JUNCTIONS}
+            >
+              <circleGeometry args={[0.08, 14]} />
+              <meshBasicMaterial color={t.junctionColor} depthTest={false} depthWrite={false} />
+            </mesh>
+          ))}
+
+          {selectionRect ? (
+            <SelectionRectOverlay a={selectionRect.a} b={selectionRect.b} color={t.selectionColor} />
+          ) : null}
+
+          {dragGhostNm && dragGhostModel ? (
+            <group
+              position={[Units.nmToMm(dragGhostNm.x), Units.nmToMm(dragGhostNm.y), 0]}
+              renderOrder={RENDER_ORDER.PREVIEW}
+            >
+              <SymbolRenderLayer model={dragGhostModel} />
+              <mesh>
+                <circleGeometry args={[0.9, 24]} />
+                <meshBasicMaterial
+                  color={t.dragGhostColor}
+                  transparent
+                  opacity={0.2}
+                  depthTest={false}
+                  depthWrite={false}
+                />
+              </mesh>
+            </group>
+          ) : null}
+        </>
+      ) : null}
+    </>
+  );
+}
 
 function CameraRefBridge({
   cameraRef,
