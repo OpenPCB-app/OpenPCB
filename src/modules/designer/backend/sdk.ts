@@ -11,6 +11,7 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
     listDesigns: () => store.listDesigns(),
     getDesign: (designId) => store.getDesign(designId),
     getSchematicProjection: (designId) => store.getSchematicProjection(designId),
+    getPcbProjection: (designId) => store.getPcbProjection(designId),
     searchLibraryComponents: (params) => store.searchLibraryComponents(params),
     resolveLibraryComponentForPlacement: (componentId) =>
       store.resolveLibraryComponentForPlacement(componentId),

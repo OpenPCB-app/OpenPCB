@@ -4,6 +4,7 @@ import type {
   DesignerDispatchResult,
   DesignerHistoryActionResult,
   DesignerHistorySnapshot,
+  DesignerPcbProjection,
   DesignerSchematicProjection,
   LibraryComponent,
   LibraryComponentPlacementDetail,
@@ -80,6 +81,17 @@ export function createDesignerApi(params: {
           backendURL,
           moduleId,
           `/designs/${encodeURIComponent(designId)}/projection/schematic`,
+        ),
+      );
+      return data.projection;
+    },
+
+    async getPcbProjection(designId: string): Promise<DesignerPcbProjection> {
+      const data = await fetchData<{ projection: DesignerPcbProjection }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/projection/pcb`,
         ),
       );
       return data.projection;

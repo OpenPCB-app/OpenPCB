@@ -17,6 +17,7 @@ import {
   type DesignerDispatchResult,
   type DesignerHistoryActionResult,
   type DesignerHistorySnapshot,
+  type DesignerPcbProjection,
   type DesignerSchematicProjection,
   type DesignerSearchLibraryParams,
   type LibraryComponent,
@@ -32,8 +33,16 @@ import {
   schematicParts,
   schematicPins,
   schematicWires,
+  pcbEntities,
   sessionHistories as sessionHistoryRows,
 } from "./schema";
+import {
+  ensurePcbBoardSettings,
+  loadPcbPlacements,
+  replacePcbBoardSettings,
+  replacePcbPlacements,
+} from "./pcb/pcb-store";
+import { loadPcbProjection } from "./pcb/pcb-projection";
 import {
   historyEmpty,
   historySessionKey,
@@ -44,9 +53,10 @@ import {
   persistSessionHistorySnapshot,
 } from "./history-persistence";
 import {
+  buildCombinedHistoryPatchSet,
   buildHistoryPatchSet,
-  projectionFromWorld,
-  projectionToWorld,
+  combinedStateFromWorld,
+  combinedStateToWorld,
   replaceSchematicProjection,
   type DesignerWorldComponent,
 } from "./projection-world";
@@ -55,10 +65,7 @@ import {
   mapDesignSummary,
   toDesignRecordFromProjection,
 } from "./projection-read";
-import {
-  conflict,
-  parseDispatchResultJson,
-} from "./results";
+import { conflict, parseDispatchResultJson } from "./results";
 
 type DbClient = BunSQLiteDatabase<Record<string, unknown>>;
 
@@ -86,6 +93,7 @@ export interface DesignerStore {
   getSchematicProjection(
     designId: string,
   ): Promise<DesignerSchematicProjection | null>;
+  getPcbProjection(designId: string): Promise<DesignerPcbProjection | null>;
   searchLibraryComponents(
     params: DesignerSearchLibraryParams,
   ): Promise<LibraryComponent[]>;
@@ -100,11 +108,19 @@ export interface DesignerStore {
     designId: string,
     sessionId: string,
   ): Promise<DesignerHistorySnapshot>;
-  undo(designId: string, sessionId: string): Promise<DesignerHistoryActionResult>;
-  redo(designId: string, sessionId: string): Promise<DesignerHistoryActionResult>;
+  undo(
+    designId: string,
+    sessionId: string,
+  ): Promise<DesignerHistoryActionResult>;
+  redo(
+    designId: string,
+    sessionId: string,
+  ): Promise<DesignerHistoryActionResult>;
 }
 
-export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStore {
+export function createDesignerStore(
+  ctx: CoreBackendModuleContext,
+): DesignerStore {
   const db = getDb(ctx.db);
   const sessionHistories = new Map<
     string,
@@ -120,7 +136,9 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
     if (existing) {
       return existing;
     }
-    const created = new CommandHistory<DesignerCommand, DesignerWorldComponent>(200);
+    const created = new CommandHistory<DesignerCommand, DesignerWorldComponent>(
+      200,
+    );
     hydrateSessionHistory(db, designId, sessionId, created);
     sessionHistories.set(key, created);
     return created;
@@ -148,11 +166,19 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
       if (!current) {
         return null;
       }
+      const pcb = ensurePcbBoardSettings(tx, designId, timestamp);
+      const placements = loadPcbPlacements(tx, designId);
       const nextRevision = current.revision + 1;
-      const world = projectionToWorld(current);
+      const world = combinedStateToWorld({
+        schematic: current,
+        pcb,
+        placements,
+      });
       applyPatches(world, patches);
-      const nextProjection = projectionFromWorld(designId, nextRevision, world);
-      replaceSchematicProjection(tx, designId, nextProjection, timestamp);
+      const next = combinedStateFromWorld(designId, nextRevision, world);
+      replaceSchematicProjection(tx, designId, next.schematic, timestamp);
+      replacePcbBoardSettings(tx, designId, next.pcb, timestamp);
+      replacePcbPlacements(tx, designId, next.placements, timestamp);
       return nextRevision;
     });
   }
@@ -163,15 +189,19 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
       const timestamp = nowIso();
       const name = input?.name?.trim() || "Untitled Design";
 
-      db.insert(designHeads)
-        .values({
-          id,
-          name,
-          revision: 0,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        })
-        .run();
+      ctx.db.transaction((txRaw) => {
+        const tx = txRaw as DbClient;
+        tx.insert(designHeads)
+          .values({
+            id,
+            name,
+            revision: 0,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          })
+          .run();
+        ensurePcbBoardSettings(tx, id, timestamp);
+      });
 
       return {
         id,
@@ -192,7 +222,11 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
     },
 
     async getDesign(designId) {
-      const head = db.select().from(designHeads).where(eq(designHeads.id, designId)).get();
+      const head = db
+        .select()
+        .from(designHeads)
+        .where(eq(designHeads.id, designId))
+        .get();
       if (!head) {
         return null;
       }
@@ -206,17 +240,43 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
     },
 
     async deleteDesign(designId) {
-      db.delete(schematicPins).where(eq(schematicPins.designId, designId)).run();
-      db.delete(schematicWires).where(eq(schematicWires.designId, designId)).run();
-      db.delete(schematicLabels).where(eq(schematicLabels.designId, designId)).run();
-      db.delete(schematicParts).where(eq(schematicParts.designId, designId)).run();
+      db.delete(schematicPins)
+        .where(eq(schematicPins.designId, designId))
+        .run();
+      db.delete(schematicWires)
+        .where(eq(schematicWires.designId, designId))
+        .run();
+      db.delete(schematicLabels)
+        .where(eq(schematicLabels.designId, designId))
+        .run();
+      db.delete(schematicParts)
+        .where(eq(schematicParts.designId, designId))
+        .run();
       db.delete(commandLog).where(eq(commandLog.designId, designId)).run();
-      db.delete(sessionHistoryRows).where(eq(sessionHistoryRows.designId, designId)).run();
+      db.delete(pcbEntities).where(eq(pcbEntities.designId, designId)).run();
+      db.delete(sessionHistoryRows)
+        .where(eq(sessionHistoryRows.designId, designId))
+        .run();
       db.delete(designHeads).where(eq(designHeads.id, designId)).run();
     },
 
     async getSchematicProjection(designId) {
       return loadSchematicProjection(db, designId);
+    },
+
+    async getPcbProjection(designId) {
+      const head = db
+        .select()
+        .from(designHeads)
+        .where(eq(designHeads.id, designId))
+        .get();
+      if (!head) return null;
+      return loadPcbProjection({
+        db,
+        designId,
+        revision: head.revision,
+        timestamp: nowIso(),
+      });
     },
 
     async searchLibraryComponents(params) {
@@ -265,18 +325,18 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
 
       const placeComponentDetail =
         envelope.command.type === "place_part"
-          ? await this.resolveLibraryComponentForPlacement(envelope.command.componentId)
+          ? await this.resolveLibraryComponentForPlacement(
+              envelope.command.componentId,
+            )
           : null;
 
       const pendingHistoryRef: {
-        current:
-          | {
-              revision: number;
-              createdEntityId: string | null;
-              forwardPatches: EcsPatch<DesignerWorldComponent>[];
-              inversePatches: EcsPatch<DesignerWorldComponent>[];
-            }
-          | null;
+        current: {
+          revision: number;
+          createdEntityId: string | null;
+          forwardPatches: EcsPatch<DesignerWorldComponent>[];
+          inversePatches: EcsPatch<DesignerWorldComponent>[];
+        } | null;
       } = { current: null };
 
       try {
@@ -309,7 +369,10 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
             envelope.baseRevision !== null &&
             envelope.baseRevision !== head.revision
           ) {
-            const conflictResult = conflict(envelope.baseRevision, head.revision);
+            const conflictResult = conflict(
+              envelope.baseRevision,
+              head.revision,
+            );
             tx.insert(commandLog)
               .values({
                 commandId: envelope.commandId,
@@ -328,7 +391,10 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
 
           const projection = loadSchematicProjection(tx, designId);
           if (!projection) {
-            const missingResult = conflict(envelope.baseRevision, head.revision);
+            const missingResult = conflict(
+              envelope.baseRevision,
+              head.revision,
+            );
             tx.insert(commandLog)
               .values({
                 commandId: envelope.commandId,
@@ -347,6 +413,13 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
 
           const timestamp = nowIso();
           const command = envelope.command;
+          const isPcbCommand = command.type.startsWith("pcb_");
+          const pcbBefore = isPcbCommand
+            ? ensurePcbBoardSettings(tx, designId, timestamp)
+            : null;
+          const placementsBefore = isPcbCommand
+            ? loadPcbPlacements(tx, designId)
+            : null;
           const result = executeDesignerCommand({
             tx,
             designId,
@@ -360,13 +433,47 @@ export function createDesignerStore(ctx: CoreBackendModuleContext): DesignerStor
           if (result.ok) {
             const nextProjection = loadSchematicProjection(tx, designId);
             if (nextProjection) {
-              const patchSet = buildHistoryPatchSet(projection, nextProjection);
-              pendingHistoryRef.current = {
-                revision: result.revision,
-                createdEntityId: result.createdEntityId,
-                forwardPatches: patchSet.forwardPatches,
-                inversePatches: patchSet.inversePatches,
-              };
+              if (pcbBefore) {
+                const pcbAfter = ensurePcbBoardSettings(
+                  tx,
+                  designId,
+                  timestamp,
+                );
+                const placementsAfter = loadPcbPlacements(tx, designId);
+                const patchSet = buildCombinedHistoryPatchSet(
+                  {
+                    schematic: projection,
+                    pcb: pcbBefore,
+                    placements: placementsBefore ?? [],
+                  },
+                  {
+                    schematic: nextProjection,
+                    pcb: pcbAfter,
+                    placements: placementsAfter,
+                  },
+                );
+                if (patchSet.forwardPatches.length > 0) {
+                  pendingHistoryRef.current = {
+                    revision: result.revision,
+                    createdEntityId: result.createdEntityId,
+                    forwardPatches: patchSet.forwardPatches,
+                    inversePatches: patchSet.inversePatches,
+                  };
+                }
+              } else {
+                const patchSet = buildHistoryPatchSet(
+                  projection,
+                  nextProjection,
+                );
+                if (patchSet.forwardPatches.length > 0) {
+                  pendingHistoryRef.current = {
+                    revision: result.revision,
+                    createdEntityId: result.createdEntityId,
+                    forwardPatches: patchSet.forwardPatches,
+                    inversePatches: patchSet.inversePatches,
+                  };
+                }
+              }
             }
           }
 

@@ -102,6 +102,25 @@ export const schematicLabels = sqliteTable(
   }),
 );
 
+export const pcbEntities = sqliteTable(
+  "designer_pcb_entities",
+  {
+    id: text("id").primaryKey(),
+    designId: text("design_id").notNull(),
+    kind: text("kind").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => ({
+    designIdIdx: index("designer_pcb_entities_design_id_idx").on(table.designId),
+    designKindIdx: index("designer_pcb_entities_design_kind_idx").on(
+      table.designId,
+      table.kind,
+    ),
+  }),
+);
+
 export const commandLog = sqliteTable(
   "designer_command_log",
   {

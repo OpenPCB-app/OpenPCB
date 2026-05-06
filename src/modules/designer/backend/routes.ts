@@ -2,7 +2,10 @@ import type {
   CoreBackendModuleContext,
   ModuleRouterHandle,
 } from "../../../core/contracts/modules/backend-module";
-import { NotFoundError, ValidationError } from "../../../core/backend/contracts/errors";
+import {
+  NotFoundError,
+  ValidationError,
+} from "../../../core/backend/contracts/errors";
 import type {
   DesignerCommandEnvelope,
   DesignerCreateWireCommand,
@@ -10,6 +13,9 @@ import type {
   DesignerDeleteEntityCommand,
   DesignerMirrorPartCommand,
   DesignerMovePartCommand,
+  DesignerPcbMovePlacementCommand,
+  DesignerPcbRotatePlacementCommand,
+  DesignerPcbSetBoardSettingsCommand,
   DesignerPlacePartCommand,
   DesignerRotatePartCommand,
   DesignerUpsertLabelCommand,
@@ -37,7 +43,9 @@ function parsePointNm(value: unknown, field: string): { x: number; y: number } {
   const x = asNumber(record.x);
   const y = asNumber(record.y);
   if (x === null || y === null) {
-    throw new ValidationError(`${field}.x and ${field}.y must be finite numbers`);
+    throw new ValidationError(
+      `${field}.x and ${field}.y must be finite numbers`,
+    );
   }
   return { x, y };
 }
@@ -85,7 +93,9 @@ function parsePlacePartCommand(
     rotation !== undefined &&
     (rotationDeg === null || ![0, 90, 180, 270].includes(rotationDeg))
   ) {
-    throw new ValidationError("command.rotationDeg must be one of 0/90/180/270");
+    throw new ValidationError(
+      "command.rotationDeg must be one of 0/90/180/270",
+    );
   }
 
   return {
@@ -97,7 +107,9 @@ function parsePlacePartCommand(
   };
 }
 
-function parseMovePartCommand(raw: Record<string, unknown>): DesignerMovePartCommand {
+function parseMovePartCommand(
+  raw: Record<string, unknown>,
+): DesignerMovePartCommand {
   const partId = asString(raw.partId);
   if (!partId) {
     throw new ValidationError("command.partId must be a string");
@@ -118,7 +130,9 @@ function parseRotatePartCommand(
     throw new ValidationError("command.partId must be a string");
   }
   if (rotationDeg === null || ![0, 90, 180, 270].includes(rotationDeg)) {
-    throw new ValidationError("command.rotationDeg must be one of 0/90/180/270");
+    throw new ValidationError(
+      "command.rotationDeg must be one of 0/90/180/270",
+    );
   }
 
   return {
@@ -151,8 +165,14 @@ function parseDeleteEntityCommand(
   if (!entityId) {
     throw new ValidationError("command.entityId must be a string");
   }
-  if (entityKind !== "part" && entityKind !== "wire" && entityKind !== "label") {
-    throw new ValidationError("command.entityKind must be one of part/wire/label");
+  if (
+    entityKind !== "part" &&
+    entityKind !== "wire" &&
+    entityKind !== "label"
+  ) {
+    throw new ValidationError(
+      "command.entityKind must be one of part/wire/label",
+    );
   }
 
   return {
@@ -166,7 +186,11 @@ function parseUpsertLabelCommand(
   raw: Record<string, unknown>,
 ): DesignerUpsertLabelCommand {
   const labelIdValue = raw.labelId;
-  if (labelIdValue !== undefined && labelIdValue !== null && typeof labelIdValue !== "string") {
+  if (
+    labelIdValue !== undefined &&
+    labelIdValue !== null &&
+    typeof labelIdValue !== "string"
+  ) {
     throw new ValidationError("command.labelId must be a string when provided");
   }
   const text = asString(raw.text);
@@ -178,6 +202,73 @@ function parseUpsertLabelCommand(
     labelId: typeof labelIdValue === "string" ? labelIdValue : undefined,
     text,
     positionNm: parsePointNm(raw.positionNm, "command.positionNm"),
+  };
+}
+
+function parsePcbSetBoardSettingsCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbSetBoardSettingsCommand {
+  const widthMm = asNumber(raw.widthMm);
+  const heightMm = asNumber(raw.heightMm);
+  if (widthMm === null || heightMm === null) {
+    throw new ValidationError(
+      "command.widthMm and command.heightMm must be finite numbers",
+    );
+  }
+  if (widthMm <= 0 || heightMm <= 0) {
+    throw new ValidationError(
+      "command.widthMm and command.heightMm must be positive",
+    );
+  }
+  return { type: "pcb_set_board_settings", widthMm, heightMm };
+}
+
+function parsePointMm(value: unknown, field: string): { x: number; y: number } {
+  const record = asRecord(value);
+  if (!record) {
+    throw new ValidationError(`${field} must be an object`);
+  }
+  const x = asNumber(record.x);
+  const y = asNumber(record.y);
+  if (x === null || y === null) {
+    throw new ValidationError(
+      `${field}.x and ${field}.y must be finite numbers`,
+    );
+  }
+  return { x, y };
+}
+
+function parsePcbMovePlacementCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbMovePlacementCommand {
+  const placementId = asString(raw.placementId);
+  if (!placementId) {
+    throw new ValidationError("command.placementId must be a string");
+  }
+  return {
+    type: "pcb_move_placement",
+    placementId,
+    positionMm: parsePointMm(raw.positionMm, "command.positionMm"),
+  };
+}
+
+function parsePcbRotatePlacementCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbRotatePlacementCommand {
+  const placementId = asString(raw.placementId);
+  const rotationDeg = asNumber(raw.rotationDeg);
+  if (!placementId) {
+    throw new ValidationError("command.placementId must be a string");
+  }
+  if (rotationDeg === null || ![0, 90, 180, 270].includes(rotationDeg)) {
+    throw new ValidationError(
+      "command.rotationDeg must be one of 0/90/180/270",
+    );
+  }
+  return {
+    type: "pcb_rotate_placement",
+    placementId,
+    rotationDeg: rotationDeg as 0 | 90 | 180 | 270,
   };
 }
 
@@ -216,7 +307,10 @@ function parseCreateWireJunctionCommand(
     );
   }
 
-  const targetPointNm = parsePointNm(raw.targetPointNm, "command.targetPointNm");
+  const targetPointNm = parsePointNm(
+    raw.targetPointNm,
+    "command.targetPointNm",
+  );
   const pointsRaw = Array.isArray(raw.pointsNm) ? raw.pointsNm : [];
   const pointsNm = pointsRaw.map((point, index) =>
     parsePointNm(point, `command.pointsNm[${index}]`),
@@ -252,7 +346,11 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
     baseRevisionRaw === null || baseRevisionRaw === undefined
       ? null
       : asNumber(baseRevisionRaw);
-  if (baseRevisionRaw !== null && baseRevisionRaw !== undefined && baseRevision === null) {
+  if (
+    baseRevisionRaw !== null &&
+    baseRevisionRaw !== undefined &&
+    baseRevision === null
+  ) {
     throw new ValidationError("baseRevision must be a number or null");
   }
 
@@ -291,6 +389,15 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
       break;
     case "upsert_label":
       command = parseUpsertLabelCommand(commandRecord);
+      break;
+    case "pcb_set_board_settings":
+      command = parsePcbSetBoardSettingsCommand(commandRecord);
+      break;
+    case "pcb_move_placement":
+      command = parsePcbMovePlacementCommand(commandRecord);
+      break;
+    case "pcb_rotate_placement":
+      command = parsePcbRotatePlacementCommand(commandRecord);
       break;
     default:
       throw new ValidationError(`Unsupported command type '${type}'`);
@@ -351,6 +458,15 @@ export function registerRoutes(
   router.get("/designs/:designId/projection/schematic", async ({ params }) => {
     const designId = params.getOrThrow("designId");
     const projection = await store.getSchematicProjection(designId);
+    if (!projection) {
+      throw new NotFoundError(`Design '${designId}' not found`);
+    }
+    return success({ projection });
+  });
+
+  router.get("/designs/:designId/projection/pcb", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    const projection = await store.getPcbProjection(designId);
     if (!projection) {
       throw new NotFoundError(`Design '${designId}' not found`);
     }
@@ -427,12 +543,16 @@ export function registerRoutes(
     return success({ components });
   });
 
-  router.get("/library/components/:componentId/placement", async ({ params }) => {
-    const componentId = params.getOrThrow("componentId");
-    const detail = await store.resolveLibraryComponentForPlacement(componentId);
-    if (!detail) {
-      throw new NotFoundError(`Library component '${componentId}' not found`);
-    }
-    return success({ detail });
-  });
+  router.get(
+    "/library/components/:componentId/placement",
+    async ({ params }) => {
+      const componentId = params.getOrThrow("componentId");
+      const detail =
+        await store.resolveLibraryComponentForPlacement(componentId);
+      if (!detail) {
+        throw new NotFoundError(`Library component '${componentId}' not found`);
+      }
+      return success({ detail });
+    },
+  );
 }

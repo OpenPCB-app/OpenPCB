@@ -6,6 +6,7 @@ import type {
   DesignerDispatchResult,
   DesignerHistoryActionResult,
   DesignerHistorySnapshot,
+  DesignerPcbProjection,
   DesignerSchematicProjection,
   DesignerSearchLibraryParams,
 } from "./types";
@@ -38,6 +39,18 @@ export type {
   DesignerMirrorPartCommand,
   DesignerMovePartCommand,
   DesignerPin,
+  PcbBoardOutline,
+  PcbBoardSettings,
+  PcbDesignRules,
+  PcbLayerId,
+  PcbNetClass,
+  PcbPlacedPart,
+  PcbPointMm,
+  RatsnestSegment,
+  DesignerPcbProjection,
+  DesignerPcbMovePlacementCommand,
+  DesignerPcbRotatePlacementCommand,
+  DesignerPcbSetBoardSettingsCommand,
   DesignerPlacePartCommand,
   DesignerPlacedPart,
   DesignerRotatePartCommand,
@@ -49,12 +62,15 @@ export type {
 export type { DesignerInvalidatedEvent } from "./events";
 
 export interface DesignerSDK {
-  createDesign(input?: CreateDesignerDesignInput): Promise<DesignerDesignSummary>;
+  createDesign(
+    input?: CreateDesignerDesignInput,
+  ): Promise<DesignerDesignSummary>;
   listDesigns(): Promise<DesignerDesignSummary[]>;
   getDesign(designId: string): Promise<DesignerDesignRecord | null>;
   getSchematicProjection(
     designId: string,
   ): Promise<DesignerSchematicProjection | null>;
+  getPcbProjection(designId: string): Promise<DesignerPcbProjection | null>;
   searchLibraryComponents(
     params: DesignerSearchLibraryParams,
   ): Promise<LibraryComponent[]>;

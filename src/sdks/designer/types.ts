@@ -44,6 +44,83 @@ export interface DesignerSchematicProjection {
   nets: DesignerDerivedNet[];
 }
 
+export type PcbLayerId = "F.Cu" | "B.Cu" | "F.SilkS" | "B.SilkS" | "Edge.Cuts";
+
+export interface PcbPointMm {
+  x: number;
+  y: number;
+}
+
+export interface PcbBoardOutline {
+  kind: "rect";
+  widthMm: number;
+  heightMm: number;
+  centerMm: PcbPointMm;
+}
+
+export interface PcbDesignRules {
+  clearance: {
+    traceToTraceMm: number;
+    traceToPadMm: number;
+    padToPadMm: number;
+    traceToViaMm: number;
+    viaToViaMm: number;
+    copperToBoardEdgeMm: number;
+  };
+  minimums: {
+    traceWidthMm: number;
+    drillSizeMm: number;
+    annularRingMm: number;
+    viaDiameterMm: number;
+    viaDrillMm: number;
+  };
+}
+
+export interface PcbNetClass {
+  id: string;
+  name: string;
+  traceWidthMm: number;
+  clearanceMm: number;
+  viaDiameterMm: number;
+  viaDrillMm: number;
+}
+
+export interface PcbBoardSettings {
+  outline: PcbBoardOutline;
+  activeLayer: PcbLayerId;
+  visibleLayers: PcbLayerId[];
+  designRules: PcbDesignRules;
+  netClasses: PcbNetClass[];
+  updatedAt: string;
+}
+
+export interface PcbPlacedPart {
+  id: string;
+  partId: string;
+  componentId: string;
+  reference: string;
+  positionMm: PcbPointMm;
+  rotationDeg: number;
+  mirrored: boolean;
+  layer: PcbLayerId;
+  footprint: LibraryFootprintPlacementSnapshot;
+}
+
+export interface RatsnestSegment {
+  netId: string;
+  fromMm: PcbPointMm;
+  toMm: PcbPointMm;
+}
+
+export interface DesignerPcbProjection {
+  designId: string;
+  revision: number;
+  board: PcbBoardSettings;
+  placements: PcbPlacedPart[];
+  ratsnest: RatsnestSegment[];
+  warnings: string[];
+}
+
 export interface DesignerJunction {
   xNm: number;
   yNm: number;
@@ -181,6 +258,24 @@ export interface DesignerUpsertLabelCommand {
   };
 }
 
+export interface DesignerPcbSetBoardSettingsCommand {
+  type: "pcb_set_board_settings";
+  widthMm: number;
+  heightMm: number;
+}
+
+export interface DesignerPcbMovePlacementCommand {
+  type: "pcb_move_placement";
+  placementId: string;
+  positionMm: PcbPointMm;
+}
+
+export interface DesignerPcbRotatePlacementCommand {
+  type: "pcb_rotate_placement";
+  placementId: string;
+  rotationDeg: 0 | 90 | 180 | 270;
+}
+
 export type DesignerCommand =
   | DesignerPlacePartCommand
   | DesignerCreateWireCommand
@@ -189,7 +284,10 @@ export type DesignerCommand =
   | DesignerRotatePartCommand
   | DesignerMirrorPartCommand
   | DesignerDeleteEntityCommand
-  | DesignerUpsertLabelCommand;
+  | DesignerUpsertLabelCommand
+  | DesignerPcbSetBoardSettingsCommand
+  | DesignerPcbMovePlacementCommand
+  | DesignerPcbRotatePlacementCommand;
 
 export type DesignerCommandEnvelope = CommandEnvelope<DesignerCommand>;
 
@@ -263,6 +361,16 @@ export type DesignerDispatchResult =
       ok: false;
       code: "INVALID_LABEL";
       detail: string;
+    }
+  | {
+      ok: false;
+      code: "INVALID_PCB_BOARD_SETTINGS";
+      detail: string;
+    }
+  | {
+      ok: false;
+      code: "PCB_PLACEMENT_NOT_FOUND";
+      placementId: string;
     };
 
 export interface DesignerSearchLibraryParams {

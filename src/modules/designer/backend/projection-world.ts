@@ -5,7 +5,11 @@ import {
   invertPatchBatch,
   type EcsPatch,
 } from "../../../shared/domain/commands";
-import { asEntityId, EcsWorld, type EntityId } from "../../../shared/domain/ecs";
+import {
+  asEntityId,
+  EcsWorld,
+  type EntityId,
+} from "../../../shared/domain/ecs";
 import type {
   DesignerDerivedNet,
   DesignerEntityKind,
@@ -14,6 +18,8 @@ import type {
   DesignerPlacedPart,
   DesignerSchematicProjection,
   DesignerWire,
+  PcbBoardSettings,
+  PcbPlacedPart,
 } from "../../../sdks";
 import { normalizeRotationDeg } from "./commands/place-part";
 import {
@@ -26,11 +32,20 @@ import {
 
 type DbClient = BunSQLiteDatabase<Record<string, unknown>>;
 
-export type DesignerWorldComponent = {
-  type: "designer.entity";
-  kind: DesignerEntityKind;
-  payload: Record<string, unknown>;
-};
+export type DesignerWorldComponent =
+  | {
+      type: "designer.entity";
+      kind: DesignerEntityKind;
+      payload: Record<string, unknown>;
+    }
+  | {
+      type: "designer.pcb_settings";
+      payload: Record<string, unknown>;
+    }
+  | {
+      type: "designer.pcb_placement";
+      payload: Record<string, unknown>;
+    };
 
 class UnionFind {
   private readonly parent = new Map<string, string>();
@@ -134,28 +149,66 @@ export function projectionToWorld(
   return world;
 }
 
-function componentEquals(left: DesignerWorldComponent, right: DesignerWorldComponent): boolean {
-  return left.kind === right.kind && JSON.stringify(left.payload) === JSON.stringify(right.payload);
+function componentEquals(
+  left: DesignerWorldComponent,
+  right: DesignerWorldComponent,
+): boolean {
+  if (left.type !== right.type) return false;
+  if (left.type === "designer.entity" && right.type === "designer.entity") {
+    return (
+      left.kind === right.kind &&
+      JSON.stringify(left.payload) === JSON.stringify(right.payload)
+    );
+  }
+  return JSON.stringify(left.payload) === JSON.stringify(right.payload);
 }
 
-function buildProjectionDiffPatches(
-  before: DesignerSchematicProjection,
-  after: DesignerSchematicProjection,
+function worldEntityComponents(
+  world: EcsWorld<DesignerWorldComponent>,
+): Array<{ entityId: EntityId; component: DesignerWorldComponent }> {
+  return world
+    .snapshots()
+    .map((snapshot) => {
+      const component =
+        snapshot.components.get("designer.entity") ??
+        snapshot.components.get("designer.pcb_settings") ??
+        snapshot.components.get("designer.pcb_placement");
+      return component ? { entityId: snapshot.id, component } : null;
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+}
+
+function buildWorldDiffPatches(
+  beforeWorld: EcsWorld<DesignerWorldComponent>,
+  afterWorld: EcsWorld<DesignerWorldComponent>,
 ): EcsPatch<DesignerWorldComponent>[] {
   const beforeMap = new Map<string, DesignerWorldComponent>();
   const afterMap = new Map<string, DesignerWorldComponent>();
-  for (const entry of projectionEntityComponents(before)) beforeMap.set(entry.entityId, entry.component);
-  for (const entry of projectionEntityComponents(after)) afterMap.set(entry.entityId, entry.component);
+  for (const entry of worldEntityComponents(beforeWorld))
+    beforeMap.set(entry.entityId, entry.component);
+  for (const entry of worldEntityComponents(afterWorld))
+    afterMap.set(entry.entityId, entry.component);
 
   const patches: EcsPatch<DesignerWorldComponent>[] = [];
-  for (const entityKey of [...afterMap.keys()].sort((a, b) => a.localeCompare(b))) {
+  for (const entityKey of [...afterMap.keys()].sort((a, b) =>
+    a.localeCompare(b),
+  )) {
     const nextComponent = afterMap.get(entityKey);
     const previousComponent = beforeMap.get(entityKey);
-    if (nextComponent && (!previousComponent || !componentEquals(previousComponent, nextComponent))) {
-      patches.push({ kind: "component.set", entityId: asEntityId(entityKey), component: nextComponent });
+    if (
+      nextComponent &&
+      (!previousComponent || !componentEquals(previousComponent, nextComponent))
+    ) {
+      patches.push({
+        kind: "component.set",
+        entityId: asEntityId(entityKey),
+        component: nextComponent,
+      });
     }
   }
-  for (const entityKey of [...beforeMap.keys()].sort((a, b) => a.localeCompare(b))) {
+  for (const entityKey of [...beforeMap.keys()].sort((a, b) =>
+    a.localeCompare(b),
+  )) {
     if (!afterMap.has(entityKey)) {
       patches.push({ kind: "entity.delete", entityId: asEntityId(entityKey) });
     }
@@ -170,8 +223,74 @@ export function buildHistoryPatchSet(
   forwardPatches: EcsPatch<DesignerWorldComponent>[];
   inversePatches: EcsPatch<DesignerWorldComponent>[];
 } {
-  const forwardPatches = buildProjectionDiffPatches(before, after);
-  const applied = applyPatches(projectionToWorld(before), forwardPatches);
+  const beforeWorld = projectionToWorld(before);
+  const afterWorld = projectionToWorld(after);
+  const forwardPatches = buildWorldDiffPatches(beforeWorld, afterWorld);
+  const applied = applyPatches(beforeWorld, forwardPatches);
+  return { forwardPatches, inversePatches: invertPatchBatch(applied) };
+}
+
+const PCB_SETTINGS_ENTITY_ID = asEntityId("pcb:board_settings");
+const PCB_PLACEMENT_PREFIX = "pcb:placement:";
+
+export interface DesignerCombinedState {
+  schematic: DesignerSchematicProjection;
+  pcb: PcbBoardSettings;
+  placements: PcbPlacedPart[];
+}
+
+export function combinedStateToWorld(
+  state: DesignerCombinedState,
+): EcsWorld<DesignerWorldComponent> {
+  const world = projectionToWorld(state.schematic);
+  world.ensureEntity(PCB_SETTINGS_ENTITY_ID);
+  world.setComponent(PCB_SETTINGS_ENTITY_ID, {
+    type: "designer.pcb_settings",
+    payload: toPayloadRecord(state.pcb),
+  });
+  for (const placement of state.placements) {
+    const entityId = asEntityId(`${PCB_PLACEMENT_PREFIX}${placement.id}`);
+    world.ensureEntity(entityId);
+    world.setComponent(entityId, {
+      type: "designer.pcb_placement",
+      payload: toPayloadRecord(placement),
+    });
+  }
+  return world;
+}
+
+export function combinedStateFromWorld(
+  designId: string,
+  revision: number,
+  world: EcsWorld<DesignerWorldComponent>,
+): DesignerCombinedState {
+  const schematic = projectionFromWorld(designId, revision, world);
+  const pcbSnapshot = world.snapshotEntity(PCB_SETTINGS_ENTITY_ID);
+  const pcbComponent = pcbSnapshot?.components.get("designer.pcb_settings");
+  const pcb = (pcbComponent?.payload ?? {}) as unknown as PcbBoardSettings;
+
+  const placements: PcbPlacedPart[] = [];
+  for (const snapshot of world.snapshots()) {
+    const component = snapshot.components.get("designer.pcb_placement");
+    if (component && component.type === "designer.pcb_placement") {
+      placements.push(component.payload as unknown as PcbPlacedPart);
+    }
+  }
+  placements.sort((a, b) => a.id.localeCompare(b.id));
+  return { schematic, pcb, placements };
+}
+
+export function buildCombinedHistoryPatchSet(
+  before: DesignerCombinedState,
+  after: DesignerCombinedState,
+): {
+  forwardPatches: EcsPatch<DesignerWorldComponent>[];
+  inversePatches: EcsPatch<DesignerWorldComponent>[];
+} {
+  const beforeWorld = combinedStateToWorld(before);
+  const afterWorld = combinedStateToWorld(after);
+  const forwardPatches = buildWorldDiffPatches(beforeWorld, afterWorld);
+  const applied = applyPatches(beforeWorld, forwardPatches);
   return { forwardPatches, inversePatches: invertPatchBatch(applied) };
 }
 
@@ -213,19 +332,37 @@ export function deriveNetsAndJunctions(
     if (targetKey && last) unionFind.union(targetKey, pointKey(last));
   }
 
-  const netMap = new Map<string, { pinIds: Set<string>; wireIds: Set<string>; labelIds: Set<string>; names: Set<string> }>();
+  const netMap = new Map<
+    string,
+    {
+      pinIds: Set<string>;
+      wireIds: Set<string>;
+      labelIds: Set<string>;
+      names: Set<string>;
+    }
+  >();
   const ensureNet = (root: string) => {
     const existing = netMap.get(root);
     if (existing) return existing;
-    const created = { pinIds: new Set<string>(), wireIds: new Set<string>(), labelIds: new Set<string>(), names: new Set<string>() };
+    const created = {
+      pinIds: new Set<string>(),
+      wireIds: new Set<string>(),
+      labelIds: new Set<string>(),
+      names: new Set<string>(),
+    };
     netMap.set(root, created);
     return created;
   };
 
-  for (const part of parts) for (const pin of part.pins) ensureNet(unionFind.find(pointKey(pin.worldPositionNm))).pinIds.add(pin.id);
+  for (const part of parts)
+    for (const pin of part.pins)
+      ensureNet(unionFind.find(pointKey(pin.worldPositionNm))).pinIds.add(
+        pin.id,
+      );
   for (const wire of wires) {
     const anchor = wire.pointsNm[0];
-    if (anchor) ensureNet(unionFind.find(pointKey(anchor))).wireIds.add(wire.id);
+    if (anchor)
+      ensureNet(unionFind.find(pointKey(anchor))).wireIds.add(wire.id);
   }
   for (const label of labels) {
     const net = ensureNet(unionFind.find(pointKey(label.positionNm)));
@@ -234,16 +371,18 @@ export function deriveNetsAndJunctions(
   }
 
   let unnamedIndex = 1;
-  const nets = [...netMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([root, net]) => {
-    const names = [...net.names].sort((a, b) => a.localeCompare(b));
-    return {
-      id: root,
-      name: names[0] ?? `Net_${unnamedIndex++}`,
-      pinIds: [...net.pinIds].sort((a, b) => a.localeCompare(b)),
-      wireIds: [...net.wireIds].sort((a, b) => a.localeCompare(b)),
-      labelIds: [...net.labelIds].sort((a, b) => a.localeCompare(b)),
-    };
-  });
+  const nets = [...netMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([root, net]) => {
+      const names = [...net.names].sort((a, b) => a.localeCompare(b));
+      return {
+        id: root,
+        name: names[0] ?? `Net_${unnamedIndex++}`,
+        pinIds: [...net.pinIds].sort((a, b) => a.localeCompare(b)),
+        wireIds: [...net.wireIds].sort((a, b) => a.localeCompare(b)),
+        labelIds: [...net.labelIds].sort((a, b) => a.localeCompare(b)),
+      };
+    });
 
   const junctions = [...incidentCount.entries()]
     .filter(([, count]) => count >= 3)
@@ -265,17 +404,28 @@ export function projectionFromWorld(
 
   for (const snapshot of world.snapshots()) {
     const component = snapshot.components.get("designer.entity");
-    if (!component) continue;
-    if (component.kind === "part") parts.push(component.payload as unknown as DesignerPlacedPart);
-    if (component.kind === "wire") wires.push(component.payload as unknown as DesignerWire);
-    if (component.kind === "label") labels.push(component.payload as unknown as DesignerLabel);
+    if (!component || component.type !== "designer.entity") continue;
+    if (component.kind === "part")
+      parts.push(component.payload as unknown as DesignerPlacedPart);
+    if (component.kind === "wire")
+      wires.push(component.payload as unknown as DesignerWire);
+    if (component.kind === "label")
+      labels.push(component.payload as unknown as DesignerLabel);
   }
 
   parts.sort((a, b) => a.id.localeCompare(b.id));
   wires.sort((a, b) => a.id.localeCompare(b.id));
   labels.sort((a, b) => a.id.localeCompare(b.id));
   const derived = deriveNetsAndJunctions(parts, wires, labels);
-  return { designId, revision, parts, wires, labels, nets: derived.nets, junctions: derived.junctions };
+  return {
+    designId,
+    revision,
+    parts,
+    wires,
+    labels,
+    nets: derived.nets,
+    junctions: derived.junctions,
+  };
 }
 
 export function replaceSchematicProjection(
@@ -286,69 +436,82 @@ export function replaceSchematicProjection(
 ): void {
   tx.delete(schematicPins).where(eq(schematicPins.designId, designId)).run();
   tx.delete(schematicWires).where(eq(schematicWires.designId, designId)).run();
-  tx.delete(schematicLabels).where(eq(schematicLabels.designId, designId)).run();
+  tx.delete(schematicLabels)
+    .where(eq(schematicLabels.designId, designId))
+    .run();
   tx.delete(schematicParts).where(eq(schematicParts.designId, designId)).run();
 
   for (const part of projection.parts) {
-    tx.insert(schematicParts).values({
-      id: part.id,
-      designId,
-      componentId: part.componentId,
-      reference: part.reference,
-      value: part.value,
-      positionXNm: part.positionNm.x,
-      positionYNm: part.positionNm.y,
-      rotationDeg: normalizeRotationDeg(part.rotationDeg),
-      mirrored: part.mirrored ? 1 : 0,
-      symbolSnapshotJson: JSON.stringify(part.symbol),
-      footprintSnapshotJson: JSON.stringify(part.footprint),
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }).run();
-
-    for (const pin of part.pins) {
-      tx.insert(schematicPins).values({
-        id: pin.id,
+    tx.insert(schematicParts)
+      .values({
+        id: part.id,
         designId,
-        partId: part.id,
-        originPinKey: pin.originPinKey,
-        number: pin.number,
-        name: pin.name,
-        electricalType: pin.electricalType,
-        unit: pin.unit,
-        localXNm: pin.localPositionNm.x,
-        localYNm: pin.localPositionNm.y,
-        worldXNm: pin.worldPositionNm.x,
-        worldYNm: pin.worldPositionNm.y,
+        componentId: part.componentId,
+        reference: part.reference,
+        value: part.value,
+        positionXNm: part.positionNm.x,
+        positionYNm: part.positionNm.y,
+        rotationDeg: normalizeRotationDeg(part.rotationDeg),
+        mirrored: part.mirrored ? 1 : 0,
+        symbolSnapshotJson: JSON.stringify(part.symbol),
+        footprintSnapshotJson: JSON.stringify(part.footprint),
         createdAt: timestamp,
         updatedAt: timestamp,
-      }).run();
+      })
+      .run();
+
+    for (const pin of part.pins) {
+      tx.insert(schematicPins)
+        .values({
+          id: pin.id,
+          designId,
+          partId: part.id,
+          originPinKey: pin.originPinKey,
+          number: pin.number,
+          name: pin.name,
+          electricalType: pin.electricalType,
+          unit: pin.unit,
+          localXNm: pin.localPositionNm.x,
+          localYNm: pin.localPositionNm.y,
+          worldXNm: pin.worldPositionNm.x,
+          worldYNm: pin.worldPositionNm.y,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        })
+        .run();
     }
   }
 
   for (const wire of projection.wires) {
-    tx.insert(schematicWires).values({
-      id: wire.id,
-      designId,
-      sourcePinId: wire.sourcePinId,
-      targetPinId: wire.targetPinId,
-      pointsJson: JSON.stringify(wire.pointsNm),
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }).run();
+    tx.insert(schematicWires)
+      .values({
+        id: wire.id,
+        designId,
+        sourcePinId: wire.sourcePinId,
+        targetPinId: wire.targetPinId,
+        pointsJson: JSON.stringify(wire.pointsNm),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+      .run();
   }
 
   for (const label of projection.labels) {
-    tx.insert(schematicLabels).values({
-      id: label.id,
-      designId,
-      text: label.text,
-      xNm: label.positionNm.x,
-      yNm: label.positionNm.y,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }).run();
+    tx.insert(schematicLabels)
+      .values({
+        id: label.id,
+        designId,
+        text: label.text,
+        xNm: label.positionNm.x,
+        yNm: label.positionNm.y,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+      .run();
   }
 
-  tx.update(designHeads).set({ revision: projection.revision, updatedAt: timestamp }).where(eq(designHeads.id, designId)).run();
+  tx.update(designHeads)
+    .set({ revision: projection.revision, updatedAt: timestamp })
+    .where(eq(designHeads.id, designId))
+    .run();
 }

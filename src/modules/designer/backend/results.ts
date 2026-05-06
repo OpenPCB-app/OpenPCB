@@ -5,7 +5,9 @@ import type {
 } from "../../../sdks";
 import { asNumber, asRecord, asString, parseJsonRecord } from "./value-guards";
 
-export function parseDispatchResultJson(payloadJson: string): DesignerDispatchResult | null {
+export function parseDispatchResultJson(
+  payloadJson: string,
+): DesignerDispatchResult | null {
   const parsed = parseJsonRecord(payloadJson);
   if (parsed.ok === true) {
     const revision = asNumber(parsed.revision);
@@ -68,7 +70,11 @@ export function parseDispatchResultJson(payloadJson: string): DesignerDispatchRe
     if (!entityId || !entityKind) {
       return null;
     }
-    if (entityKind !== "part" && entityKind !== "wire" && entityKind !== "label") {
+    if (
+      entityKind !== "part" &&
+      entityKind !== "wire" &&
+      entityKind !== "label"
+    ) {
       return null;
     }
     return { ok: false, code, entityId, entityKind };
@@ -84,11 +90,28 @@ export function parseDispatchResultJson(payloadJson: string): DesignerDispatchRe
     return detail ? { ok: false, code, detail } : null;
   }
 
+  if (code === "INVALID_PCB_BOARD_SETTINGS") {
+    const detail = asString(parsed.detail);
+    return detail ? { ok: false, code, detail } : null;
+  }
+
+  if (code === "PCB_PLACEMENT_NOT_FOUND") {
+    const placementId = asString(parsed.placementId);
+    return placementId ? { ok: false, code, placementId } : null;
+  }
+
   return null;
 }
 
-export function conflict(expected: number | null, actual: number): DesignerDispatchResult {
-  return { ok: false, code: "REVISION_CONFLICT", conflict: { expected, actual } };
+export function conflict(
+  expected: number | null,
+  actual: number,
+): DesignerDispatchResult {
+  return {
+    ok: false,
+    code: "REVISION_CONFLICT",
+    conflict: { expected, actual },
+  };
 }
 
 export function componentNotFound(componentId: string): DesignerDispatchResult {
@@ -114,6 +137,21 @@ export function invalidLabel(detail: string): DesignerDispatchResult {
   return { ok: false, code: "INVALID_LABEL", detail };
 }
 
-export function okResult(revision: number, createdEntityId: string): DesignerCommandOkResult {
+export function invalidPcbBoardSettings(
+  detail: string,
+): DesignerDispatchResult {
+  return { ok: false, code: "INVALID_PCB_BOARD_SETTINGS", detail };
+}
+
+export function pcbPlacementNotFound(
+  placementId: string,
+): DesignerDispatchResult {
+  return { ok: false, code: "PCB_PLACEMENT_NOT_FOUND", placementId };
+}
+
+export function okResult(
+  revision: number,
+  createdEntityId: string | null,
+): DesignerCommandOkResult {
   return { ok: true, revision, createdEntityId, idempotent: false };
 }

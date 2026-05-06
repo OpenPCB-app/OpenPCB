@@ -90,6 +90,8 @@ function commandErrorMessage(result: Exclude<DesignerDispatchResult, { ok: true 
       return result.detail;
     case "INVALID_LABEL":
       return result.detail;
+    case "INVALID_PCB_BOARD_SETTINGS":
+      return result.detail;
     default:
       return "Command failed";
   }
@@ -380,9 +382,12 @@ export function useDesignerWorkspace(params: {
         throw new Error("No design selected");
       }
 
+      const isPcbCommand = command.type.startsWith("pcb_");
+      const sessionId = isPcbCommand ? "designer-pcb-session" : DESIGNER_SESSION_ID;
+
       const envelope: DesignerCommandEnvelope = {
         commandId: crypto.randomUUID(),
-        sessionId: DESIGNER_SESSION_ID,
+        sessionId,
         aggregateId: designId,
         baseRevision: projectionRef.current?.revision ?? null,
         issuedAt: Date.now(),
@@ -394,8 +399,17 @@ export function useDesignerWorkspace(params: {
         throw new Error(commandErrorMessage(result));
       }
 
-      await refreshProjectionForDesign(designId);
-      await refreshHistoryForDesign(designId);
+      if (isPcbCommand) {
+        if (projectionRef.current) {
+          projectionRef.current = {
+            ...projectionRef.current,
+            revision: result.revision,
+          };
+        }
+      } else {
+        await refreshProjectionForDesign(designId);
+        await refreshHistoryForDesign(designId);
+      }
       return result;
     },
     [

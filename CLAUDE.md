@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-OpenPCB — desktop PCB design suite. Bun HTTP backend + React 19/Vite 7/Tailwind 4 frontend + Electron shell + SQLite (Drizzle ORM). Package manager: **bun** (bun.lock present) at workspace level, root uses npm workspaces.
+OpenPCB — desktop PCB design suite. Bun HTTP backend + React 19/Vite 7/Tailwind 4 frontend + Electron shell + SQLite (Drizzle ORM). Root uses **npm workspaces**; backend uses Bun runtime + Bun test; root-level lockfile is `bun.lock` (kept for tooling) but installs go through npm.
 
-Branch `aggresive-cleanup` is mid-restructuring. Many npm scripts and configs still reference legacy paths (`src-ts`, `src-react`, `core/backend`, `core/frontend`) — actual code is under `src/core/*` and `src/modules/*`. **Verify paths before running scripts.**
+Branch `aggresive-cleanup` is mid-restructuring. Most paths have been migrated to `src/core/*`, `src/modules/*`, `src/sdks/*`, `src/shared/*`, but a few stale references remain in `bunfig.toml` and some scripts. **Verify paths before running unfamiliar scripts.**
 
 ## Commands
 
@@ -14,30 +14,31 @@ Run from repo root unless noted.
 
 **Dev**
 
-- `npm run dev` — backend (Bun) + frontend (Vite) in browser mode
-- `npm run dev:electron` — backend + frontend + Electron shell
-- `npm run dev:backend` — Bun backend only (`src/core/backend/main.ts`, port 3000)
-- `npm run dev:frontend` — Vite dev server (port 1420, proxies `/api` → 3000)
+- `npm run dev` — backend (Bun) + frontend (Vite), browser mode
+- `npm run dev:electron` — backend + frontend + Electron shell (waits on `http://127.0.0.1:1420`)
+- `npm run dev:backend` — Bun backend only (`src/core/backend/main.ts`, port 3000, `--watch`)
+- `npm run dev:frontend` — Vite dev server only (port 1420, proxies `/api` and `/ws` → 3000)
 
 **Build / check**
 
-- `npm run build` — bun sidecar + frontend + electron bundle + dist
-- `npm run typecheck` — `tsc -b` over composite project
-- `npm run lint` — runs `lint` in frontend workspace if present
+- `npm run build` — bun sidecar compile + frontend bundle + electron build + dist
+- `npm run typecheck` — `tsc -b` over composite project (core/backend, core/frontend, modules)
+- `npm run lint` — runs `lint` (typecheck) in `src/core/frontend` workspace
 
 **Tests**
 
-- Backend (Bun): `cd src/core/backend && bun test` (root `test:backend` points at stale `core/backend`)
-- Frontend (Vitest): `cd src/core/frontend && npx vitest run` (root `test:react` points at stale `core/frontend`)
-- Single test file: `bun test path/to/file.test.ts` or `npx vitest run path/to/file.test.tsx`
-- E2E: `npm run test:e2e` — Playwright (Chrome), spawns both dev servers
+- Backend (Bun): `npm run test:backend` → `npm run test --workspace src/core/backend` → `bun test`
+- Frontend (Vitest): `npm run test:react` → `npm run test --workspace src/core/frontend` → `vitest run`
+- Single backend test: `cd src/core/backend && bun test tests/<file>.test.ts`
+- Single frontend test: `cd src/core/frontend && npx vitest run path/to/file.test.tsx`
+- E2E: `npm run test:e2e` — Playwright (Chrome). `npm run dev:browser` opens Playwright UI against the dev backend.
 
-**Modules / codegen** (legacy paths — inspect before running)
+**Modules / codegen**
 
 - `npm run module` — interactive module CLI (`scripts/module-cli.ts`)
-- `npm run module:validate`, `npm run module:codegen`, `npm run modules:generate`
-- `npm run gen` — full codegen pipeline (modules → SDK → OpenAPI → orval)
-- `npm run db:generate|migrate|push|studio|check` — Drizzle Kit (config has stale paths)
+- `npm run module:validate` / `npm run module:codegen` / `npm run modules:generate`
+- `npm run gen` — full codegen pipeline (modules → SDK → OpenAPI → orval). `npm run gen:check` fails if generated files are dirty.
+- `npm run db:generate|push|studio|check` — Drizzle Kit. `db:migrate` is a no-op message; module SQL migrations are applied automatically on backend startup.
 
 ## Architecture
 
@@ -50,17 +51,17 @@ modules/*  →  sdks/ + shared/  →  core/
 
 Layer rules (ESLint not yet wired):
 
-- `core/` — pure infrastructure: HTTP, router, module-loader, app shell. **Zero business logic.**
-- `shared/` — canvas engine, shared types. Used by modules.
-- `sdks/` — pure interfaces + public types between modules (no implementations).
-- `modules/*` — self-contained vertical slices (backend + frontend + DB schema + domain).
+- `core/` — pure infrastructure: HTTP, router, module-loader, app shell, DB factory, error contracts. **Zero business logic.**
+- `shared/` — canvas engine, ECS world, command/patch infrastructure, shared types. Used by modules.
+- `sdks/` — pure interfaces + public types between modules (`@sdks/library`, `@sdks/designer`). No implementations.
+- `modules/*` — self-contained vertical slices (backend + frontend + DB schema + domain logic).
 
 ### Layout
 
 ```
 src/
 ├── core/
-│   ├── backend/        Bun HTTP runtime, module loader, router
+│   ├── backend/        Bun HTTP runtime, module loader, router (own workspace)
 │   │   ├── main.ts     entry — boots ModuleRuntime then createHttpServer
 │   │   ├── http/       server, CORS, middleware, problem-details
 │   │   ├── router/     HttpRouter, ModuleRouter, route matcher, registry
@@ -68,26 +69,27 @@ src/
 │   │   ├── db/         sqlite-client, module-db-factory, transaction-runner
 │   │   ├── migrations/ module-migrator (per-module SQL migrations)
 │   │   ├── controllers/ health, diagnostics
-│   │   ├── contracts/  AppError hierarchy (ValidationError, NotFoundError, etc.)
+│   │   ├── contracts/  AppError hierarchy
 │   │   ├── diagnostics/ error buffer + store
 │   │   ├── logging/    JSON structured logger
-│   │   └── tests/      Bun test suite
-│   ├── frontend/       React 19 + Vite 7 + Tailwind 4 (own package.json)
+│   │   └── tests/      Bun test suite (designer-commands, designer-pcb, library-integration, …)
+│   ├── frontend/       React 19 + Vite 7 + Tailwind 4 (own workspace)
 │   │   └── src/        App → RuntimeProvider → BootstrapProvider → ThemeProvider → AppShell → AppRouter
-│   └── contracts/      app/* (runtime, bootstrap, routes) + modules/* (manifest, backend-module, sdk)
+│   └── contracts/      app/* (runtime, bootstrap, routes) + modules/* (manifest, backend-module, sdk facades)
 ├── modules/
-│   └── library/        only concrete module (formerly component-library)
-│       ├── manifest.json    schema enforced by manifest-discovery
-│       ├── module.backend.ts  barrel: exports { manifest, definition }
-│       ├── module.frontend.ts barrel: exports { manifest, Space (lazy) }
-│       ├── backend/     index.ts (definition), routes.ts, queries.ts, schema.ts, seed.ts, migrations/, import/
-│       └── frontend/    Space.tsx
+│   ├── library/        component library: symbols, footprints, KiCad import, seeding
+│   └── designer/       schematic + PCB editor (commands, history, projection, ECS world, store, wire-geometry, pcb/)
+│       └── backend/migrations/0000…0004_pcb_foundation.sql
+├── sdks/               public inter-module contracts
+│   ├── index.ts        MODULE_SDK_TOKENS = { LIBRARY, DESIGNER }
+│   ├── library/        types.ts, index.ts
+│   └── designer/       types.ts, events.ts, index.ts
 └── shared/
-    ├── backend/         (placeholder)
-    └── frontend/canvas/ canvas engine
+    ├── backend/        ECS world, command/patch/history infrastructure
+    └── frontend/canvas/ canvas engine + theme-aware layers
 
 electron/               Electron main + preload + backend-manager (separate workspace)
-scripts/                module CLI, codegen, bun sidecar compile
+scripts/                module-cli.ts, gen-modules.ts, gen-sdk.ts, generate-openapi.ts, compile-bun-sidecar.ts
 docs/                   PROPOSED_ARCHITECTURE.md, COMMAND_PATTERN.md, DATA_MODEL.md
 tests/e2e/              Playwright E2E tests
 ```
@@ -96,16 +98,16 @@ tests/e2e/              Playwright E2E tests
 
 `ModuleRuntime` (`src/core/backend/modules/module-loader.ts`) drives boot:
 
-1. `discoverModuleManifests(workspaceRoot)` walks `modules/*` — **the loader resolves `workspaceRoot` to `../../..` from its own file, landing at `src/core/`, so discovery searches `src/core/modules` not `src/modules/`.** Override with `OPENPCB_WORKSPACE_ROOT` env var. Active cleanup gap.
+1. `discoverModuleManifests(workspaceRoot)` walks `<workspaceRoot>/modules/*`. Default workspaceRoot = `path.resolve(import.meta.dir, "../../..")` from `src/core/backend/modules/` → resolves to `src/`, so discovery searches `src/modules/`. Override with `OPENPCB_WORKSPACE_ROOT` if needed.
 2. Validates + normalizes manifests (`id`, `namespace`, `apiVersion: 2`, `sidebar`, `dependsOn`).
-3. Topological sort with cycle detection, resolves `dependsOn`.
+3. Topological sort with cycle detection, resolves `dependsOn` (e.g., `designer` depends on `library`).
 4. Per module: applies `backend/migrations/*.sql` → dynamic-imports `module.backend.ts` → expects `ModuleDefinition` export (`definition`, `default`, or `backendModule`).
 5. Lifecycle: `onActivate → registerSdk → registerRoutes(router, ctx)`.
-6. SDKs go into `RuntimeSdkRegistry`; routes into `ModuleRouterRegistry`.
+6. SDKs registered in `RuntimeSdkRegistry` keyed by `MODULE_SDK_TOKENS`; routes mounted in `ModuleRouterRegistry`.
 
-**Module route URL pattern:** `/api/modules/{moduleId}/{subpath}` — the registry rewrites URL to just the subpath before dispatching to the module's router.
+**Module route URL pattern:** `/api/modules/{moduleId}/{subpath}` — registry rewrites URL to just `{subpath}` before dispatching to the module's router.
 
-**Module manifest schema:** `id` (kebab-case), `label`, `namespace` (dot-separated), `version`, `apiVersion: 2`, `kind: "space"|"tool"`, `sidebar: { label, icon (Lucide name), order, group? }`, `runtime: { backendEntry?, frontendEntry? }`, `dependsOn: [{ id, minVersion?, optional? }]`.
+**Module manifest schema:** `id` (kebab-case), `label`, `namespace` (dot-separated), `version`, `apiVersion: 2`, `kind: "space"|"tool"`, `sidebar: { label, icon (Lucide name), order, group? }`, `runtime: { backendEntry?, frontendEntry? }`, `dependsOn: [{ id, minVersion?, optional? }]`, optional `defaultPinned`.
 
 **Module definition contract** (`src/core/contracts/modules/backend-module.ts`):
 
@@ -121,11 +123,11 @@ interface ModuleDefinition {
 }
 ```
 
-Context provides: `moduleId`, `manifest`, `db` (prefixed SQLite via Drizzle), `sdk` (RuntimeSdkRegistry), `logger`.
+Context: `moduleId`, `manifest`, `db` (prefixed SQLite via Drizzle, e.g., tables prefixed `library_` / `designer_`), `sdk` (RuntimeSdkRegistry), `logger`.
 
 ### Frontend module loading
 
-Frontend uses `import.meta.glob("../../../../modules/*/module.frontend.ts")` to discover modules. Each `module.frontend.ts` exports `{ manifest, Space }` where `Space` is a lazy React component receiving `{ moduleId, namespace, backendURL }`. Navigation is Zustand-based (`useNavigationStore`), no React Router.
+`src/core/frontend/src/components/ModuleSpaceHost.tsx` uses `import.meta.glob` to discover `module.frontend.ts` files. Each exports `{ manifest, Space }` where `Space` is a lazy React component receiving `{ moduleId, namespace, backendURL }`. Navigation is **Zustand-based** (`useNavigationStore`), no React Router.
 
 ### Backend HTTP stack
 
@@ -139,19 +141,26 @@ Built-in routes:
 - `GET /api/diagnostics` → error stats (ring buffer, last 100)
 - `GET /api/modules/registry` → module list for frontend
 
-Errors use **RFC 7807 problem-details** (`application/problem+json`). `AppError` subclasses: `ValidationError` (400), `NotFoundError` (404), `MethodNotAllowedError` (405). Custom types prefixed `https://openpcb.dev/problems/`.
+Errors use **RFC 7807 problem-details** (`application/problem+json`). `AppError` subclasses: `ValidationError` (400), `NotFoundError` (404), `MethodNotAllowedError` (405). Custom problem types prefixed `https://openpcb.dev/problems/`.
 
 ### Database
 
-Single SQLite file via Bun native driver + Drizzle ORM. Each module gets a `DrizzleModuleDbClient` with `tablePrefix` (e.g., `library_`). Migrations are `.sql` files in `backend/migrations/`, tracked in `openpcb_migrations` table, applied transactionally with `BEGIN IMMEDIATE`.
+Single SQLite file via Bun native driver + Drizzle ORM. Each module gets a `DrizzleModuleDbClient` with `tablePrefix`. Migrations are `.sql` files in `<module>/backend/migrations/`, tracked in `openpcb_migrations` table, applied transactionally with `BEGIN IMMEDIATE`.
 
 Path resolution: `OPENPCB_DB_PATH` env → dev: `dev-data/openpcb.sqlite` → prod: `~/.openpcb/data.sqlite`.
 
-### Command pattern / designer domain
+### Designer command pattern
 
-Designer domain being moved from `core/backend/designer/` into `modules/designer/` (see `docs/COMMAND_PATTERN.md`, `docs/DATA_MODEL.md`). Do not assume paths under `core/backend/designer` are authoritative.
+See `docs/COMMAND_PATTERN.md`, `docs/DATA_MODEL.md`. Designer backend (`src/modules/designer/backend/`) implements:
 
-Flow: `CommandEnvelope` → idempotency check → load `DesignWorld` → validate `baseRevision` → command bus dispatch → handler plans patches → apply → persist → publish invalidation → return `CommandResult`. Reads via `SchematicProjection`.
+- ECS world (entities/components) persisted as JSON blobs (decision locked in `TODO.md`)
+- Command flow: `CommandEnvelope` → idempotency check (command log) → load `DesignWorld` → validate `baseRevision` → command-bus dispatch → handler plans patches → apply → persist → publish invalidation → return `CommandResult`
+- Patches/inverse via `shared/backend` ECS + patch infrastructure → enables undo/redo
+- Reads via `SchematicProjection` (`projection-read.ts`, `projection-world.ts`)
+- Per-session undo/redo persisted across runtime reloads (`history-persistence.ts`, `history-state.ts`)
+- PCB foundation in progress (Phase 3): board settings, placements auto-synced from schematic, traces/vias/ratsnest pending
+
+Files: `command-executor.ts`, `commands/`, `history-*.ts`, `projection-*.ts`, `store.ts`, `wire-geometry.ts`, `pcb/`.
 
 ### Dev ports / proxy
 
@@ -166,28 +175,32 @@ Flow: `CommandEnvelope` → idempotency check → load `DesignWorld` → validat
 | `PORT`                      | 3000                            | Backend server port                                       |
 | `HOST`                      | 127.0.0.1                       | Backend bind address                                      |
 | `OPENPCB_DB_PATH`           | `dev-data/openpcb.sqlite` (dev) | SQLite database path                                      |
-| `OPENPCB_WORKSPACE_ROOT`    | (derived from import.meta.dir)  | Module discovery root — set to repo root to fix discovery |
+| `OPENPCB_WORKSPACE_ROOT`    | derived from `import.meta.dir`  | Module discovery root (defaults to repo `src/`)           |
 | `OPENPCB_ALLOWED_ORIGINS`   | localhost:1420, :3000, tauri    | Comma-separated CORS origins                              |
 | `OPENPCB_DEBUG_DIAGNOSTICS` | false                           | Enable `/api/diagnostics/debug/modules` endpoint          |
 | `NODE_ENV`                  | —                               | `development` for dev; suppresses request logging in test |
 
 ## TypeScript
 
-- Composite build via `tsconfig.json` referencing `src/core/backend`, `src/core/frontend`, `src/core/frontend/tsconfig.node.json`.
-- `tsconfig.base.json`: strict, ES2022 target, bundler moduleResolution, `noUncheckedIndexedAccess`, `noImplicitOverride`. Path alias: `@modules/*` → `src/modules/*`.
-- Frontend Vite aliases: `@` → `src/core/frontend/src`, `@modules` → `src/modules`.
+- Composite build via `tsconfig.json` referencing `src/core/backend/tsconfig.json`, `src/core/frontend/tsconfig.json`, `src/core/frontend/tsconfig.node.json`, `tsconfig.modules.json`.
+- `tsconfig.modules.json` covers `src/modules/**`, `src/shared/**`, `src/sdks/**`, `src/core/contracts/**` (noEmit, jsx).
+- `tsconfig.base.json`: strict, ES2022 target, bundler `moduleResolution`, `noUncheckedIndexedAccess`, `noImplicitOverride`.
+- Path aliases (root tsconfig.base + frontend tsconfig.modules):
+  - `@modules/*` → `src/modules/*`
+  - `@sdks/*` → `src/sdks/*`
+  - `@shared/*` → `src/shared/*`
+  - `@/*` → `src/core/frontend/src/*` (frontend only)
+- Frontend Vite aliases mirror these; verify in `src/core/frontend/vite.config.ts` when adding new aliases.
 
-## Known inconsistencies (cleanup branch)
+## Known stale references (cleanup branch)
 
 Fix these rather than working around silently:
 
-- Root `package.json` `workspaces` lists `src/electron` but actual dir is `electron/`.
-- Many root scripts reference `src-ts`, `src-react`, `core/backend`, `core/frontend` (e.g. `test:backend`, `test:react`, `db:generate`, `gen:check`, `build:frontend`). Real paths are `src/core/*`.
-- `ModuleRuntime` workspaceRoot resolves to `src/core/` instead of repo root (discovery searches `src/core/modules`, not `src/modules`).
-- `drizzle.config.ts` schema paths point to `src-ts/src/db/schema` and `modules/*/ts/db/schema.ts` (stale).
-- `bunfig.toml` preloads `./src-ts/test/setup.ts` (no longer exists).
+- Root `bunfig.toml` preloads `./src-ts/test/setup.ts` (no longer exists). Backend tests run from `src/core/backend/bunfig.toml` (no preload), so this only bites if someone runs `bun test` from repo root.
+- Some legacy npm script names (`test:ts`, `test:ts:watch`) still alias backend tests; prefer `test:backend` / `test:react` / `test:e2e`.
+- ESLint boundary-enforcement rules are not yet wired (TODO Phase 1 last item).
 
-When editing, verify the real path and prefer updating stale references over duplicating them.
+When editing, verify the real path and prefer updating stale references over duplicating them. **Do not introduce new references to `src-ts`, `src-react`, `core/backend`, or `core/frontend` (without the `src/` prefix).**
 
 ## Skills (slash commands)
 

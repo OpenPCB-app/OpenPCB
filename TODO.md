@@ -47,13 +47,38 @@
 - [x] Extract command execution from `store.ts` into `command-executor.ts`
 - [x] Extract projection read mapping into `projection-read.ts`
 
-## Phase 3 — Basic PCB Foundation (later)
+## Phase 3 — Basic PCB Foundation (in progress)
 
-- [ ] Add PCB entity/component types and persistence
-- [ ] Auto-sync schematic netlist/entities into PCB model
-- [ ] Basic PCB view: component placement + ratsnest
+- [x] Add PCB board settings entity types and persistence
+- [x] Add persisted empty PCB projection with default 100x80mm board
+- [x] Add basic PCB tab canvas + board-size settings form
+- [x] Add PCB undo/redo with separate history session from schematic
+- [x] Fix PCB render ordering (grid < fill < outline)
+- [x] Fix canvas remounting on every revision change
+- [x] Add PCB entity/component types for placements
+- [x] Auto-sync schematic parts into PCB placements (center + deterministic offset)
+- [x] Basic PCB view: component placement rendering via FootprintRenderLayer
+- [x] Pad world-position helper + net↔pad correlation (pin.number == pad.number)
+- [x] Basic PCB view: ratsnest (Prim's MST per net, always-on)
+- [x] PCB placement selection + drag-to-move + R rotate, with combined-world undo/redo
+- [~] Auto-sync schematic wires into PCB traces — **wontfix**, replaced by ratsnest + manual routing (Phase 4). No real EDA tool does literal wire→trace sync; bridge is the netlist.
+- [ ] PCB traces/vias entity types — deferred to Phase 4
+- [ ] DRC engine reading PcbDesignRules — deferred to Phase 4
+
+## Phase 4 — PCB routing + DRC (next)
+
+- [ ] Trace/via entity model + migrations
+- [ ] Manual trace routing tool (Manhattan + 45°, see /pcb-layout skill)
+- [ ] Layer switching on V key (pad↔via)
+- [ ] DRC violations rendered against PcbDesignRules
+- [ ] Net classes applied to routed traces
+- [ ] Ratsnest visibility toggle UI (currently always-on)
+- [ ] Marquee / multi-select / group move on PCB
+- [ ] Explicit pinmap field in LibraryComponent (currently relies on pin.number == pad.number)
 
 ## Current Status
 
 - Phase 1 infrastructure established and validated.
-- Next: connect designer backend/store to shared ECS + patch/history primitives.
+- Phase 3 PCB foundation complete: board, placements, ratsnest, selection, move, rotate, full undo/redo.
+- Backend: 56 tests passing. Frontend: 11 tests passing. Typecheck clean.
+- Next: Phase 4 — trace routing + DRC.

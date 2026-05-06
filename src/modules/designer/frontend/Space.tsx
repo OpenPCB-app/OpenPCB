@@ -13,6 +13,7 @@ import { DesignerStatusBar } from "./components/DesignerStatusBar";
 import { SchematicCanvas, type SchematicCanvasHandle } from "./components/SchematicCanvas";
 import { ToastProvider, useToast } from "./hooks/use-toast";
 import { useDesignerWorkspace } from "./hooks/useDesignerWorkspace";
+import { PcbCanvas } from "./pcb/PcbCanvas";
 import type { ModuleSpaceProps } from "./types";
 import { SCHEMATIC_GRID_MM } from "./types";
 
@@ -146,6 +147,13 @@ function DesignerSpaceInner({ moduleId, backendURL, designId }: ModuleSpaceProps
         <div className="relative min-h-0 min-w-0 flex-1">
           {state.activeView === "schem" ? (
             canvasContent()
+          ) : state.activeView === "pcb" ? (
+            <PcbCanvas
+              backendURL={backendURL}
+              moduleId={moduleId}
+              designId={state.selectedDesignId}
+              dispatchCommand={actions.dispatchCommand}
+            />
           ) : (
             <DesignerPlaceholderView view={state.activeView} />
           )}
