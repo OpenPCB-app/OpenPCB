@@ -246,9 +246,9 @@ function parseCommitGeneratedBody(value: unknown): CommitGeneratedRequest {
     },
     generatedFootprint: {
       source:
-        sourceRaw as CommitGeneratedRequest["generatedFootprint"]["source"],
+        sourceRaw as unknown as CommitGeneratedRequest["generatedFootprint"]["source"],
       metadata:
-        metadataRaw as CommitGeneratedRequest["generatedFootprint"]["metadata"],
+        metadataRaw as unknown as CommitGeneratedRequest["generatedFootprint"]["metadata"],
     },
     component: {
       name: readStringField(componentRaw, "name", "component.name"),

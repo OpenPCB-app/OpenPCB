@@ -71,6 +71,14 @@ export class CommandHistory<
     this.redoStack.length = 0;
   }
 
+  restore(snapshot: CommandHistorySnapshot<TCommand, TComponent>): void {
+    this.undoStack.length = 0;
+    this.redoStack.length = 0;
+    this.undoStack.push(...snapshot.undoStack);
+    this.redoStack.push(...snapshot.redoStack);
+    this.trimUndoStack();
+  }
+
   snapshot(): CommandHistorySnapshot<TCommand, TComponent> {
     return {
       undoDepth: this.undoStack.length,

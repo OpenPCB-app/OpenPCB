@@ -2,6 +2,8 @@ import type {
   DesignerCommandEnvelope,
   DesignerDesignSummary,
   DesignerDispatchResult,
+  DesignerHistoryActionResult,
+  DesignerHistorySnapshot,
   DesignerSchematicProjection,
   LibraryComponent,
   LibraryComponentPlacementDetail,
@@ -121,6 +123,58 @@ export function createDesignerApi(params: {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(envelope),
+        },
+      );
+      return data.result;
+    },
+
+    async getHistory(
+      designId: string,
+      sessionId: string,
+    ): Promise<DesignerHistorySnapshot> {
+      const data = await fetchData<{ history: DesignerHistorySnapshot }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/history?sessionId=${encodeURIComponent(sessionId)}`,
+        ),
+      );
+      return data.history;
+    },
+
+    async undo(
+      designId: string,
+      sessionId: string,
+    ): Promise<DesignerHistoryActionResult> {
+      const data = await fetchData<{ result: DesignerHistoryActionResult }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/history/undo`,
+        ),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        },
+      );
+      return data.result;
+    },
+
+    async redo(
+      designId: string,
+      sessionId: string,
+    ): Promise<DesignerHistoryActionResult> {
+      const data = await fetchData<{ result: DesignerHistoryActionResult }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/history/redo`,
+        ),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId }),
         },
       );
       return data.result;

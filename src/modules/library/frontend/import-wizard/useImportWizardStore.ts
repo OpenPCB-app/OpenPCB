@@ -86,7 +86,7 @@ export interface ImportWizardState {
 
   setSymbolSource: (source: "import" | "draw") => void;
 
-  setFootprintSource: (source: "import" | "preset") => void;
+  setFootprintSource: (source: "import" | "preset" | "draw") => void;
   setPresetFamily: (family: PackageFamily | null) => void;
   setPresetSize: (size: string | null) => void;
   setPresetDensity: (density: DensityLevel) => void;

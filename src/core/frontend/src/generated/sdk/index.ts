@@ -2,3 +2,4 @@
 // SDK index - re-exports all module SDKs
 
 export * as library from "./library";
+export * as designer from "./designer";

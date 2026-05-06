@@ -233,6 +233,207 @@ describe("designer commands hardening", () => {
     expect(projection?.parts.length).toBe(1);
   });
 
+  test("rejects commandId reuse with a different payload", async () => {
+    isolateTestDb("designer-hardening-idempotent-mismatch");
+    const { moduleRuntime } = await createRuntimeAndServer();
+
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const design = await designerSdk.createDesign({ name: "Idempotency mismatch" });
+
+    const commandId = "cmd-reused-with-different-payload";
+    const first = await designerSdk.dispatchCommand(design.id, {
+      commandId,
+      sessionId: "mismatch",
+      aggregateId: design.id,
+      baseRevision: 0,
+      issuedAt: Date.now(),
+      command: {
+        type: "upsert_label",
+        text: "NET_A",
+        positionNm: { x: 0, y: 0 },
+      },
+    });
+    expect(first.ok).toBe(true);
+
+    const second = await designerSdk.dispatchCommand(design.id, {
+      commandId,
+      sessionId: "mismatch",
+      aggregateId: design.id,
+      baseRevision: 1,
+      issuedAt: Date.now(),
+      command: {
+        type: "upsert_label",
+        text: "NET_B",
+        positionNm: { x: 1_000_000, y: 0 },
+      },
+    });
+
+    expect(second.ok).toBe(false);
+    if (!second.ok) {
+      expect(second.code).toBe("REVISION_CONFLICT");
+    }
+    const projection = await designerSdk.getSchematicProjection(design.id);
+    expect(projection?.labels.length).toBe(1);
+    expect(projection?.labels[0]?.text).toBe("NET_A");
+  });
+
+  test("supports undo and redo for schematic commands", async () => {
+    isolateTestDb("designer-hardening-undo-redo");
+    const { moduleRuntime } = await createRuntimeAndServer();
+
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const design = await designerSdk.createDesign({ name: "Undo redo" });
+
+    const emptyHistory = await designerSdk.getHistory(design.id, "history");
+    expect(emptyHistory.canUndo).toBe(false);
+    expect(emptyHistory.canRedo).toBe(false);
+
+    const createLabel = await designerSdk.dispatchCommand(design.id, {
+      commandId: crypto.randomUUID(),
+      sessionId: "history",
+      aggregateId: design.id,
+      baseRevision: 0,
+      issuedAt: Date.now(),
+      command: {
+        type: "upsert_label",
+        text: "UNDO_ME",
+        positionNm: { x: 1_000_000, y: 2_000_000 },
+      },
+    });
+    expect(createLabel.ok).toBe(true);
+
+    const afterCommandHistory = await designerSdk.getHistory(design.id, "history");
+    expect(afterCommandHistory.canUndo).toBe(true);
+    expect(afterCommandHistory.canRedo).toBe(false);
+
+    const undo = await designerSdk.undo(design.id, "history");
+    expect(undo.ok).toBe(true);
+    if (undo.ok) {
+      expect(undo.revision).toBe(2);
+      expect(undo.history.canUndo).toBe(false);
+      expect(undo.history.canRedo).toBe(true);
+    }
+    const afterUndo = await designerSdk.getSchematicProjection(design.id);
+    expect(afterUndo?.labels.length).toBe(0);
+
+    const redo = await designerSdk.redo(design.id, "history");
+    expect(redo.ok).toBe(true);
+    if (redo.ok) {
+      expect(redo.revision).toBe(3);
+      expect(redo.history.canUndo).toBe(true);
+      expect(redo.history.canRedo).toBe(false);
+    }
+    const afterRedo = await designerSdk.getSchematicProjection(design.id);
+    expect(afterRedo?.labels.length).toBe(1);
+    expect(afterRedo?.labels[0]?.text).toBe("UNDO_ME");
+  });
+
+  test("supports undo and redo through HTTP routes", async () => {
+    isolateTestDb("designer-hardening-http-undo-redo");
+    const { moduleRuntime, server } = await createRuntimeAndServer();
+
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const design = await designerSdk.createDesign({ name: "HTTP undo redo" });
+    const envelope: DesignerCommandEnvelope = {
+      commandId: crypto.randomUUID(),
+      sessionId: "http-history",
+      aggregateId: design.id,
+      baseRevision: 0,
+      issuedAt: Date.now(),
+      command: {
+        type: "upsert_label",
+        text: "HTTP_NET",
+        positionNm: { x: 1_000_000, y: 1_000_000 },
+      },
+    };
+
+    const commandResponse = await server.fetch(
+      new Request(`http://localhost/api/modules/designer/designs/${design.id}/commands`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(envelope),
+      }),
+    );
+    expect(commandResponse.status).toBe(200);
+
+    const historyResponse = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/designer/designs/${design.id}/history?sessionId=http-history`,
+      ),
+    );
+    expect(historyResponse.status).toBe(200);
+    const historyBody = (await historyResponse.json()) as {
+      data?: { history?: { canUndo?: boolean; canRedo?: boolean } };
+    };
+    expect(historyBody.data?.history?.canUndo).toBe(true);
+    expect(historyBody.data?.history?.canRedo).toBe(false);
+
+    const undoResponse = await server.fetch(
+      new Request(`http://localhost/api/modules/designer/designs/${design.id}/history/undo`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId: "http-history" }),
+      }),
+    );
+    expect(undoResponse.status).toBe(200);
+    const afterUndo = await designerSdk.getSchematicProjection(design.id);
+    expect(afterUndo?.labels.length).toBe(0);
+
+    const redoResponse = await server.fetch(
+      new Request(`http://localhost/api/modules/designer/designs/${design.id}/history/redo`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId: "http-history" }),
+      }),
+    );
+    expect(redoResponse.status).toBe(200);
+    const afterRedo = await designerSdk.getSchematicProjection(design.id);
+    expect(afterRedo?.labels.length).toBe(1);
+    expect(afterRedo?.labels[0]?.text).toBe("HTTP_NET");
+  });
+
+  test("hydrates undo history from persisted session snapshot", async () => {
+    isolateTestDb("designer-hardening-persisted-history");
+    const firstRuntime = await createRuntimeAndServer();
+    const designerSdk = firstRuntime.moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const design = await designerSdk.createDesign({ name: "Persisted history" });
+
+    const command = await designerSdk.dispatchCommand(design.id, {
+      commandId: crypto.randomUUID(),
+      sessionId: "persisted-history",
+      aggregateId: design.id,
+      baseRevision: 0,
+      issuedAt: Date.now(),
+      command: {
+        type: "upsert_label",
+        text: "PERSISTED_NET",
+        positionNm: { x: 1_000_000, y: 1_000_000 },
+      },
+    });
+    expect(command.ok).toBe(true);
+
+    const secondRuntime = await createRuntimeAndServer();
+    const rehydratedSdk = secondRuntime.moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const history = await rehydratedSdk.getHistory(design.id, "persisted-history");
+    expect(history.canUndo).toBe(true);
+    expect(history.undoDepth).toBe(1);
+
+    const undo = await rehydratedSdk.undo(design.id, "persisted-history");
+    expect(undo.ok).toBe(true);
+    const afterUndo = await rehydratedSdk.getSchematicProjection(design.id);
+    expect(afterUndo?.labels.length).toBe(0);
+  });
+
   test("returns revision conflict on stale baseRevision", async () => {
     isolateTestDb("designer-hardening-conflict");
     const { moduleRuntime, server } = await createRuntimeAndServer();
@@ -612,6 +813,9 @@ describe("designer commands hardening", () => {
 
     const afterJunction = await designerSdk.getSchematicProjection(design.id);
     expect(afterJunction?.wires.length).toBe(2);
+    expect(afterJunction?.junctions).toContainEqual({ xNm: 4_000_000, yNm: 0 });
+    expect(afterJunction?.nets.length).toBeGreaterThan(0);
+    expect(afterJunction?.nets.some((net) => net.wireIds.length === 2)).toBe(true);
     const anchorWire = afterJunction?.wires.find((wire) => wire.id === createWire.createdEntityId);
     expect(anchorWire?.pointsNm.some((point) => point.x === 4_000_000 && point.y === 0)).toBe(true);
   });

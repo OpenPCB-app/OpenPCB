@@ -39,6 +39,7 @@ export function DesignerFloatingToolbar({
         disabled={!canUndo}
         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
         title="Undo"
+        aria-label="Undo"
       >
         <Undo2 className="h-3.5 w-3.5" />
       </button>
@@ -48,6 +49,7 @@ export function DesignerFloatingToolbar({
         disabled={!canRedo}
         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
         title="Redo"
+        aria-label="Redo"
       >
         <Redo2 className="h-3.5 w-3.5" />
       </button>
@@ -59,6 +61,7 @@ export function DesignerFloatingToolbar({
         onClick={onZoomOut}
         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         title="Zoom out"
+        aria-label="Zoom out"
       >
         <Minus className="h-3.5 w-3.5" />
       </button>
@@ -67,6 +70,7 @@ export function DesignerFloatingToolbar({
         onClick={onZoomIn}
         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         title="Zoom in"
+        aria-label="Zoom in"
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
@@ -75,6 +79,7 @@ export function DesignerFloatingToolbar({
         onClick={onFit}
         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         title="Fit"
+        aria-label="Fit schematic"
       >
         <ScanSearch className="h-3.5 w-3.5" />
       </button>
@@ -88,6 +93,7 @@ export function DesignerFloatingToolbar({
             : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         }`}
         title="Toggle grid"
+        aria-label="Toggle grid"
       >
         <Grid3X3 className="h-3.5 w-3.5" />
         Grid

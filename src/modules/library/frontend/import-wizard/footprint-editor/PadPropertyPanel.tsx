@@ -10,6 +10,10 @@ import { useShallow } from "zustand/react/shallow";
 import { useFootprintEditorStore } from "./useFootprintEditorStore";
 import type { EditorPadElement, PadShape } from "./types";
 
+type PadPatch = {
+  -readonly [K in keyof Omit<EditorPadElement, "id">]?: Omit<EditorPadElement, "id">[K];
+};
+
 const PAD_SHAPES: readonly { value: PadShape; label: string }[] = [
   { value: "rect", label: "Rect" },
   { value: "circle", label: "Circle" },
@@ -92,7 +96,7 @@ function PadRow({
   }, [pad.id]);
 
   const commitPatch = useCallback(
-    (patch: Partial<Omit<EditorPadElement, "id">>) => {
+    (patch: PadPatch) => {
       const store = useFootprintEditorStore.getState();
       store.pushSnapshot();
       store.updatePad(pad.id, patch);
@@ -149,7 +153,7 @@ function PadRow({
             value={pad.shape}
             onChange={(e) => {
               const shape = e.currentTarget.value as PadShape;
-              const patch: Partial<Omit<EditorPadElement, "id">> = { shape };
+              const patch: PadPatch = { shape };
               if (shape === "circle") patch.heightMm = pad.widthMm;
               if (shape === "roundrect" && !pad.roundrectRatio)
                 patch.roundrectRatio = 0.25;
@@ -192,7 +196,7 @@ function PadRow({
             onBlur={() => {
               const next = Number(widthDraft);
               if (Number.isFinite(next) && next > 0 && next !== pad.widthMm) {
-                const patch: Partial<Omit<EditorPadElement, "id">> = {
+                const patch: PadPatch = {
                   widthMm: next,
                 };
                 if (pad.shape === "circle") patch.heightMm = next;
@@ -293,7 +297,7 @@ function PadRow({
               }
               const prev = pad.drillDiameterMm ?? 0;
               if (next !== prev) {
-                const patch: Partial<Omit<EditorPadElement, "id">> = {
+                const patch: PadPatch = {
                   drillDiameterMm: next > 0 ? next : undefined,
                 };
                 // Auto-switch layer to *.Cu for TH pads

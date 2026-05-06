@@ -193,6 +193,28 @@ export type DesignerCommand =
 
 export type DesignerCommandEnvelope = CommandEnvelope<DesignerCommand>;
 
+export interface DesignerHistorySnapshot {
+  canUndo: boolean;
+  canRedo: boolean;
+  undoDepth: number;
+  redoDepth: number;
+}
+
+export interface DesignerHistoryActionOkResult {
+  ok: true;
+  revision: number;
+  history: DesignerHistorySnapshot;
+}
+
+export type DesignerHistoryActionResult =
+  | DesignerHistoryActionOkResult
+  | {
+      ok: false;
+      code: "HISTORY_EMPTY";
+      direction: "undo" | "redo";
+      history: DesignerHistorySnapshot;
+    };
+
 export interface DesignerCommandOkResult {
   ok: true;
   revision: number;

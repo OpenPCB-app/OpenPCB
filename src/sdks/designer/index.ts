@@ -4,6 +4,8 @@ import type {
   DesignerDesignRecord,
   DesignerDesignSummary,
   DesignerDispatchResult,
+  DesignerHistoryActionResult,
+  DesignerHistorySnapshot,
   DesignerSchematicProjection,
   DesignerSearchLibraryParams,
 } from "./types";
@@ -27,6 +29,9 @@ export type {
   DesignerDispatchResult,
   DesignerEntityKind,
   DesignerEntityRecord,
+  DesignerHistoryActionOkResult,
+  DesignerHistoryActionResult,
+  DesignerHistorySnapshot,
   DesignerJunction,
   DesignerLabel,
   DesignerLibraryLookup,
@@ -60,4 +65,16 @@ export interface DesignerSDK {
     designId: string,
     envelope: DesignerCommandEnvelope,
   ): Promise<DesignerDispatchResult>;
+  getHistory(
+    designId: string,
+    sessionId: string,
+  ): Promise<DesignerHistorySnapshot>;
+  undo(
+    designId: string,
+    sessionId: string,
+  ): Promise<DesignerHistoryActionResult>;
+  redo(
+    designId: string,
+    sessionId: string,
+  ): Promise<DesignerHistoryActionResult>;
 }

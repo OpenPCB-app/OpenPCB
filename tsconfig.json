@@ -7,6 +7,7 @@
   "references": [
     { "path": "./src/core/backend/tsconfig.json" },
     { "path": "./src/core/frontend/tsconfig.json" },
-    { "path": "./src/core/frontend/tsconfig.node.json" }
+    { "path": "./src/core/frontend/tsconfig.node.json" },
+    { "path": "./tsconfig.modules.json" }
   ]
 }

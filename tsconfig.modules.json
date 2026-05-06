@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["bun-types", "vite/client"],
+    "paths": {
+      "@/*": ["src/core/frontend/src/*"],
+      "@modules/*": ["src/modules/*"],
+      "@sdks/*": ["src/sdks/*"],
+      "@shared/*": ["src/shared/*"]
+    }
+  },
+  "include": [
+    "src/modules/**/*.ts",
+    "src/modules/**/*.tsx",
+    "src/shared/**/*.ts",
+    "src/shared/**/*.tsx",
+    "src/sdks/**/*.ts",
+    "src/core/contracts/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
+}

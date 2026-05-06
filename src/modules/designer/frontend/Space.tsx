@@ -155,14 +155,10 @@ function DesignerSpaceInner({ moduleId, backendURL, designId }: ModuleSpaceProps
               <div className="pointer-events-auto">
                 <DesignerFloatingToolbar
                   gridVisible={gridVisible}
-                  canUndo={false}
-                  canRedo={false}
-                  onUndo={() => {
-                    actions.setError("Undo will be enabled with command history UI");
-                  }}
-                  onRedo={() => {
-                    actions.setError("Redo will be enabled with command history UI");
-                  }}
+                  canUndo={state.canUndo}
+                  canRedo={state.canRedo}
+                  onUndo={() => void actions.undo()}
+                  onRedo={() => void actions.redo()}
                   onZoomIn={() => canvasRef.current?.zoomIn()}
                   onZoomOut={() => canvasRef.current?.zoomOut()}
                   onFit={() => canvasRef.current?.fit()}

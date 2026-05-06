@@ -14,10 +14,13 @@ import type {
 import { createDesignerApi } from "../api";
 import type { DesignerView } from "../types";
 
+const DESIGNER_SESSION_ID = "designer-ui-session";
+
 export interface DesignerWorkspaceState {
   loadingDesigns: boolean;
   creatingDesign: boolean;
   loadingProjection: boolean;
+  loadingHistory: boolean;
   searchingComponents: boolean;
   error: string | null;
   designs: DesignerDesignSummary[];
@@ -35,6 +38,10 @@ export interface DesignerWorkspaceState {
   dragPlacementLoading: boolean;
   dragPlacementDetail: LibraryComponentPlacementDetail | null;
   dragGhostNm: { x: number; y: number } | null;
+  canUndo: boolean;
+  canRedo: boolean;
+  undoDepth: number;
+  redoDepth: number;
 }
 
 export interface DesignerWorkspaceActions {
@@ -43,6 +50,7 @@ export interface DesignerWorkspaceActions {
   createDesign(): Promise<void>;
   selectDesign(designId: string | null): void;
   refreshProjection(): Promise<void>;
+  refreshHistory(): Promise<void>;
   setActiveView(view: DesignerView): void;
   setQuery(value: string): void;
   setLabelDraftText(value: string): void;
@@ -55,6 +63,8 @@ export interface DesignerWorkspaceActions {
   setSelectedLabelId(labelId: string | null): void;
   setWireSourcePinId(pinId: string | null): void;
   dispatchCommand(command: DesignerCommand): Promise<DesignerDispatchResult>;
+  undo(): Promise<void>;
+  redo(): Promise<void>;
 }
 
 export interface DesignerWorkspaceDerived {
@@ -105,6 +115,7 @@ export function useDesignerWorkspace(params: {
   const [loadingDesigns, setLoadingDesigns] = useState(false);
   const [creatingDesign, setCreatingDesign] = useState(false);
   const [loadingProjection, setLoadingProjection] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [searchingComponents, setSearchingComponents] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [designs, setDesigns] = useState<DesignerDesignSummary[]>([]);
@@ -125,6 +136,10 @@ export function useDesignerWorkspace(params: {
   const [dragGhostNm, setDragGhostNm] = useState<{ x: number; y: number } | null>(
     null,
   );
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [undoDepth, setUndoDepth] = useState(0);
+  const [redoDepth, setRedoDepth] = useState(0);
   const dragResolvePromiseRef = useRef<Promise<LibraryComponentPlacementDetail> | null>(null);
   const dragResolveComponentRef = useRef<string | null>(null);
   const ensureDesignPromiseRef = useRef<Promise<string> | null>(null);
@@ -198,6 +213,45 @@ export function useDesignerWorkspace(params: {
 
     await refreshProjectionForDesign(selectedDesignId);
   }, [refreshProjectionForDesign, selectedDesignId]);
+
+  const applyHistorySnapshot = useCallback((history: {
+    canUndo: boolean;
+    canRedo: boolean;
+    undoDepth: number;
+    redoDepth: number;
+  }) => {
+    setCanUndo(history.canUndo);
+    setCanRedo(history.canRedo);
+    setUndoDepth(history.undoDepth);
+    setRedoDepth(history.redoDepth);
+  }, []);
+
+  const clearHistorySnapshot = useCallback(() => {
+    applyHistorySnapshot({ canUndo: false, canRedo: false, undoDepth: 0, redoDepth: 0 });
+  }, [applyHistorySnapshot]);
+
+  const refreshHistoryForDesign = useCallback(
+    async (designId: string) => {
+      setLoadingHistory(true);
+      try {
+        const history = await api.getHistory(designId, DESIGNER_SESSION_ID);
+        applyHistorySnapshot(history);
+      } catch {
+        clearHistorySnapshot();
+      } finally {
+        setLoadingHistory(false);
+      }
+    },
+    [api, applyHistorySnapshot, clearHistorySnapshot],
+  );
+
+  const refreshHistory = useCallback(async () => {
+    if (!selectedDesignId) {
+      clearHistorySnapshot();
+      return;
+    }
+    await refreshHistoryForDesign(selectedDesignId);
+  }, [clearHistorySnapshot, refreshHistoryForDesign, selectedDesignId]);
 
   const ensureDesignForPlacement = useCallback(async (): Promise<string> => {
     if (selectedDesignId) {
@@ -328,7 +382,7 @@ export function useDesignerWorkspace(params: {
 
       const envelope: DesignerCommandEnvelope = {
         commandId: crypto.randomUUID(),
-        sessionId: "designer-ui-session",
+        sessionId: DESIGNER_SESSION_ID,
         aggregateId: designId,
         baseRevision: projectionRef.current?.revision ?? null,
         issuedAt: Date.now(),
@@ -341,14 +395,46 @@ export function useDesignerWorkspace(params: {
       }
 
       await refreshProjectionForDesign(designId);
+      await refreshHistoryForDesign(designId);
       return result;
     },
     [
       api,
       ensureDesignForPlacement,
       refreshProjectionForDesign,
+      refreshHistoryForDesign,
     ],
   );
+
+  const undo = useCallback(async () => {
+    const designId = selectedDesignIdRef.current;
+    if (!designId) {
+      return;
+    }
+    const result = await api.undo(designId, DESIGNER_SESSION_ID);
+    if (!result.ok) {
+      applyHistorySnapshot(result.history);
+      setError("Nothing to undo");
+      return;
+    }
+    applyHistorySnapshot(result.history);
+    await refreshProjectionForDesign(designId);
+  }, [api, applyHistorySnapshot, refreshProjectionForDesign]);
+
+  const redo = useCallback(async () => {
+    const designId = selectedDesignIdRef.current;
+    if (!designId) {
+      return;
+    }
+    const result = await api.redo(designId, DESIGNER_SESSION_ID);
+    if (!result.ok) {
+      applyHistorySnapshot(result.history);
+      setError("Nothing to redo");
+      return;
+    }
+    applyHistorySnapshot(result.history);
+    await refreshProjectionForDesign(designId);
+  }, [api, applyHistorySnapshot, refreshProjectionForDesign]);
 
   useEffect(() => {
     void refreshDesigns();
@@ -358,6 +444,10 @@ export function useDesignerWorkspace(params: {
   useEffect(() => {
     void refreshProjection();
   }, [refreshProjection]);
+
+  useEffect(() => {
+    void refreshHistory();
+  }, [refreshHistory]);
 
   const selectedPart = useMemo(() => {
     if (!projection || !selectedPartId) {
@@ -404,6 +494,7 @@ export function useDesignerWorkspace(params: {
       loadingDesigns,
       creatingDesign,
       loadingProjection,
+      loadingHistory,
       searchingComponents,
       error,
       designs,
@@ -421,6 +512,10 @@ export function useDesignerWorkspace(params: {
       dragPlacementLoading,
       dragPlacementDetail,
       dragGhostNm,
+      canUndo,
+      canRedo,
+      undoDepth,
+      redoDepth,
     },
     actions: {
       setError,
@@ -428,6 +523,7 @@ export function useDesignerWorkspace(params: {
       createDesign,
       selectDesign: setSelectedDesignId,
       refreshProjection,
+      refreshHistory,
       setActiveView,
       setQuery,
       setLabelDraftText,
@@ -440,6 +536,8 @@ export function useDesignerWorkspace(params: {
       setSelectedLabelId,
       setWireSourcePinId,
       dispatchCommand,
+      undo,
+      redo,
     },
     derived: {
       selectedPart,

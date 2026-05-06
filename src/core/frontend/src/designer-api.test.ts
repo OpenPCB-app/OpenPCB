@@ -46,3 +46,69 @@ describe("createDesignerApi error handling", () => {
     globalThis.fetch = originalFetch;
   });
 });
+
+describe("createDesignerApi history endpoints", () => {
+  test("calls history, undo and redo endpoints with session id", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          data: {
+            history: { canUndo: true, canRedo: false, undoDepth: 1, redoDepth: 0 },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          data: {
+            result: {
+              ok: true,
+              revision: 2,
+              history: { canUndo: false, canRedo: true, undoDepth: 0, redoDepth: 1 },
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          data: {
+            result: {
+              ok: true,
+              revision: 3,
+              history: { canUndo: true, canRedo: false, undoDepth: 1, redoDepth: 0 },
+            },
+          },
+        }),
+      );
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+    try {
+      const api = createDesignerApi({ backendURL: "http://localhost:3000", moduleId: "designer" });
+      await expect(api.getHistory("design 1", "session 1")).resolves.toMatchObject({
+        canUndo: true,
+      });
+      await expect(api.undo("design 1", "session 1")).resolves.toMatchObject({
+        ok: true,
+        revision: 2,
+      });
+      await expect(api.redo("design 1", "session 1")).resolves.toMatchObject({
+        ok: true,
+        revision: 3,
+      });
+
+      expect(mockFetch.mock.calls[0]?.[0]).toBe(
+        "http://localhost:3000/api/modules/designer/designs/design%201/history?sessionId=session%201",
+      );
+      expect(mockFetch.mock.calls[1]?.[0]).toBe(
+        "http://localhost:3000/api/modules/designer/designs/design%201/history/undo",
+      );
+      expect(mockFetch.mock.calls[2]?.[0]).toBe(
+        "http://localhost:3000/api/modules/designer/designs/design%201/history/redo",
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});

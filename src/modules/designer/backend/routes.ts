@@ -15,6 +15,7 @@ import type {
   DesignerUpsertLabelCommand,
 } from "../../../sdks/designer";
 import { createDesignerStore } from "./store";
+import { asNumber, asRecord, asString } from "./value-guards";
 
 function success<T>(data: T, status = 200): Response {
   return Response.json({ ok: true, data }, { status });
@@ -26,24 +27,6 @@ async function parseJsonBody<T>(req: Request): Promise<T> {
   } catch {
     throw new ValidationError("Request body must be valid JSON");
   }
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-}
-
-function asString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-function asNumber(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return null;
-  }
-  return value;
 }
 
 function parsePointNm(value: unknown, field: string): { x: number; y: number } {
@@ -72,6 +55,18 @@ function parseCreateDesignBody(body: unknown): { name?: string } {
     throw new ValidationError("name must be a string");
   }
   return { name };
+}
+
+function parseHistoryBody(body: unknown): { sessionId: string } {
+  const record = asRecord(body);
+  if (!record) {
+    throw new ValidationError("Request body must be an object");
+  }
+  const sessionId = asString(record.sessionId);
+  if (!sessionId) {
+    throw new ValidationError("sessionId must be a string");
+  }
+  return { sessionId };
 }
 
 function parsePlacePartCommand(
@@ -369,6 +364,42 @@ export function registerRoutes(
       throw new ValidationError("aggregateId must match :designId route param");
     }
     const result = await store.dispatchCommand(designId, envelope);
+    return success({ result });
+  });
+
+  router.get("/designs/:designId/history", async ({ params, query }) => {
+    const designId = params.getOrThrow("designId");
+    const sessionId = query.get("sessionId")?.trim();
+    if (!sessionId) {
+      throw new ValidationError("sessionId query parameter is required");
+    }
+    const projection = await store.getSchematicProjection(designId);
+    if (!projection) {
+      throw new NotFoundError(`Design '${designId}' not found`);
+    }
+    const history = await store.getHistory(designId, sessionId);
+    return success({ history });
+  });
+
+  router.post("/designs/:designId/history/undo", async ({ params, req }) => {
+    const designId = params.getOrThrow("designId");
+    const projection = await store.getSchematicProjection(designId);
+    if (!projection) {
+      throw new NotFoundError(`Design '${designId}' not found`);
+    }
+    const { sessionId } = parseHistoryBody(await parseJsonBody<unknown>(req));
+    const result = await store.undo(designId, sessionId);
+    return success({ result });
+  });
+
+  router.post("/designs/:designId/history/redo", async ({ params, req }) => {
+    const designId = params.getOrThrow("designId");
+    const projection = await store.getSchematicProjection(designId);
+    if (!projection) {
+      throw new NotFoundError(`Design '${designId}' not found`);
+    }
+    const { sessionId } = parseHistoryBody(await parseJsonBody<unknown>(req));
+    const result = await store.redo(designId, sessionId);
     return success({ result });
   });
 

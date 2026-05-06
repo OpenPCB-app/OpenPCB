@@ -12,6 +12,14 @@
 
 - Architecture + working schematic editor on new foundations (Phase 1 + Phase 2)
 
+## Phase 0 — Browser Dev Stabilization
+
+- [x] Allow frontend dev server to lazy-load `src/modules/*`
+- [x] Regenerate module catalog and SDK exports for `library` + `designer`
+- [x] Add module/shared TypeScript coverage to root `npm run typecheck`
+- [x] Add Playwright browser smoke tests for app boot, module registry, and designer shell
+- [x] Verify with typecheck, backend tests, frontend tests, and e2e smoke
+
 ## Phase 1 — Architecture Alignment
 
 - [x] Create `src/sdks/` structure (`library`, `designer`, root token map)
@@ -32,8 +40,12 @@
 - [ ] Wire apply/invert/history flow into dispatch pipeline
 - [ ] Implement full net rebuild system from ECS world
 - [ ] Implement projection builder from ECS world
-- [ ] Enable real undo/redo in backend + frontend controls
-- [ ] Add focused unit tests for command handlers and systems
+- [x] Enable real undo/redo in backend + frontend controls
+- [x] Add focused backend tests for command idempotency, history, undo/redo, nets, and junctions
+- [x] Persist per-session undo/redo snapshots across backend runtime reloads
+- [x] Extract designer result parsing, history state, projection/world, and wire geometry helpers from `store.ts`
+- [x] Extract command execution from `store.ts` into `command-executor.ts`
+- [x] Extract projection read mapping into `projection-read.ts`
 
 ## Phase 3 — Basic PCB Foundation (later)
 

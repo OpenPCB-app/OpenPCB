@@ -16,5 +16,8 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
       store.resolveLibraryComponentForPlacement(componentId),
     dispatchCommand: (designId, envelope) =>
       store.dispatchCommand(designId, envelope),
+    getHistory: (designId, sessionId) => store.getHistory(designId, sessionId),
+    undo: (designId, sessionId) => store.undo(designId, sessionId),
+    redo: (designId, sessionId) => store.redo(designId, sessionId),
   };
 }

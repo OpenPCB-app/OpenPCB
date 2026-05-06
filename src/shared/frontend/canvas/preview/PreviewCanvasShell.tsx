@@ -72,17 +72,17 @@ class CanvasErrorBoundary extends Component<
   { children: ReactNode; fallbackMessage: string },
   CanvasErrorBoundaryState
 > {
-  state: CanvasErrorBoundaryState = { hasError: false };
+  override state: CanvasErrorBoundaryState = { hasError: false };
 
   static getDerivedStateFromError(): CanvasErrorBoundaryState {
     return { hasError: true };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo): void {
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error("[PreviewCanvas] Render error:", error, info.componentStack);
   }
 
-  render() {
+  override render() {
     if (this.state.hasError) {
       return (
         <div className="flex h-full w-full items-center justify-center bg-slate-900">

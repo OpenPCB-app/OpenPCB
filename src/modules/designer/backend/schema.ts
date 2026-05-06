@@ -119,3 +119,22 @@ export const commandLog = sqliteTable(
     designIdIdx: index("designer_command_log_design_id_idx").on(table.designId),
   }),
 );
+
+export const sessionHistories = sqliteTable(
+  "designer_session_histories",
+  {
+    id: text("id").primaryKey(),
+    designId: text("design_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    undoStackJson: text("undo_stack_json").notNull(),
+    redoStackJson: text("redo_stack_json").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => ({
+    designSessionUq: uniqueIndex("designer_session_histories_design_session_uq").on(
+      table.designId,
+      table.sessionId,
+    ),
+    designIdIdx: index("designer_session_histories_design_id_idx").on(table.designId),
+  }),
+);
