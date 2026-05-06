@@ -35,6 +35,7 @@ interface PcbCanvasProps {
   moduleId: string;
   designId: string | null;
   dispatchCommand: (command: DesignerCommand) => Promise<unknown>;
+  notifyExternalRevisionBump?: (revision: number) => void;
 }
 
 function NumberInput(props: {
@@ -58,7 +59,13 @@ function NumberInput(props: {
 }
 
 export function PcbCanvas(props: PcbCanvasProps): ReactElement {
-  const workspace = usePcbWorkspace(props);
+  const workspace = usePcbWorkspace({
+    backendURL: props.backendURL,
+    moduleId: props.moduleId,
+    designId: props.designId,
+    dispatchCommand: props.dispatchCommand,
+    notifyExternalRevisionBump: props.notifyExternalRevisionBump,
+  });
   const [widthText, setWidthText] = useState("100");
   const [heightText, setHeightText] = useState("80");
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
@@ -174,7 +181,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         <EdaCanvas
           key={props.designId}
           testId="designer-pcb-canvas"
-          initialZoom={8}
+          initialZoom={6}
           backgroundColor="#020617"
           interactionHandler={handler}
         >
@@ -250,9 +257,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         ) : null}
 
         {workspace.projection?.warnings.length ? (
-          <div className="mt-3 rounded border border-amber-900 bg-amber-950/50 px-2 py-1.5 text-xs text-amber-200">
-            {workspace.projection.warnings.join("\n")}
-          </div>
+          <ul className="mt-3 max-h-40 list-disc space-y-0.5 overflow-y-auto rounded border border-amber-900 bg-amber-950/50 px-4 py-1.5 text-xs text-amber-200">
+            {workspace.projection.warnings.map((warning, i) => (
+              <li key={i} className="break-words">
+                {warning}
+              </li>
+            ))}
+          </ul>
         ) : null}
       </div>
     </div>

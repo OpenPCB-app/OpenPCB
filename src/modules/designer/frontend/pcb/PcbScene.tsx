@@ -65,9 +65,9 @@ function BoardFill({
     >
       <planeGeometry args={[widthMm, heightMm]} />
       <meshBasicMaterial
-        color="#111827"
+        color="#1e293b"
         transparent
-        opacity={0.45}
+        opacity={0.85}
         depthTest={false}
         depthWrite={false}
       />

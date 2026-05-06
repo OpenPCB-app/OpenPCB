@@ -65,6 +65,7 @@ export interface DesignerWorkspaceActions {
   dispatchCommand(command: DesignerCommand): Promise<DesignerDispatchResult>;
   undo(): Promise<void>;
   redo(): Promise<void>;
+  notifyExternalRevisionBump(revision: number): void;
 }
 
 export interface DesignerWorkspaceDerived {
@@ -74,7 +75,9 @@ export interface DesignerWorkspaceDerived {
   wireSourcePin: DesignerPin | null;
 }
 
-function commandErrorMessage(result: Exclude<DesignerDispatchResult, { ok: true }>): string {
+function commandErrorMessage(
+  result: Exclude<DesignerDispatchResult, { ok: true }>,
+): string {
   switch (result.code) {
     case "REVISION_CONFLICT":
       return "Revision conflict. Please retry after refresh.";
@@ -101,14 +104,21 @@ export function useDesignerWorkspace(params: {
   backendURL?: string | null;
   moduleId: string;
   initialDesignId?: string;
-  onNotify?: (message: string, variant?: "info" | "success" | "warning" | "error") => void;
+  onNotify?: (
+    message: string,
+    variant?: "info" | "success" | "warning" | "error",
+  ) => void;
 }): {
   state: DesignerWorkspaceState;
   actions: DesignerWorkspaceActions;
   derived: DesignerWorkspaceDerived;
 } {
   const api = useMemo(
-    () => createDesignerApi({ backendURL: params.backendURL, moduleId: params.moduleId }),
+    () =>
+      createDesignerApi({
+        backendURL: params.backendURL,
+        moduleId: params.moduleId,
+      }),
     [params.backendURL, params.moduleId],
   );
 
@@ -122,7 +132,8 @@ export function useDesignerWorkspace(params: {
   const [error, setError] = useState<string | null>(null);
   const [designs, setDesigns] = useState<DesignerDesignSummary[]>([]);
   const [selectedDesignId, setSelectedDesignId] = useState<string | null>(null);
-  const [projection, setProjection] = useState<DesignerSchematicProjection | null>(null);
+  const [projection, setProjection] =
+    useState<DesignerSchematicProjection | null>(null);
   const [activeView, setActiveView] = useState<DesignerView>("schem");
   const [query, setQuery] = useState("");
   const [components, setComponents] = useState<LibraryComponent[]>([]);
@@ -131,18 +142,22 @@ export function useDesignerWorkspace(params: {
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
   const [wireSourcePinId, setWireSourcePinId] = useState<string | null>(null);
   const [labelDraftText, setLabelDraftText] = useState("NET");
-  const [draggingComponentId, setDraggingComponentId] = useState<string | null>(null);
+  const [draggingComponentId, setDraggingComponentId] = useState<string | null>(
+    null,
+  );
   const [dragPlacementLoading, setDragPlacementLoading] = useState(false);
   const [dragPlacementDetail, setDragPlacementDetail] =
     useState<LibraryComponentPlacementDetail | null>(null);
-  const [dragGhostNm, setDragGhostNm] = useState<{ x: number; y: number } | null>(
-    null,
-  );
+  const [dragGhostNm, setDragGhostNm] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [undoDepth, setUndoDepth] = useState(0);
   const [redoDepth, setRedoDepth] = useState(0);
-  const dragResolvePromiseRef = useRef<Promise<LibraryComponentPlacementDetail> | null>(null);
+  const dragResolvePromiseRef =
+    useRef<Promise<LibraryComponentPlacementDetail> | null>(null);
   const dragResolveComponentRef = useRef<string | null>(null);
   const ensureDesignPromiseRef = useRef<Promise<string> | null>(null);
   const projectionRef = useRef<DesignerSchematicProjection | null>(null);
@@ -169,14 +184,20 @@ export function useDesignerWorkspace(params: {
       const next = await api.listDesigns();
       setDesigns(next);
       if (!selectedDesignId) {
-        if (params.initialDesignId && next.some((d) => d.id === params.initialDesignId)) {
+        if (
+          params.initialDesignId &&
+          next.some((d) => d.id === params.initialDesignId)
+        ) {
           setSelectedDesignId(params.initialDesignId);
         } else if (next[0]) {
           setSelectedDesignId(next[0].id);
         }
       }
     } catch (listError) {
-      const message = listError instanceof Error ? listError.message : "Failed to load designs";
+      const message =
+        listError instanceof Error
+          ? listError.message
+          : "Failed to load designs";
       setError(message);
       setDesigns([]);
     } finally {
@@ -216,20 +237,28 @@ export function useDesignerWorkspace(params: {
     await refreshProjectionForDesign(selectedDesignId);
   }, [refreshProjectionForDesign, selectedDesignId]);
 
-  const applyHistorySnapshot = useCallback((history: {
-    canUndo: boolean;
-    canRedo: boolean;
-    undoDepth: number;
-    redoDepth: number;
-  }) => {
-    setCanUndo(history.canUndo);
-    setCanRedo(history.canRedo);
-    setUndoDepth(history.undoDepth);
-    setRedoDepth(history.redoDepth);
-  }, []);
+  const applyHistorySnapshot = useCallback(
+    (history: {
+      canUndo: boolean;
+      canRedo: boolean;
+      undoDepth: number;
+      redoDepth: number;
+    }) => {
+      setCanUndo(history.canUndo);
+      setCanRedo(history.canRedo);
+      setUndoDepth(history.undoDepth);
+      setRedoDepth(history.redoDepth);
+    },
+    [],
+  );
 
   const clearHistorySnapshot = useCallback(() => {
-    applyHistorySnapshot({ canUndo: false, canRedo: false, undoDepth: 0, redoDepth: 0 });
+    applyHistorySnapshot({
+      canUndo: false,
+      canRedo: false,
+      undoDepth: 0,
+      redoDepth: 0,
+    });
   }, [applyHistorySnapshot]);
 
   const refreshHistoryForDesign = useCallback(
@@ -279,7 +308,9 @@ export function useDesignerWorkspace(params: {
         return created.id;
       } catch (createError) {
         const message =
-          createError instanceof Error ? createError.message : "Failed to create design";
+          createError instanceof Error
+            ? createError.message
+            : "Failed to create design";
         setError(message);
         throw new Error(message);
       } finally {
@@ -304,7 +335,10 @@ export function useDesignerWorkspace(params: {
       setSelectedDesignId(created.id);
       notify?.("Design created", "success");
     } catch (createError) {
-      const message = createError instanceof Error ? createError.message : "Failed to create design";
+      const message =
+        createError instanceof Error
+          ? createError.message
+          : "Failed to create design";
       setError(message);
     } finally {
       setCreatingDesign(false);
@@ -318,7 +352,10 @@ export function useDesignerWorkspace(params: {
       const found = await api.searchComponents(query, 30);
       setComponents(found);
     } catch (searchError) {
-      const message = searchError instanceof Error ? searchError.message : "Failed to search components";
+      const message =
+        searchError instanceof Error
+          ? searchError.message
+          : "Failed to search components";
       setError(message);
     } finally {
       setSearchingComponents(false);
@@ -383,7 +420,9 @@ export function useDesignerWorkspace(params: {
       }
 
       const isPcbCommand = command.type.startsWith("pcb_");
-      const sessionId = isPcbCommand ? "designer-pcb-session" : DESIGNER_SESSION_ID;
+      const sessionId = isPcbCommand
+        ? "designer-pcb-session"
+        : DESIGNER_SESSION_ID;
 
       const envelope: DesignerCommandEnvelope = {
         commandId: crypto.randomUUID(),
@@ -450,6 +489,12 @@ export function useDesignerWorkspace(params: {
     await refreshProjectionForDesign(designId);
   }, [api, applyHistorySnapshot, refreshProjectionForDesign]);
 
+  const notifyExternalRevisionBump = useCallback((revision: number) => {
+    if (projectionRef.current && projectionRef.current.revision < revision) {
+      projectionRef.current = { ...projectionRef.current, revision };
+    }
+  }, []);
+
   useEffect(() => {
     void refreshDesigns();
     void searchComponents();
@@ -488,7 +533,9 @@ export function useDesignerWorkspace(params: {
       return null;
     }
     for (const part of projection.parts) {
-      const pin = part.pins.find((candidate) => candidate.id === wireSourcePinId);
+      const pin = part.pins.find(
+        (candidate) => candidate.id === wireSourcePinId,
+      );
       if (pin) {
         return pin;
       }
@@ -500,7 +547,9 @@ export function useDesignerWorkspace(params: {
     if (!projection || !selectedLabelId) {
       return null;
     }
-    return projection.labels.find((label) => label.id === selectedLabelId) ?? null;
+    return (
+      projection.labels.find((label) => label.id === selectedLabelId) ?? null
+    );
   }, [projection, selectedLabelId]);
 
   return {
@@ -552,6 +601,7 @@ export function useDesignerWorkspace(params: {
       dispatchCommand,
       undo,
       redo,
+      notifyExternalRevisionBump,
     },
     derived: {
       selectedPart,

@@ -10,7 +10,10 @@ import { DesignerHeader } from "./components/DesignerHeader";
 import { DesignerPlaceholderView } from "./components/DesignerPlaceholderView";
 import { DesignerSidebar } from "./components/DesignerSidebar";
 import { DesignerStatusBar } from "./components/DesignerStatusBar";
-import { SchematicCanvas, type SchematicCanvasHandle } from "./components/SchematicCanvas";
+import {
+  SchematicCanvas,
+  type SchematicCanvasHandle,
+} from "./components/SchematicCanvas";
 import { ToastProvider, useToast } from "./hooks/use-toast";
 import { useDesignerWorkspace } from "./hooks/useDesignerWorkspace";
 import { PcbCanvas } from "./pcb/PcbCanvas";
@@ -32,7 +35,11 @@ function CanvasEmptyState({ message }: { message: string }): ReactElement {
   );
 }
 
-function DesignerSpaceInner({ moduleId, backendURL, designId }: ModuleSpaceProps): ReactElement {
+function DesignerSpaceInner({
+  moduleId,
+  backendURL,
+  designId,
+}: ModuleSpaceProps): ReactElement {
   const { addToast } = useToast();
   const { state, actions } = useDesignerWorkspace({
     backendURL,
@@ -46,7 +53,9 @@ function DesignerSpaceInner({ moduleId, backendURL, designId }: ModuleSpaceProps
   const canvasRef = useRef<SchematicCanvasHandle | null>(null);
 
   const selectedDesign = useMemo(
-    () => state.designs.find((design) => design.id === state.selectedDesignId) ?? null,
+    () =>
+      state.designs.find((design) => design.id === state.selectedDesignId) ??
+      null,
     [state.designs, state.selectedDesignId],
   );
 
@@ -153,6 +162,7 @@ function DesignerSpaceInner({ moduleId, backendURL, designId }: ModuleSpaceProps
               moduleId={moduleId}
               designId={state.selectedDesignId}
               dispatchCommand={actions.dispatchCommand}
+              notifyExternalRevisionBump={actions.notifyExternalRevisionBump}
             />
           ) : (
             <DesignerPlaceholderView view={state.activeView} />

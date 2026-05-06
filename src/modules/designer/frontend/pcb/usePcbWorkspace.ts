@@ -13,8 +13,15 @@ export function usePcbWorkspace(params: {
   moduleId: string;
   designId: string | null;
   dispatchCommand: (command: DesignerCommand) => Promise<unknown>;
+  notifyExternalRevisionBump?: (revision: number) => void;
 }) {
-  const { backendURL, moduleId, designId, dispatchCommand } = params;
+  const {
+    backendURL,
+    moduleId,
+    designId,
+    dispatchCommand,
+    notifyExternalRevisionBump,
+  } = params;
   const api = useMemo(
     () => createDesignerApi({ backendURL, moduleId }),
     [backendURL, moduleId],
@@ -39,7 +46,9 @@ export function usePcbWorkspace(params: {
     setLoading(true);
     setError(null);
     try {
-      setProjection(await api.getPcbProjection(designId));
+      const next = await api.getPcbProjection(designId);
+      setProjection(next);
+      if (next) notifyExternalRevisionBump?.(next.revision);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load PCB projection",
@@ -47,7 +56,7 @@ export function usePcbWorkspace(params: {
     } finally {
       setLoading(false);
     }
-  }, [api, designId]);
+  }, [api, designId, notifyExternalRevisionBump]);
 
   const refreshHistory = useCallback(async () => {
     if (!designId) {
