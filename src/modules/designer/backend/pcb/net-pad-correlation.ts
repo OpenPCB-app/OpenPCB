@@ -42,6 +42,10 @@ export function correlateNetPads(
     }
   }
 
+  // Track placements with empty pad sets so we emit one warning per placement
+  // (not one per pin attempt) when a footprint preview has no pads at all.
+  const reportedEmptyPlacement = new Set<string>();
+
   const netPads = new Map<string, PadRef[]>();
 
   for (const net of schematic.nets) {
@@ -53,7 +57,7 @@ export function correlateNetPads(
         warnings.push(`WARN: net ${net.id} references unknown pin ${pinId}`);
         continue;
       }
-      if (pinInfo.pinNumber === null) {
+      if (pinInfo.pinNumber === null || pinInfo.pinNumber.trim() === "") {
         warnings.push(
           `WARN: net ${net.id} pin ${pinId} has no pin number — cannot match to pad`,
         );
@@ -66,12 +70,26 @@ export function correlateNetPads(
         );
         continue;
       }
-      const pad = placementPads(placement).find(
-        (candidate) => candidate.number === pinInfo.pinNumber,
+      const candidates = placementPads(placement);
+      if (candidates.length === 0) {
+        if (!reportedEmptyPlacement.has(placement.id)) {
+          reportedEmptyPlacement.add(placement.id);
+          warnings.push(
+            `WARN: placement ${placement.id} (component ${placement.componentId}) has no pads in footprint.preview.pads — every net referencing this part will fail to correlate`,
+          );
+        }
+        continue;
+      }
+      const want = pinInfo.pinNumber.trim();
+      const pad = candidates.find(
+        (candidate) => (candidate.number ?? "").trim() === want,
       );
       if (!pad) {
+        const available = candidates
+          .map((c) => `"${(c.number ?? "").trim()}"`)
+          .join(", ");
         warnings.push(
-          `WARN: net ${net.id} has unmatched pin ${pinId} (pad number "${pinInfo.pinNumber}" not on placement ${placement.id})`,
+          `WARN: net ${net.id} pin ${pinId} requested pad "${want}" on placement ${placement.id} — available pads: [${available}]`,
         );
         continue;
       }

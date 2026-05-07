@@ -16,6 +16,10 @@ import { components, footprints, symbols } from "../schema";
 import { getDb } from "../queries";
 import { ImportValidationError, parseImportBundle } from "./inspect-kicad";
 import type { CommitKicadResponse } from "./types";
+import {
+  validateFootprintPads,
+  validateSymbolPinsCoverFootprintPads,
+} from "./validate-pads";
 
 export interface CommitDrawnRequest {
   drawnSymbol: {
@@ -131,6 +135,8 @@ export function commitDrawnImport(
   if (input.footprintMode === "generated" && input.generatedFootprint) {
     const fpSource = input.generatedFootprint.source;
     const fpMeta = input.generatedFootprint.metadata;
+    validateFootprintPads(fpSource);
+    validateSymbolPinsCoverFootprintPads(symbolSource, fpSource);
     const fpModel = buildFootprintRenderModel(fpSource);
     const fpHash = hashString(JSON.stringify(fpSource));
     footprintName = fpMeta.name;
@@ -163,6 +169,8 @@ export function commitDrawnImport(
   } else if (input.footprintMode === "drawn" && input.drawnFootprint) {
     const fpSource = input.drawnFootprint.source;
     const fpMeta = input.drawnFootprint.metadata;
+    validateFootprintPads(fpSource);
+    validateSymbolPinsCoverFootprintPads(symbolSource, fpSource);
     const fpModel = buildFootprintRenderModel(fpSource);
     const fpHash = hashString(JSON.stringify(fpSource));
     footprintName = fpMeta.name;
@@ -208,6 +216,8 @@ export function commitDrawnImport(
     if (!selectedFp) {
       throw new ImportValidationError("Selected footprint not found in files");
     }
+    validateFootprintPads(selectedFp.preview);
+    validateSymbolPinsCoverFootprintPads(symbolSource, selectedFp.preview);
     const rawFp = parsed.raw.footprintById[selectedFp.id];
     footprintName = selectedFp.name;
     tags = dedupeTags([...selectedFp.tags, "drawn-symbol"]);

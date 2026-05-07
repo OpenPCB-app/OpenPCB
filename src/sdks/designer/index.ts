@@ -50,6 +50,7 @@ export type {
   DesignerPcbProjection,
   DesignerPcbMovePlacementCommand,
   DesignerPcbRotatePlacementCommand,
+  DesignerPcbSetActiveLayerCommand,
   DesignerPcbSetBoardSettingsCommand,
   DesignerPlacePartCommand,
   DesignerPlacedPart,

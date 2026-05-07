@@ -19,11 +19,33 @@ export interface SchematicTheme {
   partOutlineColor: string;
 }
 
+/** PCB canvas color tokens. Distinct from `preview` because library tiles
+ * render symbols/footprints on a light surface, while the PCB canvas renders
+ * on a near-black board fill and needs higher-contrast text + per-layer pads. */
+export interface PcbCanvasTheme {
+  background: string;
+  boardFill: string;
+  boardFillOpacity: number;
+  ratsnestDefault: string;
+  ratsnestPower: string;
+  ratsnestGround: string;
+  selectionOutline: string;
+  highlightNet: string;
+  refdesLabel: string;
+  valueLabel: string;
+  padNumberText: string;
+  silkscreen: string;
+  fab: string;
+  courtyard: string;
+  drill: string;
+}
+
 /** Full canvas theme for a given mode */
 export interface CanvasTheme {
   mode: CanvasThemeMode;
   schematic: SchematicTheme;
   preview: PreviewTheme;
+  pcbCanvas: PcbCanvasTheme;
 }
 
 // ── Light mode palette ──────────────────────────────────────────────
@@ -77,6 +99,26 @@ const PREVIEW_DARK: PreviewTheme = {
   footprintDrill: "#0f172a",
 };
 
+/** PCB canvas tokens — KiCad/Altium-conventional dark palette.
+ * Single token set for both modes; the PCB tab is always dark. */
+const PCB_CANVAS_TOKENS: PcbCanvasTheme = {
+  background: "#0a0f1c",
+  boardFill: "#0a0f1c",
+  boardFillOpacity: 0.95,
+  ratsnestDefault: "#e5e7eb",
+  ratsnestPower: "#ef4444",
+  ratsnestGround: "#475569",
+  selectionOutline: "#22d3ee",
+  highlightNet: "#22d3ee",
+  refdesLabel: "#cbd5e1",
+  valueLabel: "#cbd5e1",
+  padNumberText: "#ffffff",
+  silkscreen: "#e2e8f0",
+  fab: "#22d3ee",
+  courtyard: "#f5d142",
+  drill: "#0a0f1c",
+};
+
 /** Build the full canvas theme for a given mode */
 export function getCanvasTheme(mode: CanvasThemeMode): CanvasTheme {
   if (mode === "light") {
@@ -98,6 +140,7 @@ export function getCanvasTheme(mode: CanvasThemeMode): CanvasTheme {
         footprintFab: "#64748b",
         footprintDrill: "#f1f5f9",
       },
+      pcbCanvas: PCB_CANVAS_TOKENS,
     };
   }
 
@@ -105,6 +148,7 @@ export function getCanvasTheme(mode: CanvasThemeMode): CanvasTheme {
     mode: "dark",
     schematic: SCHEMATIC_DARK,
     preview: PREVIEW_DARK,
+    pcbCanvas: PCB_CANVAS_TOKENS,
   };
 }
 

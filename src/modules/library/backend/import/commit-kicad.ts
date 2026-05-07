@@ -3,15 +3,20 @@ import { and, eq } from "drizzle-orm";
 import { components, footprints, symbols } from "../schema";
 import { getDb } from "../queries";
 import { ImportValidationError, parseImportBundle } from "./inspect-kicad";
-import type {
-  CommitKicadRequest,
-  CommitKicadResponse,
-} from "./types";
+import type { CommitKicadRequest, CommitKicadResponse } from "./types";
+import {
+  validateFootprintPads,
+  validateSymbolPinsCoverFootprintPads,
+} from "./validate-pads";
 
 const PLACEHOLDER_FOOTPRINT_ID = "fp-no-footprint-yet";
 const PLACEHOLDER_FOOTPRINT_NAME = "No footprint yet";
 const PLACEHOLDER_SOURCE_HASH = "placeholder:no-footprint-yet";
-const PLACEHOLDER_TAGS = ["placeholder-footprint", "virtual", "no-footprint-yet"] as const;
+const PLACEHOLDER_TAGS = [
+  "placeholder-footprint",
+  "virtual",
+  "no-footprint-yet",
+] as const;
 
 function trimOrEmpty(value: string): string {
   return value.trim();
@@ -68,7 +73,10 @@ function findExistingSymbolId(
     const rowSourceHash = asString(provenance?.sourceHash);
     const rowNormalizedId = asString(normalized?.id);
 
-    if (rowSourceHash === sourceHash && rowNormalizedId === normalizedSymbolId) {
+    if (
+      rowSourceHash === sourceHash &&
+      rowNormalizedId === normalizedSymbolId
+    ) {
       return row.id;
     }
   }
@@ -95,14 +103,19 @@ function findExistingFootprintId(
     const rowSourceHash = asString(provenance?.sourceHash);
     const rowNormalizedId = asString(normalized?.id);
 
-    if (rowSourceHash === sourceHash && rowNormalizedId === normalizedFootprintId) {
+    if (
+      rowSourceHash === sourceHash &&
+      rowNormalizedId === normalizedFootprintId
+    ) {
       return row.id;
     }
   }
   return null;
 }
 
-function findPlaceholderFootprintId(ctx: CoreBackendModuleContext): string | null {
+function findPlaceholderFootprintId(
+  ctx: CoreBackendModuleContext,
+): string | null {
   const db = getDb(ctx);
   const byId = db
     .select({ id: footprints.id })
@@ -196,9 +209,9 @@ export function commitKicadImport(
 
   const selectedFootprint = symbolOnlyImport
     ? null
-    : parsed.normalizedFootprints.find(
+    : (parsed.normalizedFootprints.find(
         (footprint) => footprint.id === selectedFootprintId,
-      ) ?? null;
+      ) ?? null);
   if (!symbolOnlyImport && !selectedFootprint) {
     throw new ImportValidationError(
       "Selected footprint is not present in import payload",
@@ -207,7 +220,9 @@ export function commitKicadImport(
 
   const rawSymbol = parsed.raw.symbolById[selectedSymbolId];
   if (!rawSymbol) {
-    throw new ImportValidationError("Failed to map selected symbol raw payload");
+    throw new ImportValidationError(
+      "Failed to map selected symbol raw payload",
+    );
   }
 
   const rawFootprint = selectedFootprint
@@ -216,6 +231,17 @@ export function commitKicadImport(
   if (selectedFootprint && !rawFootprint) {
     throw new ImportValidationError(
       "Failed to map selected footprint raw payload",
+    );
+  }
+
+  // Strict pad validation — empty pad numbers or zero-pad footprints fail at
+  // import time, not later on the PCB tab. Pin↔pad subset enforced when both
+  // a symbol and footprint are selected (skipped for symbol-only import).
+  if (selectedFootprint) {
+    validateFootprintPads(selectedFootprint.preview);
+    validateSymbolPinsCoverFootprintPads(
+      selectedSymbol,
+      selectedFootprint.preview,
     );
   }
 
@@ -237,8 +263,8 @@ export function commitKicadImport(
 
   const symbolId = existingSymbolId ?? crypto.randomUUID();
   const footprintId = selectedFootprint
-    ? existingFootprintId ?? crypto.randomUUID()
-    : existingFootprintId ?? PLACEHOLDER_FOOTPRINT_ID;
+    ? (existingFootprintId ?? crypto.randomUUID())
+    : (existingFootprintId ?? PLACEHOLDER_FOOTPRINT_ID);
   const componentId = crypto.randomUUID();
   const warningCount =
     selectedSymbol.warnings.length + (selectedFootprint?.warnings.length ?? 0);

@@ -538,9 +538,10 @@ export function buildFootprintPreviewFromParsed(
       });
     }
 
+    const normalizedNumber = (pad.number ?? "").trim();
     return {
-      id: `${pad.number || "?"}:${index}`,
-      number: pad.number,
+      id: `${normalizedNumber || "?"}:${index}`,
+      number: normalizedNumber,
       shape: isRenderedShape ? pad.shape : "rect",
       centerMm: { x: pad.position.x, y: pad.position.y },
       widthMm: pad.size.width,

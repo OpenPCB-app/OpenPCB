@@ -15,6 +15,7 @@ import type {
   DesignerMovePartCommand,
   DesignerPcbMovePlacementCommand,
   DesignerPcbRotatePlacementCommand,
+  DesignerPcbSetActiveLayerCommand,
   DesignerPcbSetBoardSettingsCommand,
   DesignerPlacePartCommand,
   DesignerRotatePartCommand,
@@ -272,6 +273,29 @@ function parsePcbRotatePlacementCommand(
   };
 }
 
+const PCB_LAYER_VALUES = new Set<string>([
+  "F.Cu",
+  "B.Cu",
+  "F.SilkS",
+  "B.SilkS",
+  "Edge.Cuts",
+]);
+
+function parsePcbSetActiveLayerCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbSetActiveLayerCommand {
+  const layer = asString(raw.layer);
+  if (!layer || !PCB_LAYER_VALUES.has(layer)) {
+    throw new ValidationError(
+      "command.layer must be one of F.Cu / B.Cu / F.SilkS / B.SilkS / Edge.Cuts",
+    );
+  }
+  return {
+    type: "pcb_set_active_layer",
+    layer: layer as DesignerPcbSetActiveLayerCommand["layer"],
+  };
+}
+
 function parseCreateWireCommand(
   raw: Record<string, unknown>,
 ): DesignerCreateWireCommand {
@@ -398,6 +422,9 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
       break;
     case "pcb_rotate_placement":
       command = parsePcbRotatePlacementCommand(commandRecord);
+      break;
+    case "pcb_set_active_layer":
+      command = parsePcbSetActiveLayerCommand(commandRecord);
       break;
     default:
       throw new ValidationError(`Unsupported command type '${type}'`);

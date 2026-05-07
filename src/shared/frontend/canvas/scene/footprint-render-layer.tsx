@@ -11,13 +11,17 @@ export interface FootprintRenderLayerProps {
   dimmedLayers?: ReadonlySet<string>;
   /** When true, color pads + graphics by their layer using PCB_LAYER_COLORS. */
   useLayerColors?: boolean;
+  /** Rendering surface — "preview" (default, library tile colors) or "pcb" (PCB canvas tokens). */
+  surface?: "preview" | "pcb";
 }
 
-function layerColor(layer: string | undefined, pt: { footprintSilk: string; footprintPad: string }): string {
+function layerColor(
+  layer: string | undefined,
+  pt: { footprintSilk: string; footprintPad: string },
+): string {
   if (!layer) return pt.footprintSilk;
   return (
-    PCB_LAYER_COLORS[layer as keyof typeof PCB_LAYER_COLORS] ??
-    pt.footprintSilk
+    PCB_LAYER_COLORS[layer as keyof typeof PCB_LAYER_COLORS] ?? pt.footprintSilk
   );
 }
 
@@ -36,12 +40,14 @@ function dimHex(hex: string, factor: number): string {
   return `#${dr.toString(16).padStart(2, "0")}${dg.toString(16).padStart(2, "0")}${db.toString(16).padStart(2, "0")}`;
 }
 
-function padLayerColor(layer: string | undefined, pt: { footprintPad: string }): string {
+function padLayerColor(
+  layer: string | undefined,
+  pt: { footprintPad: string },
+): string {
   if (!layer) return pt.footprintPad;
   if (layer === "*.Cu") return ALL_CU_COLOR;
   return (
-    PCB_LAYER_COLORS[layer as keyof typeof PCB_LAYER_COLORS] ??
-    pt.footprintPad
+    PCB_LAYER_COLORS[layer as keyof typeof PCB_LAYER_COLORS] ?? pt.footprintPad
   );
 }
 
@@ -54,9 +60,23 @@ export function FootprintRenderLayer({
   model,
   dimmedLayers,
   useLayerColors = false,
+  surface = "preview",
 }: FootprintRenderLayerProps) {
   const { theme } = useCanvasTheme();
-  const pt = theme.preview;
+  const basePreview = theme.preview;
+  // For PCB surface, override the few preview tokens that are unreadable on dark
+  // board fill (golden pad number text) with PCB canvas tokens. Pad fill colors
+  // are routed through PCB_LAYER_COLORS via useLayerColors, not these tokens.
+  const pt =
+    surface === "pcb"
+      ? {
+          ...basePreview,
+          footprintPadNumber: theme.pcbCanvas.padNumberText,
+          footprintSilk: theme.pcbCanvas.silkscreen,
+          footprintFab: theme.pcbCanvas.fab,
+          footprintDrill: theme.pcbCanvas.drill,
+        }
+      : basePreview;
 
   // ── Graphics grouped by layer ──────────────────────────────────────
   const graphicGroups = useMemo(() => {
@@ -169,10 +189,7 @@ export function FootprintRenderLayer({
       })}
 
       {/* Pads */}
-      <PadInstances
-        pads={padData}
-        defaultColor={pt.footprintPad}
-      />
+      <PadInstances pads={padData} defaultColor={pt.footprintPad} />
 
       {/* Drill holes */}
       {model.pads.map((pad) =>
@@ -206,13 +223,17 @@ export function FootprintRenderLayer({
         </EDAText>
       ))}
 
-      {/* Labels — use per-layer color when enabled */}
+      {/* Labels — per-layer color, with PCB-surface override for Fab text */}
       {model.labels.map((label) => {
-        const color = useLayerColors
-          ? layerColor(label.layer, pt)
-          : label.layer?.includes("Fab")
-            ? pt.footprintFab
-            : pt.footprintSilk;
+        const isFab = label.layer?.includes("Fab") ?? false;
+        const color =
+          surface === "pcb" && isFab
+            ? theme.pcbCanvas.refdesLabel
+            : useLayerColors
+              ? layerColor(label.layer, pt)
+              : isFab
+                ? pt.footprintFab
+                : pt.footprintSilk;
         const isDimmed =
           dimmedLayers !== undefined &&
           label.layer !== undefined &&

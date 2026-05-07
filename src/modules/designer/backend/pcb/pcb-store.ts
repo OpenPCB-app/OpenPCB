@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type {
   PcbBoardSettings,
+  PcbLayerId,
   PcbPlacedPart,
   PcbPointMm,
 } from "../../../../sdks/designer";
@@ -156,6 +157,35 @@ export function updatePcbBoardSize(params: {
     updatedAt: params.timestamp,
   };
 
+  params.db
+    .update(pcbEntities)
+    .set({ payloadJson: JSON.stringify(next), updatedAt: params.timestamp })
+    .where(
+      and(
+        eq(pcbEntities.designId, params.designId),
+        eq(pcbEntities.kind, BOARD_SETTINGS_KIND),
+      ),
+    )
+    .run();
+  return next;
+}
+
+export function updatePcbActiveLayer(params: {
+  db: DbClient;
+  designId: string;
+  layer: PcbLayerId;
+  timestamp: string;
+}): PcbBoardSettings {
+  const settings = ensurePcbBoardSettings(
+    params.db,
+    params.designId,
+    params.timestamp,
+  );
+  const next: PcbBoardSettings = {
+    ...settings,
+    activeLayer: params.layer,
+    updatedAt: params.timestamp,
+  };
   params.db
     .update(pcbEntities)
     .set({ payloadJson: JSON.stringify(next), updatedAt: params.timestamp })
@@ -429,24 +459,51 @@ export function syncPcbPlacementsFromSchematic(params: {
     }
   }
 
-  // Create placements for new schematic parts
+  // Self-heal placements with absurd positions. A previous sync bug stored
+  // nanometer values into the mm field, putting parts ~86,000 km off-board.
+  // Detect any position outside a generous board envelope and reset to the
+  // deterministic offset so the user can see and move the part again.
+  // Threshold: 10,000 mm — bigger than any realistic PCB, much smaller than
+  // the bug's nm-as-mm magnitude.
+  const POSITION_SANITY_MM = 10_000;
+  const isAbsurd = (p: PcbPlacedPart): boolean =>
+    !Number.isFinite(p.positionMm.x) ||
+    !Number.isFinite(p.positionMm.y) ||
+    Math.abs(p.positionMm.x) > POSITION_SANITY_MM ||
+    Math.abs(p.positionMm.y) > POSITION_SANITY_MM;
+
+  // Create or repair placements for each schematic part.
   const result: PcbPlacedPart[] = [];
   for (const part of schematicParts) {
     const existingPlacement = existingByPartId.get(part.id);
-    if (existingPlacement) {
+    if (existingPlacement && !isAbsurd(existingPlacement)) {
       result.push(existingPlacement);
+      continue;
+    }
+    const index = hashStringToIndex(part.id) % 24;
+    const offset = deterministicOffset(index);
+    const repairedPosition = {
+      x: Number((boardCenter.x + offset.x).toFixed(3)),
+      y: Number((boardCenter.y + offset.y).toFixed(3)),
+    };
+    if (existingPlacement) {
+      // Repair in place: keep id + manual fields the user set, reset position.
+      const repaired: PcbPlacedPart = {
+        ...existingPlacement,
+        positionMm: repairedPosition,
+        // Refresh the footprint snapshot too — the stale data was likely
+        // committed alongside an outdated snapshot.
+        footprint: part.footprint,
+      };
+      upsertPcbPlacement(db, designId, repaired, timestamp);
+      result.push(repaired);
     } else {
-      const index = hashStringToIndex(part.id) % 24;
-      const offset = deterministicOffset(index);
       const placement: PcbPlacedPart = {
         id: crypto.randomUUID(),
         partId: part.id,
         componentId: part.componentId,
         reference: part.reference,
-        positionMm: {
-          x: Number((boardCenter.x + offset.x).toFixed(3)),
-          y: Number((boardCenter.y + offset.y).toFixed(3)),
-        },
+        positionMm: repairedPosition,
         rotationDeg: 0,
         mirrored: false,
         layer: "F.Cu",

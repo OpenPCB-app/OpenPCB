@@ -13,6 +13,10 @@ import { components, footprints, symbols } from "../schema";
 import { getDb } from "../queries";
 import { ImportValidationError, parseImportBundle } from "./inspect-kicad";
 import type { CommitKicadResponse } from "./types";
+import {
+  validateFootprintPads,
+  validateSymbolPinsCoverFootprintPads,
+} from "./validate-pads";
 
 export interface CommitGeneratedRequest {
   symbolLibrary: { fileName: string; content: string };
@@ -100,6 +104,8 @@ export function commitGeneratedImport(
   // Build footprint model from source
   const fpSource = input.generatedFootprint.source;
   const fpMeta = input.generatedFootprint.metadata;
+  validateFootprintPads(fpSource);
+  validateSymbolPinsCoverFootprintPads(selectedSymbol, fpSource);
   const fpModel = buildFootprintRenderModel(fpSource);
   const sourceHash = hashSource(fpSource);
 

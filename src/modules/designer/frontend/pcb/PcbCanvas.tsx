@@ -13,8 +13,9 @@ import type {
   InteractionEvent,
   InteractionHandler,
 } from "../../../../shared/frontend/canvas/interaction/types";
-import { hitPlacement } from "./pcb-hit";
+import { hitPad, hitPlacement } from "./pcb-hit";
 import { PcbScene } from "./PcbScene";
+import { PcbToolbar } from "./PcbToolbar";
 import { usePcbWorkspace } from "./usePcbWorkspace";
 
 const PCB_GRID_MM = 0.25;
@@ -86,6 +87,17 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     };
   }, []);
 
+  // Reverse-lookup (placementId|padNumber) → netId from ratsnest segments.
+  // Only nets with >=2 pads appear here; isolated single-pad nets won't hover-highlight.
+  const padToNet = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const seg of workspace.projection?.ratsnest ?? []) {
+      map.set(`${seg.fromPlacementId}|${seg.fromPadNumber}`, seg.netId);
+      map.set(`${seg.toPlacementId}|${seg.toPadNumber}`, seg.netId);
+    }
+    return map;
+  }, [workspace.projection?.ratsnest]);
+
   const handler = useMemo<InteractionHandler>(() => {
     return {
       onPointerDown(event) {
@@ -109,9 +121,17 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
       },
       onPointerMove(event) {
+        const cursor = eventToMm(event);
+        // Hover-highlight: resolve cursor → pad → net (only when not dragging).
+        if (!dragSession) {
+          const pad = hitPad(placementsRef.current, cursor);
+          const netId = pad
+            ? (padToNet.get(`${pad.placementId}|${pad.padNumber}`) ?? null)
+            : null;
+          workspace.hoverNet(netId);
+        }
         setDragSession((prev) => {
           if (!prev) return prev;
-          const cursor = eventToMm(event);
           const next = {
             x: snapMm(cursor.x - prev.pointerOffsetMm.x),
             y: snapMm(cursor.y - prev.pointerOffsetMm.y),
@@ -136,6 +156,28 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.target instanceof HTMLInputElement) return;
+      // Global keys (no selection required).
+      if (event.key === "b" || event.key === "B") {
+        event.preventDefault();
+        workspace.toggleRatsnestVisible();
+        return;
+      }
+      if (event.key === "`") {
+        event.preventDefault();
+        if (workspace.highlightedNetId) {
+          workspace.pinHighlightedNet(workspace.highlightedNetId);
+        } else {
+          workspace.clearHighlight();
+        }
+        return;
+      }
+      if (event.key === "Escape") {
+        workspace.setSelectedPlacementId(null);
+        setDragSession(null);
+        workspace.clearHighlight();
+        return;
+      }
+      // Selection-dependent keys.
       const id = workspace.selectedPlacementId;
       if (!id) return;
       if (event.key === "r" || event.key === "R") {
@@ -145,9 +187,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         const next = (((placement.rotationDeg + 90) % 360) + 360) % 360;
         const rotation = next as 0 | 90 | 180 | 270;
         void workspace.rotatePlacement(id, rotation);
-      } else if (event.key === "Escape") {
-        workspace.setSelectedPlacementId(null);
-        setDragSession(null);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -189,13 +228,25 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             projection={workspace.projection}
             selectedPlacementId={workspace.selectedPlacementId}
             dragOverride={dragOverride}
+            highlightedNetId={workspace.highlightedNetId}
+            ratsnestVisible={workspace.ratsnestVisible}
           />
         </EdaCanvas>
-      ) : (
+      ) : null}
+      {workspace.projection ? (
+        <PcbToolbar
+          activeLayer={workspace.projection.board.activeLayer}
+          onSetActiveLayer={(layer) => void workspace.setActiveLayer(layer)}
+          ratsnestVisible={workspace.ratsnestVisible}
+          onToggleRatsnest={workspace.toggleRatsnestVisible}
+          drcCount={0}
+        />
+      ) : null}
+      {!workspace.projection ? (
         <div className="flex h-full items-center justify-center text-sm text-slate-500">
           {workspace.loading ? "Loading PCB..." : "PCB projection unavailable"}
         </div>
-      )}
+      ) : null}
 
       <div className="absolute right-3 top-3 z-20 w-72 rounded-lg border border-slate-800 bg-slate-950/95 p-3 shadow-xl backdrop-blur">
         <div className="mb-3 flex items-center justify-between">

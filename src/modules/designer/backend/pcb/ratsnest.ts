@@ -1,8 +1,13 @@
 // Ratsnest = MST of pad positions per net. Edges are airwires the user must route.
 // Prim's algorithm, O(N^2) — fine for hundreds of pads per net; revisit if it bites.
 
-import type { PcbPointMm, RatsnestSegment } from "../../../../sdks/designer";
+import type {
+  PcbNetClass,
+  PcbPointMm,
+  RatsnestSegment,
+} from "../../../../sdks/designer";
 import type { NetPadCorrelation, PadRef } from "./net-pad-correlation";
+import { resolveNetClassId } from "./net-class-resolver";
 
 function distSq(a: PcbPointMm, b: PcbPointMm): number {
   const dx = a.x - b.x;
@@ -10,7 +15,11 @@ function distSq(a: PcbPointMm, b: PcbPointMm): number {
   return dx * dx + dy * dy;
 }
 
-function mstForNet(netId: string, pads: PadRef[]): RatsnestSegment[] {
+function mstForNet(
+  netId: string,
+  netClassId: string,
+  pads: PadRef[],
+): RatsnestSegment[] {
   if (pads.length < 2) return [];
 
   const inTree = new Array<boolean>(pads.length).fill(false);
@@ -40,10 +49,17 @@ function mstForNet(netId: string, pads: PadRef[]): RatsnestSegment[] {
 
     inTree[nextIdx] = true;
     const parentIdx = parent[nextIdx]!;
+    const a = pads[parentIdx]!;
+    const b = pads[nextIdx]!;
     segments.push({
       netId,
-      fromMm: pads[parentIdx]!.worldMm,
-      toMm: pads[nextIdx]!.worldMm,
+      netClassId,
+      fromMm: a.worldMm,
+      toMm: b.worldMm,
+      fromPlacementId: a.placementId,
+      fromPadNumber: a.padNumber,
+      toPlacementId: b.placementId,
+      toPadNumber: b.padNumber,
     });
 
     for (let i = 0; i < pads.length; i++) {
@@ -60,12 +76,22 @@ function mstForNet(netId: string, pads: PadRef[]): RatsnestSegment[] {
   return segments;
 }
 
+export interface ComputeRatsnestContext {
+  /** Schematic net id → human net name for net-class auto-assignment. */
+  netNames: Map<string, string>;
+  /** Net classes available on the board (drives color routing). */
+  netClasses: ReadonlyArray<PcbNetClass>;
+}
+
 export function computeRatsnest(
   correlation: NetPadCorrelation,
+  ctx: ComputeRatsnestContext,
 ): RatsnestSegment[] {
   const result: RatsnestSegment[] = [];
   for (const [netId, pads] of correlation.netPads) {
-    result.push(...mstForNet(netId, pads));
+    const netName = ctx.netNames.get(netId) ?? "";
+    const classId = resolveNetClassId(netName, ctx.netClasses);
+    result.push(...mstForNet(netId, classId, pads));
   }
   return result;
 }

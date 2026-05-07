@@ -83,6 +83,8 @@ export interface PcbNetClass {
   clearanceMm: number;
   viaDiameterMm: number;
   viaDrillMm: number;
+  /** Color used to render ratsnest airwires for nets in this class. */
+  color: string;
 }
 
 export interface PcbBoardSettings {
@@ -108,8 +110,14 @@ export interface PcbPlacedPart {
 
 export interface RatsnestSegment {
   netId: string;
+  /** Net-class id used for color routing (e.g. "default", "power", "gnd"). */
+  netClassId: string;
   fromMm: PcbPointMm;
   toMm: PcbPointMm;
+  fromPlacementId: string;
+  fromPadNumber: string;
+  toPlacementId: string;
+  toPadNumber: string;
 }
 
 export interface DesignerPcbProjection {
@@ -276,6 +284,11 @@ export interface DesignerPcbRotatePlacementCommand {
   rotationDeg: 0 | 90 | 180 | 270;
 }
 
+export interface DesignerPcbSetActiveLayerCommand {
+  type: "pcb_set_active_layer";
+  layer: PcbLayerId;
+}
+
 export type DesignerCommand =
   | DesignerPlacePartCommand
   | DesignerCreateWireCommand
@@ -287,7 +300,8 @@ export type DesignerCommand =
   | DesignerUpsertLabelCommand
   | DesignerPcbSetBoardSettingsCommand
   | DesignerPcbMovePlacementCommand
-  | DesignerPcbRotatePlacementCommand;
+  | DesignerPcbRotatePlacementCommand
+  | DesignerPcbSetActiveLayerCommand;
 
 export type DesignerCommandEnvelope = CommandEnvelope<DesignerCommand>;
 

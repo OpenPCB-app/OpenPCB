@@ -1,6 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { computeRatsnest } from "../../../modules/designer/backend/pcb/ratsnest";
 import type { NetPadCorrelation } from "../../../modules/designer/backend/pcb/net-pad-correlation";
+import type { PcbNetClass } from "../../../sdks/designer";
+
+const NET_CLASSES: PcbNetClass[] = [
+  {
+    id: "default",
+    name: "Default",
+    traceWidthMm: 0.25,
+    clearanceMm: 0.2,
+    viaDiameterMm: 0.8,
+    viaDrillMm: 0.4,
+    color: "#e5e7eb",
+  },
+];
+
+const ctx = { netNames: new Map<string, string>(), netClasses: NET_CLASSES };
 
 describe("computeRatsnest", () => {
   test("returns empty for net with <2 pads", () => {
@@ -13,7 +28,7 @@ describe("computeRatsnest", () => {
       ]),
       warnings: [],
     };
-    expect(computeRatsnest(correlation)).toEqual([]);
+    expect(computeRatsnest(correlation, ctx)).toEqual([]);
   });
 
   test("MST of triangle picks 2 shortest edges", () => {
@@ -32,7 +47,7 @@ describe("computeRatsnest", () => {
       ]),
       warnings: [],
     };
-    const segments = computeRatsnest(correlation);
+    const segments = computeRatsnest(correlation, ctx);
     expect(segments).toHaveLength(2);
     const placements = segments
       .map((s) => `${s.fromMm.x},${s.fromMm.y}->${s.toMm.x},${s.toMm.y}`)
@@ -64,7 +79,7 @@ describe("computeRatsnest", () => {
       ]),
       warnings: [],
     };
-    const segments = computeRatsnest(correlation);
+    const segments = computeRatsnest(correlation, ctx);
     // 1 segment for vcc + 2 segments for gnd = 3
     expect(segments).toHaveLength(3);
     expect(segments.filter((s) => s.netId === "vcc")).toHaveLength(1);

@@ -3,7 +3,9 @@ import type { PcbBoardSettings } from "../../../../sdks/designer";
 export const DEFAULT_PCB_WIDTH_MM = 100;
 export const DEFAULT_PCB_HEIGHT_MM = 80;
 
-export function createDefaultPcbBoardSettings(timestamp: string): PcbBoardSettings {
+export function createDefaultPcbBoardSettings(
+  timestamp: string,
+): PcbBoardSettings {
   return {
     outline: {
       kind: "rect",
@@ -38,6 +40,7 @@ export function createDefaultPcbBoardSettings(timestamp: string): PcbBoardSettin
         clearanceMm: 0.2,
         viaDiameterMm: 0.8,
         viaDrillMm: 0.4,
+        color: "#e5e7eb",
       },
       {
         id: "power",
@@ -46,6 +49,16 @@ export function createDefaultPcbBoardSettings(timestamp: string): PcbBoardSettin
         clearanceMm: 0.2,
         viaDiameterMm: 0.8,
         viaDrillMm: 0.4,
+        color: "#ef4444",
+      },
+      {
+        id: "gnd",
+        name: "GND",
+        traceWidthMm: 0.4,
+        clearanceMm: 0.2,
+        viaDiameterMm: 0.8,
+        viaDrillMm: 0.4,
+        color: "#475569",
       },
     ],
     updatedAt: timestamp,

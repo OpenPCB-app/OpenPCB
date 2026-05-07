@@ -38,6 +38,7 @@ import {
 import {
   movePcbPlacement,
   rotatePcbPlacement,
+  updatePcbActiveLayer,
   updatePcbBoardSize,
 } from "./pcb/pcb-store";
 import {
@@ -256,6 +257,16 @@ export function executeDesignerCommand({
       timestamp,
     });
     if (!rotated) return pcbPlacementNotFound(command.placementId);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_set_active_layer") {
+    updatePcbActiveLayer({
+      db: tx,
+      designId,
+      layer: command.layer,
+      timestamp,
+    });
     return okResult(bumpRevision(tx, designId, revision, timestamp), null);
   }
 

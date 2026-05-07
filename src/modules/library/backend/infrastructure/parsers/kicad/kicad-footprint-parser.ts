@@ -149,7 +149,7 @@ export function parseKicadFootprint(source: string): ParsedKicadFootprint {
 
   // Description
   const descrNode = findNode(tree, "descr");
-  const description = descrNode ? getStringValue(descrNode) ?? "" : "";
+  const description = descrNode ? (getStringValue(descrNode) ?? "") : "";
 
   // Tags — may be space-separated string or multiple args
   const tagsNode = findNode(tree, "tags");
@@ -178,7 +178,7 @@ export function parseKicadFootprint(source: string): ParsedKicadFootprint {
   // Pads
   const pads: ParsedPad[] = [];
   for (const padNode of findNodes(tree, "pad")) {
-    const padNum = getStringValue(padNode, 1) ?? "";
+    const padNum = (getStringValue(padNode, 1) ?? "").trim();
     const rawType = getStringValue(padNode, 2) ?? "";
     const rawShape = getStringValue(padNode, 3) ?? "";
 
@@ -199,13 +199,13 @@ export function parseKicadFootprint(source: string): ParsedKicadFootprint {
       type: padType,
       shape: padShape,
       position: {
-        x: atNode ? getNumberValue(atNode, 1) ?? 0 : 0,
-        y: atNode ? getNumberValue(atNode, 2) ?? 0 : 0,
+        x: atNode ? (getNumberValue(atNode, 1) ?? 0) : 0,
+        y: atNode ? (getNumberValue(atNode, 2) ?? 0) : 0,
       },
-      rotation: atNode ? getNumberValue(atNode, 3) ?? 0 : 0,
+      rotation: atNode ? (getNumberValue(atNode, 3) ?? 0) : 0,
       size: {
-        width: sizeNode ? getNumberValue(sizeNode, 1) ?? 0 : 0,
-        height: sizeNode ? getNumberValue(sizeNode, 2) ?? 0 : 0,
+        width: sizeNode ? (getNumberValue(sizeNode, 1) ?? 0) : 0,
+        height: sizeNode ? (getNumberValue(sizeNode, 2) ?? 0) : 0,
       },
       layers: extractLayers(padNode),
     };

@@ -41,7 +41,16 @@ export function loadPcbProjection(params: {
   const correlation = schematic
     ? correlateNetPads(schematic, placements)
     : { netPads: new Map(), warnings: [] };
-  const ratsnest = computeRatsnest(correlation);
+  const netNames = new Map<string, string>();
+  if (schematic) {
+    for (const net of schematic.nets) {
+      netNames.set(net.id, net.name);
+    }
+  }
+  const ratsnest = computeRatsnest(correlation, {
+    netNames,
+    netClasses: board.netClasses,
+  });
 
   return {
     designId: params.designId,

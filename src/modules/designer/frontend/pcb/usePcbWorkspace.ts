@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   DesignerCommand,
   DesignerPcbProjection,
+  PcbLayerId,
   PcbPointMm,
 } from "../../../../sdks";
 import { createDesignerApi } from "../api";
+import { useDesignerHighlight } from "../useDesignerHighlight";
 
 const PCB_SESSION_ID = "designer-pcb-session";
 
@@ -37,6 +39,16 @@ export function usePcbWorkspace(params: {
   const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(
     null,
   );
+  // Cross-probe highlight state lives in a designer-wide store so the schematic
+  // and PCB views stay in lockstep (hover a pad on PCB → schematic dims; hover
+  // a wire on schematic → PCB dims). UI state local to the PCB tab — like the
+  // ratsnest visibility toggle — stays here.
+  const highlightedNetId = useDesignerHighlight((s) => s.highlightedNetId);
+  const pinnedHighlight = useDesignerHighlight((s) => s.pinned);
+  const hoverNetStore = useDesignerHighlight((s) => s.hoverNet);
+  const pinNetStore = useDesignerHighlight((s) => s.pinNet);
+  const clearHighlightStore = useDesignerHighlight((s) => s.clear);
+  const [ratsnestVisible, setRatsnestVisible] = useState(true);
 
   const refresh = useCallback(async () => {
     if (!designId) {
@@ -164,6 +176,34 @@ export function usePcbWorkspace(params: {
     [dispatchCommand, refresh, refreshHistory],
   );
 
+  const setActiveLayer = useCallback(
+    async (layer: PcbLayerId) => {
+      setError(null);
+      try {
+        await dispatchCommand({
+          type: "pcb_set_active_layer",
+          layer,
+        });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Set active layer failed",
+        );
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  // Highlight setters are passthroughs to the cross-probe store.
+  const hoverNet = hoverNetStore;
+  const pinHighlightedNet = pinNetStore;
+  const clearHighlight = clearHighlightStore;
+
+  const toggleRatsnestVisible = useCallback(() => {
+    setRatsnestVisible((v) => !v);
+  }, []);
+
   return {
     projection,
     loading,
@@ -173,8 +213,16 @@ export function usePcbWorkspace(params: {
     canRedo,
     selectedPlacementId,
     setSelectedPlacementId,
+    highlightedNetId,
+    pinnedHighlight,
+    hoverNet,
+    pinHighlightedNet,
+    clearHighlight,
+    ratsnestVisible,
+    toggleRatsnestVisible,
     refresh,
     updateBoardSize,
+    setActiveLayer,
     undo,
     redo,
     movePlacement,
