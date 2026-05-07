@@ -46,6 +46,11 @@ export interface DesignerSchematicProjection {
 
 export type PcbLayerId = "F.Cu" | "B.Cu" | "F.SilkS" | "B.SilkS" | "Edge.Cuts";
 
+/** Subset of PcbLayerId that traces and vias may live on (copper only). */
+export type PcbCopperLayerId = "F.Cu" | "B.Cu";
+
+export type PcbTraceSegmentMode = "manhattan-90" | "manhattan-45";
+
 export interface PcbPointMm {
   x: number;
   y: number;
@@ -93,6 +98,12 @@ export interface PcbBoardSettings {
   visibleLayers: PcbLayerId[];
   designRules: PcbDesignRules;
   netClasses: PcbNetClass[];
+  /**
+   * Board-level trace-width presets (mm), shown in the route-tool dropdown
+   * and cycled with W / Shift+W. The active net class's traceWidthMm is the
+   * implicit default at session start.
+   */
+  tracePresets: number[];
   updatedAt: string;
 }
 
@@ -106,6 +117,31 @@ export interface PcbPlacedPart {
   mirrored: boolean;
   layer: PcbLayerId;
   footprint: LibraryFootprintPlacementSnapshot;
+}
+
+export interface PcbTrace {
+  id: string;
+  /** Net id resolved at create time from the starting pad, or null for empty-space starts. */
+  netId: string | null;
+  netClassId: string;
+  layer: PcbCopperLayerId;
+  /** Width in mm. Defaults from net class; user may override mid-route. */
+  widthMm: number;
+  /** Polyline in nm; >=2 points; segments are 90° or 45° depending on segmentMode. */
+  pointsNm: Array<{ x: number; y: number }>;
+  segmentMode: PcbTraceSegmentMode;
+}
+
+export interface PcbVia {
+  id: string;
+  netId: string | null;
+  netClassId: string;
+  centerMm: PcbPointMm;
+  diameterMm: number;
+  drillMm: number;
+  /** Through-via for v1 — always F.Cu↔B.Cu. */
+  fromLayer: "F.Cu";
+  toLayer: "B.Cu";
 }
 
 export interface RatsnestSegment {
@@ -125,6 +161,8 @@ export interface DesignerPcbProjection {
   revision: number;
   board: PcbBoardSettings;
   placements: PcbPlacedPart[];
+  traces: PcbTrace[];
+  vias: PcbVia[];
   ratsnest: RatsnestSegment[];
   warnings: string[];
 }
@@ -289,6 +327,39 @@ export interface DesignerPcbSetActiveLayerCommand {
   layer: PcbLayerId;
 }
 
+export interface DesignerPcbAddTraceCommand {
+  type: "pcb_add_trace";
+  layer: PcbCopperLayerId;
+  pointsNm: Array<{ x: number; y: number }>;
+  widthMm: number;
+  netId: string | null;
+  netClassId: string;
+  segmentMode: PcbTraceSegmentMode;
+}
+
+export interface DesignerPcbAddViaCommand {
+  type: "pcb_add_via";
+  centerMm: PcbPointMm;
+  netId: string | null;
+  netClassId: string;
+}
+
+export interface DesignerPcbDeleteTraceCommand {
+  type: "pcb_delete_trace";
+  traceId: string;
+}
+
+export interface DesignerPcbDeleteViaCommand {
+  type: "pcb_delete_via";
+  viaId: string;
+}
+
+export interface DesignerPcbUpdateTraceGeometryCommand {
+  type: "pcb_update_trace_geometry";
+  traceId: string;
+  pointsNm: Array<{ x: number; y: number }>;
+}
+
 export type DesignerCommand =
   | DesignerPlacePartCommand
   | DesignerCreateWireCommand
@@ -301,7 +372,12 @@ export type DesignerCommand =
   | DesignerPcbSetBoardSettingsCommand
   | DesignerPcbMovePlacementCommand
   | DesignerPcbRotatePlacementCommand
-  | DesignerPcbSetActiveLayerCommand;
+  | DesignerPcbSetActiveLayerCommand
+  | DesignerPcbAddTraceCommand
+  | DesignerPcbAddViaCommand
+  | DesignerPcbDeleteTraceCommand
+  | DesignerPcbDeleteViaCommand
+  | DesignerPcbUpdateTraceGeometryCommand;
 
 export type DesignerCommandEnvelope = CommandEnvelope<DesignerCommand>;
 
@@ -385,6 +461,31 @@ export type DesignerDispatchResult =
       ok: false;
       code: "PCB_PLACEMENT_NOT_FOUND";
       placementId: string;
+    }
+  | {
+      ok: false;
+      code: "INVALID_PCB_TRACE";
+      detail: string;
+    }
+  | {
+      ok: false;
+      code: "INVALID_PCB_VIA";
+      detail: string;
+    }
+  | {
+      ok: false;
+      code: "PCB_TRACE_NOT_FOUND";
+      traceId: string;
+    }
+  | {
+      ok: false;
+      code: "PCB_VIA_NOT_FOUND";
+      viaId: string;
+    }
+  | {
+      ok: false;
+      code: "PCB_NET_CLASS_NOT_FOUND";
+      netClassId: string;
     };
 
 export interface DesignerSearchLibraryParams {

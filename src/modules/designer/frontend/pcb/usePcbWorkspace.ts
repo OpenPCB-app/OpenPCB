@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   DesignerCommand,
   DesignerPcbProjection,
+  PcbCopperLayerId,
   PcbLayerId,
   PcbPointMm,
+  PcbTraceSegmentMode,
 } from "../../../../sdks";
 import { createDesignerApi } from "../api";
 import { useDesignerHighlight } from "../useDesignerHighlight";
@@ -204,6 +206,91 @@ export function usePcbWorkspace(params: {
     setRatsnestVisible((v) => !v);
   }, []);
 
+  const addTrace = useCallback(
+    async (input: {
+      layer: PcbCopperLayerId;
+      pointsNm: Array<{ x: number; y: number }>;
+      widthMm: number;
+      netId: string | null;
+      netClassId: string;
+      segmentMode: PcbTraceSegmentMode;
+    }) => {
+      setError(null);
+      try {
+        await dispatchCommand({ type: "pcb_add_trace", ...input });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Add trace failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const addVia = useCallback(
+    async (input: {
+      centerMm: PcbPointMm;
+      netId: string | null;
+      netClassId: string;
+    }) => {
+      setError(null);
+      try {
+        await dispatchCommand({ type: "pcb_add_via", ...input });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Add via failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const deleteTrace = useCallback(
+    async (traceId: string) => {
+      setError(null);
+      try {
+        await dispatchCommand({ type: "pcb_delete_trace", traceId });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Delete trace failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const deleteVia = useCallback(
+    async (viaId: string) => {
+      setError(null);
+      try {
+        await dispatchCommand({ type: "pcb_delete_via", viaId });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Delete via failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const updateTraceGeometry = useCallback(
+    async (traceId: string, pointsNm: Array<{ x: number; y: number }>) => {
+      setError(null);
+      try {
+        await dispatchCommand({
+          type: "pcb_update_trace_geometry",
+          traceId,
+          pointsNm,
+        });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Reshape trace failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
   return {
     projection,
     loading,
@@ -227,5 +314,10 @@ export function usePcbWorkspace(params: {
     redo,
     movePlacement,
     rotatePlacement,
+    addTrace,
+    addVia,
+    deleteTrace,
+    deleteVia,
+    updateTraceGeometry,
   };
 }

@@ -14,6 +14,8 @@ import {
   RENDER_ORDER,
 } from "../../../../shared/frontend/canvas/layers";
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
+import { TraceLayer } from "./layers/TraceLayer";
+import { ViaLayer } from "./layers/ViaLayer";
 
 function BoardOutline({
   projection,
@@ -392,6 +394,8 @@ function SelectionOutlineMaterial(): ReactElement {
 interface PcbSceneProps {
   projection: DesignerPcbProjection;
   selectedPlacementId?: string | null;
+  selectedTraceId?: string | null;
+  selectedViaId?: string | null;
   dragOverride?: { id: string; positionMm: PcbPointMm } | null;
   highlightedNetId?: string | null;
   ratsnestVisible?: boolean;
@@ -400,6 +404,8 @@ interface PcbSceneProps {
 export function PcbScene({
   projection,
   selectedPlacementId,
+  selectedTraceId,
+  selectedViaId,
   dragOverride,
   highlightedNetId,
   ratsnestVisible = true,
@@ -437,6 +443,23 @@ export function PcbScene({
           }
         />
       ))}
+      <TraceLayer
+        traces={projection.traces}
+        layer="B.Cu"
+        highlightedNetId={highlightedNetId}
+        selectedTraceId={selectedTraceId}
+      />
+      <TraceLayer
+        traces={projection.traces}
+        layer="F.Cu"
+        highlightedNetId={highlightedNetId}
+        selectedTraceId={selectedTraceId}
+      />
+      <ViaLayer
+        vias={projection.vias}
+        highlightedNetId={highlightedNetId}
+        selectedViaId={selectedViaId}
+      />
       <RatsnestLayer
         projection={projection}
         selectedPlacementId={selectedPlacementId}

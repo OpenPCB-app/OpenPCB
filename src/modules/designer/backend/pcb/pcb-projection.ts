@@ -4,6 +4,8 @@ import { loadSchematicProjection } from "../projection-read";
 import { correlateNetPads } from "./net-pad-correlation";
 import {
   ensurePcbBoardSettings,
+  loadPcbTraces,
+  loadPcbVias,
   syncPcbPlacementsFromSchematic,
 } from "./pcb-store";
 import { computeRatsnest } from "./ratsnest";
@@ -47,9 +49,14 @@ export function loadPcbProjection(params: {
       netNames.set(net.id, net.name);
     }
   }
+  const traces = loadPcbTraces(params.db, params.designId);
+  const vias = loadPcbVias(params.db, params.designId);
+
   const ratsnest = computeRatsnest(correlation, {
     netNames,
     netClasses: board.netClasses,
+    traces,
+    vias,
   });
 
   return {
@@ -57,6 +64,8 @@ export function loadPcbProjection(params: {
     revision: params.revision,
     board,
     placements,
+    traces,
+    vias,
     ratsnest,
     warnings: correlation.warnings,
   };

@@ -13,13 +13,20 @@ import type {
   DesignerDeleteEntityCommand,
   DesignerMirrorPartCommand,
   DesignerMovePartCommand,
+  DesignerPcbAddTraceCommand,
+  DesignerPcbAddViaCommand,
+  DesignerPcbDeleteTraceCommand,
+  DesignerPcbDeleteViaCommand,
   DesignerPcbMovePlacementCommand,
   DesignerPcbRotatePlacementCommand,
   DesignerPcbSetActiveLayerCommand,
   DesignerPcbSetBoardSettingsCommand,
+  DesignerPcbUpdateTraceGeometryCommand,
   DesignerPlacePartCommand,
   DesignerRotatePartCommand,
   DesignerUpsertLabelCommand,
+  PcbCopperLayerId,
+  PcbTraceSegmentMode,
 } from "../../../sdks/designer";
 import { createDesignerStore } from "./store";
 import { asNumber, asRecord, asString } from "./value-guards";
@@ -349,6 +356,113 @@ function parseCreateWireJunctionCommand(
   };
 }
 
+const PCB_COPPER_LAYERS = new Set<string>(["F.Cu", "B.Cu"]);
+const PCB_TRACE_SEGMENT_MODES = new Set<string>([
+  "manhattan-90",
+  "manhattan-45",
+]);
+
+function parsePcbAddTraceCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbAddTraceCommand {
+  const layer = asString(raw.layer);
+  if (!layer || !PCB_COPPER_LAYERS.has(layer)) {
+    throw new ValidationError("command.layer must be 'F.Cu' or 'B.Cu'");
+  }
+  const widthMm = asNumber(raw.widthMm);
+  if (widthMm === null || widthMm <= 0) {
+    throw new ValidationError("command.widthMm must be a positive number");
+  }
+  const netClassId = asString(raw.netClassId);
+  if (!netClassId) {
+    throw new ValidationError("command.netClassId must be a string");
+  }
+  const segmentMode = asString(raw.segmentMode);
+  if (!segmentMode || !PCB_TRACE_SEGMENT_MODES.has(segmentMode)) {
+    throw new ValidationError(
+      "command.segmentMode must be 'manhattan-90' or 'manhattan-45'",
+    );
+  }
+  if (!Array.isArray(raw.pointsNm) || raw.pointsNm.length < 2) {
+    throw new ValidationError("command.pointsNm must have at least 2 points");
+  }
+  const pointsNm = raw.pointsNm.map((point, i) =>
+    parsePointNm(point, `command.pointsNm[${i}]`),
+  );
+  const netIdRaw = raw.netId;
+  const netId =
+    netIdRaw === null || netIdRaw === undefined ? null : asString(netIdRaw);
+  if (netIdRaw !== null && netIdRaw !== undefined && netId === null) {
+    throw new ValidationError("command.netId must be a string or null");
+  }
+  return {
+    type: "pcb_add_trace",
+    layer: layer as PcbCopperLayerId,
+    pointsNm,
+    widthMm,
+    netId,
+    netClassId,
+    segmentMode: segmentMode as PcbTraceSegmentMode,
+  };
+}
+
+function parsePcbAddViaCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbAddViaCommand {
+  const netClassId = asString(raw.netClassId);
+  if (!netClassId) {
+    throw new ValidationError("command.netClassId must be a string");
+  }
+  const netIdRaw = raw.netId;
+  const netId =
+    netIdRaw === null || netIdRaw === undefined ? null : asString(netIdRaw);
+  if (netIdRaw !== null && netIdRaw !== undefined && netId === null) {
+    throw new ValidationError("command.netId must be a string or null");
+  }
+  return {
+    type: "pcb_add_via",
+    centerMm: parsePointMm(raw.centerMm, "command.centerMm"),
+    netId,
+    netClassId,
+  };
+}
+
+function parsePcbDeleteTraceCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbDeleteTraceCommand {
+  const traceId = asString(raw.traceId);
+  if (!traceId) {
+    throw new ValidationError("command.traceId must be a string");
+  }
+  return { type: "pcb_delete_trace", traceId };
+}
+
+function parsePcbDeleteViaCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbDeleteViaCommand {
+  const viaId = asString(raw.viaId);
+  if (!viaId) {
+    throw new ValidationError("command.viaId must be a string");
+  }
+  return { type: "pcb_delete_via", viaId };
+}
+
+function parsePcbUpdateTraceGeometryCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbUpdateTraceGeometryCommand {
+  const traceId = asString(raw.traceId);
+  if (!traceId) {
+    throw new ValidationError("command.traceId must be a string");
+  }
+  if (!Array.isArray(raw.pointsNm) || raw.pointsNm.length < 2) {
+    throw new ValidationError("command.pointsNm must have at least 2 points");
+  }
+  const pointsNm = raw.pointsNm.map((point, i) =>
+    parsePointNm(point, `command.pointsNm[${i}]`),
+  );
+  return { type: "pcb_update_trace_geometry", traceId, pointsNm };
+}
+
 function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
   const record = asRecord(body);
   if (!record) {
@@ -425,6 +539,21 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
       break;
     case "pcb_set_active_layer":
       command = parsePcbSetActiveLayerCommand(commandRecord);
+      break;
+    case "pcb_add_trace":
+      command = parsePcbAddTraceCommand(commandRecord);
+      break;
+    case "pcb_add_via":
+      command = parsePcbAddViaCommand(commandRecord);
+      break;
+    case "pcb_delete_trace":
+      command = parsePcbDeleteTraceCommand(commandRecord);
+      break;
+    case "pcb_delete_via":
+      command = parsePcbDeleteViaCommand(commandRecord);
+      break;
+    case "pcb_update_trace_geometry":
+      command = parsePcbUpdateTraceGeometryCommand(commandRecord);
       break;
     default:
       throw new ValidationError(`Unsupported command type '${type}'`);

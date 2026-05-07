@@ -100,6 +100,31 @@ export function parseDispatchResultJson(
     return placementId ? { ok: false, code, placementId } : null;
   }
 
+  if (code === "INVALID_PCB_TRACE") {
+    const detail = asString(parsed.detail);
+    return detail ? { ok: false, code, detail } : null;
+  }
+
+  if (code === "INVALID_PCB_VIA") {
+    const detail = asString(parsed.detail);
+    return detail ? { ok: false, code, detail } : null;
+  }
+
+  if (code === "PCB_TRACE_NOT_FOUND") {
+    const traceId = asString(parsed.traceId);
+    return traceId ? { ok: false, code, traceId } : null;
+  }
+
+  if (code === "PCB_VIA_NOT_FOUND") {
+    const viaId = asString(parsed.viaId);
+    return viaId ? { ok: false, code, viaId } : null;
+  }
+
+  if (code === "PCB_NET_CLASS_NOT_FOUND") {
+    const netClassId = asString(parsed.netClassId);
+    return netClassId ? { ok: false, code, netClassId } : null;
+  }
+
   return null;
 }
 
@@ -147,6 +172,28 @@ export function pcbPlacementNotFound(
   placementId: string,
 ): DesignerDispatchResult {
   return { ok: false, code: "PCB_PLACEMENT_NOT_FOUND", placementId };
+}
+
+export function invalidPcbTrace(detail: string): DesignerDispatchResult {
+  return { ok: false, code: "INVALID_PCB_TRACE", detail };
+}
+
+export function invalidPcbVia(detail: string): DesignerDispatchResult {
+  return { ok: false, code: "INVALID_PCB_VIA", detail };
+}
+
+export function pcbTraceNotFound(traceId: string): DesignerDispatchResult {
+  return { ok: false, code: "PCB_TRACE_NOT_FOUND", traceId };
+}
+
+export function pcbViaNotFound(viaId: string): DesignerDispatchResult {
+  return { ok: false, code: "PCB_VIA_NOT_FOUND", viaId };
+}
+
+export function pcbNetClassNotFound(
+  netClassId: string,
+): DesignerDispatchResult {
+  return { ok: false, code: "PCB_NET_CLASS_NOT_FOUND", netClassId };
 }
 
 export function okResult(

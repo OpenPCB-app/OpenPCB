@@ -20,6 +20,8 @@ import type {
   DesignerWire,
   PcbBoardSettings,
   PcbPlacedPart,
+  PcbTrace,
+  PcbVia,
 } from "../../../sdks";
 import { normalizeRotationDeg } from "./commands/place-part";
 import {
@@ -44,6 +46,14 @@ export type DesignerWorldComponent =
     }
   | {
       type: "designer.pcb_placement";
+      payload: Record<string, unknown>;
+    }
+  | {
+      type: "designer.pcb_trace";
+      payload: Record<string, unknown>;
+    }
+  | {
+      type: "designer.pcb_via";
       payload: Record<string, unknown>;
     };
 
@@ -172,7 +182,9 @@ function worldEntityComponents(
       const component =
         snapshot.components.get("designer.entity") ??
         snapshot.components.get("designer.pcb_settings") ??
-        snapshot.components.get("designer.pcb_placement");
+        snapshot.components.get("designer.pcb_placement") ??
+        snapshot.components.get("designer.pcb_trace") ??
+        snapshot.components.get("designer.pcb_via");
       return component ? { entityId: snapshot.id, component } : null;
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
@@ -232,11 +244,15 @@ export function buildHistoryPatchSet(
 
 const PCB_SETTINGS_ENTITY_ID = asEntityId("pcb:board_settings");
 const PCB_PLACEMENT_PREFIX = "pcb:placement:";
+const PCB_TRACE_PREFIX = "pcb:trace:";
+const PCB_VIA_PREFIX = "pcb:via:";
 
 export interface DesignerCombinedState {
   schematic: DesignerSchematicProjection;
   pcb: PcbBoardSettings;
   placements: PcbPlacedPart[];
+  traces: PcbTrace[];
+  vias: PcbVia[];
 }
 
 export function combinedStateToWorld(
@@ -256,6 +272,22 @@ export function combinedStateToWorld(
       payload: toPayloadRecord(placement),
     });
   }
+  for (const trace of state.traces) {
+    const entityId = asEntityId(`${PCB_TRACE_PREFIX}${trace.id}`);
+    world.ensureEntity(entityId);
+    world.setComponent(entityId, {
+      type: "designer.pcb_trace",
+      payload: toPayloadRecord(trace),
+    });
+  }
+  for (const via of state.vias) {
+    const entityId = asEntityId(`${PCB_VIA_PREFIX}${via.id}`);
+    world.ensureEntity(entityId);
+    world.setComponent(entityId, {
+      type: "designer.pcb_via",
+      payload: toPayloadRecord(via),
+    });
+  }
   return world;
 }
 
@@ -270,14 +302,28 @@ export function combinedStateFromWorld(
   const pcb = (pcbComponent?.payload ?? {}) as unknown as PcbBoardSettings;
 
   const placements: PcbPlacedPart[] = [];
+  const traces: PcbTrace[] = [];
+  const vias: PcbVia[] = [];
   for (const snapshot of world.snapshots()) {
-    const component = snapshot.components.get("designer.pcb_placement");
-    if (component && component.type === "designer.pcb_placement") {
-      placements.push(component.payload as unknown as PcbPlacedPart);
+    const placementComp = snapshot.components.get("designer.pcb_placement");
+    if (placementComp && placementComp.type === "designer.pcb_placement") {
+      placements.push(placementComp.payload as unknown as PcbPlacedPart);
+      continue;
+    }
+    const traceComp = snapshot.components.get("designer.pcb_trace");
+    if (traceComp && traceComp.type === "designer.pcb_trace") {
+      traces.push(traceComp.payload as unknown as PcbTrace);
+      continue;
+    }
+    const viaComp = snapshot.components.get("designer.pcb_via");
+    if (viaComp && viaComp.type === "designer.pcb_via") {
+      vias.push(viaComp.payload as unknown as PcbVia);
     }
   }
   placements.sort((a, b) => a.id.localeCompare(b.id));
-  return { schematic, pcb, placements };
+  traces.sort((a, b) => a.id.localeCompare(b.id));
+  vias.sort((a, b) => a.id.localeCompare(b.id));
+  return { schematic, pcb, placements, traces, vias };
 }
 
 export function buildCombinedHistoryPatchSet(

@@ -3,6 +3,14 @@ import type { PcbBoardSettings } from "../../../../sdks/designer";
 export const DEFAULT_PCB_WIDTH_MM = 100;
 export const DEFAULT_PCB_HEIGHT_MM = 80;
 
+/**
+ * Industry-standard trace width presets (mm). 0.15 = JLCPCB/PCBWay safe min;
+ * 0.25 = KiCad/Altium default; 0.5 = small power; 1.0 = main power rail.
+ */
+export const DEFAULT_TRACE_PRESETS_MM: ReadonlyArray<number> = [
+  0.15, 0.2, 0.25, 0.5, 1.0,
+];
+
 export function createDefaultPcbBoardSettings(
   timestamp: string,
 ): PcbBoardSettings {
@@ -61,6 +69,7 @@ export function createDefaultPcbBoardSettings(
         color: "#475569",
       },
     ],
+    tracePresets: [...DEFAULT_TRACE_PRESETS_MM],
     updatedAt: timestamp,
   };
 }

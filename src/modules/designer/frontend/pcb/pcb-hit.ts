@@ -1,4 +1,10 @@
-import type { PcbPlacedPart, PcbPointMm } from "../../../../sdks";
+import type {
+  PcbCopperLayerId,
+  PcbPlacedPart,
+  PcbPointMm,
+  PcbTrace,
+  PcbVia,
+} from "../../../../sdks";
 
 const PAD_HIT_PAD_MM = 0.4;
 
@@ -82,6 +88,89 @@ function inverseTransform(
       local = { x: worldDelta.x, y: worldDelta.y };
   }
   return mirrored ? { x: -local.x, y: local.y } : local;
+}
+
+const TRACE_HIT_MM = 0.2;
+
+export interface TraceHit {
+  trace: PcbTrace;
+  segmentIndex: number;
+  closestMm: PcbPointMm;
+  distanceMm: number;
+}
+
+function projectPointToSegment(
+  point: PcbPointMm,
+  start: PcbPointMm,
+  end: PcbPointMm,
+): { closest: PcbPointMm; distance: number } {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) {
+    const ddx = point.x - start.x;
+    const ddy = point.y - start.y;
+    return { closest: start, distance: Math.sqrt(ddx * ddx + ddy * ddy) };
+  }
+  const rawT = ((point.x - start.x) * dx + (point.y - start.y) * dy) / lenSq;
+  const t = Math.max(0, Math.min(1, rawT));
+  const closest = { x: start.x + dx * t, y: start.y + dy * t };
+  const ddx = point.x - closest.x;
+  const ddy = point.y - closest.y;
+  return { closest, distance: Math.sqrt(ddx * ddx + ddy * ddy) };
+}
+
+/**
+ * Hit-test traces on the active copper layer. Returns the closest trace whose
+ * distance to the cursor is within (trace.widthMm/2 + TRACE_HIT_MM).
+ */
+export function hitTrace(
+  traces: readonly PcbTrace[],
+  cursorMm: PcbPointMm,
+  activeLayer: PcbCopperLayerId,
+): TraceHit | null {
+  let best: TraceHit | null = null;
+  for (const trace of traces) {
+    if (trace.layer !== activeLayer) continue;
+    const tolerance = trace.widthMm / 2 + TRACE_HIT_MM;
+    for (let i = 1; i < trace.pointsNm.length; i += 1) {
+      const a = {
+        x: trace.pointsNm[i - 1]!.x / 1_000_000,
+        y: trace.pointsNm[i - 1]!.y / 1_000_000,
+      };
+      const b = {
+        x: trace.pointsNm[i]!.x / 1_000_000,
+        y: trace.pointsNm[i]!.y / 1_000_000,
+      };
+      const proj = projectPointToSegment(cursorMm, a, b);
+      if (
+        proj.distance <= tolerance &&
+        (!best || proj.distance < best.distanceMm)
+      ) {
+        best = {
+          trace,
+          segmentIndex: i - 1,
+          closestMm: proj.closest,
+          distanceMm: proj.distance,
+        };
+      }
+    }
+  }
+  return best;
+}
+
+/** Hit-test through-vias. Bounds-check against via outer diameter. */
+export function hitVia(
+  vias: readonly PcbVia[],
+  cursorMm: PcbPointMm,
+): PcbVia | null {
+  for (const via of vias) {
+    const r = via.diameterMm / 2;
+    const dx = cursorMm.x - via.centerMm.x;
+    const dy = cursorMm.y - via.centerMm.y;
+    if (dx * dx + dy * dy <= r * r) return via;
+  }
+  return null;
 }
 
 export function hitPlacement(

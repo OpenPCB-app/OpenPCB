@@ -2,9 +2,13 @@ import { and, eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type {
   PcbBoardSettings,
+  PcbCopperLayerId,
   PcbLayerId,
   PcbPlacedPart,
   PcbPointMm,
+  PcbTrace,
+  PcbTraceSegmentMode,
+  PcbVia,
 } from "../../../../sdks/designer";
 import { pcbEntities } from "../schema";
 import { asNumber, asRecord, asString } from "../value-guards";
@@ -14,6 +18,16 @@ type DbClient = BunSQLiteDatabase<Record<string, unknown>>;
 
 const BOARD_SETTINGS_KIND = "board_settings";
 const PLACEMENT_KIND = "placement";
+const TRACE_KIND = "trace";
+const VIA_KIND = "via";
+
+function isCopperLayer(value: string | null): value is PcbCopperLayerId {
+  return value === "F.Cu" || value === "B.Cu";
+}
+
+function isSegmentMode(value: string | null): value is PcbTraceSegmentMode {
+  return value === "manhattan-90" || value === "manhattan-45";
+}
 
 function isPcbLayerId(
   value: string | null,
@@ -78,6 +92,17 @@ function parseBoardSettings(value: unknown): PcbBoardSettings | null {
   }
 
   const defaults = createDefaultPcbBoardSettings(updatedAt);
+  // Trace presets: parse if present, fallback to defaults so older saved
+  // boards (pre-tracePresets) keep working without migration.
+  const tracePresetsRaw = Array.isArray(record.tracePresets)
+    ? record.tracePresets
+    : null;
+  const tracePresets =
+    tracePresetsRaw === null
+      ? defaults.tracePresets
+      : tracePresetsRaw
+          .map((value) => asNumber(value))
+          .filter((value): value is number => value !== null && value > 0);
   return {
     ...defaults,
     outline: {
@@ -88,6 +113,8 @@ function parseBoardSettings(value: unknown): PcbBoardSettings | null {
     },
     activeLayer,
     visibleLayers: parseVisibleLayers(record.visibleLayers),
+    tracePresets:
+      tracePresets.length > 0 ? tracePresets : defaults.tracePresets,
     updatedAt,
   };
 }
@@ -515,4 +542,243 @@ export function syncPcbPlacementsFromSchematic(params: {
   }
 
   return result;
+}
+
+// ───────────────────────── Traces ─────────────────────────
+
+function parseTrace(value: unknown): PcbTrace | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const id = asString(record.id);
+  const netId = record.netId === null ? null : asString(record.netId);
+  const netClassId = asString(record.netClassId);
+  const layer = asString(record.layer);
+  const widthMm = asNumber(record.widthMm);
+  const segmentMode = asString(record.segmentMode);
+  const points = Array.isArray(record.pointsNm) ? record.pointsNm : null;
+  if (
+    !id ||
+    !netClassId ||
+    !isCopperLayer(layer) ||
+    widthMm === null ||
+    widthMm <= 0 ||
+    !isSegmentMode(segmentMode) ||
+    !points ||
+    points.length < 2
+  ) {
+    return null;
+  }
+  const pointsNm: Array<{ x: number; y: number }> = [];
+  for (const raw of points) {
+    const r = asRecord(raw);
+    const x = asNumber(r?.x);
+    const y = asNumber(r?.y);
+    if (x === null || y === null) return null;
+    pointsNm.push({ x, y });
+  }
+  return {
+    id,
+    netId: netId ?? null,
+    netClassId,
+    layer,
+    widthMm,
+    pointsNm,
+    segmentMode,
+  };
+}
+
+export function loadPcbTraces(db: DbClient, designId: string): PcbTrace[] {
+  const rows = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(eq(pcbEntities.designId, designId), eq(pcbEntities.kind, TRACE_KIND)),
+    )
+    .all();
+  const traces: PcbTrace[] = [];
+  for (const row of rows) {
+    const parsed = parseTrace(parsePayload(row.payloadJson));
+    if (parsed) traces.push(parsed);
+  }
+  return traces;
+}
+
+export function loadPcbTraceById(
+  db: DbClient,
+  designId: string,
+  traceId: string,
+): PcbTrace | null {
+  const row = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, TRACE_KIND),
+        eq(pcbEntities.id, traceId),
+      ),
+    )
+    .get();
+  if (!row) return null;
+  return parseTrace(parsePayload(row.payloadJson));
+}
+
+export function insertPcbTrace(
+  db: DbClient,
+  designId: string,
+  trace: PcbTrace,
+  timestamp: string,
+): void {
+  db.insert(pcbEntities)
+    .values({
+      id: trace.id,
+      designId,
+      kind: TRACE_KIND,
+      payloadJson: JSON.stringify(trace),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .run();
+}
+
+export function updatePcbTrace(
+  db: DbClient,
+  trace: PcbTrace,
+  timestamp: string,
+): void {
+  db.update(pcbEntities)
+    .set({ payloadJson: JSON.stringify(trace), updatedAt: timestamp })
+    .where(eq(pcbEntities.id, trace.id))
+    .run();
+}
+
+export function deletePcbTrace(db: DbClient, traceId: string): void {
+  db.delete(pcbEntities).where(eq(pcbEntities.id, traceId)).run();
+}
+
+export function replacePcbTraces(
+  db: DbClient,
+  designId: string,
+  traces: PcbTrace[],
+  timestamp: string,
+): void {
+  db.delete(pcbEntities)
+    .where(
+      and(eq(pcbEntities.designId, designId), eq(pcbEntities.kind, TRACE_KIND)),
+    )
+    .run();
+  for (const trace of traces) {
+    insertPcbTrace(db, designId, trace, timestamp);
+  }
+}
+
+// ───────────────────────── Vias ─────────────────────────
+
+function parseVia(value: unknown): PcbVia | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const id = asString(record.id);
+  const netId = record.netId === null ? null : asString(record.netId);
+  const netClassId = asString(record.netClassId);
+  const center = asRecord(record.centerMm);
+  const cx = asNumber(center?.x);
+  const cy = asNumber(center?.y);
+  const diameterMm = asNumber(record.diameterMm);
+  const drillMm = asNumber(record.drillMm);
+  if (
+    !id ||
+    !netClassId ||
+    cx === null ||
+    cy === null ||
+    diameterMm === null ||
+    drillMm === null ||
+    diameterMm <= drillMm ||
+    drillMm <= 0
+  ) {
+    return null;
+  }
+  return {
+    id,
+    netId: netId ?? null,
+    netClassId,
+    centerMm: { x: cx, y: cy },
+    diameterMm,
+    drillMm,
+    fromLayer: "F.Cu",
+    toLayer: "B.Cu",
+  };
+}
+
+export function loadPcbVias(db: DbClient, designId: string): PcbVia[] {
+  const rows = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(eq(pcbEntities.designId, designId), eq(pcbEntities.kind, VIA_KIND)),
+    )
+    .all();
+  const vias: PcbVia[] = [];
+  for (const row of rows) {
+    const parsed = parseVia(parsePayload(row.payloadJson));
+    if (parsed) vias.push(parsed);
+  }
+  return vias;
+}
+
+export function loadPcbViaById(
+  db: DbClient,
+  designId: string,
+  viaId: string,
+): PcbVia | null {
+  const row = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, VIA_KIND),
+        eq(pcbEntities.id, viaId),
+      ),
+    )
+    .get();
+  if (!row) return null;
+  return parseVia(parsePayload(row.payloadJson));
+}
+
+export function insertPcbVia(
+  db: DbClient,
+  designId: string,
+  via: PcbVia,
+  timestamp: string,
+): void {
+  db.insert(pcbEntities)
+    .values({
+      id: via.id,
+      designId,
+      kind: VIA_KIND,
+      payloadJson: JSON.stringify(via),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .run();
+}
+
+export function deletePcbVia(db: DbClient, viaId: string): void {
+  db.delete(pcbEntities).where(eq(pcbEntities.id, viaId)).run();
+}
+
+export function replacePcbVias(
+  db: DbClient,
+  designId: string,
+  vias: PcbVia[],
+  timestamp: string,
+): void {
+  db.delete(pcbEntities)
+    .where(
+      and(eq(pcbEntities.designId, designId), eq(pcbEntities.kind, VIA_KIND)),
+    )
+    .run();
+  for (const via of vias) {
+    insertPcbVia(db, designId, via, timestamp);
+  }
 }

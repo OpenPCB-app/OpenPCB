@@ -23,9 +23,14 @@ import {
   entityNotFound,
   invalidLabel,
   invalidPcbBoardSettings,
+  invalidPcbTrace,
+  invalidPcbVia,
   invalidWirePath,
   okResult,
+  pcbNetClassNotFound,
   pcbPlacementNotFound,
+  pcbTraceNotFound,
+  pcbViaNotFound,
   pinNotFound,
 } from "./results";
 import {
@@ -36,11 +41,24 @@ import {
   schematicWires,
 } from "./schema";
 import {
+  deletePcbTrace,
+  deletePcbVia,
+  ensurePcbBoardSettings,
+  insertPcbTrace,
+  insertPcbVia,
+  loadPcbTraceById,
+  loadPcbViaById,
   movePcbPlacement,
   rotatePcbPlacement,
   updatePcbActiveLayer,
   updatePcbBoardSize,
+  updatePcbTrace,
 } from "./pcb/pcb-store";
+import {
+  validatePath as validateTracePath,
+  sanitizePath as sanitizeTracePath,
+} from "./pcb/pcb-trace-geometry";
+import type { PcbNetClass, PcbTrace, PcbVia } from "../../../sdks";
 import {
   insertVertexOnWire,
   parseWirePointsJson,
@@ -267,6 +285,81 @@ export function executeDesignerCommand({
       layer: command.layer,
       timestamp,
     });
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_add_trace") {
+    const board = ensurePcbBoardSettings(tx, designId, timestamp);
+    const netClass = board.netClasses.find(
+      (nc) => nc.id === command.netClassId,
+    );
+    if (!netClass) return pcbNetClassNotFound(command.netClassId);
+    const sanitized = sanitizeTracePath(command.pointsNm);
+    if (sanitized.length < 2) {
+      return invalidPcbTrace("path must have at least 2 distinct points");
+    }
+    const reason = validateTracePath(sanitized, command.segmentMode);
+    if (reason) return invalidPcbTrace(reason);
+    const trace: PcbTrace = {
+      id: crypto.randomUUID(),
+      netId: command.netId,
+      netClassId: command.netClassId,
+      layer: command.layer,
+      widthMm: command.widthMm,
+      pointsNm: sanitized,
+      segmentMode: command.segmentMode,
+    };
+    insertPcbTrace(tx, designId, trace, timestamp);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), trace.id);
+  }
+
+  if (command.type === "pcb_add_via") {
+    const board = ensurePcbBoardSettings(tx, designId, timestamp);
+    const netClass = board.netClasses.find(
+      (nc) => nc.id === command.netClassId,
+    );
+    if (!netClass) return pcbNetClassNotFound(command.netClassId);
+    if (netClass.viaDiameterMm <= netClass.viaDrillMm) {
+      return invalidPcbVia("net class viaDiameterMm must exceed viaDrillMm");
+    }
+    const via: PcbVia = {
+      id: crypto.randomUUID(),
+      netId: command.netId,
+      netClassId: command.netClassId,
+      centerMm: command.centerMm,
+      diameterMm: netClass.viaDiameterMm,
+      drillMm: netClass.viaDrillMm,
+      fromLayer: "F.Cu",
+      toLayer: "B.Cu",
+    };
+    insertPcbVia(tx, designId, via, timestamp);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), via.id);
+  }
+
+  if (command.type === "pcb_delete_trace") {
+    const existing = loadPcbTraceById(tx, designId, command.traceId);
+    if (!existing) return pcbTraceNotFound(command.traceId);
+    deletePcbTrace(tx, command.traceId);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_delete_via") {
+    const existing = loadPcbViaById(tx, designId, command.viaId);
+    if (!existing) return pcbViaNotFound(command.viaId);
+    deletePcbVia(tx, command.viaId);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_update_trace_geometry") {
+    const existing = loadPcbTraceById(tx, designId, command.traceId);
+    if (!existing) return pcbTraceNotFound(command.traceId);
+    const sanitized = sanitizeTracePath(command.pointsNm);
+    if (sanitized.length < 2) {
+      return invalidPcbTrace("path must have at least 2 distinct points");
+    }
+    const reason = validateTracePath(sanitized, existing.segmentMode);
+    if (reason) return invalidPcbTrace(reason);
+    updatePcbTrace(tx, { ...existing, pointsNm: sanitized }, timestamp);
     return okResult(bumpRevision(tx, designId, revision, timestamp), null);
   }
 

@@ -39,8 +39,12 @@ import {
 import {
   ensurePcbBoardSettings,
   loadPcbPlacements,
+  loadPcbTraces,
+  loadPcbVias,
   replacePcbBoardSettings,
   replacePcbPlacements,
+  replacePcbTraces,
+  replacePcbVias,
 } from "./pcb/pcb-store";
 import { loadPcbProjection } from "./pcb/pcb-projection";
 import {
@@ -168,17 +172,23 @@ export function createDesignerStore(
       }
       const pcb = ensurePcbBoardSettings(tx, designId, timestamp);
       const placements = loadPcbPlacements(tx, designId);
+      const traces = loadPcbTraces(tx, designId);
+      const vias = loadPcbVias(tx, designId);
       const nextRevision = current.revision + 1;
       const world = combinedStateToWorld({
         schematic: current,
         pcb,
         placements,
+        traces,
+        vias,
       });
       applyPatches(world, patches);
       const next = combinedStateFromWorld(designId, nextRevision, world);
       replaceSchematicProjection(tx, designId, next.schematic, timestamp);
       replacePcbBoardSettings(tx, designId, next.pcb, timestamp);
       replacePcbPlacements(tx, designId, next.placements, timestamp);
+      replacePcbTraces(tx, designId, next.traces, timestamp);
+      replacePcbVias(tx, designId, next.vias, timestamp);
       return nextRevision;
     });
   }
@@ -420,6 +430,10 @@ export function createDesignerStore(
           const placementsBefore = isPcbCommand
             ? loadPcbPlacements(tx, designId)
             : null;
+          const tracesBefore = isPcbCommand
+            ? loadPcbTraces(tx, designId)
+            : null;
+          const viasBefore = isPcbCommand ? loadPcbVias(tx, designId) : null;
           const result = executeDesignerCommand({
             tx,
             designId,
@@ -440,16 +454,22 @@ export function createDesignerStore(
                   timestamp,
                 );
                 const placementsAfter = loadPcbPlacements(tx, designId);
+                const tracesAfter = loadPcbTraces(tx, designId);
+                const viasAfter = loadPcbVias(tx, designId);
                 const patchSet = buildCombinedHistoryPatchSet(
                   {
                     schematic: projection,
                     pcb: pcbBefore,
                     placements: placementsBefore ?? [],
+                    traces: tracesBefore ?? [],
+                    vias: viasBefore ?? [],
                   },
                   {
                     schematic: nextProjection,
                     pcb: pcbAfter,
                     placements: placementsAfter,
+                    traces: tracesAfter,
+                    vias: viasAfter,
                   },
                 );
                 if (patchSet.forwardPatches.length > 0) {
