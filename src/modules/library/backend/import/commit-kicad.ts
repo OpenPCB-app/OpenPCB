@@ -2,21 +2,19 @@ import type { CoreBackendModuleContext } from "../../../../core/contracts/module
 import { and, eq } from "drizzle-orm";
 import { components, footprints, symbols } from "../schema";
 import { getDb } from "../queries";
+import {
+  PLACEHOLDER_FOOTPRINT_ID,
+  PLACEHOLDER_FOOTPRINT_NAME,
+  PLACEHOLDER_TAGS,
+  buildPlaceholderFootprintDataJson,
+  findPlaceholderFootprintId,
+} from "../builtins/placeholder-footprint";
 import { ImportValidationError, parseImportBundle } from "./inspect-kicad";
 import type { CommitKicadRequest, CommitKicadResponse } from "./types";
 import {
   validateFootprintPads,
   validateSymbolPinsCoverFootprintPads,
 } from "./validate-pads";
-
-const PLACEHOLDER_FOOTPRINT_ID = "fp-no-footprint-yet";
-const PLACEHOLDER_FOOTPRINT_NAME = "No footprint yet";
-const PLACEHOLDER_SOURCE_HASH = "placeholder:no-footprint-yet";
-const PLACEHOLDER_TAGS = [
-  "placeholder-footprint",
-  "virtual",
-  "no-footprint-yet",
-] as const;
 
 function trimOrEmpty(value: string): string {
   return value.trim();
@@ -111,70 +109,6 @@ function findExistingFootprintId(
     }
   }
   return null;
-}
-
-function findPlaceholderFootprintId(
-  ctx: CoreBackendModuleContext,
-): string | null {
-  const db = getDb(ctx);
-  const byId = db
-    .select({ id: footprints.id })
-    .from(footprints)
-    .where(eq(footprints.id, PLACEHOLDER_FOOTPRINT_ID))
-    .get();
-  if (byId) {
-    return byId.id;
-  }
-
-  const rows = db
-    .select({ id: footprints.id, dataJson: footprints.dataJson })
-    .from(footprints)
-    .where(eq(footprints.name, PLACEHOLDER_FOOTPRINT_NAME))
-    .all();
-
-  for (const row of rows) {
-    const data = parseJsonObject(row.dataJson);
-    const normalized = asRecord(data.normalized);
-    if (asString(normalized?.id) === PLACEHOLDER_FOOTPRINT_ID) {
-      return row.id;
-    }
-  }
-  return null;
-}
-
-function buildPlaceholderFootprintDataJson(now: string): string {
-  return JSON.stringify({
-    provenance: {
-      sourceKind: "system",
-      sourceFormat: "placeholder",
-      fileName: null,
-      importedAt: now,
-      sourceHash: PLACEHOLDER_SOURCE_HASH,
-    },
-    parser: {
-      warnings: [],
-    },
-    normalized: {
-      id: PLACEHOLDER_FOOTPRINT_ID,
-      fileName: "",
-      name: PLACEHOLDER_FOOTPRINT_NAME,
-      description: "Component was imported without a real PCB footprint.",
-      mountType: "virtual",
-      padCount: 0,
-      packageCode: {
-        imperial: null,
-        metric: null,
-      },
-      tags: [...PLACEHOLDER_TAGS],
-      sourceHash: PLACEHOLDER_SOURCE_HASH,
-      warnings: [],
-      preview: null,
-    },
-    raw: {
-      kind: "placeholder-footprint",
-      name: PLACEHOLDER_FOOTPRINT_NAME,
-    },
-  });
 }
 
 function dedupeTags(values: readonly string[]): string[] {

@@ -24,6 +24,10 @@ export interface ParsedKicadSymbol {
   bodyGraphics: ParsedBodyGraphic[];
   warnings: ParsedWarning[];
   rawSource: string;
+  /** Font size (mm) of the symbol's `Reference` property, when present. */
+  referenceFontSizeMm?: number;
+  /** Font size (mm) of the symbol's `Value` property, when present. */
+  valueFontSizeMm?: number;
 }
 
 export interface ParsedBodyGraphic {
@@ -41,6 +45,10 @@ export interface ParsedPin {
   rotation: number;
   unit: number;
   hidden: boolean;
+  /** Font size (mm) for the pin name label, when the source provided one. */
+  nameFontSizeMm?: number;
+  /** Font size (mm) for the pin number label, when the source provided one. */
+  numberFontSizeMm?: number;
 }
 
 export interface ParsedWarning {
@@ -71,6 +79,24 @@ const KNOWN_PIN_TYPES = new Set([
   "open_emitter",
   "no_connect",
 ]);
+
+/**
+ * Read a `(effects (font (size W H)))` block inside `parent`, returning the
+ * width value in mm (KiCad uses square text — width and height match). Returns
+ * null if the block is absent or malformed; callers should fall back to the
+ * KLC default of 1.27 mm.
+ */
+function readFontSizeMm(parent: SExpr[] | null | undefined): number | null {
+  if (!parent) return null;
+  const effects = findNode(parent, "effects");
+  if (!effects) return null;
+  const font = findNode(effects, "font");
+  if (!font) return null;
+  const size = findNode(font, "size");
+  if (!size) return null;
+  const width = getNumberValue(size, 1);
+  return width !== null && Number.isFinite(width) && width > 0 ? width : null;
+}
 
 /**
  * Parse a .kicad_sym file content into an array of symbol definitions.
@@ -114,12 +140,21 @@ function parseSymbol(node: SExpr[]): ParsedKicadSymbol {
 
   // Properties
   const properties: Record<string, string> = {};
+  let referenceFontSizeMm: number | undefined;
+  let valueFontSizeMm: number | undefined;
   const propertyNodes = findNodes(node, "property");
   for (const prop of propertyNodes) {
     const key = getStringValue(prop, 1);
     const value = getStringValue(prop, 2);
     if (key && value !== null) {
       properties[key] = value;
+    }
+    if (key === "Reference") {
+      const fontSize = readFontSizeMm(prop);
+      if (fontSize !== null) referenceFontSizeMm = fontSize;
+    } else if (key === "Value") {
+      const fontSize = readFontSizeMm(prop);
+      if (fontSize !== null) valueFontSizeMm = fontSize;
     }
   }
 
@@ -174,6 +209,8 @@ function parseSymbol(node: SExpr[]): ParsedKicadSymbol {
     bodyGraphics,
     warnings,
     rawSource: serializeSexpr(node),
+    referenceFontSizeMm,
+    valueFontSizeMm,
   };
 }
 
@@ -193,6 +230,9 @@ function parsePin(node: SExpr[], unit: number): ParsedPin | null {
 
   if (!atNode || !nameNode || !numberNode) return null;
 
+  const nameFontSizeMm = readFontSizeMm(nameNode) ?? undefined;
+  const numberFontSizeMm = readFontSizeMm(numberNode) ?? undefined;
+
   return {
     name: getStringValue(nameNode) ?? "",
     number: getStringValue(numberNode) ?? "",
@@ -202,9 +242,11 @@ function parsePin(node: SExpr[], unit: number): ParsedPin | null {
       x: getNumberValue(atNode, 1) ?? 0,
       y: getNumberValue(atNode, 2) ?? 0,
     },
-    length: lengthNode ? getNumberValue(lengthNode) ?? 0 : 0,
+    length: lengthNode ? (getNumberValue(lengthNode) ?? 0) : 0,
     rotation: getNumberValue(atNode, 3) ?? 0,
     unit,
     hidden: node.includes("hide"),
+    nameFontSizeMm,
+    numberFontSizeMm,
   };
 }

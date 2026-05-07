@@ -1511,3 +1511,28 @@ Core properties:
 - frontend treats projection as a cache, not authority
 
 It is already concrete enough to extend, but it is still intentionally narrow and schematic-first.
+
+---
+
+## 20. Persistence convention: no foreign keys in `designer_*`
+
+Designer SQLite tables (`designer_design_heads`, `designer_schematic_*`,
+`designer_pcb_*`, `designer_schematic_primitives`) deliberately omit foreign
+key constraints on `design_id`. This matches the ECS-as-blobs persistence
+choice: each row is a sparse component for a design entity, not a strict
+relational child. Cascade-on-design-delete is performed at the application
+layer (see the design-delete handler) so a single audited code path drives
+cleanup across all designer tables, including JSON-blob payloads that have no
+SQL-level relationship to enforce.
+
+Implications for migration authors:
+
+- Do **not** add `FOREIGN KEY (design_id) REFERENCES designer_design_heads(id)`
+  to a single new table without retrofitting every other designer table in the
+  same migration. A partial FK rollout produces inconsistent delete semantics
+  (some tables auto-cascade, others rely on the app-level path) and is worse
+  than no FKs at all.
+- If a future change requires SQL-level integrity (e.g. cross-process writers),
+  treat it as a one-shot project-wide migration, not a per-table addition.
+- New `designer_*` migration files should include a top-of-file comment noting
+  this convention so reviewers don't relitigate it (see `0006_schematic_primitives.sql`).

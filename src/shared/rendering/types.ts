@@ -111,6 +111,11 @@ export interface SymbolRenderSourcePin {
   readonly rotationDeg: number;
   readonly unit: number;
   readonly hidden: boolean;
+  /** Optional override for the pin-name label font size (mm). Falls back to
+   *  KLC default 1.27 mm. */
+  readonly nameFontSizeMm?: number;
+  /** Optional override for the pin-number label font size (mm). */
+  readonly numberFontSizeMm?: number;
 }
 
 export interface SymbolRenderSourceGraphic {
@@ -132,6 +137,10 @@ export interface SymbolRenderSource {
   readonly graphics: readonly SymbolRenderSourceGraphic[];
   readonly labels?: readonly SymbolRenderSourceLabel[];
   readonly warnings: readonly PreviewWarning[];
+  /** Optional override for the symbol's reference-label font size (mm). */
+  readonly referenceFontSizeMm?: number;
+  /** Optional override for the symbol's value-label font size (mm). */
+  readonly valueFontSizeMm?: number;
 }
 
 export interface SymbolRenderModelPin {

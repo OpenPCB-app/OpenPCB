@@ -181,6 +181,11 @@ function DesignerSpaceInner({
                   onZoomOut={() => canvasRef.current?.zoomOut()}
                   onFit={() => canvasRef.current?.fit()}
                   onToggleGrid={() => setGridVisible((value) => !value)}
+                  onPlaceGnd={() => canvasRef.current?.armPrimitive("gnd")}
+                  onPlacePwr={() => canvasRef.current?.armPrimitive("pwr")}
+                  onPlaceNetPortal={() =>
+                    canvasRef.current?.armPrimitive("net_portal")
+                  }
                 />
               </div>
             </div>

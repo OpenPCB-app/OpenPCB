@@ -9,7 +9,11 @@ import {
   type ReactElement,
 } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
+import * as THREE from "three";
 import type { OrthographicCamera } from "three";
+import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import {
   EdaCanvas,
   type InteractionEvent,
@@ -25,6 +29,10 @@ import { RENDER_ORDER } from "../../../../shared/frontend/canvas/layers";
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
 import { Units } from "../../../../shared/frontend/canvas/coords";
 import {
+  DEFAULT_SCHEMATIC_ZOOM,
+  NET_LABEL_FONT_MM,
+} from "../../../../shared/frontend/canvas/defaults";
+import {
   isDeleteShortcut,
   isEditableShortcutTarget,
   isSelectAllShortcut,
@@ -34,6 +42,8 @@ import type {
   DesignerCommand,
   DesignerPlacedPart,
   DesignerPin,
+  DesignerPrimitive,
+  DesignerPrimitiveKind,
   DesignerSchematicProjection,
   DesignerWire,
   LibraryComponentPlacementDetail,
@@ -43,10 +53,32 @@ import type { DesignerWorkspaceActions } from "../hooks/useDesignerWorkspace";
 import { SCHEMATIC_GRID_NM, SCHEMATIC_GRID_MM } from "../types";
 import { COMPONENT_DND_MIME } from "./DesignerSidebar";
 import { useDesignerHighlight } from "../useDesignerHighlight";
+import {
+  PrimitiveGhost,
+  SchematicPrimitivesLayer,
+} from "./SchematicPrimitivesLayer";
+import { NetPortalPicker, PwrRailPicker } from "./LabelPicker";
 const PIN_HIT_MM = 0.35;
+// Primitive connection dots are rendered larger (≈0.36 mm radius), so the
+// hit zone must be wider than for part pins to match the visible target.
+const PRIMITIVE_PIN_HIT_MM = 0.7;
 const WIRE_HIT_MM = 0.3;
 const LABEL_HIT_MM = 1.2;
 const PART_CENTER_FALLBACK_MM = 2.6;
+
+// Local-space (mm) AABB per primitive kind, matching the geometry drawn in
+// SchematicPrimitivesLayer. Connection point is at (0, 0); the rest of the
+// glyph hangs above or below. Padded slightly so the visible body is the
+// click target, not just the connection dot.
+const PRIMITIVE_HIT_PADDING_MM = 0.4;
+const PRIMITIVE_LOCAL_BOUNDS_MM: Record<
+  "gnd" | "pwr" | "net_portal",
+  { minX: number; minY: number; maxX: number; maxY: number }
+> = {
+  gnd: { minX: -2.032, minY: -3.556, maxX: 2.032, maxY: 0 },
+  pwr: { minX: -1.27, minY: 0, maxX: 1.27, maxY: 2.794 },
+  net_portal: { minX: -4.47, minY: -1.016, maxX: 0, maxY: 1.016 },
+};
 
 interface PointNm {
   x: number;
@@ -62,10 +94,18 @@ interface SelectionState {
   partIds: Set<string>;
   wireIds: Set<string>;
   labelIds: Set<string>;
+  primitiveIds: Set<string>;
 }
+
+type ArmedPrimitive =
+  | { kind: "gnd" }
+  | { kind: "pwr"; railText: string }
+  | { kind: "net_portal"; portalText: string }
+  | null;
 
 interface DragPartsSession {
   initialPartPositionsNm: Map<string, PointNm>;
+  initialPrimitivePositionsNm: Map<string, PointNm>;
   startPointerNm: PointNm;
   deltaNm: PointNm;
 }
@@ -86,6 +126,11 @@ export interface SchematicCanvasHandle {
   zoomIn(): void;
   zoomOut(): void;
   fit(): void;
+  /**
+   * Arm the next click for a primitive placement. PWR/portal need text;
+   * supplying an empty string lets the canvas open its inline picker.
+   */
+  armPrimitive(kind: DesignerPrimitiveKind, text?: string): void;
 }
 
 interface SchematicCanvasProps {
@@ -177,6 +222,7 @@ function emptySelection(): SelectionState {
     partIds: new Set<string>(),
     wireIds: new Set<string>(),
     labelIds: new Set<string>(),
+    primitiveIds: new Set<string>(),
   };
 }
 
@@ -185,6 +231,7 @@ function cloneSelection(selection: SelectionState): SelectionState {
     partIds: new Set(selection.partIds),
     wireIds: new Set(selection.wireIds),
     labelIds: new Set(selection.labelIds),
+    primitiveIds: new Set(selection.primitiveIds),
   };
 }
 
@@ -192,7 +239,8 @@ function selectionIsEmpty(selection: SelectionState): boolean {
   return (
     selection.partIds.size === 0 &&
     selection.wireIds.size === 0 &&
-    selection.labelIds.size === 0
+    selection.labelIds.size === 0 &&
+    selection.primitiveIds.size === 0
   );
 }
 
@@ -314,6 +362,30 @@ function computeProjectionBoundsMm(
     maxY = Math.max(maxY, y);
   }
 
+  for (const primitive of projection.primitives) {
+    const localBounds = PRIMITIVE_LOCAL_BOUNDS_MM[primitive.kind];
+    if (!localBounds) continue;
+    const cx = Units.nmToMm(primitive.positionNm.x);
+    const cy = Units.nmToMm(primitive.positionNm.y);
+    const rad = (primitive.rotationDeg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const corners: PointMm[] = [
+      { x: localBounds.minX, y: localBounds.minY },
+      { x: localBounds.maxX, y: localBounds.minY },
+      { x: localBounds.maxX, y: localBounds.maxY },
+      { x: localBounds.minX, y: localBounds.maxY },
+    ];
+    for (const corner of corners) {
+      const wx = cx + corner.x * cos - corner.y * sin;
+      const wy = cy + corner.x * sin + corner.y * cos;
+      minX = Math.min(minX, wx);
+      minY = Math.min(minY, wy);
+      maxX = Math.max(maxX, wx);
+      maxY = Math.max(maxY, wy);
+    }
+  }
+
   if (!Number.isFinite(minX)) {
     return null;
   }
@@ -378,6 +450,31 @@ function firstSelectedId(set: Set<string>): string | null {
   return null;
 }
 
+/**
+ * Schematic wire stroke width in mm. Rendered with LineSegments2 +
+ * LineMaterial in world-units mode so it stays a true 0.05 mm at every zoom
+ * level instead of a fixed 1-pixel hairline. ~2× the previous 1-px line
+ * without overpowering symbol-body strokes.
+ */
+const SCHEMATIC_WIRE_WIDTH_MM = 0.18;
+
+// KiCad-style net classification by name. Matches the same regexes used
+// server-side in `pcb/net-class-resolver.ts` plus common +Vn / -Vn rails
+// (e.g. "+5V", "+3V3", "-12V").
+const GND_NET_NAMES = /^(GND|GROUND|AGND|DGND|EARTH|VSS|VEE)$/i;
+const POWER_NET_NAMES = /^(VCC|VDD|VBAT|VBUS|VIN|VOUT|[+-]\d+V\d*|[+-]V\w*)$/i;
+
+type WireNetClass = "default" | "gnd" | "power";
+
+function classifyNetByName(name: string | undefined | null): WireNetClass {
+  if (!name) return "default";
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return "default";
+  if (GND_NET_NAMES.test(trimmed)) return "gnd";
+  if (POWER_NET_NAMES.test(trimmed)) return "power";
+  return "default";
+}
+
 function WireLayer({
   wires,
   color,
@@ -387,6 +484,8 @@ function WireLayer({
   color: string;
   opacity?: number;
 }) {
+  const size = useThree((s) => s.size);
+
   const positions = useMemo(() => {
     const values: number[] = [];
     for (const wire of wires) {
@@ -409,25 +508,51 @@ function WireLayer({
     return new Float32Array(values);
   }, [wires]);
 
-  if (positions.length === 0) {
-    return null;
-  }
+  const geometry = useMemo(() => {
+    if (positions.length === 0) return null;
+    const geom = new LineSegmentsGeometry();
+    geom.setPositions(positions);
+    return geom;
+  }, [positions]);
 
-  const transparent = opacity < 1;
-  return (
-    <lineSegments renderOrder={RENDER_ORDER.WIRES}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-      </bufferGeometry>
-      <lineBasicMaterial
-        color={color}
-        depthWrite={false}
-        depthTest={false}
-        transparent={transparent}
-        opacity={opacity}
-      />
-    </lineSegments>
+  const material = useMemo(() => {
+    return new LineMaterial({
+      color: new THREE.Color(color).getHex(),
+      linewidth: SCHEMATIC_WIRE_WIDTH_MM,
+      worldUnits: true,
+      transparent: opacity < 1,
+      opacity,
+      depthTest: false,
+      depthWrite: false,
+    });
+  }, [color, opacity]);
+
+  useEffect(() => {
+    material.resolution.set(size.width, size.height);
+  }, [material, size.width, size.height]);
+
+  // Create the line with renderOrder + computed distances baked in so the
+  // first paint is correct. A separate cleanup effect disposes the
+  // geometry/material on unmount or when deps change — without this, swapping
+  // wires causes Three.js to retain the old GL buffers/uniforms.
+  const line = useMemo(() => {
+    if (!geometry) return null;
+    const built = new LineSegments2(geometry, material);
+    built.computeLineDistances();
+    built.renderOrder = RENDER_ORDER.WIRES;
+    return built;
+  }, [geometry, material]);
+
+  useEffect(
+    () => () => {
+      geometry?.dispose();
+      material.dispose();
+    },
+    [geometry, material],
   );
+
+  if (!line) return null;
+  return <primitive object={line} />;
 }
 
 function PartSelectionOutline({
@@ -560,6 +685,9 @@ export const SchematicCanvas = forwardRef<
   );
   const [wireSession, setWireSession] = useState<WireSession | null>(null);
   const [armedLabelText, setArmedLabelText] = useState<string | null>(null);
+  const [armedPrimitive, setArmedPrimitive] = useState<ArmedPrimitive>(null);
+  const [pwrPickerOpen, setPwrPickerOpen] = useState(false);
+  const [netPortalPickerOpen, setNetPortalPickerOpen] = useState(false);
   const cameraRef = useRef<OrthographicCamera | null>(null);
 
   useEffect(() => {
@@ -595,16 +723,26 @@ export const SchematicCanvas = forwardRef<
           projection.labels.some((label) => label.id === id),
         ),
       );
-      return { partIds, wireIds, labelIds };
+      const primitiveIds = new Set(
+        [...current.primitiveIds].filter((id) =>
+          projection.primitives.some((primitive) => primitive.id === id),
+        ),
+      );
+      return { partIds, wireIds, labelIds, primitiveIds };
     });
 
-    if (
-      wireSession &&
-      !projection.parts.some((part) =>
-        part.pins.some((pin) => pin.id === wireSession.sourcePinId),
-      )
-    ) {
-      setWireSession(null);
+    if (wireSession) {
+      const sourceId = wireSession.sourcePinId;
+      const stillExists = sourceId.startsWith("primitive:")
+        ? projection.primitives.some(
+            (p) => p.id === sourceId.slice("primitive:".length),
+          )
+        : projection.parts.some((part) =>
+            part.pins.some((pin) => pin.id === sourceId),
+          );
+      if (!stillExists) {
+        setWireSession(null);
+      }
     }
   }, [projection, wireSession]);
 
@@ -622,6 +760,32 @@ export const SchematicCanvas = forwardRef<
       camera.zoom = Math.max(camera.zoom / 1.15, 5);
       camera.updateProjectionMatrix();
       onZoomChange?.(camera.zoom * 2);
+    },
+    armPrimitive(kind, text) {
+      if (kind === "gnd") {
+        setArmedPrimitive({ kind: "gnd" });
+        return;
+      }
+      if (kind === "pwr") {
+        const railText = text?.trim();
+        if (railText && railText.length > 0) {
+          setArmedPrimitive({ kind: "pwr", railText });
+        } else {
+          setPwrPickerOpen(true);
+        }
+        return;
+      }
+      // net_portal
+      const portalText =
+        text?.trim() ??
+        window.prompt("Net portal name (matches across the schematic):") ??
+        "";
+      const trimmed = portalText.trim();
+      if (trimmed.length === 0) {
+        setArmedPrimitive(null);
+        return;
+      }
+      setArmedPrimitive({ kind: "net_portal", portalText: trimmed });
     },
     fit() {
       const camera = cameraRef.current;
@@ -677,6 +841,22 @@ export const SchematicCanvas = forwardRef<
     [dragSession],
   );
 
+  const renderedPrimitivePositionNm = useCallback(
+    (primitive: DesignerPrimitive): PointNm => {
+      const initial = dragSession?.initialPrimitivePositionsNm.get(
+        primitive.id,
+      );
+      if (!initial || !dragSession) {
+        return { x: primitive.positionNm.x, y: primitive.positionNm.y };
+      }
+      return {
+        x: initial.x + dragSession.deltaNm.x,
+        y: initial.y + dragSession.deltaNm.y,
+      };
+    },
+    [dragSession],
+  );
+
   const pinById = useMemo(() => {
     const map = new Map<string, DesignerPin>();
     if (!projection) {
@@ -687,6 +867,22 @@ export const SchematicCanvas = forwardRef<
         map.set(pin.id, pin);
       }
     }
+    // Synthetic single-pin entries for each primitive's connection point.
+    // Connection point is local (0, 0); rotation pivots around it so the
+    // world position equals the primitive's position.
+    for (const primitive of projection.primitives) {
+      const id = `primitive:${primitive.id}`;
+      map.set(id, {
+        id,
+        originPinKey: id,
+        number: null,
+        name: primitive.kind,
+        electricalType: "passive",
+        unit: 1,
+        localPositionNm: { x: 0, y: 0 },
+        worldPositionNm: { ...primitive.positionNm },
+      });
+    }
     return map;
   }, [projection]);
 
@@ -696,20 +892,39 @@ export const SchematicCanvas = forwardRef<
         return null;
       }
       const cursor = toMm(worldNm);
+      // Per-pin hit-test: each candidate brings its own threshold (part pins
+      // use PIN_HIT_MM, primitive synth pins use the wider PRIMITIVE_PIN_HIT_MM
+      // to match their bigger visible dot). Pick the nearest pin whose
+      // distance is within its own threshold.
+      //
+      // Synthetic primitive pins are sourced from `pinById`, which is built
+      // from the same `projection` we iterate here — they are guaranteed to
+      // refer to a live primitive. Stale-source protection for in-flight wire
+      // drags lives in the projection-change effect that nulls `wireSession`
+      // when its source pin disappears.
       let best: DesignerPin | null = null;
       let bestDistance = Number.POSITIVE_INFINITY;
       for (const part of projection.parts) {
         for (const pin of part.pins) {
           const d = distanceMm(cursor, toMm(pin.worldPositionNm));
-          if (d < bestDistance) {
+          if (d <= PIN_HIT_MM && d < bestDistance) {
             bestDistance = d;
             best = pin;
           }
         }
       }
-      return bestDistance <= PIN_HIT_MM ? best : null;
+      for (const primitive of projection.primitives) {
+        const synthPin = pinById.get(`primitive:${primitive.id}`);
+        if (!synthPin) continue;
+        const d = distanceMm(cursor, toMm(synthPin.worldPositionNm));
+        if (d <= PRIMITIVE_PIN_HIT_MM && d < bestDistance) {
+          bestDistance = d;
+          best = synthPin;
+        }
+      }
+      return best;
     },
-    [projection],
+    [pinById, projection],
   );
 
   const hitWire = useCallback(
@@ -771,6 +986,53 @@ export const SchematicCanvas = forwardRef<
       return bestDistance <= LABEL_HIT_MM ? bestId : null;
     },
     [projection],
+  );
+
+  const hitPrimitiveId = useCallback(
+    (worldNm: PointNm): string | null => {
+      if (!projection) return null;
+      const cursorMm = toMm(worldNm);
+      // Glyph-bounds hit-test: transform cursor into the primitive's local
+      // frame (inverse of position + rotation) and check the kind's AABB
+      // padded by PRIMITIVE_HIT_PADDING_MM.
+      for (const primitive of projection.primitives) {
+        const positionNm = renderedPrimitivePositionNm(primitive);
+        const tx = cursorMm.x - Units.nmToMm(positionNm.x);
+        const ty = cursorMm.y - Units.nmToMm(positionNm.y);
+        const rad = (primitive.rotationDeg * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        // inverse rotation: [cos sin; -sin cos]
+        const localX = tx * cos + ty * sin;
+        const localY = -tx * sin + ty * cos;
+        const bounds = PRIMITIVE_LOCAL_BOUNDS_MM[primitive.kind];
+        const pad = PRIMITIVE_HIT_PADDING_MM;
+        if (
+          localX >= bounds.minX - pad &&
+          localX <= bounds.maxX + pad &&
+          localY >= bounds.minY - pad &&
+          localY <= bounds.maxY + pad
+        ) {
+          return primitive.id;
+        }
+      }
+      // Fallback: nearest connection-point within a small radius (catches
+      // misclicks just above the GND pin stub etc.).
+      let bestId: string | null = null;
+      let bestDistance = Number.POSITIVE_INFINITY;
+      for (const primitive of projection.primitives) {
+        const d = distanceMm(
+          cursorMm,
+          toMm(renderedPrimitivePositionNm(primitive)),
+        );
+        if (d < bestDistance) {
+          bestDistance = d;
+          bestId = primitive.id;
+        }
+      }
+      return bestDistance <= 0.6 ? bestId : null;
+    },
+    [projection, renderedPrimitivePositionNm],
   );
 
   const hitPartId = useCallback(
@@ -870,12 +1132,23 @@ export const SchematicCanvas = forwardRef<
       }
 
       if (matchesKey(event, "Escape")) {
-        if (wireSession || marqueeSession || dragSession || armedLabelText) {
+        if (
+          wireSession ||
+          marqueeSession ||
+          dragSession ||
+          armedLabelText ||
+          armedPrimitive ||
+          pwrPickerOpen ||
+          netPortalPickerOpen
+        ) {
           event.preventDefault();
           setWireSession(null);
           setMarqueeSession(null);
           setDragSession(null);
           setArmedLabelText(null);
+          setArmedPrimitive(null);
+          setPwrPickerOpen(false);
+          setNetPortalPickerOpen(false);
           actions.setWireSourcePinId(null);
         }
         return;
@@ -885,11 +1158,18 @@ export const SchematicCanvas = forwardRef<
         if (!projection) {
           return;
         }
+        // Ctrl/Cmd+A selects every drawable in the schematic — parts, wires,
+        // labels, AND primitives (GND/PWR/NET_PORTAL ports). A subsequent
+        // Delete therefore removes primitives along with parts; this is
+        // intentional and matches the marquee-select behavior.
         event.preventDefault();
         setSelection({
           partIds: new Set(projection.parts.map((part) => part.id)),
           wireIds: new Set(projection.wires.map((wire) => wire.id)),
           labelIds: new Set(projection.labels.map((label) => label.id)),
+          primitiveIds: new Set(
+            projection.primitives.map((primitive) => primitive.id),
+          ),
         });
         return;
       }
@@ -900,19 +1180,24 @@ export const SchematicCanvas = forwardRef<
         }
         event.preventDefault();
 
-        // Wires connected to deleted parts are cascade-deleted by the backend.
-        // Exclude those wires from explicit deletion to avoid "not found" errors.
+        // Wires connected to deleted parts/primitives are cascade-deleted
+        // by the backend. Exclude those from explicit deletion to avoid
+        // "not found" errors.
         const partIdsToDelete = new Set(selection.partIds);
+        const primitiveIdsToDelete = new Set(selection.primitiveIds);
         const wireIdsToDelete = new Set(selection.wireIds);
-        for (const wire of projection.wires) {
-          if (!wireIdsToDelete.has(wire.id)) {
-            continue;
+        const pinReferencesDeletedEntity = (pinId: string): boolean => {
+          if (pinId.startsWith("primitive:")) {
+            return primitiveIdsToDelete.has(pinId.slice("primitive:".length));
           }
-          const sourcePartId = wire.sourcePinId.split(":")[0];
-          const targetPartId = wire.targetPinId.split(":")[0];
+          const partId = pinId.split(":")[0];
+          return !!partId && partIdsToDelete.has(partId);
+        };
+        for (const wire of projection.wires) {
+          if (!wireIdsToDelete.has(wire.id)) continue;
           if (
-            (sourcePartId && partIdsToDelete.has(sourcePartId)) ||
-            (targetPartId && partIdsToDelete.has(targetPartId))
+            pinReferencesDeletedEntity(wire.sourcePinId) ||
+            pinReferencesDeletedEntity(wire.targetPinId)
           ) {
             wireIdsToDelete.delete(wire.id);
           }
@@ -938,6 +1223,13 @@ export const SchematicCanvas = forwardRef<
             type: "delete_entity",
             entityId: labelId,
             entityKind: "label",
+          });
+        }
+        for (const primitiveId of selection.primitiveIds) {
+          commands.push({
+            type: "delete_entity",
+            entityId: primitiveId,
+            entityKind: "primitive",
           });
         }
         void dispatchCommandsSequentially(commands)
@@ -997,6 +1289,43 @@ export const SchematicCanvas = forwardRef<
       ) {
         event.preventDefault();
         setArmedLabelText(labelDraftText.trim() || "NET");
+        return;
+      }
+
+      if (
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        matchesKey(event, "g")
+      ) {
+        event.preventDefault();
+        setArmedPrimitive({ kind: "gnd" });
+        return;
+      }
+
+      if (
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        matchesKey(event, "p")
+      ) {
+        event.preventDefault();
+        setPwrPickerOpen(true);
+        return;
+      }
+
+      if (
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        matchesKey(event, "h")
+      ) {
+        event.preventDefault();
+        setNetPortalPickerOpen(true);
+        return;
       }
     };
 
@@ -1005,6 +1334,9 @@ export const SchematicCanvas = forwardRef<
   }, [
     actions,
     armedLabelText,
+    armedPrimitive,
+    pwrPickerOpen,
+    netPortalPickerOpen,
     dispatchCommandsSequentially,
     dragSession,
     labelDraftText,
@@ -1064,6 +1396,7 @@ export const SchematicCanvas = forwardRef<
         const wireHit = hitWire(worldNm);
         const partId = hitPartId(worldNm);
         const labelId = hitLabelId(worldNm);
+        const primitiveId = hitPrimitiveId(worldNm);
 
         if (armedLabelText) {
           const text = armedLabelText.trim();
@@ -1084,6 +1417,39 @@ export const SchematicCanvas = forwardRef<
             .catch((err) =>
               actions.setError(
                 err instanceof Error ? err.message : "Failed to label",
+              ),
+            );
+          return;
+        }
+
+        if (armedPrimitive) {
+          const command =
+            armedPrimitive.kind === "gnd"
+              ? {
+                  type: "place_gnd_port" as const,
+                  positionNm: snappedWorldNm,
+                }
+              : armedPrimitive.kind === "pwr"
+                ? {
+                    type: "place_pwr_port" as const,
+                    positionNm: snappedWorldNm,
+                    railText: armedPrimitive.railText,
+                  }
+                : {
+                    type: "place_net_portal" as const,
+                    positionNm: snappedWorldNm,
+                    portalText: armedPrimitive.portalText,
+                  };
+          void actions
+            .dispatchCommand(command)
+            .then(() => {
+              setArmedPrimitive(null);
+            })
+            .catch((err) =>
+              actions.setError(
+                err instanceof Error
+                  ? err.message
+                  : "Failed to place primitive",
               ),
             );
           return;
@@ -1172,6 +1538,7 @@ export const SchematicCanvas = forwardRef<
               partIds: new Set([partId]),
               wireIds: new Set(),
               labelIds: new Set(),
+              primitiveIds: new Set(),
             });
           }
 
@@ -1193,8 +1560,24 @@ export const SchematicCanvas = forwardRef<
             });
           }
 
+          // Co-drag any primitives that were already in the selection so
+          // mixed-selection (shift-click part + primitive) drags both kinds
+          // together rather than silently dropping the primitive.
+          const initialPrimitivePositionsNm = new Map<string, PointNm>();
+          if (selection.partIds.has(partId)) {
+            for (const id of selection.primitiveIds) {
+              const found = projection.primitives.find((p) => p.id === id);
+              if (!found) continue;
+              initialPrimitivePositionsNm.set(id, {
+                x: found.positionNm.x,
+                y: found.positionNm.y,
+              });
+            }
+          }
+
           setDragSession({
             initialPartPositionsNm,
+            initialPrimitivePositionsNm,
             startPointerNm: worldNm,
             deltaNm: { x: 0, y: 0 },
           });
@@ -1215,6 +1598,7 @@ export const SchematicCanvas = forwardRef<
               partIds: new Set(),
               wireIds: new Set([wireHit.wire.id]),
               labelIds: new Set(),
+              primitiveIds: new Set(),
             });
           }
           setDragSession(null);
@@ -1235,9 +1619,75 @@ export const SchematicCanvas = forwardRef<
               partIds: new Set(),
               wireIds: new Set(),
               labelIds: new Set([labelId]),
+              primitiveIds: new Set(),
             });
           }
           setDragSession(null);
+          return;
+        }
+
+        if (primitiveId) {
+          setMarqueeSession(null);
+          setWireSession(null);
+
+          const nextSelection = cloneSelection(selection);
+          if (event.modifiers.shift) {
+            if (nextSelection.primitiveIds.has(primitiveId)) {
+              nextSelection.primitiveIds.delete(primitiveId);
+            } else {
+              nextSelection.primitiveIds.add(primitiveId);
+            }
+            setSelection(nextSelection);
+            return;
+          }
+
+          if (
+            !nextSelection.primitiveIds.has(primitiveId) ||
+            selection.primitiveIds.size > 1
+          ) {
+            setSelection({
+              partIds: new Set(),
+              wireIds: new Set(),
+              labelIds: new Set(),
+              primitiveIds: new Set([primitiveId]),
+            });
+          }
+
+          const selectedPrimitiveIds =
+            selection.primitiveIds.has(primitiveId) &&
+            selection.primitiveIds.size > 0
+              ? [...selection.primitiveIds]
+              : [primitiveId];
+          const initialPrimitivePositionsNm = new Map<string, PointNm>();
+          for (const id of selectedPrimitiveIds) {
+            const found = projection.primitives.find((p) => p.id === id);
+            if (!found) continue;
+            initialPrimitivePositionsNm.set(id, {
+              x: found.positionNm.x,
+              y: found.positionNm.y,
+            });
+          }
+
+          // Co-drag any parts that were already in the selection — symmetric
+          // counterpart to the part-click branch above.
+          const initialPartPositionsNm = new Map<string, PointNm>();
+          if (selection.primitiveIds.has(primitiveId)) {
+            for (const id of selection.partIds) {
+              const found = projection.parts.find((p) => p.id === id);
+              if (!found) continue;
+              initialPartPositionsNm.set(id, {
+                x: found.positionNm.x,
+                y: found.positionNm.y,
+              });
+            }
+          }
+
+          setDragSession({
+            initialPartPositionsNm,
+            initialPrimitivePositionsNm,
+            startPointerNm: worldNm,
+            deltaNm: { x: 0, y: 0 },
+          });
           return;
         }
 
@@ -1270,6 +1720,19 @@ export const SchematicCanvas = forwardRef<
               commands.push({
                 type: "move_part",
                 partId,
+                positionNm: {
+                  x: initial.x + dragSession.deltaNm.x,
+                  y: initial.y + dragSession.deltaNm.y,
+                },
+              });
+            }
+            for (const [
+              primitiveId,
+              initial,
+            ] of dragSession.initialPrimitivePositionsNm.entries()) {
+              commands.push({
+                type: "move_primitive",
+                primitiveId,
                 positionNm: {
                   x: initial.x + dragSession.deltaNm.x,
                   y: initial.y + dragSession.deltaNm.y,
@@ -1356,6 +1819,12 @@ export const SchematicCanvas = forwardRef<
             }
           }
 
+          for (const primitive of projection.primitives) {
+            if (pointInRect(toMm(primitive.positionNm), rect)) {
+              next.primitiveIds.add(primitive.id);
+            }
+          }
+
           setSelection(next);
           setMarqueeSession(null);
         }
@@ -1423,6 +1892,7 @@ export const SchematicCanvas = forwardRef<
     [
       actions,
       armedLabelText,
+      armedPrimitive,
       commitWireToPin,
       commitWireToWireJunction,
       dispatchCommandsSequentially,
@@ -1434,6 +1904,7 @@ export const SchematicCanvas = forwardRef<
       hitLabelId,
       hitPartId,
       hitPin,
+      hitPrimitiveId,
       hitWire,
       labelDraftText,
       marqueeSession,
@@ -1489,13 +1960,55 @@ export const SchematicCanvas = forwardRef<
     ? { a: marqueeSession.startMm, b: marqueeSession.currentMm }
     : null;
 
+  const displayedPrimitives = useMemo(() => {
+    if (!projection) return [];
+    if (!dragSession || dragSession.initialPrimitivePositionsNm.size === 0) {
+      return projection.primitives;
+    }
+    return projection.primitives.map((primitive) => {
+      const positionNm = renderedPrimitivePositionNm(primitive);
+      if (
+        positionNm.x === primitive.positionNm.x &&
+        positionNm.y === primitive.positionNm.y
+      ) {
+        return primitive;
+      }
+      return { ...primitive, positionNm };
+    });
+  }, [dragSession, projection, renderedPrimitivePositionNm]);
+
+  const primitiveGhost: DesignerPrimitive | null = useMemo(() => {
+    if (!armedPrimitive || !cursorNm) return null;
+    const snapped = snapNm(cursorNm);
+    const id = "primitive-ghost";
+    if (armedPrimitive.kind === "gnd") {
+      return { id, kind: "gnd", positionNm: snapped, rotationDeg: 0 };
+    }
+    if (armedPrimitive.kind === "pwr") {
+      return {
+        id,
+        kind: "pwr",
+        positionNm: snapped,
+        rotationDeg: 0,
+        railText: armedPrimitive.railText,
+      };
+    }
+    return {
+      id,
+      kind: "net_portal",
+      positionNm: snapped,
+      rotationDeg: 0,
+      portalText: armedPrimitive.portalText,
+    };
+  }, [armedPrimitive, cursorNm]);
+
   return (
     <section className="relative h-full w-full min-h-0 rounded-none">
       <EdaCanvas
         readOnly={false}
         interactionHandler={interactionHandler}
         className="h-full w-full"
-        initialZoom={35}
+        initialZoom={DEFAULT_SCHEMATIC_ZOOM}
         enableDragDrop
         gridSize={SCHEMATIC_GRID_NM}
       >
@@ -1519,12 +2032,32 @@ export const SchematicCanvas = forwardRef<
           renderedPartPositionNm={renderedPartPositionNm}
           selection={selection}
           labels={projection?.labels ?? []}
+          primitives={displayedPrimitives}
+          primitiveGhost={primitiveGhost}
           junctions={projection?.junctions ?? []}
           selectionRect={selectionRect}
           dragGhostNm={dragGhostNm}
           dragGhostModel={dragGhostModel}
         />
       </EdaCanvas>
+      {pwrPickerOpen ? (
+        <PwrRailPicker
+          onPick={(railText) => {
+            setPwrPickerOpen(false);
+            setArmedPrimitive({ kind: "pwr", railText });
+          }}
+          onCancel={() => setPwrPickerOpen(false)}
+        />
+      ) : null}
+      {netPortalPickerOpen ? (
+        <NetPortalPicker
+          onPick={(portalText) => {
+            setNetPortalPickerOpen(false);
+            setArmedPrimitive({ kind: "net_portal", portalText });
+          }}
+          onCancel={() => setNetPortalPickerOpen(false)}
+        />
+      ) : null}
     </section>
   );
 });
@@ -1539,6 +2072,8 @@ interface SchematicSceneProps {
   renderedPartPositionNm: (part: DesignerPlacedPart) => PointNm;
   selection: SelectionState;
   labels: DesignerSchematicProjection["labels"];
+  primitives: DesignerSchematicProjection["primitives"];
+  primitiveGhost: DesignerPrimitive | null;
   junctions: DesignerSchematicProjection["junctions"];
   selectionRect: { a: PointMm; b: PointMm } | null;
   dragGhostNm: { x: number; y: number } | null;
@@ -1555,6 +2090,8 @@ function SchematicScene({
   renderedPartPositionNm,
   selection,
   labels,
+  primitives,
+  primitiveGhost,
   junctions,
   selectionRect,
   dragGhostNm,
@@ -1574,6 +2111,19 @@ function SchematicScene({
     }
     return map;
   }, [projection]);
+
+  // Wire-id → net class (default | gnd | power) so we can color-bucket
+  // unselected wires by net family.
+  const wireToClass = useMemo(() => {
+    const map = new Map<string, WireNetClass>();
+    if (!projection) return map;
+    for (const net of projection.nets) {
+      const cls = classifyNetByName(net.name);
+      for (const wireId of net.wireIds) map.set(wireId, cls);
+    }
+    return map;
+  }, [projection]);
+
   const { highlightedWires, dimmedUnselectedWires } = useMemo(() => {
     if (!highlightedNetId) {
       return {
@@ -1590,6 +2140,22 @@ function SchematicScene({
     return { highlightedWires: high, dimmedUnselectedWires: dim };
   }, [highlightedNetId, unselectedWires, wireToNet]);
 
+  // Bucket unselected wires by net class for per-color rendering.
+  const wireBucketsByClass = useMemo(() => {
+    const buckets: Record<WireNetClass, DesignerWire[]> = {
+      default: [],
+      gnd: [],
+      power: [],
+    };
+    for (const wire of dimmedUnselectedWires) {
+      const cls = wireToClass.get(wire.id) ?? "default";
+      buckets[cls].push(wire);
+    }
+    return buckets;
+  }, [dimmedUnselectedWires, wireToClass]);
+
+  const wireOpacity = highlightedNetId ? 0.2 : 1;
+
   return (
     <>
       <GridShader
@@ -1604,11 +2170,27 @@ function SchematicScene({
 
       {projection ? (
         <>
-          <WireLayer
-            wires={dimmedUnselectedWires}
-            color={t.wireColor}
-            opacity={highlightedNetId ? 0.2 : 1}
-          />
+          {wireBucketsByClass.default.length > 0 ? (
+            <WireLayer
+              wires={wireBucketsByClass.default}
+              color={t.wireColor}
+              opacity={wireOpacity}
+            />
+          ) : null}
+          {wireBucketsByClass.gnd.length > 0 ? (
+            <WireLayer
+              wires={wireBucketsByClass.gnd}
+              color={t.wireGndColor}
+              opacity={wireOpacity}
+            />
+          ) : null}
+          {wireBucketsByClass.power.length > 0 ? (
+            <WireLayer
+              wires={wireBucketsByClass.power}
+              color={t.wirePowerColor}
+              opacity={wireOpacity}
+            />
+          ) : null}
           {highlightedWires.length > 0 ? (
             <WireLayer wires={highlightedWires} color={t.wireSelectedColor} />
           ) : null}
@@ -1654,7 +2236,7 @@ function SchematicScene({
                   0,
                 ]}
                 color={selected ? t.labelSelectedColor : t.labelColor}
-                fontSize={0.9}
+                fontSize={NET_LABEL_FONT_MM}
                 anchorX="left"
                 anchorY="middle"
               >
@@ -1662,6 +2244,15 @@ function SchematicScene({
               </EDAText>
             );
           })}
+
+          <SchematicPrimitivesLayer
+            primitives={primitives}
+            selectedPrimitiveIds={selection.primitiveIds}
+          />
+
+          {primitiveGhost ? (
+            <PrimitiveGhost primitive={primitiveGhost} />
+          ) : null}
 
           {junctions.map((junction) => (
             <mesh
@@ -1673,7 +2264,7 @@ function SchematicScene({
               ]}
               renderOrder={RENDER_ORDER.JUNCTIONS}
             >
-              <circleGeometry args={[0.08, 14]} />
+              <circleGeometry args={[0.1, 24]} />
               <meshBasicMaterial
                 color={t.junctionColor}
                 depthTest={false}

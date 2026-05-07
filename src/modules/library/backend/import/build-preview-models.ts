@@ -452,6 +452,8 @@ export function buildSymbolPreviewFromParsed(
       rotationDeg: pin.rotation,
       unit: pin.unit,
       hidden: pin.hidden,
+      nameFontSizeMm: pin.nameFontSizeMm,
+      numberFontSizeMm: pin.numberFontSizeMm,
     };
   });
 
@@ -508,6 +510,8 @@ export function buildSymbolPreviewFromParsed(
     graphics,
     labels,
     warnings,
+    referenceFontSizeMm: symbol.referenceFontSizeMm,
+    valueFontSizeMm: symbol.valueFontSizeMm,
   };
 
   const model = buildSymbolRenderModel(source, {

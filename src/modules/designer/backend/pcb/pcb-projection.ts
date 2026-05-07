@@ -25,6 +25,10 @@ export function loadPcbProjection(params: {
   );
   const schematic = loadSchematicProjection(params.db, params.designId);
 
+  // Schematic primitives (GND/PWR/NET_PORTAL) are deliberately excluded from
+  // PCB placements — they are not parts, have no footprint, and exist only on
+  // the schematic. The mapper below iterates `schematic.parts` only, so this
+  // is a structural guarantee rather than an explicit filter.
   const placements = schematic
     ? syncPcbPlacementsFromSchematic({
         db: params.db,

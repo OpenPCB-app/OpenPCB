@@ -1,28 +1,66 @@
 import { useMemo } from "react";
 import * as THREE from "three";
-import { EDAText, PinDots } from "../primitives";
+import { EDAText, PinDots, ThickLineBucket } from "../primitives";
 import type { SymbolRenderModel } from "../../../rendering";
 import { RENDER_ORDER } from "../layers";
 import { useCanvasTheme } from "../theme";
 import { graphicStrokeSegments } from "../preview/geometry";
+import { BODY_STROKE_MM, SYMBOL_PIN_DOT_RADIUS_MM } from "../defaults";
+
+interface StrokeBucket {
+  widthMm: number;
+  positions: number[];
+}
+
+/**
+ * Bucket all symbol-body segments by their stroke width so each LineSegments2
+ * mesh has a uniform width (LineMaterial requires this). Pin stubs share the
+ * default body stroke width.
+ */
+function buildStrokeBuckets(model: SymbolRenderModel): StrokeBucket[] {
+  const bucketsByWidth = new Map<number, StrokeBucket>();
+
+  const upsert = (
+    widthMm: number,
+    a: { x: number; y: number },
+    b: { x: number; y: number },
+  ) => {
+    const key = widthMm;
+    let bucket = bucketsByWidth.get(key);
+    if (!bucket) {
+      bucket = { widthMm, positions: [] };
+      bucketsByWidth.set(key, bucket);
+    }
+    bucket.positions.push(a.x, a.y, 0, b.x, b.y, 0);
+  };
+
+  for (const graphic of model.graphics) {
+    const stroke =
+      "strokeWidthMm" in graphic && graphic.strokeWidthMm > 0
+        ? graphic.strokeWidthMm
+        : BODY_STROKE_MM;
+    const segments = graphicStrokeSegments(graphic);
+    for (const segment of segments) {
+      upsert(
+        stroke,
+        { x: segment[0], y: segment[1] },
+        { x: segment[2], y: segment[3] },
+      );
+    }
+  }
+
+  for (const pin of model.pins) {
+    upsert(BODY_STROKE_MM, pin.anchor, pin.bodyEnd);
+  }
+
+  return [...bucketsByWidth.values()];
+}
 
 export function SymbolRenderLayer({ model }: { model: SymbolRenderModel }) {
   const { theme } = useCanvasTheme();
   const pt = theme.preview;
 
-  const strokePositions = useMemo(() => {
-    const values: number[] = [];
-    for (const graphic of model.graphics) {
-      const segments = graphicStrokeSegments(graphic);
-      for (const segment of segments) {
-        values.push(segment[0], segment[1], 0, segment[2], segment[3], 0);
-      }
-    }
-    for (const pin of model.pins) {
-      values.push(pin.anchor.x, pin.anchor.y, 0, pin.bodyEnd.x, pin.bodyEnd.y, 0);
-    }
-    return new Float32Array(values);
-  }, [model.graphics, model.pins]);
+  const buckets = useMemo(() => buildStrokeBuckets(model), [model]);
 
   const fillShapes = useMemo(() => {
     const shapes: THREE.Shape[] = [];
@@ -38,7 +76,13 @@ export function SymbolRenderLayer({ model }: { model: SymbolRenderModel }) {
       }
       if (graphic.kind === "circle" && graphic.fill === "solid") {
         const shape = new THREE.Shape();
-        shape.absarc(graphic.center.x, graphic.center.y, graphic.radiusMm, 0, Math.PI * 2);
+        shape.absarc(
+          graphic.center.x,
+          graphic.center.y,
+          graphic.radiusMm,
+          0,
+          Math.PI * 2,
+        );
         shapes.push(shape);
       }
       if (
@@ -92,22 +136,19 @@ export function SymbolRenderLayer({ model }: { model: SymbolRenderModel }) {
         </mesh>
       )}
 
-      {strokePositions.length > 0 && (
-        <lineSegments renderOrder={RENDER_ORDER.BODIES + 0.1}>
-          <bufferGeometry>
-            <bufferAttribute attach="attributes-position" args={[strokePositions, 3]} />
-          </bufferGeometry>
-          <lineBasicMaterial
-            color={pt.symbolStroke}
-            depthTest={false}
-            depthWrite={false}
-          />
-        </lineSegments>
-      )}
+      {buckets.map((bucket, i) => (
+        <ThickLineBucket
+          key={`${bucket.widthMm}-${i}`}
+          positions={bucket.positions}
+          widthMm={bucket.widthMm}
+          color={pt.symbolStroke}
+          renderOrder={RENDER_ORDER.BODIES + 0.1}
+        />
+      ))}
 
       <PinDots
         pins={pinDots}
-        radius={0.1}
+        radius={SYMBOL_PIN_DOT_RADIUS_MM}
         defaultColor={pt.symbolPinDot}
       />
 
@@ -123,7 +164,11 @@ export function SymbolRenderLayer({ model }: { model: SymbolRenderModel }) {
         const rotation =
           label.rotationDeg === 0
             ? undefined
-            : ([0, 0, (label.rotationDeg * Math.PI) / 180] as [number, number, number]);
+            : ([0, 0, (label.rotationDeg * Math.PI) / 180] as [
+                number,
+                number,
+                number,
+              ]);
 
         const isLight = theme.mode === "light";
         const outlineWidth = isLight ? 0.025 : undefined;

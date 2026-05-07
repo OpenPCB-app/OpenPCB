@@ -168,4 +168,48 @@ describe("KiCad symbol parser", () => {
     const result2 = parseKicadSymbolLib(content);
     expect(result1.symbols[0]!.rawSource).toBe(result2.symbols[0]!.rawSource);
   });
+
+  test("reads (effects (font (size W H))) on pins and properties", () => {
+    // simple_resistor fixture has size 1.27 on every text element.
+    const content = readFixture("simple_resistor.kicad_sym");
+    const sym = parseKicadSymbolLib(content).symbols[0]!;
+    expect(sym.pins[0]!.nameFontSizeMm).toBeCloseTo(1.27, 5);
+    expect(sym.pins[0]!.numberFontSizeMm).toBeCloseTo(1.27, 5);
+    expect(sym.referenceFontSizeMm).toBeCloseTo(1.27, 5);
+    expect(sym.valueFontSizeMm).toBeCloseTo(1.27, 5);
+  });
+
+  test("missing effects → font sizes are undefined (caller falls back to KLC default)", () => {
+    const content = `(kicad_symbol_lib
+      (version 20231120) (generator "test")
+      (symbol "X"
+        (property "Reference" "U" (at 0 0 0))
+        (property "Value" "X" (at 0 -2.54 0))
+        (symbol "X_1_1"
+          (pin passive line (at 0 3.81 270) (length 1.27) (name "A") (number "1"))
+        )
+      ))`;
+    const sym = parseKicadSymbolLib(content).symbols[0]!;
+    expect(sym.pins[0]!.nameFontSizeMm).toBeUndefined();
+    expect(sym.pins[0]!.numberFontSizeMm).toBeUndefined();
+    expect(sym.referenceFontSizeMm).toBeUndefined();
+    expect(sym.valueFontSizeMm).toBeUndefined();
+  });
+
+  test("non-default font sizes survive parsing", () => {
+    const content = `(kicad_symbol_lib
+      (version 20231120) (generator "test")
+      (symbol "Y"
+        (property "Reference" "U" (at 0 0 0) (effects (font (size 0.762 0.762))))
+        (symbol "Y_1_1"
+          (pin passive line (at 0 3.81 270) (length 1.27)
+            (name "A" (effects (font (size 0.5 0.5))))
+            (number "1" (effects (font (size 0.6 0.6)))))
+        )
+      ))`;
+    const sym = parseKicadSymbolLib(content).symbols[0]!;
+    expect(sym.referenceFontSizeMm).toBeCloseTo(0.762, 5);
+    expect(sym.pins[0]!.nameFontSizeMm).toBeCloseTo(0.5, 5);
+    expect(sym.pins[0]!.numberFontSizeMm).toBeCloseTo(0.6, 5);
+  });
 });

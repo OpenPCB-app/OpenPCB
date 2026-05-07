@@ -11,6 +11,7 @@ import type {
   LibraryComponentPlacementDetail,
 } from "../../../sdks";
 import { normalizeRotationDeg } from "./commands/place-part";
+import { loadPrimitives } from "./primitive-store";
 import { deriveNetsAndJunctions } from "./projection-world";
 import {
   designHeads,
@@ -28,14 +29,20 @@ type PinRow = typeof schematicPins.$inferSelect;
 type WireRow = typeof schematicWires.$inferSelect;
 type LabelRow = typeof schematicLabels.$inferSelect;
 
-function parseSymbolSnapshotJson(payloadJson: string): LibraryComponentPlacementDetail["symbol"] {
-  return parseJsonRecord(payloadJson) as unknown as LibraryComponentPlacementDetail["symbol"];
+function parseSymbolSnapshotJson(
+  payloadJson: string,
+): LibraryComponentPlacementDetail["symbol"] {
+  return parseJsonRecord(
+    payloadJson,
+  ) as unknown as LibraryComponentPlacementDetail["symbol"];
 }
 
 function parseFootprintSnapshotJson(
   payloadJson: string,
 ): LibraryComponentPlacementDetail["footprint"] {
-  return parseJsonRecord(payloadJson) as unknown as LibraryComponentPlacementDetail["footprint"];
+  return parseJsonRecord(
+    payloadJson,
+  ) as unknown as LibraryComponentPlacementDetail["footprint"];
 }
 
 function mapPinRow(row: PinRow): DesignerPin {
@@ -83,7 +90,9 @@ function mapLabelRow(row: LabelRow): DesignerLabel {
   };
 }
 
-export function mapDesignSummary(row: typeof designHeads.$inferSelect): DesignerDesignSummary {
+export function mapDesignSummary(
+  row: typeof designHeads.$inferSelect,
+): DesignerDesignSummary {
   return {
     id: row.id,
     name: row.name,
@@ -97,13 +106,37 @@ export function loadSchematicProjection(
   db: DbClient,
   designId: string,
 ): DesignerSchematicProjection | null {
-  const head = db.select().from(designHeads).where(eq(designHeads.id, designId)).get();
+  const head = db
+    .select()
+    .from(designHeads)
+    .where(eq(designHeads.id, designId))
+    .get();
   if (!head) return null;
 
-  const partRows = db.select().from(schematicParts).where(eq(schematicParts.designId, designId)).orderBy(asc(schematicParts.createdAt)).all();
-  const pinRows = db.select().from(schematicPins).where(eq(schematicPins.designId, designId)).orderBy(asc(schematicPins.createdAt)).all();
-  const wireRows = db.select().from(schematicWires).where(eq(schematicWires.designId, designId)).orderBy(asc(schematicWires.createdAt)).all();
-  const labelRows = db.select().from(schematicLabels).where(eq(schematicLabels.designId, designId)).orderBy(asc(schematicLabels.createdAt)).all();
+  const partRows = db
+    .select()
+    .from(schematicParts)
+    .where(eq(schematicParts.designId, designId))
+    .orderBy(asc(schematicParts.createdAt))
+    .all();
+  const pinRows = db
+    .select()
+    .from(schematicPins)
+    .where(eq(schematicPins.designId, designId))
+    .orderBy(asc(schematicPins.createdAt))
+    .all();
+  const wireRows = db
+    .select()
+    .from(schematicWires)
+    .where(eq(schematicWires.designId, designId))
+    .orderBy(asc(schematicWires.createdAt))
+    .all();
+  const labelRows = db
+    .select()
+    .from(schematicLabels)
+    .where(eq(schematicLabels.designId, designId))
+    .orderBy(asc(schematicLabels.createdAt))
+    .all();
 
   const pinsByPartId = new Map<string, DesignerPin[]>();
   for (const pinRow of pinRows) {
@@ -113,16 +146,20 @@ export function loadSchematicProjection(
     else pinsByPartId.set(pinRow.partId, [mapped]);
   }
 
-  const parts = partRows.map((row) => mapPartRow(row, pinsByPartId.get(row.id) ?? []));
+  const parts = partRows.map((row) =>
+    mapPartRow(row, pinsByPartId.get(row.id) ?? []),
+  );
   const wires = wireRows.map(mapWireRow);
   const labels = labelRows.map(mapLabelRow);
-  const derived = deriveNetsAndJunctions(parts, wires, labels);
+  const primitives = loadPrimitives(db, designId);
+  const derived = deriveNetsAndJunctions(parts, wires, labels, primitives);
   return {
     designId,
     revision: head.revision,
     parts,
     wires,
     labels,
+    primitives,
     nets: derived.nets,
     junctions: derived.junctions,
   };
@@ -156,6 +193,14 @@ export function toDesignRecordFromProjection(
         designId: summary.id,
         kind: "label" as const,
         payload: label as unknown as Record<string, unknown>,
+        createdAt: summary.updatedAt,
+        updatedAt: summary.updatedAt,
+      })),
+      ...projection.primitives.map((primitive) => ({
+        id: primitive.id,
+        designId: summary.id,
+        kind: "primitive" as const,
+        payload: primitive as unknown as Record<string, unknown>,
         createdAt: summary.updatedAt,
         updatedAt: summary.updatedAt,
       })),

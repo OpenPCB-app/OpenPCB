@@ -1,5 +1,6 @@
 import { eq, inArray, like, or, sql } from "drizzle-orm";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
+import { ValidationError } from "../../../core/backend/contracts/errors";
 import type {
   LibraryComponent,
   LibraryComponentPlacementDetail,
@@ -204,7 +205,7 @@ function parseSymbolPlacementSnapshot(
   if (!normalized) {
     throw new Error(
       `Symbol ${row.id} (${row.name}) missing normalized data. ` +
-        `Only normalized-format symbols are supported for schematic placement.`
+        `Only normalized-format symbols are supported for schematic placement.`,
     );
   }
 
@@ -216,7 +217,7 @@ function parseSymbolPlacementSnapshot(
   if (!isSymbolRenderModel(previewRaw)) {
     throw new Error(
       `Symbol ${row.id} (${row.name}) missing valid preview model. ` +
-        `Symbol must have a renderable preview for schematic placement.`
+        `Symbol must have a renderable preview for schematic placement.`,
     );
   }
 
@@ -234,10 +235,12 @@ function parseSymbolPlacementSnapshot(
       }
 
       const originPinKey = asString(pin.originPinKey);
-      const name = asString(pin.name);
-      if (!originPinKey || !name) {
+      if (!originPinKey) {
         return null;
       }
+      // Empty pin names are valid (KiCad convention for unlabeled pins on
+      // generic passives like R/C). Only require originPinKey + position.
+      const name = asString(pin.name) ?? "";
 
       return {
         originPinKey,
@@ -248,7 +251,10 @@ function parseSymbolPlacementSnapshot(
         unit: asNumber(pin.unit) ?? 1,
       };
     })
-    .filter((pin): pin is LibrarySymbolPlacementSnapshot["pins"][number] => pin !== null);
+    .filter(
+      (pin): pin is LibrarySymbolPlacementSnapshot["pins"][number] =>
+        pin !== null,
+    );
 
   return {
     symbolId: row.id,
@@ -340,6 +346,7 @@ export function mapComponent(row: ComponentRow): LibraryComponent {
     symbolId: row.symbolId,
     footprintId: row.footprintId,
     tags: parseJsonStringArray(row.tagsJson),
+    isBuiltin: Boolean(row.isBuiltin),
   };
 }
 
@@ -568,6 +575,93 @@ export interface DeleteComponentsResult {
   deletedFootprints: number;
 }
 
+/**
+ * Read-only invariant for built-in components: any PATCH/PUT/DELETE on a row
+ * with `is_builtin = 1` MUST be rejected. Clients clone via the dedicated
+ * clone path before mutating. See `builtins/seed.ts` for the seeding side of
+ * the contract. Call this from every library route that mutates an existing
+ * `library_components` row by id.
+ */
+export function assertNotBuiltinComponents(
+  ctx: CoreBackendModuleContext,
+  ids: string[],
+  action: "delete" | "update" | "modify" = "modify",
+): void {
+  if (ids.length === 0) return;
+  const db = getDb(ctx);
+  const hits = db
+    .select({
+      id: components.id,
+      name: components.name,
+      isBuiltin: components.isBuiltin,
+    })
+    .from(components)
+    .where(inArray(components.id, ids))
+    .all()
+    .filter((row) => Boolean(row.isBuiltin));
+  if (hits.length === 0) return;
+  const names = hits.map((row) => row.name).join(", ");
+  throw new ValidationError(
+    `Cannot ${action} built-in components (${names}). Use "Duplicate to my library" to create an editable copy.`,
+  );
+}
+
+export interface CloneComponentResult {
+  componentId: string;
+  componentName: string;
+}
+
+/**
+ * Clones a component into an editable user-owned copy. Reuses the source
+ * symbol/footprint rows (clone-on-edit is deferred — the user can re-import or
+ * use the symbol editor later to materialize an own copy). Strips the
+ * `builtin`/`system` tags and adds `user`. Always sets `is_builtin = 0`.
+ */
+export function cloneComponent(
+  ctx: CoreBackendModuleContext,
+  sourceId: string,
+): CloneComponentResult | null {
+  const db = getDb(ctx);
+  const source = db
+    .select()
+    .from(components)
+    .where(eq(components.id, sourceId))
+    .get();
+  if (!source) {
+    return null;
+  }
+
+  const sourceTags = parseJsonStringArray(source.tagsJson);
+  const cleanedTags = sourceTags
+    .map((tag) => tag.trim())
+    .filter((tag) => {
+      const lowered = tag.toLowerCase();
+      return tag.length > 0 && lowered !== "builtin" && lowered !== "system";
+    });
+  if (!cleanedTags.some((tag) => tag.toLowerCase() === "user")) {
+    cleanedTags.push("user");
+  }
+
+  const now = new Date().toISOString();
+  const newComponentId = crypto.randomUUID();
+  const newComponentName = `${source.name} (Copy)`;
+
+  db.insert(components)
+    .values({
+      id: newComponentId,
+      name: newComponentName,
+      description: source.description,
+      symbolId: source.symbolId,
+      footprintId: source.footprintId,
+      tagsJson: JSON.stringify(cleanedTags),
+      createdAt: now,
+      isBuiltin: 0,
+    })
+    .run();
+
+  return { componentId: newComponentId, componentName: newComponentName };
+}
+
 export function deleteComponents(
   ctx: CoreBackendModuleContext,
   ids: string[],
@@ -577,6 +671,8 @@ export function deleteComponents(
   }
 
   const db = getDb(ctx);
+
+  assertNotBuiltinComponents(ctx, ids, "delete");
 
   let summary: DeleteComponentsResult = {
     deletedComponents: 0,
@@ -601,10 +697,7 @@ export function deleteComponents(
     const footprintIds = [...new Set(toDelete.map((r) => r.footprintId))];
 
     // Delete the components
-    transactionalDb
-      .delete(components)
-      .where(inArray(components.id, ids))
-      .run();
+    transactionalDb.delete(components).where(inArray(components.id, ids)).run();
 
     // Delete orphaned symbols (not referenced by any remaining component)
     let deletedSymbols = 0;

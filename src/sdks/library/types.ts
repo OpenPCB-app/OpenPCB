@@ -10,6 +10,7 @@ export interface LibraryComponent {
   symbolId: string;
   footprintId: string;
   tags: string[];
+  isBuiltin: boolean;
 }
 
 export interface LibrarySymbol {

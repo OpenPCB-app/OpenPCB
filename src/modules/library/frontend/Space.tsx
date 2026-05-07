@@ -156,14 +156,19 @@ export function LibrarySpace({
     });
   }, []);
 
+  const selectableCount = useMemo(
+    () => components.filter((c) => !c.isBuiltin).length,
+    [components],
+  );
+
   const toggleSelectAll = useCallback(() => {
     setSelectedIds((prev) => {
-      if (prev.size === components.length && components.length > 0) {
+      if (prev.size === selectableCount && selectableCount > 0) {
         return new Set();
       }
-      return new Set(components.map((c) => c.id));
+      return new Set(components.filter((c) => !c.isBuiltin).map((c) => c.id));
     });
-  }, [components]);
+  }, [components, selectableCount]);
 
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
@@ -281,6 +286,10 @@ export function LibrarySpace({
         moduleId={moduleId}
         componentId={detailComponentId}
         onBack={() => setDetailComponentId(null)}
+        onCloned={(newId) => {
+          setRefreshTick((value) => value + 1);
+          setDetailComponentId(newId);
+        }}
       />
     );
   }
@@ -355,10 +364,10 @@ export function LibrarySpace({
           <input
             type="checkbox"
             checked={
-              components.length > 0 && selectedIds.size === components.length
+              selectableCount > 0 && selectedIds.size === selectableCount
             }
             onChange={toggleSelectAll}
-            disabled={components.length === 0}
+            disabled={selectableCount === 0}
             className="h-4 w-4 cursor-pointer rounded border-slate-300 text-violet-600 focus:ring-violet-600 dark:border-slate-600"
           />
           <span>Select All</span>

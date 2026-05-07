@@ -1,4 +1,12 @@
 import {
+  BODY_STROKE_MM,
+  KLC_TEXT_SIZE_MM,
+  PIN_NAME_GAP_MM as DEFAULT_PIN_NAME_GAP_MM,
+  PIN_NUMBER_GAP_MM as DEFAULT_PIN_NUMBER_GAP_MM,
+  REFERENCE_OFFSET_MM,
+  VALUE_OFFSET_MM,
+} from "../frontend/canvas/defaults";
+import {
   boundsFromGraphics,
   emptyBoundsMm,
   includeLabel,
@@ -15,11 +23,12 @@ import type {
   SymbolRenderModel,
   SymbolRenderModelPin,
   SymbolRenderSource,
+  SymbolRenderSourcePin,
 } from "./types";
 
 const DEFAULT_UNIT_GAP_MM = 2.0;
-const PIN_NAME_GAP_MM = 0.4;
-const PIN_NUMBER_GAP_MM = 0.7;
+const PIN_NAME_GAP_MM = DEFAULT_PIN_NAME_GAP_MM;
+const PIN_NUMBER_GAP_MM = DEFAULT_PIN_NUMBER_GAP_MM;
 
 function normalizeRotation(rotationDeg: number): number {
   const normalized = rotationDeg % 360;
@@ -49,7 +58,10 @@ function pinBodyEnd(pin: {
   };
 }
 
-function createPinLabels(pin: SymbolRenderModelPin): PreviewLabel[] {
+function createPinLabels(
+  pin: SymbolRenderModelPin,
+  sourcePin?: SymbolRenderSourcePin,
+): PreviewLabel[] {
   const side = rotationToSide(pin.rotationDeg);
   const out: PreviewLabel[] = [];
 
@@ -67,7 +79,7 @@ function createPinLabels(pin: SymbolRenderModelPin): PreviewLabel[] {
       id: `${pin.id}:name`,
       text: pin.name,
       at: nameAt,
-      fontSizeMm: 0.28,
+      fontSizeMm: sourcePin?.nameFontSizeMm ?? KLC_TEXT_SIZE_MM,
       rotationDeg: 0,
       anchorX: side === "left" ? "left" : side === "right" ? "right" : "center",
       anchorY: "middle",
@@ -89,7 +101,7 @@ function createPinLabels(pin: SymbolRenderModelPin): PreviewLabel[] {
       id: `${pin.id}:number`,
       text: pin.number,
       at: numberAt,
-      fontSizeMm: 0.25,
+      fontSizeMm: sourcePin?.numberFontSizeMm ?? KLC_TEXT_SIZE_MM,
       rotationDeg: 0,
       anchorX: side === "left" ? "right" : side === "right" ? "left" : "center",
       anchorY: "middle",
@@ -164,10 +176,10 @@ function withFallbackBody(
   }
 
   const padded = {
-    minX: bounds.minX + 0.6,
-    minY: bounds.minY - 1.2,
-    maxX: bounds.maxX - 0.6,
-    maxY: bounds.maxY + 1.2,
+    minX: bounds.minX + 1.27,
+    minY: bounds.minY - 1.27,
+    maxX: bounds.maxX - 1.27,
+    maxY: bounds.maxY + 1.27,
   };
 
   return [
@@ -178,7 +190,7 @@ function withFallbackBody(
       width: Math.abs(padded.maxX - padded.minX),
       height: Math.abs(padded.maxY - padded.minY),
       fill: "none",
-      strokeWidthMm: 0.15,
+      strokeWidthMm: BODY_STROKE_MM,
     },
   ];
 }
@@ -248,8 +260,11 @@ export function buildSymbolRenderModel(
 
     const graphicsWithFallback = withFallbackBody(unitGraphics, localPins);
 
+    const sourcePinById = new Map<string, SymbolRenderSourcePin>(
+      source.pins.map((p) => [p.id, p]),
+    );
     const localLabelsFromPins = localPins.flatMap((pin) =>
-      createPinLabels(pin),
+      createPinLabels(pin, sourcePinById.get(pin.id)),
     );
     const localLabelsFromSource = (source.labels ?? [])
       .filter((entry) => entry.unit === 0 || entry.unit === unit)
@@ -317,9 +332,9 @@ export function buildSymbolRenderModel(
         text: source.referenceText,
         at: {
           x: (finalBounds.minX + finalBounds.maxX) / 2,
-          y: finalBounds.maxY + 0.4,
+          y: finalBounds.maxY + REFERENCE_OFFSET_MM,
         },
-        fontSizeMm: 0.35,
+        fontSizeMm: source.referenceFontSizeMm ?? KLC_TEXT_SIZE_MM,
         rotationDeg: 0,
         anchorX: "center",
         anchorY: "bottom",
@@ -335,9 +350,9 @@ export function buildSymbolRenderModel(
         text: source.valueText,
         at: {
           x: (finalBounds.minX + finalBounds.maxX) / 2,
-          y: finalBounds.minY - 0.4,
+          y: finalBounds.minY - VALUE_OFFSET_MM,
         },
-        fontSizeMm: 0.30,
+        fontSizeMm: source.valueFontSizeMm ?? KLC_TEXT_SIZE_MM,
         rotationDeg: 0,
         anchorX: "center",
         anchorY: "top",

@@ -1,4 +1,4 @@
-import { sqliteTable, text, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 
 /**
  * Library schema — three flat tables backing the component library.
@@ -30,8 +30,12 @@ export const components = sqliteTable(
     footprintId: text("footprint_id").notNull(),
     tagsJson: text("tags_json").notNull(),
     createdAt: text("created_at").notNull(),
+    isBuiltin: integer("is_builtin").notNull().default(0),
   },
   (table) => ({
     nameIdx: index("library_components_name_idx").on(table.name),
+    isBuiltinIdx: index("library_components_is_builtin_idx").on(
+      table.isBuiltin,
+    ),
   }),
 );

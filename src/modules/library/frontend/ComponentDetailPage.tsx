@@ -1,5 +1,11 @@
-import { ArrowLeft } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { ArrowLeft, Copy, Lock } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+} from "react";
 import {
   FootprintPreviewCanvas,
   SymbolPreviewCanvas,
@@ -32,15 +38,18 @@ export function ComponentDetailPage({
   moduleId,
   componentId,
   onBack,
+  onCloned,
 }: {
   backendURL: string | null | undefined;
   moduleId: string;
   componentId: string;
   onBack: () => void;
+  onCloned?: (newComponentId: string) => void;
 }): ReactElement {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<ComponentDetailPayload | null>(null);
+  const [cloning, setCloning] = useState(false);
 
   useEffect(() => {
     if (!backendURL) {
@@ -103,7 +112,40 @@ export function ComponentDetailPage({
     [detail?.footprint.preview],
   );
   const isPlaceholderFootprint =
-    detail?.component.tags.some((tag) => tag.toLowerCase() === "placeholder-footprint") ?? false;
+    detail?.component.tags.some(
+      (tag) => tag.toLowerCase() === "placeholder-footprint",
+    ) ?? false;
+  const isBuiltin = detail?.component.isBuiltin ?? false;
+
+  const handleClone = useCallback(async () => {
+    if (!backendURL || !detail) return;
+    setCloning(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `${backendURL}/api/modules/${moduleId}/components/${componentId}/clone`,
+        { method: "POST" },
+      );
+      const payload = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        data?: { componentId?: string };
+      } | null;
+      if (!response.ok || !payload?.ok || !payload.data?.componentId) {
+        throw new Error(
+          toUserError(payload, `Clone failed (HTTP ${response.status})`),
+        );
+      }
+      onCloned?.(payload.data.componentId);
+    } catch (cloneError) {
+      setError(
+        cloneError instanceof Error
+          ? cloneError.message
+          : "Failed to duplicate component",
+      );
+    } finally {
+      setCloning(false);
+    }
+  }, [backendURL, componentId, detail, moduleId, onCloned]);
 
   return (
     <div className="flex h-full w-full flex-col bg-slate-50 dark:bg-slate-950">
@@ -121,6 +163,25 @@ export function ComponentDetailPage({
             ? "Loading component..."
             : (detail?.component.name ?? "Component")}
         </h1>
+        {detail && (
+          <div className="ml-auto flex items-center gap-2">
+            {isBuiltin && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+                <Lock className="h-3 w-3" />
+                Core
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => void handleClone()}
+              disabled={cloning || !backendURL}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 disabled:opacity-50 dark:border-violet-700 dark:bg-slate-800 dark:text-violet-300 dark:hover:bg-slate-700"
+            >
+              <Copy className="h-4 w-4" />
+              {cloning ? "Duplicating..." : "Duplicate"}
+            </button>
+          </div>
+        )}
       </header>
 
       <main className="flex-1 overflow-auto p-6">
@@ -138,6 +199,13 @@ export function ComponentDetailPage({
 
         {!loading && !error && detail && (
           <section className="space-y-4">
+            {isBuiltin && (
+              <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200">
+                <strong className="font-semibold">Built-in component.</strong>{" "}
+                Read-only. Click Duplicate to create an editable copy in your
+                library.
+              </div>
+            )}
             <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
               <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                 {detail.component.name}

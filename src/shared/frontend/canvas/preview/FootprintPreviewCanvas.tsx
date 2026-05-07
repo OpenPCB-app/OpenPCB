@@ -1,5 +1,10 @@
 import { useMemo } from "react";
-import { FootprintRenderLayer, footprintGeometryBounds, footprintVisualBounds } from "../scene";
+import { DEFAULT_PCB_ZOOM, PCB_GRID_MM } from "../defaults";
+import {
+  FootprintRenderLayer,
+  footprintGeometryBounds,
+  footprintVisualBounds,
+} from "../scene";
 import { PreviewCanvasShell } from "./PreviewCanvasShell";
 import type { FootprintPreviewCanvasProps } from "./types";
 
@@ -13,7 +18,7 @@ export function FootprintPreviewCanvas({
   showGrid = true,
   fitPaddingPx = 24,
   minSpanMm = 2,
-  initialZoom = 24,
+  initialZoom = DEFAULT_PCB_ZOOM,
 }: FootprintPreviewCanvasProps) {
   const fittedBounds = useMemo(() => {
     if (!model) {
@@ -30,7 +35,7 @@ export function FootprintPreviewCanvas({
       hasModel={model !== null}
       bounds={fittedBounds}
       emptyMessage={emptyMessage}
-      gridSize={0.5}
+      gridSize={PCB_GRID_MM}
       className={className}
       style={style}
       backgroundColor={backgroundColor}

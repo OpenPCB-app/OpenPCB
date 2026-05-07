@@ -6,7 +6,13 @@ import type {
   LibrarySymbolPlacementSnapshot,
 } from "../library";
 
-export type DesignerEntityKind = "part" | "wire" | "label";
+export type DesignerEntityKind = "part" | "wire" | "label" | "primitive";
+
+/** First-class schematic primitives for power/ground/portal — distinct from
+ *  library components. They have no footprint and never become PCB
+ *  placements. Net derivation uses them to force net names and to globally
+ *  join sub-graphs by portal text. */
+export type DesignerPrimitiveKind = "gnd" | "pwr" | "net_portal";
 
 export interface DesignerDesignSummary {
   id: string;
@@ -40,6 +46,7 @@ export interface DesignerSchematicProjection {
   parts: DesignerPlacedPart[];
   wires: DesignerWire[];
   labels: DesignerLabel[];
+  primitives: DesignerPrimitive[];
   junctions: DesignerJunction[];
   nets: DesignerDerivedNet[];
 }
@@ -178,6 +185,7 @@ export interface DesignerDerivedNet {
   pinIds: string[];
   wireIds: string[];
   labelIds: string[];
+  primitiveIds: string[];
 }
 
 export interface DesignerPin {
@@ -231,6 +239,33 @@ export interface DesignerLabel {
     y: number;
   };
 }
+
+interface DesignerPrimitiveBase {
+  id: string;
+  positionNm: { x: number; y: number };
+  rotationDeg: number;
+}
+
+export interface DesignerGndPort extends DesignerPrimitiveBase {
+  kind: "gnd";
+}
+
+export interface DesignerPwrPort extends DesignerPrimitiveBase {
+  kind: "pwr";
+  /** User-facing rail name (e.g. "VCC", "+3V3"). Drives the net's name. */
+  railText: string;
+}
+
+export interface DesignerNetPortal extends DesignerPrimitiveBase {
+  kind: "net_portal";
+  /** Cross-region join key. Portals sharing this text merge into one net. */
+  portalText: string;
+}
+
+export type DesignerPrimitive =
+  | DesignerGndPort
+  | DesignerPwrPort
+  | DesignerNetPortal;
 
 export interface DesignerPlacePartCommand {
   type: "place_part";
@@ -304,6 +339,45 @@ export interface DesignerUpsertLabelCommand {
   };
 }
 
+export interface DesignerPlaceGndPortCommand {
+  type: "place_gnd_port";
+  positionNm: { x: number; y: number };
+  rotationDeg?: 0 | 90 | 180 | 270;
+}
+
+export interface DesignerPlacePwrPortCommand {
+  type: "place_pwr_port";
+  positionNm: { x: number; y: number };
+  rotationDeg?: 0 | 90 | 180 | 270;
+  railText: string;
+}
+
+export interface DesignerPlaceNetPortalCommand {
+  type: "place_net_portal";
+  positionNm: { x: number; y: number };
+  rotationDeg?: 0 | 90 | 180 | 270;
+  portalText: string;
+}
+
+export interface DesignerMovePrimitiveCommand {
+  type: "move_primitive";
+  primitiveId: string;
+  positionNm: { x: number; y: number };
+}
+
+export interface DesignerRotatePrimitiveCommand {
+  type: "rotate_primitive";
+  primitiveId: string;
+  rotationDeg: 0 | 90 | 180 | 270;
+}
+
+export interface DesignerUpdatePrimitiveTextCommand {
+  type: "update_primitive_text";
+  primitiveId: string;
+  /** Applies to railText (pwr) or portalText (net_portal). Ignored for gnd. */
+  text: string;
+}
+
 export interface DesignerPcbSetBoardSettingsCommand {
   type: "pcb_set_board_settings";
   widthMm: number;
@@ -369,6 +443,12 @@ export type DesignerCommand =
   | DesignerMirrorPartCommand
   | DesignerDeleteEntityCommand
   | DesignerUpsertLabelCommand
+  | DesignerPlaceGndPortCommand
+  | DesignerPlacePwrPortCommand
+  | DesignerPlaceNetPortalCommand
+  | DesignerMovePrimitiveCommand
+  | DesignerRotatePrimitiveCommand
+  | DesignerUpdatePrimitiveTextCommand
   | DesignerPcbSetBoardSettingsCommand
   | DesignerPcbMovePlacementCommand
   | DesignerPcbRotatePlacementCommand
@@ -451,6 +531,16 @@ export type DesignerDispatchResult =
       ok: false;
       code: "INVALID_LABEL";
       detail: string;
+    }
+  | {
+      ok: false;
+      code: "INVALID_PRIMITIVE";
+      detail: string;
+    }
+  | {
+      ok: false;
+      code: "PRIMITIVE_NOT_FOUND";
+      primitiveId: string;
     }
   | {
       ok: false;

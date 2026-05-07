@@ -8,7 +8,12 @@ export interface SchematicTheme {
   gridColor: string;
   gridAlpha: number;
   gridMajorAlpha: number;
+  /** Default signal wire color (used for nets that aren't power or ground). */
   wireColor: string;
+  /** Wire color for power rails (VCC, VDD, +5V, +3V3, …). */
+  wirePowerColor: string;
+  /** Wire color for ground nets (GND, VSS, …). */
+  wireGndColor: string;
   wireSelectedColor: string;
   wirePreviewColor: string;
   labelColor: string;
@@ -49,12 +54,16 @@ export interface CanvasTheme {
 }
 
 // ── Light mode palette ──────────────────────────────────────────────
+// Signal-wire palette follows KiCad eeschema convention:
+// default = green-ish, power = red, ground = neutral dark/gray.
 const SCHEMATIC_LIGHT: SchematicTheme = {
   background: "#f5f5f0",
   gridColor: "#475569",
   gridAlpha: 0.55,
   gridMajorAlpha: 0.4,
-  wireColor: "#020617",
+  wireColor: "#0f766e", // teal-700 (signal default)
+  wirePowerColor: "#b91c1c", // red-700
+  wireGndColor: "#475569", // slate-600
   wireSelectedColor: "#7c3aed",
   wirePreviewColor: "#b45309",
   labelColor: "#0f172a",
@@ -65,13 +74,15 @@ const SCHEMATIC_LIGHT: SchematicTheme = {
   partOutlineColor: "#7c3aed",
 };
 
-// ── Dark mode palette (matches current hardcoded values) ────────────
+// ── Dark mode palette ──────────────────────────────────────────────
 const SCHEMATIC_DARK: SchematicTheme = {
   background: "#0b1120",
   gridColor: "#94a3b8",
   gridAlpha: 0.16,
   gridMajorAlpha: 0.12,
-  wireColor: "#67e8f9",
+  wireColor: "#67e8f9", // cyan-300 (signal default)
+  wirePowerColor: "#f87171", // red-400 — distinct from signal cyan
+  wireGndColor: "#cbd5e1", // slate-300 — slightly cooler than signal
   wireSelectedColor: "#22d3ee",
   wirePreviewColor: "#f59e0b",
   labelColor: "#a5b4fc",

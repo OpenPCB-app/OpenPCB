@@ -33,8 +33,11 @@ import {
 } from "./tools/route-tool-state";
 import { buildPreviewPath } from "./tools/route-preview-geometry";
 import { usePcbWorkspace } from "./usePcbWorkspace";
+import {
+  DEFAULT_PCB_ZOOM,
+  PCB_GRID_MM,
+} from "../../../../shared/frontend/canvas/defaults";
 
-const PCB_GRID_MM = 0.25;
 const NM_PER_MM = 1_000_000;
 
 function snapMm(value: number): number {
@@ -641,7 +644,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         <EdaCanvas
           key={props.designId}
           testId="designer-pcb-canvas"
-          initialZoom={6}
+          initialZoom={DEFAULT_PCB_ZOOM}
           backgroundColor="#020617"
           interactionHandler={handler}
         >

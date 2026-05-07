@@ -56,7 +56,9 @@ function cardChips(component: LibraryComponent): string[] {
   if (mountTag) {
     push(mountTag);
   }
-  if (component.tags.some((tag) => tag.toLowerCase() === "placeholder-footprint")) {
+  if (
+    component.tags.some((tag) => tag.toLowerCase() === "placeholder-footprint")
+  ) {
     push("No footprint yet");
   } else {
     push(compactToken(component.footprintId));
@@ -78,6 +80,7 @@ export function LibraryCard({
 }): ReactElement {
   const glyph = previewGlyph(component);
   const chips = cardChips(component);
+  const isBuiltin = component.isBuiltin;
 
   const borderClass = selected
     ? "border-violet-500 dark:border-violet-500"
@@ -87,16 +90,26 @@ export function LibraryCard({
     <div
       className={`group relative flex h-56 w-full flex-col overflow-hidden rounded-xl border bg-white text-left transition-all hover:shadow-sm dark:bg-slate-900 ${borderClass}`}
     >
-      <label className="absolute left-2 top-2 z-10 inline-flex items-center rounded-sm bg-white/90 p-0.5 dark:bg-slate-900/90">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={() => onToggleSelect?.(component.id)}
-          onClick={(event) => event.stopPropagation()}
-          aria-label={`Select ${component.name}`}
-          className="h-4 w-4 cursor-pointer rounded border-slate-300 text-violet-600 focus:ring-violet-600 dark:border-slate-600"
-        />
-      </label>
+      {!isBuiltin && (
+        <label className="absolute left-2 top-2 z-10 inline-flex items-center rounded-sm bg-white/90 p-0.5 dark:bg-slate-900/90">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect?.(component.id)}
+            onClick={(event) => event.stopPropagation()}
+            aria-label={`Select ${component.name}`}
+            className="h-4 w-4 cursor-pointer rounded border-slate-300 text-violet-600 focus:ring-violet-600 dark:border-slate-600"
+          />
+        </label>
+      )}
+      {isBuiltin && (
+        <span
+          className="absolute right-2 top-2 z-10 inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wider text-violet-700 dark:bg-violet-950/60 dark:text-violet-300"
+          title="Built-in component — read-only. Use Duplicate to edit."
+        >
+          Core
+        </span>
+      )}
       <button
         type="button"
         onClick={() => onOpen(component.id)}

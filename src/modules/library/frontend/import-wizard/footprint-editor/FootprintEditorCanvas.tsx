@@ -1,6 +1,7 @@
 import { useEffect, useMemo, type ReactElement } from "react";
 import { useThree } from "@react-three/fiber";
 import { buildFootprintRenderModel } from "../../../../../shared/rendering/footprint-preview-builder";
+import { DEFAULT_PCB_ZOOM } from "../../../../../shared/frontend/canvas/defaults";
 import { EdaCanvas } from "../../../../../shared/frontend/canvas/interaction";
 import { GridShader } from "../../../../../shared/frontend/canvas/primitives";
 import { FootprintRenderLayer } from "../../../../../shared/frontend/canvas/scene";
@@ -92,7 +93,7 @@ function EditorCanvasContent({
       interactionHandler={handler}
       className="h-full w-full"
       backgroundColor="#0f172a"
-      initialZoom={40}
+      initialZoom={DEFAULT_PCB_ZOOM}
       themeMode="dark"
     >
       <InvalidateOnChange />

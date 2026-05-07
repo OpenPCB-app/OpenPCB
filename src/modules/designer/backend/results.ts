@@ -73,11 +73,22 @@ export function parseDispatchResultJson(
     if (
       entityKind !== "part" &&
       entityKind !== "wire" &&
-      entityKind !== "label"
+      entityKind !== "label" &&
+      entityKind !== "primitive"
     ) {
       return null;
     }
     return { ok: false, code, entityId, entityKind };
+  }
+
+  if (code === "INVALID_PRIMITIVE") {
+    const detail = asString(parsed.detail);
+    return detail ? { ok: false, code, detail } : null;
+  }
+
+  if (code === "PRIMITIVE_NOT_FOUND") {
+    const primitiveId = asString(parsed.primitiveId);
+    return primitiveId ? { ok: false, code, primitiveId } : null;
   }
 
   if (code === "INVALID_WIRE_PATH") {
@@ -160,6 +171,14 @@ export function invalidWirePath(detail: string): DesignerDispatchResult {
 
 export function invalidLabel(detail: string): DesignerDispatchResult {
   return { ok: false, code: "INVALID_LABEL", detail };
+}
+
+export function invalidPrimitive(detail: string): DesignerDispatchResult {
+  return { ok: false, code: "INVALID_PRIMITIVE", detail };
+}
+
+export function primitiveNotFound(primitiveId: string): DesignerDispatchResult {
+  return { ok: false, code: "PRIMITIVE_NOT_FOUND", primitiveId };
 }
 
 export function invalidPcbBoardSettings(

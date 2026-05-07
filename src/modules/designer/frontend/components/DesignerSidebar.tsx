@@ -12,13 +12,11 @@ interface DesignerSidebarProps {
 
 const COMPONENT_DND_MIME = "application/x-openpcb-component-id";
 
-export function DesignerSidebar({ state, actions }: DesignerSidebarProps): ReactElement {
-  const {
-    query,
-    searchingComponents,
-    components,
-    draggingComponentId,
-  } = state;
+export function DesignerSidebar({
+  state,
+  actions,
+}: DesignerSidebarProps): ReactElement {
+  const { query, searchingComponents, components, draggingComponentId } = state;
 
   return (
     <aside className="flex h-full min-h-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
@@ -61,14 +59,19 @@ export function DesignerSidebar({ state, actions }: DesignerSidebarProps): React
                   draggable
                   onDragStart={(event) => {
                     event.dataTransfer.effectAllowed = "copy";
-                    event.dataTransfer.setData(COMPONENT_DND_MIME, component.id);
-                    void actions.beginDragComponent(component.id).catch((dragError) => {
-                      actions.setError(
-                        dragError instanceof Error
-                          ? dragError.message
-                          : "Failed to prepare drag placement",
-                      );
-                    });
+                    event.dataTransfer.setData(
+                      COMPONENT_DND_MIME,
+                      component.id,
+                    );
+                    void actions
+                      .beginDragComponent(component.id)
+                      .catch((dragError) => {
+                        actions.setError(
+                          dragError instanceof Error
+                            ? dragError.message
+                            : "Failed to prepare drag placement",
+                        );
+                      });
                   }}
                   onDragEnd={() => actions.clearDragState()}
                   className={`flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors ${
@@ -79,8 +82,18 @@ export function DesignerSidebar({ state, actions }: DesignerSidebarProps): React
                 >
                   <GripVertical className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                      {component.name}
+                    <span className="flex items-center gap-1.5">
+                      <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                        {component.name}
+                      </span>
+                      {component.isBuiltin ? (
+                        <span
+                          className="inline-flex shrink-0 items-center rounded-full bg-violet-100 px-1.5 text-[0.6rem] font-semibold uppercase tracking-wider text-violet-700 dark:bg-violet-950/60 dark:text-violet-300"
+                          title="Built-in component — read-only. Duplicate from the Library to edit."
+                        >
+                          Core
+                        </span>
+                      ) : null}
                     </span>
                     <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
                       {component.description || component.id}

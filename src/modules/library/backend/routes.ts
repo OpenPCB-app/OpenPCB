@@ -10,6 +10,7 @@ import {
 import {
   getDb,
   getComponentDetail,
+  cloneComponent,
   deleteComponents,
   resolveComponent,
   getSymbol,
@@ -367,6 +368,15 @@ export function registerRoutes(
       throw new NotFoundError("Component not found");
     }
     return success({ component });
+  });
+
+  router.post("/components/:componentId/clone", async (routeCtx) => {
+    const sourceId = routeCtx.params.getOrThrow("componentId");
+    const result = cloneComponent(ctx, sourceId);
+    if (!result) {
+      throw new NotFoundError("Component not found");
+    }
+    return success(result, 201);
   });
 
   router.get("/components/:componentId/detail", async (routeCtx) => {

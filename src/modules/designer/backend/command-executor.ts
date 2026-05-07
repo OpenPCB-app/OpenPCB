@@ -4,9 +4,19 @@ import type {
   DesignerCommand,
   DesignerDispatchResult,
   DesignerPin,
+  DesignerPrimitive,
   DesignerSchematicProjection,
   LibraryComponentPlacementDetail,
 } from "../../../sdks";
+import {
+  insertPrimitiveRow,
+  isPrimitivePinId,
+  loadPrimitiveById,
+  primitiveAsPin,
+  primitiveIdFromPinId,
+  primitivePinId,
+  serializePrimitivePayload,
+} from "./primitive-store";
 import { buildCreateWirePayload } from "./commands/create-wire";
 import {
   buildPlacePartPayload,
@@ -25,6 +35,7 @@ import {
   invalidPcbBoardSettings,
   invalidPcbTrace,
   invalidPcbVia,
+  invalidPrimitive,
   invalidWirePath,
   okResult,
   pcbNetClassNotFound,
@@ -32,12 +43,14 @@ import {
   pcbTraceNotFound,
   pcbViaNotFound,
   pinNotFound,
+  primitiveNotFound,
 } from "./results";
 import {
   designHeads,
   schematicLabels,
   schematicParts,
   schematicPins,
+  schematicPrimitives,
   schematicWires,
 } from "./schema";
 import {
@@ -79,6 +92,10 @@ export interface ExecuteDesignerCommandParams {
   placeComponentDetail: LibraryComponentPlacementDetail | null;
 }
 
+function isFinitePoint(point: { x: number; y: number }): boolean {
+  return Number.isFinite(point.x) && Number.isFinite(point.y);
+}
+
 function mapPinRow(row: PinRow): DesignerPin {
   return {
     id: row.id,
@@ -90,6 +107,31 @@ function mapPinRow(row: PinRow): DesignerPin {
     localPositionNm: { x: row.localXNm, y: row.localYNm },
     worldPositionNm: { x: row.worldXNm, y: row.worldYNm },
   };
+}
+
+// Resolves a pin id that may reference either a real part pin
+// (`schematicPins.id`) or a synthetic primitive pin (`primitive:<id>`).
+function resolvePinAny(
+  tx: DbClient,
+  designId: string,
+  pinId: string,
+): DesignerPin | null {
+  if (isPrimitivePinId(pinId)) {
+    const primitive = loadPrimitiveById(
+      tx,
+      designId,
+      primitiveIdFromPinId(pinId),
+    );
+    return primitive ? primitiveAsPin(primitive) : null;
+  }
+  const row = tx
+    .select()
+    .from(schematicPins)
+    .where(
+      and(eq(schematicPins.designId, designId), eq(schematicPins.id, pinId)),
+    )
+    .get();
+  return row ? mapPinRow(row) : null;
 }
 
 function bumpRevision(
@@ -379,32 +421,148 @@ export function executeDesignerCommand({
     );
   }
 
+  if (command.type === "place_gnd_port") {
+    if (!isFinitePoint(command.positionNm)) {
+      return invalidPrimitive("GND port position must be finite numbers");
+    }
+    const primitive: DesignerPrimitive = {
+      id: crypto.randomUUID(),
+      kind: "gnd",
+      positionNm: command.positionNm,
+      rotationDeg: normalizeRotationDeg(command.rotationDeg ?? 0),
+    };
+    insertPrimitiveRow(tx, designId, primitive, timestamp);
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      primitive.id,
+    );
+  }
+
+  if (command.type === "place_pwr_port") {
+    if (!isFinitePoint(command.positionNm)) {
+      return invalidPrimitive("PWR port position must be finite numbers");
+    }
+    const railText = command.railText.trim();
+    if (railText.length === 0) {
+      return invalidPrimitive("PWR port requires a rail name");
+    }
+    const primitive: DesignerPrimitive = {
+      id: crypto.randomUUID(),
+      kind: "pwr",
+      positionNm: command.positionNm,
+      rotationDeg: normalizeRotationDeg(command.rotationDeg ?? 0),
+      railText,
+    };
+    insertPrimitiveRow(tx, designId, primitive, timestamp);
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      primitive.id,
+    );
+  }
+
+  if (command.type === "place_net_portal") {
+    if (!isFinitePoint(command.positionNm)) {
+      return invalidPrimitive("Net portal position must be finite numbers");
+    }
+    const portalText = command.portalText.trim();
+    if (portalText.length === 0) {
+      return invalidPrimitive("Net portal requires a name");
+    }
+    const primitive: DesignerPrimitive = {
+      id: crypto.randomUUID(),
+      kind: "net_portal",
+      positionNm: command.positionNm,
+      rotationDeg: normalizeRotationDeg(command.rotationDeg ?? 0),
+      portalText,
+    };
+    insertPrimitiveRow(tx, designId, primitive, timestamp);
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      primitive.id,
+    );
+  }
+
+  if (command.type === "move_primitive") {
+    if (!isFinitePoint(command.positionNm)) {
+      return invalidPrimitive("Primitive position must be finite numbers");
+    }
+    const existing = loadPrimitiveById(tx, designId, command.primitiveId);
+    if (!existing) return primitiveNotFound(command.primitiveId);
+    tx.update(schematicPrimitives)
+      .set({
+        positionXNm: command.positionNm.x,
+        positionYNm: command.positionNm.y,
+        updatedAt: timestamp,
+      })
+      .where(eq(schematicPrimitives.id, command.primitiveId))
+      .run();
+    const synthPinId = primitivePinId(command.primitiveId);
+    const nextByPinId = new Map<string, { x: number; y: number }>();
+    nextByPinId.set(synthPinId, { ...command.positionNm });
+    updateConnectedWireGeometry({
+      tx,
+      designId,
+      movedPinIds: [synthPinId],
+      nextByPinId,
+      timestamp,
+    });
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      command.primitiveId,
+    );
+  }
+
+  if (command.type === "rotate_primitive") {
+    const existing = loadPrimitiveById(tx, designId, command.primitiveId);
+    if (!existing) return primitiveNotFound(command.primitiveId);
+    tx.update(schematicPrimitives)
+      .set({
+        rotationDeg: normalizeRotationDeg(command.rotationDeg),
+        updatedAt: timestamp,
+      })
+      .where(eq(schematicPrimitives.id, command.primitiveId))
+      .run();
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      command.primitiveId,
+    );
+  }
+
+  if (command.type === "update_primitive_text") {
+    const existing = loadPrimitiveById(tx, designId, command.primitiveId);
+    if (!existing) return primitiveNotFound(command.primitiveId);
+    if (existing.kind === "gnd") {
+      return invalidPrimitive("GND ports do not have editable text");
+    }
+    const text = command.text.trim();
+    if (text.length === 0) {
+      return invalidPrimitive("Primitive text must not be empty");
+    }
+    const updated: DesignerPrimitive =
+      existing.kind === "pwr"
+        ? { ...existing, railText: text }
+        : { ...existing, portalText: text };
+    tx.update(schematicPrimitives)
+      .set({
+        payloadJson: serializePrimitivePayload(updated),
+        updatedAt: timestamp,
+      })
+      .where(eq(schematicPrimitives.id, command.primitiveId))
+      .run();
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      command.primitiveId,
+    );
+  }
+
   if (command.type === "create_wire") {
-    const sourcePinRow = tx
-      .select()
-      .from(schematicPins)
-      .where(
-        and(
-          eq(schematicPins.designId, designId),
-          eq(schematicPins.id, command.sourcePinId),
-        ),
-      )
-      .get();
-    if (!sourcePinRow) return pinNotFound(command.sourcePinId);
-    const targetPinRow = tx
-      .select()
-      .from(schematicPins)
-      .where(
-        and(
-          eq(schematicPins.designId, designId),
-          eq(schematicPins.id, command.targetPinId),
-        ),
-      )
-      .get();
-    if (!targetPinRow) return pinNotFound(command.targetPinId);
+    const sourcePin = resolvePinAny(tx, designId, command.sourcePinId);
+    if (!sourcePin) return pinNotFound(command.sourcePinId);
+    const targetPin = resolvePinAny(tx, designId, command.targetPinId);
+    if (!targetPin) return pinNotFound(command.targetPinId);
     const built = buildCreateWirePayload(
-      mapPinRow(sourcePinRow),
-      mapPinRow(targetPinRow),
+      sourcePin,
+      targetPin,
       command.pointsNm,
     );
     if (!built.payload)
@@ -417,17 +575,8 @@ export function executeDesignerCommand({
   }
 
   if (command.type === "create_wire_junction") {
-    const sourcePinRow = tx
-      .select()
-      .from(schematicPins)
-      .where(
-        and(
-          eq(schematicPins.designId, designId),
-          eq(schematicPins.id, command.sourcePinId),
-        ),
-      )
-      .get();
-    if (!sourcePinRow) return pinNotFound(command.sourcePinId);
+    const sourcePin = resolvePinAny(tx, designId, command.sourcePinId);
+    if (!sourcePin) return pinNotFound(command.sourcePinId);
     const wireRow = tx
       .select()
       .from(schematicWires)
@@ -447,30 +596,11 @@ export function executeDesignerCommand({
     const junctionPoint = insertion.points[insertion.insertIndex];
     if (!junctionPoint) return invalidWirePath("junction insertion failed");
 
-    const endpointSourcePinRow = tx
-      .select()
-      .from(schematicPins)
-      .where(
-        and(
-          eq(schematicPins.designId, designId),
-          eq(schematicPins.id, wireRow.sourcePinId),
-        ),
-      )
-      .get();
-    const endpointTargetPinRow = tx
-      .select()
-      .from(schematicPins)
-      .where(
-        and(
-          eq(schematicPins.designId, designId),
-          eq(schematicPins.id, wireRow.targetPinId),
-        ),
-      )
-      .get();
-    if (!endpointSourcePinRow) return pinNotFound(wireRow.sourcePinId);
-    if (!endpointTargetPinRow) return pinNotFound(wireRow.targetPinId);
+    const endpointSourcePin = resolvePinAny(tx, designId, wireRow.sourcePinId);
+    const endpointTargetPin = resolvePinAny(tx, designId, wireRow.targetPinId);
+    if (!endpointSourcePin) return pinNotFound(wireRow.sourcePinId);
+    if (!endpointTargetPin) return pinNotFound(wireRow.targetPinId);
 
-    const sourcePin = mapPinRow(sourcePinRow);
     const pseudoJunctionPin: DesignerPin = {
       id: `junction:${wireRow.id}`,
       originPinKey: `junction:${wireRow.id}`,
@@ -501,8 +631,8 @@ export function executeDesignerCommand({
       ? pathToSourceEndpoint
       : pathToTargetEndpoint;
     const targetEndpointPin = useSourceEndpoint
-      ? mapPinRow(endpointSourcePinRow)
-      : mapPinRow(endpointTargetPinRow);
+      ? endpointSourcePin
+      : endpointTargetPin;
     const finalBuild = buildCreateWirePayload(
       sourcePin,
       targetEndpointPin,
@@ -633,6 +763,33 @@ export function executeDesignerCommand({
       if (!wire) return entityNotFound(command.entityId, "wire");
       tx.delete(schematicWires)
         .where(eq(schematicWires.id, command.entityId))
+        .run();
+    } else if (command.entityKind === "primitive") {
+      const primitive = tx
+        .select({ id: schematicPrimitives.id })
+        .from(schematicPrimitives)
+        .where(
+          and(
+            eq(schematicPrimitives.designId, designId),
+            eq(schematicPrimitives.id, command.entityId),
+          ),
+        )
+        .get();
+      if (!primitive) return entityNotFound(command.entityId, "primitive");
+      const synthPinId = primitivePinId(command.entityId);
+      tx.delete(schematicWires)
+        .where(
+          and(
+            eq(schematicWires.designId, designId),
+            or(
+              eq(schematicWires.sourcePinId, synthPinId),
+              eq(schematicWires.targetPinId, synthPinId),
+            ),
+          ),
+        )
+        .run();
+      tx.delete(schematicPrimitives)
+        .where(eq(schematicPrimitives.id, command.entityId))
         .run();
     } else {
       const label = tx

@@ -1,4 +1,10 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 export const designHeads = sqliteTable(
   "designer_design_heads",
@@ -32,7 +38,9 @@ export const schematicParts = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => ({
-    designIdIdx: index("designer_schematic_parts_design_id_idx").on(table.designId),
+    designIdIdx: index("designer_schematic_parts_design_id_idx").on(
+      table.designId,
+    ),
     designReferenceUq: uniqueIndex("designer_schematic_parts_design_ref_uq").on(
       table.designId,
       table.reference,
@@ -59,12 +67,13 @@ export const schematicPins = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => ({
-    designIdIdx: index("designer_schematic_pins_design_id_idx").on(table.designId),
-    partIdIdx: index("designer_schematic_pins_part_id_idx").on(table.partId),
-    partOriginKeyUq: uniqueIndex("designer_schematic_pins_part_origin_key_uq").on(
-      table.partId,
-      table.originPinKey,
+    designIdIdx: index("designer_schematic_pins_design_id_idx").on(
+      table.designId,
     ),
+    partIdIdx: index("designer_schematic_pins_part_id_idx").on(table.partId),
+    partOriginKeyUq: uniqueIndex(
+      "designer_schematic_pins_part_origin_key_uq",
+    ).on(table.partId, table.originPinKey),
   }),
 );
 
@@ -80,9 +89,15 @@ export const schematicWires = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => ({
-    designIdIdx: index("designer_schematic_wires_design_id_idx").on(table.designId),
-    sourcePinIdx: index("designer_schematic_wires_source_pin_idx").on(table.sourcePinId),
-    targetPinIdx: index("designer_schematic_wires_target_pin_idx").on(table.targetPinId),
+    designIdIdx: index("designer_schematic_wires_design_id_idx").on(
+      table.designId,
+    ),
+    sourcePinIdx: index("designer_schematic_wires_source_pin_idx").on(
+      table.sourcePinId,
+    ),
+    targetPinIdx: index("designer_schematic_wires_target_pin_idx").on(
+      table.targetPinId,
+    ),
   }),
 );
 
@@ -98,7 +113,33 @@ export const schematicLabels = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => ({
-    designIdIdx: index("designer_schematic_labels_design_id_idx").on(table.designId),
+    designIdIdx: index("designer_schematic_labels_design_id_idx").on(
+      table.designId,
+    ),
+  }),
+);
+
+export const schematicPrimitives = sqliteTable(
+  "designer_schematic_primitives",
+  {
+    id: text("id").primaryKey(),
+    designId: text("design_id").notNull(),
+    kind: text("kind").notNull(),
+    positionXNm: integer("position_x_nm").notNull(),
+    positionYNm: integer("position_y_nm").notNull(),
+    rotationDeg: integer("rotation_deg").notNull().default(0),
+    payloadJson: text("payload_json").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => ({
+    designIdIdx: index("designer_schematic_primitives_design_id_idx").on(
+      table.designId,
+    ),
+    designKindIdx: index("designer_schematic_primitives_design_kind_idx").on(
+      table.designId,
+      table.kind,
+    ),
   }),
 );
 
@@ -113,7 +154,9 @@ export const pcbEntities = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => ({
-    designIdIdx: index("designer_pcb_entities_design_id_idx").on(table.designId),
+    designIdIdx: index("designer_pcb_entities_design_id_idx").on(
+      table.designId,
+    ),
     designKindIdx: index("designer_pcb_entities_design_kind_idx").on(
       table.designId,
       table.kind,
@@ -150,10 +193,11 @@ export const sessionHistories = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => ({
-    designSessionUq: uniqueIndex("designer_session_histories_design_session_uq").on(
+    designSessionUq: uniqueIndex(
+      "designer_session_histories_design_session_uq",
+    ).on(table.designId, table.sessionId),
+    designIdIdx: index("designer_session_histories_design_id_idx").on(
       table.designId,
-      table.sessionId,
     ),
-    designIdIdx: index("designer_session_histories_design_id_idx").on(table.designId),
   }),
 );

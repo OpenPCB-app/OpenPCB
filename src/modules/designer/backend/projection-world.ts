@@ -16,6 +16,7 @@ import type {
   DesignerJunction,
   DesignerLabel,
   DesignerPlacedPart,
+  DesignerPrimitive,
   DesignerSchematicProjection,
   DesignerWire,
   PcbBoardSettings,
@@ -24,11 +25,13 @@ import type {
   PcbVia,
 } from "../../../sdks";
 import { normalizeRotationDeg } from "./commands/place-part";
+import { asPrimitiveFromPayload, insertPrimitiveRow } from "./primitive-store";
 import {
   designHeads,
   schematicLabels,
   schematicParts,
   schematicPins,
+  schematicPrimitives,
   schematicWires,
 } from "./schema";
 
@@ -144,6 +147,16 @@ function projectionEntityComponents(
         type: "designer.entity" as const,
         kind: "label" as const,
         payload: toPayloadRecord(label as unknown as Record<string, unknown>),
+      },
+    })),
+    ...projection.primitives.map((primitive) => ({
+      entityId: toWorldEntityId("primitive", primitive.id),
+      component: {
+        type: "designer.entity" as const,
+        kind: "primitive" as const,
+        payload: toPayloadRecord(
+          primitive as unknown as Record<string, unknown>,
+        ),
       },
     })),
   ];
@@ -340,11 +353,37 @@ export function buildCombinedHistoryPatchSet(
   return { forwardPatches, inversePatches: invertPatchBatch(applied) };
 }
 
+export interface NetDerivationWarning {
+  code: "PWR_RAIL_CONFLICT" | "LABEL_OVERRIDDEN_BY_GND";
+  netRoot: string;
+  detail: string;
+}
+
+export interface NetDerivationResult {
+  nets: DesignerDerivedNet[];
+  junctions: DesignerJunction[];
+  warnings: NetDerivationWarning[];
+}
+
+/**
+ * Builds nets + junctions from schematic geometry. Net-name priority:
+ *   GND port present                           -> "GND"
+ *   exactly one PWR rail                       -> railText
+ *   more than one PWR rail (rare conflict)     -> alphabetically first + warning
+ *   any NET_PORTAL                             -> alphabetically first portalText
+ *   any DesignerLabel text                     -> alphabetically first label text
+ *   otherwise                                  -> Net_<n>
+ *
+ * NET_PORTALs sharing the same `portalText` join across disconnected
+ * sub-graphs (cross-region net), which is what distinguishes them from local
+ * DesignerLabels.
+ */
 export function deriveNetsAndJunctions(
   parts: DesignerPlacedPart[],
   wires: DesignerWire[],
   labels: DesignerLabel[],
-): { nets: DesignerDerivedNet[]; junctions: DesignerJunction[] } {
+  primitives: DesignerPrimitive[] = [],
+): NetDerivationResult {
   const unionFind = new UnionFind();
   const incidentCount = new Map<string, number>();
   const pinKeyById = new Map<string, string>();
@@ -357,6 +396,14 @@ export function deriveNetsAndJunctions(
     }
   }
   for (const label of labels) unionFind.add(pointKey(label.positionNm));
+  for (const prim of primitives) {
+    const key = pointKey(prim.positionNm);
+    // Synthetic primitive pin id `primitive:<id>` so wires that terminate
+    // on a primitive's connection point are unioned into the same net as
+    // the primitive itself.
+    pinKeyById.set(`primitive:${prim.id}`, key);
+    unionFind.add(key);
+  }
 
   for (const wire of wires) {
     for (const point of wire.pointsNm) unionFind.add(pointKey(point));
@@ -378,13 +425,35 @@ export function deriveNetsAndJunctions(
     if (targetKey && last) unionFind.union(targetKey, pointKey(last));
   }
 
+  // Cross-region join: NET_PORTALs sharing portalText merge.
+  const portalsByText = new Map<string, string[]>();
+  for (const prim of primitives) {
+    if (prim.kind !== "net_portal") continue;
+    const text = prim.portalText.trim();
+    if (text.length === 0) continue;
+    const arr = portalsByText.get(text) ?? [];
+    arr.push(pointKey(prim.positionNm));
+    portalsByText.set(text, arr);
+  }
+  for (const keys of portalsByText.values()) {
+    for (let index = 1; index < keys.length; index += 1) {
+      const head = keys[0];
+      const next = keys[index];
+      if (head && next) unionFind.union(head, next);
+    }
+  }
+
   const netMap = new Map<
     string,
     {
       pinIds: Set<string>;
       wireIds: Set<string>;
       labelIds: Set<string>;
+      primitiveIds: Set<string>;
       names: Set<string>;
+      pwrRails: Set<string>;
+      portalTexts: Set<string>;
+      gndCount: number;
     }
   >();
   const ensureNet = (root: string) => {
@@ -394,7 +463,11 @@ export function deriveNetsAndJunctions(
       pinIds: new Set<string>(),
       wireIds: new Set<string>(),
       labelIds: new Set<string>(),
+      primitiveIds: new Set<string>(),
       names: new Set<string>(),
+      pwrRails: new Set<string>(),
+      portalTexts: new Set<string>(),
+      gndCount: 0,
     };
     netMap.set(root, created);
     return created;
@@ -415,18 +488,63 @@ export function deriveNetsAndJunctions(
     net.labelIds.add(label.id);
     if (label.text.trim()) net.names.add(label.text.trim());
   }
+  for (const prim of primitives) {
+    const net = ensureNet(unionFind.find(pointKey(prim.positionNm)));
+    net.primitiveIds.add(prim.id);
+    if (prim.kind === "gnd") {
+      net.gndCount += 1;
+    } else if (prim.kind === "pwr") {
+      const rail = prim.railText.trim();
+      if (rail.length > 0) net.pwrRails.add(rail);
+    } else if (prim.kind === "net_portal") {
+      const text = prim.portalText.trim();
+      if (text.length > 0) net.portalTexts.add(text);
+    }
+  }
 
+  const warnings: NetDerivationWarning[] = [];
   let unnamedIndex = 1;
   const nets = [...netMap.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([root, net]) => {
-      const names = [...net.names].sort((a, b) => a.localeCompare(b));
+      let name: string;
+      if (net.gndCount > 0) {
+        name = "GND";
+        // Warn if any non-GND label is on this net (likely a misnaming).
+        for (const labelName of net.names) {
+          if (labelName.toUpperCase() !== "GND") {
+            warnings.push({
+              code: "LABEL_OVERRIDDEN_BY_GND",
+              netRoot: root,
+              detail: `Label "${labelName}" overridden by GND port`,
+            });
+            break;
+          }
+        }
+      } else if (net.pwrRails.size === 1) {
+        name = [...net.pwrRails][0] ?? `Net_${unnamedIndex++}`;
+      } else if (net.pwrRails.size > 1) {
+        const sorted = [...net.pwrRails].sort((a, b) => a.localeCompare(b));
+        name = sorted[0] ?? `Net_${unnamedIndex++}`;
+        warnings.push({
+          code: "PWR_RAIL_CONFLICT",
+          netRoot: root,
+          detail: `Multiple power rails on one net: ${sorted.join(", ")}`,
+        });
+      } else if (net.portalTexts.size > 0) {
+        const sorted = [...net.portalTexts].sort((a, b) => a.localeCompare(b));
+        name = sorted[0] ?? `Net_${unnamedIndex++}`;
+      } else {
+        const sortedLabels = [...net.names].sort((a, b) => a.localeCompare(b));
+        name = sortedLabels[0] ?? `Net_${unnamedIndex++}`;
+      }
       return {
         id: root,
-        name: names[0] ?? `Net_${unnamedIndex++}`,
+        name,
         pinIds: [...net.pinIds].sort((a, b) => a.localeCompare(b)),
         wireIds: [...net.wireIds].sort((a, b) => a.localeCompare(b)),
         labelIds: [...net.labelIds].sort((a, b) => a.localeCompare(b)),
+        primitiveIds: [...net.primitiveIds].sort((a, b) => a.localeCompare(b)),
       };
     });
 
@@ -436,7 +554,7 @@ export function deriveNetsAndJunctions(
     .map((point) => ({ xNm: point.x, yNm: point.y }))
     .sort((a, b) => (a.xNm === b.xNm ? a.yNm - b.yNm : a.xNm - b.xNm));
 
-  return { nets, junctions };
+  return { nets, junctions, warnings };
 }
 
 export function projectionFromWorld(
@@ -447,6 +565,7 @@ export function projectionFromWorld(
   const parts: DesignerPlacedPart[] = [];
   const wires: DesignerWire[] = [];
   const labels: DesignerLabel[] = [];
+  const primitives: DesignerPrimitive[] = [];
 
   for (const snapshot of world.snapshots()) {
     const component = snapshot.components.get("designer.entity");
@@ -457,18 +576,24 @@ export function projectionFromWorld(
       wires.push(component.payload as unknown as DesignerWire);
     if (component.kind === "label")
       labels.push(component.payload as unknown as DesignerLabel);
+    if (component.kind === "primitive") {
+      const parsed = asPrimitiveFromPayload(component.payload);
+      if (parsed) primitives.push(parsed);
+    }
   }
 
   parts.sort((a, b) => a.id.localeCompare(b.id));
   wires.sort((a, b) => a.id.localeCompare(b.id));
   labels.sort((a, b) => a.id.localeCompare(b.id));
-  const derived = deriveNetsAndJunctions(parts, wires, labels);
+  primitives.sort((a, b) => a.id.localeCompare(b.id));
+  const derived = deriveNetsAndJunctions(parts, wires, labels, primitives);
   return {
     designId,
     revision,
     parts,
     wires,
     labels,
+    primitives,
     nets: derived.nets,
     junctions: derived.junctions,
   };
@@ -484,6 +609,9 @@ export function replaceSchematicProjection(
   tx.delete(schematicWires).where(eq(schematicWires.designId, designId)).run();
   tx.delete(schematicLabels)
     .where(eq(schematicLabels.designId, designId))
+    .run();
+  tx.delete(schematicPrimitives)
+    .where(eq(schematicPrimitives.designId, designId))
     .run();
   tx.delete(schematicParts).where(eq(schematicParts.designId, designId)).run();
 
@@ -554,6 +682,10 @@ export function replaceSchematicProjection(
         updatedAt: timestamp,
       })
       .run();
+  }
+
+  for (const primitive of projection.primitives) {
+    insertPrimitiveRow(tx, designId, primitive, timestamp);
   }
 
   tx.update(designHeads)

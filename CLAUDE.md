@@ -23,7 +23,7 @@ Run from repo root unless noted.
 
 - `npm run build` — bun sidecar compile + frontend bundle + electron build + dist
 - `npm run typecheck` — `tsc -b` over composite project (core/backend, core/frontend, modules)
-- `npm run lint` — runs `lint` (typecheck) in `src/core/frontend` workspace
+- `npm run lint` — misnomer: runs `tsc --noEmit` in `src/core/frontend` (no ESLint wired). Same effect as typecheck for the frontend workspace.
 
 **Tests**
 
@@ -37,7 +37,7 @@ Run from repo root unless noted.
 
 - `npm run module` — interactive module CLI (`scripts/module-cli.ts`)
 - `npm run module:validate` / `npm run module:codegen` / `npm run modules:generate`
-- `npm run gen` — full codegen pipeline (modules → SDK → OpenAPI → orval). `npm run gen:check` fails if generated files are dirty.
+- `npm run gen` — alias for `module:codegen` only (does **not** chain `gen:openapi` or `gen:sdk:orval`; run those separately if needed). `npm run gen:check` fails if `src/core/frontend/src/generated/` is dirty.
 - `npm run db:generate|push|studio|check` — Drizzle Kit. `db:migrate` is a no-op message; module SQL migrations are applied automatically on backend startup.
 
 ## Architecture

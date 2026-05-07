@@ -7,5 +7,9 @@ export interface ModuleSpaceProps {
   designId?: string;
 }
 
-export const SCHEMATIC_GRID_MM = 0.5;
-export const SCHEMATIC_GRID_NM = 500_000;
+// Re-exported from the shared canvas-defaults module so all canvases share
+// one source of truth. Numerically identical to the previous local constants.
+export {
+  SCHEMATIC_GRID_MM,
+  SCHEMATIC_GRID_NM,
+} from "../../../shared/frontend/canvas/defaults";

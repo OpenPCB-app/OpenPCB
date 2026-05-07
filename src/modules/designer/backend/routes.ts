@@ -13,6 +13,7 @@ import type {
   DesignerDeleteEntityCommand,
   DesignerMirrorPartCommand,
   DesignerMovePartCommand,
+  DesignerMovePrimitiveCommand,
   DesignerPcbAddTraceCommand,
   DesignerPcbAddViaCommand,
   DesignerPcbDeleteTraceCommand,
@@ -22,8 +23,13 @@ import type {
   DesignerPcbSetActiveLayerCommand,
   DesignerPcbSetBoardSettingsCommand,
   DesignerPcbUpdateTraceGeometryCommand,
+  DesignerPlaceGndPortCommand,
+  DesignerPlaceNetPortalCommand,
   DesignerPlacePartCommand,
+  DesignerPlacePwrPortCommand,
   DesignerRotatePartCommand,
+  DesignerRotatePrimitiveCommand,
+  DesignerUpdatePrimitiveTextCommand,
   DesignerUpsertLabelCommand,
   PcbCopperLayerId,
   PcbTraceSegmentMode,
@@ -176,10 +182,11 @@ function parseDeleteEntityCommand(
   if (
     entityKind !== "part" &&
     entityKind !== "wire" &&
-    entityKind !== "label"
+    entityKind !== "label" &&
+    entityKind !== "primitive"
   ) {
     throw new ValidationError(
-      "command.entityKind must be one of part/wire/label",
+      "command.entityKind must be one of part/wire/label/primitive",
     );
   }
 
@@ -188,6 +195,105 @@ function parseDeleteEntityCommand(
     entityId,
     entityKind,
   };
+}
+
+function parseOptionalRotationDeg(value: unknown): 0 | 90 | 180 | 270 {
+  if (value === undefined) return 0;
+  const rotationDeg = asNumber(value);
+  if (rotationDeg === null || ![0, 90, 180, 270].includes(rotationDeg)) {
+    throw new ValidationError(
+      "command.rotationDeg must be one of 0/90/180/270",
+    );
+  }
+  return rotationDeg as 0 | 90 | 180 | 270;
+}
+
+function parsePlaceGndPortCommand(
+  raw: Record<string, unknown>,
+): DesignerPlaceGndPortCommand {
+  return {
+    type: "place_gnd_port",
+    positionNm: parsePointNm(raw.positionNm, "command.positionNm"),
+    rotationDeg: parseOptionalRotationDeg(raw.rotationDeg),
+  };
+}
+
+function parsePlacePwrPortCommand(
+  raw: Record<string, unknown>,
+): DesignerPlacePwrPortCommand {
+  const railText = asString(raw.railText);
+  if (railText === null) {
+    throw new ValidationError("command.railText must be a string");
+  }
+  return {
+    type: "place_pwr_port",
+    positionNm: parsePointNm(raw.positionNm, "command.positionNm"),
+    rotationDeg: parseOptionalRotationDeg(raw.rotationDeg),
+    railText,
+  };
+}
+
+function parsePlaceNetPortalCommand(
+  raw: Record<string, unknown>,
+): DesignerPlaceNetPortalCommand {
+  const portalText = asString(raw.portalText);
+  if (portalText === null) {
+    throw new ValidationError("command.portalText must be a string");
+  }
+  return {
+    type: "place_net_portal",
+    positionNm: parsePointNm(raw.positionNm, "command.positionNm"),
+    rotationDeg: parseOptionalRotationDeg(raw.rotationDeg),
+    portalText,
+  };
+}
+
+function parseMovePrimitiveCommand(
+  raw: Record<string, unknown>,
+): DesignerMovePrimitiveCommand {
+  const primitiveId = asString(raw.primitiveId);
+  if (!primitiveId) {
+    throw new ValidationError("command.primitiveId must be a string");
+  }
+  return {
+    type: "move_primitive",
+    primitiveId,
+    positionNm: parsePointNm(raw.positionNm, "command.positionNm"),
+  };
+}
+
+function parseRotatePrimitiveCommand(
+  raw: Record<string, unknown>,
+): DesignerRotatePrimitiveCommand {
+  const primitiveId = asString(raw.primitiveId);
+  if (!primitiveId) {
+    throw new ValidationError("command.primitiveId must be a string");
+  }
+  const rotationDeg = asNumber(raw.rotationDeg);
+  if (rotationDeg === null || ![0, 90, 180, 270].includes(rotationDeg)) {
+    throw new ValidationError(
+      "command.rotationDeg must be one of 0/90/180/270",
+    );
+  }
+  return {
+    type: "rotate_primitive",
+    primitiveId,
+    rotationDeg: rotationDeg as 0 | 90 | 180 | 270,
+  };
+}
+
+function parseUpdatePrimitiveTextCommand(
+  raw: Record<string, unknown>,
+): DesignerUpdatePrimitiveTextCommand {
+  const primitiveId = asString(raw.primitiveId);
+  const text = asString(raw.text);
+  if (!primitiveId) {
+    throw new ValidationError("command.primitiveId must be a string");
+  }
+  if (text === null) {
+    throw new ValidationError("command.text must be a string");
+  }
+  return { type: "update_primitive_text", primitiveId, text };
 }
 
 function parseUpsertLabelCommand(
@@ -527,6 +633,24 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
       break;
     case "upsert_label":
       command = parseUpsertLabelCommand(commandRecord);
+      break;
+    case "place_gnd_port":
+      command = parsePlaceGndPortCommand(commandRecord);
+      break;
+    case "place_pwr_port":
+      command = parsePlacePwrPortCommand(commandRecord);
+      break;
+    case "place_net_portal":
+      command = parsePlaceNetPortalCommand(commandRecord);
+      break;
+    case "move_primitive":
+      command = parseMovePrimitiveCommand(commandRecord);
+      break;
+    case "rotate_primitive":
+      command = parseRotatePrimitiveCommand(commandRecord);
+      break;
+    case "update_primitive_text":
+      command = parseUpdatePrimitiveTextCommand(commandRecord);
       break;
     case "pcb_set_board_settings":
       command = parsePcbSetBoardSettingsCommand(commandRecord);

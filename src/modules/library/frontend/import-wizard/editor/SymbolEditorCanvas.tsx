@@ -1,6 +1,7 @@
 import { useEffect, useMemo, type ReactElement } from "react";
 import { useThree } from "@react-three/fiber";
 import { buildSymbolRenderModel } from "../../../../../shared/rendering/symbol-preview-builder";
+import { DEFAULT_SCHEMATIC_ZOOM } from "../../../../../shared/frontend/canvas/defaults";
 import { EdaCanvas } from "../../../../../shared/frontend/canvas/interaction";
 import { GridShader } from "../../../../../shared/frontend/canvas/primitives";
 import { SymbolRenderLayer } from "../../../../../shared/frontend/canvas/scene";
@@ -70,7 +71,7 @@ function EditorCanvasContent({
       interactionHandler={handler}
       className="h-full w-full"
       backgroundColor="#0f172a"
-      initialZoom={40}
+      initialZoom={DEFAULT_SCHEMATIC_ZOOM}
       themeMode="dark"
     >
       <InvalidateOnChange />
