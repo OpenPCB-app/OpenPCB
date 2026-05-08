@@ -1,18 +1,10 @@
 # Bun configuration
 
-[packages]
-# Use workspace root for module resolution
-external = ["tauri", "@tauri-apps/*"]
-
 [dev]
-# Use reload on watch
 reload = true
 
 [define]
-# Environment variables
 "NODE_ENV" = "\"development\""
 
 [test]
-# Test configuration
-preload = ["./src-ts/test/setup.ts"]
 timeout = 30000
