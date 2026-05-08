@@ -198,11 +198,21 @@ function SinglePrimitive({
   const y = Units.nmToMm(primitive.positionNm.y);
   const rotationRad = (primitive.rotationDeg * Math.PI) / 180;
 
+  // Per-kind primitive accent color. Wires are intentionally muted greys;
+  // primitives use saturated landmark colors so PWR/GND/Net Portal ports
+  // remain immediately recognizable.
+  const kindBaseColor =
+    primitive.kind === "gnd"
+      ? t.primitiveGndColor
+      : primitive.kind === "pwr"
+        ? t.primitivePwrColor
+        : t.primitivePortalColor;
+
   const baseColor = selected
     ? t.labelSelectedColor
     : ghost
       ? t.wirePreviewColor
-      : t.labelColor;
+      : kindBaseColor;
 
   const labelText =
     primitive.kind === "pwr"

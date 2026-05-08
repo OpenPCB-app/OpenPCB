@@ -22,6 +22,11 @@ export interface SchematicTheme {
   selectionColor: string;
   dragGhostColor: string;
   partOutlineColor: string;
+  /** Saturated accent colors used for primitive ports (GND/PWR/Net Portal)
+   * so they remain visual landmarks even when wires are muted greys. */
+  primitiveGndColor: string;
+  primitivePwrColor: string;
+  primitivePortalColor: string;
 }
 
 /** PCB canvas color tokens. Distinct from `preview` because library tiles
@@ -61,9 +66,9 @@ const SCHEMATIC_LIGHT: SchematicTheme = {
   gridColor: "#475569",
   gridAlpha: 0.55,
   gridMajorAlpha: 0.4,
-  wireColor: "#0f766e", // teal-700 (signal default)
-  wirePowerColor: "#b91c1c", // red-700
-  wireGndColor: "#475569", // slate-600
+  wireColor: "#475569", // slate-600 — neutral grey on light BG
+  wirePowerColor: "#7a5151", // grey with warm-red hint
+  wireGndColor: "#4f5b6b", // grey with cool-blue hint
   wireSelectedColor: "#7c3aed",
   wirePreviewColor: "#b45309",
   labelColor: "#0f172a",
@@ -72,37 +77,48 @@ const SCHEMATIC_LIGHT: SchematicTheme = {
   selectionColor: "#7c3aed",
   dragGhostColor: "#7c3aed",
   partOutlineColor: "#7c3aed",
+  primitiveGndColor: "#3b82f6",
+  primitivePwrColor: "#dc2626",
+  primitivePortalColor: "#7c3aed",
 };
 
 // ── Dark mode palette ──────────────────────────────────────────────
+// "Deep Space" — violet signal wires, warm-red power, steel-blue GND, and
+// orange-red component outlines. Three distinct hue families (violet/red/
+// blue/orange) keep wire classes and component bodies semantically separable
+// at any zoom level. Inspired by KiCad Eagle-Dark structure with violet
+// substituted for the conventional green signal wire.
 const SCHEMATIC_DARK: SchematicTheme = {
   background: "#0b1120",
   gridColor: "#94a3b8",
   gridAlpha: 0.16,
   gridMajorAlpha: 0.12,
-  wireColor: "#67e8f9", // cyan-300 (signal default)
-  wirePowerColor: "#f87171", // red-400 — distinct from signal cyan
-  wireGndColor: "#cbd5e1", // slate-300 — slightly cooler than signal
-  wireSelectedColor: "#22d3ee",
-  wirePreviewColor: "#f59e0b",
-  labelColor: "#a5b4fc",
-  labelSelectedColor: "#22d3ee",
-  junctionColor: "#e2e8f0",
-  selectionColor: "#22d3ee",
-  dragGhostColor: "#22d3ee",
+  wireColor: "#94a3b8", // slate-400 — darker neutral grey
+  wirePowerColor: "#a05858", // darker dimmed red
+  wireGndColor: "#5a7a99", // darker dimmed blue
+  wireSelectedColor: "#ffffff", // bright white selection pop
+  wirePreviewColor: "#f59e0b", // amber — drafting wires-in-progress
+  labelColor: "#94a3b8", // muted slate-blue (annotations recede)
+  labelSelectedColor: "#f0f4ff", // near-white
+  junctionColor: "#cbd5e1", // light slate — matches grey wire family
+  selectionColor: "#fbbf24", // amber — high contrast vs violet wires
+  dragGhostColor: "#a78bfa",
   partOutlineColor: "#22d3ee",
+  primitiveGndColor: "#3b82f6", // blue-500 — saturated GND landmark
+  primitivePwrColor: "#dc2626", // red-600 — matches power wire
+  primitivePortalColor: "#7c3aed", // violet-600 — matches app primary brand
 };
 
 /** Default preview theme for dark backgrounds (legacy compatibility) */
 const PREVIEW_DARK: PreviewTheme = {
-  symbolStroke: "#94a3b8",
-  symbolFill: "#1e293b",
-  symbolPinDot: "#38bdf8",
+  symbolStroke: "#e2e8f0", // slate-200 — soft white, less heavy on large IC bodies
+  symbolFill: "#0f172a", // slate-900 — slightly darker than canvas BG
+  symbolPinDot: "#7dd3fc", // sky-300 — softer terminals, less "Christmas-lights" effect
   symbolPinLine: "#e2e8f0",
-  symbolPinLabel: "#e2e8f0",
-  symbolPinNumber: "#94a3b8",
-  symbolRefLabel: "#e0af68",
-  symbolValueLabel: "#cbd5e1",
+  symbolPinLabel: "#94a3b8", // muted slate-blue inside body
+  symbolPinNumber: "#cbd5e1", // slate-300 — pin numbers near body
+  symbolRefLabel: "#fbbf24", // amber — refs pop on dark canvas
+  symbolValueLabel: "#94a3b8", // slate-400 — quieter than ref
   footprintPad: "#c9a227",
   footprintPadNumber: "#0f172a",
   footprintSilk: "#cbd5e1",

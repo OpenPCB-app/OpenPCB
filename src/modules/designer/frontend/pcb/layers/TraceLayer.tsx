@@ -6,7 +6,7 @@ import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import type { PcbCopperLayerId, PcbTrace } from "../../../../../sdks";
 import {
-  PCB_LAYER_COLORS,
+  PCB_TRACE_COLORS,
   RENDER_ORDER,
 } from "../../../../../shared/frontend/canvas/layers";
 
@@ -16,8 +16,8 @@ interface TraceLayerProps {
   traces: ReadonlyArray<PcbTrace>;
   /** When set, traces on other nets are dimmed. */
   highlightedNetId?: string | null;
-  /** When set, the matching trace is rendered in the selection color. */
-  selectedTraceId?: string | null;
+  /** Traces in this set are rendered in the selection color. */
+  selectedTraceIds?: ReadonlySet<string>;
   /** Layer to render. */
   layer: PcbCopperLayerId;
 }
@@ -36,12 +36,12 @@ interface TraceLayerProps {
 export function TraceLayer({
   traces,
   highlightedNetId,
-  selectedTraceId,
+  selectedTraceIds,
   layer,
 }: TraceLayerProps): ReactElement | null {
   const renderOrder =
     layer === "F.Cu" ? RENDER_ORDER.FRONT_COPPER : RENDER_ORDER.BACK_COPPER;
-  const baseColor = PCB_LAYER_COLORS[layer];
+  const baseColor = PCB_TRACE_COLORS[layer];
 
   // Group traces by width × state. For each (widthMm, state) bucket we
   // produce one Float32Array of segment vertex positions (6 floats per segment).
@@ -77,7 +77,7 @@ export function TraceLayer({
     };
 
     for (const trace of layerTraces) {
-      const isSelected = trace.id === selectedTraceId;
+      const isSelected = selectedTraceIds?.has(trace.id) ?? false;
       const isHighlighted = scopingActive && trace.netId === highlightedNetId;
       const targetMap = isSelected
         ? selected
@@ -106,7 +106,7 @@ export function TraceLayer({
       dim: toBuckets(dim),
       selected: toBuckets(selected),
     };
-  }, [traces, layer, highlightedNetId, selectedTraceId]);
+  }, [traces, layer, highlightedNetId, selectedTraceIds]);
 
   return (
     <>

@@ -43,6 +43,17 @@ export const PCB_LAYER_COLORS: Record<PcbLayerId, string> = {
   "Edge.Cuts": "#fbbf24",
 };
 
+/**
+ * Trace-only color overrides. Pads/silk continue to use PCB_LAYER_COLORS
+ * (orange for F.Cu, blue for B.Cu) so footprint pads retain their copper
+ * appearance. Traces use saturated red/blue so the routed signal flow is
+ * visually distinct from the static pad copper underneath.
+ */
+export const PCB_TRACE_COLORS: Record<"F.Cu" | "B.Cu", string> = {
+  "F.Cu": "#b91c1c", // red-700 — top copper traces (darker)
+  "B.Cu": "#1d4ed8", // blue-700 — bottom copper traces (darker)
+};
+
 export function createDefaultLayerVisibility(): Set<PcbLayerId> {
   return new Set<PcbLayerId>([
     "F.Cu",
