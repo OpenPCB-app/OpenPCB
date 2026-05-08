@@ -72,3 +72,18 @@ export interface CommitKicadResponse {
   componentName: string;
   reused: boolean;
 }
+
+export interface ArchiveImportWarning {
+  code: string;
+  message: string;
+}
+
+export interface CommitKicadZipResponse extends CommitKicadResponse {
+  warnings: ArchiveImportWarning[];
+  selected: {
+    symbolName: string;
+    footprintName: string;
+    modelFileName: string | null;
+    confidence: "high" | "medium" | "low";
+  };
+}

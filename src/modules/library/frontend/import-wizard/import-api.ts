@@ -6,6 +6,7 @@ import type { GeneratedFootprintMetadata } from "../../../../shared/rendering/ip
 import type {
   CommitKicadRequest,
   CommitKicadResponse,
+  CommitKicadZipResponse,
   InspectKicadRequest,
   InspectKicadResponse,
 } from "../../contracts/import";
@@ -66,6 +67,33 @@ export async function commitKicadImportRequest(
   if (!response.ok || !payload?.ok || !payload.data) {
     throw new Error(
       toUserError(payload, `Import failed (HTTP ${response.status})`),
+    );
+  }
+  return payload.data;
+}
+
+export async function commitKicadZipImportRequest(
+  backendURL: string,
+  moduleId: string,
+  file: File,
+  signal: AbortSignal,
+): Promise<CommitKicadZipResponse> {
+  const url = `${backendURL}/api/modules/${moduleId}/imports/kicad/zip`;
+  const body = new FormData();
+  body.set("file", file);
+  const response = await fetch(url, {
+    method: "POST",
+    body,
+    signal,
+  });
+  const payload = (await parseJson(response)) as {
+    ok?: boolean;
+    data?: CommitKicadZipResponse;
+    error?: string;
+  };
+  if (!response.ok || !payload?.ok || !payload.data) {
+    throw new Error(
+      toUserError(payload, `ZIP import failed (HTTP ${response.status})`),
     );
   }
   return payload.data;

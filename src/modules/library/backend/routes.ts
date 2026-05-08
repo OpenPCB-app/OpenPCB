@@ -3,10 +3,7 @@ import type {
   ModuleRouterHandle,
 } from "../../../core/contracts/modules/backend-module";
 import { sql } from "drizzle-orm";
-import {
-  NotFoundError,
-  ValidationError,
-} from "../../../core/backend/contracts/errors";
+import { NotFoundError, ValidationError } from "../../../core/contracts/errors";
 import {
   getDb,
   getComponentDetail,
@@ -19,6 +16,7 @@ import {
 } from "./queries";
 import { components } from "./schema";
 import { commitKicadImport } from "./import/commit-kicad";
+import { commitKicadZipImport } from "./import/commit-kicad-zip";
 import {
   commitGeneratedImport,
   type CommitGeneratedRequest,
@@ -194,6 +192,28 @@ function parseCommitRequestBody(value: unknown): CommitKicadRequest {
   };
 }
 
+async function parseZipImportBody(req: Request): Promise<{
+  fileName: string;
+  bytes: Uint8Array;
+}> {
+  let formData: FormData;
+  try {
+    formData = await req.formData();
+  } catch {
+    throw new ValidationError("Request body must be multipart/form-data");
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) {
+    throw new ValidationError("file must be a ZIP upload");
+  }
+  if (!file.name.toLowerCase().endsWith(".zip")) {
+    throw new ValidationError("file must have a .zip extension");
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return { fileName: file.name, bytes };
+}
+
 function parseCommitGeneratedBody(value: unknown): CommitGeneratedRequest {
   if (!isRecord(value)) {
     throw new ValidationError("Request body must be an object");
@@ -337,6 +357,12 @@ export function registerRoutes(
       await parseJsonBody<unknown>(routeCtx.req),
     );
     const result = commitKicadImport(ctx, body);
+    return success(result, result.reused ? 200 : 201);
+  });
+
+  router.post("/imports/kicad/zip", async (routeCtx) => {
+    const body = await parseZipImportBody(routeCtx.req);
+    const result = await commitKicadZipImport(ctx, body.fileName, body.bytes);
     return success(result, result.reused ? 200 : 201);
   });
 

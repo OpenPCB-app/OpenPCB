@@ -3,12 +3,22 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
 } from "react";
-import { Filter, Plus, Search, Trash2, X, type LucideIcon } from "lucide-react";
+import {
+  Filter,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import type { LibraryComponent } from "../../../sdks/library";
 import { ComponentDetailPage } from "./ComponentDetailPage";
+import { commitKicadZipImportRequest } from "./import-wizard/import-api";
 import { ImportWizardPage } from "./import-wizard";
 import { LibraryCard } from "./LibraryCard";
 import { toUserError } from "./utils";
@@ -17,6 +27,13 @@ interface ModuleSpaceProps {
   moduleId: string;
   namespace?: string;
   backendURL?: string | null;
+}
+
+interface LibraryNotice {
+  id: string;
+  title: string;
+  message: string;
+  variant: "success" | "warning" | "error";
 }
 
 function useDebouncedValue(value: string, delayMs: number): string {
@@ -94,6 +111,46 @@ function ActionButton({
   );
 }
 
+function NoticeViewport({
+  notice,
+  onDismiss,
+}: {
+  notice: LibraryNotice | null;
+  onDismiss: () => void;
+}): ReactElement | null {
+  if (!notice) return null;
+
+  const variantClass =
+    notice.variant === "error"
+      ? "border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+      : notice.variant === "warning"
+        ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+        : "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200";
+
+  return (
+    <div className="pointer-events-none fixed right-5 top-5 z-50">
+      <div
+        role="status"
+        aria-live="polite"
+        className={`pointer-events-auto flex max-w-md gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg backdrop-blur ${variantClass}`}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold">{notice.title}</div>
+          <div className="mt-0.5 text-xs opacity-90">{notice.message}</div>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="shrink-0 opacity-70 transition hover:opacity-100"
+          aria-label="Dismiss notification"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function FilterChip({
   label,
   active,
@@ -141,6 +198,9 @@ export function LibrarySpace({
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [zipImporting, setZipImporting] = useState(false);
+  const [notice, setNotice] = useState<LibraryNotice | null>(null);
+  const zipInputRef = useRef<HTMLInputElement | null>(null);
 
   const selectionMode = selectedIds.size > 0;
 
@@ -211,6 +271,66 @@ export function LibrarySpace({
     }
   }, [selectedIds, backendURL, moduleId]);
 
+  const handleZipUpload = useCallback(
+    async (file: File | null | undefined) => {
+      if (!file) return;
+      if (!backendURL) {
+        setError("Backend URL unavailable");
+        return;
+      }
+      setZipImporting(true);
+      setError(null);
+      const controller = new AbortController();
+      try {
+        const result = await commitKicadZipImportRequest(
+          backendURL,
+          moduleId,
+          file,
+          controller.signal,
+        );
+        setRefreshTick((value) => value + 1);
+        setDetailComponentId(result.componentId);
+        if (result.warnings.length > 0) {
+          const firstWarning = result.warnings[0];
+          setNotice({
+            id: crypto.randomUUID(),
+            title: "Imported with warnings",
+            message:
+              result.warnings.length === 1
+                ? (firstWarning?.message ?? "Review imported component metadata.")
+                : `${firstWarning?.message ?? "Review imported component metadata."} +${result.warnings.length - 1} more`,
+            variant: "warning",
+          });
+        } else {
+          setNotice({
+            id: crypto.randomUUID(),
+            title: result.reused ? "Existing component opened" : "Component imported",
+            message: result.componentName,
+            variant: "success",
+          });
+        }
+      } catch (zipError) {
+        const message =
+          zipError instanceof Error
+            ? zipError.message
+            : "Failed to import ZIP archive";
+        setError(message);
+        setNotice({
+          id: crypto.randomUUID(),
+          title: "ZIP import failed",
+          message,
+          variant: "error",
+        });
+      } finally {
+        setZipImporting(false);
+        if (zipInputRef.current) {
+          zipInputRef.current.value = "";
+        }
+      }
+    },
+    [backendURL, moduleId],
+  );
+
   const tagsKey = useMemo(() => [...activeTags].sort().join(","), [activeTags]);
   const searchUrl = useMemo(
     () =>
@@ -279,18 +399,27 @@ export function LibrarySpace({
     setSelectedIds((prev) => (prev.size === 0 ? prev : new Set()));
   }, [components]);
 
+  useEffect(() => {
+    if (!notice) return;
+    const timeout = window.setTimeout(() => setNotice(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
+
   if (detailComponentId) {
     return (
-      <ComponentDetailPage
-        backendURL={backendURL}
-        moduleId={moduleId}
-        componentId={detailComponentId}
-        onBack={() => setDetailComponentId(null)}
-        onCloned={(newId) => {
-          setRefreshTick((value) => value + 1);
-          setDetailComponentId(newId);
-        }}
-      />
+      <>
+        <ComponentDetailPage
+          backendURL={backendURL}
+          moduleId={moduleId}
+          componentId={detailComponentId}
+          onBack={() => setDetailComponentId(null)}
+          onCloned={(newId) => {
+            setRefreshTick((value) => value + 1);
+            setDetailComponentId(newId);
+          }}
+        />
+        <NoticeViewport notice={notice} onDismiss={() => setNotice(null)} />
+      </>
     );
   }
 
@@ -334,9 +463,26 @@ export function LibrarySpace({
           </label>
 
           <ActionButton
+            icon={Upload}
+            label={zipImporting ? "Importing..." : "Upload ZIP"}
+            disabled={zipImporting}
+            onClick={() => zipInputRef.current?.click()}
+          />
+          <input
+            ref={zipInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            className="hidden"
+            onChange={(event) => {
+              void handleZipUpload(event.currentTarget.files?.[0] ?? null);
+            }}
+          />
+
+          <ActionButton
             icon={Plus}
             label="New"
             primary
+            disabled={zipImporting}
             onClick={() => setWizardOpen(true)}
           />
         </div>
@@ -439,6 +585,7 @@ export function LibrarySpace({
           )}
         </section>
       </main>
+      <NoticeViewport notice={notice} onDismiss={() => setNotice(null)} />
     </div>
   );
 }
