@@ -666,6 +666,8 @@ export const SchematicCanvas = forwardRef<
   const [pwrPickerOpen, setPwrPickerOpen] = useState(false);
   const [netPortalPickerOpen, setNetPortalPickerOpen] = useState(false);
   const cameraRef = useRef<OrthographicCamera | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const lastAutoFittedDesignIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     actions.setSelectedPartId(firstSelectedId(selection.partIds));
@@ -723,6 +725,58 @@ export const SchematicCanvas = forwardRef<
     }
   }, [projection, wireSession]);
 
+  const fitCamera = useCallback(() => {
+    const camera = cameraRef.current;
+    if (!camera || !projection) return;
+
+    const bounds = computeProjectionBoundsMm(projection);
+    if (!bounds) {
+      camera.position.set(0, 0, camera.position.z);
+      camera.zoom = 35;
+      camera.updateProjectionMatrix();
+      onZoomChange?.(camera.zoom * 2);
+      return;
+    }
+
+    const canvas = camera.userData?.canvas as HTMLCanvasElement | undefined;
+    const width = canvas?.clientWidth ?? 800;
+    const height = canvas?.clientHeight ?? 600;
+
+    const contentWidth = bounds.maxX - bounds.minX;
+    const contentHeight = bounds.maxY - bounds.minY;
+    const padding = Math.max(contentWidth, contentHeight, 1) * 0.1;
+
+    const paddedWidth = contentWidth + padding * 2;
+    const paddedHeight = contentHeight + padding * 2;
+
+    const zoomX = width / paddedWidth;
+    const zoomY = height / paddedHeight;
+    const zoom = Math.min(zoomX, zoomY);
+
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+
+    camera.position.set(centerX, centerY, camera.position.z);
+    camera.zoom = Math.max(5, Math.min(zoom, 500));
+    camera.updateProjectionMatrix();
+    onZoomChange?.(camera.zoom * 2);
+  }, [projection, onZoomChange]);
+
+  // Auto-fit when the canvas first becomes ready and on every projection
+  // designId change. Runs on mount (project open, tab switch back, module
+  // re-entry) since cameraReady flips false→true each remount.
+  useEffect(() => {
+    if (!cameraReady) return;
+    if (!projection?.designId) return;
+    if (lastAutoFittedDesignIdRef.current === projection.designId) {
+      // Already auto-fitted this design within this mount; do not re-fit
+      // on unrelated projection updates (revision bumps, edits).
+      return;
+    }
+    fitCamera();
+    lastAutoFittedDesignIdRef.current = projection.designId;
+  }, [cameraReady, projection?.designId, fitCamera]);
+
   useImperativeHandle(ref, () => ({
     zoomIn() {
       const camera = cameraRef.current;
@@ -761,42 +815,7 @@ export const SchematicCanvas = forwardRef<
       }
     },
     fit() {
-      const camera = cameraRef.current;
-      if (!camera || !projection) return;
-
-      const bounds = computeProjectionBoundsMm(projection);
-      if (!bounds) {
-        camera.position.set(0, 0, camera.position.z);
-        camera.zoom = 35;
-        camera.updateProjectionMatrix();
-        onZoomChange?.(camera.zoom * 2);
-        return;
-      }
-
-      const canvas = cameraRef.current?.userData?.canvas as
-        | HTMLCanvasElement
-        | undefined;
-      const width = canvas?.clientWidth ?? 800;
-      const height = canvas?.clientHeight ?? 600;
-
-      const contentWidth = bounds.maxX - bounds.minX;
-      const contentHeight = bounds.maxY - bounds.minY;
-      const padding = Math.max(contentWidth, contentHeight) * 0.1;
-
-      const paddedWidth = contentWidth + padding * 2;
-      const paddedHeight = contentHeight + padding * 2;
-
-      const zoomX = width / paddedWidth;
-      const zoomY = height / paddedHeight;
-      const zoom = Math.min(zoomX, zoomY);
-
-      const centerX = (bounds.minX + bounds.maxX) / 2;
-      const centerY = (bounds.minY + bounds.maxY) / 2;
-
-      camera.position.set(centerX, centerY, camera.position.z);
-      camera.zoom = Math.max(5, Math.min(zoom, 500));
-      camera.updateProjectionMatrix();
-      onZoomChange?.(camera.zoom * 2);
+      fitCamera();
     },
   }));
 
@@ -1938,7 +1957,11 @@ export const SchematicCanvas = forwardRef<
         enableDragDrop
         gridSize={SCHEMATIC_GRID_NM}
       >
-        <CameraRefBridge cameraRef={cameraRef} onZoomChange={onZoomChange} />
+        <CameraRefBridge
+          cameraRef={cameraRef}
+          onZoomChange={onZoomChange}
+          onReady={() => setCameraReady(true)}
+        />
         <ZoomReporter onZoomChange={onZoomChange} />
         <InvalidateOnCanvasChange
           projection={projection}
@@ -2240,16 +2263,21 @@ function SchematicScene({
 function CameraRefBridge({
   cameraRef,
   onZoomChange,
+  onReady,
 }: {
   cameraRef: React.MutableRefObject<OrthographicCamera | null>;
   onZoomChange?: (zoomPercent: number) => void;
+  onReady?: () => void;
 }) {
   const camera = useThree((state) => state.camera) as OrthographicCamera;
+  const gl = useThree((state) => state.gl);
 
   useEffect(() => {
     cameraRef.current = camera;
+    camera.userData.canvas = gl.domElement;
     onZoomChange?.(camera.zoom * 2);
-  }, [camera, cameraRef, onZoomChange]);
+    onReady?.();
+  }, [camera, gl, cameraRef, onZoomChange, onReady]);
 
   return null;
 }

@@ -106,6 +106,70 @@ const NET_PORTAL_SEGMENTS: Array<[Vec2, Vec2]> = [
   ],
 ];
 
+// Local-space (mm) AABB per primitive kind. Padded slightly so the selection
+// outline frames the geometry instead of clipping the strokes.
+const PRIMITIVE_LOCAL_BOUNDS_MM: Record<
+  "gnd" | "pwr" | "net_portal",
+  { minX: number; minY: number; maxX: number; maxY: number }
+> = {
+  gnd: { minX: -2.032, minY: -3.556, maxX: 2.032, maxY: 0 },
+  pwr: { minX: -1.27, minY: 0, maxX: 1.27, maxY: 2.794 },
+  net_portal: { minX: -4.47, minY: -1.016, maxX: 0, maxY: 1.016 },
+};
+
+const SELECTION_OUTLINE_PAD_MM = 0.508;
+
+function PrimitiveSelectionOutline({
+  kind,
+  color,
+}: {
+  kind: "gnd" | "pwr" | "net_portal";
+  color: string;
+}): ReactElement | null {
+  const positions = useMemo(() => {
+    const b = PRIMITIVE_LOCAL_BOUNDS_MM[kind];
+    const minX = b.minX - SELECTION_OUTLINE_PAD_MM;
+    const minY = b.minY - SELECTION_OUTLINE_PAD_MM;
+    const maxX = b.maxX + SELECTION_OUTLINE_PAD_MM;
+    const maxY = b.maxY + SELECTION_OUTLINE_PAD_MM;
+    return new Float32Array([
+      minX,
+      minY,
+      0,
+      maxX,
+      minY,
+      0,
+      maxX,
+      minY,
+      0,
+      maxX,
+      maxY,
+      0,
+      maxX,
+      maxY,
+      0,
+      minX,
+      maxY,
+      0,
+      minX,
+      maxY,
+      0,
+      minX,
+      minY,
+      0,
+    ]);
+  }, [kind]);
+
+  return (
+    <lineSegments renderOrder={RENDER_ORDER.LABELS + 0.1}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+      </bufferGeometry>
+      <lineBasicMaterial color={color} depthTest={false} depthWrite={false} />
+    </lineSegments>
+  );
+}
+
 interface SinglePrimitiveProps {
   primitive: DesignerPrimitive;
   selected?: boolean;
@@ -149,6 +213,12 @@ function SinglePrimitive({
 
   return (
     <group position={[x, y, 0]} rotation={[0, 0, rotationRad]}>
+      {selected && !ghost ? (
+        <PrimitiveSelectionOutline
+          kind={primitive.kind}
+          color={t.selectionColor}
+        />
+      ) : null}
       <ThickLineBucket
         positions={positions}
         widthMm={BODY_STROKE_MM}
