@@ -1,4 +1,4 @@
-import { ValidationError } from "../contracts/errors";
+import { ValidationError } from "../../contracts/errors";
 
 export class RouteParams {
   constructor(private readonly params: Record<string, string>) {}

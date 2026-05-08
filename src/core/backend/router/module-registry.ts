@@ -1,4 +1,4 @@
-import { NotFoundError } from "../contracts/errors";
+import { NotFoundError } from "../../contracts/errors";
 import type { RequestContext } from "../http/request-context";
 import type { ModuleDispatchResult } from "./module-types";
 import { ModuleRouter } from "./module-router";
@@ -39,7 +39,10 @@ export class ModuleRouterRegistry {
       throw new NotFoundError(`Module \"${parsed.moduleId}\" not found`);
     }
 
-    const subpathUrl = new URL(`${parsed.subpath}${ctx.url.search}`, ctx.url.origin);
+    const subpathUrl = new URL(
+      `${parsed.subpath}${ctx.url.search}`,
+      ctx.url.origin,
+    );
     const moduleCtx: RequestContext = {
       ...ctx,
       url: subpathUrl,

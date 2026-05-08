@@ -1,7 +1,18 @@
 import { ZodError } from "zod";
-import { MethodNotAllowedError, NotFoundError, ValidationError } from "../contracts/errors";
-import type { RequestContext, ValidatedRequestData } from "../http/request-context";
-import type { RouteDefinition, RouteHandler, RouteSchemas } from "./route-definition";
+import {
+  MethodNotAllowedError,
+  NotFoundError,
+  ValidationError,
+} from "../../contracts/errors";
+import type {
+  RequestContext,
+  ValidatedRequestData,
+} from "../http/request-context";
+import type {
+  RouteDefinition,
+  RouteHandler,
+  RouteSchemas,
+} from "./route-definition";
 import { compilePath, matchPath, type CompiledRoute } from "./route-matcher";
 import { RouteParams } from "./route-params";
 
@@ -16,7 +27,9 @@ function routeSpecificity(route: RegisteredRoute): number {
     .reduce((score, segment) => score + (segment.startsWith(":") ? 1 : 100), 0);
 }
 
-function normalizeQuery(searchParams: URLSearchParams): Record<string, string | string[]> {
+function normalizeQuery(
+  searchParams: URLSearchParams,
+): Record<string, string | string[]> {
   const query: Record<string, string | string[]> = {};
   for (const [key, value] of searchParams.entries()) {
     const existing = query[key];
@@ -91,16 +104,22 @@ export class HttpRouter {
     const pathname = ctx.url.pathname;
     const method = ctx.req.method.toUpperCase();
 
-    const byPath = this.routes.filter((route) => matchPath(route.compiled, pathname) !== null);
+    const byPath = this.routes.filter(
+      (route) => matchPath(route.compiled, pathname) !== null,
+    );
     if (byPath.length === 0) {
       throw new NotFoundError();
     }
 
     const route = byPath
       .filter((candidate) => candidate.method === method)
-      .sort((left, right) => routeSpecificity(right) - routeSpecificity(left))[0];
+      .sort(
+        (left, right) => routeSpecificity(right) - routeSpecificity(left),
+      )[0];
     if (!route) {
-      const allowedMethods = [...new Set(byPath.map((candidate) => candidate.method))].sort();
+      const allowedMethods = [
+        ...new Set(byPath.map((candidate) => candidate.method)),
+      ].sort();
       throw new MethodNotAllowedError(allowedMethods);
     }
 

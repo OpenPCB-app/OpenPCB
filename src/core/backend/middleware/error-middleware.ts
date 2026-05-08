@@ -1,4 +1,4 @@
-import { AppError, type ProblemDetails } from "../contracts/errors";
+import { AppError, type ProblemDetails } from "../../contracts/errors";
 import type { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { problemDetailsResponse } from "../http/problem-details";
 import type { Middleware } from "../http/request-context";
@@ -24,7 +24,9 @@ function toProblem(error: unknown, path: string): ProblemDetails {
   };
 }
 
-export function createErrorMiddleware(diagnosticsStore: DiagnosticsStore): Middleware {
+export function createErrorMiddleware(
+  diagnosticsStore: DiagnosticsStore,
+): Middleware {
   return async (ctx, next) => {
     try {
       return await next();
@@ -40,9 +42,15 @@ export function createErrorMiddleware(diagnosticsStore: DiagnosticsStore): Middl
         detail: problem.detail ?? problem.title,
       });
       if (process.env.NODE_ENV !== "test") {
-        console.error(`[core-backend] ${ctx.req.method} ${ctx.url.pathname} ${problem.status}`, error);
+        console.error(
+          `[core-backend] ${ctx.req.method} ${ctx.url.pathname} ${problem.status}`,
+          error,
+        );
       }
-      return problemDetailsResponse(problem, error instanceof AppError ? error.headers : undefined);
+      return problemDetailsResponse(
+        problem,
+        error instanceof AppError ? error.headers : undefined,
+      );
     }
   };
 }
