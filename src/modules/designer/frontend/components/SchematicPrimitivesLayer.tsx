@@ -208,11 +208,10 @@ function SinglePrimitive({
         ? t.primitivePwrColor
         : t.primitivePortalColor;
 
-  const baseColor = selected
-    ? t.labelSelectedColor
-    : ghost
-      ? t.wirePreviewColor
-      : kindBaseColor;
+  // Selected primitives keep their kind color — selection is communicated
+  // by the surrounding outline rect (PrimitiveSelectionOutline), not by
+  // recoloring the symbol itself.
+  const baseColor = ghost ? t.wirePreviewColor : kindBaseColor;
 
   const labelText =
     primitive.kind === "pwr"

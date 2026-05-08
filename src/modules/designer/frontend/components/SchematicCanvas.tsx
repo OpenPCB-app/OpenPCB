@@ -457,10 +457,14 @@ function WireLayer({
   wires,
   color,
   opacity = 1,
+  widthMm = SCHEMATIC_WIRE_WIDTH_MM,
+  renderOrder = RENDER_ORDER.WIRES,
 }: {
   wires: DesignerWire[];
   color: string;
   opacity?: number;
+  widthMm?: number;
+  renderOrder?: number;
 }) {
   const size = useThree((s) => s.size);
 
@@ -496,14 +500,14 @@ function WireLayer({
   const material = useMemo(() => {
     return new LineMaterial({
       color: new THREE.Color(color).getHex(),
-      linewidth: SCHEMATIC_WIRE_WIDTH_MM,
+      linewidth: widthMm,
       worldUnits: true,
       transparent: opacity < 1,
       opacity,
       depthTest: false,
       depthWrite: false,
     });
-  }, [color, opacity]);
+  }, [color, opacity, widthMm]);
 
   useEffect(() => {
     material.resolution.set(size.width, size.height);
@@ -517,9 +521,9 @@ function WireLayer({
     if (!geometry) return null;
     const built = new LineSegments2(geometry, material);
     built.computeLineDistances();
-    built.renderOrder = RENDER_ORDER.WIRES;
+    built.renderOrder = renderOrder;
     return built;
-  }, [geometry, material]);
+  }, [geometry, material, renderOrder]);
 
   useEffect(
     () => () => {
@@ -2089,19 +2093,22 @@ function SchematicScene({
     return { highlightedWires: high, dimmedUnselectedWires: dim };
   }, [highlightedNetId, unselectedWires, wireToNet]);
 
-  // Bucket unselected wires by net class for per-color rendering.
+  // Bucket ALL wires (selected + unselected) by net class so selected wires
+  // keep their net-class color. The selection halo is rendered as a
+  // separate thicker pass behind the wires.
   const wireBucketsByClass = useMemo(() => {
     const buckets: Record<WireNetClass, DesignerWire[]> = {
       default: [],
       gnd: [],
       power: [],
     };
-    for (const wire of dimmedUnselectedWires) {
+    const allRendered = [...dimmedUnselectedWires, ...selectedWires];
+    for (const wire of allRendered) {
       const cls = wireToClass.get(wire.id) ?? "default";
       buckets[cls].push(wire);
     }
     return buckets;
-  }, [dimmedUnselectedWires, wireToClass]);
+  }, [dimmedUnselectedWires, selectedWires, wireToClass]);
 
   const wireOpacity = highlightedNetId ? 0.2 : 1;
 
@@ -2143,8 +2150,19 @@ function SchematicScene({
           {highlightedWires.length > 0 ? (
             <WireLayer wires={highlightedWires} color={t.wireSelectedColor} />
           ) : null}
+          {/* Selection halo: thicker semi-transparent line behind selected
+              wires. The wires themselves render in their net-class color
+              via wireBucketsByClass above (selected wires are bucketed
+              alongside unselected ones), so the only "selection" indicator
+              is this glow underneath. */}
           {selectedWires.length > 0 ? (
-            <WireLayer wires={selectedWires} color={t.wireSelectedColor} />
+            <WireLayer
+              wires={selectedWires}
+              color={t.selectionColor}
+              widthMm={SCHEMATIC_WIRE_WIDTH_MM * 3}
+              opacity={0.35}
+              renderOrder={RENDER_ORDER.WIRES - 0.1}
+            />
           ) : null}
           {wirePreview ? (
             <WireLayer wires={[wirePreview]} color={t.wirePreviewColor} />
