@@ -420,6 +420,11 @@ export interface DesignerPcbMovePlacementCommand {
   positionMm: PcbPointMm;
 }
 
+export interface DesignerPcbMovePlacementsCommand {
+  type: "pcb_move_placements";
+  updates: ReadonlyArray<{ placementId: string; positionMm: PcbPointMm }>;
+}
+
 export interface DesignerPcbRotatePlacementCommand {
   type: "pcb_rotate_placement";
   placementId: string;
@@ -483,6 +488,7 @@ export type DesignerCommand =
   | DesignerUpdatePrimitiveTextCommand
   | DesignerPcbSetBoardSettingsCommand
   | DesignerPcbMovePlacementCommand
+  | DesignerPcbMovePlacementsCommand
   | DesignerPcbRotatePlacementCommand
   | DesignerPcbSetActiveLayerCommand
   | DesignerPcbAddTraceCommand

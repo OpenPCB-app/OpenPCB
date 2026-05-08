@@ -8,6 +8,18 @@ import {
 import { PreviewCanvasShell } from "./PreviewCanvasShell";
 import type { FootprintPreviewCanvasProps } from "./types";
 
+/**
+ * Hide F.Fab / B.Fab so KiCad's `${REFERENCE}` placeholder text (positioned at
+ * the footprint origin / pad-1 center) doesn't overlay pads in Library preview
+ * tiles. Matches the PCB canvas's default-hide convention.
+ */
+const PREVIEW_HIDDEN_LAYERS: ReadonlySet<string> = new Set([
+  "F.Fab",
+  "B.Fab",
+  "F.Fabrication",
+  "B.Fabrication",
+]);
+
 export function FootprintPreviewCanvas({
   model,
   emptyMessage = "No footprint preview",
@@ -44,7 +56,12 @@ export function FootprintPreviewCanvas({
       minSpanMm={minSpanMm}
       initialZoom={initialZoom}
     >
-      {model ? <FootprintRenderLayer model={model} /> : null}
+      {model ? (
+        <FootprintRenderLayer
+          model={model}
+          hiddenLayers={PREVIEW_HIDDEN_LAYERS}
+        />
+      ) : null}
     </PreviewCanvasShell>
   );
 }

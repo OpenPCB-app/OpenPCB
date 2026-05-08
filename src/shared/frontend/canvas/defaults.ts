@@ -9,14 +9,12 @@
 // Snap grids — preserved at current values so existing designs don't shift.
 // ---------------------------------------------------------------------------
 
-/** Schematic-editor snap grid (mm). 0.5 mm is OpenPCB's longstanding default;
- *  KiCad's canonical grid is 1.27 mm but changing it here would break placed
- *  parts in dev-data/openpcb.sqlite. */
-export const SCHEMATIC_GRID_MM = 0.5;
+/** Schematic-editor snap grid (mm). */
+export const SCHEMATIC_GRID_MM = 2;
 
 /** Schematic snap grid in nanometers. DragDropOverlay snaps in nm; this MUST
  *  remain numerically equal to `SCHEMATIC_GRID_MM * 1_000_000`. */
-export const SCHEMATIC_GRID_NM = 500_000;
+export const SCHEMATIC_GRID_NM = 2_000_000;
 
 /** PCB snap grid (mm). */
 export const PCB_GRID_MM = 0.25;

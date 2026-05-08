@@ -310,6 +310,20 @@ export function executeDesignerCommand({
     return okResult(bumpRevision(tx, designId, revision, timestamp), null);
   }
 
+  if (command.type === "pcb_move_placements") {
+    for (const update of command.updates) {
+      const moved = movePcbPlacement({
+        db: tx,
+        designId,
+        placementId: update.placementId,
+        positionMm: update.positionMm,
+        timestamp,
+      });
+      if (!moved) return pcbPlacementNotFound(update.placementId);
+    }
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
   if (command.type === "pcb_rotate_placement") {
     const rotated = rotatePcbPlacement({
       db: tx,

@@ -10,7 +10,7 @@ import { useCanvasTheme } from "../../../../../shared/frontend/canvas/theme";
 interface ViaLayerProps {
   vias: ReadonlyArray<PcbVia>;
   highlightedNetId?: string | null;
-  selectedViaId?: string | null;
+  selectedViaIds?: ReadonlySet<string>;
 }
 
 /**
@@ -23,7 +23,7 @@ interface ViaLayerProps {
 export function ViaLayer({
   vias,
   highlightedNetId,
-  selectedViaId,
+  selectedViaIds,
 }: ViaLayerProps): ReactElement | null {
   const { theme } = useCanvasTheme();
   if (vias.length === 0) return null;
@@ -39,7 +39,7 @@ export function ViaLayer({
             highlightedNetId !== undefined &&
             via.netId !== highlightedNetId
           }
-          selected={via.id === selectedViaId}
+          selected={selectedViaIds?.has(via.id) ?? false}
         />
       ))}
     </>

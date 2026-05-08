@@ -57,6 +57,7 @@ export type {
   DesignerPcbDeleteTraceCommand,
   DesignerPcbDeleteViaCommand,
   DesignerPcbMovePlacementCommand,
+  DesignerPcbMovePlacementsCommand,
   DesignerPcbRotatePlacementCommand,
   DesignerPcbSetActiveLayerCommand,
   DesignerPcbSetBoardSettingsCommand,

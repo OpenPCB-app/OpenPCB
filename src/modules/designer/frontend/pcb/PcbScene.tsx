@@ -16,6 +16,7 @@ import {
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
 import { TraceLayer } from "./layers/TraceLayer";
 import { ViaLayer } from "./layers/ViaLayer";
+import type { PcbSelection } from "./pcb-selection";
 
 function BoardOutline({
   projection,
@@ -84,7 +85,7 @@ function BoardFill({
 
 interface RatsnestLayerProps {
   projection: DesignerPcbProjection;
-  selectedPlacementId?: string | null;
+  selectedPlacementIds?: ReadonlySet<string>;
   highlightedNetId?: string | null;
   visible: boolean;
 }
@@ -99,7 +100,7 @@ interface RatsnestGroup {
 
 function RatsnestLayer({
   projection,
-  selectedPlacementId,
+  selectedPlacementIds,
   highlightedNetId,
   visible,
 }: RatsnestLayerProps): ReactElement | null {
@@ -126,15 +127,16 @@ function RatsnestLayer({
         highlightedNetId !== null &&
         highlightedNetId !== undefined &&
         seg.netId === highlightedNetId;
+      const placementsScoped =
+        selectedPlacementIds !== undefined && selectedPlacementIds.size > 0;
       const isLocal =
-        selectedPlacementId !== null &&
-        selectedPlacementId !== undefined &&
-        (seg.fromPlacementId === selectedPlacementId ||
-          seg.toPlacementId === selectedPlacementId);
+        placementsScoped &&
+        (selectedPlacementIds.has(seg.fromPlacementId) ||
+          selectedPlacementIds.has(seg.toPlacementId));
       // When something is highlighted/scoped, "bright" wins; otherwise everything is bright.
       const scopingActive =
         (highlightedNetId !== null && highlightedNetId !== undefined) ||
-        (selectedPlacementId !== null && selectedPlacementId !== undefined);
+        placementsScoped;
       const target =
         !scopingActive || isHighlighted || isLocal ? bucket.bright : bucket.dim;
       target.push(seg.fromMm.x, seg.fromMm.y, 0, seg.toMm.x, seg.toMm.y, 0);
@@ -148,7 +150,12 @@ function RatsnestLayer({
       });
     }
     return result;
-  }, [projection.ratsnest, classColors, highlightedNetId, selectedPlacementId]);
+  }, [
+    projection.ratsnest,
+    classColors,
+    highlightedNetId,
+    selectedPlacementIds,
+  ]);
 
   if (!visible || groups.length === 0) return null;
 
@@ -244,6 +251,20 @@ function DashedLineSegments({
   );
 }
 
+/**
+ * F.Fab / F.Fabrication labels in KiCad footprints carry the `${REFERENCE}`
+ * user-text token at the footprint origin (or pad-1 center for THT) — meant
+ * for fabrication-only artwork. On the PCB layout canvas we hide them by
+ * default to match KiCad's routing view convention; the actual reference
+ * designator (e.g. "R1") is rendered via the silkscreen reference label.
+ */
+const PCB_HIDDEN_LAYERS: ReadonlySet<string> = new Set([
+  "F.Fab",
+  "B.Fab",
+  "F.Fabrication",
+  "B.Fabrication",
+]);
+
 function PlacementRender({
   placement,
   positionOverrideMm,
@@ -271,7 +292,13 @@ function PlacementRender({
       scale={[scaleX, 1, 1]}
     >
       {model ? (
-        <FootprintRenderLayer model={model} useLayerColors surface="pcb" />
+        <FootprintRenderLayer
+          model={model}
+          useLayerColors
+          surface="pcb"
+          hiddenLayers={PCB_HIDDEN_LAYERS}
+          placeholderSubstitutions={{ reference: placement.reference }}
+        />
       ) : null}
       {isEmptyModel ? (
         <PlacementPlaceholder reference={placement.reference} />
@@ -393,19 +420,16 @@ function SelectionOutlineMaterial(): ReactElement {
 
 interface PcbSceneProps {
   projection: DesignerPcbProjection;
-  selectedPlacementId?: string | null;
-  selectedTraceId?: string | null;
-  selectedViaId?: string | null;
-  dragOverride?: { id: string; positionMm: PcbPointMm } | null;
+  selection?: PcbSelection;
+  /** Per-placement live drag preview positions (group drag). */
+  dragOverride?: ReadonlyMap<string, PcbPointMm> | null;
   highlightedNetId?: string | null;
   ratsnestVisible?: boolean;
 }
 
 export function PcbScene({
   projection,
-  selectedPlacementId,
-  selectedTraceId,
-  selectedViaId,
+  selection,
   dragOverride,
   highlightedNetId,
   ratsnestVisible = true,
@@ -416,16 +440,18 @@ export function PcbScene({
     invalidate();
   }, [
     projection,
-    selectedPlacementId,
+    selection,
     dragOverride,
     highlightedNetId,
     ratsnestVisible,
     invalidate,
   ]);
 
-  const selected = selectedPlacementId
-    ? projection.placements.find((p) => p.id === selectedPlacementId)
-    : null;
+  const selectedPlacementIds = selection?.placementIds;
+  const selectedPlacements = useMemo(() => {
+    if (!selectedPlacementIds || selectedPlacementIds.size === 0) return [];
+    return projection.placements.filter((p) => selectedPlacementIds.has(p.id));
+  }, [projection.placements, selectedPlacementIds]);
 
   return (
     <>
@@ -436,46 +462,39 @@ export function PcbScene({
         <PlacementRender
           key={placement.id}
           placement={placement}
-          positionOverrideMm={
-            dragOverride?.id === placement.id
-              ? dragOverride.positionMm
-              : undefined
-          }
+          positionOverrideMm={dragOverride?.get(placement.id)}
         />
       ))}
       <TraceLayer
         traces={projection.traces}
         layer="B.Cu"
         highlightedNetId={highlightedNetId}
-        selectedTraceId={selectedTraceId}
+        selectedTraceIds={selection?.traceIds}
       />
       <TraceLayer
         traces={projection.traces}
         layer="F.Cu"
         highlightedNetId={highlightedNetId}
-        selectedTraceId={selectedTraceId}
+        selectedTraceIds={selection?.traceIds}
       />
       <ViaLayer
         vias={projection.vias}
         highlightedNetId={highlightedNetId}
-        selectedViaId={selectedViaId}
+        selectedViaIds={selection?.viaIds}
       />
       <RatsnestLayer
         projection={projection}
-        selectedPlacementId={selectedPlacementId}
+        selectedPlacementIds={selectedPlacementIds}
         highlightedNetId={highlightedNetId}
         visible={ratsnestVisible}
       />
-      {selected ? (
+      {selectedPlacements.map((placement) => (
         <SelectionOutline
-          placement={selected}
-          positionOverrideMm={
-            dragOverride?.id === selected.id
-              ? dragOverride.positionMm
-              : undefined
-          }
+          key={placement.id}
+          placement={placement}
+          positionOverrideMm={dragOverride?.get(placement.id)}
         />
-      ) : null}
+      ))}
     </>
   );
 }

@@ -38,9 +38,6 @@ export function usePcbWorkspace(params: {
   const [error, setError] = useState<string | null>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(
-    null,
-  );
   // Cross-probe highlight state lives in a designer-wide store so the schematic
   // and PCB views stay in lockstep (hover a pad on PCB → schematic dims; hover
   // a wire on schematic → PCB dims). UI state local to the PCB tab — like the
@@ -151,6 +148,23 @@ export function usePcbWorkspace(params: {
           placementId,
           positionMm,
         });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Move failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const movePlacements = useCallback(
+    async (
+      updates: ReadonlyArray<{ placementId: string; positionMm: PcbPointMm }>,
+    ) => {
+      if (updates.length === 0) return;
+      setError(null);
+      try {
+        await dispatchCommand({ type: "pcb_move_placements", updates });
         await refresh();
         await refreshHistory();
       } catch (err) {
@@ -298,8 +312,6 @@ export function usePcbWorkspace(params: {
     error,
     canUndo,
     canRedo,
-    selectedPlacementId,
-    setSelectedPlacementId,
     highlightedNetId,
     pinnedHighlight,
     hoverNet,
@@ -313,6 +325,7 @@ export function usePcbWorkspace(params: {
     undo,
     redo,
     movePlacement,
+    movePlacements,
     rotatePlacement,
     addTrace,
     addVia,

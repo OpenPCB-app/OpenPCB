@@ -39,11 +39,12 @@ async function createRuntimeAndServer() {
 async function importFixtureComponent(
   server: ReturnType<typeof createHttpServer>,
 ): Promise<string> {
-  const symbolPath = path.resolve(import.meta.dir, "../../../../data/C.kicad_sym");
-  const footprintPath = path.resolve(
+  const fixtureDir = path.resolve(
     import.meta.dir,
-    "../../../../data/C_1210_3225Metric.kicad_mod",
+    "../../../modules/library/backend/infrastructure/parsers/kicad/__fixtures__",
   );
+  const symbolPath = path.resolve(fixtureDir, "simple_capacitor.kicad_sym");
+  const footprintPath = path.resolve(fixtureDir, "C_0603_1608Metric.kicad_mod");
   const symbolContent = await Bun.file(symbolPath).text();
   const footprintContent = await Bun.file(footprintPath).text();
 
@@ -58,7 +59,7 @@ async function importFixtureComponent(
         },
         footprints: [
           {
-            fileName: "C_1210_3225Metric.kicad_mod",
+            fileName: "C_0603_1608Metric.kicad_mod",
             content: footprintContent,
           },
         ],
@@ -90,7 +91,7 @@ async function importFixtureComponent(
         },
         footprints: [
           {
-            fileName: "C_1210_3225Metric.kicad_mod",
+            fileName: "C_0603_1608Metric.kicad_mod",
             content: footprintContent,
           },
         ],
@@ -240,7 +241,9 @@ describe("designer commands hardening", () => {
     const designerSdk = moduleRuntime
       .getSdkRegistry()
       .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
-    const design = await designerSdk.createDesign({ name: "Idempotency mismatch" });
+    const design = await designerSdk.createDesign({
+      name: "Idempotency mismatch",
+    });
 
     const commandId = "cmd-reused-with-different-payload";
     const first = await designerSdk.dispatchCommand(design.id, {
@@ -306,7 +309,10 @@ describe("designer commands hardening", () => {
     });
     expect(createLabel.ok).toBe(true);
 
-    const afterCommandHistory = await designerSdk.getHistory(design.id, "history");
+    const afterCommandHistory = await designerSdk.getHistory(
+      design.id,
+      "history",
+    );
     expect(afterCommandHistory.canUndo).toBe(true);
     expect(afterCommandHistory.canRedo).toBe(false);
 
@@ -354,11 +360,14 @@ describe("designer commands hardening", () => {
     };
 
     const commandResponse = await server.fetch(
-      new Request(`http://localhost/api/modules/designer/designs/${design.id}/commands`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(envelope),
-      }),
+      new Request(
+        `http://localhost/api/modules/designer/designs/${design.id}/commands`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(envelope),
+        },
+      ),
     );
     expect(commandResponse.status).toBe(200);
 
@@ -375,22 +384,28 @@ describe("designer commands hardening", () => {
     expect(historyBody.data?.history?.canRedo).toBe(false);
 
     const undoResponse = await server.fetch(
-      new Request(`http://localhost/api/modules/designer/designs/${design.id}/history/undo`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sessionId: "http-history" }),
-      }),
+      new Request(
+        `http://localhost/api/modules/designer/designs/${design.id}/history/undo`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId: "http-history" }),
+        },
+      ),
     );
     expect(undoResponse.status).toBe(200);
     const afterUndo = await designerSdk.getSchematicProjection(design.id);
     expect(afterUndo?.labels.length).toBe(0);
 
     const redoResponse = await server.fetch(
-      new Request(`http://localhost/api/modules/designer/designs/${design.id}/history/redo`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sessionId: "http-history" }),
-      }),
+      new Request(
+        `http://localhost/api/modules/designer/designs/${design.id}/history/redo`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId: "http-history" }),
+        },
+      ),
     );
     expect(redoResponse.status).toBe(200);
     const afterRedo = await designerSdk.getSchematicProjection(design.id);
@@ -404,7 +419,9 @@ describe("designer commands hardening", () => {
     const designerSdk = firstRuntime.moduleRuntime
       .getSdkRegistry()
       .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
-    const design = await designerSdk.createDesign({ name: "Persisted history" });
+    const design = await designerSdk.createDesign({
+      name: "Persisted history",
+    });
 
     const command = await designerSdk.dispatchCommand(design.id, {
       commandId: crypto.randomUUID(),
@@ -424,7 +441,10 @@ describe("designer commands hardening", () => {
     const rehydratedSdk = secondRuntime.moduleRuntime
       .getSdkRegistry()
       .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
-    const history = await rehydratedSdk.getHistory(design.id, "persisted-history");
+    const history = await rehydratedSdk.getHistory(
+      design.id,
+      "persisted-history",
+    );
     expect(history.canUndo).toBe(true);
     expect(history.undoDepth).toBe(1);
 
@@ -526,7 +546,9 @@ describe("designer commands hardening", () => {
       throw new Error("place_part must return createdEntityId");
     }
 
-    const projectionAfterPlace = await designerSdk.getSchematicProjection(design.id);
+    const projectionAfterPlace = await designerSdk.getSchematicProjection(
+      design.id,
+    );
     const partAfterPlace = projectionAfterPlace?.parts.find(
       (part) => part.id === place.createdEntityId,
     );
@@ -579,7 +601,9 @@ describe("designer commands hardening", () => {
     });
     expect(mirror.ok).toBe(true);
 
-    const projectionAfterTransform = await designerSdk.getSchematicProjection(design.id);
+    const projectionAfterTransform = await designerSdk.getSchematicProjection(
+      design.id,
+    );
     const partAfterTransform = projectionAfterTransform?.parts.find(
       (part) => part.id === partAfterPlace.id,
     );
@@ -588,10 +612,16 @@ describe("designer commands hardening", () => {
     expect(partAfterTransform?.positionNm.x).toBe(10_000_000);
     expect(partAfterTransform?.positionNm.y).toBe(20_000_000);
 
-    const transformedPin = partAfterTransform?.pins.find((pin) => pin.id === firstPin.id);
+    const transformedPin = partAfterTransform?.pins.find(
+      (pin) => pin.id === firstPin.id,
+    );
     expect(transformedPin).toBeDefined();
-    expect(transformedPin?.worldPositionNm.x).not.toBe(firstPin.worldPositionNm.x);
-    expect(transformedPin?.worldPositionNm.y).not.toBe(firstPin.worldPositionNm.y);
+    expect(transformedPin?.worldPositionNm.x).not.toBe(
+      firstPin.worldPositionNm.x,
+    );
+    expect(transformedPin?.worldPositionNm.y).not.toBe(
+      firstPin.worldPositionNm.y,
+    );
   });
 
   test("creates, updates and deletes labels", async () => {
@@ -635,7 +665,9 @@ describe("designer commands hardening", () => {
     expect(updateLabel.ok).toBe(true);
 
     const projection = await designerSdk.getSchematicProjection(design.id);
-    const label = projection?.labels.find((entry) => entry.id === createLabel.createdEntityId);
+    const label = projection?.labels.find(
+      (entry) => entry.id === createLabel.createdEntityId,
+    );
     expect(label?.text).toBe("NET_B");
     expect(label?.positionNm.x).toBe(3_000_000);
     expect(label?.positionNm.y).toBe(4_000_000);
@@ -815,9 +847,17 @@ describe("designer commands hardening", () => {
     expect(afterJunction?.wires.length).toBe(2);
     expect(afterJunction?.junctions).toContainEqual({ xNm: 4_000_000, yNm: 0 });
     expect(afterJunction?.nets.length).toBeGreaterThan(0);
-    expect(afterJunction?.nets.some((net) => net.wireIds.length === 2)).toBe(true);
-    const anchorWire = afterJunction?.wires.find((wire) => wire.id === createWire.createdEntityId);
-    expect(anchorWire?.pointsNm.some((point) => point.x === 4_000_000 && point.y === 0)).toBe(true);
+    expect(afterJunction?.nets.some((net) => net.wireIds.length === 2)).toBe(
+      true,
+    );
+    const anchorWire = afterJunction?.wires.find(
+      (wire) => wire.id === createWire.createdEntityId,
+    );
+    expect(
+      anchorWire?.pointsNm.some(
+        (point) => point.x === 4_000_000 && point.y === 0,
+      ),
+    ).toBe(true);
   });
 
   test("moves connected wire endpoints when moving part", async () => {
@@ -895,7 +935,9 @@ describe("designer commands hardening", () => {
     expect(move.ok).toBe(true);
 
     const afterMove = await designerSdk.getSchematicProjection(design.id);
-    const movedPart = afterMove?.parts.find((part) => part.id === placeA.createdEntityId);
+    const movedPart = afterMove?.parts.find(
+      (part) => part.id === placeA.createdEntityId,
+    );
     const movedSource = movedPart?.pins.find((pin) => pin.id === source.id);
     const movedWire = afterMove?.wires[0];
 
@@ -913,7 +955,9 @@ describe("designer commands hardening", () => {
       .getSdkRegistry()
       .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
 
-    const design = await designerSdk.createDesign({ name: "Invalid wire path" });
+    const design = await designerSdk.createDesign({
+      name: "Invalid wire path",
+    });
     const placeA = await designerSdk.dispatchCommand(design.id, {
       commandId: crypto.randomUUID(),
       sessionId: "invalid-wire",
@@ -960,7 +1004,10 @@ describe("designer commands hardening", () => {
         targetPinId: pinB.id,
         pointsNm: [
           pinA.worldPositionNm,
-          { x: pinA.worldPositionNm.x + 100_000, y: pinA.worldPositionNm.y + 100_000 },
+          {
+            x: pinA.worldPositionNm.x + 100_000,
+            y: pinA.worldPositionNm.y + 100_000,
+          },
           pinB.worldPositionNm,
         ],
       },

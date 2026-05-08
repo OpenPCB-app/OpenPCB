@@ -20,6 +20,24 @@ import type {
   InteractionHandler,
 } from "../../../../shared/frontend/canvas/interaction/types";
 import { hitPad, hitPlacement, hitTrace, hitVia } from "./pcb-hit";
+import {
+  placementContainedInRect,
+  placementIntersectsRect,
+  traceContainedInRect,
+  traceIntersectsRect,
+} from "./pcb-rect-hit";
+import {
+  clonePcbSelection,
+  emptyPcbSelection,
+  toggleTrace,
+  toggleVia,
+  togglePlacement,
+  type PcbSelection,
+} from "./pcb-selection";
+import {
+  SelectionRectOverlay,
+  useMarqueeSelection,
+} from "../../../../shared/frontend/canvas/selection";
 import { PcbScene } from "./PcbScene";
 import { PcbToolbar } from "./PcbToolbar";
 import { TracePreviewLayer } from "./layers/TracePreviewLayer";
@@ -56,9 +74,12 @@ function pointMmToNm(p: PcbPointMm): PointNm {
 type ToolMode = "select" | "route";
 
 interface DragSession {
-  placementId: string;
+  primaryPlacementId: string;
   pointerOffsetMm: PcbPointMm;
-  currentMm: PcbPointMm;
+  initialPrimaryMm: PcbPointMm;
+  currentPrimaryMm: PcbPointMm;
+  /** Initial position for every placement in the drag set (single-element for non-group). */
+  initialPositionsByPlacementId: Map<string, PcbPointMm>;
   moved: boolean;
 }
 
@@ -114,8 +135,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     x: number;
     y: number;
   } | null>(null);
-  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
-  const [selectedViaId, setSelectedViaId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<PcbSelection>(emptyPcbSelection);
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
   const placementsRef = useRef(workspace.projection?.placements ?? []);
   placementsRef.current = workspace.projection?.placements ?? [];
   const tracesRef = useRef(workspace.projection?.traces ?? []);
@@ -131,6 +153,31 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     setWidthText(String(board.widthMm));
     setHeightText(String(board.heightMm));
   }, [workspace.projection?.board.outline]);
+
+  // Prune stale ids when projection changes (e.g. undo deleted a trace that
+  // was part of the current selection).
+  useEffect(() => {
+    const projection = workspace.projection;
+    if (!projection) return;
+    const placementIds = new Set(projection.placements.map((p) => p.id));
+    const traceIds = new Set(projection.traces.map((t) => t.id));
+    const viaIds = new Set(projection.vias.map((v) => v.id));
+    setSelection((prev) => {
+      const np = new Set(
+        [...prev.placementIds].filter((id) => placementIds.has(id)),
+      );
+      const nt = new Set([...prev.traceIds].filter((id) => traceIds.has(id)));
+      const nv = new Set([...prev.viaIds].filter((id) => viaIds.has(id)));
+      if (
+        np.size === prev.placementIds.size &&
+        nt.size === prev.traceIds.size &&
+        nv.size === prev.viaIds.size
+      ) {
+        return prev;
+      }
+      return { placementIds: np, traceIds: nt, viaIds: nv };
+    });
+  }, [workspace.projection]);
 
   const eventToMm = useCallback((event: InteractionEvent): PcbPointMm => {
     return {
@@ -157,6 +204,36 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     const a = workspace.projection?.board.activeLayer;
     return a === "B.Cu" ? "B.Cu" : "F.Cu";
   }, [workspace.projection?.board.activeLayer]);
+
+  // Marquee/rubber-band selection. Uses the shared canvas hook so PCB and
+  // schematic behave identically (KiCad direction-based window/crossing modes,
+  // Shift = additive, Escape = cancel + restore prior selection).
+  const marquee = useMarqueeSelection<PcbSelection>({
+    enabled: toolMode === "select",
+    cloneSelection: clonePcbSelection,
+    emptySelection: emptyPcbSelection,
+    getSelection: () => selectionRef.current,
+    setSelection,
+    applyMarqueeHits: ({ rect, mode, baseSelection }) => {
+      const placementHit =
+        mode === "window" ? placementContainedInRect : placementIntersectsRect;
+      const traceHit =
+        mode === "window" ? traceContainedInRect : traceIntersectsRect;
+      const placementIds = new Set(baseSelection.placementIds);
+      const traceIds = new Set(baseSelection.traceIds);
+      const viaIds = new Set(baseSelection.viaIds);
+      for (const p of placementsRef.current) {
+        if (placementHit(p, rect)) placementIds.add(p.id);
+      }
+      const layer: PcbCopperLayerId =
+        workspace.projection?.board.activeLayer === "B.Cu" ? "B.Cu" : "F.Cu";
+      for (const t of tracesRef.current) {
+        if (t.layer !== layer) continue;
+        if (traceHit(t, rect)) traceIds.add(t.id);
+      }
+      return { placementIds, traceIds, viaIds };
+    },
+  });
 
   // Default net class supplies width/clearance/via dims when starting a trace
   // on empty space (no pad → null netId).
@@ -313,46 +390,88 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
 
         // Select mode: click trace/via first, then placement.
+        const shift = event.modifiers.shift;
+        const current = selectionRef.current;
         const traceHit = hitTrace(tracesRef.current, cursor, activeCopperLayer);
         if (traceHit) {
-          workspace.setSelectedPlacementId(null);
           setDragSession(null);
-          setSelectedTraceId(traceHit.trace.id);
-          setSelectedViaId(null);
+          setSelection(
+            shift
+              ? toggleTrace(current, traceHit.trace.id)
+              : {
+                  placementIds: new Set(),
+                  traceIds: new Set([traceHit.trace.id]),
+                  viaIds: new Set(),
+                },
+          );
           return;
         }
         const viaHit = hitVia(viasRef.current, cursor);
         if (viaHit) {
-          workspace.setSelectedPlacementId(null);
           setDragSession(null);
-          setSelectedTraceId(null);
-          setSelectedViaId(viaHit.id);
+          setSelection(
+            shift
+              ? toggleVia(current, viaHit.id)
+              : {
+                  placementIds: new Set(),
+                  traceIds: new Set(),
+                  viaIds: new Set([viaHit.id]),
+                },
+          );
           return;
         }
-        // Click on empty space / placement clears trace+via selection.
-        setSelectedTraceId(null);
-        setSelectedViaId(null);
         const hit = hitPlacement(placementsRef.current, cursor);
         if (hit) {
-          workspace.setSelectedPlacementId(hit.id);
+          if (shift) {
+            // Shift-click toggles placement membership; no drag.
+            setDragSession(null);
+            setSelection(togglePlacement(current, hit.id));
+            return;
+          }
+          // Decide drag set: if hit is already part of a multi-selection,
+          // drag the whole group; otherwise replace selection with hit.
+          const inGroup =
+            current.placementIds.has(hit.id) && current.placementIds.size > 1;
+          const groupIds = inGroup
+            ? new Set(current.placementIds)
+            : new Set([hit.id]);
+          if (!inGroup) {
+            setSelection({
+              placementIds: groupIds,
+              traceIds: new Set(),
+              viaIds: new Set(),
+            });
+          }
+          const initial = new Map<string, PcbPointMm>();
+          for (const p of placementsRef.current) {
+            if (groupIds.has(p.id)) initial.set(p.id, { ...p.positionMm });
+          }
           setDragSession({
-            placementId: hit.id,
+            primaryPlacementId: hit.id,
             pointerOffsetMm: {
               x: cursor.x - hit.positionMm.x,
               y: cursor.y - hit.positionMm.y,
             },
-            currentMm: { ...hit.positionMm },
+            initialPrimaryMm: { ...hit.positionMm },
+            currentPrimaryMm: { ...hit.positionMm },
+            initialPositionsByPlacementId: initial,
             moved: false,
           });
-        } else {
-          workspace.setSelectedPlacementId(null);
-          setDragSession(null);
+          return;
         }
+        // Empty space → start marquee (no drag).
+        setDragSession(null);
+        marquee.beginMarquee(cursor, shift);
       },
       onPointerMove(event) {
         const cursor = eventToMm(event);
         setCursorMm(cursor);
         setCursorClientPx({ x: event.screenPoint.x, y: event.screenPoint.y });
+        // Marquee in flight: update rect, suppress hover-net & drag updates.
+        if (marquee.marqueeSession) {
+          marquee.updateMarqueeCursor(cursor);
+          return;
+        }
         // Hover-highlight: resolve cursor → pad → net (only when not dragging).
         if (!dragSession) {
           const pad = hitPad(placementsRef.current, cursor);
@@ -367,17 +486,43 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             x: snapMm(cursor.x - prev.pointerOffsetMm.x),
             y: snapMm(cursor.y - prev.pointerOffsetMm.y),
           };
-          if (next.x === prev.currentMm.x && next.y === prev.currentMm.y) {
+          if (
+            next.x === prev.currentPrimaryMm.x &&
+            next.y === prev.currentPrimaryMm.y
+          ) {
             return prev;
           }
-          return { ...prev, currentMm: next, moved: true };
+          return { ...prev, currentPrimaryMm: next, moved: true };
         });
       },
       onPointerUp() {
+        if (marquee.marqueeSession) {
+          marquee.finishMarquee();
+          return;
+        }
         const session = dragSession;
         if (!session) return;
         if (session.moved) {
-          void workspace.movePlacement(session.placementId, session.currentMm);
+          const dx = session.currentPrimaryMm.x - session.initialPrimaryMm.x;
+          const dy = session.currentPrimaryMm.y - session.initialPrimaryMm.y;
+          const updates: Array<{
+            placementId: string;
+            positionMm: PcbPointMm;
+          }> = [];
+          for (const [id, initial] of session.initialPositionsByPlacementId) {
+            updates.push({
+              placementId: id,
+              positionMm: { x: initial.x + dx, y: initial.y + dy },
+            });
+          }
+          if (updates.length === 1) {
+            void workspace.movePlacement(
+              updates[0]!.placementId,
+              updates[0]!.positionMm,
+            );
+          } else if (updates.length > 1) {
+            void workspace.movePlacements(updates);
+          }
         }
         setDragSession(null);
       },
@@ -392,6 +537,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     defaultNetClass,
     dragSession,
     eventToMm,
+    marquee,
     padToNet,
     resolveAnchor,
     routeState,
@@ -405,16 +551,16 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
 
       // Tool toggle: R activates Route mode (also rotates a selected
       // placement when in Select mode without an active route session).
+      // Group rotate is unsupported in v1 — R only rotates when exactly
+      // one placement is selected.
       if (event.key === "r" || event.key === "R") {
-        if (
-          toolMode === "select" &&
-          workspace.selectedPlacementId &&
-          !event.shiftKey
-        ) {
+        const sole =
+          selection.placementIds.size === 1
+            ? [...selection.placementIds][0]
+            : null;
+        if (toolMode === "select" && sole && !event.shiftKey) {
           event.preventDefault();
-          const placement = placementsRef.current.find(
-            (p) => p.id === workspace.selectedPlacementId,
-          );
+          const placement = placementsRef.current.find((p) => p.id === sole);
           if (placement) {
             const next = (((placement.rotationDeg + 90) % 360) + 360) % 360;
             void workspace.rotatePlacement(
@@ -535,10 +681,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         return;
       }
       if (event.key === "Escape") {
-        workspace.setSelectedPlacementId(null);
+        if (marquee.marqueeSession) {
+          marquee.cancelMarquee();
+          return;
+        }
+        setSelection(emptyPcbSelection());
         setDragSession(null);
-        setSelectedTraceId(null);
-        setSelectedViaId(null);
         workspace.clearHighlight();
         if (toolMode === "route") {
           setToolMode("select");
@@ -546,22 +694,23 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         return;
       }
-      // Delete selected trace / via.
+      // Delete all selected traces + vias.
       if (event.key === "Delete" || event.key === "Backspace") {
-        if (selectedTraceId) {
-          event.preventDefault();
-          void workspace.deleteTrace(selectedTraceId).then(() => {
-            setSelectedTraceId(null);
-          });
-          return;
-        }
-        if (selectedViaId) {
-          event.preventDefault();
-          void workspace.deleteVia(selectedViaId).then(() => {
-            setSelectedViaId(null);
-          });
-          return;
-        }
+        const traceIds = [...selection.traceIds];
+        const viaIds = [...selection.viaIds];
+        if (traceIds.length === 0 && viaIds.length === 0) return;
+        event.preventDefault();
+        const tasks: Array<Promise<unknown>> = [];
+        for (const id of traceIds) tasks.push(workspace.deleteTrace(id));
+        for (const id of viaIds) tasks.push(workspace.deleteVia(id));
+        void Promise.allSettled(tasks).then(() => {
+          setSelection((prev) => ({
+            placementIds: prev.placementIds,
+            traceIds: new Set(),
+            viaIds: new Set(),
+          }));
+        });
+        return;
       }
     };
     window.addEventListener("keydown", onKey);
@@ -569,9 +718,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   }, [
     cursorMm,
     cycleWidth,
+    marquee,
     routeState,
-    selectedTraceId,
-    selectedViaId,
+    selection,
     setSessionWidth,
     toolMode,
     workspace,
@@ -593,10 +742,16 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     );
   }
 
-  const dragOverride =
-    dragSession && dragSession.moved
-      ? { id: dragSession.placementId, positionMm: dragSession.currentMm }
-      : null;
+  const dragOverride = useMemo<ReadonlyMap<string, PcbPointMm> | null>(() => {
+    if (!dragSession || !dragSession.moved) return null;
+    const dx = dragSession.currentPrimaryMm.x - dragSession.initialPrimaryMm.x;
+    const dy = dragSession.currentPrimaryMm.y - dragSession.initialPrimaryMm.y;
+    const map = new Map<string, PcbPointMm>();
+    for (const [id, initial] of dragSession.initialPositionsByPlacementId) {
+      map.set(id, { x: initial.x + dx, y: initial.y + dy });
+    }
+    return map;
+  }, [dragSession]);
 
   // Live route preview: build path through committed anchors + cursor.
   const routePreview = useMemo(() => {
@@ -660,12 +815,15 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         >
           <PcbScene
             projection={workspace.projection}
-            selectedPlacementId={workspace.selectedPlacementId}
-            selectedTraceId={selectedTraceId}
-            selectedViaId={selectedViaId}
+            selection={selection}
             dragOverride={dragOverride}
             highlightedNetId={workspace.highlightedNetId}
             ratsnestVisible={workspace.ratsnestVisible}
+          />
+          <SelectionRectOverlay
+            a={marquee.overlayProps.a}
+            b={marquee.overlayProps.b}
+            color={marquee.overlayProps.color}
           />
           {routePreview ? (
             <TracePreviewLayer

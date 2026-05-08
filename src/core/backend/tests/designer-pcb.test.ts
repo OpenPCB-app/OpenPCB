@@ -195,14 +195,12 @@ describe("designer PCB phase 1", () => {
 async function importFixtureComponent(
   server: ReturnType<typeof createHttpServer>,
 ): Promise<string> {
-  const symbolPath = path.resolve(
+  const fixtureDir = path.resolve(
     import.meta.dir,
-    "../../../../data/C.kicad_sym",
+    "../../../modules/library/backend/infrastructure/parsers/kicad/__fixtures__",
   );
-  const footprintPath = path.resolve(
-    import.meta.dir,
-    "../../../../data/C_1210_3225Metric.kicad_mod",
-  );
+  const symbolPath = path.resolve(fixtureDir, "simple_capacitor.kicad_sym");
+  const footprintPath = path.resolve(fixtureDir, "C_0603_1608Metric.kicad_mod");
   const symbolContent = await Bun.file(symbolPath).text();
   const footprintContent = await Bun.file(footprintPath).text();
 
@@ -214,7 +212,7 @@ async function importFixtureComponent(
         symbolLibrary: { fileName: "C.kicad_sym", content: symbolContent },
         footprints: [
           {
-            fileName: "C_1210_3225Metric.kicad_mod",
+            fileName: "C_0603_1608Metric.kicad_mod",
             content: footprintContent,
           },
         ],
@@ -239,7 +237,7 @@ async function importFixtureComponent(
         symbolLibrary: { fileName: "C.kicad_sym", content: symbolContent },
         footprints: [
           {
-            fileName: "C_1210_3225Metric.kicad_mod",
+            fileName: "C_0603_1608Metric.kicad_mod",
             content: footprintContent,
           },
         ],

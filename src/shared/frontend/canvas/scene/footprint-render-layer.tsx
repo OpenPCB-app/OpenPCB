@@ -9,10 +9,43 @@ export interface FootprintRenderLayerProps {
   model: FootprintRenderModel;
   /** Layers to render at reduced opacity (~30%). Used by footprint editor for inactive-layer dimming. */
   dimmedLayers?: ReadonlySet<string>;
+  /**
+   * Layers to skip entirely (graphics + labels not rendered). Use for PCB canvas
+   * default-hide of F.Fab / F.Fabrication so KiCad's user-text `${REFERENCE}`
+   * placeholders don't overlay pads at the footprint origin.
+   */
+  hiddenLayers?: ReadonlySet<string>;
   /** When true, color pads + graphics by their layer using PCB_LAYER_COLORS. */
   useLayerColors?: boolean;
   /** Rendering surface — "preview" (default, library tile colors) or "pcb" (PCB canvas tokens). */
   surface?: "preview" | "pcb";
+  /**
+   * Substitute KiCad placeholder tokens in label.text. When a placement has an
+   * assigned reference (e.g. "R1") and value (e.g. "10k"), pass them here so
+   * labels render the real designator instead of the literal "REF**" / "VALUE".
+   */
+  placeholderSubstitutions?: {
+    reference?: string;
+    value?: string;
+  };
+}
+
+const REFERENCE_TOKEN_RE = /\$\{REFERENCE\}|REF\*\*/g;
+const VALUE_TOKEN_RE = /\$\{VALUE\}|(?<![A-Za-z])VALUE(?![A-Za-z])/g;
+
+function applyPlaceholderSubstitutions(
+  text: string,
+  subs: { reference?: string; value?: string } | undefined,
+): string {
+  if (!subs) return text;
+  let out = text;
+  if (subs.reference) {
+    out = out.replace(REFERENCE_TOKEN_RE, subs.reference);
+  }
+  if (subs.value) {
+    out = out.replace(VALUE_TOKEN_RE, subs.value);
+  }
+  return out;
 }
 
 function layerColor(
@@ -59,9 +92,13 @@ interface LayerGraphicGroup {
 export function FootprintRenderLayer({
   model,
   dimmedLayers,
+  hiddenLayers,
   useLayerColors = false,
   surface = "preview",
+  placeholderSubstitutions,
 }: FootprintRenderLayerProps) {
+  const isHidden = (layer: string | undefined): boolean =>
+    layer !== undefined && hiddenLayers?.has(layer) === true;
   const { theme } = useCanvasTheme();
   const basePreview = theme.preview;
   // For PCB surface, override the few preview tokens that are unreadable on dark
@@ -84,6 +121,7 @@ export function FootprintRenderLayer({
       // Legacy path: single group, single color
       const values: number[] = [];
       for (const graphic of model.graphics) {
+        if (isHidden(graphic.layer)) continue;
         for (const seg of graphicStrokeSegments(graphic)) {
           values.push(seg[0], seg[1], 0, seg[2], seg[3], 0);
         }
@@ -96,6 +134,7 @@ export function FootprintRenderLayer({
 
     const byLayer = new Map<string, number[]>();
     for (const graphic of model.graphics) {
+      if (isHidden(graphic.layer)) continue;
       const key = graphic.layer ?? "__none__";
       let arr = byLayer.get(key);
       if (!arr) {
@@ -114,7 +153,9 @@ export function FootprintRenderLayer({
       }
     }
     return groups;
-  }, [model.graphics, useLayerColors]);
+    // hiddenLayers participates by reference identity — callers should keep it
+    // stable (or memoized) to avoid spurious recomputes.
+  }, [model.graphics, useLayerColors, hiddenLayers]);
 
   // ── Pads ───────────────────────────────────────────────────────────
   const padData = useMemo(
@@ -225,6 +266,7 @@ export function FootprintRenderLayer({
 
       {/* Labels — per-layer color, with PCB-surface override for Fab text */}
       {model.labels.map((label) => {
+        if (isHidden(label.layer)) return null;
         const isFab = label.layer?.includes("Fab") ?? false;
         const color =
           surface === "pcb" && isFab
@@ -238,6 +280,10 @@ export function FootprintRenderLayer({
           dimmedLayers !== undefined &&
           label.layer !== undefined &&
           dimmedLayers.has(label.layer);
+        const text = applyPlaceholderSubstitutions(
+          label.text,
+          placeholderSubstitutions,
+        );
         return (
           <EDAText
             key={label.id}
@@ -253,7 +299,7 @@ export function FootprintRenderLayer({
                 : [0, 0, (label.rotationDeg * Math.PI) / 180]
             }
           >
-            {label.text}
+            {text}
           </EDAText>
         );
       })}
