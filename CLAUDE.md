@@ -192,15 +192,12 @@ Files: `command-executor.ts`, `commands/`, `history-*.ts`, `projection-*.ts`, `s
   - `@/*` → `src/core/frontend/src/*` (frontend only)
 - Frontend Vite aliases mirror these; verify in `src/core/frontend/vite.config.ts` when adding new aliases.
 
-## Known stale references (cleanup branch)
+## Open infra TODOs
 
-Fix these rather than working around silently:
+- ESLint boundary-enforcement rules are not yet wired (`TODO.md` Backlog). Module → core imports are caught by review only.
+- Frontend Vitest `include` is scoped to `src/core/frontend/src/**`; pure-logic frontend reducers tested under Bun (e.g. `src/core/backend/tests/route-tool-state.test.ts`) live with the backend test suite.
 
-- Root `bunfig.toml` preloads `./src-ts/test/setup.ts` (no longer exists). Backend tests run from `src/core/backend/bunfig.toml` (no preload), so this only bites if someone runs `bun test` from repo root.
-- Some legacy npm script names (`test:ts`, `test:ts:watch`) still alias backend tests; prefer `test:backend` / `test:react` / `test:e2e`.
-- ESLint boundary-enforcement rules are not yet wired (TODO Phase 1 last item).
-
-When editing, verify the real path and prefer updating stale references over duplicating them. **Do not introduce new references to `src-ts`, `src-react`, `core/backend`, or `core/frontend` (without the `src/` prefix).**
+When editing, always use the `src/core/*`, `src/modules/*`, `src/sdks/*`, `src/shared/*` prefixes. The pre-restructure `src-ts/`, `src-react/`, root-level `core/`, `modules/`, `sdks/`, `legacy/` directories no longer exist; never reintroduce references to them.
 
 ## Skills (slash commands)
 
@@ -208,7 +205,7 @@ Five domain-specific skills are configured in `.claude/skills/`. Use `/skill-nam
 
 | Skill                | When to use                                                                                                                                                                                                                                                                                                                                                    |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/component-library` | Component wizard, symbol/footprint editors, KiCad `.kicad_sym`/`.kicad_mod` import, variant data model, library↔designer linking, built-in component seeding, ComponentPalette/ComponentDetailPage UI                                                                                                                                                          |
+| `/library`           | Component wizard, symbol/footprint editors, KiCad `.kicad_sym`/`.kicad_mod` import, variant data model, library↔designer linking, built-in component seeding, ComponentPalette/ComponentDetailPage UI                                                                                                                                                          |
 | `/schematic-editor`  | Symbol placement, wire routing (Manhattan 90°-only), net labels, pin connections, junction detection, net extraction algorithm, ERC, netlist, tool modes (select/placement/wire/netLabel), undo/redo                                                                                                                                                           |
 | `/pcb-layout`        | Trace routing (Manhattan + 45°), via placement (V key layer switch), pad rendering, ratsnest (MST), board outline, component placement, net classes, footprint rendering from KiCad payload, grid presets, Gerber export                                                                                                                                       |
 | `/r3f-eda-rendering` | **Any** visual rendering in EDA editors. R3F orthographic + demand rendering (`invalidate()`). Critical rules: never Canvas2D, never `frameloop="always"`, never raw Three.js imperatively, no depthTest. Coordinate pipeline: nanometers (store) → mm (scene) → px (screen). Render order constants. InstancedMesh, LineSegments2, text, hit-testing patterns |
@@ -217,6 +214,6 @@ Five domain-specific skills are configured in `.claude/skills/`. Use `/skill-nam
 **Skill selection guidance:**
 
 - Modifying any canvas/visual code → `/r3f-eda-rendering` first, then the domain skill (`/schematic-editor` or `/pcb-layout`)
-- Working on library module backend/frontend → `/component-library`
+- Working on library module backend/frontend → `/library`
 - Need a DRC value, clearance rule, or trace width → `/eda-standards`
 - Skills have `references/` subdirs with detailed specs (routing algorithms, hit-testing, net extraction, design rules). The skill loads these automatically.

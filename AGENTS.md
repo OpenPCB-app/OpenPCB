@@ -1,124 +1,73 @@
-# PROJECT KNOWLEDGE BASE
+# OpenPCB agent notes
 
-**Generated:** 2026-04-14
-**Branch:** aggresive-cleanup
-**Type:** Desktop PCB design suite
+Compact repo facts only. If this conflicts with executable config, trust config.
 
-## OVERVIEW
+## Stack and package boundaries
 
-OpenPCB — Bun HTTP backend + React 19/Vite 7/Tailwind 4 frontend + Electron shell + SQLite (Drizzle ORM). Mid-restructuring branch. Module renamed: `component-library` → `library`.
+- npm workspaces only: `src/core/backend`, `src/core/frontend`, `electron` (`packageManager: npm@10.9.2`). Bun is the backend runtime/test runner, not the root package manager.
+- App shape: Bun HTTP backend + React 19/Vite 7/Tailwind 4 frontend + Electron shell + shared SQLite/Drizzle DB.
+- Real source roots: `src/core/*` infrastructure, `src/modules/*` feature modules, `src/sdks/*` cross-module SDK contracts, `src/shared/*` shared rendering/domain code.
+- Active modules are `library` and `designer`; `designer` has required dependency `library >=0.1.0`.
+- Module route shape is `/api/modules/{moduleId}/{subpath}`. `/api/modules/registry` is a core route, not module dispatch.
 
-## STRUCTURE
+## Entry points and wiring
 
-```
-./
-├── src/
-│   ├── core/           # Infrastructure (backend + frontend + contracts)
-│   ├── modules/        # Feature modules (only library currently)
-│   └── shared/         # Canvas engine (frontend/canvas/), backend placeholder
-├── electron/           # OS shell (spawns backend as child)
-├── scripts/            # Module CLI, codegen, bun sidecar compile
-├── docs/               # PROPOSED_ARCHITECTURE.md, COMMAND_PATTERN.md, DATA_MODEL.md
-├── tests/e2e/          # Playwright E2E tests
-└── .claude/skills/     # 5 domain-specific Claude Code skills
-```
+- Backend starts at `src/core/backend/main.ts`: `ModuleRuntime.bootstrap()` before `createHttpServer()`/`Bun.serve()`.
+- Module bootstrap: discover manifests -> resolve dependencies -> run `backend/migrations/*.sql` -> import backend entry -> `onActivate` -> `registerSdk` -> `registerRoutes`.
+- Module backend export may be `definition`, default, or `backendModule`; its `id` must match `manifest.json`.
+- Frontend entry: `src/core/frontend/src/main.tsx`; provider stack in `App.tsx` is `RuntimeProvider -> BootstrapProvider -> ThemeProvider -> AppShell`.
+- Electron dev loads Vite at `127.0.0.1:1420` and does not spawn backend; packaged Electron spawns the compiled Bun sidecar and waits for the first JSON stdout line containing `serverPort`.
 
-## WHERE TO LOOK
-
-| Task              | Location                                                     | Notes                                                        |
-| ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Add backend route | `src/core/backend/router/`                                   | Mounts in module-loader.ts                                   |
-| Add module        | `src/modules/<name>/`                                        | Copy library/ structure, add manifest.json                   |
-| Module discovery  | `src/core/backend/modules/module-loader.ts`                  | WorkspaceRoot bug: searches src/core/modules not src/modules |
-| Module contracts  | `src/core/contracts/modules/`                                | ModuleDefinition, ModuleManifest, LibrarySDK                 |
-| Shared canvas     | `src/shared/frontend/canvas/`                                | Used by editor modules                                       |
-| SDK interfaces    | `src/core/contracts/modules/sdk.ts`                          | Pure interfaces (LibrarySDK etc.)                            |
-| Entry points      | `src/core/backend/main.ts`, `src/core/frontend/src/main.tsx` | Boot + React mount                                           |
-| Fix stale paths   | `package.json` scripts                                       | Many reference src-ts, src-react, core/_ (now src/core/_)    |
-| Error handling    | `src/core/backend/contracts/errors.ts`                       | AppError, ValidationError, NotFoundError                     |
-| DB setup          | `src/core/backend/db/sqlite-client.ts`                       | Singleton SQLite + Drizzle                                   |
-| Module migrations | `src/modules/*/backend/migrations/*.sql`                     | Applied by module-migrator.ts                                |
-
-## CONVENTIONS
-
-- Path alias: `@modules/*` → `src/modules/*`, `@` → frontend `src/`
-- Composite TS build: references in tsconfig.json
-- Strict mode: `noUncheckedIndexedAccess`, `noImplicitOverride`, ES2022 target
-- Bun for backend runtime + tests, npm workspaces at root
-- Module routes: `/api/modules/{moduleId}/{subpath}`
-- Errors: RFC 7807 problem-details (`application/problem+json`)
-- DB: single SQLite, per-module table prefix (e.g., `library_`)
-- Frontend state: Zustand (no React Router), context providers for runtime/bootstrap/theme
-
-## ANTI-PATTERNS (THIS PROJECT)
-
-- **Direct core/ imports from modules/** — Use sdks/ + shared/ only
-- **Stale path references** — Don't add new refs to src-ts, src-react, core/backend, core/frontend
-- **Module workspaceRoot** — Module discovery broken; set OPENPCB_WORKSPACE_ROOT or fix resolution
-- **Business logic in core/** — core/ is pure infrastructure only
-- **Canvas2D in editors** — All rendering via R3F, never Canvas2D
-- **frameloop="always"** — Demand-based rendering only, use `invalidate()`
-- **Raw Three.js imperatively** — Use R3F JSX declarative patterns
-
-## COMMANDS
+## Commands that matter
 
 ```bash
-# Dev
-npm run dev              # backend + frontend
-npm run dev:electron     # + electron shell
-npm run dev:backend      # Bun only (port 3000)
-npm run dev:frontend     # Vite only (port 1420)
+npm run dev              # backend (:3000) + frontend (:1420)
+npm run dev:electron     # backend + frontend + electron watch/start
+npm run dev:backend      # cd src/core/backend && PORT=3000 NODE_ENV=development bun --watch main.ts
+npm run dev:frontend     # Vite only
 
-# Build / check
-npm run build            # full bundle
-npm run typecheck        # tsc -b composite
+npm run typecheck        # root composite tsc -b; excludes electron
+npm run build            # compile Bun sidecar, frontend build, electron build+dist
+npm run bun:compile      # builds bin/bun-backend-{rust-host-triple}
 
-# Tests (use these, not root scripts which have stale paths)
-cd src/core/backend && bun test          # backend
-cd src/core/frontend && npx vitest run   # frontend
-bun test path/to/file.test.ts            # single backend test
-npm run test:e2e                         # Playwright E2E
+npm run test:backend     # workspace bun test
+npm run test:react       # frontend vitest
+npm run test:e2e         # Playwright; starts fresh backend/frontend
 
-# Module system
-npm run module           # interactive CLI
-npm run module:validate  # check manifests
-npm run module:codegen   # regenerate SDKs
-npm run gen              # full codegen pipeline
+npm run module:validate  # manifest validation via registry generator
+npm run module:codegen   # registry + SDK only
+npm run gen:check        # fails if generated modules/sdk differ from git
 ```
 
-## ENVIRONMENT VARIABLES
+- Focused backend test: `cd src/core/backend && bun test path/to/file.test.ts`.
+- Focused frontend test: `npm run test --workspace src/core/frontend -- path/to/file.test.tsx`.
+- `npm run db:migrate` is a no-op note; module SQL migrations apply on backend startup.
+- `scripts/README.md` mentions Rust types/bridge codegen and root scripts that no longer exist; current CLI only does registry + SDK.
 
-| Variable                    | Default                      | Purpose                                  |
-| --------------------------- | ---------------------------- | ---------------------------------------- |
-| `PORT`                      | 3000                         | Backend server port                      |
-| `HOST`                      | 127.0.0.1                    | Backend bind address                     |
-| `OPENPCB_DB_PATH`           | `dev-data/openpcb.sqlite`    | SQLite path                              |
-| `OPENPCB_WORKSPACE_ROOT`    | (derived)                    | Set to repo root to fix module discovery |
-| `OPENPCB_ALLOWED_ORIGINS`   | localhost:1420, :3000, tauri | CORS origins                             |
-| `OPENPCB_DEBUG_DIAGNOSTICS` | false                        | Debug modules endpoint                   |
+## Tests and runtime quirks
 
-## SKILLS (SLASH COMMANDS)
+- Playwright config uses Chromium only, baseURL `http://127.0.0.1:1420`, and resets `/tmp/openpcb-e2e.sqlite*` via `OPENPCB_DB_PATH=/tmp/openpcb-e2e.sqlite`.
+- Backend default DB path: dev `dev-data/openpcb.sqlite`, prod `~/.openpcb/data.sqlite`; override with `OPENPCB_DB_PATH`.
+- Shared SQLite is singleton, WAL enabled, foreign keys on, module tables are prefix-partitioned.
+- Module migrations are lexicographic `.sql` files, split by `--> statement-breakpoint`, tracked in `openpcb_migrations`, wrapped in `BEGIN IMMEDIATE`.
+- Set `OPENPCB_WORKSPACE_ROOT` only when module discovery runs from an unusual cwd; default loader already searches for `src/modules`.
 
-Five domain-specific skills in `.claude/skills/`. Use these instead of guessing EDA conventions.
+## Import and architecture rules
 
-| Skill                | When to use                                                                                                                     |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `/component-library` | Component wizard, symbol/footprint editors, KiCad import, variant model, library↔designer linking, seeding, ComponentPalette UI |
-| `/schematic-editor`  | Wire routing (Manhattan 90°), net labels, pin connections, junction detection, net extraction, ERC, tool modes, undo/redo       |
-| `/pcb-layout`        | Trace routing (Manhattan + 45°), via placement, pad/footprint rendering, ratsnest (MST), board outline, net classes, Gerber     |
-| `/r3f-eda-rendering` | **Any** visual rendering. R3F + demand rendering. Coordinate pipeline: nm→mm→px. InstancedMesh, LineSegments2, hit-testing      |
-| `/eda-standards`     | IPC-2221B clearance, trace width formula, manufacturer presets (JLCPCB/PCBWay), layer naming, via specs, DRC values only        |
+- Modules must not import `src/core/backend/*` or `src/core/frontend/*`; use `src/core/contracts/*`, `src/sdks/*`, and `src/shared/*`.
+- Keep business/domain logic out of `src/core/*`; core is transport/runtime/module infrastructure.
+- Error responses use RFC 7807 problem details (`application/problem+json`).
+- Root TS aliases: `@modules/*`, `@sdks/*`, `@shared/*`; frontend also has `@/* -> src/core/frontend/src/*`.
+- Frontend has no React Router dependency; routing/state is app-shell + Zustand/module registry based.
 
-**Selection guide:**
+## Rendering / EDA-specific rules
 
-- Canvas/visual code → `/r3f-eda-rendering` first, then domain skill
-- Library module work → `/component-library`
-- DRC values, clearances, trace widths → `/eda-standards`
+- Editor rendering is React Three Fiber only: no Canvas2D, no imperative Three.js scene mutation, no `frameloop="always"`; use demand rendering/invalidation.
+- For visual/editor work, read `.claude/skills/r3f-eda-rendering/SKILL.md` plus the domain skill: `schematic-editor`, `pcb-layout`, or `library`.
+- For DRC, clearances, trace widths, Gerbers, IPC/JLCPCB/PCBWay values, read `.claude/skills/eda-standards/SKILL.md`; do not invent manufacturing constants.
 
-## NOTES
+## Known stale guidance to ignore
 
-- Designer domain moving from core/backend/designer/ → modules/designer/ (in progress)
-- Only library module exists; designer module planned
-- Electron spawns Bun backend; frontend proxies /api → :3000
-- Drizzle config paths stale (points to src-ts/)
-- bunfig.toml test preload path stale (src-ts/test/setup.ts)
+- Older nested `AGENTS.md` files may still say module routes are `/api/v1/{module}` or module discovery is broken; current code uses `/api/modules/{moduleId}` and the loader has fallback discovery.
+- `bun.lock` is stale relative to root `package.json`; use `package-lock.json`/npm workspaces for dependency truth.
+- Do not auto commit/push/pull; only when explicitly asked.

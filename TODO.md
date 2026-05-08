@@ -8,77 +8,92 @@
 - Schematic→PCB sync: auto-sync on schematic changes
 - Migrations: automatic on startup
 
-## Deliverable Target
-
-- Architecture + working schematic editor on new foundations (Phase 1 + Phase 2)
-
-## Phase 0 — Browser Dev Stabilization
-
-- [x] Allow frontend dev server to lazy-load `src/modules/*`
-- [x] Regenerate module catalog and SDK exports for `library` + `designer`
-- [x] Add module/shared TypeScript coverage to root `npm run typecheck`
-- [x] Add Playwright browser smoke tests for app boot, module registry, and designer shell
-- [x] Verify with typecheck, backend tests, frontend tests, and e2e smoke
-
-## Phase 1 — Architecture Alignment
-
-- [x] Create `src/sdks/` structure (`library`, `designer`, root token map)
-- [x] Migrate SDK contracts from `src/contracts/modules/*` to `src/sdks/*`
-- [x] Keep backward-compatible facade exports in `src/contracts/modules/*`
-- [x] Add shared ECS core (`entity`, `component`, `world`, `query`, `system`)
-- [x] Add shared command+patch infrastructure (`patch`, `apply`, `invert`, `history`)
-- [x] Add backend tests for new ECS and patch/history foundations
-- [x] Verify with `npm run typecheck`
-- [x] Verify with backend tests (`bun test`)
-- [x] Integrate new shared command/patch infrastructure into designer runtime store
-- [ ] Add boundary enforcement lint rules (pending lint infra)
-
-## Phase 2 — Designer Domain Rewrite (next)
-
-- [ ] Define ECS component model for schematic entities (part/wire/label/net)
-- [ ] Implement command handlers that emit ECS patches
-- [ ] Wire apply/invert/history flow into dispatch pipeline
-- [ ] Implement full net rebuild system from ECS world
-- [ ] Implement projection builder from ECS world
-- [x] Enable real undo/redo in backend + frontend controls
-- [x] Add focused backend tests for command idempotency, history, undo/redo, nets, and junctions
-- [x] Persist per-session undo/redo snapshots across backend runtime reloads
-- [x] Extract designer result parsing, history state, projection/world, and wire geometry helpers from `store.ts`
-- [x] Extract command execution from `store.ts` into `command-executor.ts`
-- [x] Extract projection read mapping into `projection-read.ts`
-
-## Phase 3 — Basic PCB Foundation (in progress)
-
-- [x] Add PCB board settings entity types and persistence
-- [x] Add persisted empty PCB projection with default 100x80mm board
-- [x] Add basic PCB tab canvas + board-size settings form
-- [x] Add PCB undo/redo with separate history session from schematic
-- [x] Fix PCB render ordering (grid < fill < outline)
-- [x] Fix canvas remounting on every revision change
-- [x] Add PCB entity/component types for placements
-- [x] Auto-sync schematic parts into PCB placements (center + deterministic offset)
-- [x] Basic PCB view: component placement rendering via FootprintRenderLayer
-- [x] Pad world-position helper + net↔pad correlation (pin.number == pad.number)
-- [x] Basic PCB view: ratsnest (Prim's MST per net, always-on)
-- [x] PCB placement selection + drag-to-move + R rotate, with combined-world undo/redo
-- [~] Auto-sync schematic wires into PCB traces — **wontfix**, replaced by ratsnest + manual routing (Phase 4). No real EDA tool does literal wire→trace sync; bridge is the netlist.
-- [ ] PCB traces/vias entity types — deferred to Phase 4
-- [ ] DRC engine reading PcbDesignRules — deferred to Phase 4
-
-## Phase 4 — PCB routing + DRC (next)
-
-- [ ] Trace/via entity model + migrations
-- [ ] Manual trace routing tool (Manhattan + 45°, see /pcb-layout skill)
-- [ ] Layer switching on V key (pad↔via)
-- [ ] DRC violations rendered against PcbDesignRules
-- [ ] Net classes applied to routed traces
-- [ ] Ratsnest visibility toggle UI (currently always-on)
-- [ ] Marquee / multi-select / group move on PCB
-- [ ] Explicit pinmap field in LibraryComponent (currently relies on pin.number == pad.number)
-
 ## Current Status
 
-- Phase 1 infrastructure established and validated.
-- Phase 3 PCB foundation complete: board, placements, ratsnest, selection, move, rotate, full undo/redo.
-- Backend: 56 tests passing. Frontend: 11 tests passing. Typecheck clean.
-- Next: Phase 4 — trace routing + DRC.
+- Branch `aggresive-cleanup` merged to `master`. Phases 1–3 complete; Phase 4 partially shipped (trace routing, vias, layer switching, live DRC, ratsnest).
+- Backend: 124 tests passing (19 files). Frontend: 11 tests passing. Typecheck clean.
+- Active sprint: post-merge cleanup + dead-code removal (see plan in `.claude/plans/act-as-senior-software-resilient-meadow.md`).
+
+## Phase 0 — Browser Dev Stabilization (done)
+
+- [x] Frontend lazy-loads `src/modules/*`
+- [x] Module catalog and SDK exports for `library` + `designer`
+- [x] Module/shared TypeScript coverage in root `npm run typecheck`
+- [x] Playwright browser smoke tests
+- [x] Verified: typecheck + backend + frontend + e2e
+
+## Phase 1 — Architecture Alignment (done except boundary lint)
+
+- [x] `src/sdks/` structure (`library`, `designer`, root token map)
+- [x] SDK contracts migrated from `src/contracts/modules/*` to `src/sdks/*`
+- [x] Backward-compatible facade exports in `src/contracts/modules/*`
+- [x] Shared ECS core (`entity`, `component`, `world`, `query`, `system`)
+- [x] Shared command+patch infrastructure (`patch`, `apply`, `invert`, `history`)
+- [x] Backend tests for ECS and patch/history foundations
+- [x] Shared command/patch infrastructure integrated into designer runtime store
+- [ ] Boundary enforcement lint rules (deferred — see Backlog)
+
+## Phase 2 — Designer Domain Rewrite (done)
+
+- [x] ECS component model for schematic entities (part/wire/label/net/primitive)
+- [x] Command handlers emit ECS patches
+- [x] Apply/invert/history flow wired into dispatch pipeline
+- [x] Full net rebuild system from ECS world
+- [x] Projection builder from ECS world
+- [x] Real undo/redo in backend + frontend controls
+- [x] Backend tests for command idempotency, history, undo/redo, nets, junctions
+- [x] Per-session undo/redo snapshots persisted across runtime reloads
+- [x] Designer result parsing, history state, projection/world, wire geometry helpers extracted from `store.ts`
+- [x] Command execution extracted into `command-executor.ts`
+- [x] Projection read mapping in `projection-read.ts`
+
+## Phase 3 — Basic PCB Foundation (done)
+
+- [x] PCB board settings entity types and persistence
+- [x] Persisted empty PCB projection with default 100x80mm board
+- [x] Basic PCB tab canvas + board-size settings form
+- [x] PCB undo/redo with separate history session from schematic
+- [x] PCB render ordering (grid < fill < outline)
+- [x] Canvas mount stable across revision changes
+- [x] PCB entity/component types for placements
+- [x] Auto-sync schematic parts into PCB placements (center + deterministic offset)
+- [x] Component placement rendering via FootprintRenderLayer
+- [x] Pad world-position helper + net↔pad correlation (pin.number == pad.number)
+- [x] Ratsnest (Prim's MST per net, always-on)
+- [x] PCB placement selection + drag-to-move + R rotate, with combined-world undo/redo
+- [~] Schematic wire → PCB trace auto-sync — **wontfix**, replaced by ratsnest + manual routing. Bridge between schematic and PCB is the netlist.
+
+## Phase 4 — PCB routing + DRC (partially shipped)
+
+Shipped:
+
+- [x] Trace + via entity model + migrations (`0005_pcb_traces.sql`)
+- [x] Manual trace routing tool (Manhattan-90 + Manhattan-45 with corner chamfer)
+- [x] Layer switching on V key (smart via: + / - flips layer, v drops via)
+- [x] Live DRC (trace-trace + trace-pad clearance, same-net skip, same-layer filter, design-rule + net-class fallback)
+- [x] Net classes applied via trace presets (Default/Power/GND with width/clearance/via dims)
+- [x] Trace presets array on board settings ([0.15, 0.2, 0.25, 0.5, 1.0] mm)
+- [x] Posture cycling (auto/axis/diagonal via `/` key)
+- [x] Cursor layer chip + 45° corner chamfer
+- [x] Schematic primitives (GND/PWR/net portals + wiring + edits)
+- [x] Label upsert
+- [x] Footprint editor + IPC-7351B preset generator + drawn-footprint commit path
+
+Backlog:
+
+- [ ] Marquee / multi-select / group move on PCB
+- [ ] Trace editing (drag segment, break + reconnect, rip-up & retry)
+- [ ] Layer-visibility panel UI (currently only active layer toggleable from toolbar)
+- [ ] Ratsnest visibility toggle UI (currently always-on)
+- [ ] Explicit `pinmap` field in `LibraryComponent` (currently relies on `pin.number == pad.number`)
+
+## Backlog (post-Phase 4)
+
+- [ ] ESLint + `eslint-plugin-boundaries` for compile-time `core ← shared ← sdks ← modules` enforcement
+- [ ] Manufacturing export — Gerber, drill, BOM
+- [ ] Library variants / families / presets / provenance
+- [ ] Differential pair rules + length tuning
+- [ ] Copper pours / zones / keepouts
+- [ ] Symbol/footprint editor expansion (multi-unit, alt graphical body styles)
+- [ ] OpenAPI codegen pipeline (revisit `gen:openapi` if/when frontend SDK regen is needed)
+- [ ] E2E test expansion (currently smoke only)

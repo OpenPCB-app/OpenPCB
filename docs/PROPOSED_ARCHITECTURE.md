@@ -21,13 +21,13 @@ modules/*  ─────────►  sdks/*  ─────────�
    └──────────────────────────────────────────┘  (modules also import shared/ directly)
 ```
 
-| Layer | May import from | Must NOT import from |
-|-------|----------------|---------------------|
-| `core/` | Nothing app-specific | shared/, sdks/, modules/ |
-| `shared/` | `core/` only | sdks/, modules/ |
-| `sdks/` | `shared/` only (for shared types) | core/, modules/ |
-| `modules/*` | `shared/`, `sdks/*` | `core/` directly, other modules' internals |
-| `electron/` | nothing from src (spawns Bun as child process) | — |
+| Layer       | May import from                                | Must NOT import from                       |
+| ----------- | ---------------------------------------------- | ------------------------------------------ |
+| `core/`     | Nothing app-specific                           | shared/, sdks/, modules/                   |
+| `shared/`   | `core/` only                                   | sdks/, modules/                            |
+| `sdks/`     | `shared/` only (for shared types)              | core/, modules/                            |
+| `modules/*` | `shared/`, `sdks/*`                            | `core/` directly, other modules' internals |
+| `electron/` | nothing from src (spawns Bun as child process) | —                                          |
 
 **ESLint boundaries enforcement**: Use `eslint-plugin-boundaries` to make these rules compile-time errors.
 
@@ -156,10 +156,10 @@ OpenPCB/
 │   │   ├── types.ts                 # Project, DesignState, Netlist, etc.
 │   │   └── events.ts                # Designer-specific events
 │   │
-│   ├── component-library/
-│   │   ├── index.ts                 # ComponentLibrarySDK interface
-│   │   ├── types.ts                 # Part, Symbol, Footprint, SearchParams
-│   │   └── components.ts            # Re-exported React components (PartPickerDialog, etc.)
+│   ├── library/
+│   │   ├── index.ts                 # LibrarySDK interface
+│   │   ├── types.ts                 # LibraryComponent, LibrarySymbol, LibraryFootprint, LibrarySearchParams
+│   │   └── components.ts            # Re-exported React components (ComponentPickerDialog, etc.)
 │   │
 │   ├── ai-service/
 │   │   ├── index.ts                 # AIServiceSDK interface
@@ -171,9 +171,9 @@ OpenPCB/
 │
 ├── modules/                         # Self-contained feature modules
 │   ├── designer/                    # ← detailed below
-│   ├── component-library/
-│   ├── ai-service/
-│   └── knowledge/
+│   ├── library/
+│   ├── ai-service/                  # planned
+│   └── knowledge/                   # planned
 │
 ├── scripts/                         # Build and codegen scripts
 ├── tests/                           # E2E tests (Playwright)
@@ -284,7 +284,7 @@ modules/designer/
 │   │
 │   ├── hooks/
 │   │   ├── useDesignEntities.ts      # Query ECS entities (wraps shared useProjection)
-│   │   └── usePartPicker.ts          # Opens ComponentLibrary's PartPicker (via SDK)
+│   │   └── useComponentPicker.ts     # Opens Library's ComponentPicker (via SDK)
 │   │
 │   └── routes.ts                     # Route definitions for this module
 │
@@ -306,58 +306,58 @@ modules/designer/
 
 If YES → it belongs in `core/`.
 
-| Belongs in core/ | Does NOT belong in core/ |
-|---|---|
-| HTTP server setup | ECS engine |
-| Request/response pipeline | Command pattern |
-| DI container | Entity types |
-| Module manifest loader | Patch algebra |
-| App shell (Layout, sidebar, router) | Canvas/rendering engine |
-| Runtime detection (web/electron) | Domain events |
-| Health/diagnostics endpoints | Business logic of any kind |
-| CORS, middleware, request ID | Shared UI components |
+| Belongs in core/                    | Does NOT belong in core/   |
+| ----------------------------------- | -------------------------- |
+| HTTP server setup                   | ECS engine                 |
+| Request/response pipeline           | Command pattern            |
+| DI container                        | Entity types               |
+| Module manifest loader              | Patch algebra              |
+| App shell (Layout, sidebar, router) | Canvas/rendering engine    |
+| Runtime detection (web/electron)    | Domain events              |
+| Health/diagnostics endpoints        | Business logic of any kind |
+| CORS, middleware, request ID        | Shared UI components       |
 
 ### shared/ — "Do multiple modules need this?"
 
 If YES → it belongs in `shared/`.
 
-| Belongs in shared/ | Does NOT belong in shared/ |
-|---|---|
-| ECS engine + world state | Designer command handlers |
-| Command bus + history | Part search logic |
-| Patch algebra (apply/invert) | AI provider implementations |
-| Domain event bus | Module-specific screens |
-| Canvas engine (camera, layers, interaction) | Module-specific DB schemas |
-| Shared UI primitives (Button, Dialog) | Module-specific API handlers |
-| Geometry types, ID types | SDK implementations |
-| DB connection helpers | |
-| In-memory test adapters | |
+| Belongs in shared/                          | Does NOT belong in shared/   |
+| ------------------------------------------- | ---------------------------- |
+| ECS engine + world state                    | Designer command handlers    |
+| Command bus + history                       | Part search logic            |
+| Patch algebra (apply/invert)                | AI provider implementations  |
+| Domain event bus                            | Module-specific screens      |
+| Canvas engine (camera, layers, interaction) | Module-specific DB schemas   |
+| Shared UI primitives (Button, Dialog)       | Module-specific API handlers |
+| Geometry types, ID types                    | SDK implementations          |
+| DB connection helpers                       |                              |
+| In-memory test adapters                     |                              |
 
 ### sdks/ — "What can other modules call?"
 
 Pure interfaces + public types. No implementations, no business logic.
 
-| Belongs in sdks/ | Does NOT belong in sdks/ |
-|---|---|
-| `DesignerSDK` interface | `DesignerService` class |
-| `Part`, `Symbol`, `Footprint` types | Internal domain models |
-| `ChatParams`, `ToolResult` types | Provider implementations |
+| Belongs in sdks/                          | Does NOT belong in sdks/  |
+| ----------------------------------------- | ------------------------- |
+| `DesignerSDK` interface                   | `DesignerService` class   |
+| `Part`, `Symbol`, `Footprint` types       | Internal domain models    |
+| `ChatParams`, `ToolResult` types          | Provider implementations  |
 | Re-exported cross-module React components | Internal React components |
 
 ### modules/ — "Is this specific to one feature?"
 
 If YES → it belongs in that module.
 
-| Belongs in modules/ | Does NOT belong in modules/ |
-|---|---|
-| Command handlers | ECS engine |
-| API route handlers | Command bus |
-| Frontend screens | Shared UI primitives |
-| Module-specific stores | Canvas engine |
-| DB schema + migrations | |
-| AI tools | |
-| SDK implementation | |
-| Domain invariants | |
+| Belongs in modules/    | Does NOT belong in modules/ |
+| ---------------------- | --------------------------- |
+| Command handlers       | ECS engine                  |
+| API route handlers     | Command bus                 |
+| Frontend screens       | Shared UI primitives        |
+| Module-specific stores | Canvas engine               |
+| DB schema + migrations |                             |
+| AI tools               |                             |
+| SDK implementation     |                             |
+| Domain invariants      |                             |
 
 ---
 
@@ -372,39 +372,39 @@ If YES → it belongs in that module.
    d. Module registers its AI tools in tool registry
    e. Module runs DB migrations
 3. When Designer module loads:
-   - It resolves ComponentLibrarySDK from DI (already registered by comp-lib)
+   - It resolves LibrarySDK from DI (already registered by library)
    - It resolves AIServiceSDK from DI (already registered by ai-service)
    - It injects these into its DesignerService
 ```
 
 ```typescript
 // modules/designer/index.ts
-import type { ModuleEntry } from '@openpcb/core/contracts';
-import type { ComponentLibrarySDK } from '@openpcb/sdks/component-library';
-import type { AIServiceSDK } from '@openpcb/sdks/ai-service';
-import { DesignerService } from './backend/application/sdk-implementation';
+import type { ModuleEntry } from "@openpcb/core/contracts";
+import type { LibrarySDK } from "@openpcb/sdks/library";
+import type { AIServiceSDK } from "@openpcb/sdks/ai-service";
+import { DesignerService } from "./backend/application/sdk-implementation";
 
 export default {
-  name: 'designer',
+  name: "designer",
 
   async register(ctx) {
-    const compLib = ctx.resolve<ComponentLibrarySDK>('ComponentLibrarySDK');
-    const ai = ctx.resolve<AIServiceSDK>('AIServiceSDK');
-    const db = ctx.resolve('db');
+    const library = ctx.resolve<LibrarySDK>("LibrarySDK");
+    const ai = ctx.resolve<AIServiceSDK>("AIServiceSDK");
+    const db = ctx.resolve("db");
 
-    const service = new DesignerService(compLib, ai, db);
-    ctx.register('DesignerSDK', () => service);
+    const service = new DesignerService(library, ai, db);
+    ctx.register("DesignerSDK", () => service);
 
     // Register HTTP handlers
-    ctx.router.mount('/api/v1/designer', createDesignerRoutes(service));
+    ctx.router.mount("/api/v1/designer", createDesignerRoutes(service));
 
     // Register AI tools
     ctx.tools.register(designerTools(service));
   },
 
   async migrate(ctx) {
-    await ctx.db.runMigrations('./modules/designer/backend/db/migrations');
-  }
+    await ctx.db.runMigrations("./modules/designer/backend/db/migrations");
+  },
 } satisfies ModuleEntry;
 ```
 
@@ -417,14 +417,16 @@ export default {
 // Collects routes from all module manifests (fetched from backend registry)
 
 export function buildModuleRoutes(registry: ModuleRegistry): Route[] {
-  return registry.modules.flatMap(mod => 
-    mod.frontend.routes.map(route => ({
+  return registry.modules.flatMap((mod) =>
+    mod.frontend.routes.map((route) => ({
       path: route.path,
       moduleId: mod.name,
       screen: route.screen,
       // Lazy-loaded from modules/<id>/frontend/routes.ts
-      component: lazy(() => import(`@openpcb/modules/${mod.name}/frontend/routes`))
-    }))
+      component: lazy(
+        () => import(`@openpcb/modules/${mod.name}/frontend/routes`),
+      ),
+    })),
   );
 }
 ```
@@ -433,8 +435,8 @@ Each module exports its route components:
 
 ```typescript
 // modules/designer/frontend/routes.ts
-import { SchematicEditor } from './screens/SchematicEditor';
-import { PCBEditor } from './screens/PCBEditor';
+import { SchematicEditor } from "./screens/SchematicEditor";
+import { PCBEditor } from "./screens/PCBEditor";
 
 export const routes = {
   SchematicEditor,
@@ -447,26 +449,31 @@ export const routes = {
 ## Key architectural improvements over current state
 
 ### 1. Designer domain extracted from core/
+
 **Before**: `core/backend/designer/` — business logic inside infrastructure.  
 **After**: `modules/designer/backend/domain/` — business logic inside its module.  
 The ECS engine and command pattern are in `shared/`, the designer-specific handlers are in the module.
 
 ### 2. Frontend/backend coupling broken
+
 **Before**: `core/frontend/designer/` imports directly from `core/backend/designer/application/*`.  
 **After**: Frontend imports only from `sdks/designer/` (pure interfaces) and `shared/` (domain primitives).  
 In-memory bridge for standalone mode uses shared test utilities.
 
 ### 3. SDK contracts separated from implementations
+
 **Before**: No clear SDK boundary — everything in core.  
 **After**: `sdks/designer/index.ts` defines the interface, `modules/designer/backend/application/sdk-implementation.ts` implements it. Clean substitution boundary.
 
 ### 4. Module loading is symmetric
+
 **Before**: Backend uses manifest-aware loading, frontend uses convention-based glob.  
 **After**: Both frontend and backend resolve from `MODULE_MANIFEST.json`. Frontend routes come from manifest, lazy-loaded by screen name.
 
 ### 5. Canvas engine is shared
+
 **Before**: `core/frontend/src/editor-canvas/` — sits in core but is domain-specific.  
-**After**: `shared/frontend/canvas/` — explicitly shared, used by both designer and component-library modules.
+**After**: `shared/frontend/canvas/` — explicitly shared, used by both designer and library modules.
 
 ---
 
@@ -478,14 +485,14 @@ In-memory bridge for standalone mode uses shared test utilities.
   "name": "designer",
   "version": "1.0.0",
   "description": "Schematic and PCB design editor",
-  
+
   // Dependency order — these modules must load first
-  "dependencies": ["component-library", "ai-service"],
-  
+  "dependencies": ["library", "ai-service"],
+
   // Backend entry
   "backend": {
     "entry": "./index.ts",
-    "apiPrefix": "/api/v1/designer"
+    "apiPrefix": "/api/v1/designer",
   },
 
   // Frontend entry
@@ -493,13 +500,13 @@ In-memory bridge for standalone mode uses shared test utilities.
     "entry": "./frontend/routes.ts",
     "routes": [
       { "path": "/schematic/:projectId", "screen": "SchematicEditor" },
-      { "path": "/pcb/:projectId", "screen": "PCBEditor" }
+      { "path": "/pcb/:projectId", "screen": "PCBEditor" },
     ],
     "navigation": {
       "label": "Designer",
       "icon": "circuit-board",
-      "order": 1
-    }
+      "order": 1,
+    },
   },
 
   // Database tables this module owns
@@ -510,14 +517,14 @@ In-memory bridge for standalone mode uses shared test utilities.
     {
       "name": "place_component",
       "description": "Place a component on the schematic",
-      "parameters": { "libraryRef": "string", "x": "number", "y": "number" }
+      "parameters": { "libraryRef": "string", "x": "number", "y": "number" },
     },
     {
       "name": "run_drc",
       "description": "Run design rule check on the PCB",
-      "parameters": { "projectId": "string" }
-    }
-  ]
+      "parameters": { "projectId": "string" },
+    },
+  ],
 }
 ```
 
@@ -530,12 +537,12 @@ In-memory bridge for standalone mode uses shared test utilities.
 {
   "compilerOptions": {
     "paths": {
-      "@openpcb/core/*":    ["./core/*"],
-      "@openpcb/shared/*":  ["./shared/*"],
-      "@openpcb/sdks/*":    ["./sdks/*"],
-      "@openpcb/modules/*": ["./modules/*"]
-    }
-  }
+      "@openpcb/core/*": ["./core/*"],
+      "@openpcb/shared/*": ["./shared/*"],
+      "@openpcb/sdks/*": ["./sdks/*"],
+      "@openpcb/modules/*": ["./modules/*"],
+    },
+  },
 }
 ```
 

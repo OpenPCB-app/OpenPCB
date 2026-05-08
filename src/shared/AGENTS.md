@@ -35,7 +35,7 @@ src/shared/
 
 ## CONVENTIONS
 
-- Used by designer + component-library modules
+- Used by designer + library modules
 - React Three Fiber (R3F) based
 - Screen/world coordinate conversions in utils/
 

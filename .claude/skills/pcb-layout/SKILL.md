@@ -5,7 +5,7 @@ description: "PCB layout editor — traces, pads, vias, routing, placement, laye
 
 # PCB Layout Editor Skill
 
-This skill covers the PCB layout editor — traces, pads, vias, routing, placement, and manufacturing. For Three.js rendering patterns, see `r3f-eda-rendering`. For IPC standards and manufacturing rules, see `eda-standards`. For component/footprint data model, see `component-library`.
+This skill covers the PCB layout editor — traces, pads, vias, routing, placement, and manufacturing. For Three.js rendering patterns, see `r3f-eda-rendering`. For IPC standards and manufacturing rules, see `eda-standards`. For component/footprint data model, see `library`.
 
 ## Architecture
 
@@ -33,33 +33,33 @@ PcbCanvasR3F (wrapper)
 
 ```typescript
 interface PcbDocument {
-  boardOutline: BoardOutline;           // { width, height } in mm
-  manufacturerPreset: string;           // "jlcpcb_standard"
-  netClasses: NetClass[];               // Default + Power
-  nets: PcbNet[];                       // resolved from schematic
-  placements: PcbPlacement[];           // placed footprints
-  traces: TraceSegment[];               // routed copper traces
-  vias: Via[];                          // through-hole vias
-  zones: CopperZone[];                  // copper fills (future)
+  boardOutline: BoardOutline; // { width, height } in mm
+  manufacturerPreset: string; // "jlcpcb_standard"
+  netClasses: NetClass[]; // Default + Power
+  nets: PcbNet[]; // resolved from schematic
+  placements: PcbPlacement[]; // placed footprints
+  traces: TraceSegment[]; // routed copper traces
+  vias: Via[]; // through-hole vias
+  zones: CopperZone[]; // copper fills (future)
 }
 
 interface TraceSegment {
   id: string;
-  start: Point2D;       // mm
-  end: Point2D;          // mm
-  width: number;         // mm
-  layer: string;         // "F.Cu" or "B.Cu"
-  net: string;           // net ID
+  start: Point2D; // mm
+  end: Point2D; // mm
+  width: number; // mm
+  layer: string; // "F.Cu" or "B.Cu"
+  net: string; // net ID
 }
 
 interface Via {
   id: string;
   position: Point2D;
-  padDiameter: number;   // mm
+  padDiameter: number; // mm
   drillDiameter: number; // mm
   net: string;
   type: "through";
-  layers: [string, string];  // ["F.Cu", "B.Cu"]
+  layers: [string, string]; // ["F.Cu", "B.Cu"]
   tented: boolean;
 }
 ```
@@ -70,16 +70,17 @@ See `references/data-model.md` for complete type definitions.
 
 ### Layer IDs (KiCad-compatible)
 
-| Layer | Color | Purpose |
-|-------|-------|---------|
-| `F.Cu` | `#c87533` (orange) | Front copper — traces, pads |
-| `B.Cu` | `#3377c8` (blue) | Back copper — traces, pads |
-| `F.SilkS` | `#e2e8f0` (light gray) | Front silkscreen |
-| `B.SilkS` | `#94a3b8` | Back silkscreen |
-| `Edge.Cuts` | `#fbbf24` (yellow) | Board outline |
-| `F.CrtYd` | rgba yellow | Front courtyard |
+| Layer       | Color                  | Purpose                     |
+| ----------- | ---------------------- | --------------------------- |
+| `F.Cu`      | `#c87533` (orange)     | Front copper — traces, pads |
+| `B.Cu`      | `#3377c8` (blue)       | Back copper — traces, pads  |
+| `F.SilkS`   | `#e2e8f0` (light gray) | Front silkscreen            |
+| `B.SilkS`   | `#94a3b8`              | Back silkscreen             |
+| `Edge.Cuts` | `#fbbf24` (yellow)     | Board outline               |
+| `F.CrtYd`   | rgba yellow            | Front courtyard             |
 
 ### Layer rendering rules
+
 - Active layer renders at full opacity
 - Inactive layers render at 0.3 opacity (dimmed)
 - Through-hole pads and vias render on ALL copper layers
@@ -87,7 +88,9 @@ See `references/data-model.md` for complete type definitions.
 - Silkscreen renders at `FRONT_SILK` (8) or `BACK_SILK` (3) render order
 
 ### Back-side component mirroring
+
 Components on `B.Cu` are **X-mirrored** (standard PCB convention). When rendering a back-side component:
+
 - Mirror pad X coordinates: `x = -x`
 - Use `B.SilkS` graphics instead of `F.SilkS`
 - Render in back copper color (blue)
@@ -97,6 +100,7 @@ Components on `B.Cu` are **X-mirrored** (standard PCB convention). When renderin
 Read `references/routing.md` for the complete interactive routing implementation.
 
 ### Key rules
+
 - **Manhattan (90°)**: horizontal and vertical segments only (MVP)
 - **45° routing**: horizontal → 45° diagonal → vertical (future — see reference)
 - **Net assignment**: traces inherit net from the starting pad
@@ -106,6 +110,7 @@ Read `references/routing.md` for the complete interactive routing implementation
 - **Grid snap**: trace endpoints snap to PCB grid (0.254mm default)
 
 ### Via placement during routing
+
 1. Press `V` mid-route
 2. Commit trace segments up to cursor position
 3. Place via at cursor (padDiameter and drillDiameter from net class)
@@ -113,6 +118,7 @@ Read `references/routing.md` for the complete interactive routing implementation
 5. Continue routing on new layer from via position
 
 ### Routing state machine
+
 ```
 IDLE → (click pad) → ROUTING → (click corner | click target | V | Esc)
   ↓ click target: COMPLETE → IDLE (traces added to document)
@@ -128,6 +134,7 @@ IDLE → (click pad) → ROUTING → (click corner | click target | V | Esc)
 Ratsnest shows unrouted connections as dashed airwires. Uses MST (Minimum Spanning Tree) via Kruskal's algorithm.
 
 ### Algorithm
+
 1. For each net with 2+ pads: collect pad world positions
 2. Build Union-Find with one element per pad
 3. **Account for routed traces**: for each trace in this net, find pads at start/end (0.01mm tolerance), union them
@@ -137,9 +144,10 @@ Ratsnest shows unrouted connections as dashed airwires. Uses MST (Minimum Spanni
 7. If multiple groups → MST between group centroids = ratsnest lines
 
 ### Pad world position resolution
+
 ```typescript
 function resolvePadWorldPosition(placement, padNumber) {
-  const pad = placement.footprintData.pads.find(p => p.number === padNumber);
+  const pad = placement.footprintData.pads.find((p) => p.number === padNumber);
   // Rotate by placement.rotation
   // Mirror X if placement.layer === "B.Cu"
   // Translate by placement.position
@@ -152,13 +160,16 @@ function resolvePadWorldPosition(placement, padNumber) {
 ## Component placement
 
 ### Placement from schematic sync
+
 When user switches to PCB tab, `syncSchematicToPcb()` runs:
+
 - New schematic symbols → auto-placed near board center
 - Existing symbols → preserve PCB positions
 - Deleted symbols → remove from PCB
 - Power symbols (GND, VCC) → skipped (no footprint)
 
 ### Interaction
+
 - Click to select placement
 - Drag to move (snaps to grid)
 - R key: rotate 90° (or context menu)
@@ -169,8 +180,20 @@ When user switches to PCB tab, `syncSchematicToPcb()` runs:
 
 ```typescript
 const DEFAULT_NET_CLASSES: NetClass[] = [
-  { name: "Default", traceWidth: 0.25, clearance: 0.2, viaDiameter: 0.6, viaDrill: 0.3 },
-  { name: "Power",   traceWidth: 0.5,  clearance: 0.2, viaDiameter: 0.8, viaDrill: 0.4 },
+  {
+    name: "Default",
+    traceWidth: 0.25,
+    clearance: 0.2,
+    viaDiameter: 0.6,
+    viaDrill: 0.3,
+  },
+  {
+    name: "Power",
+    traceWidth: 0.5,
+    clearance: 0.2,
+    viaDiameter: 0.8,
+    viaDrill: 0.4,
+  },
 ];
 ```
 
@@ -182,11 +205,11 @@ Trace width cycling presets (W key): `[0.15, 0.2, 0.25, 0.3, 0.5, 0.8, 1.0]` mm.
 
 ```typescript
 PCB_GRID_PRESETS = [
-  { label: "1.27mm (50mil)", size: 1.27 },     // through-hole spacing
-  { label: "0.635mm (25mil)", size: 0.635 },   // fine placement
-  { label: "0.254mm (10mil)", size: 0.254 },   // routing grid (DEFAULT)
-  { label: "0.127mm (5mil)", size: 0.127 },    // fine routing
-  { label: "0.1mm", size: 0.1 },               // metric fine
+  { label: "1.27mm (50mil)", size: 1.27 }, // through-hole spacing
+  { label: "0.635mm (25mil)", size: 0.635 }, // fine placement
+  { label: "0.254mm (10mil)", size: 0.254 }, // routing grid (DEFAULT)
+  { label: "0.127mm (5mil)", size: 0.127 }, // fine routing
+  { label: "0.1mm", size: 0.1 }, // metric fine
 ];
 ```
 
@@ -195,21 +218,23 @@ PCB_GRID_PRESETS = [
 Footprint data is `ParsedKicadFootprint` stored as `Record<string, unknown>` in `kicadPayload`. Key substructures:
 
 ### Pad rendering
+
 ```typescript
 interface ParsedPad {
-  number: string;           // "1", "2"
+  number: string; // "1", "2"
   type: "smd" | "thru_hole" | "np_thru_hole" | "connect";
   shape: "circle" | "rect" | "oval" | "roundrect" | "trapezoid" | "custom";
-  position: { x: number; y: number };  // relative to footprint origin, mm
+  position: { x: number; y: number }; // relative to footprint origin, mm
   size: { width: number; height: number };
   rotation: number;
-  layers: string[];         // ["F.Cu", "F.Mask", "F.Paste"]
-  roundrectRatio?: number;  // 0-1 for roundrect shape
-  drillDiameter?: number;   // for thru_hole
+  layers: string[]; // ["F.Cu", "F.Mask", "F.Paste"]
+  roundrectRatio?: number; // 0-1 for roundrect shape
+  drillDiameter?: number; // for thru_hole
 }
 ```
 
 ### Silkscreen rendering
+
 ```typescript
 interface ParsedGraphic {
   type: "line" | "rect" | "circle" | "arc" | "poly" | "text";
@@ -228,29 +253,29 @@ interface ParsedGraphic {
 
 ## Anti-patterns
 
-| Don't | Do instead |
-|-------|------------|
-| Connect pads from different nets | Validate net match before completing route |
-| Ignore layer when hit-testing pads | Filter by active layer first |
-| Different pad position calculation in ratsnest vs hit-test | Single shared `resolvePadWorldPosition()` |
-| Store ratsnest in document | Derive from nets + traces + vias (computed) |
-| Assume `data.start` is `{x, y}` | It's `[x, y]` — parse as array |
-| Render traces with pixel-width lines | Use `LineSegments2` with `worldUnits: true` |
+| Don't                                                      | Do instead                                  |
+| ---------------------------------------------------------- | ------------------------------------------- |
+| Connect pads from different nets                           | Validate net match before completing route  |
+| Ignore layer when hit-testing pads                         | Filter by active layer first                |
+| Different pad position calculation in ratsnest vs hit-test | Single shared `resolvePadWorldPosition()`   |
+| Store ratsnest in document                                 | Derive from nets + traces + vias (computed) |
+| Assume `data.start` is `{x, y}`                            | It's `[x, y]` — parse as array              |
+| Render traces with pixel-width lines                       | Use `LineSegments2` with `worldUnits: true` |
 
 ## File locations
 
-| Area | Path |
-|------|------|
-| R3F wrapper | `render-engine/wrappers/PcbCanvasR3F.tsx` |
-| Scene | `render-engine/scenes/PcbScene.tsx` |
-| Trace rendering | `render-engine/primitives/TraceLines.tsx` |
-| Pad rendering | `render-engine/primitives/PadInstances.tsx` |
-| Via rendering | `render-engine/primitives/ViaInstances.tsx` |
-| Ratsnest rendering | `render-engine/primitives/RatsnestLines.tsx` |
-| Store | `stores/pcb-store.ts` |
-| Hit testing | `components/pcb-editor/canvas/pcb-hit-test.ts` |
-| Ratsnest calc | `components/pcb-editor/ratsnest.ts` |
-| Sync logic | `components/pcb-editor/schematic-pcb-sync.ts` |
-| Routing | `components/pcb-editor/routing/manhattan-path.ts` |
-| PCB types | `components/pcb-editor/pcb-types.ts` |
-| Layer colors | `render-engine/layers.ts` |
+| Area               | Path                                              |
+| ------------------ | ------------------------------------------------- |
+| R3F wrapper        | `render-engine/wrappers/PcbCanvasR3F.tsx`         |
+| Scene              | `render-engine/scenes/PcbScene.tsx`               |
+| Trace rendering    | `render-engine/primitives/TraceLines.tsx`         |
+| Pad rendering      | `render-engine/primitives/PadInstances.tsx`       |
+| Via rendering      | `render-engine/primitives/ViaInstances.tsx`       |
+| Ratsnest rendering | `render-engine/primitives/RatsnestLines.tsx`      |
+| Store              | `stores/pcb-store.ts`                             |
+| Hit testing        | `components/pcb-editor/canvas/pcb-hit-test.ts`    |
+| Ratsnest calc      | `components/pcb-editor/ratsnest.ts`               |
+| Sync logic         | `components/pcb-editor/schematic-pcb-sync.ts`     |
+| Routing            | `components/pcb-editor/routing/manhattan-path.ts` |
+| PCB types          | `components/pcb-editor/pcb-types.ts`              |
+| Layer colors       | `render-engine/layers.ts`                         |
