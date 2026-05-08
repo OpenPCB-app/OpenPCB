@@ -24,7 +24,16 @@ import {
   GridShader,
 } from "../../../../shared/frontend/canvas/primitives";
 import { SymbolRenderLayer } from "../../../../shared/frontend/canvas/scene";
-import { SelectionRectOverlay } from "../../../../shared/frontend/canvas/selection";
+import {
+  SelectionRectOverlay,
+  aabbContains,
+  aabbOverlap,
+  isPointInAabb,
+  polylineContainedInAabb,
+  polylineIntersectsAabb,
+  useMarqueeSelection,
+} from "../../../../shared/frontend/canvas/selection";
+import type { BoundsMm } from "../../../../shared/rendering/types";
 import { RENDER_ORDER } from "../../../../shared/frontend/canvas/layers";
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
 import { Units } from "../../../../shared/frontend/canvas/coords";
@@ -108,13 +117,6 @@ interface DragPartsSession {
   initialPrimitivePositionsNm: Map<string, PointNm>;
   startPointerNm: PointNm;
   deltaNm: PointNm;
-}
-
-interface MarqueeSession {
-  startMm: PointMm;
-  currentMm: PointMm;
-  additive: boolean;
-  baseSelection: SelectionState;
 }
 
 interface WireSession {
@@ -393,30 +395,6 @@ function computeProjectionBoundsMm(
   return { minX, minY, maxX, maxY };
 }
 
-function pointInRect(
-  pointMm: PointMm,
-  rect: { minX: number; minY: number; maxX: number; maxY: number },
-): boolean {
-  return (
-    pointMm.x >= rect.minX &&
-    pointMm.x <= rect.maxX &&
-    pointMm.y >= rect.minY &&
-    pointMm.y <= rect.maxY
-  );
-}
-
-function intersectsRect(
-  a: { minX: number; minY: number; maxX: number; maxY: number },
-  b: { minX: number; minY: number; maxX: number; maxY: number },
-): boolean {
-  return !(
-    a.maxX < b.minX ||
-    a.minX > b.maxX ||
-    a.maxY < b.minY ||
-    a.minY > b.maxY
-  );
-}
-
 function distancePointToSegmentMm(
   point: PointMm,
   a: PointMm,
@@ -614,14 +592,14 @@ function InvalidateOnCanvasChange({
   cursorNm,
   selection,
   dragSession,
-  marqueeSession,
+  marqueeRect,
   wireSession,
 }: {
   projection: DesignerSchematicProjection | null;
   cursorNm: PointNm | null;
   selection: SelectionState;
   dragSession: DragPartsSession | null;
-  marqueeSession: MarqueeSession | null;
+  marqueeRect: { a: PointMm | null; b: PointMm | null } | null;
   wireSession: WireSession | null;
 }) {
   const invalidate = useThree((state) => state.invalidate);
@@ -633,7 +611,7 @@ function InvalidateOnCanvasChange({
     cursorNm,
     selection,
     dragSession,
-    marqueeSession,
+    marqueeRect,
     wireSession,
   ]);
   return null;
@@ -679,10 +657,9 @@ export const SchematicCanvas = forwardRef<
 
   const [cursorNm, setCursorNm] = useState<PointNm | null>(null);
   const [selection, setSelection] = useState<SelectionState>(emptySelection);
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
   const [dragSession, setDragSession] = useState<DragPartsSession | null>(null);
-  const [marqueeSession, setMarqueeSession] = useState<MarqueeSession | null>(
-    null,
-  );
   const [wireSession, setWireSession] = useState<WireSession | null>(null);
   const [armedLabelText, setArmedLabelText] = useState<string | null>(null);
   const [armedPrimitive, setArmedPrimitive] = useState<ArmedPrimitive>(null);
@@ -703,7 +680,7 @@ export const SchematicCanvas = forwardRef<
       setSelection(emptySelection());
       setWireSession(null);
       setDragSession(null);
-      setMarqueeSession(null);
+      marquee.cancelMarquee();
       return;
     }
 
@@ -776,16 +753,12 @@ export const SchematicCanvas = forwardRef<
         return;
       }
       // net_portal
-      const portalText =
-        text?.trim() ??
-        window.prompt("Net portal name (matches across the schematic):") ??
-        "";
-      const trimmed = portalText.trim();
-      if (trimmed.length === 0) {
-        setArmedPrimitive(null);
-        return;
+      const portalText = text?.trim();
+      if (portalText && portalText.length > 0) {
+        setArmedPrimitive({ kind: "net_portal", portalText });
+      } else {
+        setNetPortalPickerOpen(true);
       }
-      setArmedPrimitive({ kind: "net_portal", portalText: trimmed });
     },
     fit() {
       const camera = cameraRef.current;
@@ -856,6 +829,48 @@ export const SchematicCanvas = forwardRef<
     },
     [dragSession],
   );
+
+  // Marquee/rubber-band selection — uses the same shared hook as PCB so both
+  // canvases behave identically (KiCad direction-based window/crossing modes,
+  // Shift = additive, Escape = cancel + restore prior selection).
+  const marquee = useMarqueeSelection<SelectionState>({
+    enabled: true,
+    cloneSelection,
+    emptySelection,
+    getSelection: () => selectionRef.current,
+    setSelection,
+    applyMarqueeHits: ({ rect, mode, baseSelection }) => {
+      const next = cloneSelection(baseSelection);
+      if (!projection) return next;
+      const partTest = (b: BoundsMm) =>
+        mode === "window" ? aabbContains(rect, b) : aabbOverlap(b, rect);
+      for (const part of projection.parts) {
+        const b = worldBoundsForPart(part, renderedPartPositionNm(part));
+        if (b && partTest(b)) next.partIds.add(part.id);
+      }
+      for (const wire of projection.wires) {
+        if (wire.pointsNm.length === 0) continue;
+        const ptsMm: PointMm[] = wire.pointsNm.map((p) => toMm(p));
+        const inside =
+          mode === "window"
+            ? polylineContainedInAabb(ptsMm, rect)
+            : polylineIntersectsAabb(ptsMm, rect);
+        if (inside) next.wireIds.add(wire.id);
+      }
+      // Labels & primitives are point-like → window/crossing equivalent.
+      for (const label of projection.labels) {
+        if (isPointInAabb(toMm(label.positionNm), rect)) {
+          next.labelIds.add(label.id);
+        }
+      }
+      for (const primitive of projection.primitives) {
+        if (isPointInAabb(toMm(renderedPrimitivePositionNm(primitive)), rect)) {
+          next.primitiveIds.add(primitive.id);
+        }
+      }
+      return next;
+    },
+  });
 
   const pinById = useMemo(() => {
     const map = new Map<string, DesignerPin>();
@@ -1134,7 +1149,7 @@ export const SchematicCanvas = forwardRef<
       if (matchesKey(event, "Escape")) {
         if (
           wireSession ||
-          marqueeSession ||
+          marquee.marqueeSession ||
           dragSession ||
           armedLabelText ||
           armedPrimitive ||
@@ -1143,7 +1158,7 @@ export const SchematicCanvas = forwardRef<
         ) {
           event.preventDefault();
           setWireSession(null);
-          setMarqueeSession(null);
+          marquee.cancelMarquee();
           setDragSession(null);
           setArmedLabelText(null);
           setArmedPrimitive(null);
@@ -1340,7 +1355,7 @@ export const SchematicCanvas = forwardRef<
     dispatchCommandsSequentially,
     dragSession,
     labelDraftText,
-    marqueeSession,
+    marquee,
     projection,
     selection,
     wireSession,
@@ -1372,11 +1387,8 @@ export const SchematicCanvas = forwardRef<
           }
         }
 
-        if (marqueeSession) {
-          setMarqueeSession({
-            ...marqueeSession,
-            currentMm: toMm(worldNm),
-          });
+        if (marquee.marqueeSession) {
+          marquee.updateMarqueeCursor(toMm(worldNm));
         }
       },
       onPointerLeave() {
@@ -1516,7 +1528,7 @@ export const SchematicCanvas = forwardRef<
         }
 
         if (partId) {
-          setMarqueeSession(null);
+          marquee.cancelMarquee();
           setWireSession(null);
 
           const nextSelection = cloneSelection(selection);
@@ -1627,7 +1639,7 @@ export const SchematicCanvas = forwardRef<
         }
 
         if (primitiveId) {
-          setMarqueeSession(null);
+          marquee.cancelMarquee();
           setWireSession(null);
 
           const nextSelection = cloneSelection(selection);
@@ -1693,15 +1705,7 @@ export const SchematicCanvas = forwardRef<
 
         const startMm = toMm(worldNm);
         setDragSession(null);
-        setMarqueeSession({
-          startMm,
-          currentMm: startMm,
-          additive: event.modifiers.shift,
-          baseSelection: cloneSelection(selection),
-        });
-        if (!event.modifiers.shift) {
-          setSelection(emptySelection());
-        }
+        marquee.beginMarquee(startMm, event.modifiers.shift);
       },
       onPointerUp() {
         if (!projection) {
@@ -1749,84 +1753,8 @@ export const SchematicCanvas = forwardRef<
           return;
         }
 
-        if (marqueeSession) {
-          const minX = Math.min(
-            marqueeSession.startMm.x,
-            marqueeSession.currentMm.x,
-          );
-          const maxX = Math.max(
-            marqueeSession.startMm.x,
-            marqueeSession.currentMm.x,
-          );
-          const minY = Math.min(
-            marqueeSession.startMm.y,
-            marqueeSession.currentMm.y,
-          );
-          const maxY = Math.max(
-            marqueeSession.startMm.y,
-            marqueeSession.currentMm.y,
-          );
-          const rect = { minX, minY, maxX, maxY };
-
-          const next = marqueeSession.additive
-            ? cloneSelection(marqueeSession.baseSelection)
-            : emptySelection();
-
-          for (const part of projection.parts) {
-            const bounds = worldBoundsForPart(
-              part,
-              renderedPartPositionNm(part),
-            );
-            if (bounds && intersectsRect(bounds, rect)) {
-              next.partIds.add(part.id);
-            }
-          }
-
-          for (const wire of projection.wires) {
-            if (wire.pointsNm.length === 0) {
-              continue;
-            }
-            let minWireX = Number.POSITIVE_INFINITY;
-            let minWireY = Number.POSITIVE_INFINITY;
-            let maxWireX = Number.NEGATIVE_INFINITY;
-            let maxWireY = Number.NEGATIVE_INFINITY;
-            for (const point of wire.pointsNm) {
-              const mm = toMm(point);
-              minWireX = Math.min(minWireX, mm.x);
-              minWireY = Math.min(minWireY, mm.y);
-              maxWireX = Math.max(maxWireX, mm.x);
-              maxWireY = Math.max(maxWireY, mm.y);
-            }
-            if (
-              Number.isFinite(minWireX) &&
-              intersectsRect(
-                {
-                  minX: minWireX,
-                  minY: minWireY,
-                  maxX: maxWireX,
-                  maxY: maxWireY,
-                },
-                rect,
-              )
-            ) {
-              next.wireIds.add(wire.id);
-            }
-          }
-
-          for (const label of projection.labels) {
-            if (pointInRect(toMm(label.positionNm), rect)) {
-              next.labelIds.add(label.id);
-            }
-          }
-
-          for (const primitive of projection.primitives) {
-            if (pointInRect(toMm(primitive.positionNm), rect)) {
-              next.primitiveIds.add(primitive.id);
-            }
-          }
-
-          setSelection(next);
-          setMarqueeSession(null);
+        if (marquee.marqueeSession) {
+          marquee.finishMarquee();
         }
       },
       onDragEnter(event) {
@@ -1907,7 +1835,7 @@ export const SchematicCanvas = forwardRef<
       hitPrimitiveId,
       hitWire,
       labelDraftText,
-      marqueeSession,
+      marquee,
       pinById,
       projection,
       renderedPartPositionNm,
@@ -1956,9 +1884,7 @@ export const SchematicCanvas = forwardRef<
   }, [cursorNm, pinById, projection, wireSession]);
 
   const dragGhostModel = dragPlacementDetail?.symbol.preview ?? null;
-  const selectionRect = marqueeSession
-    ? { a: marqueeSession.startMm, b: marqueeSession.currentMm }
-    : null;
+  const marqueeOverlay = marquee.overlayProps;
 
   const displayedPrimitives = useMemo(() => {
     if (!projection) return [];
@@ -2019,7 +1945,7 @@ export const SchematicCanvas = forwardRef<
           cursorNm={cursorNm}
           selection={selection}
           dragSession={dragSession}
-          marqueeSession={marqueeSession}
+          marqueeRect={{ a: marqueeOverlay.a, b: marqueeOverlay.b }}
           wireSession={wireSession}
         />
         <SchematicScene
@@ -2035,7 +1961,7 @@ export const SchematicCanvas = forwardRef<
           primitives={displayedPrimitives}
           primitiveGhost={primitiveGhost}
           junctions={projection?.junctions ?? []}
-          selectionRect={selectionRect}
+          marqueeOverlay={marqueeOverlay}
           dragGhostNm={dragGhostNm}
           dragGhostModel={dragGhostModel}
         />
@@ -2075,7 +2001,7 @@ interface SchematicSceneProps {
   primitives: DesignerSchematicProjection["primitives"];
   primitiveGhost: DesignerPrimitive | null;
   junctions: DesignerSchematicProjection["junctions"];
-  selectionRect: { a: PointMm; b: PointMm } | null;
+  marqueeOverlay: { a: PointMm | null; b: PointMm | null; color: string };
   dragGhostNm: { x: number; y: number } | null;
   dragGhostModel: SymbolRenderModel | null;
 }
@@ -2093,7 +2019,7 @@ function SchematicScene({
   primitives,
   primitiveGhost,
   junctions,
-  selectionRect,
+  marqueeOverlay,
   dragGhostNm,
   dragGhostModel,
 }: SchematicSceneProps) {
@@ -2217,7 +2143,11 @@ function SchematicScene({
                 rotation={[0, 0, rotationRad]}
                 scale={[scaleX, 1, 1]}
               >
-                <SymbolRenderLayer model={model} />
+                <SymbolRenderLayer
+                  model={model}
+                  counterRotationDeg={part.rotationDeg}
+                  counterMirrored={part.mirrored}
+                />
                 {selected ? (
                   <PartSelectionOutline part={part} color={t.selectionColor} />
                 ) : null}
@@ -2273,13 +2203,11 @@ function SchematicScene({
             </mesh>
           ))}
 
-          {selectionRect ? (
-            <SelectionRectOverlay
-              a={selectionRect.a}
-              b={selectionRect.b}
-              color={t.selectionColor}
-            />
-          ) : null}
+          <SelectionRectOverlay
+            a={marqueeOverlay.a}
+            b={marqueeOverlay.b}
+            color={marqueeOverlay.color}
+          />
 
           {dragGhostNm && dragGhostModel ? (
             <group

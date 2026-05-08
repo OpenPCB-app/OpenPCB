@@ -142,7 +142,11 @@ function DesignerSpaceInner({
 
       <div className="relative flex min-h-0 flex-1">
         <div style={{ width: leftWidth }} className="shrink-0">
-          <DesignerSidebar state={state} actions={actions} />
+          <DesignerSidebar
+            state={state}
+            actions={actions}
+            activeView={state.activeView}
+          />
         </div>
 
         <div

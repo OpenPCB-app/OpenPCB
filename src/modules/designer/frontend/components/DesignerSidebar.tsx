@@ -4,10 +4,12 @@ import type {
   DesignerWorkspaceActions,
   DesignerWorkspaceState,
 } from "../hooks/useDesignerWorkspace";
+import type { DesignerView } from "../types";
 
 interface DesignerSidebarProps {
   state: DesignerWorkspaceState;
   actions: DesignerWorkspaceActions;
+  activeView: DesignerView;
 }
 
 const COMPONENT_DND_MIME = "application/x-openpcb-component-id";
@@ -15,8 +17,15 @@ const COMPONENT_DND_MIME = "application/x-openpcb-component-id";
 export function DesignerSidebar({
   state,
   actions,
+  activeView,
 }: DesignerSidebarProps): ReactElement {
   const { query, searchingComponents, components, draggingComponentId } = state;
+
+  if (activeView !== "schem") {
+    return (
+      <aside className="flex h-full min-h-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950" />
+    );
+  }
 
   return (
     <aside className="flex h-full min-h-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">

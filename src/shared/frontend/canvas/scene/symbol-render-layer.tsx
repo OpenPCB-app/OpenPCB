@@ -56,7 +56,21 @@ function buildStrokeBuckets(model: SymbolRenderModel): StrokeBucket[] {
   return [...bucketsByWidth.values()];
 }
 
-export function SymbolRenderLayer({ model }: { model: SymbolRenderModel }) {
+export function SymbolRenderLayer({
+  model,
+  counterRotationDeg = 0,
+  counterMirrored = false,
+}: {
+  model: SymbolRenderModel;
+  /**
+   * When this layer is rendered inside a rotated/mirrored parent group, set
+   * these to undo the parent transform for label content so pin numbers,
+   * references, values, and pin labels render upright/unmirrored regardless
+   * of part orientation.
+   */
+  counterRotationDeg?: number;
+  counterMirrored?: boolean;
+}) {
   const { theme } = useCanvasTheme();
   const pt = theme.preview;
 
@@ -153,6 +167,10 @@ export function SymbolRenderLayer({ model }: { model: SymbolRenderModel }) {
       />
 
       {model.labels.map((label) => {
+        const counterScaleX = counterMirrored ? -1 : 1;
+        const counterRotationRad = (-counterRotationDeg * Math.PI) / 180;
+        const needsCounter = counterRotationDeg !== 0 || counterMirrored;
+
         const color =
           label.role === "pin-number"
             ? pt.symbolPinNumber
@@ -174,10 +192,9 @@ export function SymbolRenderLayer({ model }: { model: SymbolRenderModel }) {
         const outlineWidth = isLight ? 0.025 : undefined;
         const outlineColor = isLight ? "#f5f5f0" : undefined;
 
-        return (
+        const text = (
           <EDAText
-            key={label.id}
-            position={[label.at.x, label.at.y, 0]}
+            position={needsCounter ? [0, 0, 0] : [label.at.x, label.at.y, 0]}
             color={color}
             fontSize={label.fontSizeMm}
             anchorX={label.anchorX}
@@ -188,6 +205,21 @@ export function SymbolRenderLayer({ model }: { model: SymbolRenderModel }) {
           >
             {label.text}
           </EDAText>
+        );
+
+        if (!needsCounter) {
+          return <group key={label.id}>{text}</group>;
+        }
+
+        // Nested groups apply T(label.at) * S(1/parentScaleX) * R(-parentRot)
+        // so the label's world transform reduces to pure translation, keeping
+        // text upright/unmirrored even when the parent part is rotated/flipped.
+        return (
+          <group key={label.id} position={[label.at.x, label.at.y, 0]}>
+            <group scale={[counterScaleX, 1, 1]}>
+              <group rotation={[0, 0, counterRotationRad]}>{text}</group>
+            </group>
+          </group>
         );
       })}
     </>
