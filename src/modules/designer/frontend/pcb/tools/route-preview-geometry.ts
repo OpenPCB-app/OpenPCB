@@ -61,9 +61,59 @@ function elbow45(
 }
 
 /**
+ * Replace axis⟂axis 90° corners with a 45° chamfer (half the shorter leg,
+ * floored to integer nm so the chamfer stays a valid 45° diagonal). Mirrors
+ * backend `chamfer45Corners` in pcb-trace-geometry.ts.
+ */
+function chamfer45Corners(path: PointNm[]): PointNm[] {
+  if (path.length < 3) return path;
+  const out: PointNm[] = [{ ...path[0]! }];
+  for (let i = 1; i < path.length; i += 1) {
+    const next = path[i]!;
+    if (out.length >= 2) {
+      const a = out[out.length - 2]!;
+      const b = out[out.length - 1]!;
+      const dx1 = b.x - a.x;
+      const dy1 = b.y - a.y;
+      const dx2 = next.x - b.x;
+      const dy2 = next.y - b.y;
+      const seg1Horiz = dx1 !== 0 && dy1 === 0;
+      const seg1Vert = dx1 === 0 && dy1 !== 0;
+      const seg2Horiz = dx2 !== 0 && dy2 === 0;
+      const seg2Vert = dx2 === 0 && dy2 !== 0;
+      const perpendicular90 =
+        (seg1Horiz && seg2Vert) || (seg1Vert && seg2Horiz);
+      if (perpendicular90) {
+        const len1 = Math.abs(dx1) + Math.abs(dy1);
+        const len2 = Math.abs(dx2) + Math.abs(dy2);
+        const chamfer = Math.floor(Math.min(len1, len2) / 2);
+        if (chamfer > 0) {
+          const sx1 = Math.sign(dx1);
+          const sy1 = Math.sign(dy1);
+          const sx2 = Math.sign(dx2);
+          const sy2 = Math.sign(dy2);
+          out.pop();
+          out.push(
+            { x: b.x - sx1 * chamfer, y: b.y - sy1 * chamfer },
+            { x: b.x + sx2 * chamfer, y: b.y + sy2 * chamfer },
+          );
+          out.push({ ...next });
+          continue;
+        }
+      }
+    }
+    out.push({ ...next });
+  }
+  return out;
+}
+
+/**
  * Build a route preview path through anchors using the chosen corner mode and
  * posture. Mirrors backend pcb-trace-geometry.buildTracePathThroughAnchors so
  * the ghost preview matches what the backend will validate.
+ *
+ * In "manhattan-45" mode, axis⟂axis 90° corners produced by L-shaped waypoint
+ * clicks are auto-chamfered into 45° elbows.
  */
 export function buildPreviewPath(
   anchors: PointNm[],
@@ -85,5 +135,6 @@ export function buildPreviewPath(
         : elbow90(prev, next, effective);
     for (const p of elbows) path.push({ ...p });
   }
-  return dedupe(path);
+  const deduped = dedupe(path);
+  return mode === "manhattan-45" ? chamfer45Corners(deduped) : deduped;
 }

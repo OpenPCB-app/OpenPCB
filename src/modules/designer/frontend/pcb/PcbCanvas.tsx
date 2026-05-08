@@ -37,6 +37,7 @@ import {
   DEFAULT_PCB_ZOOM,
   PCB_GRID_MM,
 } from "../../../../shared/frontend/canvas/defaults";
+import { PCB_LAYER_COLORS } from "../../../../shared/frontend/canvas/layers";
 
 const NM_PER_MM = 1_000_000;
 
@@ -106,6 +107,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     initialRouteToolState,
   );
   const [cursorMm, setCursorMm] = useState<PcbPointMm | null>(null);
+  // Viewport-relative cursor position (clientX/Y) — drives the route-mode
+  // layer chip that follows the cursor so users can see active layer state
+  // without looking at the toolbar.
+  const [cursorClientPx, setCursorClientPx] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [selectedViaId, setSelectedViaId] = useState<string | null>(null);
   const placementsRef = useRef(workspace.projection?.placements ?? []);
@@ -344,6 +352,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       onPointerMove(event) {
         const cursor = eventToMm(event);
         setCursorMm(cursor);
+        setCursorClientPx({ x: event.screenPoint.x, y: event.screenPoint.y });
         // Hover-highlight: resolve cursor → pad → net (only when not dragging).
         if (!dragSession) {
           const pad = hitPad(placementsRef.current, cursor);
@@ -374,6 +383,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       },
       onPointerLeave() {
         setCursorMm(null);
+        setCursorClientPx(null);
       },
     };
   }, [
@@ -716,6 +726,23 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       {!workspace.projection ? (
         <div className="flex h-full items-center justify-center text-sm text-slate-500">
           {workspace.loading ? "Loading PCB..." : "PCB projection unavailable"}
+        </div>
+      ) : null}
+
+      {toolMode === "route" && cursorClientPx ? (
+        <div
+          className="pointer-events-none fixed z-30 flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-950/90 px-2 py-0.5 text-[10px] font-medium text-slate-100 shadow-lg backdrop-blur"
+          style={{
+            left: cursorClientPx.x + 14,
+            top: cursorClientPx.y + 14,
+          }}
+        >
+          <span
+            aria-hidden
+            className="inline-block h-2 w-2 rounded-full"
+            style={{ backgroundColor: PCB_LAYER_COLORS[activeCopperLayer] }}
+          />
+          {activeCopperLayer === "F.Cu" ? "Top" : "Bottom"}
         </div>
       ) : null}
 

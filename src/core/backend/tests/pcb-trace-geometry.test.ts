@@ -182,6 +182,109 @@ describe("buildTracePathThroughAnchors", () => {
       { x: 10, y: 0 },
     ]);
   });
+
+  test("45° mode chamfers an L-shaped waypoint corner", () => {
+    // User clicks (0,0) → (10,0) → (10,10) — perpendicular axis segments meet
+    // at (10,0). In 45° mode this corner should be replaced by a 45° chamfer.
+    const path = buildTracePathThroughAnchors(
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+      ],
+      "manhattan-45",
+    );
+    expect(path).toEqual([
+      { x: 0, y: 0 },
+      { x: 5, y: 0 },
+      { x: 10, y: 5 },
+      { x: 10, y: 10 },
+    ]);
+    expect(validate45Path(path)).toBeNull();
+  });
+
+  test("90° mode preserves sharp L-shaped corner (no chamfer)", () => {
+    const path = buildTracePathThroughAnchors(
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+      ],
+      "manhattan-90",
+    );
+    expect(path).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+    ]);
+    expect(validate90Path(path)).toBeNull();
+  });
+
+  test("45° mode chamfers consecutive 90° corners (staircase)", () => {
+    // (0,0) → (10,0) → (10,10) → (20,10): two perpendicular corners.
+    const path = buildTracePathThroughAnchors(
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+        { x: 20, y: 10 },
+      ],
+      "manhattan-45",
+    );
+    // After chamfer pass: corner at (10,0) gets chamfered; corner at (10,10)
+    // also gets chamfered. Each chamfer = half min adjacent leg.
+    // First corner: legs 10 and 10 → chamfer 5: (5,0) and (10,5).
+    // After first chamfer the path becomes
+    //   (0,0) → (5,0) → (10,5) → (10,10) → (20,10)
+    // Then walking forward, the corner at (10,10) sees prev=(10,5), curr=(10,10),
+    // next=(20,10): dx1=0,dy1=5 (vert), dx2=10,dy2=0 (horiz). chamfer = floor(min(5,10)/2) = 2.
+    // chamferStart = (10, 10 - 2) = (10, 8); chamferEnd = (10 + 2, 10) = (12, 10).
+    expect(path).toEqual([
+      { x: 0, y: 0 },
+      { x: 5, y: 0 },
+      { x: 10, y: 5 },
+      { x: 10, y: 8 },
+      { x: 12, y: 10 },
+      { x: 20, y: 10 },
+    ]);
+    expect(validate45Path(path)).toBeNull();
+  });
+
+  test("45° mode chamfer respects asymmetric leg lengths", () => {
+    // Short horizontal then long vertical; chamfer = half shorter = 2.
+    const path = buildTracePathThroughAnchors(
+      [
+        { x: 0, y: 0 },
+        { x: 4, y: 0 },
+        { x: 4, y: 20 },
+      ],
+      "manhattan-45",
+    );
+    expect(path).toEqual([
+      { x: 0, y: 0 },
+      { x: 2, y: 0 },
+      { x: 4, y: 2 },
+      { x: 4, y: 20 },
+    ]);
+    expect(validate45Path(path)).toBeNull();
+  });
+
+  test("45° mode does not chamfer when one leg is zero (collinear)", () => {
+    // Two collinear horizontal segments — sanitizePath collapses; nothing
+    // to chamfer.
+    const path = buildTracePathThroughAnchors(
+      [
+        { x: 0, y: 0 },
+        { x: 5, y: 0 },
+        { x: 10, y: 0 },
+      ],
+      "manhattan-45",
+    );
+    // Result is just collinear points; validates as 45° (axis-aligned).
+    expect(validate45Path(path)).toBeNull();
+    // Final endpoint preserved.
+    expect(path[path.length - 1]).toEqual({ x: 10, y: 0 });
+  });
 });
 
 describe("polyline distance helpers", () => {

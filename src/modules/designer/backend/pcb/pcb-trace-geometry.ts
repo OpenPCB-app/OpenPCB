@@ -178,10 +178,74 @@ function elbow45(
 }
 
 /**
+ * Walk a path and replace 90° corners between two perpendicular axis-aligned
+ * segments with a 45° chamfer. The chamfer length is half the shorter adjacent
+ * leg, rounded down to integer units (preserves nm-grid integrality and a true
+ * 45° diagonal). Used only for "manhattan-45" mode — sharp 90° corners in 45°
+ * mode are not desired (user explicitly switches to "manhattan-90" for sharp
+ * elbows).
+ *
+ * Only chamfers axis⟂axis corners (horizontal-to-vertical or vice versa).
+ * Diagonal⟂diagonal 90° corners are rare in practice (would require explicit
+ * waypoint clicks on diagonals) and are left untouched.
+ */
+function chamfer45Corners(path: Point[]): Point[] {
+  if (path.length < 3) return path;
+  const out: Point[] = [{ ...path[0]! }];
+  for (let i = 1; i < path.length; i += 1) {
+    const next = path[i]!;
+    if (out.length >= 2) {
+      const a = out[out.length - 2]!;
+      const b = out[out.length - 1]!;
+      const dx1 = b.x - a.x;
+      const dy1 = b.y - a.y;
+      const dx2 = next.x - b.x;
+      const dy2 = next.y - b.y;
+      const seg1Horiz = dx1 !== 0 && dy1 === 0;
+      const seg1Vert = dx1 === 0 && dy1 !== 0;
+      const seg2Horiz = dx2 !== 0 && dy2 === 0;
+      const seg2Vert = dx2 === 0 && dy2 !== 0;
+      const perpendicular90 =
+        (seg1Horiz && seg2Vert) || (seg1Vert && seg2Horiz);
+      if (perpendicular90) {
+        const len1 = Math.abs(dx1) + Math.abs(dy1);
+        const len2 = Math.abs(dx2) + Math.abs(dy2);
+        const chamfer = Math.floor(Math.min(len1, len2) / 2);
+        if (chamfer > 0) {
+          const sx1 = Math.sign(dx1);
+          const sy1 = Math.sign(dy1);
+          const sx2 = Math.sign(dx2);
+          const sy2 = Math.sign(dy2);
+          const chamferStart: Point = {
+            x: b.x - sx1 * chamfer,
+            y: b.y - sy1 * chamfer,
+          };
+          const chamferEnd: Point = {
+            x: b.x + sx2 * chamfer,
+            y: b.y + sy2 * chamfer,
+          };
+          // Replace corner vertex `b` with the two chamfer endpoints.
+          out.pop();
+          out.push(chamferStart, chamferEnd);
+          out.push({ ...next });
+          continue;
+        }
+      }
+    }
+    out.push({ ...next });
+  }
+  return out;
+}
+
+/**
  * Build a path through a sequence of anchors. `posture="auto"` infers per-anchor
  * from the previous segment direction so the path flows naturally without
  * backward zig-zags. Manual override ("axis" / "diagonal") forces every elbow
  * to use the requested posture.
+ *
+ * In "manhattan-45" mode, a final pass auto-chamfers any remaining axis⟂axis
+ * 90° corners produced by user waypoint clicks (so an L-shape becomes a 45°
+ * elbow rather than a sharp right angle).
  */
 export function buildTracePathThroughAnchors(
   anchors: Point[],
@@ -203,7 +267,8 @@ export function buildTracePathThroughAnchors(
         : elbow90(prev, next, effective);
     for (const point of elbows) path.push({ ...point });
   }
-  return sanitizePath(path);
+  const sanitized = sanitizePath(path);
+  return mode === "manhattan-45" ? chamfer45Corners(sanitized) : sanitized;
 }
 
 function distance(a: Point, b: Point): number {
