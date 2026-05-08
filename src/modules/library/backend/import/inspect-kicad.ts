@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { ValidationError } from "../../../../core/backend/contracts/errors";
+import { ValidationError } from "../../../../core/contracts/errors";
 import type {
   FootprintRenderModel,
   SymbolRenderModel,

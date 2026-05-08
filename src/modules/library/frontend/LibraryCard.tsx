@@ -114,6 +114,7 @@ export function LibraryCard({
         type="button"
         onClick={() => onOpen(component.id)}
         className="flex h-full w-full flex-col text-left focus:outline-none focus:ring-2 focus:ring-violet-500"
+        data-testid={`library-component-card-${component.id}`}
       >
         <div className="relative flex h-22 items-center justify-center border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40">
           <span className="text-3xl font-semibold tracking-tight text-slate-400 dark:text-slate-500">

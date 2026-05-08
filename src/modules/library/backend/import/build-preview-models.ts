@@ -589,6 +589,6 @@ export function buildFootprintPreviewFromParsed(
       "F.Fabrication",
       "B.Fabrication", // KiCad 8+
     ],
-    includePadLayerNames: ["F.Cu", "B.Cu"],
+    includePadLayerNames: ["F.Cu", "B.Cu", "*.Cu"],
   });
 }

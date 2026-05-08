@@ -16,6 +16,9 @@ export const definition: ModuleDefinition = {
       seededComponents: seedResult.seededComponents,
       seededSymbols: seedResult.seededSymbols,
       refreshedSymbols: seedResult.refreshedSymbols,
+      seededFootprints: seedResult.seededFootprints,
+      refreshedFootprints: seedResult.refreshedFootprints,
+      repointedComponents: seedResult.repointedComponents,
       rebuiltSymbols: rebuildResult.rebuiltSymbols,
       rebuildMs: rebuildResult.ms,
     });

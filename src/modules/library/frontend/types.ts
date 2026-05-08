@@ -47,8 +47,24 @@ export interface ComponentFootprintDetail {
   provenance: ComponentSourceProvenance | null;
 }
 
+export interface ComponentFootprintVariant {
+  footprintId: string;
+  variantLabel: string;
+  isDefault: boolean;
+  sortOrder: number;
+  name: string;
+  mountType: string | null;
+  padCount: number;
+  packageCode: {
+    imperial: string | null;
+    metric: string | null;
+  };
+}
+
 export interface ComponentDetailPayload {
   component: LibraryComponent;
   symbol: ComponentSymbolDetail;
   footprint: ComponentFootprintDetail;
+  /** All footprints this component can accept (1+ entries; default is flagged). */
+  footprintVariants: ComponentFootprintVariant[];
 }

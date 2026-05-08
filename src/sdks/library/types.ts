@@ -62,10 +62,33 @@ export interface LibraryFootprintDetail {
   provenance: LibrarySourceProvenance | null;
 }
 
+/** One row of `library_component_footprints` enriched with display metadata. */
+export interface LibraryComponentFootprintVariant {
+  footprintId: string;
+  variantLabel: string;
+  isDefault: boolean;
+  sortOrder: number;
+  /** Cached subset of LibraryFootprintDetail useful for picker UIs. */
+  name: string;
+  mountType: string | null;
+  padCount: number;
+  packageCode: {
+    imperial: string | null;
+    metric: string | null;
+  };
+}
+
 export interface LibraryComponentDetail {
   component: LibraryComponent;
   symbol: LibrarySymbolDetail;
+  /** The currently-resolved footprint detail (default unless overridden). */
   footprint: LibraryFootprintDetail;
+  /**
+   * Every footprint this component can accept. Always non-empty (length >= 1)
+   * for resolvable components; the entry whose `footprintId` matches
+   * `component.footprintId` is the default.
+   */
+  footprintVariants: LibraryComponentFootprintVariant[];
 }
 
 export interface LibrarySymbolPinSnapshot {
@@ -101,6 +124,11 @@ export interface LibraryComponentPlacementDetail {
   component: LibraryComponent;
   symbol: LibrarySymbolPlacementSnapshot;
   footprint: LibraryFootprintPlacementSnapshot;
+  /**
+   * All footprints this component can accept. Used by per-instance footprint
+   * pickers in the schematic / PCB property panels.
+   */
+  footprintVariants: LibraryComponentFootprintVariant[];
   resolvedAt: string;
 }
 

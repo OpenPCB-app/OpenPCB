@@ -1,6 +1,6 @@
-import { eq, inArray, like, or, sql } from "drizzle-orm";
+import { asc, eq, inArray, like, or, sql } from "drizzle-orm";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
-import { ValidationError } from "../../../core/backend/contracts/errors";
+import { ValidationError } from "../../../core/contracts/errors";
 import type {
   LibraryComponent,
   LibraryComponentPlacementDetail,
@@ -21,7 +21,7 @@ import type {
   SymbolRenderModel,
 } from "../../../shared/rendering";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { components, footprints, symbols } from "./schema";
+import { componentFootprints, components, footprints, symbols } from "./schema";
 
 export type ComponentRow = typeof components.$inferSelect;
 export type SymbolRow = typeof symbols.$inferSelect;
@@ -472,6 +472,89 @@ export async function resolveComponent(
   return row ? mapComponent(row) : null;
 }
 
+/**
+ * Load the full footprint variant list for a component, joined with each
+ * footprint's name/mountType/padCount/packageCode for picker UIs. Returns at
+ * least one entry (the component's default) for resolvable components; older
+ * components migrated before the join table existed get a synthetic single
+ * entry derived from their cached `footprintId`.
+ */
+async function loadComponentFootprintVariants(
+  ctx: CoreBackendModuleContext,
+  componentRow: ComponentRow,
+): Promise<
+  import("../../../sdks/library/types").LibraryComponentFootprintVariant[]
+> {
+  const db = getDb(ctx);
+  const joinRows = await db
+    .select({
+      footprintId: componentFootprints.footprintId,
+      isDefault: componentFootprints.isDefault,
+      variantLabel: componentFootprints.variantLabel,
+      sortOrder: componentFootprints.sortOrder,
+    })
+    .from(componentFootprints)
+    .where(eq(componentFootprints.componentId, componentRow.id))
+    .orderBy(asc(componentFootprints.sortOrder))
+    .all();
+
+  if (joinRows.length === 0) {
+    // Fallback: synthesize a single-entry list from the cached default so
+    // callers always receive a non-empty array. Older user-imported components
+    // without join rows still resolve.
+    const fpRow = await db
+      .select()
+      .from(footprints)
+      .where(eq(footprints.id, componentRow.footprintId))
+      .get();
+    if (!fpRow) return [];
+    const detail = mapFootprintDetail(fpRow);
+    return [
+      {
+        footprintId: fpRow.id,
+        variantLabel: detail.name,
+        isDefault: true,
+        sortOrder: 0,
+        name: detail.name,
+        mountType: detail.mountType,
+        padCount: detail.padCount,
+        packageCode: detail.packageCode,
+      },
+    ];
+  }
+
+  const fpRows = await db
+    .select()
+    .from(footprints)
+    .where(
+      inArray(
+        footprints.id,
+        joinRows.map((row) => row.footprintId),
+      ),
+    )
+    .all();
+  const fpById = new Map(fpRows.map((row) => [row.id, row]));
+
+  const variants: import("../../../sdks/library/types").LibraryComponentFootprintVariant[] =
+    [];
+  for (const row of joinRows) {
+    const fp = fpById.get(row.footprintId);
+    if (!fp) continue; // referential integrity is enforced via FK + ON DELETE CASCADE; this is defensive
+    const detail = mapFootprintDetail(fp);
+    variants.push({
+      footprintId: row.footprintId,
+      variantLabel: row.variantLabel,
+      isDefault: row.isDefault === 1,
+      sortOrder: row.sortOrder,
+      name: detail.name,
+      mountType: detail.mountType,
+      padCount: detail.padCount,
+      packageCode: detail.packageCode,
+    });
+  }
+  return variants;
+}
+
 export async function getComponentDetail(
   ctx: CoreBackendModuleContext,
   componentId: string,
@@ -500,10 +583,16 @@ export async function getComponentDetail(
     return null;
   }
 
+  const footprintVariants = await loadComponentFootprintVariants(
+    ctx,
+    componentRow,
+  );
+
   return {
     component: mapComponent(componentRow),
     symbol: mapSymbolDetail(symbolRow),
     footprint: mapFootprintDetail(footprintRow),
+    footprintVariants,
   };
 }
 
@@ -535,10 +624,16 @@ export async function resolveComponentForPlacement(
     return null;
   }
 
+  const footprintVariants = await loadComponentFootprintVariants(
+    ctx,
+    componentRow,
+  );
+
   return {
     component: mapComponent(componentRow),
     symbol: parseSymbolPlacementSnapshot(symbolRow),
     footprint: parseFootprintPlacementSnapshot(footprintRow),
+    footprintVariants,
     resolvedAt: new Date().toISOString(),
   };
 }

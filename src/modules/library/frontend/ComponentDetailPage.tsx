@@ -249,7 +249,10 @@ export function ComponentDetailPage({
                     </span>
                   ) : null}
                 </div>
-                <div className="h-64 overflow-hidden rounded-xl border border-slate-200 bg-slate-900 dark:border-slate-800">
+                <div
+                  className="h-64 overflow-hidden rounded-xl border border-slate-200 bg-slate-900 dark:border-slate-800"
+                  data-testid="footprint-preview-canvas"
+                >
                   <FootprintPreviewCanvas model={footprintPreview} />
                 </div>
               </div>
@@ -295,11 +298,17 @@ export function ComponentDetailPage({
                     {isPlaceholderFootprint ? " (No footprint yet)" : ""}
                   </dd>
                   <dt className="text-slate-500 dark:text-slate-400">Mount</dt>
-                  <dd className="text-slate-800 dark:text-slate-200">
+                  <dd
+                    className="text-slate-800 dark:text-slate-200"
+                    data-testid="component-mount-type"
+                  >
                     {detail.footprint.mountType ?? "—"}
                   </dd>
                   <dt className="text-slate-500 dark:text-slate-400">Pads</dt>
-                  <dd className="text-slate-800 dark:text-slate-200">
+                  <dd
+                    className="text-slate-800 dark:text-slate-200"
+                    data-testid="component-pad-count"
+                  >
                     {detail.footprint.padCount}
                   </dd>
                   <dt className="text-slate-500 dark:text-slate-400">
@@ -319,6 +328,57 @@ export function ComponentDetailPage({
                 </dl>
               </div>
             </div>
+
+            {detail.footprintVariants && detail.footprintVariants.length > 1 ? (
+              <div
+                className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+                data-testid="component-footprint-variants"
+              >
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  Footprint variants
+                </h3>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  This component can use any of the{" "}
+                  {detail.footprintVariants.length} footprints below. The
+                  default is preselected when placing a new instance;
+                  per-placement override coming soon.
+                </p>
+                <ul className="mt-3 divide-y divide-slate-200 dark:divide-slate-800">
+                  {detail.footprintVariants
+                    .slice()
+                    .sort((a, b) => a.sortOrder - b.sortOrder)
+                    .map((variant) => (
+                      <li
+                        key={variant.footprintId}
+                        className="flex items-center justify-between gap-4 py-2"
+                        data-testid={`component-footprint-variant-${variant.footprintId}`}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-xs font-medium text-slate-800 dark:text-slate-200">
+                              {variant.variantLabel}
+                            </span>
+                            {variant.isDefault ? (
+                              <span className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wider text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300">
+                                Default
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-0.5 truncate text-[0.6875rem] text-slate-500 dark:text-slate-400">
+                            {variant.name}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2 text-[0.6875rem] text-slate-500 dark:text-slate-400">
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800">
+                            {variant.mountType ?? "—"}
+                          </span>
+                          <span>{variant.padCount} pads</span>
+                        </div>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            ) : null}
           </section>
         )}
       </main>

@@ -3,6 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import type { LibrarySDK } from "../../../sdks";
 import { MODULE_SDK_TOKENS } from "../../../sdks";
+import {
+  BUILTIN_COMPONENT_IDS,
+  BUILTIN_FOOTPRINT_IDS,
+} from "../../../modules/library/backend/builtins/seed";
 import { resetSharedSqliteForTesting } from "../db/sqlite-client";
 import { createHttpServer } from "../http/create-http-server";
 import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
@@ -107,7 +111,7 @@ describe("library builtins", () => {
       limit: 100,
     });
     const builtinCountBefore = before.filter((c) => c.isBuiltin).length;
-    expect(builtinCountBefore).toBe(2);
+    expect(builtinCountBefore).toBe(BUILTIN_COMPONENT_IDS.size);
 
     // Re-bootstrap a second runtime against the SAME sqlite file
     const dbPath = process.env.OPENPCB_DB_PATH;
@@ -129,7 +133,139 @@ describe("library builtins", () => {
       limit: 100,
     });
     const builtinCountAfter = after.filter((c) => c.isBuiltin).length;
-    expect(builtinCountAfter).toBe(2);
+    expect(builtinCountAfter).toBe(BUILTIN_COMPONENT_IDS.size);
+  });
+
+  // The library SDK's `getFootprint` returns a flat `LibraryFootprint`
+  // (`{ id, name, data }`); the curated preview lives at
+  // `data.normalized.preview`. `LibraryFootprintDetail` (with `padCount`,
+  // `preview`, etc.) is only produced by `getComponentDetail`.
+  function readPreview(fp: { data: Record<string, unknown> } | null): {
+    pads: Array<{
+      centerMm: { x: number; y: number };
+      layer: string;
+      drillDiameterMm?: number;
+    }>;
+    kind: string;
+  } | null {
+    const normalized = (fp?.data as { normalized?: { preview?: unknown } })
+      ?.normalized;
+    return (normalized?.preview as ReturnType<typeof readPreview>) ?? null;
+  }
+
+  test("seeds 17 builtin footprints with non-empty pads (SMD chip + THT axial + disc)", async () => {
+    const { librarySdk } = await bootHarness("library-builtins-footprints");
+    expect(BUILTIN_FOOTPRINT_IDS.size).toBe(17);
+    for (const fpId of BUILTIN_FOOTPRINT_IDS) {
+      const fp = await librarySdk.getFootprint(fpId);
+      expect(fp).not.toBeNull();
+      const preview = readPreview(fp);
+      expect(preview).not.toBeNull();
+      expect(preview!.pads.length).toBe(2);
+    }
+  });
+
+  test("R_0603_1608Metric pad geometry matches IPC nominal density (~1.55mm pad-pad center)", async () => {
+    const { librarySdk } = await bootHarness("library-builtins-r0603-geom");
+    const fp = await librarySdk.getFootprint("builtin:fp:r-0603-1608m");
+    const preview = readPreview(fp);
+    expect(preview).not.toBeNull();
+    const xs = preview!.pads.map((p) => p.centerMm.x).sort((a, b) => a - b);
+    const span = xs[1]! - xs[0]!;
+    expect(span).toBeGreaterThan(1.4);
+    expect(span).toBeLessThan(1.7);
+    for (const pad of preview!.pads) {
+      expect(pad.layer).toBe("F.Cu");
+    }
+  });
+
+  test("THT footprints expose drilled pads (drillDiameterMm > 0) and *.Cu layer", async () => {
+    const { librarySdk } = await bootHarness("library-builtins-tht-drill");
+    const thtIds = [
+      "builtin:fp:r-axial-din0207-p7.62",
+      "builtin:fp:r-axial-din0207-p10.16",
+      "builtin:fp:r-axial-din0309-p12.70",
+      "builtin:fp:c-disc-d3-p2.5",
+      "builtin:fp:c-disc-d5-p5",
+      "builtin:fp:c-disc-d7.5-p5",
+    ];
+    for (const id of thtIds) {
+      const fp = await librarySdk.getFootprint(id);
+      const preview = readPreview(fp);
+      expect(preview).not.toBeNull();
+      for (const pad of preview!.pads) {
+        expect(pad.drillDiameterMm ?? 0).toBeGreaterThan(0);
+        expect(pad.layer).toBe("*.Cu");
+      }
+    }
+  });
+
+  test("R_Axial_DIN0207 P7.62mm pads sit at ±3.81mm (= 7.62mm pitch)", async () => {
+    const { librarySdk } = await bootHarness("library-builtins-axial-pitch");
+    const fp = await librarySdk.getFootprint(
+      "builtin:fp:r-axial-din0207-p7.62",
+    );
+    const preview = readPreview(fp);
+    expect(preview).not.toBeNull();
+    const xs = preview!.pads.map((p) => p.centerMm.x).sort((a, b) => a - b);
+    expect(Math.abs(xs[1]! - xs[0]!)).toBeCloseTo(7.62, 5);
+  });
+
+  test("Generic builtin:resistor + builtin:capacitor repointed to 0603 footprints", async () => {
+    const { librarySdk } = await bootHarness("library-builtins-default-fp");
+    const r = await librarySdk.getComponentDetail("builtin:resistor");
+    const c = await librarySdk.getComponentDetail("builtin:capacitor");
+    expect(r?.component.footprintId).toBe("builtin:fp:r-0603-1608m");
+    expect(c?.component.footprintId).toBe("builtin:fp:c-0603-1608m");
+    expect(r?.footprint.padCount).toBe(2);
+    expect(c?.footprint.padCount).toBe(2);
+  });
+
+  test("builtin:resistor exposes 9 footprint variants (6 SMD + 3 THT) with default flagged", async () => {
+    const { librarySdk } = await bootHarness("library-builtins-r-variants");
+    const detail = await librarySdk.getComponentDetail("builtin:resistor");
+    expect(detail).not.toBeNull();
+    const variants = detail!.footprintVariants;
+    expect(variants.length).toBe(9);
+    const defaults = variants.filter((v) => v.isDefault);
+    expect(defaults.length).toBe(1);
+    expect(defaults[0]!.footprintId).toBe("builtin:fp:r-0603-1608m");
+    expect(detail!.component.footprintId).toBe(defaults[0]!.footprintId);
+    // Sort order: variants are ordered by sortOrder ascending.
+    const sortOrders = variants.map((v) => v.sortOrder);
+    const sorted = [...sortOrders].sort((a, b) => a - b);
+    expect(sortOrders).toEqual(sorted);
+  });
+
+  test("builtin:capacitor exposes 8 footprint variants with default flagged", async () => {
+    const { librarySdk } = await bootHarness("library-builtins-c-variants");
+    const detail = await librarySdk.getComponentDetail("builtin:capacitor");
+    expect(detail).not.toBeNull();
+    const variants = detail!.footprintVariants;
+    expect(variants.length).toBe(8);
+    const defaults = variants.filter((v) => v.isDefault);
+    expect(defaults.length).toBe(1);
+    expect(defaults[0]!.footprintId).toBe("builtin:fp:c-0603-1608m");
+  });
+
+  test("placement detail surfaces footprintVariants for picker UIs", async () => {
+    const { librarySdk } = await bootHarness(
+      "library-builtins-placement-variants",
+    );
+    const placement =
+      await librarySdk.resolveComponentForPlacement("builtin:resistor");
+    expect(placement).not.toBeNull();
+    expect(placement!.footprintVariants.length).toBe(9);
+  });
+
+  test("legacy sized component IDs are removed on boot (no builtin:resistor:0805)", async () => {
+    const { librarySdk } = await bootHarness("library-builtins-legacy-removed");
+    const all = await librarySdk.searchComponents({ query: "", limit: 100 });
+    const ids = all.map((c) => c.id);
+    expect(ids).not.toContain("builtin:resistor:0805");
+    expect(ids).not.toContain("builtin:capacitor:tht-disc-d5");
+    expect(ids).toContain("builtin:resistor");
+    expect(ids).toContain("builtin:capacitor");
   });
 
   test("DELETE rejects builtin component ids with HTTP 400", async () => {
@@ -138,7 +274,9 @@ describe("library builtins", () => {
       new Request("http://localhost/api/modules/library/components/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: ["builtin:resistor"] }),
+        body: JSON.stringify({
+          ids: ["builtin:resistor", "builtin:capacitor"],
+        }),
       }),
     );
     expect(response.status).toBe(400);

@@ -1,4 +1,10 @@
-import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  index,
+  primaryKey,
+} from "drizzle-orm/sqlite-core";
 
 /**
  * Library schema — three flat tables backing the component library.
@@ -27,6 +33,11 @@ export const components = sqliteTable(
     name: text("name").notNull(),
     description: text("description").notNull(),
     symbolId: text("symbol_id").notNull(),
+    /**
+     * Cached default footprint id. The full set of footprints a component can
+     * accept lives in `library_component_footprints`; this column stores the
+     * one with `is_default = 1` for fast lookup on the read path.
+     */
     footprintId: text("footprint_id").notNull(),
     tagsJson: text("tags_json").notNull(),
     createdAt: text("created_at").notNull(),
@@ -36,6 +47,33 @@ export const components = sqliteTable(
     nameIdx: index("library_components_name_idx").on(table.name),
     isBuiltinIdx: index("library_components_is_builtin_idx").on(
       table.isBuiltin,
+    ),
+  }),
+);
+
+/**
+ * 1:N component → footprint variants. A component (e.g. `builtin:resistor`)
+ * lists every footprint it can accept (e.g. R_0402, R_0603, R_THT_axial,...).
+ * Exactly one row per component has `isDefault = 1` and matches the cached
+ * `library_components.footprintId` for that component.
+ */
+export const componentFootprints = sqliteTable(
+  "library_component_footprints",
+  {
+    componentId: text("component_id").notNull(),
+    footprintId: text("footprint_id").notNull(),
+    isDefault: integer("is_default").notNull().default(0),
+    variantLabel: text("variant_label").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.componentId, table.footprintId] }),
+    componentIdx: index("library_component_footprints_component_idx").on(
+      table.componentId,
+    ),
+    defaultIdx: index("library_component_footprints_default_idx").on(
+      table.componentId,
+      table.isDefault,
     ),
   }),
 );
