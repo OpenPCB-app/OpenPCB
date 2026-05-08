@@ -30,6 +30,7 @@ export interface DesignerWorkspaceState {
   query: string;
   components: LibraryComponent[];
   selectedPartId: string | null;
+  selectedPartIds: Set<string>;
   selectedPinId: string | null;
   selectedLabelId: string | null;
   wireSourcePinId: string | null;
@@ -55,10 +56,13 @@ export interface DesignerWorkspaceActions {
   setQuery(value: string): void;
   setLabelDraftText(value: string): void;
   searchComponents(): Promise<void>;
+  searchComponentsByQuery(query: string): Promise<LibraryComponent[]>;
+  resolvePlacement(componentId: string): Promise<LibraryComponentPlacementDetail>;
   beginDragComponent(componentId: string): Promise<void>;
   setDragGhostNm(point: { x: number; y: number } | null): void;
   clearDragState(): void;
   setSelectedPartId(partId: string | null): void;
+  setSelectedPartIds(partIds: Set<string>): void;
   setSelectedPinId(pinId: string | null): void;
   setSelectedLabelId(labelId: string | null): void;
   setWireSourcePinId(pinId: string | null): void;
@@ -70,6 +74,7 @@ export interface DesignerWorkspaceActions {
 
 export interface DesignerWorkspaceDerived {
   selectedPart: DesignerPlacedPart | null;
+  selectedParts: DesignerPlacedPart[];
   selectedPin: DesignerPin | null;
   selectedLabel: DesignerLabel | null;
   wireSourcePin: DesignerPin | null;
@@ -93,8 +98,12 @@ function commandErrorMessage(
       return result.detail;
     case "INVALID_LABEL":
       return result.detail;
+    case "INVALID_PRIMITIVE":
+      return result.detail;
     case "INVALID_PCB_BOARD_SETTINGS":
       return result.detail;
+    case "DUPLICATE_REFERENCE":
+      return `Reference '${result.reference}' already exists`;
     default:
       return "Command failed";
   }
@@ -138,6 +147,7 @@ export function useDesignerWorkspace(params: {
   const [query, setQuery] = useState("");
   const [components, setComponents] = useState<LibraryComponent[]>([]);
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
+  const [selectedPartIds, setSelectedPartIds] = useState<Set<string>>(new Set());
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
   const [wireSourcePinId, setWireSourcePinId] = useState<string | null>(null);
@@ -362,6 +372,20 @@ export function useDesignerWorkspace(params: {
     }
   }, [api, query]);
 
+  const searchComponentsByQuery = useCallback(
+    async (q: string) => {
+      return api.searchComponents(q, 50);
+    },
+    [api],
+  );
+
+  const resolvePlacement = useCallback(
+    async (componentId: string) => {
+      return api.resolvePlacement(componentId);
+    },
+    [api],
+  );
+
   const beginDragComponent = useCallback(
     async (componentId: string) => {
       setDraggingComponentId(componentId);
@@ -552,6 +576,13 @@ export function useDesignerWorkspace(params: {
     );
   }, [projection, selectedLabelId]);
 
+  const selectedParts = useMemo(() => {
+    if (!projection || selectedPartIds.size === 0) {
+      return [];
+    }
+    return projection.parts.filter((part) => selectedPartIds.has(part.id));
+  }, [projection, selectedPartIds]);
+
   return {
     state: {
       loadingDesigns,
@@ -567,6 +598,7 @@ export function useDesignerWorkspace(params: {
       query,
       components,
       selectedPartId,
+      selectedPartIds,
       selectedPinId,
       selectedLabelId,
       wireSourcePinId,
@@ -591,10 +623,13 @@ export function useDesignerWorkspace(params: {
       setQuery,
       setLabelDraftText,
       searchComponents,
+      searchComponentsByQuery,
+      resolvePlacement,
       beginDragComponent,
       setDragGhostNm,
       clearDragState,
       setSelectedPartId,
+      setSelectedPartIds,
       setSelectedPinId,
       setSelectedLabelId,
       setWireSourcePinId,
@@ -605,6 +640,7 @@ export function useDesignerWorkspace(params: {
     },
     derived: {
       selectedPart,
+      selectedParts,
       selectedPin,
       selectedLabel,
       wireSourcePin,

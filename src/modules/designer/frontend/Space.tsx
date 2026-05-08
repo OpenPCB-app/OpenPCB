@@ -1,4 +1,6 @@
 import {
+  useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -14,14 +16,44 @@ import {
   SchematicCanvas,
   type SchematicCanvasHandle,
 } from "./components/SchematicCanvas";
+import { ComponentCommandPalette } from "./components/ComponentCommandPalette";
 import { ToastProvider, useToast } from "./hooks/use-toast";
 import { useDesignerWorkspace } from "./hooks/useDesignerWorkspace";
 import { PcbCanvas } from "./pcb/PcbCanvas";
+import type { LibraryComponent } from "../../../sdks";
 import type { ModuleSpaceProps } from "./types";
 import { SCHEMATIC_GRID_MM } from "./types";
+import { isEditableShortcutTarget } from "../../../shared/frontend/canvas/utils/keyboard-shortcuts";
 
 const MIN_LEFT = 240;
 const MAX_LEFT = 520;
+const DEFAULT_COMPONENT_LIMIT = 8;
+
+function commonComponentRank(component: LibraryComponent): number {
+  const text = [component.name, component.description, ...component.tags]
+    .join(" ")
+    .toLowerCase();
+  if (text.includes("resistor")) return 0;
+  if (text.includes("capacitor") || /\bcap\b/.test(text)) return 1;
+  if (text.includes("led")) return 2;
+  if (text.includes("diode")) return 3;
+  if (text.includes("transistor") || text.includes("mosfet")) return 4;
+  if (text.includes("connector") || text.includes("header")) return 5;
+  if (text.includes("opamp") || text.includes("mcu") || /\bic\b/.test(text)) {
+    return 6;
+  }
+  return 100;
+}
+
+function sortCommonComponents(
+  components: LibraryComponent[],
+): LibraryComponent[] {
+  return [...components].sort((a, b) => {
+    const rankDelta = commonComponentRank(a) - commonComponentRank(b);
+    if (rankDelta !== 0) return rankDelta;
+    return a.name.localeCompare(b.name);
+  });
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -50,7 +82,95 @@ function DesignerSpaceInner({
   const [leftWidth, setLeftWidth] = useState(300);
   const [zoomPercent, setZoomPercent] = useState(70);
   const [gridVisible, setGridVisible] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const canvasRef = useRef<SchematicCanvasHandle | null>(null);
+  const canOpenPalette = state.activeView === "schem" && !!state.projection;
+
+  const openComponentPalette = useCallback(() => {
+    if (canOpenPalette) {
+      setPaletteOpen(true);
+    }
+  }, [canOpenPalette]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isEditableShortcutTarget(event.target)) {
+        return;
+      }
+      const hasModifier = event.metaKey || event.ctrlKey;
+      if (hasModifier && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        openComponentPalette();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [openComponentPalette]);
+
+  const handlePaletteSelect = useCallback(
+    async (componentId: string) => {
+      setPaletteOpen(false);
+      try {
+        const detail = await actions.resolvePlacement(componentId);
+        if (!canvasRef.current) {
+          addToast("Open a schematic before placing components", "warning");
+          return;
+        }
+        canvasRef.current.armComponentPlacement(detail);
+      } catch (err) {
+        addToast(
+          err instanceof Error ? err.message : "Failed to resolve component",
+          "error",
+        );
+      }
+    },
+    [actions.resolvePlacement, addToast],
+  );
+
+  const searchPaletteComponents = useCallback(
+    (q: string) => actions.searchComponentsByQuery(q).catch(() => []),
+    [actions.searchComponentsByQuery],
+  );
+
+  const loadPaletteDefaults = useCallback(async () => {
+    const recentIds: string[] = [];
+    const seen = new Set<string>();
+    const parts = state.projection?.parts ?? [];
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+      const componentId = parts[index]?.componentId;
+      if (!componentId || seen.has(componentId)) continue;
+      seen.add(componentId);
+      recentIds.push(componentId);
+      if (recentIds.length >= DEFAULT_COMPONENT_LIMIT) break;
+    }
+
+    if (recentIds.length > 0) {
+      const details = await Promise.all(
+        recentIds.map((componentId) =>
+          actions.resolvePlacement(componentId).catch(() => null),
+        ),
+      );
+      const components = details
+        .map((detail) => detail?.component ?? null)
+        .filter((component): component is LibraryComponent => component !== null);
+      if (components.length > 0) {
+        return { label: "Recently used", components };
+      }
+    }
+
+    const components = await actions.searchComponentsByQuery("");
+    return {
+      label: "Common components",
+      components: sortCommonComponents(components).slice(
+        0,
+        DEFAULT_COMPONENT_LIMIT,
+      ),
+    };
+  }, [
+    actions.resolvePlacement,
+    actions.searchComponentsByQuery,
+    state.projection?.parts,
+  ]);
 
   const selectedDesign = useMemo(
     () =>
@@ -132,6 +252,8 @@ function DesignerSpaceInner({
         onViewChange={actions.setActiveView}
         onSelectDesign={actions.selectDesign}
         onCreateDesign={actions.createDesign}
+        canOpenPalette={canOpenPalette}
+        onOpenPalette={openComponentPalette}
       />
 
       {state.error ? (
@@ -185,6 +307,7 @@ function DesignerSpaceInner({
                   onZoomOut={() => canvasRef.current?.zoomOut()}
                   onFit={() => canvasRef.current?.fit()}
                   onToggleGrid={() => setGridVisible((value) => !value)}
+                  onPlaceComponent={openComponentPalette}
                   onPlaceGnd={() => canvasRef.current?.armPrimitive("gnd")}
                   onPlacePwr={() => canvasRef.current?.armPrimitive("pwr")}
                   onPlaceNetPortal={() =>
@@ -201,6 +324,14 @@ function DesignerSpaceInner({
         gridMm={SCHEMATIC_GRID_MM}
         zoom={zoomPercent}
         selection={selectionSummary}
+      />
+
+      <ComponentCommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        onSelect={handlePaletteSelect}
+        searchComponents={searchPaletteComponents}
+        loadDefaultComponents={loadPaletteDefaults}
       />
     </div>
   );

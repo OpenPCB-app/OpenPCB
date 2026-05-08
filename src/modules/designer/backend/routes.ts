@@ -2,10 +2,7 @@ import type {
   CoreBackendModuleContext,
   ModuleRouterHandle,
 } from "../../../core/contracts/modules/backend-module";
-import {
-  NotFoundError,
-  ValidationError,
-} from "../../../core/backend/contracts/errors";
+import { NotFoundError, ValidationError } from "../../../core/contracts/errors";
 import type {
   DesignerCommandEnvelope,
   DesignerCreateWireCommand,
@@ -19,6 +16,7 @@ import type {
   DesignerPcbDeleteTraceCommand,
   DesignerPcbDeleteViaCommand,
   DesignerPcbMovePlacementCommand,
+  DesignerPcbMovePlacementsCommand,
   DesignerPcbRotatePlacementCommand,
   DesignerPcbSetActiveLayerCommand,
   DesignerPcbSetBoardSettingsCommand,
@@ -29,6 +27,8 @@ import type {
   DesignerPlacePwrPortCommand,
   DesignerRotatePartCommand,
   DesignerRotatePrimitiveCommand,
+  DesignerUpdatePartPropertiesCommand,
+  DesignerUpdatePartsPropertiesCommand,
   DesignerUpdatePrimitiveTextCommand,
   DesignerUpsertLabelCommand,
   PcbCopperLayerId,
@@ -168,6 +168,71 @@ function parseMirrorPartCommand(
     type: "mirror_part",
     partId,
     mirrored: raw.mirrored === true,
+  };
+}
+
+function parseUpdatePartPropertiesCommand(
+  raw: Record<string, unknown>,
+): DesignerUpdatePartPropertiesCommand {
+  const partId = asString(raw.partId);
+  if (!partId) {
+    throw new ValidationError("command.partId must be a string");
+  }
+  if (raw.reference !== undefined && asString(raw.reference) === null) {
+    throw new ValidationError("command.reference must be a string");
+  }
+  if (raw.value !== undefined && asString(raw.value) === null) {
+    throw new ValidationError("command.value must be a string");
+  }
+  if (raw.propertiesJson !== undefined && !asRecord(raw.propertiesJson)) {
+    throw new ValidationError("command.propertiesJson must be an object");
+  }
+  const reference = asString(raw.reference) ?? undefined;
+  const value = asString(raw.value) ?? undefined;
+  const propertiesJson = asRecord(raw.propertiesJson) ?? undefined;
+
+  return {
+    type: "update_part_properties",
+    partId,
+    ...(reference !== undefined && { reference }),
+    ...(value !== undefined && { value }),
+    ...(propertiesJson !== undefined && {
+      propertiesJson:
+        propertiesJson as DesignerUpdatePartPropertiesCommand["propertiesJson"],
+    }),
+  };
+}
+
+function parseUpdatePartsPropertiesCommand(
+  raw: Record<string, unknown>,
+): DesignerUpdatePartsPropertiesCommand {
+  const partIdsRaw = raw.partIds;
+  if (
+    !Array.isArray(partIdsRaw) ||
+    partIdsRaw.length === 0 ||
+    partIdsRaw.some((id) => typeof id !== "string")
+  ) {
+    throw new ValidationError(
+      "command.partIds must be a non-empty array of strings",
+    );
+  }
+  if (raw.value !== undefined && asString(raw.value) === null) {
+    throw new ValidationError("command.value must be a string");
+  }
+  if (raw.propertiesJson !== undefined && !asRecord(raw.propertiesJson)) {
+    throw new ValidationError("command.propertiesJson must be an object");
+  }
+  const value = asString(raw.value) ?? undefined;
+  const propertiesJson = asRecord(raw.propertiesJson) ?? undefined;
+
+  return {
+    type: "update_parts_properties",
+    partIds: partIdsRaw,
+    ...(value !== undefined && { value }),
+    ...(propertiesJson !== undefined && {
+      propertiesJson:
+        propertiesJson as DesignerUpdatePartsPropertiesCommand["propertiesJson"],
+    }),
   };
 }
 
@@ -364,6 +429,38 @@ function parsePcbMovePlacementCommand(
     placementId,
     positionMm: parsePointMm(raw.positionMm, "command.positionMm"),
   };
+}
+
+function parsePcbMovePlacementsCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbMovePlacementsCommand {
+  const updatesRaw = raw.updates;
+  if (!Array.isArray(updatesRaw)) {
+    throw new ValidationError("command.updates must be an array");
+  }
+  const updates = updatesRaw.map((entry, index) => {
+    const record = asRecord(entry);
+    if (!record) {
+      throw new ValidationError(`command.updates[${index}] must be an object`);
+    }
+    const placementId = asString(record.placementId);
+    if (!placementId) {
+      throw new ValidationError(
+        `command.updates[${index}].placementId must be a string`,
+      );
+    }
+    return {
+      placementId,
+      positionMm: parsePointMm(
+        record.positionMm,
+        `command.updates[${index}].positionMm`,
+      ),
+    };
+  });
+  if (updates.length === 0) {
+    throw new ValidationError("command.updates must have at least 1 entry");
+  }
+  return { type: "pcb_move_placements", updates };
 }
 
 function parsePcbRotatePlacementCommand(
@@ -628,6 +725,12 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
     case "mirror_part":
       command = parseMirrorPartCommand(commandRecord);
       break;
+    case "update_part_properties":
+      command = parseUpdatePartPropertiesCommand(commandRecord);
+      break;
+    case "update_parts_properties":
+      command = parseUpdatePartsPropertiesCommand(commandRecord);
+      break;
     case "delete_entity":
       command = parseDeleteEntityCommand(commandRecord);
       break;
@@ -657,6 +760,9 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
       break;
     case "pcb_move_placement":
       command = parsePcbMovePlacementCommand(commandRecord);
+      break;
+    case "pcb_move_placements":
+      command = parsePcbMovePlacementsCommand(commandRecord);
       break;
     case "pcb_rotate_placement":
       command = parsePcbRotatePlacementCommand(commandRecord);

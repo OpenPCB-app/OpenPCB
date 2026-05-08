@@ -629,6 +629,7 @@ export function replaceSchematicProjection(
         mirrored: part.mirrored ? 1 : 0,
         symbolSnapshotJson: JSON.stringify(part.symbol),
         footprintSnapshotJson: JSON.stringify(part.footprint),
+        propertiesJson: JSON.stringify(part.propertiesJson ?? {}),
         createdAt: timestamp,
         updatedAt: timestamp,
       })

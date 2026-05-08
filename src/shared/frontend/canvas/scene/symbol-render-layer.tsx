@@ -1,11 +1,16 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import { EDAText, PinDots, ThickLineBucket } from "../primitives";
-import type { SymbolRenderModel } from "../../../rendering";
+import type { PreviewLabel, SymbolRenderModel } from "../../../rendering";
 import { RENDER_ORDER } from "../layers";
 import { useCanvasTheme } from "../theme";
 import { graphicStrokeSegments } from "../preview/geometry";
-import { BODY_STROKE_MM, SYMBOL_PIN_DOT_RADIUS_MM } from "../defaults";
+import {
+  BODY_STROKE_MM,
+  KLC_TEXT_SIZE_MM,
+  REFERENCE_OFFSET_MM,
+  SYMBOL_PIN_DOT_RADIUS_MM,
+} from "../defaults";
 
 interface StrokeBucket {
   widthMm: number;
@@ -60,6 +65,8 @@ export function SymbolRenderLayer({
   model,
   counterRotationDeg = 0,
   counterMirrored = false,
+  referenceText,
+  valueText,
 }: {
   model: SymbolRenderModel;
   /**
@@ -70,6 +77,10 @@ export function SymbolRenderLayer({
    */
   counterRotationDeg?: number;
   counterMirrored?: boolean;
+  /** Optional instance designator override, e.g. R6/C2/U1. */
+  referenceText?: string;
+  /** Optional instance value override. Empty string hides the value label. */
+  valueText?: string;
 }) {
   const { theme } = useCanvasTheme();
   const pt = theme.preview;
@@ -136,6 +147,104 @@ export function SymbolRenderLayer({
     [model.pins],
   );
 
+  const referenceLabel = model.labels.find((label) => label.role === "reference");
+  const hasValueLabel = model.labels.some((label) => label.role === "value");
+  const hasInstanceValue = valueText !== undefined && valueText.trim().length > 0;
+  const fallbackValueLabel: PreviewLabel | null = hasInstanceValue
+    ? {
+        id: "instance:value",
+        text: valueText!.trim(),
+        at: {
+          x:
+            referenceLabel?.at.x ??
+            ((model.bounds?.minX ?? -1) + (model.bounds?.maxX ?? 1)) / 2,
+          y:
+            (referenceLabel?.at.y ??
+              (model.bounds?.maxY ?? 0) + REFERENCE_OFFSET_MM) -
+            (referenceLabel?.fontSizeMm ?? KLC_TEXT_SIZE_MM) * 1.25,
+        },
+        fontSizeMm: referenceLabel?.fontSizeMm ?? KLC_TEXT_SIZE_MM,
+        rotationDeg: 0,
+        anchorX: "center",
+        anchorY: "bottom",
+        role: "value",
+      }
+    : null;
+
+  function renderLabel(label: PreviewLabel, key: string) {
+    if (
+      key !== "instance:value" &&
+      label.role === "value" &&
+      valueText !== undefined &&
+      hasValueLabel
+    ) {
+      return null;
+    }
+
+    const counterScaleX = counterMirrored ? -1 : 1;
+    const counterRotationRad = (-counterRotationDeg * Math.PI) / 180;
+    const needsCounter = counterRotationDeg !== 0 || counterMirrored;
+
+    const color =
+      label.role === "pin-number"
+        ? pt.symbolPinNumber
+        : label.role === "reference"
+          ? pt.symbolRefLabel
+          : label.role === "value"
+            ? pt.symbolValueLabel
+            : pt.symbolPinLabel;
+    const rotation =
+      label.rotationDeg === 0
+        ? undefined
+        : ([0, 0, (label.rotationDeg * Math.PI) / 180] as [
+            number,
+            number,
+            number,
+          ]);
+
+    const isLight = theme.mode === "light";
+    const outlineWidth = isLight ? 0.025 : undefined;
+    const outlineColor = isLight ? "#f5f5f0" : undefined;
+
+    const labelText =
+      label.role === "reference"
+        ? referenceText ?? label.text
+        : label.role === "value"
+          ? label.text
+          : label.text;
+
+    if (labelText.length === 0) {
+      return null;
+    }
+
+    const text = (
+      <EDAText
+        position={needsCounter ? [0, 0, 0] : [label.at.x, label.at.y, 0]}
+        color={color}
+        fontSize={label.fontSizeMm}
+        anchorX={label.anchorX}
+        anchorY={label.anchorY}
+        rotation={rotation}
+        outlineWidth={outlineWidth}
+        outlineColor={outlineColor}
+      >
+        {labelText}
+      </EDAText>
+    );
+
+    if (!needsCounter) {
+      return <group key={key}>{text}</group>;
+    }
+
+    return (
+      <group key={key} position={[label.at.x, label.at.y, 0]}>
+        <group scale={[counterScaleX, 1, 1]}>
+          <group rotation={[0, 0, counterRotationRad]}>{text}</group>
+        </group>
+      </group>
+    );
+  }
+
   return (
     <>
       {fillShapes.length > 0 && (
@@ -166,62 +275,8 @@ export function SymbolRenderLayer({
         defaultColor={pt.symbolPinDot}
       />
 
-      {model.labels.map((label) => {
-        const counterScaleX = counterMirrored ? -1 : 1;
-        const counterRotationRad = (-counterRotationDeg * Math.PI) / 180;
-        const needsCounter = counterRotationDeg !== 0 || counterMirrored;
-
-        const color =
-          label.role === "pin-number"
-            ? pt.symbolPinNumber
-            : label.role === "reference"
-              ? pt.symbolRefLabel
-              : label.role === "value"
-                ? pt.symbolValueLabel
-                : pt.symbolPinLabel;
-        const rotation =
-          label.rotationDeg === 0
-            ? undefined
-            : ([0, 0, (label.rotationDeg * Math.PI) / 180] as [
-                number,
-                number,
-                number,
-              ]);
-
-        const isLight = theme.mode === "light";
-        const outlineWidth = isLight ? 0.025 : undefined;
-        const outlineColor = isLight ? "#f5f5f0" : undefined;
-
-        const text = (
-          <EDAText
-            position={needsCounter ? [0, 0, 0] : [label.at.x, label.at.y, 0]}
-            color={color}
-            fontSize={label.fontSizeMm}
-            anchorX={label.anchorX}
-            anchorY={label.anchorY}
-            rotation={rotation}
-            outlineWidth={outlineWidth}
-            outlineColor={outlineColor}
-          >
-            {label.text}
-          </EDAText>
-        );
-
-        if (!needsCounter) {
-          return <group key={label.id}>{text}</group>;
-        }
-
-        // Nested groups apply T(label.at) * S(1/parentScaleX) * R(-parentRot)
-        // so the label's world transform reduces to pure translation, keeping
-        // text upright/unmirrored even when the parent part is rotated/flipped.
-        return (
-          <group key={label.id} position={[label.at.x, label.at.y, 0]}>
-            <group scale={[counterScaleX, 1, 1]}>
-              <group rotation={[0, 0, counterRotationRad]}>{text}</group>
-            </group>
-          </group>
-        );
-      })}
+      {model.labels.map((label) => renderLabel(label, label.id))}
+      {fallbackValueLabel ? renderLabel(fallbackValueLabel, fallbackValueLabel.id) : null}
     </>
   );
 }

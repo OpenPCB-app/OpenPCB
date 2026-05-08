@@ -8,7 +8,7 @@ import { RENDER_ORDER } from "../layers";
 preloadFont(
   {
     characters:
-      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-+/()[]{}#~:;,!?@$%^&*=<>_ ",
+      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-+/()[]{}#~:;,!?@$%^&*=<>_ Ωωµμ",
   } as unknown as Parameters<typeof preloadFont>[0],
   () => {},
 );

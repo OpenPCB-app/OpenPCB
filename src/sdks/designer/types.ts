@@ -205,6 +205,20 @@ export interface DesignerPin {
   };
 }
 
+export interface PartPropertiesJson {
+  valueStructured?: {
+    kind: "resistor" | "capacitor" | "generic";
+    amount?: number;
+    unit?: string;
+    tolerance?: string;
+  };
+  pcb?: {
+    staleReason?: string;
+    staleAt?: string;
+  };
+  [key: string]: unknown;
+}
+
 export interface DesignerPlacedPart {
   id: string;
   componentId: string;
@@ -219,6 +233,7 @@ export interface DesignerPlacedPart {
   symbol: LibrarySymbolPlacementSnapshot;
   footprint: LibraryFootprintPlacementSnapshot;
   pins: DesignerPin[];
+  propertiesJson: PartPropertiesJson;
 }
 
 export interface DesignerWire {
@@ -321,6 +336,21 @@ export interface DesignerMirrorPartCommand {
   type: "mirror_part";
   partId: string;
   mirrored: boolean;
+}
+
+export interface DesignerUpdatePartPropertiesCommand {
+  type: "update_part_properties";
+  partId: string;
+  reference?: string;
+  value?: string;
+  propertiesJson?: PartPropertiesJson;
+}
+
+export interface DesignerUpdatePartsPropertiesCommand {
+  type: "update_parts_properties";
+  partIds: string[];
+  value?: string;
+  propertiesJson?: PartPropertiesJson;
 }
 
 export interface DesignerDeleteEntityCommand {
@@ -441,6 +471,8 @@ export type DesignerCommand =
   | DesignerMovePartCommand
   | DesignerRotatePartCommand
   | DesignerMirrorPartCommand
+  | DesignerUpdatePartPropertiesCommand
+  | DesignerUpdatePartsPropertiesCommand
   | DesignerDeleteEntityCommand
   | DesignerUpsertLabelCommand
   | DesignerPlaceGndPortCommand
@@ -526,6 +558,11 @@ export type DesignerDispatchResult =
       ok: false;
       code: "INVALID_WIRE_PATH";
       detail: string;
+    }
+  | {
+      ok: false;
+      code: "DUPLICATE_REFERENCE";
+      reference: string;
     }
   | {
       ok: false;

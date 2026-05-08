@@ -135,5 +135,6 @@ export function buildPlacePartPayload(
     symbol: detail.symbol,
     footprint: detail.footprint,
     pins: buildPins(partId, detail, positionNm, normalizedRotation, mirrored),
+    propertiesJson: "{}",
   };
 }

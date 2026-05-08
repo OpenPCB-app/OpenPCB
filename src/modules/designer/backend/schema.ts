@@ -34,6 +34,7 @@ export const schematicParts = sqliteTable(
     mirrored: integer("mirrored").notNull().default(0),
     symbolSnapshotJson: text("symbol_snapshot_json").notNull(),
     footprintSnapshotJson: text("footprint_snapshot_json").notNull(),
+    propertiesJson: text("properties_json").notNull().default("{}"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },

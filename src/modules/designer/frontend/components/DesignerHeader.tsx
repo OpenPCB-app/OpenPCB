@@ -1,9 +1,5 @@
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from "../../../../core/frontend/src/components/ui/tabs";
-import { ChevronDown, Plus } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@shared/frontend/ui/tabs";
+import { ChevronDown, Plus, Search } from "lucide-react";
 import { useState, type ReactElement } from "react";
 import type { DesignerDesignSummary } from "../../../../sdks/designer";
 import type { DesignerView } from "../types";
@@ -16,6 +12,8 @@ interface DesignerHeaderProps {
   onViewChange: (view: DesignerView) => void;
   onSelectDesign: (designId: string | null) => void;
   onCreateDesign: () => void;
+  canOpenPalette: boolean;
+  onOpenPalette: () => void;
 }
 
 export function DesignerHeader({
@@ -26,6 +24,8 @@ export function DesignerHeader({
   onViewChange,
   onSelectDesign,
   onCreateDesign,
+  canOpenPalette,
+  onOpenPalette,
 }: DesignerHeaderProps): ReactElement {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -116,7 +116,18 @@ export function DesignerHeader({
         </TabsList>
       </Tabs>
 
-      <div />
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={onOpenPalette}
+          disabled={!canOpenPalette}
+          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+          title="Place component (⌘/Ctrl K)"
+        >
+          <Search className="h-3.5 w-3.5" />
+          Place
+        </button>
+      </div>
     </header>
   );
 }

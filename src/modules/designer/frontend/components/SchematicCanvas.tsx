@@ -133,6 +133,11 @@ export interface SchematicCanvasHandle {
    * supplying an empty string lets the canvas open its inline picker.
    */
   armPrimitive(kind: DesignerPrimitiveKind, text?: string): void;
+  /**
+   * Arm the next click for a component placement. Click canvas to place;
+   * Esc cancels.
+   */
+  armComponentPlacement(detail: LibraryComponentPlacementDetail): void;
 }
 
 interface SchematicCanvasProps {
@@ -598,6 +603,7 @@ function InvalidateOnCanvasChange({
   dragSession,
   marqueeRect,
   wireSession,
+  armedComponentDetail,
 }: {
   projection: DesignerSchematicProjection | null;
   cursorNm: PointNm | null;
@@ -605,6 +611,7 @@ function InvalidateOnCanvasChange({
   dragSession: DragPartsSession | null;
   marqueeRect: { a: PointMm | null; b: PointMm | null } | null;
   wireSession: WireSession | null;
+  armedComponentDetail: LibraryComponentPlacementDetail | null;
 }) {
   const invalidate = useThree((state) => state.invalidate);
   useEffect(() => {
@@ -617,6 +624,7 @@ function InvalidateOnCanvasChange({
     dragSession,
     marqueeRect,
     wireSession,
+    armedComponentDetail,
   ]);
   return null;
 }
@@ -667,6 +675,8 @@ export const SchematicCanvas = forwardRef<
   const [wireSession, setWireSession] = useState<WireSession | null>(null);
   const [armedLabelText, setArmedLabelText] = useState<string | null>(null);
   const [armedPrimitive, setArmedPrimitive] = useState<ArmedPrimitive>(null);
+  const [armedComponentDetail, setArmedComponentDetail] =
+    useState<LibraryComponentPlacementDetail | null>(null);
   const [pwrPickerOpen, setPwrPickerOpen] = useState(false);
   const [netPortalPickerOpen, setNetPortalPickerOpen] = useState(false);
   const cameraRef = useRef<OrthographicCamera | null>(null);
@@ -675,6 +685,7 @@ export const SchematicCanvas = forwardRef<
 
   useEffect(() => {
     actions.setSelectedPartId(firstSelectedId(selection.partIds));
+    actions.setSelectedPartIds(selection.partIds);
     actions.setSelectedLabelId(firstSelectedId(selection.labelIds));
     const pinId = wireSession?.sourcePinId ?? null;
     actions.setSelectedPinId(pinId);
@@ -797,6 +808,13 @@ export const SchematicCanvas = forwardRef<
       onZoomChange?.(camera.zoom * 2);
     },
     armPrimitive(kind, text) {
+      setArmedComponentDetail(null);
+      setArmedLabelText(null);
+      setArmedPrimitive(null);
+      setPwrPickerOpen(false);
+      setNetPortalPickerOpen(false);
+      setWireSession(null);
+      actions.setWireSourcePinId(null);
       if (kind === "gnd") {
         setArmedPrimitive({ kind: "gnd" });
         return;
@@ -817,6 +835,16 @@ export const SchematicCanvas = forwardRef<
       } else {
         setNetPortalPickerOpen(true);
       }
+    },
+    armComponentPlacement(detail) {
+      setArmedLabelText(null);
+      setArmedPrimitive(null);
+      setPwrPickerOpen(false);
+      setNetPortalPickerOpen(false);
+      setDragSession(null);
+      setWireSession(null);
+      actions.setWireSourcePinId(null);
+      setArmedComponentDetail(detail);
     },
     fit() {
       fitCamera();
@@ -1176,6 +1204,7 @@ export const SchematicCanvas = forwardRef<
           dragSession ||
           armedLabelText ||
           armedPrimitive ||
+          armedComponentDetail ||
           pwrPickerOpen ||
           netPortalPickerOpen
         ) {
@@ -1185,6 +1214,7 @@ export const SchematicCanvas = forwardRef<
           setDragSession(null);
           setArmedLabelText(null);
           setArmedPrimitive(null);
+          setArmedComponentDetail(null);
           setPwrPickerOpen(false);
           setNetPortalPickerOpen(false);
           actions.setWireSourcePinId(null);
@@ -1373,6 +1403,7 @@ export const SchematicCanvas = forwardRef<
     actions,
     armedLabelText,
     armedPrimitive,
+    armedComponentDetail,
     pwrPickerOpen,
     netPortalPickerOpen,
     dispatchCommandsSequentially,
@@ -1432,6 +1463,24 @@ export const SchematicCanvas = forwardRef<
         const partId = hitPartId(worldNm);
         const labelId = hitLabelId(worldNm);
         const primitiveId = hitPrimitiveId(worldNm);
+
+        if (armedComponentDetail) {
+          void actions
+            .dispatchCommand({
+              type: "place_part",
+              componentId: armedComponentDetail.component.id,
+              positionNm: snappedWorldNm,
+            })
+            .then(() => {
+              setArmedComponentDetail(null);
+            })
+            .catch((err) =>
+              actions.setError(
+                err instanceof Error ? err.message : "Failed to place component",
+              ),
+            );
+          return;
+        }
 
         if (armedLabelText) {
           const text = armedLabelText.trim();
@@ -1844,6 +1893,7 @@ export const SchematicCanvas = forwardRef<
       actions,
       armedLabelText,
       armedPrimitive,
+      armedComponentDetail,
       commitWireToPin,
       commitWireToWireJunction,
       dispatchCommandsSequentially,
@@ -1907,6 +1957,8 @@ export const SchematicCanvas = forwardRef<
   }, [cursorNm, pinById, projection, wireSession]);
 
   const dragGhostModel = dragPlacementDetail?.symbol.preview ?? null;
+  const componentGhostModel = armedComponentDetail?.symbol.preview ?? null;
+  const componentGhostNm = armedComponentDetail && cursorNm ? snapNm(cursorNm) : null;
   const marqueeOverlay = marquee.overlayProps;
 
   const displayedPrimitives = useMemo(() => {
@@ -1974,6 +2026,7 @@ export const SchematicCanvas = forwardRef<
           dragSession={dragSession}
           marqueeRect={{ a: marqueeOverlay.a, b: marqueeOverlay.b }}
           wireSession={wireSession}
+          armedComponentDetail={armedComponentDetail}
         />
         <SchematicScene
           projection={projection}
@@ -1991,6 +2044,8 @@ export const SchematicCanvas = forwardRef<
           marqueeOverlay={marqueeOverlay}
           dragGhostNm={dragGhostNm}
           dragGhostModel={dragGhostModel}
+          componentGhostNm={componentGhostNm}
+          componentGhostModel={componentGhostModel}
         />
       </EdaCanvas>
       {pwrPickerOpen ? (
@@ -2031,6 +2086,8 @@ interface SchematicSceneProps {
   marqueeOverlay: { a: PointMm | null; b: PointMm | null; color: string };
   dragGhostNm: { x: number; y: number } | null;
   dragGhostModel: SymbolRenderModel | null;
+  componentGhostNm: { x: number; y: number } | null;
+  componentGhostModel: SymbolRenderModel | null;
 }
 
 function SchematicScene({
@@ -2049,6 +2106,8 @@ function SchematicScene({
   marqueeOverlay,
   dragGhostNm,
   dragGhostModel,
+  componentGhostNm,
+  componentGhostModel,
 }: SchematicSceneProps) {
   const { theme } = useCanvasTheme();
   const t = theme.schematic;
@@ -2188,6 +2247,8 @@ function SchematicScene({
                   model={model}
                   counterRotationDeg={part.rotationDeg}
                   counterMirrored={part.mirrored}
+                  referenceText={part.reference}
+                  valueText={part.value}
                 />
                 {selected ? (
                   <PartSelectionOutline part={part} color={t.selectionColor} />
@@ -2260,6 +2321,29 @@ function SchematicScene({
               renderOrder={RENDER_ORDER.PREVIEW}
             >
               <SymbolRenderLayer model={dragGhostModel} />
+              <mesh>
+                <circleGeometry args={[0.9, 24]} />
+                <meshBasicMaterial
+                  color={t.dragGhostColor}
+                  transparent
+                  opacity={0.2}
+                  depthTest={false}
+                  depthWrite={false}
+                />
+              </mesh>
+            </group>
+          ) : null}
+
+          {componentGhostNm && componentGhostModel ? (
+            <group
+              position={[
+                Units.nmToMm(componentGhostNm.x),
+                Units.nmToMm(componentGhostNm.y),
+                0,
+              ]}
+              renderOrder={RENDER_ORDER.PREVIEW}
+            >
+              <SymbolRenderLayer model={componentGhostModel} />
               <mesh>
                 <circleGeometry args={[0.9, 24]} />
                 <meshBasicMaterial

@@ -30,6 +30,7 @@ import type {
 } from "./payload-types";
 import {
   componentNotFound,
+  duplicateReference,
   entityNotFound,
   invalidLabel,
   invalidPcbBoardSettings,
@@ -167,6 +168,7 @@ function insertPart(
       mirrored: payload.mirrored ? 1 : 0,
       symbolSnapshotJson: JSON.stringify(payload.symbol),
       footprintSnapshotJson: JSON.stringify(payload.footprint),
+      propertiesJson: payload.propertiesJson ?? "{}",
       createdAt: timestamp,
       updatedAt: timestamp,
     })
@@ -709,6 +711,110 @@ export function executeDesignerCommand({
       timestamp,
     });
     return okResult(bumpRevision(tx, designId, revision, timestamp), partId);
+  }
+
+  if (command.type === "update_part_properties") {
+    const partRow = tx
+      .select()
+      .from(schematicParts)
+      .where(
+        and(
+          eq(schematicParts.designId, designId),
+          eq(schematicParts.id, command.partId),
+        ),
+      )
+      .get();
+    if (!partRow) return entityNotFound(command.partId, "part");
+
+    const updates: Partial<typeof schematicParts.$inferInsert> = {
+      updatedAt: timestamp,
+    };
+
+    if (command.reference !== undefined) {
+      const trimmed = command.reference.trim();
+      if (trimmed.length === 0) {
+        return invalidPrimitive("reference must not be empty");
+      }
+      const existing = tx
+        .select({ id: schematicParts.id })
+        .from(schematicParts)
+        .where(
+          and(
+            eq(schematicParts.designId, designId),
+            eq(schematicParts.reference, trimmed),
+          ),
+        )
+        .get();
+      if (existing && existing.id !== command.partId) {
+        return duplicateReference(trimmed);
+      }
+      updates.reference = trimmed;
+    }
+
+    if (command.value !== undefined) {
+      updates.value = command.value;
+    }
+
+    if (command.propertiesJson !== undefined) {
+      updates.propertiesJson = JSON.stringify(command.propertiesJson);
+    }
+
+    tx.update(schematicParts)
+      .set(updates)
+      .where(eq(schematicParts.id, command.partId))
+      .run();
+
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      command.partId,
+    );
+  }
+
+  if (command.type === "update_parts_properties") {
+    const requestedPartIds = [...new Set(command.partIds)];
+    if (requestedPartIds.length === 0) {
+      return entityNotFound("", "part");
+    }
+    const partRows = tx
+      .select()
+      .from(schematicParts)
+      .where(
+        and(
+          eq(schematicParts.designId, designId),
+          inArray(schematicParts.id, requestedPartIds),
+        ),
+      )
+      .all();
+
+    if (partRows.length !== requestedPartIds.length) {
+      const foundIds = new Set(partRows.map((part) => part.id));
+      const missingId = requestedPartIds.find((id) => !foundIds.has(id));
+      return entityNotFound(missingId ?? requestedPartIds[0] ?? "", "part");
+    }
+
+    const updates: Partial<typeof schematicParts.$inferInsert> = {
+      updatedAt: timestamp,
+    };
+
+    if (command.value !== undefined) {
+      updates.value = command.value;
+    }
+
+    if (command.propertiesJson !== undefined) {
+      updates.propertiesJson = JSON.stringify(command.propertiesJson);
+    }
+
+    for (const partRow of partRows) {
+      tx.update(schematicParts)
+        .set(updates)
+        .where(eq(schematicParts.id, partRow.id))
+        .run();
+    }
+
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      requestedPartIds[0] ?? null,
+    );
   }
 
   if (command.type === "delete_entity") {

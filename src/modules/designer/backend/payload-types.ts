@@ -14,6 +14,7 @@ export interface PersistedPartPayload {
   symbol: LibraryComponentPlacementDetail["symbol"];
   footprint: LibraryComponentPlacementDetail["footprint"];
   pins: DesignerPin[];
+  propertiesJson?: string;
 }
 
 export interface PersistedWirePayload {

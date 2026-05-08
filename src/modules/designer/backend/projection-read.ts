@@ -58,6 +58,16 @@ function mapPinRow(row: PinRow): DesignerPin {
   };
 }
 
+function parsePropertiesJson(
+  payloadJson: string,
+): DesignerPlacedPart["propertiesJson"] {
+  try {
+    return JSON.parse(payloadJson) as DesignerPlacedPart["propertiesJson"];
+  } catch {
+    return {};
+  }
+}
+
 function mapPartRow(row: PartRow, pins: DesignerPin[]): DesignerPlacedPart {
   return {
     id: row.id,
@@ -70,6 +80,7 @@ function mapPartRow(row: PartRow, pins: DesignerPin[]): DesignerPlacedPart {
     symbol: parseSymbolSnapshotJson(row.symbolSnapshotJson),
     footprint: parseFootprintSnapshotJson(row.footprintSnapshotJson),
     pins,
+    propertiesJson: parsePropertiesJson(row.propertiesJson),
   };
 }
 

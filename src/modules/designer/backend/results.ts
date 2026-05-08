@@ -96,6 +96,11 @@ export function parseDispatchResultJson(
     return detail ? { ok: false, code, detail } : null;
   }
 
+  if (code === "DUPLICATE_REFERENCE") {
+    const reference = asString(parsed.reference);
+    return reference ? { ok: false, code, reference } : null;
+  }
+
   if (code === "INVALID_LABEL") {
     const detail = asString(parsed.detail);
     return detail ? { ok: false, code, detail } : null;
@@ -213,6 +218,12 @@ export function pcbNetClassNotFound(
   netClassId: string,
 ): DesignerDispatchResult {
   return { ok: false, code: "PCB_NET_CLASS_NOT_FOUND", netClassId };
+}
+
+export function duplicateReference(
+  reference: string,
+): DesignerDispatchResult {
+  return { ok: false, code: "DUPLICATE_REFERENCE", reference };
 }
 
 export function okResult(
