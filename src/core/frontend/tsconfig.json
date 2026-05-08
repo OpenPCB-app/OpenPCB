@@ -9,7 +9,10 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@modules/*": ["../../modules/*"],
+      "@sdks/*": ["../../sdks/*"],
+      "@shared/*": ["../../shared/*"]
     }
   },
   "include": [
@@ -19,7 +22,15 @@
     "../../contracts/**/*.ts",
     "../../sdks/**/*.ts",
     "../../shared/domain/**/*.ts",
-    "../../shared/rendering/types.ts"
+    "../../shared/rendering/**/*.ts",
+    "../../shared/frontend/**/*.ts",
+    "../../shared/frontend/**/*.tsx"
   ],
-  "exclude": ["../backend/**", "../../src-react/**", "../../src-ts/**", "../../modules/**", "**/*.test.ts", "**/*.test.tsx", "**/*.test.js", "**/*.test.jsx"]
+  "exclude": [
+    "../backend/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.test.js",
+    "**/*.test.jsx"
+  ]
 }

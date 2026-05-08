@@ -14,6 +14,8 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@modules": path.resolve(__dirname, "../../../src/modules"),
+      "@shared": path.resolve(__dirname, "../../../src/shared"),
+      "@sdks": path.resolve(__dirname, "../../../src/sdks"),
     },
   },
   clearScreen: false,

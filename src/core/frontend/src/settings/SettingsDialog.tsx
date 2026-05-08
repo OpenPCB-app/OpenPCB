@@ -1,7 +1,12 @@
 import * as React from "react";
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@shared/frontend/ui/tabs";
 import { SettingsSidebar } from "./SettingsSidebar";
 import { settingsNavItems, type SettingsNavItem } from "./nav";
 import { GeneralPanel } from "./panels/GeneralPanel";
@@ -34,7 +39,9 @@ export function SettingsDialog({
     [],
   );
 
-  const defaultTab = (initialTab ?? items[0]?.id ?? "general") as SettingsPanelId;
+  const defaultTab = (initialTab ??
+    items[0]?.id ??
+    "general") as SettingsPanelId;
   const [activeTab, setActiveTab] = React.useState<SettingsPanelId>(defaultTab);
 
   React.useEffect(() => {
@@ -46,7 +53,10 @@ export function SettingsDialog({
   return (
     <Dialog open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
-      <DialogContent className="max-w-5xl p-0" onPointerDownOutside={(e) => e.preventDefault()}>
+      <DialogContent
+        className="max-w-5xl p-0"
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <Tabs
           value={activeTab}
@@ -62,7 +72,11 @@ export function SettingsDialog({
                   {items.map((item) => {
                     const Panel = panelComponents[item.id];
                     return (
-                      <TabsContent key={item.id} value={item.id} className="mt-0 h-full w-full">
+                      <TabsContent
+                        key={item.id}
+                        value={item.id}
+                        className="mt-0 h-full w-full"
+                      >
                         <Panel />
                       </TabsContent>
                     );

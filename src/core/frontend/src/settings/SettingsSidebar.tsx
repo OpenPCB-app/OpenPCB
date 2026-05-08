@@ -1,4 +1,4 @@
-import { TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsList, TabsTrigger } from "@shared/frontend/ui/tabs";
 import type { SettingsNavItem } from "./nav";
 
 interface SettingsSidebarProps {
