@@ -18,12 +18,18 @@ interface DesignerSidebarProps {
   state: DesignerWorkspaceState;
   actions: DesignerWorkspaceActions;
   activeView: DesignerView;
+  pcbSlotRef?: (el: HTMLDivElement | null) => void;
 }
 
-function inferValueKind(part: DesignerPlacedPart): "resistor" | "capacitor" | "generic" {
-  const text = `${part.reference} ${part.symbol.name} ${part.footprint.name}`.toLowerCase();
-  if (part.reference.startsWith("R") || text.includes("resistor")) return "resistor";
-  if (part.reference.startsWith("C") || text.includes("capacitor")) return "capacitor";
+function inferValueKind(
+  part: DesignerPlacedPart,
+): "resistor" | "capacitor" | "generic" {
+  const text =
+    `${part.reference} ${part.symbol.name} ${part.footprint.name}`.toLowerCase();
+  if (part.reference.startsWith("R") || text.includes("resistor"))
+    return "resistor";
+  if (part.reference.startsWith("C") || text.includes("capacitor"))
+    return "capacitor";
   return "generic";
 }
 
@@ -42,18 +48,18 @@ function unitAliasesForKind(
       r: "Ω",
       ohm: "Ω",
       ohms: "Ω",
-      "ω": "Ω",
-      "Ω": "Ω",
+      ω: "Ω",
+      Ω: "Ω",
       k: "kΩ",
       kohm: "kΩ",
       kohms: "kΩ",
-      "kω": "kΩ",
-      "kΩ": "kΩ",
+      kω: "kΩ",
+      kΩ: "kΩ",
       m: "MΩ",
       mohm: "MΩ",
       mohms: "MΩ",
-      "mω": "MΩ",
-      "MΩ": "MΩ",
+      mω: "MΩ",
+      MΩ: "MΩ",
     };
   }
   if (kind === "capacitor") {
@@ -61,8 +67,8 @@ function unitAliasesForKind(
       pf: "pF",
       nf: "nF",
       uf: "uF",
-      "µf": "µF",
-      "μf": "µF",
+      µf: "µF",
+      μf: "µF",
       mf: "mF",
       f: "F",
     };
@@ -76,9 +82,7 @@ function parseInlineValue(
 ): { amount: number; unit: string; canonicalValue: string } | null {
   const trimmed = rawValue.trim().replace(/\s+/g, "");
   if (!trimmed || kind === "generic") return null;
-  const match = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))([a-zA-ZΩωµμ]*)$/.exec(
-    trimmed,
-  );
+  const match = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))([a-zA-ZΩωµμ]*)$/.exec(trimmed);
   if (!match) return null;
   const amountText = match[1];
   if (!amountText) return null;
@@ -134,7 +138,9 @@ function PartInspector({
         reference: trimmed,
       });
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to update reference");
+      setError(
+        error instanceof Error ? error.message : "Failed to update reference",
+      );
       setReferenceDraft(part.reference);
     }
   }, [referenceDraft, part.reference, part.id, dispatchCommand, setError]);
@@ -171,16 +177,12 @@ function PartInspector({
           : part.propertiesJson,
       });
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to update value");
+      setError(
+        error instanceof Error ? error.message : "Failed to update value",
+      );
       setValueDraft(part.value);
     }
-  }, [
-    valueDraft,
-    part,
-    dispatchCommand,
-    setError,
-    toleranceDraft,
-  ]);
+  }, [valueDraft, part, dispatchCommand, setError, toleranceDraft]);
 
   const commitTolerance = useCallback(async () => {
     const current = part.propertiesJson.valueStructured;
@@ -195,7 +197,9 @@ function PartInspector({
         },
       });
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to update tolerance");
+      setError(
+        error instanceof Error ? error.message : "Failed to update tolerance",
+      );
       setToleranceDraft(current.tolerance ?? "");
     }
   }, [dispatchCommand, part, setError, toleranceDraft]);
@@ -294,20 +298,36 @@ function PartInspector({
         </p>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <span className="text-[10px] text-slate-500 dark:text-slate-400">X</span>
-            <div className="text-xs text-slate-700 dark:text-slate-300">{positionMm.x} mm</div>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+              X
+            </span>
+            <div className="text-xs text-slate-700 dark:text-slate-300">
+              {positionMm.x} mm
+            </div>
           </div>
           <div>
-            <span className="text-[10px] text-slate-500 dark:text-slate-400">Y</span>
-            <div className="text-xs text-slate-700 dark:text-slate-300">{positionMm.y} mm</div>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+              Y
+            </span>
+            <div className="text-xs text-slate-700 dark:text-slate-300">
+              {positionMm.y} mm
+            </div>
           </div>
           <div>
-            <span className="text-[10px] text-slate-500 dark:text-slate-400">Rotation</span>
-            <div className="text-xs text-slate-700 dark:text-slate-300">{part.rotationDeg}°</div>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+              Rotation
+            </span>
+            <div className="text-xs text-slate-700 dark:text-slate-300">
+              {part.rotationDeg}°
+            </div>
           </div>
           <div>
-            <span className="text-[10px] text-slate-500 dark:text-slate-400">Mirrored</span>
-            <div className="text-xs text-slate-700 dark:text-slate-300">{part.mirrored ? "Yes" : "No"}</div>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+              Mirrored
+            </span>
+            <div className="text-xs text-slate-700 dark:text-slate-300">
+              {part.mirrored ? "Yes" : "No"}
+            </div>
           </div>
         </div>
       </div>
@@ -318,26 +338,45 @@ function PartInspector({
         </p>
         <div className="flex flex-col gap-1">
           <div className="flex justify-between">
-            <span className="text-[10px] text-slate-500 dark:text-slate-400">Component</span>
-            <span className="max-w-[60%] truncate text-xs text-slate-700 dark:text-slate-300" title={part.componentId}>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+              Component
+            </span>
+            <span
+              className="max-w-[60%] truncate text-xs text-slate-700 dark:text-slate-300"
+              title={part.componentId}
+            >
               {part.componentId.slice(0, 8)}...
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[10px] text-slate-500 dark:text-slate-400">Symbol</span>
-            <span className="max-w-[60%] truncate text-xs text-slate-700 dark:text-slate-300" title={part.symbol.name}>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+              Symbol
+            </span>
+            <span
+              className="max-w-[60%] truncate text-xs text-slate-700 dark:text-slate-300"
+              title={part.symbol.name}
+            >
               {part.symbol.name}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[10px] text-slate-500 dark:text-slate-400">Footprint</span>
-            <span className="max-w-[60%] truncate text-xs text-slate-700 dark:text-slate-300" title={part.footprint.name}>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+              Footprint
+            </span>
+            <span
+              className="max-w-[60%] truncate text-xs text-slate-700 dark:text-slate-300"
+              title={part.footprint.name}
+            >
               {part.footprint.name}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[10px] text-slate-500 dark:text-slate-400">Pins</span>
-            <span className="text-xs text-slate-700 dark:text-slate-300">{part.pins.length}</span>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+              Pins
+            </span>
+            <span className="text-xs text-slate-700 dark:text-slate-300">
+              {part.pins.length}
+            </span>
           </div>
         </div>
       </div>
@@ -459,7 +498,7 @@ function SchematicDesignerSidebar({
   }, [state.projection, state.selectedPartIds, state.selectedPartId]);
 
   const singlePart =
-    selectedParts.length === 1 ? selectedParts[0] ?? null : null;
+    selectedParts.length === 1 ? (selectedParts[0] ?? null) : null;
   const multiParts = selectedParts.length > 1 ? selectedParts : [];
 
   return (
@@ -507,7 +546,21 @@ export function DesignerSidebar({
   state,
   actions,
   activeView,
+  pcbSlotRef,
 }: DesignerSidebarProps): ReactElement {
+  if (activeView === "pcb") {
+    return (
+      <aside className="flex h-full min-h-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
+        <div className="border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Board
+          </p>
+        </div>
+        <div ref={pcbSlotRef} className="min-h-0 flex-1 overflow-y-auto" />
+      </aside>
+    );
+  }
+
   if (activeView !== "schem") {
     return (
       <aside className="flex h-full min-h-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950" />

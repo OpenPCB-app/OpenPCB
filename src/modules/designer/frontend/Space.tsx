@@ -83,6 +83,8 @@ function DesignerSpaceInner({
   const [zoomPercent, setZoomPercent] = useState(70);
   const [gridVisible, setGridVisible] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [pcbDrcCount, setPcbDrcCount] = useState(0);
+  const [pcbBoardSlot, setPcbBoardSlot] = useState<HTMLDivElement | null>(null);
   const canvasRef = useRef<SchematicCanvasHandle | null>(null);
   const canOpenPalette = state.activeView === "schem" && !!state.projection;
 
@@ -152,7 +154,9 @@ function DesignerSpaceInner({
       );
       const components = details
         .map((detail) => detail?.component ?? null)
-        .filter((component): component is LibraryComponent => component !== null);
+        .filter(
+          (component): component is LibraryComponent => component !== null,
+        );
       if (components.length > 0) {
         return { label: "Recently used", components };
       }
@@ -268,6 +272,7 @@ function DesignerSpaceInner({
             state={state}
             actions={actions}
             activeView={state.activeView}
+            pcbSlotRef={setPcbBoardSlot}
           />
         </div>
 
@@ -289,6 +294,8 @@ function DesignerSpaceInner({
               designId={state.selectedDesignId}
               dispatchCommand={actions.dispatchCommand}
               notifyExternalRevisionBump={actions.notifyExternalRevisionBump}
+              onDrcCountChange={setPcbDrcCount}
+              boardPanelTarget={pcbBoardSlot}
             />
           ) : (
             <DesignerPlaceholderView view={state.activeView} />
@@ -324,6 +331,7 @@ function DesignerSpaceInner({
         gridMm={SCHEMATIC_GRID_MM}
         zoom={zoomPercent}
         selection={selectionSummary}
+        drcCount={state.activeView === "pcb" ? pcbDrcCount : undefined}
       />
 
       <ComponentCommandPalette
