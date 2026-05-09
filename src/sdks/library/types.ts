@@ -112,12 +112,30 @@ export interface LibrarySymbolPlacementSnapshot {
   preview: SymbolRenderModel;
 }
 
+export type LibraryFootprintModelStatus =
+  | "missing"
+  | "pending_client_conversion"
+  | "ready"
+  | "failed"
+  | "unsupported_format";
+
+export interface LibraryFootprintModelDescriptor {
+  status: LibraryFootprintModelStatus | string;
+  glbUrl: string | null;
+  glbSha256: string | null;
+  sourceStepSha256: string | null;
+  sourceFilename: string | null;
+  modelRef: unknown | null;
+  converterVersion: string | null;
+}
+
 export interface LibraryFootprintPlacementSnapshot {
   footprintId: string;
   name: string;
   mountType: string | null;
   sourceHash: string | null;
   preview: FootprintRenderModel | null;
+  model3d?: LibraryFootprintModelDescriptor;
 }
 
 export interface LibraryComponentPlacementDetail {

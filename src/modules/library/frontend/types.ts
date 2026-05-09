@@ -8,6 +8,8 @@ export type {
   InspectSymbolItem,
   InspectFootprintItem,
   InspectPayload,
+  Model3DCandidate,
+  ModelConversionMetadata,
 } from "../contracts/import";
 
 export interface ComponentSourceProvenance {

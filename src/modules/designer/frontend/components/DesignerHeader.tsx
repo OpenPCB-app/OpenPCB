@@ -107,7 +107,7 @@ export function DesignerHeader({
           <TabsTrigger value="pcb" className="px-3 py-1 text-xs">
             PCB
           </TabsTrigger>
-          <TabsTrigger value="3d" className="px-3 py-1 text-xs">
+          <TabsTrigger value="3d" className="px-3 py-1 text-xs" data-testid="designer-view-3d">
             3D
           </TabsTrigger>
           <TabsTrigger value="bom" className="px-3 py-1 text-xs">

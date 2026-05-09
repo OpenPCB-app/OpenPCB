@@ -14,6 +14,15 @@
 - Backend: 124 tests passing (19 files). Frontend: 11 tests passing. Typecheck clean.
 - Active sprint: post-merge cleanup + dead-code removal (see plan in `.claude/plans/act-as-senior-software-resilient-meadow.md`).
 
+## Active 3D Regression Fix
+
+- [ ] Reproduce `data/ATTINY13A-SU.zip` ZIP+STEP import and stuck 3D conversion.
+- [ ] Trace ZIP model extraction, worker conversion, backend upload, and Designer projection.
+- [ ] Fix import wizard STEP/ZIP 3D UX and conversion reliability.
+- [ ] Fix Library/Designer GLB rendering, transforms, and camera/model fitting.
+- [ ] Add regression coverage with the ATTINY ZIP fixture.
+- [ ] Verify with LSP, focused tests, build, and browser QA.
+
 ## Phase 0 — Browser Dev Stabilization (done)
 
 - [x] Frontend lazy-loads `src/modules/*`

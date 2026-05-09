@@ -7,6 +7,7 @@ import type {
   LibraryComponentDetail,
   LibraryFootprint,
   LibraryFootprintDetail,
+  LibraryFootprintModelDescriptor,
   LibraryFootprintPlacementSnapshot,
   LibraryPreviewWarning,
   LibrarySearchParams,
@@ -21,11 +22,52 @@ import type {
   SymbolRenderModel,
 } from "../../../shared/rendering";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { componentFootprints, components, footprints, symbols } from "./schema";
+import {
+  componentFootprints,
+  components,
+  footprintModels,
+  footprints,
+  symbols,
+} from "./schema";
 
 export type ComponentRow = typeof components.$inferSelect;
 export type SymbolRow = typeof symbols.$inferSelect;
 export type FootprintRow = typeof footprints.$inferSelect;
+export type FootprintModelRow = typeof footprintModels.$inferSelect;
+
+export interface FootprintModelMetadata {
+  status: string;
+  hasModel: boolean;
+  glbSha256: string | null;
+  sourceStepSha256: string | null;
+  sourceFilename: string | null;
+  modelRef: unknown | null;
+  byteSize: number | null;
+  errorMessage: string | null;
+}
+
+export interface FootprintModelRecord extends FootprintModelMetadata {
+  footprintId: string;
+  glbPath: string | null;
+  sourceStepPath: string | null;
+  sourceByteSize: number | null;
+  tessellationParams: unknown | null;
+  converterVersion: string | null;
+}
+
+export interface UpsertFootprintModelInput {
+  footprintId: string;
+  glbPath: string;
+  glbSha256: string;
+  byteSize: number;
+  sourceStepPath: string | null;
+  sourceStepSha256: string | null;
+  sourceFilename: string | null;
+  sourceByteSize: number | null;
+  modelRefJson: string | null;
+  tessellationParamsJson: string | null;
+  converterVersion: string | null;
+}
 
 export function getDb(
   ctx: CoreBackendModuleContext,
@@ -54,6 +96,17 @@ function parseJsonStringArray(value: string): string[] {
     return parsed.filter((entry): entry is string => typeof entry === "string");
   } catch {
     return [];
+  }
+}
+
+function parseOptionalJson(value: string | null): unknown | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
   }
 }
 
@@ -268,20 +321,41 @@ function parseSymbolPlacementSnapshot(
 
 function parseFootprintPlacementSnapshot(
   row: FootprintRow,
+  modelRow?: FootprintModelRow | null,
 ): LibraryFootprintPlacementSnapshot {
-  // TODO: Tighten footprint preview invariants when PCB editor starts consuming placement snapshots.
-  // For now, footprint preview is optional (null allowed) since schematic-only workflow is the priority.
+  // Footprint preview is optional (null allowed) while schematic-only workflows remain supported.
   const data = parseJsonObject(row.dataJson);
   const normalized = asRecord(data.normalized);
   const provenance = asRecord(data.provenance);
   const previewRaw = normalized?.preview;
 
-  return {
+  const snapshot: LibraryFootprintPlacementSnapshot = {
     footprintId: row.id,
     name: row.name,
     mountType: asString(normalized?.mountType) ?? asString(data.mountType),
     sourceHash: asString(provenance?.sourceHash),
     preview: isFootprintRenderModel(previewRaw) ? previewRaw : null,
+  };
+  if (modelRow) {
+    snapshot.model3d = mapFootprintModelDescriptor(modelRow);
+  }
+  return snapshot;
+}
+
+function mapFootprintModelDescriptor(
+  row: FootprintModelRow,
+): LibraryFootprintModelDescriptor {
+  return {
+    status: row.status,
+    glbUrl:
+      row.glbPath && row.glbSha256
+        ? `/api/modules/library/footprints/${row.footprintId}/model`
+        : null,
+    glbSha256: row.glbSha256,
+    sourceStepSha256: row.sourceStepSha256,
+    sourceFilename: row.sourceFilename,
+    modelRef: parseOptionalJson(row.modelRefJson),
+    converterVersion: row.converterVersion,
   };
 }
 
@@ -624,6 +698,12 @@ export async function resolveComponentForPlacement(
     return null;
   }
 
+  const footprintModelRow = await db
+    .select()
+    .from(footprintModels)
+    .where(eq(footprintModels.footprintId, footprintRow.id))
+    .get();
+
   const footprintVariants = await loadComponentFootprintVariants(
     ctx,
     componentRow,
@@ -632,7 +712,7 @@ export async function resolveComponentForPlacement(
   return {
     component: mapComponent(componentRow),
     symbol: parseSymbolPlacementSnapshot(symbolRow),
-    footprint: parseFootprintPlacementSnapshot(footprintRow),
+    footprint: parseFootprintPlacementSnapshot(footprintRow, footprintModelRow),
     footprintVariants,
     resolvedAt: new Date().toISOString(),
   };
@@ -662,6 +742,171 @@ export async function getFootprint(
     .where(eq(footprints.id, footprintId))
     .get();
   return row ? mapFootprint(row) : null;
+}
+
+function mapFootprintModelRecord(row: FootprintModelRow): FootprintModelRecord {
+  return {
+    footprintId: row.footprintId,
+    status: row.status,
+    hasModel: Boolean(row.glbPath && row.glbSha256),
+    glbSha256: row.glbSha256,
+    sourceStepSha256: row.sourceStepSha256,
+    sourceFilename: row.sourceFilename,
+    modelRef: parseOptionalJson(row.modelRefJson),
+    byteSize: row.byteSize,
+    errorMessage: row.errorMessage,
+    glbPath: row.glbPath,
+    sourceStepPath: row.sourceStepPath,
+    sourceByteSize: row.sourceByteSize,
+    tessellationParams: parseOptionalJson(row.tessellationParamsJson),
+    converterVersion: row.converterVersion,
+  };
+}
+
+export function toFootprintModelMetadata(
+  record: FootprintModelRecord | null,
+): FootprintModelMetadata {
+  if (!record) {
+    return {
+      status: "missing",
+      hasModel: false,
+      glbSha256: null,
+      sourceStepSha256: null,
+      sourceFilename: null,
+      modelRef: null,
+      byteSize: null,
+      errorMessage: null,
+    };
+  }
+
+  return {
+    status: record.status,
+    hasModel: record.hasModel,
+    glbSha256: record.glbSha256,
+    sourceStepSha256: record.sourceStepSha256,
+    sourceFilename: record.sourceFilename,
+    modelRef: record.modelRef,
+    byteSize: record.byteSize,
+    errorMessage: record.errorMessage,
+  };
+}
+
+export async function getFootprintModelRecord(
+  ctx: CoreBackendModuleContext,
+  footprintId: string,
+): Promise<FootprintModelRecord | null> {
+  const db = getDb(ctx);
+  const row = await db
+    .select()
+    .from(footprintModels)
+    .where(eq(footprintModels.footprintId, footprintId))
+    .get();
+  return row ? mapFootprintModelRecord(row) : null;
+}
+
+export async function getFootprintModelMetadata(
+  ctx: CoreBackendModuleContext,
+  footprintId: string,
+): Promise<FootprintModelMetadata> {
+  return toFootprintModelMetadata(
+    await getFootprintModelRecord(ctx, footprintId),
+  );
+}
+
+export function upsertFootprintModelRecord(
+  ctx: CoreBackendModuleContext,
+  input: UpsertFootprintModelInput,
+): FootprintModelMetadata {
+  const db = getDb(ctx);
+  const now = new Date().toISOString();
+
+  db.transaction((tx) => {
+    const txDb = tx as typeof db;
+    const existing = txDb
+      .select({ createdAt: footprintModels.createdAt })
+      .from(footprintModels)
+      .where(eq(footprintModels.footprintId, input.footprintId))
+      .get();
+
+    txDb
+      .delete(footprintModels)
+      .where(eq(footprintModels.footprintId, input.footprintId))
+      .run();
+    txDb
+      .insert(footprintModels)
+      .values({
+        footprintId: input.footprintId,
+        status: "ready",
+        glbPath: input.glbPath,
+        glbSha256: input.glbSha256,
+        sourceStepPath: input.sourceStepPath,
+        sourceStepSha256: input.sourceStepSha256,
+        sourceFilename: input.sourceFilename,
+        sourceByteSize: input.sourceByteSize,
+        modelRefJson: input.modelRefJson,
+        tessellationParamsJson: input.tessellationParamsJson,
+        converterVersion: input.converterVersion,
+        byteSize: input.byteSize,
+        errorMessage: null,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      })
+      .run();
+  });
+
+  return {
+    status: "ready",
+    hasModel: true,
+    glbSha256: input.glbSha256,
+    sourceStepSha256: input.sourceStepSha256,
+    sourceFilename: input.sourceFilename,
+    modelRef: parseOptionalJson(input.modelRefJson),
+    byteSize: input.byteSize,
+    errorMessage: null,
+  };
+}
+
+export async function markFootprintModelConversionFailed(
+  ctx: CoreBackendModuleContext,
+  footprintId: string,
+  errorMessage: string,
+): Promise<FootprintModelMetadata> {
+  const db = getDb(ctx);
+  const existing = await getFootprintModelRecord(ctx, footprintId);
+  if (!existing) {
+    throw new ValidationError("Footprint model record not found");
+  }
+
+  db.update(footprintModels)
+    .set({
+      status: "failed",
+      glbPath: null,
+      glbSha256: null,
+      byteSize: null,
+      errorMessage,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(footprintModels.footprintId, footprintId))
+    .run();
+
+  return toFootprintModelMetadata({
+    ...existing,
+    status: "failed",
+    glbPath: null,
+    glbSha256: null,
+    byteSize: null,
+    errorMessage,
+  });
+}
+
+export function deleteFootprintModelRecord(
+  ctx: CoreBackendModuleContext,
+  footprintId: string,
+): void {
+  const db = getDb(ctx);
+  db.delete(footprintModels)
+    .where(eq(footprintModels.footprintId, footprintId))
+    .run();
 }
 
 export interface DeleteComponentsResult {
@@ -699,6 +944,31 @@ export function assertNotBuiltinComponents(
   throw new ValidationError(
     `Cannot ${action} built-in components (${names}). Use "Duplicate to my library" to create an editable copy.`,
   );
+}
+
+export function assertFootprintNotBuiltinComponent(
+  ctx: CoreBackendModuleContext,
+  footprintId: string,
+  action: "delete" | "update" | "modify" = "modify",
+): void {
+  const db = getDb(ctx);
+  const variantRows = db
+    .select({ componentId: componentFootprints.componentId })
+    .from(componentFootprints)
+    .where(eq(componentFootprints.footprintId, footprintId))
+    .all();
+  const ids = [
+    ...new Set([
+      ...variantRows.map((row) => row.componentId),
+      ...db
+        .select({ id: components.id })
+        .from(components)
+        .where(eq(components.footprintId, footprintId))
+        .all()
+        .map((row) => row.id),
+    ]),
+  ];
+  assertNotBuiltinComponents(ctx, ids, action);
 }
 
 export interface CloneComponentResult {

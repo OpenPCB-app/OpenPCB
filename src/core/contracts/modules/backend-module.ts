@@ -72,6 +72,7 @@ export interface ModuleRouterHandle {
   get(path: string, handler: ModuleRouteHandler): void;
   post(path: string, handler: ModuleRouteHandler): void;
   put(path: string, handler: ModuleRouteHandler): void;
+  patch(path: string, handler: ModuleRouteHandler): void;
   delete(path: string, handler: ModuleRouteHandler): void;
 }
 

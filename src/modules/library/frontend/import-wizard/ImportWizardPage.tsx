@@ -11,6 +11,7 @@ import { useImportWizardStore } from "./useImportWizardStore";
 import { WizardProgressBar } from "./WizardProgressBar";
 import { SymbolStep } from "./steps/SymbolStep";
 import { FootprintStep } from "./steps/FootprintStep";
+import { ModelStep } from "./steps/ModelStep";
 import { MetadataStep } from "./steps/MetadataStep";
 import {
   isEscapeShortcut,
@@ -25,20 +26,74 @@ import {
   commitKicadImportRequest,
   inspectKicadImport,
 } from "./import-api";
+import type { ModelConversionMetadata } from "../../contracts/import";
+import {
+  convertPendingModelConversion,
+  uploadFootprintStepModel,
+  validateStepUploadFile,
+} from "../three-d/model-conversion";
 import { useSymbolEditorStore } from "./editor";
 import { useFootprintEditorStore } from "./footprint-editor";
+import { toUserError } from "../utils";
+
+export { convertPendingModelConversion };
 
 const STEP_SYMBOL = 0;
 const STEP_FOOTPRINT = 1;
-const STEP_METADATA = 2;
+const STEP_MODEL = 2;
+const STEP_METADATA = 3;
 
 const STEPS = [
   { label: "Symbol" },
   { label: "Footprints" },
+  { label: "3D Model" },
   { label: "Metadata" },
 ] as const;
 
-function toGeneratedMountType(value: "smd" | "tht" | "mixed"): "smd" | "through_hole" {
+function isPendingModelConversion(
+  value: unknown,
+): value is ModelConversionMetadata {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    (value as { status?: unknown }).status === "pending_client_conversion" &&
+    typeof (value as { footprintId?: unknown }).footprintId === "string" &&
+    typeof (value as { sourceStepUrl?: unknown }).sourceStepUrl === "string"
+  );
+}
+
+async function fetchCommittedFootprintId({
+  backendURL,
+  moduleId,
+  componentId,
+  signal,
+}: {
+  backendURL: string;
+  moduleId: string;
+  componentId: string;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const response = await fetch(
+    `${backendURL}/api/modules/${encodeURIComponent(moduleId)}/components/${encodeURIComponent(componentId)}/detail`,
+    { signal },
+  );
+  const payload = (await response.json().catch(() => null)) as {
+    ok?: boolean;
+    data?: { detail?: { footprint?: { id?: unknown } } };
+    error?: string;
+  } | null;
+  const footprintId = payload?.data?.detail?.footprint?.id;
+  if (!response.ok || !payload?.ok || typeof footprintId !== "string") {
+    throw new Error(
+      toUserError(payload, `Detail fetch failed (HTTP ${response.status})`),
+    );
+  }
+  return footprintId;
+}
+
+function toGeneratedMountType(
+  value: "smd" | "tht" | "mixed",
+): "smd" | "through_hole" {
   return value === "smd" ? "smd" : "through_hole";
 }
 
@@ -60,10 +115,17 @@ export function ImportWizardPage({
 
   const symbolFile = useImportWizardStore((s) => s.symbolFile);
   const footprintFiles = useImportWizardStore((s) => s.footprintFiles);
+  const modelFile = useImportWizardStore((s) => s.modelFile);
   const currentStep = useImportWizardStore((s) => s.currentStep);
   const loadingCommit = useImportWizardStore((s) => s.loadingCommit);
   const commitError = useImportWizardStore((s) => s.commitError);
   const commitResult = useImportWizardStore((s) => s.commitResult);
+  const modelConversionStatus = useImportWizardStore(
+    (s) => s.modelConversionStatus,
+  );
+  const modelConversionMessage = useImportWizardStore(
+    (s) => s.modelConversionMessage,
+  );
   const symbolSource = useImportWizardStore((s) => s.symbolSource);
 
   // Single derived selector — avoids 3 separate subscriptions for inspectStatus,
@@ -399,6 +461,68 @@ export function ImportWizardPage({
         );
       }
 
+      const modelConversion = isPendingModelConversion(
+        (result as unknown as { modelConversion?: unknown }).modelConversion,
+      )
+        ? (result as unknown as { modelConversion: ModelConversionMetadata })
+            .modelConversion
+        : null;
+      if (modelFile) {
+        const validationError = validateStepUploadFile(modelFile);
+        if (validationError) {
+          throw new Error(validationError);
+        }
+        const footprintId = await fetchCommittedFootprintId({
+          backendURL,
+          moduleId,
+          componentId: result.componentId,
+          signal: controller.signal,
+        });
+        await uploadFootprintStepModel({
+          backendURL,
+          moduleId,
+          footprintId,
+          stepFile: modelFile,
+          signal: controller.signal,
+          onProgress: (status, message) => {
+            useImportWizardStore
+              .getState()
+              .setModelConversionProgress(status, message ?? null);
+          },
+        }).catch((conversionError) => {
+          useImportWizardStore
+            .getState()
+            .setModelConversionProgress(
+              "failed",
+              conversionError instanceof Error
+                ? conversionError.message
+                : "3D model conversion failed",
+            );
+        });
+      }
+      if (modelConversion) {
+        await convertPendingModelConversion({
+          backendURL,
+          moduleId,
+          conversion: modelConversion,
+          signal: controller.signal,
+          onProgress: (status, message) => {
+            useImportWizardStore
+              .getState()
+              .setModelConversionProgress(status, message ?? null);
+          },
+        }).catch((conversionError) => {
+          useImportWizardStore
+            .getState()
+            .setModelConversionProgress(
+              "failed",
+              conversionError instanceof Error
+                ? conversionError.message
+                : "3D model conversion failed",
+            );
+        });
+      }
+
       onImported();
       if (result.reused) {
         store.setCommitResult(result);
@@ -415,6 +539,7 @@ export function ImportWizardPage({
       store.setCommitError(
         err instanceof Error ? err.message : "Failed to import component",
       );
+      store.setModelConversionProgress("idle", null);
     } finally {
       if (!controller.signal.aborted) {
         store.setLoadingCommit(false);
@@ -423,7 +548,7 @@ export function ImportWizardPage({
         commitAbortRef.current = null;
       }
     }
-  }, [backendURL, moduleId, symbolFile, footprintFiles, onImported, onClose]);
+  }, [backendURL, moduleId, symbolFile, footprintFiles, modelFile, onImported, onClose]);
 
   const handleClose = useCallback(
     (skipConfirm = false) => {
@@ -431,6 +556,7 @@ export function ImportWizardPage({
       const editorState = useSymbolEditorStore.getState();
       const hasWork =
         wizardState.symbolFile !== null ||
+        wizardState.modelFile !== null ||
         (wizardState.symbolSource === "draw" &&
           (editorState.graphics.length > 0 || editorState.pins.length > 0));
       if (!skipConfirm && hasWork) {
@@ -467,6 +593,8 @@ export function ImportWizardPage({
       case STEP_SYMBOL:
       case STEP_FOOTPRINT:
         return readyForAdvancedSteps;
+      case STEP_MODEL:
+        return readyForAdvancedSteps && (!modelFile || !validateStepUploadFile(modelFile));
       case STEP_METADATA:
         return readyForAdvancedSteps && canProceedMetadata;
       default:
@@ -569,6 +697,7 @@ export function ImportWizardPage({
       >
         {currentStep === STEP_SYMBOL && <SymbolStep />}
         {currentStep === STEP_FOOTPRINT && <FootprintStep />}
+        {currentStep === STEP_MODEL && <ModelStep />}
         {currentStep === STEP_METADATA && <MetadataStep />}
       </div>
 
@@ -585,6 +714,19 @@ export function ImportWizardPage({
           >
             Close
           </button>
+        </div>
+      ) : modelConversionStatus !== "idle" && currentStep === STEP_METADATA ? (
+        <div
+          className={`border-t px-6 py-2 text-sm ${
+            modelConversionStatus === "failed"
+              ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+              : "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300"
+          }`}
+        >
+          {modelConversionMessage ??
+            (modelConversionStatus === "ready"
+              ? "Ready"
+              : "Converting 3D model…")}
         </div>
       ) : commitError && currentStep === STEP_METADATA ? (
         <div className="border-t border-red-200 bg-red-50 px-6 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">

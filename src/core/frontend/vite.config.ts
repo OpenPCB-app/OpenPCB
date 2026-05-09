@@ -1,15 +1,25 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwind from "@tailwindcss/vite";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../../..");
+const require = createRequire(import.meta.url);
+const wasm = require("vite-plugin-wasm") as () => Plugin;
+const topLevelAwait = require("vite-plugin-top-level-await") as () => Plugin;
 
 export default defineConfig({
-  plugins: [react(), tailwind()],
+  plugins: [react(), tailwind(), wasm(), topLevelAwait()],
+  optimizeDeps: {
+    exclude: ["occt-import-js"],
+  },
+  worker: {
+    plugins: () => [wasm()],
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -42,5 +52,10 @@ export default defineConfig({
     target: "safari13",
     minify: "esbuild",
     sourcemap: false,
+    rollupOptions: {
+      input: {
+        app: path.resolve(__dirname, "index.html"),
+      },
+    },
   },
 });

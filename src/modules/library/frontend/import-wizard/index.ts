@@ -1,1 +1,1 @@
-export { ImportWizardPage } from "./ImportWizardPage";
+export { convertPendingModelConversion, ImportWizardPage } from "./ImportWizardPage";

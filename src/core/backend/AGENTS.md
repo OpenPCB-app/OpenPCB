@@ -30,7 +30,7 @@ src/core/backend/
 ## KEY ABSTRACTIONS
 
 - **ModuleRuntime**: Discovers manifests, topological load, runs migrations, calls onActivate
-- **ModuleRouterRegistry**: Collects routes from all modules, mounts at /api/v1/{module}
+- **ModuleRouterRegistry**: Collects routes from all modules, mounts at `/api/modules/{moduleId}/{subpath}`
 - **RuntimeSdkRegistry**: Cross-module SDK resolution without direct imports
 
 ## ANTI-PATTERNS

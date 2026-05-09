@@ -11,17 +11,27 @@ import type {
 import type { InspectPayload } from "../types";
 
 export type InspectStatus = "idle" | "loading" | "success" | "error";
+export type ModelConversionStatus =
+  | "idle"
+  | "fetching_source"
+  | "converting"
+  | "uploading"
+  | "ready"
+  | "failed";
 
 export interface ImportWizardState {
   currentStep: number;
   symbolFile: File | null;
   footprintFiles: File[];
+  modelFile: File | null;
 
   inspectData: InspectPayload | null;
   inspectStatus: InspectStatus;
   inspectError: string | null;
   loadingCommit: boolean;
   commitError: string | null;
+  modelConversionStatus: ModelConversionStatus;
+  modelConversionMessage: string | null;
   commitResult: {
     componentId: string;
     componentName: string;
@@ -52,6 +62,7 @@ export interface ImportWizardState {
 
   setSymbolFile: (file: File | null) => void;
   setFootprintFiles: (files: File[]) => void;
+  setModelFile: (file: File | null) => void;
   beginInspect: () => void;
   setInspectData: (data: InspectPayload | null) => void;
   finishInspectSuccess: () => void;
@@ -76,6 +87,10 @@ export interface ImportWizardState {
   setLoadingCommit: (loading: boolean) => void;
   setCommitError: (error: string | null) => void;
   clearCommitError: () => void;
+  setModelConversionProgress: (
+    status: ModelConversionStatus,
+    message?: string | null,
+  ) => void;
   setCommitResult: (
     result: {
       componentId: string;
@@ -110,11 +125,14 @@ const INITIAL_STATE = {
   currentStep: 0,
   symbolFile: null,
   footprintFiles: [],
+  modelFile: null,
   inspectData: null,
   inspectStatus: "idle" as InspectStatus,
   inspectError: null,
   loadingCommit: false,
   commitError: null,
+  modelConversionStatus: "idle" as ModelConversionStatus,
+  modelConversionMessage: null,
   commitResult: null,
   selectedSymbolId: "",
   selectedFootprintId: "",
@@ -137,6 +155,7 @@ export const useImportWizardStore = create<ImportWizardState>((set) => ({
 
   setSymbolFile: (file) => set({ symbolFile: file }),
   setFootprintFiles: (files) => set({ footprintFiles: files }),
+  setModelFile: (file) => set({ modelFile: file }),
 
   beginInspect: () =>
     set({
@@ -204,6 +223,8 @@ export const useImportWizardStore = create<ImportWizardState>((set) => ({
   setLoadingCommit: (loading) => set({ loadingCommit: loading }),
   setCommitError: (error) => set({ commitError: error }),
   clearCommitError: () => set({ commitError: null }),
+  setModelConversionProgress: (status, message = null) =>
+    set({ modelConversionStatus: status, modelConversionMessage: message }),
   setCommitResult: (result) => set({ commitResult: result }),
 
   setSymbolSource: (source) => set({ symbolSource: source }),
@@ -221,13 +242,13 @@ export const useImportWizardStore = create<ImportWizardState>((set) => ({
 
   goNext: () =>
     set((state) => ({
-      currentStep: Math.min(state.currentStep + 1, 2),
+      currentStep: Math.min(state.currentStep + 1, 3),
     })),
   goBack: () =>
     set((state) => ({
       currentStep: Math.max(state.currentStep - 1, 0),
     })),
-  goToStep: (step) => set({ currentStep: Math.max(0, Math.min(step, 2)) }),
+  goToStep: (step) => set({ currentStep: Math.max(0, Math.min(step, 3)) }),
 
   reset: () => set({ ...INITIAL_STATE }),
 }));

@@ -26,6 +26,26 @@ export const footprints = sqliteTable("library_footprints", {
   createdAt: text("created_at").notNull(),
 });
 
+export const footprintModels = sqliteTable("library_footprint_models", {
+  footprintId: text("footprint_id")
+    .primaryKey()
+    .references(() => footprints.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  glbPath: text("glb_path"),
+  glbSha256: text("glb_sha256"),
+  sourceStepPath: text("source_step_path"),
+  sourceStepSha256: text("source_step_sha256"),
+  sourceFilename: text("source_filename"),
+  sourceByteSize: integer("source_byte_size"),
+  modelRefJson: text("model_ref_json"),
+  tessellationParamsJson: text("tessellation_params_json"),
+  converterVersion: text("converter_version"),
+  byteSize: integer("byte_size"),
+  errorMessage: text("error_message"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const components = sqliteTable(
   "library_components",
   {

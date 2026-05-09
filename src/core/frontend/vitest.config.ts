@@ -4,17 +4,22 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, "../../..");
 
 export default defineConfig({
+  root: repoRoot,
   test: {
     environment: "node",
     globals: true,
-    include: ["src/**/*.test.{ts,tsx,js,jsx}"],
+    include: [
+      "src/core/frontend/src/**/*.test.{ts,tsx,js,jsx}",
+      "src/modules/*/frontend/**/*.test.{ts,tsx,js,jsx}",
+    ],
   },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "@modules": path.resolve(__dirname, "../../modules"),
+      "@modules": path.resolve(repoRoot, "src/modules"),
     },
   },
 });

@@ -40,9 +40,37 @@ export interface InspectFootprintItem {
   preview: FootprintRenderModel;
 }
 
+export type Model3DCandidateAssociation =
+  | "valid"
+  | "missing_target"
+  | "orphan_asset"
+  | "shared_body"
+  | "unsupported_format"
+  | "footprint-model-ref"
+  | "symbol-name"
+  | "archive-name"
+  | "single-model";
+
+export interface Model3DCandidate {
+  fileName: string;
+  extension: string;
+  association: Model3DCandidateAssociation;
+}
+
+export interface ModelConversionMetadata {
+  footprintId: string;
+  sourceStepSha256: string;
+  sourceStepUrl: string;
+  sourceFilename: string;
+  selectedModel: Model3DCandidate;
+  modelRef: unknown | null;
+  status: "pending_client_conversion";
+}
+
 export interface InspectPayload {
   symbols: InspectSymbolItem[];
   footprints: InspectFootprintItem[];
+  model3dCandidates: Model3DCandidate[];
   warnings: ImportWarning[];
 }
 
@@ -50,6 +78,8 @@ export interface InspectKicadRequest {
   /** Optional — when omitted, only footprint files are parsed (draw-symbol flow). */
   symbolLibrary?: ImportFileInput | null;
   footprints: ImportFileInput[];
+  /** Optional archive model filenames only; raw model bytes are never sent in JSON. */
+  model3dFiles?: Array<{ fileName: string }>;
 }
 
 export interface InspectKicadResponse extends InspectPayload {}
@@ -80,6 +110,8 @@ export interface ArchiveImportWarning {
 
 export interface CommitKicadZipResponse extends CommitKicadResponse {
   warnings: ArchiveImportWarning[];
+  model3dCandidates: Model3DCandidate[];
+  modelConversion: ModelConversionMetadata | null;
   selected: {
     symbolName: string;
     footprintName: string;

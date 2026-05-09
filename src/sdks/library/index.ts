@@ -13,6 +13,8 @@ export type {
   LibraryComponentPlacementDetail,
   LibraryFootprint,
   LibraryFootprintDetail,
+  LibraryFootprintModelDescriptor,
+  LibraryFootprintModelStatus,
   LibraryFootprintPlacementSnapshot,
   LibraryPreviewWarning,
   LibrarySearchParams,

@@ -20,6 +20,7 @@ import { ComponentCommandPalette } from "./components/ComponentCommandPalette";
 import { ToastProvider, useToast } from "./hooks/use-toast";
 import { useDesignerWorkspace } from "./hooks/useDesignerWorkspace";
 import { PcbCanvas } from "./pcb/PcbCanvas";
+import { Board3DCanvas } from "./three-d/Board3DCanvas";
 import type { LibraryComponent } from "../../../sdks";
 import type { ModuleSpaceProps } from "./types";
 import { SCHEMATIC_GRID_MM } from "./types";
@@ -296,6 +297,13 @@ function DesignerSpaceInner({
               notifyExternalRevisionBump={actions.notifyExternalRevisionBump}
               onDrcCountChange={setPcbDrcCount}
               boardPanelTarget={pcbBoardSlot}
+            />
+          ) : state.activeView === "3d" ? (
+            <Board3DCanvas
+              backendURL={backendURL}
+              moduleId={moduleId}
+              selectedDesignId={state.selectedDesignId}
+              error={state.error}
             />
           ) : (
             <DesignerPlaceholderView view={state.activeView} />

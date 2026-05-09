@@ -504,7 +504,20 @@ export function syncPcbPlacementsFromSchematic(params: {
   for (const part of schematicParts) {
     const existingPlacement = existingByPartId.get(part.id);
     if (existingPlacement && !isAbsurd(existingPlacement)) {
-      result.push(existingPlacement);
+      const footprintChanged =
+        JSON.stringify(existingPlacement.footprint) !== JSON.stringify(part.footprint);
+      if (footprintChanged) {
+        const refreshed: PcbPlacedPart = {
+          ...existingPlacement,
+          componentId: part.componentId,
+          reference: part.reference,
+          footprint: part.footprint,
+        };
+        upsertPcbPlacement(db, designId, refreshed, timestamp);
+        result.push(refreshed);
+      } else {
+        result.push(existingPlacement);
+      }
       continue;
     }
     const index = hashStringToIndex(part.id) % 24;

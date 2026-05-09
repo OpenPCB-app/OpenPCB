@@ -28,6 +28,18 @@ export interface FootprintRenderLayerProps {
     reference?: string;
     value?: string;
   };
+  /**
+   * When true, pads/lines/drills participate in depth testing/writing so 3D
+   * geometry above them (component bodies) correctly occludes them. Default
+   * false preserves the 2D canvas overlay convention (always-on-top).
+   */
+  enableDepthTest?: boolean;
+  /**
+   * When true, per-pad number labels (e.g. "1", "2", "65") are not rendered.
+   * Used by the 3D PCB board view where pad numbers are clutter on top of
+   * component bodies. Default false keeps existing 2D canvas behavior.
+   */
+  hidePadNumbers?: boolean;
 }
 
 const REFERENCE_TOKEN_RE = /\$\{REFERENCE\}|REF\*\*/g;
@@ -96,6 +108,8 @@ export function FootprintRenderLayer({
   useLayerColors = false,
   surface = "preview",
   placeholderSubstitutions,
+  enableDepthTest = false,
+  hidePadNumbers = false,
 }: FootprintRenderLayerProps) {
   const isHidden = (layer: string | undefined): boolean =>
     layer !== undefined && hiddenLayers?.has(layer) === true;
@@ -220,8 +234,8 @@ export function FootprintRenderLayer({
             </bufferGeometry>
             <lineBasicMaterial
               color={color}
-              depthTest={false}
-              depthWrite={false}
+              depthTest={enableDepthTest}
+              depthWrite={enableDepthTest}
               transparent={isDimmed}
               opacity={isDimmed ? 0.3 : 1}
             />
@@ -230,7 +244,11 @@ export function FootprintRenderLayer({
       })}
 
       {/* Pads */}
-      <PadInstances pads={padData} defaultColor={pt.footprintPad} />
+      <PadInstances
+        pads={padData}
+        defaultColor={pt.footprintPad}
+        enableDepthTest={enableDepthTest}
+      />
 
       {/* Drill holes */}
       {model.pads.map((pad) =>
@@ -243,26 +261,27 @@ export function FootprintRenderLayer({
             <circleGeometry args={[pad.drillDiameterMm / 2, 20]} />
             <meshBasicMaterial
               color={pt.footprintDrill}
-              depthTest={false}
-              depthWrite={false}
+              depthTest={enableDepthTest}
+              depthWrite={enableDepthTest}
             />
           </mesh>
         ) : null,
       )}
 
-      {/* Pad numbers */}
-      {model.pads.map((pad) => (
-        <EDAText
-          key={`${pad.id}:number`}
-          position={[pad.centerMm.x, pad.centerMm.y, 0]}
-          color={pt.footprintPadNumber}
-          fontSize={0.28}
-          anchorX="center"
-          anchorY="middle"
-        >
-          {pad.number}
-        </EDAText>
-      ))}
+      {/* Pad numbers — hidden in 3D PCB board view (clutter on top of bodies) */}
+      {!hidePadNumbers &&
+        model.pads.map((pad) => (
+          <EDAText
+            key={`${pad.id}:number`}
+            position={[pad.centerMm.x, pad.centerMm.y, 0]}
+            color={pt.footprintPadNumber}
+            fontSize={0.28}
+            anchorX="center"
+            anchorY="middle"
+          >
+            {pad.number}
+          </EDAText>
+        ))}
 
       {/* Labels — per-layer color, with PCB-surface override for Fab text */}
       {model.labels.map((label) => {

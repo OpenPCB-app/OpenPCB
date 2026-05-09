@@ -20,6 +20,8 @@ export interface PadInstancesProps {
   pads: readonly PadData[];
   defaultColor?: string;
   selectedColor?: string;
+  /** When true, pads participate in depth testing/writing so 3D bodies above can occlude them. Default false matches 2D canvas overlay convention. */
+  enableDepthTest?: boolean;
 }
 
 /** Build a THREE.Shape for a rectangle with rounded corners. */
@@ -44,6 +46,7 @@ export function PadInstances({
   pads,
   defaultColor = "#c9a227",
   selectedColor = "#38bdf8",
+  enableDepthTest = false,
 }: PadInstancesProps) {
   const invalidate = useThree((s) => s.invalidate);
 
@@ -53,11 +56,11 @@ export function PadInstances({
   const material = useMemo(
     () =>
       new THREE.MeshBasicMaterial({
-        depthTest: false,
-        depthWrite: false,
+        depthTest: enableDepthTest,
+        depthWrite: enableDepthTest,
         side: THREE.DoubleSide,
       }),
-    [],
+    [enableDepthTest],
   );
 
   const defCol = useMemo(() => new THREE.Color(defaultColor), [defaultColor]);
@@ -200,8 +203,8 @@ export function PadInstances({
             <primitive object={geom} attach="geometry" />
             <meshBasicMaterial
               color={padColor}
-              depthTest={false}
-              depthWrite={false}
+              depthTest={enableDepthTest}
+              depthWrite={enableDepthTest}
               side={THREE.DoubleSide}
             />
           </mesh>

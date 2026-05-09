@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Lock } from "lucide-react";
+import { ArrowLeft, Copy, Lock, Upload } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -15,7 +15,16 @@ import type {
   SymbolRenderModel,
 } from "../../../shared/rendering";
 import type { ComponentDetailPayload } from "./types";
+import { ThreeDComponentPreview } from "./three-d/ThreeDComponentPreview";
+import {
+  uploadFootprintStepModel,
+  validateStepUploadFile,
+} from "./three-d/model-conversion";
 import { toUserError } from "./utils";
+
+export { uploadFootprintStepModel, validateStepUploadFile };
+
+type UploadStatus = "idle" | "converting" | "uploading" | "ready";
 
 function asSymbolRender(value: unknown): SymbolRenderModel | null {
   if (!value || typeof value !== "object") {
@@ -39,17 +48,22 @@ export function ComponentDetailPage({
   componentId,
   onBack,
   onCloned,
+  modelRefreshToken: externalModelRefreshToken = 0,
 }: {
   backendURL: string | null | undefined;
   moduleId: string;
   componentId: string;
   onBack: () => void;
   onCloned?: (newComponentId: string) => void;
+  modelRefreshToken?: number;
 }): ReactElement {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<ComponentDetailPayload | null>(null);
   const [cloning, setCloning] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [modelRefreshToken, setModelRefreshToken] = useState(0);
 
   useEffect(() => {
     if (!backendURL) {
@@ -116,6 +130,12 @@ export function ComponentDetailPage({
       (tag) => tag.toLowerCase() === "placeholder-footprint",
     ) ?? false;
   const isBuiltin = detail?.component.isBuiltin ?? false;
+  const componentCategory =
+    detail?.component.tags.find(
+      (tag) => tag.toLowerCase() !== "placeholder-footprint",
+    ) ??
+    detail?.component.name ??
+    "component";
 
   const handleClone = useCallback(async () => {
     if (!backendURL || !detail) return;
@@ -146,6 +166,54 @@ export function ComponentDetailPage({
       setCloning(false);
     }
   }, [backendURL, componentId, detail, moduleId, onCloned]);
+
+  const handleStepUpload = useCallback(
+    async (file: File | null | undefined) => {
+      if (!file || !backendURL || !detail || isBuiltin) {
+        return;
+      }
+      const validationError = validateStepUploadFile(file);
+      if (validationError) {
+        setUploadError(validationError);
+        setUploadStatus("idle");
+        return;
+      }
+
+      setUploadError(null);
+      setUploadStatus("converting");
+      const controller = new AbortController();
+      try {
+        await uploadFootprintStepModel({
+          backendURL,
+          moduleId,
+          footprintId: detail.footprint.id,
+          stepFile: file,
+          signal: controller.signal,
+          onProgress: (status) => {
+            if (
+              status === "converting" ||
+              status === "uploading" ||
+              status === "ready"
+            ) {
+              setUploadStatus(status);
+            }
+          },
+        });
+        setModelRefreshToken((token) => token + 1);
+      } catch (stepUploadError) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setUploadStatus("idle");
+        setUploadError(
+          stepUploadError instanceof Error
+            ? stepUploadError.message
+            : "Failed to upload STEP model",
+        );
+      }
+    },
+    [backendURL, detail, isBuiltin, moduleId],
+  );
 
   return (
     <div className="flex h-full w-full flex-col bg-slate-50 dark:bg-slate-950">
@@ -231,39 +299,20 @@ export function ComponentDetailPage({
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-1">
-                <div className="text-xs text-slate-600 dark:text-slate-400">
-                  Symbol preview
-                </div>
+            <div
+              className="grid gap-4 lg:grid-cols-3"
+              data-testid="library-preview-cards"
+            >
+              <article className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                <header className="mb-3 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Symbol
+                  </h3>
+                </header>
                 <div className="h-64 overflow-hidden rounded-xl border border-slate-200 bg-slate-900 dark:border-slate-800">
                   <SymbolPreviewCanvas model={symbolPreview} />
                 </div>
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
-                  Footprint preview
-                  {isPlaceholderFootprint ? (
-                    <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300">
-                      No footprint yet
-                    </span>
-                  ) : null}
-                </div>
-                <div
-                  className="h-64 overflow-hidden rounded-xl border border-slate-200 bg-slate-900 dark:border-slate-800"
-                  data-testid="footprint-preview-canvas"
-                >
-                  <FootprintPreviewCanvas model={footprintPreview} />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Symbol metadata
-                </h3>
-                <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
+                <dl className="mt-3 grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
                   <dt className="text-slate-500 dark:text-slate-400">Name</dt>
                   <dd className="text-slate-800 dark:text-slate-200">
                     {detail.symbol.name}
@@ -285,13 +334,26 @@ export function ComponentDetailPage({
                     {detail.symbol.warnings.length}
                   </dd>
                 </dl>
-              </div>
+              </article>
 
-              <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Footprint metadata
-                </h3>
-                <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
+              <article className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                <header className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Footprint
+                  </h3>
+                  {isPlaceholderFootprint ? (
+                    <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300">
+                      No footprint yet
+                    </span>
+                  ) : null}
+                </header>
+                <div
+                  className="h-64 overflow-hidden rounded-xl border border-slate-200 bg-slate-900 dark:border-slate-800"
+                  data-testid="footprint-preview-canvas"
+                >
+                  <FootprintPreviewCanvas model={footprintPreview} />
+                </div>
+                <dl className="mt-3 grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
                   <dt className="text-slate-500 dark:text-slate-400">Name</dt>
                   <dd className="text-slate-800 dark:text-slate-200">
                     {detail.footprint.name}
@@ -326,7 +388,74 @@ export function ComponentDetailPage({
                     {detail.footprint.warnings.length}
                   </dd>
                 </dl>
-              </div>
+              </article>
+
+              <article
+                className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+                data-testid="library-component-3d-card"
+              >
+                <header className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    3D
+                  </h3>
+                  {!isBuiltin && !isPlaceholderFootprint ? (
+                    <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-700 dark:bg-slate-800 dark:text-violet-300 dark:hover:bg-slate-700">
+                      <Upload className="h-3.5 w-3.5" />
+                      Upload STEP
+                      <input
+                        type="file"
+                        accept=".step,.stp"
+                        className="hidden"
+                        disabled={
+                          uploadStatus === "converting" ||
+                          uploadStatus === "uploading"
+                        }
+                        onChange={(event) => {
+                          void handleStepUpload(
+                            event.currentTarget.files?.[0] ?? null,
+                          );
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  ) : null}
+                </header>
+                {uploadStatus !== "idle" ? (
+                  <span
+                    className="mb-2 text-xs text-slate-500 dark:text-slate-400"
+                    data-testid="library-3d-upload-progress"
+                  >
+                    {uploadStatus === "converting"
+                      ? "Converting 3D model…"
+                      : uploadStatus === "uploading"
+                        ? "Uploading GLB…"
+                        : "Ready"}
+                  </span>
+                ) : null}
+                {uploadError ? (
+                  <div
+                    className="mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+                    data-testid="library-3d-upload-error"
+                  >
+                    {uploadError}
+                  </div>
+                ) : null}
+                {isPlaceholderFootprint ? (
+                  <div className="flex h-64 items-center justify-center rounded-xl border border-slate-200 bg-slate-900 px-4 text-center text-xs text-slate-400 dark:border-slate-800">
+                    Add a footprint to enable 3D preview.
+                  </div>
+                ) : (
+                  <ThreeDComponentPreview
+                    key={`${modelRefreshToken}:${externalModelRefreshToken}`}
+                    backendURL={backendURL}
+                    moduleId={moduleId}
+                    footprintId={detail.footprint.id}
+                    category={componentCategory}
+                    mountType={detail.footprint.mountType}
+                    isBuiltin={isBuiltin}
+                  />
+                )}
+              </article>
             </div>
 
             {detail.footprintVariants && detail.footprintVariants.length > 1 ? (

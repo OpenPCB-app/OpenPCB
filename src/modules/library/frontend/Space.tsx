@@ -19,7 +19,7 @@ import {
 import type { LibraryComponent } from "../../../sdks/library";
 import { ComponentDetailPage } from "./ComponentDetailPage";
 import { commitKicadZipImportRequest } from "./import-wizard/import-api";
-import { ImportWizardPage } from "./import-wizard";
+import { convertPendingModelConversion, ImportWizardPage } from "./import-wizard";
 import { LibraryCard } from "./LibraryCard";
 import { toUserError } from "./utils";
 
@@ -196,6 +196,7 @@ export function LibrarySpace({
   const [detailComponentId, setDetailComponentId] = useState<string | null>(
     null,
   );
+  const [detailModelRefreshToken, setDetailModelRefreshToken] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [zipImporting, setZipImporting] = useState(false);
@@ -290,6 +291,44 @@ export function LibrarySpace({
         );
         setRefreshTick((value) => value + 1);
         setDetailComponentId(result.componentId);
+        if (result.modelConversion?.status === "pending_client_conversion") {
+          setNotice({
+            id: crypto.randomUUID(),
+            title: "Converting 3D model",
+            message: "Converting 3D model…",
+            variant: "success",
+          });
+          await convertPendingModelConversion({
+            backendURL,
+            moduleId,
+            conversion: result.modelConversion,
+            signal: controller.signal,
+            onProgress: (status, message) => {
+              setNotice({
+                id: crypto.randomUUID(),
+                title:
+                  status === "failed"
+                    ? "3D model conversion failed"
+                    : status === "ready"
+                      ? "3D model ready"
+                      : "Converting 3D model",
+                message: message ?? (status === "ready" ? "Ready" : "Converting 3D model…"),
+                variant: status === "failed" ? "warning" : "success",
+              });
+            },
+          }).catch((conversionError) => {
+            setNotice({
+              id: crypto.randomUUID(),
+              title: "3D model conversion failed",
+              message:
+                conversionError instanceof Error
+                  ? conversionError.message
+                  : "Imported component remains available without a 3D model.",
+              variant: "warning",
+            });
+          });
+          setDetailModelRefreshToken((token) => token + 1);
+        }
         if (result.warnings.length > 0) {
           const firstWarning = result.warnings[0];
           setNotice({
@@ -412,6 +451,7 @@ export function LibrarySpace({
           backendURL={backendURL}
           moduleId={moduleId}
           componentId={detailComponentId}
+          modelRefreshToken={detailModelRefreshToken}
           onBack={() => setDetailComponentId(null)}
           onCloned={(newId) => {
             setRefreshTick((value) => value + 1);

@@ -9,6 +9,7 @@ import {
   parseKicadFootprint,
   type ParsedKicadFootprint,
 } from "../infrastructure/parsers/kicad/kicad-footprint-parser";
+import { classifyModel3DLinks } from "../infrastructure/parsers/kicad/kicad-model-linker";
 import {
   parseKicadSymbolLib,
   type ParsedKicadSymbol,
@@ -21,6 +22,7 @@ import type {
   ImportWarning,
   InspectKicadRequest,
   InspectKicadResponse,
+  Model3DCandidate,
 } from "./types";
 
 export class ImportValidationError extends ValidationError {
@@ -67,6 +69,7 @@ export interface NormalizedImportedFootprint {
 export interface ParsedImportBundle {
   normalizedSymbols: NormalizedImportedSymbol[];
   normalizedFootprints: NormalizedImportedFootprint[];
+  model3dCandidates: Model3DCandidate[];
   warnings: ImportWarning[];
   raw: {
     symbolFileName: string;
@@ -186,6 +189,17 @@ function normalizeFootprint(
   };
 }
 
+function extensionOf(fileName: string): string {
+  const dot = fileName.lastIndexOf(".");
+  return dot >= 0 ? fileName.slice(dot).toLowerCase() : "";
+}
+
+function basenameOf(fileName: string): string {
+  const normalized = fileName.replace(/\\/g, "/");
+  const slash = normalized.lastIndexOf("/");
+  return slash >= 0 ? normalized.slice(slash + 1) : normalized;
+}
+
 export function parseImportBundle(
   input: InspectKicadRequest,
 ): ParsedImportBundle {
@@ -225,6 +239,9 @@ export function parseImportBundle(
   const footprintByName: Record<string, ParsedKicadFootprint> = {};
   const footprintById: Record<string, ParsedKicadFootprint> = {};
   const footprintFileByName: Record<string, string> = {};
+  const availableModelFiles = (input.model3dFiles ?? []).map((item) =>
+    basenameOf(item.fileName),
+  );
 
   for (let index = 0; index < normalizedSymbols.length; index += 1) {
     const normalized = normalizedSymbols[index];
@@ -281,9 +298,44 @@ export function parseImportBundle(
     }
   }
 
+  const modelClassifications = classifyModel3DLinks(
+    Object.values(footprintByName),
+    availableModelFiles,
+  );
+  const model3dCandidates = modelClassifications.map((item) => {
+    const extension = extensionOf(item.modelFileName);
+    return {
+      fileName: item.modelFileName,
+      extension,
+      association: extension === ".wrl" ? "unsupported_format" : item.status,
+    } satisfies Model3DCandidate;
+  });
+
+  for (const classification of modelClassifications) {
+    if (classification.status === "valid" && extensionOf(classification.modelFileName) !== ".wrl") {
+      continue;
+    }
+    const normalizedFootprint = parsedFootprintByName(
+      normalizedFootprints,
+      classification.footprintName,
+    );
+    warnings.push({
+      scope: "footprint",
+      itemId: normalizedFootprint?.id ?? "",
+      itemName: classification.footprintName || classification.modelFileName,
+      code: extensionOf(classification.modelFileName) === ".wrl"
+        ? "model3d_unsupported_format"
+        : `model3d_${classification.status}`,
+      message: extensionOf(classification.modelFileName) === ".wrl"
+        ? `3D model file ${classification.modelFileName} is a VRML model; STEP/STP is required for import conversion`
+        : modelClassificationMessage(classification.status, classification.modelFileName),
+    });
+  }
+
   return {
     normalizedSymbols,
     normalizedFootprints,
+    model3dCandidates,
     warnings,
     raw: {
       symbolFileName,
@@ -294,6 +346,26 @@ export function parseImportBundle(
       footprintFileByName,
     },
   };
+}
+
+function parsedFootprintByName(
+  footprintsList: NormalizedImportedFootprint[],
+  name: string,
+): NormalizedImportedFootprint | null {
+  return footprintsList.find((footprint) => footprint.name === name) ?? null;
+}
+
+function modelClassificationMessage(status: string, fileName: string): string {
+  if (status === "missing_target") {
+    return `3D model reference ${fileName} was not found in the import payload`;
+  }
+  if (status === "orphan_asset") {
+    return `3D model file ${fileName} is present but not referenced by any footprint`;
+  }
+  if (status === "shared_body") {
+    return `3D model file ${fileName} is shared by multiple footprints`;
+  }
+  return `3D model file ${fileName} has status ${status}`;
 }
 
 export function buildInspectResponse(
@@ -320,6 +392,7 @@ export function buildInspectResponse(
       warningCount: footprint.warnings.length,
       preview: footprint.preview,
     })),
+    model3dCandidates: parsed.model3dCandidates,
     warnings: parsed.warnings,
   };
 }
