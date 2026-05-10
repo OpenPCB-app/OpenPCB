@@ -4,6 +4,7 @@
 
 import type { FootprintRenderSourcePad } from "../../../../shared/rendering/types";
 import type { PcbPlacedPart, PcbPointMm } from "../../../../sdks/designer";
+import { placementMirrorX as sdkPlacementMirrorX } from "../../../../sdks/designer/pcb-helpers";
 import { normalizeRotationDeg } from "../commands/place-part";
 
 export function transformPadCenterMm(
@@ -27,6 +28,9 @@ export function transformPadCenterMm(
   }
 }
 
+// Re-export the SDK helper so existing backend imports don't change.
+export const placementMirrorX = sdkPlacementMirrorX;
+
 export function padWorldPositionMm(
   placement: PcbPlacedPart,
   pad: Pick<FootprintRenderSourcePad, "centerMm">,
@@ -34,7 +38,7 @@ export function padWorldPositionMm(
   const transformed = transformPadCenterMm(
     pad.centerMm,
     placement.rotationDeg,
-    placement.mirrored,
+    placementMirrorX(placement),
   );
   return {
     x: placement.positionMm.x + transformed.x,

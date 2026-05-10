@@ -14,12 +14,14 @@ export default defineConfig({
     include: [
       "src/core/frontend/src/**/*.test.{ts,tsx,js,jsx}",
       "src/modules/*/frontend/**/*.test.{ts,tsx,js,jsx}",
+      "src/shared/frontend/**/*.test.{ts,tsx,js,jsx}",
     ],
   },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@modules": path.resolve(repoRoot, "src/modules"),
+      "@shared": path.resolve(repoRoot, "src/shared"),
     },
   },
 });

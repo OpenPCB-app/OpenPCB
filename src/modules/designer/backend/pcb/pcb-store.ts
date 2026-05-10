@@ -211,6 +211,48 @@ export function updatePcbActiveLayer(params: {
   const next: PcbBoardSettings = {
     ...settings,
     activeLayer: params.layer,
+    visibleLayers: settings.visibleLayers.includes(params.layer)
+      ? settings.visibleLayers
+      : [...settings.visibleLayers, params.layer],
+    updatedAt: params.timestamp,
+  };
+  params.db
+    .update(pcbEntities)
+    .set({ payloadJson: JSON.stringify(next), updatedAt: params.timestamp })
+    .where(
+      and(
+        eq(pcbEntities.designId, params.designId),
+        eq(pcbEntities.kind, BOARD_SETTINGS_KIND),
+      ),
+    )
+    .run();
+  return next;
+}
+
+export function updatePcbVisibleLayers(params: {
+  db: DbClient;
+  designId: string;
+  visibleLayers: ReadonlyArray<PcbLayerId>;
+  timestamp: string;
+}): PcbBoardSettings {
+  const settings = ensurePcbBoardSettings(
+    params.db,
+    params.designId,
+    params.timestamp,
+  );
+  // Dedupe + preserve order; ensure activeLayer remains visible.
+  const seen = new Set<PcbLayerId>();
+  const visible: PcbLayerId[] = [];
+  for (const layer of params.visibleLayers) {
+    if (!seen.has(layer)) {
+      seen.add(layer);
+      visible.push(layer);
+    }
+  }
+  if (!seen.has(settings.activeLayer)) visible.push(settings.activeLayer);
+  const next: PcbBoardSettings = {
+    ...settings,
+    visibleLayers: visible,
     updatedAt: params.timestamp,
   };
   params.db
@@ -438,6 +480,27 @@ export function rotatePcbPlacement(params: {
   return next;
 }
 
+export function flipPcbPlacement(params: {
+  db: DbClient;
+  designId: string;
+  placementId: string;
+  timestamp: string;
+}): PcbPlacedPart | null {
+  const placement = loadPcbPlacementById(
+    params.db,
+    params.designId,
+    params.placementId,
+  );
+  if (!placement) return null;
+  const next: PcbPlacedPart = {
+    ...placement,
+    layer: placement.layer === "B.Cu" ? "F.Cu" : "B.Cu",
+    mirrored: !placement.mirrored,
+  };
+  upsertPcbPlacement(params.db, params.designId, next, params.timestamp);
+  return next;
+}
+
 function deterministicOffset(index: number): { x: number; y: number } {
   const base = 1.5;
   const step = 0.8;
@@ -472,9 +535,18 @@ export function syncPcbPlacementsFromSchematic(params: {
     footprint: PcbPlacedPart["footprint"];
   }>;
   boardCenter: PcbPointMm;
+  /** Layer assigned to newly-created placements; B.Cu also flips mirror. Defaults to F.Cu. */
+  defaultLayer?: PcbLayerId;
   timestamp: string;
 }): PcbPlacedPart[] {
-  const { db, designId, schematicParts, boardCenter, timestamp } = params;
+  const {
+    db,
+    designId,
+    schematicParts,
+    boardCenter,
+    defaultLayer = "F.Cu",
+    timestamp,
+  } = params;
   const existing = loadPcbPlacements(db, designId);
   const existingByPartId = new Map(existing.map((p) => [p.partId, p]));
   const schematicPartIds = new Set(schematicParts.map((p) => p.id));
@@ -505,7 +577,8 @@ export function syncPcbPlacementsFromSchematic(params: {
     const existingPlacement = existingByPartId.get(part.id);
     if (existingPlacement && !isAbsurd(existingPlacement)) {
       const footprintChanged =
-        JSON.stringify(existingPlacement.footprint) !== JSON.stringify(part.footprint);
+        JSON.stringify(existingPlacement.footprint) !==
+        JSON.stringify(part.footprint);
       if (footprintChanged) {
         const refreshed: PcbPlacedPart = {
           ...existingPlacement,
@@ -545,8 +618,8 @@ export function syncPcbPlacementsFromSchematic(params: {
         reference: part.reference,
         positionMm: repairedPosition,
         rotationDeg: 0,
-        mirrored: false,
-        layer: "F.Cu",
+        mirrored: defaultLayer === "B.Cu",
+        layer: defaultLayer,
         footprint: part.footprint,
       };
       upsertPcbPlacement(db, designId, placement, timestamp);

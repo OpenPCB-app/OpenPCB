@@ -3,10 +3,15 @@ import { useEffect, useMemo, useRef, type ReactElement } from "react";
 import * as THREE from "three";
 import type {
   DesignerPcbProjection,
+  PcbLayerId,
   PcbPlacedPart,
   PcbPointMm,
 } from "../../../../sdks";
 import { FootprintRenderLayer } from "../../../../shared/frontend/canvas/scene";
+import {
+  flipLayerSide,
+  placementContributingLayers,
+} from "../../../../shared/frontend/canvas/scene/layer-side";
 import { EDAText } from "../../../../shared/frontend/canvas/primitives/EDAText";
 import { GridShader } from "../../../../shared/frontend/canvas/primitives/GridShader";
 import {
@@ -16,13 +21,23 @@ import {
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
 import { TraceLayer } from "./layers/TraceLayer";
 import { ViaLayer } from "./layers/ViaLayer";
+import {
+  areViasVisible,
+  hiddenFootprintLayers,
+  isCopperLayerVisible,
+  isPcbLayerVisible,
+  isPlacementVisible,
+  visibleLayerSet,
+} from "./pcb-layer-visibility";
 import type { PcbSelection } from "./pcb-selection";
 
 function BoardOutline({
   projection,
+  visibleLayers,
 }: {
   projection: DesignerPcbProjection;
-}): ReactElement {
+  visibleLayers: ReadonlySet<PcbLayerId>;
+}): ReactElement | null {
   const geometry = useMemo(() => {
     const { widthMm, heightMm, centerMm } = projection.board.outline;
     const halfW = widthMm / 2;
@@ -45,6 +60,8 @@ function BoardOutline({
   }, [projection.board.outline]);
 
   useEffect(() => () => geometry.dispose(), [geometry]);
+
+  if (!isPcbLayerVisible(visibleLayers, "Edge.Cuts")) return null;
 
   return (
     <lineSegments geometry={geometry} renderOrder={RENDER_ORDER.BOARD_OUTLINE}>
@@ -268,14 +285,24 @@ const PCB_HIDDEN_LAYERS: ReadonlySet<string> = new Set([
 function PlacementRender({
   placement,
   positionOverrideMm,
+  activeLayer,
+  visibleLayers,
 }: {
   placement: PcbPlacedPart;
   positionOverrideMm?: PcbPointMm;
+  activeLayer: PcbLayerId;
+  visibleLayers: ReadonlySet<PcbLayerId>;
 }): ReactElement | null {
   const model = placement.footprint.preview;
   const position = positionOverrideMm ?? placement.positionMm;
   const rotationRad = (placement.rotationDeg * Math.PI) / 180;
-  const scaleX = placement.mirrored ? -1 : 1;
+  // Match the canonical 3D mirror formula (transform-helpers.ts:29-30): a
+  // placement on B.Cu OR with `mirrored=true` flips X. Keeping these in sync
+  // means a placement created via the new flip command renders identically
+  // in 2D and 3D, and any legacy data with only one of the two flags still
+  // looks right.
+  const isBackLayer = placement.layer === "B.Cu";
+  const scaleX = placement.mirrored || isBackLayer ? -1 : 1;
 
   // No footprint preview at all, or footprint with zero pads AND zero graphics:
   // render a placeholder so the user can see the part exists and where it sits.
@@ -284,6 +311,29 @@ function PlacementRender({
   const isEmptyModel =
     !model ||
     ((model.pads?.length ?? 0) === 0 && (model.graphics?.length ?? 0) === 0);
+
+  // KiCad-style flip: when on B.Cu, every footprint child layer remaps F.* ↔ B.*
+  // (pads, silk, mask, paste, courtyard, fab). `*.Cu` (through-hole) untouched.
+  const layerRemap = isBackLayer ? flipLayerSide : undefined;
+
+  // Dim every layer the placement contributes when it lives on the off-active
+  // side. Using the remapped contributing-layers set means we cover all
+  // child layers with one prop.
+  const dimmedLayers = useMemo<ReadonlySet<string> | undefined>(() => {
+    if (placement.layer === activeLayer) return undefined;
+    return placementContributingLayers(placement.layer);
+  }, [placement.layer, activeLayer]);
+
+  const hiddenLayers = useMemo(() => {
+    return new Set([
+      ...PCB_HIDDEN_LAYERS,
+      ...hiddenFootprintLayers(visibleLayers),
+    ]);
+  }, [visibleLayers]);
+
+  // Layer-visibility filter: hide entire placement when its primary copper
+  // layer is not in the visible set. Hooks stay above this return.
+  if (!isPlacementVisible(visibleLayers, placement)) return null;
 
   return (
     <group
@@ -296,7 +346,9 @@ function PlacementRender({
           model={model}
           useLayerColors
           surface="pcb"
-          hiddenLayers={PCB_HIDDEN_LAYERS}
+          hiddenLayers={hiddenLayers}
+          dimmedLayers={dimmedLayers}
+          layerRemap={layerRemap}
           placeholderSubstitutions={{ reference: placement.reference }}
         />
       ) : null}
@@ -377,7 +429,8 @@ function SelectionOutline({
   if (!bounds) return null;
   const position = positionOverrideMm ?? placement.positionMm;
   const rotationRad = (placement.rotationDeg * Math.PI) / 180;
-  const scaleX = placement.mirrored ? -1 : 1;
+  // Mirror in lockstep with PlacementRender (mirror OR back-layer).
+  const scaleX = placement.mirrored || placement.layer === "B.Cu" ? -1 : 1;
   const w = bounds.maxX - bounds.minX;
   const h = bounds.maxY - bounds.minY;
   const cx = (bounds.minX + bounds.maxX) / 2;
@@ -448,40 +501,54 @@ export function PcbScene({
   ]);
 
   const selectedPlacementIds = selection?.placementIds;
+  const visibleLayers = useMemo(
+    () => visibleLayerSet(projection.board.visibleLayers),
+    [projection.board.visibleLayers],
+  );
   const selectedPlacements = useMemo(() => {
     if (!selectedPlacementIds || selectedPlacementIds.size === 0) return [];
-    return projection.placements.filter((p) => selectedPlacementIds.has(p.id));
-  }, [projection.placements, selectedPlacementIds]);
+    return projection.placements.filter(
+      (p) => selectedPlacementIds.has(p.id) && isPlacementVisible(visibleLayers, p),
+    );
+  }, [projection.placements, selectedPlacementIds, visibleLayers]);
 
   return (
     <>
       <GridShader gridSize={1} majorEvery={5} alpha={0.06} majorAlpha={0.04} />
       <BoardFill projection={projection} />
-      <BoardOutline projection={projection} />
+      <BoardOutline projection={projection} visibleLayers={visibleLayers} />
       {projection.placements.map((placement) => (
         <PlacementRender
           key={placement.id}
           placement={placement}
           positionOverrideMm={dragOverride?.get(placement.id)}
+          activeLayer={projection.board.activeLayer}
+          visibleLayers={visibleLayers}
         />
       ))}
-      <TraceLayer
-        traces={projection.traces}
-        layer="B.Cu"
-        highlightedNetId={highlightedNetId}
-        selectedTraceIds={selection?.traceIds}
-      />
-      <TraceLayer
-        traces={projection.traces}
-        layer="F.Cu"
-        highlightedNetId={highlightedNetId}
-        selectedTraceIds={selection?.traceIds}
-      />
-      <ViaLayer
-        vias={projection.vias}
-        highlightedNetId={highlightedNetId}
-        selectedViaIds={selection?.viaIds}
-      />
+      {isCopperLayerVisible(visibleLayers, "B.Cu") ? (
+        <TraceLayer
+          traces={projection.traces}
+          layer="B.Cu"
+          highlightedNetId={highlightedNetId}
+          selectedTraceIds={selection?.traceIds}
+        />
+      ) : null}
+      {isCopperLayerVisible(visibleLayers, "F.Cu") ? (
+        <TraceLayer
+          traces={projection.traces}
+          layer="F.Cu"
+          highlightedNetId={highlightedNetId}
+          selectedTraceIds={selection?.traceIds}
+        />
+      ) : null}
+      {areViasVisible(visibleLayers) ? (
+        <ViaLayer
+          vias={projection.vias}
+          highlightedNetId={highlightedNetId}
+          selectedViaIds={selection?.viaIds}
+        />
+      ) : null}
       <RatsnestLayer
         projection={projection}
         selectedPlacementIds={selectedPlacementIds}

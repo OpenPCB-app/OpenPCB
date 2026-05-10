@@ -63,16 +63,64 @@ describe("routeToolReducer", () => {
     expect(d.kind).toBe("idle");
   });
 
-  test("switch-layer flips layer and inserts via anchor", () => {
+  test("rebase-layer resets anchor, clears waypoints, flips layer", () => {
     const a = routeToolReducer(initialRouteToolState, startEvent);
-    const b = routeToolReducer(a, {
-      kind: "switch-layer",
+    const withWaypoint = routeToolReducer(a, {
+      kind: "commit-waypoint",
+      pointNm: { x: 1_000_000, y: 0 },
+    });
+    const b = routeToolReducer(withWaypoint, {
+      kind: "rebase-layer",
       layer: "B.Cu",
-      viaCenterNm: { x: 2_000_000, y: 0 },
+      anchorNm: { x: 2_000_000, y: 0 },
     });
     if (b.kind !== "routing") throw new Error("expected routing");
     expect(b.session.layer).toBe("B.Cu");
-    expect(b.session.waypointsNm).toEqual([{ x: 2_000_000, y: 0 }]);
+    expect(b.session.anchorNm).toEqual({ x: 2_000_000, y: 0 });
+    expect(b.session.waypointsNm).toEqual([]);
+    // Width / net / posture / segmentMode preserved.
+    expect(b.session.widthMm).toBe(0.25);
+    expect(b.session.netId).toBe(null);
+    expect(b.session.netClassId).toBe("default");
+    expect(b.session.segmentMode).toBe("manhattan-45");
+  });
+
+  test("set-via-diameter and set-via-drill update overrides", () => {
+    const a = routeToolReducer(initialRouteToolState, startEvent);
+    const b = routeToolReducer(a, {
+      kind: "set-via-diameter",
+      diameterMmOverride: 0.9,
+    });
+    const c = routeToolReducer(b, {
+      kind: "set-via-drill",
+      drillMmOverride: 0.45,
+    });
+    if (c.kind !== "routing") throw new Error("expected routing");
+    expect(c.session.viaDiameterMmOverride).toBe(0.9);
+    expect(c.session.viaDrillMmOverride).toBe(0.45);
+
+    // Setting back to undefined clears.
+    const d = routeToolReducer(c, {
+      kind: "set-via-diameter",
+      diameterMmOverride: undefined,
+    });
+    if (d.kind !== "routing") throw new Error("expected routing");
+    expect(d.session.viaDiameterMmOverride).toBeUndefined();
+  });
+
+  test("rebase-layer preserves via-size overrides", () => {
+    const a = routeToolReducer(initialRouteToolState, startEvent);
+    const withOverride = routeToolReducer(a, {
+      kind: "set-via-diameter",
+      diameterMmOverride: 1.2,
+    });
+    const b = routeToolReducer(withOverride, {
+      kind: "rebase-layer",
+      layer: "B.Cu",
+      anchorNm: { x: 2_000_000, y: 0 },
+    });
+    if (b.kind !== "routing") throw new Error("expected routing");
+    expect(b.session.viaDiameterMmOverride).toBe(1.2);
   });
 
   test("set-mode toggles segment mode", () => {

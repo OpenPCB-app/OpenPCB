@@ -192,6 +192,38 @@ export function usePcbWorkspace(params: {
     [dispatchCommand, refresh, refreshHistory],
   );
 
+  const flipPlacement = useCallback(
+    async (placementId: string) => {
+      setError(null);
+      try {
+        await dispatchCommand({ type: "pcb_flip_placement", placementId });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Flip failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const flipPlacements = useCallback(
+    async (placementIds: ReadonlyArray<string>) => {
+      if (placementIds.length === 0) return;
+      setError(null);
+      try {
+        await dispatchCommand({
+          type: "pcb_flip_placements",
+          placementIds: [...placementIds],
+        });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Flip failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
   const setActiveLayer = useCallback(
     async (layer: PcbLayerId) => {
       setError(null);
@@ -205,6 +237,25 @@ export function usePcbWorkspace(params: {
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Set active layer failed",
+        );
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const setVisibleLayers = useCallback(
+    async (visibleLayers: ReadonlyArray<PcbLayerId>) => {
+      setError(null);
+      try {
+        await dispatchCommand({
+          type: "pcb_set_visible_layers",
+          visibleLayers: [...visibleLayers],
+        });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Set visible layers failed",
         );
       }
     },
@@ -236,6 +287,7 @@ export function usePcbWorkspace(params: {
         await refreshHistory();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Add trace failed");
+        throw err instanceof Error ? err : new Error("Add trace failed");
       }
     },
     [dispatchCommand, refresh, refreshHistory],
@@ -246,6 +298,8 @@ export function usePcbWorkspace(params: {
       centerMm: PcbPointMm;
       netId: string | null;
       netClassId: string;
+      diameterMmOverride?: number;
+      drillMmOverride?: number;
     }) => {
       setError(null);
       try {
@@ -254,6 +308,7 @@ export function usePcbWorkspace(params: {
         await refreshHistory();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Add via failed");
+        throw err instanceof Error ? err : new Error("Add via failed");
       }
     },
     [dispatchCommand, refresh, refreshHistory],
@@ -322,11 +377,14 @@ export function usePcbWorkspace(params: {
     refresh,
     updateBoardSize,
     setActiveLayer,
+    setVisibleLayers,
     undo,
     redo,
     movePlacement,
     movePlacements,
     rotatePlacement,
+    flipPlacement,
+    flipPlacements,
     addTrace,
     addVia,
     deleteTrace,

@@ -77,13 +77,15 @@ export function EdaCanvas({
 
   const handleContextMenu = useCallback((e: MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
   }, []);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     container.addEventListener("contextmenu", handleContextMenu);
-    return () => container.removeEventListener("contextmenu", handleContextMenu);
+    return () =>
+      container.removeEventListener("contextmenu", handleContextMenu);
   }, [handleContextMenu]);
 
   const containerStyle: CSSProperties = {
@@ -96,7 +98,8 @@ export function EdaCanvas({
   };
 
   const resolvedMode = resolveCanvasThemeMode(themeMode);
-  const resolvedBackground = backgroundColor ?? getDefaultCanvasBackground(resolvedMode);
+  const resolvedBackground =
+    backgroundColor ?? getDefaultCanvasBackground(resolvedMode);
 
   const resolvedWheelOptions = {
     ...DEFAULT_EDA_WHEEL_OPTIONS,
@@ -186,7 +189,9 @@ function EdaCanvasInternals({
   const invalidate = useThree((s) => s.invalidate);
 
   useEffect(() => {
-    (cameraRef as React.MutableRefObject<THREE.OrthographicCamera | null>).current = camera;
+    (
+      cameraRef as React.MutableRefObject<THREE.OrthographicCamera | null>
+    ).current = camera;
   }, [camera, cameraRef]);
 
   useEdaWheel(wheelOptions);
@@ -274,6 +279,18 @@ function EdaCanvasInternals({
     interactionHandler?.onPointerLeave?.();
   }, [interactionHandler]);
 
+  useEffect(() => {
+    const canvas = gl.domElement;
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    canvas.addEventListener("contextmenu", handleContextMenu);
+    return () => canvas.removeEventListener("contextmenu", handleContextMenu);
+  }, [gl]);
+
   return (
     <>
       {!readOnly && (
@@ -351,7 +368,14 @@ function BackgroundHitPlane({
     <mesh
       renderOrder={RENDER_ORDER.HIT_PLANE}
       onPointerDown={(e) => {
-        if (!interactionHandler?.onPointerDown || e.button > 0) return;
+        if (e.button === 2) {
+          if (!interactionHandler?.onContextMenu) return;
+          e.stopPropagation();
+          interactionHandler.onContextMenu(buildInteractionEvent(e));
+          invalidate();
+          return;
+        }
+        if (!interactionHandler?.onPointerDown || e.button !== 0) return;
         e.stopPropagation();
         interactionHandler.onPointerDown(buildInteractionEvent(e));
         invalidate();
@@ -361,6 +385,7 @@ function BackgroundHitPlane({
         interactionHandler.onPointerMove(buildInteractionEvent(e));
       }}
       onPointerUp={(e) => {
+        if (e.button !== 0) return;
         if (!interactionHandler?.onPointerUp) return;
         interactionHandler.onPointerUp(buildInteractionEvent(e));
         invalidate();

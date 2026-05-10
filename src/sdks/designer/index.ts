@@ -56,11 +56,14 @@ export type {
   DesignerPcbAddViaCommand,
   DesignerPcbDeleteTraceCommand,
   DesignerPcbDeleteViaCommand,
+  DesignerPcbFlipPlacementCommand,
+  DesignerPcbFlipPlacementsCommand,
   DesignerPcbMovePlacementCommand,
   DesignerPcbMovePlacementsCommand,
   DesignerPcbRotatePlacementCommand,
   DesignerPcbSetActiveLayerCommand,
   DesignerPcbSetBoardSettingsCommand,
+  DesignerPcbSetVisibleLayersCommand,
   DesignerPcbUpdateTraceGeometryCommand,
   DesignerPlacePartCommand,
   DesignerPlaceGndPortCommand,
@@ -78,10 +81,13 @@ export type {
   DesignerRotatePartCommand,
   DesignerSchematicProjection,
   DesignerSearchLibraryParams,
+  DesignerUpdatePartPropertiesCommand,
+  DesignerUpdatePartsPropertiesCommand,
   DesignerUpsertLabelCommand,
   DesignerWire,
 } from "./types";
 export type { DesignerInvalidatedEvent } from "./events";
+export { placementMirrorX } from "./pcb-helpers";
 
 export interface DesignerSDK {
   createDesign(

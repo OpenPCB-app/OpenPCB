@@ -109,6 +109,9 @@ export function useToolDispatch<TId extends string>({
       onPointerUp(event) {
         toolRef.current.onPointerUp?.(event);
       },
+      onContextMenu(event) {
+        toolRef.current.onContextMenu?.(event);
+      },
     }),
     [],
   );

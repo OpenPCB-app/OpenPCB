@@ -58,8 +58,10 @@ import {
   deletePcbTrace,
   deletePcbVia,
   ensurePcbBoardSettings,
+  flipPcbPlacement,
   insertPcbTrace,
   insertPcbVia,
+  loadPcbPlacementById,
   loadPcbTraceById,
   loadPcbViaById,
   movePcbPlacement,
@@ -67,6 +69,7 @@ import {
   updatePcbActiveLayer,
   updatePcbBoardSize,
   updatePcbTrace,
+  updatePcbVisibleLayers,
 } from "./pcb/pcb-store";
 import {
   validatePath as validateTracePath,
@@ -336,11 +339,51 @@ export function executeDesignerCommand({
     return okResult(bumpRevision(tx, designId, revision, timestamp), null);
   }
 
+  if (command.type === "pcb_flip_placement") {
+    const flipped = flipPcbPlacement({
+      db: tx,
+      designId,
+      placementId: command.placementId,
+      timestamp,
+    });
+    if (!flipped) return pcbPlacementNotFound(command.placementId);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_flip_placements") {
+    const placementIds = [...new Set(command.placementIds)];
+    for (const placementId of placementIds) {
+      if (!loadPcbPlacementById(tx, designId, placementId)) {
+        return pcbPlacementNotFound(placementId);
+      }
+    }
+    for (const placementId of placementIds) {
+      const flipped = flipPcbPlacement({
+        db: tx,
+        designId,
+        placementId,
+        timestamp,
+      });
+      if (!flipped) return pcbPlacementNotFound(placementId);
+    }
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
   if (command.type === "pcb_set_active_layer") {
     updatePcbActiveLayer({
       db: tx,
       designId,
       layer: command.layer,
+      timestamp,
+    });
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_set_visible_layers") {
+    updatePcbVisibleLayers({
+      db: tx,
+      designId,
+      visibleLayers: command.visibleLayers,
       timestamp,
     });
     return okResult(bumpRevision(tx, designId, revision, timestamp), null);
@@ -377,16 +420,34 @@ export function executeDesignerCommand({
       (nc) => nc.id === command.netClassId,
     );
     if (!netClass) return pcbNetClassNotFound(command.netClassId);
-    if (netClass.viaDiameterMm <= netClass.viaDrillMm) {
-      return invalidPcbVia("net class viaDiameterMm must exceed viaDrillMm");
+    const diameterMm = command.diameterMmOverride ?? netClass.viaDiameterMm;
+    const drillMm = command.drillMmOverride ?? netClass.viaDrillMm;
+    if (!Number.isFinite(diameterMm) || diameterMm <= 0) {
+      return invalidPcbVia("via diameter must be positive");
+    }
+    if (!Number.isFinite(drillMm) || drillMm <= 0) {
+      return invalidPcbVia("via drill must be positive");
+    }
+    if (diameterMm <= drillMm) {
+      return invalidPcbVia("via diameter must exceed drill");
+    }
+    const minimums = board.designRules.minimums;
+    if (diameterMm < minimums.viaDiameterMm) {
+      return invalidPcbVia("via diameter is below board minimum");
+    }
+    if (drillMm < minimums.viaDrillMm || drillMm < minimums.drillSizeMm) {
+      return invalidPcbVia("via drill is below board minimum");
+    }
+    if ((diameterMm - drillMm) / 2 < minimums.annularRingMm) {
+      return invalidPcbVia("via annular ring is below board minimum");
     }
     const via: PcbVia = {
       id: crypto.randomUUID(),
       netId: command.netId,
       netClassId: command.netClassId,
       centerMm: command.centerMm,
-      diameterMm: netClass.viaDiameterMm,
-      drillMm: netClass.viaDrillMm,
+      diameterMm,
+      drillMm,
       fromLayer: "F.Cu",
       toLayer: "B.Cu",
     };

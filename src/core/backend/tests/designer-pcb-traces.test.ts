@@ -347,4 +347,76 @@ describe("designer PCB traces (Phase 1)", () => {
     expect(proj?.vias[0]?.fromLayer).toBe("F.Cu");
     expect(proj?.vias[0]?.toLayer).toBe("B.Cu");
   });
+
+  test("smart-via flow: F.Cu trace → via → B.Cu trace yields 2 traces + 1 via with one logical net", async () => {
+    isolateTestDb("traces-smart-via");
+    const { moduleRuntime } = await createRuntime();
+    const sdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const design = await sdk.createDesign({ name: "Smart Via" });
+    const proj0 = await sdk.getPcbProjection(design.id);
+    const netClass = proj0!.board.netClasses[0]!;
+    const netId = "net-A"; // synthetic net id, no schematic correlation needed
+
+    // 1) F.Cu segment from p0 to viaCenter.
+    const p0 = { x: 0, y: 0 };
+    const viaCenter = { x: 5_000_000, y: 0 };
+    const r1 = await sdk.dispatchCommand(
+      design.id,
+      envelope(design.id, "cmd-trace-fcu", SESSION, proj0!.revision, {
+        type: "pcb_add_trace",
+        layer: "F.Cu" as PcbCopperLayerId,
+        pointsNm: [p0, viaCenter],
+        widthMm: 0.25,
+        netId,
+        netClassId: netClass.id,
+        segmentMode: "manhattan-90" as PcbTraceSegmentMode,
+      }),
+    );
+    expect(r1.ok).toBe(true);
+
+    // 2) Drop a via at the join point.
+    const proj1 = await sdk.getPcbProjection(design.id);
+    const r2 = await sdk.dispatchCommand(
+      design.id,
+      envelope(design.id, "cmd-via", SESSION, proj1!.revision, {
+        type: "pcb_add_via",
+        centerMm: { x: 5, y: 0 },
+        netId,
+        netClassId: netClass.id,
+      }),
+    );
+    expect(r2.ok).toBe(true);
+
+    // 3) B.Cu segment from viaCenter to p2.
+    const proj2 = await sdk.getPcbProjection(design.id);
+    const p2 = { x: 5_000_000, y: 3_000_000 };
+    const r3 = await sdk.dispatchCommand(
+      design.id,
+      envelope(design.id, "cmd-trace-bcu", SESSION, proj2!.revision, {
+        type: "pcb_add_trace",
+        layer: "B.Cu" as PcbCopperLayerId,
+        pointsNm: [viaCenter, p2],
+        widthMm: 0.25,
+        netId,
+        netClassId: netClass.id,
+        segmentMode: "manhattan-90" as PcbTraceSegmentMode,
+      }),
+    );
+    expect(r3.ok).toBe(true);
+
+    const finalProj = await sdk.getPcbProjection(design.id);
+    expect(finalProj!.traces).toHaveLength(2);
+    expect(finalProj!.vias).toHaveLength(1);
+
+    // Per-layer traces, never merged.
+    const layers = finalProj!.traces.map((t) => t.layer).sort();
+    expect(layers).toEqual(["B.Cu", "F.Cu"]);
+
+    // All three records share the same net id.
+    for (const t of finalProj!.traces) expect(t.netId).toBe(netId);
+    expect(finalProj!.vias[0]!.netId).toBe(netId);
+  });
 });

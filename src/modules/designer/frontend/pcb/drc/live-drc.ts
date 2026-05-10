@@ -5,6 +5,7 @@ import type {
   PcbPlacedPart,
   PcbTrace,
 } from "../../../../../sdks";
+import { placementMirrorX } from "../../../../../sdks/designer/pcb-helpers";
 
 type Point = { x: number; y: number };
 
@@ -103,7 +104,7 @@ function computePadGeoms(
       const offset = transformPadCenter(
         pad.centerMm,
         placement.rotationDeg,
-        placement.mirrored,
+        placementMirrorX(placement),
       );
       const cx = placement.positionMm.x + offset.x;
       const cy = placement.positionMm.y + offset.y;

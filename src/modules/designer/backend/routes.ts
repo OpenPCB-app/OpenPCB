@@ -15,11 +15,14 @@ import type {
   DesignerPcbAddViaCommand,
   DesignerPcbDeleteTraceCommand,
   DesignerPcbDeleteViaCommand,
+  DesignerPcbFlipPlacementCommand,
+  DesignerPcbFlipPlacementsCommand,
   DesignerPcbMovePlacementCommand,
   DesignerPcbMovePlacementsCommand,
   DesignerPcbRotatePlacementCommand,
   DesignerPcbSetActiveLayerCommand,
   DesignerPcbSetBoardSettingsCommand,
+  DesignerPcbSetVisibleLayersCommand,
   DesignerPcbUpdateTraceGeometryCommand,
   DesignerPlaceGndPortCommand,
   DesignerPlaceNetPortalCommand,
@@ -32,6 +35,7 @@ import type {
   DesignerUpdatePrimitiveTextCommand,
   DesignerUpsertLabelCommand,
   PcbCopperLayerId,
+  PcbLayerId,
   PcbTraceSegmentMode,
 } from "../../../sdks/designer";
 import { createDesignerStore } from "./store";
@@ -506,6 +510,63 @@ function parsePcbSetActiveLayerCommand(
   };
 }
 
+function parsePcbSetVisibleLayersCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbSetVisibleLayersCommand {
+  const layersRaw = raw.visibleLayers;
+  if (!Array.isArray(layersRaw)) {
+    throw new ValidationError("command.visibleLayers must be an array");
+  }
+  const visibleLayers: PcbLayerId[] = [];
+  for (let i = 0; i < layersRaw.length; i++) {
+    const layer = asString(layersRaw[i]);
+    if (!layer || !PCB_LAYER_VALUES.has(layer)) {
+      throw new ValidationError(
+        `command.visibleLayers[${i}] must be a valid PcbLayerId`,
+      );
+    }
+    visibleLayers.push(layer as PcbLayerId);
+  }
+  return { type: "pcb_set_visible_layers", visibleLayers };
+}
+
+function parsePcbFlipPlacementCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbFlipPlacementCommand {
+  const placementId = asString(raw.placementId);
+  if (!placementId) {
+    throw new ValidationError("command.placementId must be a string");
+  }
+  return { type: "pcb_flip_placement", placementId };
+}
+
+function parsePcbFlipPlacementsCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbFlipPlacementsCommand {
+  const idsRaw = raw.placementIds;
+  if (!Array.isArray(idsRaw)) {
+    throw new ValidationError("command.placementIds must be an array");
+  }
+  const placementIds: string[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < idsRaw.length; i++) {
+    const placementId = asString(idsRaw[i]);
+    if (!placementId) {
+      throw new ValidationError(`command.placementIds[${i}] must be a string`);
+    }
+    if (!seen.has(placementId)) {
+      seen.add(placementId);
+      placementIds.push(placementId);
+    }
+  }
+  if (placementIds.length === 0) {
+    throw new ValidationError(
+      "command.placementIds must have at least 1 entry",
+    );
+  }
+  return { type: "pcb_flip_placements", placementIds };
+}
+
 function parseCreateWireCommand(
   raw: Record<string, unknown>,
 ): DesignerCreateWireCommand {
@@ -622,11 +683,35 @@ function parsePcbAddViaCommand(
   if (netIdRaw !== null && netIdRaw !== undefined && netId === null) {
     throw new ValidationError("command.netId must be a string or null");
   }
+  const diameterRaw = raw.diameterMmOverride;
+  let diameterMmOverride: number | undefined;
+  if (diameterRaw !== undefined && diameterRaw !== null) {
+    const value = asNumber(diameterRaw);
+    if (value === null || value <= 0) {
+      throw new ValidationError(
+        "command.diameterMmOverride must be a positive number",
+      );
+    }
+    diameterMmOverride = value;
+  }
+  const drillRaw = raw.drillMmOverride;
+  let drillMmOverride: number | undefined;
+  if (drillRaw !== undefined && drillRaw !== null) {
+    const value = asNumber(drillRaw);
+    if (value === null || value <= 0) {
+      throw new ValidationError(
+        "command.drillMmOverride must be a positive number",
+      );
+    }
+    drillMmOverride = value;
+  }
   return {
     type: "pcb_add_via",
     centerMm: parsePointMm(raw.centerMm, "command.centerMm"),
     netId,
     netClassId,
+    ...(diameterMmOverride !== undefined ? { diameterMmOverride } : {}),
+    ...(drillMmOverride !== undefined ? { drillMmOverride } : {}),
   };
 }
 
@@ -767,8 +852,17 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
     case "pcb_rotate_placement":
       command = parsePcbRotatePlacementCommand(commandRecord);
       break;
+    case "pcb_flip_placement":
+      command = parsePcbFlipPlacementCommand(commandRecord);
+      break;
+    case "pcb_flip_placements":
+      command = parsePcbFlipPlacementsCommand(commandRecord);
+      break;
     case "pcb_set_active_layer":
       command = parsePcbSetActiveLayerCommand(commandRecord);
+      break;
+    case "pcb_set_visible_layers":
+      command = parsePcbSetVisibleLayersCommand(commandRecord);
       break;
     case "pcb_add_trace":
       command = parsePcbAddTraceCommand(commandRecord);

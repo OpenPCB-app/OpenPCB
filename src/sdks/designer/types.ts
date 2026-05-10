@@ -431,9 +431,24 @@ export interface DesignerPcbRotatePlacementCommand {
   rotationDeg: 0 | 90 | 180 | 270;
 }
 
+export interface DesignerPcbFlipPlacementCommand {
+  type: "pcb_flip_placement";
+  placementId: string;
+}
+
+export interface DesignerPcbFlipPlacementsCommand {
+  type: "pcb_flip_placements";
+  placementIds: ReadonlyArray<string>;
+}
+
 export interface DesignerPcbSetActiveLayerCommand {
   type: "pcb_set_active_layer";
   layer: PcbLayerId;
+}
+
+export interface DesignerPcbSetVisibleLayersCommand {
+  type: "pcb_set_visible_layers";
+  visibleLayers: ReadonlyArray<PcbLayerId>;
 }
 
 export interface DesignerPcbAddTraceCommand {
@@ -451,6 +466,10 @@ export interface DesignerPcbAddViaCommand {
   centerMm: PcbPointMm;
   netId: string | null;
   netClassId: string;
+  /** Optional override for via diameter; falls back to net-class default. */
+  diameterMmOverride?: number;
+  /** Optional override for via drill; falls back to net-class default. */
+  drillMmOverride?: number;
 }
 
 export interface DesignerPcbDeleteTraceCommand {
@@ -490,7 +509,10 @@ export type DesignerCommand =
   | DesignerPcbMovePlacementCommand
   | DesignerPcbMovePlacementsCommand
   | DesignerPcbRotatePlacementCommand
+  | DesignerPcbFlipPlacementCommand
+  | DesignerPcbFlipPlacementsCommand
   | DesignerPcbSetActiveLayerCommand
+  | DesignerPcbSetVisibleLayersCommand
   | DesignerPcbAddTraceCommand
   | DesignerPcbAddViaCommand
   | DesignerPcbDeleteTraceCommand

@@ -361,4 +361,397 @@ describe("designer PCB placements", () => {
     if (result.ok) return;
     expect(result.code).toBe("PCB_PLACEMENT_NOT_FOUND");
   });
+
+  test("flip placement toggles layer + mirrored, preserves rotation/position", async () => {
+    isolateTestDb("designer-pcb-flip");
+    const { moduleRuntime, server } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const componentId = await importFixtureComponent(server);
+    const design = await designerSdk.createDesign({ name: "Flip" });
+
+    const placeResult = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-place",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: 0,
+      issuedAt: Date.now(),
+      command: { type: "place_part", componentId, positionNm: { x: 0, y: 0 } },
+    });
+    expect(placeResult.ok).toBe(true);
+
+    const initial = await designerSdk.getPcbProjection(design.id);
+    const placement = initial!.placements[0]!;
+    expect(placement.layer).toBe("F.Cu");
+    expect(placement.mirrored).toBe(false);
+
+    // Rotate so we can verify rotation is preserved across flip.
+    const rotated = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-rot",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: initial!.revision,
+      issuedAt: Date.now(),
+      command: {
+        type: "pcb_rotate_placement",
+        placementId: placement.id,
+        rotationDeg: 90,
+      },
+    });
+    expect(rotated.ok).toBe(true);
+    const afterRot = await designerSdk.getPcbProjection(design.id);
+    const beforeFlip = afterRot!.placements[0]!;
+
+    // Flip
+    const flipResult = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-flip",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: afterRot!.revision,
+      issuedAt: Date.now(),
+      command: { type: "pcb_flip_placement", placementId: placement.id },
+    });
+    expect(flipResult.ok).toBe(true);
+
+    const afterFlip = await designerSdk.getPcbProjection(design.id);
+    const flipped = afterFlip!.placements[0]!;
+    expect(flipped.layer).toBe("B.Cu");
+    expect(flipped.mirrored).toBe(true);
+    expect(flipped.rotationDeg).toBe(beforeFlip.rotationDeg);
+    expect(flipped.positionMm).toEqual(beforeFlip.positionMm);
+
+    // Flip again — involutive
+    const flipBack = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-flip-back",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: afterFlip!.revision,
+      issuedAt: Date.now(),
+      command: { type: "pcb_flip_placement", placementId: placement.id },
+    });
+    expect(flipBack.ok).toBe(true);
+    const restored = (await designerSdk.getPcbProjection(design.id))!
+      .placements[0]!;
+    expect(restored.layer).toBe("F.Cu");
+    expect(restored.mirrored).toBe(false);
+    expect(restored.rotationDeg).toBe(beforeFlip.rotationDeg);
+
+    // Undo restores B.Cu state
+    const undo = await designerSdk.undo(design.id, "s");
+    expect(undo.ok).toBe(true);
+    const afterUndo = (await designerSdk.getPcbProjection(design.id))!
+      .placements[0]!;
+    expect(afterUndo.layer).toBe("B.Cu");
+    expect(afterUndo.mirrored).toBe(true);
+
+    // Redo flips back to F.Cu
+    const redo = await designerSdk.redo(design.id, "s");
+    expect(redo.ok).toBe(true);
+    const afterRedo = (await designerSdk.getPcbProjection(design.id))!
+      .placements[0]!;
+    expect(afterRedo.layer).toBe("F.Cu");
+    expect(afterRedo.mirrored).toBe(false);
+  });
+
+  test("flip rejects unknown placement id", async () => {
+    isolateTestDb("designer-pcb-flip-missing");
+    const { moduleRuntime } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const design = await designerSdk.createDesign({ name: "Empty" });
+    const result = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-flip-missing",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: 0,
+      issuedAt: Date.now(),
+      command: { type: "pcb_flip_placement", placementId: "nope" },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("PCB_PLACEMENT_NOT_FOUND");
+  });
+
+  test("flip placements (group) flips each independently", async () => {
+    isolateTestDb("designer-pcb-flip-group");
+    const { moduleRuntime, server } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const componentId = await importFixtureComponent(server);
+    const design = await designerSdk.createDesign({ name: "Group" });
+
+    let rev = 0;
+    for (let i = 0; i < 2; i++) {
+      const r = await designerSdk.dispatchCommand(design.id, {
+        commandId: `cmd-place-${i}`,
+        sessionId: "s",
+        aggregateId: design.id,
+        baseRevision: rev,
+        issuedAt: Date.now(),
+        command: {
+          type: "place_part",
+          componentId,
+          positionNm: { x: i * 1_000_000, y: 0 },
+        },
+      });
+      expect(r.ok).toBe(true);
+      if (r.ok) rev = r.revision;
+    }
+    const initial = await designerSdk.getPcbProjection(design.id);
+    expect(initial!.placements).toHaveLength(2);
+    const ids = initial!.placements.map((p) => p.id);
+    const positionsBefore = initial!.placements.map((p) => ({
+      ...p.positionMm,
+    }));
+
+    const result = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-group-flip",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: initial!.revision,
+      issuedAt: Date.now(),
+      command: { type: "pcb_flip_placements", placementIds: ids },
+    });
+    expect(result.ok).toBe(true);
+
+    const after = await designerSdk.getPcbProjection(design.id);
+    for (let i = 0; i < after!.placements.length; i++) {
+      const p = after!.placements[i]!;
+      expect(p.layer).toBe("B.Cu");
+      expect(p.mirrored).toBe(true);
+      // Each flipped around its own origin: position unchanged.
+      expect(p.positionMm).toEqual(positionsBefore[i]!);
+    }
+  });
+
+  test("auto-mirror: parts placed while activeLayer=B.Cu sync as B.Cu mirrored", async () => {
+    isolateTestDb("designer-pcb-auto-mirror");
+    const { moduleRuntime, server } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const componentId = await importFixtureComponent(server);
+    const design = await designerSdk.createDesign({ name: "AutoMirror" });
+
+    // Place A while activeLayer is default (F.Cu)
+    const placeA = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-A",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: 0,
+      issuedAt: Date.now(),
+      command: {
+        type: "place_part",
+        componentId,
+        positionNm: { x: 0, y: 0 },
+      },
+    });
+    expect(placeA.ok).toBe(true);
+    const afterA = await designerSdk.getPcbProjection(design.id);
+    const placementA = afterA!.placements[0]!;
+    expect(placementA.layer).toBe("F.Cu");
+    expect(placementA.mirrored).toBe(false);
+
+    // Switch active layer to B.Cu
+    const setLayer = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-active-bcu",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: afterA!.revision,
+      issuedAt: Date.now(),
+      command: { type: "pcb_set_active_layer", layer: "B.Cu" },
+    });
+    expect(setLayer.ok).toBe(true);
+    const afterLayer = await designerSdk.getPcbProjection(design.id);
+
+    // Placement A must NOT be retro-flipped.
+    expect(afterLayer!.placements[0]!.layer).toBe("F.Cu");
+    expect(afterLayer!.placements[0]!.mirrored).toBe(false);
+
+    // Place B while activeLayer is B.Cu — auto-mirrored on bottom.
+    const placeB = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-B",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: afterLayer!.revision,
+      issuedAt: Date.now(),
+      command: {
+        type: "place_part",
+        componentId,
+        positionNm: { x: 5_000_000, y: 0 },
+      },
+    });
+    expect(placeB.ok).toBe(true);
+    const afterB = await designerSdk.getPcbProjection(design.id);
+    expect(afterB!.placements).toHaveLength(2);
+    const onlyNew = afterB!.placements.find((p) => p.id !== placementA.id)!;
+    expect(onlyNew.layer).toBe("B.Cu");
+    expect(onlyNew.mirrored).toBe(true);
+  });
+
+  test("set visible layers persists and ensures activeLayer remains visible", async () => {
+    isolateTestDb("designer-pcb-visible-layers");
+    const { moduleRuntime } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const design = await designerSdk.createDesign({ name: "Visibility" });
+    const initial = await designerSdk.getPcbProjection(design.id);
+    expect(initial!.board.activeLayer).toBe("F.Cu");
+
+    const result = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-visible",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: initial!.revision,
+      issuedAt: Date.now(),
+      command: {
+        type: "pcb_set_visible_layers",
+        // Intentionally exclude F.Cu (active) — store should re-add it.
+        visibleLayers: ["B.Cu", "Edge.Cuts"],
+      },
+    });
+    expect(result.ok).toBe(true);
+    const after = await designerSdk.getPcbProjection(design.id);
+    expect(after!.board.visibleLayers).toContain("F.Cu");
+    expect(after!.board.visibleLayers).toContain("B.Cu");
+    expect(after!.board.visibleLayers).toContain("Edge.Cuts");
+  });
+
+  test("setting active layer makes it visible", async () => {
+    isolateTestDb("designer-pcb-active-visible");
+    const { moduleRuntime } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const design = await designerSdk.createDesign({ name: "ActiveVisible" });
+    const initial = await designerSdk.getPcbProjection(design.id);
+    const hideBottom = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-hide-bottom",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: initial!.revision,
+      issuedAt: Date.now(),
+      command: { type: "pcb_set_visible_layers", visibleLayers: ["F.Cu"] },
+    });
+    expect(hideBottom.ok).toBe(true);
+    const hidden = await designerSdk.getPcbProjection(design.id);
+    expect(hidden!.board.visibleLayers).not.toContain("B.Cu");
+
+    const activateBottom = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-activate-bottom",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: hidden!.revision,
+      issuedAt: Date.now(),
+      command: { type: "pcb_set_active_layer", layer: "B.Cu" },
+    });
+    expect(activateBottom.ok).toBe(true);
+    const after = await designerSdk.getPcbProjection(design.id);
+    expect(after!.board.activeLayer).toBe("B.Cu");
+    expect(after!.board.visibleLayers).toContain("B.Cu");
+  });
+
+  test("via accepts route-time diameter/drill overrides", async () => {
+    isolateTestDb("designer-pcb-via-override");
+    const { moduleRuntime } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const design = await designerSdk.createDesign({ name: "Via" });
+    const initial = await designerSdk.getPcbProjection(design.id);
+    const netClassId = initial!.board.netClasses[0]!.id;
+
+    const result = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-via",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: initial!.revision,
+      issuedAt: Date.now(),
+      command: {
+        type: "pcb_add_via",
+        centerMm: { x: 10, y: 10 },
+        netId: null,
+        netClassId,
+        diameterMmOverride: 0.9,
+        drillMmOverride: 0.45,
+      },
+    });
+    expect(result.ok).toBe(true);
+
+    const after = await designerSdk.getPcbProjection(design.id);
+    expect(after!.vias).toHaveLength(1);
+    const via = after!.vias[0]!;
+    expect(via.diameterMm).toBe(0.9);
+    expect(via.drillMm).toBe(0.45);
+  });
+
+  test("via override rejects diameter <= drill", async () => {
+    isolateTestDb("designer-pcb-via-override-bad");
+    const { moduleRuntime } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const design = await designerSdk.createDesign({ name: "Via" });
+    const initial = await designerSdk.getPcbProjection(design.id);
+    const netClassId = initial!.board.netClasses[0]!.id;
+
+    const result = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-via-bad",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: initial!.revision,
+      issuedAt: Date.now(),
+      command: {
+        type: "pcb_add_via",
+        centerMm: { x: 10, y: 10 },
+        netId: null,
+        netClassId,
+        diameterMmOverride: 0.4,
+        drillMmOverride: 0.5,
+      },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  test("via override rejects board minimum violations", async () => {
+    isolateTestDb("designer-pcb-via-override-minimum");
+    const { moduleRuntime } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const design = await designerSdk.createDesign({ name: "Via Min" });
+    const initial = await designerSdk.getPcbProjection(design.id);
+    const netClassId = initial!.board.netClasses[0]!.id;
+
+    const result = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-via-min-bad",
+      sessionId: "s",
+      aggregateId: design.id,
+      baseRevision: initial!.revision,
+      issuedAt: Date.now(),
+      command: {
+        type: "pcb_add_via",
+        centerMm: { x: 10, y: 10 },
+        netId: null,
+        netClassId,
+        diameterMmOverride: initial!.board.designRules.minimums.viaDiameterMm,
+        drillMmOverride:
+          initial!.board.designRules.minimums.viaDrillMm + 0.2,
+      },
+    });
+    expect(result.ok).toBe(false);
+  });
 });

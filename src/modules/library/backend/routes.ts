@@ -6,7 +6,7 @@ import type {
   CoreBackendModuleContext,
   ModuleRouterHandle,
 } from "../../../core/contracts/modules/backend-module";
-import { eq, sql } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { NotFoundError, ValidationError } from "../../../core/contracts/errors";
 import {
   getDb,
@@ -398,7 +398,10 @@ async function parseModelUploadBody(req: Request): Promise<{
   validateHashMatches(glbBytes, glbSha256, "glb");
 
   const sourceStepValue = formData.get("sourceStep");
-  const sourceStepSha256Raw = readFormString(formData, "sourceStepSha256");
+  const sourceStepSha256Raw = readOptionalFormString(
+    formData,
+    "sourceStepSha256",
+  );
   let sourceStepBytes: Uint8Array | null = null;
   let sourceStepSha256: string | null = null;
   let sourceFilename: string | null = null;
@@ -412,6 +415,9 @@ async function parseModelUploadBody(req: Request): Promise<{
         `sourceStep exceeds ${STEP_SIZE_LIMIT_BYTES} bytes`,
       );
     }
+    if (!sourceStepSha256Raw) {
+      throw new ValidationError("sourceStepSha256 must be a non-empty string");
+    }
     sourceStepSha256 = normalizeSha256(sourceStepSha256Raw, "sourceStepSha256");
     sourceStepBytes = new Uint8Array(await sourceStepValue.arrayBuffer());
     validateStepMagic(sourceStepBytes, "sourceStep");
@@ -421,7 +427,9 @@ async function parseModelUploadBody(req: Request): Promise<{
         sourceStepValue.name,
     );
   } else {
-    sourceStepSha256 = normalizeSha256(sourceStepSha256Raw, "sourceStepSha256");
+    sourceStepSha256 = sourceStepSha256Raw
+      ? normalizeSha256(sourceStepSha256Raw, "sourceStepSha256")
+      : null;
     const explicitFilename = readOptionalFormString(formData, "sourceFilename");
     sourceFilename = explicitFilename
       ? validateSourceFilename(explicitFilename)
@@ -635,13 +643,13 @@ async function buildModelBundle(
   for (const row of rows) {
     if (!row.glbSha256 || !row.glbPath) continue;
     const glbRelativePath = modelAssetRelativePath("glb", row.glbSha256);
-    const sourceRelativePath = row.sourceStepSha256
-      ? modelAssetRelativePath("source", row.sourceStepSha256)
-      : null;
+    const sourceStepSha256 = row.sourceStepPath ? row.sourceStepSha256 : null;
+    const sourceRelativePath =
+      sourceStepSha256 && row.sourceStepPath ? row.sourceStepPath : null;
 
     manifest.entries.push({
       footprintId: row.footprintId,
-      sourceStepSha256: row.sourceStepSha256,
+      sourceStepSha256,
       glbSha256: row.glbSha256,
       sourceRelativePath,
       glbRelativePath,
@@ -660,13 +668,13 @@ async function buildModelBundle(
       addedPaths.add(glbRelativePath);
     }
     if (
-      row.sourceStepSha256 &&
+      sourceStepSha256 &&
       sourceRelativePath &&
       !addedPaths.has(sourceRelativePath)
     ) {
       files.push({
         name: sourceRelativePath,
-        bytes: await readSourceStep(row.sourceStepSha256),
+        bytes: await readSourceStep(sourceStepSha256),
       });
       addedPaths.add(sourceRelativePath);
     }
@@ -680,6 +688,31 @@ async function buildModelBundle(
     },
     ...files,
   ]);
+}
+
+function countModelHashReferences(
+  ctx: CoreBackendModuleContext,
+  sha256: string,
+): number {
+  const row = getDb(ctx)
+    .select({ count: sql<number>`count(*)` })
+    .from(footprintModels)
+    .where(
+      or(
+        eq(footprintModels.glbSha256, sha256),
+        eq(footprintModels.sourceStepSha256, sha256),
+      ),
+    )
+    .get();
+  return Number(row?.count ?? 0);
+}
+
+async function deleteModelIfUnreferenced(
+  ctx: CoreBackendModuleContext,
+  sha256: string,
+): Promise<void> {
+  if (countModelHashReferences(ctx, sha256) > 0) return;
+  await deleteModel(sha256);
 }
 
 function readNullableStringField(
@@ -1245,6 +1278,7 @@ export function registerRoutes(
     }
     assertFootprintNotBuiltinComponent(ctx, footprintId, "update");
 
+    const existingModel = await getFootprintModelRecord(ctx, footprintId);
     const body = await parseModelUploadBody(routeCtx.req);
     const glb = await writeGlb(body.glbBytes, body.glbSha256);
     let source: Awaited<ReturnType<typeof writeSourceStep>> | null = null;
@@ -1252,20 +1286,42 @@ export function registerRoutes(
       source = body.sourceStepBytes
         ? await writeSourceStep(body.sourceStepBytes, body.sourceStepSha256!)
         : null;
+      const preservedSource =
+        !source &&
+        body.sourceStepSha256 &&
+        existingModel?.sourceStepSha256 === body.sourceStepSha256 &&
+        existingModel.sourceStepPath
+          ? existingModel
+          : null;
+      if (!source && body.sourceStepSha256 && !preservedSource) {
+        throw new ValidationError(
+          "sourceStepSha256 requires a matching stored sourceStep",
+        );
+      }
 
       const metadata = upsertFootprintModelRecord(ctx, {
         footprintId,
         glbPath: glb.relativePath,
         glbSha256: glb.sha256,
         byteSize: glb.byteSize,
-        sourceStepPath: source?.relativePath ?? null,
-        sourceStepSha256: source?.sha256 ?? body.sourceStepSha256,
+        sourceStepPath:
+          source?.relativePath ?? preservedSource?.sourceStepPath ?? null,
+        sourceStepSha256:
+          source?.sha256 ?? preservedSource?.sourceStepSha256 ?? null,
         sourceFilename: body.sourceFilename,
-        sourceByteSize: source?.byteSize ?? null,
+        sourceByteSize:
+          source?.byteSize ?? preservedSource?.sourceByteSize ?? null,
         modelRefJson: body.modelRefJson,
         tessellationParamsJson: body.tessellationParamsJson,
         converterVersion: body.converterVersion,
       });
+      const oldHashes = [
+        existingModel?.glbSha256,
+        existingModel?.sourceStepSha256,
+      ].filter((value): value is string => Boolean(value));
+      await Promise.all(
+        oldHashes.map((sha256) => deleteModelIfUnreferenced(ctx, sha256)),
+      );
       return success(metadata, 201);
     } catch (error) {
       // Roll back any newly-written assets so the filesystem doesn't accumulate
@@ -1273,9 +1329,13 @@ export function registerRoutes(
       // pre-existed and may be referenced by other footprints (content-addressed).
       const cleanups: Promise<void>[] = [];
       if (!glb.deduped)
-        cleanups.push(deleteModel(glb.sha256).catch(() => undefined));
+        cleanups.push(
+          deleteModelIfUnreferenced(ctx, glb.sha256).catch(() => undefined),
+        );
       if (source && !source.deduped) {
-        cleanups.push(deleteModel(source.sha256).catch(() => undefined));
+        cleanups.push(
+          deleteModelIfUnreferenced(ctx, source.sha256).catch(() => undefined),
+        );
       }
       await Promise.all(cleanups);
       throw error;
@@ -1323,7 +1383,9 @@ export function registerRoutes(
     const hashes = [existing?.glbSha256, existing?.sourceStepSha256].filter(
       (value): value is string => Boolean(value),
     );
-    await Promise.all(hashes.map((sha256) => deleteModel(sha256)));
+    await Promise.all(
+      hashes.map((sha256) => deleteModelIfUnreferenced(ctx, sha256)),
+    );
     return success(toFootprintModelMetadata(null));
   });
 }

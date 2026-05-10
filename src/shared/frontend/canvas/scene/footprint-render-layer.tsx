@@ -40,6 +40,14 @@ export interface FootprintRenderLayerProps {
    * component bodies. Default false keeps existing 2D canvas behavior.
    */
   hidePadNumbers?: boolean;
+  /**
+   * Optional remap applied to every layer string the renderer consumes
+   * (graphics / pads / labels) before color / hidden / dimmed lookup. Used
+   * by the 2D PCB canvas to remap F.* ↔ B.* atomically when a placement is
+   * on the bottom side, mirroring the KiCad flip semantics. Through-hole
+   * (`*.Cu`) and `Edge.Cuts` should pass through unchanged.
+   */
+  layerRemap?: (layer: string | undefined) => string | undefined;
 }
 
 const REFERENCE_TOKEN_RE = /\$\{REFERENCE\}|REF\*\*/g;
@@ -110,9 +118,19 @@ export function FootprintRenderLayer({
   placeholderSubstitutions,
   enableDepthTest = false,
   hidePadNumbers = false,
+  layerRemap,
 }: FootprintRenderLayerProps) {
-  const isHidden = (layer: string | undefined): boolean =>
-    layer !== undefined && hiddenLayers?.has(layer) === true;
+  const remap = (layer: string | undefined): string | undefined =>
+    layerRemap ? layerRemap(layer) : layer;
+  const isHidden = (layer: string | undefined): boolean => {
+    const effective = remap(layer);
+    return effective !== undefined && hiddenLayers?.has(effective) === true;
+  };
+  const isDimmedLayer = (layer: string | undefined): boolean => {
+    if (!dimmedLayers) return false;
+    const effective = remap(layer);
+    return effective !== undefined && dimmedLayers.has(effective);
+  };
   const { theme } = useCanvasTheme();
   const basePreview = theme.preview;
   // For PCB surface, override the few preview tokens that are unreadable on dark
@@ -169,7 +187,7 @@ export function FootprintRenderLayer({
     return groups;
     // hiddenLayers participates by reference identity — callers should keep it
     // stable (or memoized) to avoid spurious recomputes.
-  }, [model.graphics, useLayerColors, hiddenLayers]);
+  }, [model.graphics, useLayerColors, hiddenLayers, layerRemap]);
 
   // ── Pads ───────────────────────────────────────────────────────────
   const padData = useMemo(
@@ -182,9 +200,13 @@ export function FootprintRenderLayer({
             ? pad.shape
             : "rect";
 
-        const padLayer = pad.layer ?? "F.Cu";
-        const isDimmed = dimmedLayers?.has(padLayer) ?? false;
-        let color = useLayerColors ? padLayerColor(pad.layer, pt) : undefined;
+        const effectiveLayer = remap(pad.layer ?? "F.Cu");
+        const isDimmed =
+          (effectiveLayer !== undefined && dimmedLayers?.has(effectiveLayer)) ??
+          false;
+        let color = useLayerColors
+          ? padLayerColor(effectiveLayer, pt)
+          : undefined;
         if (isDimmed && color) color = dimHex(color, DIM_FACTOR);
 
         return {
@@ -200,26 +222,24 @@ export function FootprintRenderLayer({
           selected: false,
         };
       }),
-    [model.pads, dimmedLayers, useLayerColors],
+    [model.pads, dimmedLayers, useLayerColors, layerRemap],
   );
 
   return (
     <>
       {/* Stroke graphics — per-layer colored when useLayerColors is true */}
       {graphicGroups.map((group) => {
+        const effectiveLayer =
+          group.layer === "__all__" || group.layer === "__none__"
+            ? undefined
+            : remap(group.layer);
         const color = useLayerColors
-          ? layerColor(
-              group.layer === "__all__" || group.layer === "__none__"
-                ? undefined
-                : group.layer,
-              pt,
-            )
+          ? layerColor(effectiveLayer, pt)
           : pt.footprintSilk;
         const isDimmed =
           dimmedLayers !== undefined &&
-          group.layer !== "__all__" &&
-          group.layer !== "__none__" &&
-          dimmedLayers.has(group.layer);
+          effectiveLayer !== undefined &&
+          dimmedLayers.has(effectiveLayer);
         return (
           <lineSegments
             key={group.layer}
@@ -286,19 +306,17 @@ export function FootprintRenderLayer({
       {/* Labels — per-layer color, with PCB-surface override for Fab text */}
       {model.labels.map((label) => {
         if (isHidden(label.layer)) return null;
-        const isFab = label.layer?.includes("Fab") ?? false;
+        const effectiveLayer = remap(label.layer);
+        const isFab = effectiveLayer?.includes("Fab") ?? false;
         const color =
           surface === "pcb" && isFab
             ? theme.pcbCanvas.refdesLabel
             : useLayerColors
-              ? layerColor(label.layer, pt)
+              ? layerColor(effectiveLayer, pt)
               : isFab
                 ? pt.footprintFab
                 : pt.footprintSilk;
-        const isDimmed =
-          dimmedLayers !== undefined &&
-          label.layer !== undefined &&
-          dimmedLayers.has(label.layer);
+        const isDimmed = isDimmedLayer(label.layer);
         const text = applyPlaceholderSubstitutions(
           label.text,
           placeholderSubstitutions,

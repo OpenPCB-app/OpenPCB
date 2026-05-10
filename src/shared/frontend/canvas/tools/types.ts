@@ -15,6 +15,7 @@ export interface EditorTool<TId extends string = string> {
   onPointerDown?(event: InteractionEvent): void;
   onPointerMove?(event: InteractionEvent): void;
   onPointerUp?(event: InteractionEvent): void;
+  onContextMenu?(event: InteractionEvent): void;
   onKeyDown?(event: KeyboardEvent): void;
   /** Optional rubber-band preview rendered in canvas during interaction. */
   render?(): ReactNode;

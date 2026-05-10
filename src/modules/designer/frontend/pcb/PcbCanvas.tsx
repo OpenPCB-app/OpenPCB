@@ -58,6 +58,15 @@ import {
   PCB_GRID_MM,
 } from "../../../../shared/frontend/canvas/defaults";
 import { PCB_LAYER_COLORS } from "../../../../shared/frontend/canvas/layers";
+import { openContextMenu } from "../../../../shared/frontend/context-menu";
+import type { ContextMenuGroup } from "../../../../shared/frontend/context-menu";
+import {
+  areViasVisible,
+  isCopperLayerVisible,
+  isPlacementVisible,
+  isTraceVisible,
+  visibleLayerSet,
+} from "./pcb-layer-visibility";
 
 const NM_PER_MM = 1_000_000;
 
@@ -131,6 +140,21 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const projectionRef = useRef(workspace.projection);
   projectionRef.current = workspace.projection;
 
+  const visibleLayers = useMemo(
+    () => visibleLayerSet(workspace.projection?.board.visibleLayers ?? []),
+    [workspace.projection?.board.visibleLayers],
+  );
+
+  const visiblePlacements = useMemo(
+    () =>
+      (workspace.projection?.placements ?? []).filter((placement) =>
+        isPlacementVisible(visibleLayers, placement),
+      ),
+    [workspace.projection?.placements, visibleLayers],
+  );
+
+  const viasVisible = areViasVisible(visibleLayers);
+
   useEffect(() => {
     const board = workspace.projection?.board.outline;
     if (!board) return;
@@ -143,9 +167,19 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   useEffect(() => {
     const projection = workspace.projection;
     if (!projection) return;
-    const placementIds = new Set(projection.placements.map((p) => p.id));
-    const traceIds = new Set(projection.traces.map((t) => t.id));
-    const viaIds = new Set(projection.vias.map((v) => v.id));
+    const placementIds = new Set(
+      projection.placements
+        .filter((p) => isPlacementVisible(visibleLayers, p))
+        .map((p) => p.id),
+    );
+    const traceIds = new Set(
+      projection.traces
+        .filter((t) => isTraceVisible(visibleLayers, t))
+        .map((t) => t.id),
+    );
+    const viaIds = new Set(
+      viasVisible ? projection.vias.map((v) => v.id) : [],
+    );
     setSelection((prev) => {
       const np = new Set(
         [...prev.placementIds].filter((id) => placementIds.has(id)),
@@ -161,7 +195,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       }
       return { placementIds: np, traceIds: nt, viaIds: nv };
     });
-  }, [workspace.projection]);
+  }, [workspace.projection, visibleLayers, viasVisible]);
 
   const eventToMm = useCallback((event: InteractionEvent): PcbPointMm => {
     return {
@@ -206,13 +240,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       const placementIds = new Set(baseSelection.placementIds);
       const traceIds = new Set(baseSelection.traceIds);
       const viaIds = new Set(baseSelection.viaIds);
-      for (const p of placementsRef.current) {
+      for (const p of visiblePlacements) {
         if (placementHit(p, rect)) placementIds.add(p.id);
       }
       const layer: PcbCopperLayerId =
         workspace.projection?.board.activeLayer === "B.Cu" ? "B.Cu" : "F.Cu";
       for (const t of tracesRef.current) {
         if (t.layer !== layer) continue;
+        if (!isTraceVisible(visibleLayers, t)) continue;
         if (traceHit(t, rect)) traceIds.add(t.id);
       }
       return { placementIds, traceIds, viaIds };
@@ -238,7 +273,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       netId: string | null;
       onPad: boolean;
     } => {
-      const pad = hitPad(placementsRef.current, cursor);
+      const pad = hitPad(visiblePlacements, cursor);
       if (pad) {
         const netId =
           padToNet.get(`${pad.placementId}|${pad.padNumber}`) ?? null;
@@ -272,12 +307,57 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     [workspace],
   );
 
+  /**
+   * Smart Via: commit segments-so-far on the current layer, drop a via at the
+   * cursor, then rebase the session onto the target layer. Mirrors the `+`/`-`
+   * keyboard shortcut behaviour. The trace commit is a no-op when the path has
+   * < 2 distinct points (e.g. via dropped immediately after `start`).
+   */
+  const placeSmartVia = useCallback(
+    async (
+      session: RouteSession,
+      cursorMm: PcbPointMm,
+      targetLayer: PcbCopperLayerId,
+    ) => {
+      const snapped = snapPointMm(cursorMm);
+      const viaCenterNm = pointMmToNm(snapped);
+      try {
+        await commitTrace(session, viaCenterNm);
+        await workspace.addVia({
+          centerMm: snapped,
+          netId: session.netId,
+          netClassId: session.netClassId,
+          ...(session.viaDiameterMmOverride !== undefined
+            ? { diameterMmOverride: session.viaDiameterMmOverride }
+            : {}),
+          ...(session.viaDrillMmOverride !== undefined
+            ? { drillMmOverride: session.viaDrillMmOverride }
+            : {}),
+        });
+      } catch {
+        return;
+      }
+      dispatchRoute({
+        kind: "rebase-layer",
+        anchorNm: viaCenterNm,
+        layer: targetLayer,
+      });
+      await workspace.setActiveLayer(targetLayer);
+    },
+    [commitTrace, workspace],
+  );
+
   // Width preset list (from board settings, fallback to net-class default).
   const tracePresets = useMemo<number[]>(() => {
     const fromBoard = workspace.projection?.board.tracePresets ?? [];
     if (fromBoard.length > 0) return fromBoard;
     return defaultNetClass ? [defaultNetClass.traceWidthMm] : [0.25];
   }, [defaultNetClass, workspace.projection?.board.tracePresets]);
+
+  // Via-size presets surfaced in the toolbar dropdowns. Conservative starter
+  // set covering common JLCPCB / PCBWay capabilities; user can type a custom.
+  const VIA_DIAMETER_PRESETS_MM: ReadonlyArray<number> = [0.45, 0.6, 0.8, 1.0];
+  const VIA_DRILL_PRESETS_MM: ReadonlyArray<number> = [0.2, 0.25, 0.3, 0.4];
 
   /**
    * Pick the next preset in the cycle (wraps). When the current width is not
@@ -323,7 +403,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       // Commit segments-so-far at OLD width using the last waypoint as the
       // session's terminal anchor.
       const lastWaypoint = session.waypointsNm[session.waypointsNm.length - 1]!;
-      await commitTrace(session, lastWaypoint);
+      try {
+        await commitTrace(session, lastWaypoint);
+      } catch {
+        return;
+      }
       // Rebase the session at the join point at the NEW width.
       dispatchRoute({
         kind: "rebase",
@@ -361,9 +445,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           // clicking empty space adds an intermediate waypoint.
           const session = routeState.session;
           if (anchor.onPad) {
-            void commitTrace(session, pointMmToNm(anchor.pointMm)).then(() => {
-              dispatchRoute({ kind: "cancel" });
-            });
+            void commitTrace(session, pointMmToNm(anchor.pointMm))
+              .then(() => {
+                dispatchRoute({ kind: "cancel" });
+              })
+              .catch(() => undefined);
             return;
           }
           dispatchRoute({
@@ -376,7 +462,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         // Select mode: click trace/via first, then placement.
         const shift = event.modifiers.shift;
         const current = selectionRef.current;
-        const traceHit = hitTrace(tracesRef.current, cursor, activeCopperLayer);
+        const traceHit = isCopperLayerVisible(visibleLayers, activeCopperLayer)
+          ? hitTrace(tracesRef.current, cursor, activeCopperLayer)
+          : null;
         if (traceHit) {
           setDragSession(null);
           setSelection(
@@ -390,7 +478,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           );
           return;
         }
-        const viaHit = hitVia(viasRef.current, cursor);
+        const viaHit = viasVisible ? hitVia(viasRef.current, cursor) : null;
         if (viaHit) {
           setDragSession(null);
           setSelection(
@@ -404,7 +492,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           );
           return;
         }
-        const hit = hitPlacement(placementsRef.current, cursor);
+        const hit = hitPlacement(visiblePlacements, cursor);
         if (hit) {
           if (shift) {
             // Shift-click toggles placement membership; no drag.
@@ -458,7 +546,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         // Hover-highlight: resolve cursor → pad → net (only when not dragging).
         if (!dragSession) {
-          const pad = hitPad(placementsRef.current, cursor);
+          const pad = hitPad(visiblePlacements, cursor);
           const netId = pad
             ? (padToNet.get(`${pad.placementId}|${pad.padNumber}`) ?? null)
             : null;
@@ -514,6 +602,229 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         setCursorMm(null);
         setCursorClientPx(null);
       },
+      onContextMenu(event) {
+        const cursor = eventToMm(event);
+        const groups: ContextMenuGroup[] = [];
+
+        if (routeState.kind !== "idle") {
+          groups.push({
+            id: "route-actions",
+            items: [
+              {
+                kind: "action",
+                id: "cancel-route",
+                label: "Cancel route",
+                shortcut: "Esc",
+                onSelect: () => dispatchRoute({ kind: "cancel" }),
+              },
+              {
+                kind: "action",
+                id: "commit-waypoint",
+                label: "Commit waypoint",
+                onSelect: () => {
+                  const anchor = resolveAnchor(cursor);
+                  dispatchRoute({
+                    kind: "commit-waypoint",
+                    pointNm: pointMmToNm(anchor.pointMm),
+                  });
+                },
+              },
+              {
+                kind: "separator",
+                id: "sep-via",
+              },
+              {
+                kind: "action",
+                id: "place-smart-via-top",
+                label: "Top Copper (F.Cu)",
+                disabled: routeState.session.layer === "F.Cu",
+                onSelect: () => {
+                  void placeSmartVia(routeState.session, cursor, "F.Cu");
+                },
+              },
+              {
+                kind: "action",
+                id: "place-smart-via-bottom",
+                label: "Bottom Copper (B.Cu)",
+                disabled: routeState.session.layer === "B.Cu",
+                onSelect: () => {
+                  void placeSmartVia(routeState.session, cursor, "B.Cu");
+                },
+              },
+            ],
+          });
+        } else {
+          const traceHit = isCopperLayerVisible(visibleLayers, activeCopperLayer)
+            ? hitTrace(tracesRef.current, cursor, activeCopperLayer)
+            : null;
+          const viaHit = viasVisible ? hitVia(viasRef.current, cursor) : null;
+          const placementHit = hitPlacement(visiblePlacements, cursor);
+
+          if (traceHit) {
+            if (!selection.traceIds.has(traceHit.trace.id)) {
+              setSelection({
+                placementIds: new Set(),
+                traceIds: new Set([traceHit.trace.id]),
+                viaIds: new Set(),
+              });
+            }
+            groups.push({
+              id: "trace-actions",
+              items: [
+                {
+                  kind: "action",
+                  id: "delete-trace",
+                  label: "Delete trace",
+                  shortcut: "Del",
+                  destructive: true,
+                  onSelect: () => {
+                    void workspace.deleteTrace(traceHit.trace.id).then(() =>
+                      setSelection((prev) => ({
+                        placementIds: prev.placementIds,
+                        traceIds: new Set(),
+                        viaIds: prev.viaIds,
+                      })),
+                    );
+                  },
+                },
+              ],
+            });
+          } else if (viaHit) {
+            if (!selection.viaIds.has(viaHit.id)) {
+              setSelection({
+                placementIds: new Set(),
+                traceIds: new Set(),
+                viaIds: new Set([viaHit.id]),
+              });
+            }
+            groups.push({
+              id: "via-actions",
+              items: [
+                {
+                  kind: "action",
+                  id: "delete-via",
+                  label: "Delete via",
+                  shortcut: "Del",
+                  destructive: true,
+                  onSelect: () => {
+                    void workspace.deleteVia(viaHit.id).then(() =>
+                      setSelection((prev) => ({
+                        placementIds: prev.placementIds,
+                        traceIds: prev.traceIds,
+                        viaIds: new Set(),
+                      })),
+                    );
+                  },
+                },
+              ],
+            });
+          } else if (placementHit) {
+            if (!selection.placementIds.has(placementHit.id)) {
+              setSelection({
+                placementIds: new Set([placementHit.id]),
+                traceIds: new Set(),
+                viaIds: new Set(),
+              });
+            }
+            groups.push({
+              id: "placement-actions",
+              items: [
+                {
+                  kind: "action",
+                  id: "rotate",
+                  label: "Rotate 90°",
+                  shortcut: "R",
+                  onSelect: () => {
+                    void workspace.rotatePlacement(
+                      placementHit.id,
+                      (placementHit.rotationDeg + 90) as 0 | 90 | 180 | 270,
+                    );
+                  },
+                },
+                {
+                  kind: "action",
+                  id: "flip",
+                  label: "Flip side",
+                  shortcut: "F",
+                  onSelect: () => {
+                    void workspace.flipPlacement(placementHit.id);
+                  },
+                },
+              ],
+            });
+          } else {
+            groups.push(
+              {
+                id: "mode",
+                items: [
+                  {
+                    kind: "action",
+                    id: "toggle-route",
+                    label:
+                      toolMode === "select"
+                        ? "Enter route mode"
+                        : "Enter select mode",
+                    shortcut: "X",
+                    onSelect: () =>
+                      setToolMode((prev) =>
+                        prev === "select" ? "route" : "select",
+                      ),
+                  },
+                  {
+                    kind: "action",
+                    id: "toggle-ratsnest",
+                    label: workspace.ratsnestVisible
+                      ? "Hide ratsnest"
+                      : "Show ratsnest",
+                    onSelect: () => workspace.toggleRatsnestVisible(),
+                  },
+                ],
+              },
+              {
+                id: "layer",
+                items: [
+                  {
+                    kind: "action",
+                    id: "set-top",
+                    label: "Top layer (F.Cu)",
+                    disabled: activeCopperLayer === "F.Cu",
+                    onSelect: () => workspace.setActiveLayer("F.Cu"),
+                  },
+                  {
+                    kind: "action",
+                    id: "set-bottom",
+                    label: "Bottom layer (B.Cu)",
+                    disabled: activeCopperLayer === "B.Cu",
+                    onSelect: () => workspace.setActiveLayer("B.Cu"),
+                  },
+                ],
+              },
+              {
+                id: "selection",
+                items: [
+                  {
+                    kind: "action",
+                    id: "clear-selection",
+                    label: "Clear selection",
+                    shortcut: "Esc",
+                    disabled:
+                      selection.placementIds.size === 0 &&
+                      selection.traceIds.size === 0 &&
+                      selection.viaIds.size === 0,
+                    onSelect: () => setSelection(emptyPcbSelection()),
+                  },
+                ],
+              },
+            );
+          }
+        }
+
+        openContextMenu({
+          scope: "pcb",
+          position: { x: event.screenPoint.x, y: event.screenPoint.y },
+          groups,
+        });
+      },
     };
   }, [
     activeCopperLayer,
@@ -523,15 +834,43 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     eventToMm,
     marquee,
     padToNet,
+    placeSmartVia,
     resolveAnchor,
     routeState,
+    selection,
     toolMode,
+    viasVisible,
+    visibleLayers,
+    visiblePlacements,
     workspace,
   ]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.target instanceof HTMLInputElement) return;
+
+      // F flips the currently-selected placement(s) in Select mode (KiCad
+      // parity). Each placement flips around its own origin: layer toggles
+      // F.Cu↔B.Cu and `mirrored` flips. Rotation/position preserved.
+      // Disabled while routing — routing-mode keys are handled below.
+      if (
+        (event.key === "f" || event.key === "F") &&
+        toolMode === "select" &&
+        routeState.kind !== "routing" &&
+        selection.placementIds.size > 0 &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        const ids = [...selection.placementIds];
+        if (ids.length === 1) {
+          void workspace.flipPlacement(ids[0]!);
+        } else {
+          void workspace.flipPlacements(ids);
+        }
+        return;
+      }
 
       // Tool toggle: R activates Route mode (also rotates a selected
       // placement when in Select mode without an active route session).
@@ -612,27 +951,15 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           return;
         }
         if (event.key === "+" || event.key === "-") {
-          // Smart Via: drop via at cursor + flip layer.
+          // Smart Via: commit segments-so-far on the current layer, drop a via
+          // at the cursor, then rebase the session onto the opposite layer.
+          // Mirrors the width-change commit-then-rebase pattern above.
           event.preventDefault();
           if (!cursorMm) return;
           const snapped = snapPointMm(cursorMm);
-          const viaCenterNm = pointMmToNm(snapped);
           const nextLayer: PcbCopperLayerId =
             session.layer === "F.Cu" ? "B.Cu" : "F.Cu";
-          // Persist via via the workspace, then update the route session.
-          void workspace
-            .addVia({
-              centerMm: snapped,
-              netId: session.netId,
-              netClassId: session.netClassId,
-            })
-            .then(() => {
-              dispatchRoute({
-                kind: "switch-layer",
-                layer: nextLayer,
-                viaCenterNm,
-              });
-            });
+          void placeSmartVia(session, snapped, nextLayer);
           return;
         }
         if (event.key === "v" || event.key === "V") {
@@ -640,11 +967,19 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           event.preventDefault();
           if (!cursorMm) return;
           const snapped = snapPointMm(cursorMm);
-          void workspace.addVia({
-            centerMm: snapped,
-            netId: session.netId,
-            netClassId: session.netClassId,
-          });
+          void workspace
+            .addVia({
+              centerMm: snapped,
+              netId: session.netId,
+              netClassId: session.netClassId,
+              ...(session.viaDiameterMmOverride !== undefined
+                ? { diameterMmOverride: session.viaDiameterMmOverride }
+                : {}),
+              ...(session.viaDrillMmOverride !== undefined
+                ? { drillMmOverride: session.viaDrillMmOverride }
+                : {}),
+            })
+            .catch(() => undefined);
           return;
         }
       }
@@ -718,14 +1053,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     widthMm > 0 &&
     heightMm > 0;
 
-  if (!props.designId) {
-    return (
-      <div className="flex h-full items-center justify-center bg-slate-950 text-sm text-slate-500">
-        Select or create a design to open PCB layout
-      </div>
-    );
-  }
-
   const dragOverride = useMemo<ReadonlyMap<string, PcbPointMm> | null>(() => {
     if (!dragSession || !dragSession.moved) return null;
     const dx = dragSession.currentPrimaryMm.x - dragSession.initialPrimaryMm.x;
@@ -792,6 +1119,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     onDrcCountChange?.(drcViolations.length);
   }, [drcViolations.length, onDrcCountChange]);
 
+  if (!props.designId) {
+    return (
+      <div className="flex h-full items-center justify-center bg-slate-950 text-sm text-slate-500">
+        Select or create a design to open PCB layout
+      </div>
+    );
+  }
+
   return (
     <div className="relative h-full w-full bg-slate-950">
       {workspace.projection ? (
@@ -835,9 +1170,21 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             <PcbTopToolbar
               activeLayer={workspace.projection.board.activeLayer}
               onSetActiveLayer={(layer) => void workspace.setActiveLayer(layer)}
+              visibleLayers={workspace.projection.board.visibleLayers}
+              onSetVisibleLayers={(layers) =>
+                void workspace.setVisibleLayers(layers)
+              }
+              selectedPlacementCount={selection.placementIds.size}
+              onFlipSelection={() => {
+                const ids = [...selection.placementIds];
+                if (ids.length === 0) return;
+                if (ids.length === 1) void workspace.flipPlacement(ids[0]!);
+                else void workspace.flipPlacements(ids);
+              }}
               ratsnestVisible={workspace.ratsnestVisible}
               onToggleRatsnest={workspace.toggleRatsnestVisible}
               routeMode={toolMode === "route"}
+              routeSessionActive={routeState.kind === "routing"}
               onToggleRouteMode={() => {
                 setToolMode((prev) => (prev === "route" ? "select" : "route"));
                 if (toolMode === "route") dispatchRoute({ kind: "cancel" });
@@ -865,6 +1212,34 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               }
               tracePresets={tracePresets}
               onPickWidth={(w) => void setSessionWidth(w)}
+              viaDiameterMm={
+                routeState.kind === "routing" &&
+                routeState.session.viaDiameterMmOverride !== undefined
+                  ? routeState.session.viaDiameterMmOverride
+                  : (defaultNetClass?.viaDiameterMm ?? 0.6)
+              }
+              viaDrillMm={
+                routeState.kind === "routing" &&
+                routeState.session.viaDrillMmOverride !== undefined
+                  ? routeState.session.viaDrillMmOverride
+                  : (defaultNetClass?.viaDrillMm ?? 0.3)
+              }
+              viaDiameterDefaultMm={defaultNetClass?.viaDiameterMm ?? 0.6}
+              viaDrillDefaultMm={defaultNetClass?.viaDrillMm ?? 0.3}
+              viaDiameterPresets={VIA_DIAMETER_PRESETS_MM}
+              viaDrillPresets={VIA_DRILL_PRESETS_MM}
+              onPickViaDiameter={(mm) =>
+                dispatchRoute({
+                  kind: "set-via-diameter",
+                  diameterMmOverride: mm,
+                })
+              }
+              onPickViaDrill={(mm) =>
+                dispatchRoute({
+                  kind: "set-via-drill",
+                  drillMmOverride: mm,
+                })
+              }
               posture={
                 routeState.kind === "routing"
                   ? routeState.session.posture

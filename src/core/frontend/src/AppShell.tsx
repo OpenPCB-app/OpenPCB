@@ -3,6 +3,11 @@ import { useBootstrap } from "./providers/BootstrapProvider";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { AppRouter } from "./AppRouter";
 import { SettingsDialog } from "@/settings";
+import { AppContextMenu } from "./components/AppContextMenu";
+import {
+  openContextMenu,
+  useContextMenuStore,
+} from "@shared/frontend/context-menu";
 
 function LoadingScreen() {
   return (
@@ -42,6 +47,20 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  useEffect(() => {
+    const suppressNativeContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+    };
+
+    document.addEventListener("contextmenu", suppressNativeContextMenu, true);
+    return () =>
+      document.removeEventListener(
+        "contextmenu",
+        suppressNativeContextMenu,
+        true,
+      );
+  }, []);
+
   if (status === "loading" || status === "idle") {
     return <LoadingScreen />;
   }
@@ -52,13 +71,38 @@ export function AppShell() {
 
   return (
     <>
-      <div className="grid h-full w-full grid-cols-[80px_1fr]">
+      <div
+        className="grid h-full w-full grid-cols-[80px_1fr]"
+        onContextMenu={(event) => {
+          event.preventDefault();
+          openContextMenu({
+            scope: "app",
+            position: { x: event.clientX, y: event.clientY },
+            title: "OpenPCB",
+            groups: [
+              {
+                id: "app",
+                items: [
+                  {
+                    kind: "action",
+                    id: "settings",
+                    label: "Settings",
+                    shortcut: "Ctrl+,",
+                    onSelect: () => setSettingsOpen(true),
+                  },
+                ],
+              },
+            ],
+          });
+        }}
+      >
         <LeftSidebar onSettingsClick={() => setSettingsOpen(true)} />
         <main className="h-full min-h-0 min-w-0">
           <AppRouter />
         </main>
       </div>
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <AppContextMenu />
     </>
   );
 }

@@ -5,6 +5,7 @@ import type {
   PcbTrace,
   PcbVia,
 } from "../../../../sdks";
+import { placementMirrorX } from "../../../../sdks/designer/pcb-helpers";
 
 const PAD_HIT_PAD_MM = 0.4;
 
@@ -46,7 +47,7 @@ export function hitPad(
       const offset = transformLocal(
         pad.centerMm,
         placement.rotationDeg,
-        placement.mirrored,
+        placementMirrorX(placement),
       );
       const cx = placement.positionMm.x + offset.x;
       const cy = placement.positionMm.y + offset.y;
@@ -187,7 +188,7 @@ export function hitPlacement(
     const local = inverseTransform(
       delta,
       placement.rotationDeg,
-      placement.mirrored,
+      placementMirrorX(placement),
     );
     if (
       local.x >= bounds.minX &&

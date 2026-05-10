@@ -96,6 +96,7 @@ export interface InteractionHandler {
   onPointerMove?(event: InteractionEvent): void;
   onPointerUp?(event: InteractionEvent): void;
   onPointerLeave?(): void;
+  onContextMenu?(event: InteractionEvent): void;
   onDragEnter?(event: DragDropEvent): void;
   onDragOver?(event: DragDropEvent): void;
   onDragLeave?(): void;

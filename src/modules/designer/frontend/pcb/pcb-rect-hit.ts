@@ -1,4 +1,5 @@
 import type { PcbPlacedPart, PcbPointMm, PcbTrace } from "../../../../sdks";
+import { placementMirrorX } from "../../../../sdks/designer/pcb-helpers";
 import type { BoundsMm } from "../../../../shared/rendering/types";
 import {
   aabbContains,
@@ -52,7 +53,7 @@ export function placementBoundsMm(placement: PcbPlacedPart): BoundsMm | null {
     const offset = transformLocal(
       corner,
       placement.rotationDeg,
-      placement.mirrored,
+      placementMirrorX(placement),
     );
     const x = placement.positionMm.x + offset.x;
     const y = placement.positionMm.y + offset.y;

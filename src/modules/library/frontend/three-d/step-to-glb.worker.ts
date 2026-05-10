@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import occtImportJsSource from "occt-import-js/dist/occt-import-js.js?raw";
+import occtWasmUrl from "occt-import-js/dist/occt-import-js.wasm?url";
 import { getCategoryMaterial } from "./category-materials";
 import type {
   ConversionResult,
@@ -66,10 +67,6 @@ interface WorkerScopeLike {
   ): void;
 }
 
-const occtWasmUrl = new URL(
-  "../../../../../node_modules/occt-import-js/dist/occt-import-js.wasm",
-  import.meta.url,
-).href;
 const initOcctImportJs = new Function(
   `${occtImportJsSource.replaceAll("import.meta.url", "self.location.href")}; return occtimportjs;`,
 )() as OcctImportJsInit;

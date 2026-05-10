@@ -30,9 +30,12 @@ export function nextPosture(current: RoutePosture): RoutePosture {
  *    cursor extends a *pending* segment from the last waypoint to the snapped
  *    cursor; that pending segment is committed on the next click.
  *  - `layer`: the active copper layer the segments are being routed on. Smart
- *    Via flips this and inserts a via at the cursor.
+ *    Via commits the in-progress trace, drops a via, then `rebase-layer`s the
+ *    session to start a fresh segment on the opposite layer.
  *  - `posture`: corner-posture for elbows in the current session (`auto` infers
  *    from prior segment direction; `/` key cycles auto→axis→diagonal).
+ *  - `viaDiameterMmOverride` / `viaDrillMmOverride`: optional route-time
+ *    overrides; when undefined the via uses the active net class defaults.
  */
 export interface RouteSession {
   anchorNm: PointNm;
@@ -43,6 +46,8 @@ export interface RouteSession {
   netClassId: string;
   widthMm: number;
   posture: RoutePosture;
+  viaDiameterMmOverride?: number;
+  viaDrillMmOverride?: number;
 }
 
 export type RouteToolState =
@@ -61,11 +66,26 @@ export type RouteToolEvent =
       posture?: RoutePosture;
     }
   | { kind: "commit-waypoint"; pointNm: PointNm }
-  | { kind: "switch-layer"; layer: PcbCopperLayerId; viaCenterNm: PointNm }
+  /**
+   * Atomic mid-route layer change. Resets the session to a single anchor at
+   * `anchorNm` (typically the just-placed via centre) on the new copper
+   * layer, clearing any prior waypoints. Any segments-so-far MUST have been
+   * committed by the caller before dispatching — see `PcbCanvas.tsx` smart-via
+   * handler.
+   */
+  | { kind: "rebase-layer"; anchorNm: PointNm; layer: PcbCopperLayerId }
   | { kind: "set-mode"; mode: PcbTraceSegmentMode }
   | { kind: "set-width"; widthMm: number }
   | { kind: "set-posture"; posture: RoutePosture }
   | { kind: "cycle-posture" }
+  | {
+      kind: "set-via-diameter";
+      diameterMmOverride: number | undefined;
+    }
+  | {
+      kind: "set-via-drill";
+      drillMmOverride: number | undefined;
+    }
   /**
    * Reset the session to a single anchor at `anchorNm`, preserving layer / net
    * / posture / width settings. Used after a width change splits the trace —
@@ -123,14 +143,14 @@ export function routeToolReducer(
         },
       };
     }
-    case "switch-layer":
+    case "rebase-layer":
       return {
         kind: "routing",
         session: {
           ...state.session,
+          anchorNm: event.anchorNm,
+          waypointsNm: [],
           layer: event.layer,
-          waypointsNm: [...state.session.waypointsNm, event.viaCenterNm],
-          anchorNm: state.session.anchorNm,
         },
       };
     case "set-mode":
@@ -142,6 +162,22 @@ export function routeToolReducer(
       return {
         kind: "routing",
         session: { ...state.session, widthMm: event.widthMm },
+      };
+    case "set-via-diameter":
+      return {
+        kind: "routing",
+        session: {
+          ...state.session,
+          viaDiameterMmOverride: event.diameterMmOverride,
+        },
+      };
+    case "set-via-drill":
+      return {
+        kind: "routing",
+        session: {
+          ...state.session,
+          viaDrillMmOverride: event.drillMmOverride,
+        },
       };
     case "set-posture":
       return {

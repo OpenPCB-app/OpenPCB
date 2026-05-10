@@ -67,6 +67,8 @@ import {
   SchematicPrimitivesLayer,
 } from "./SchematicPrimitivesLayer";
 import { NetPortalPicker, PwrRailPicker } from "./LabelPicker";
+import { openContextMenu } from "../../../../shared/frontend/context-menu";
+import type { ContextMenuGroup } from "../../../../shared/frontend/context-menu";
 const PIN_HIT_MM = 0.35;
 // Primitive connection dots are rendered larger (≈0.36 mm radius), so the
 // hit zone must be wider than for part pins to match the visible target.
@@ -1476,7 +1478,9 @@ export const SchematicCanvas = forwardRef<
             })
             .catch((err) =>
               actions.setError(
-                err instanceof Error ? err.message : "Failed to place component",
+                err instanceof Error
+                  ? err.message
+                  : "Failed to place component",
               ),
             );
           return;
@@ -1829,6 +1833,332 @@ export const SchematicCanvas = forwardRef<
           marquee.finishMarquee();
         }
       },
+      onContextMenu(event) {
+        if (!projection) {
+          return;
+        }
+
+        const worldNm = {
+          x: Math.round(event.worldPoint.x),
+          y: Math.round(event.worldPoint.y),
+        };
+
+        const pin = hitPin(worldNm);
+        const wireHit = hitWire(worldNm);
+        const partId = hitPartId(worldNm);
+        const labelId = hitLabelId(worldNm);
+        const primitiveId = hitPrimitiveId(worldNm);
+
+        const groups: ContextMenuGroup[] = [];
+
+        if (partId) {
+          if (!selection.partIds.has(partId)) {
+            setSelection({
+              partIds: new Set([partId]),
+              wireIds: new Set(),
+              labelIds: new Set(),
+              primitiveIds: new Set(),
+            });
+          }
+          groups.push({
+            id: "part-actions",
+            items: [
+              {
+                kind: "action",
+                id: "rotate-cw",
+                label: "Rotate 90° clockwise",
+                shortcut: "R",
+                onSelect: () => {
+                  const part = projection.parts.find((p) => p.id === partId);
+                  if (!part) return;
+                  const next = ((((part.rotationDeg + 90) % 360) + 360) %
+                    360) as 0 | 90 | 180 | 270;
+                  void actions
+                    .dispatchCommand({
+                      type: "rotate_part",
+                      partId,
+                      rotationDeg: next,
+                    })
+                    .catch((err) =>
+                      actions.setError(
+                        err instanceof Error ? err.message : "Rotate failed",
+                      ),
+                    );
+                },
+              },
+              {
+                kind: "action",
+                id: "rotate-ccw",
+                label: "Rotate 90° counter-clockwise",
+                shortcut: "Shift+R",
+                onSelect: () => {
+                  const part = projection.parts.find((p) => p.id === partId);
+                  if (!part) return;
+                  const next = ((((part.rotationDeg - 90) % 360) + 360) %
+                    360) as 0 | 90 | 180 | 270;
+                  void actions
+                    .dispatchCommand({
+                      type: "rotate_part",
+                      partId,
+                      rotationDeg: next,
+                    })
+                    .catch((err) =>
+                      actions.setError(
+                        err instanceof Error ? err.message : "Rotate failed",
+                      ),
+                    );
+                },
+              },
+              {
+                kind: "separator",
+                id: "sep-rotate-delete",
+              },
+              {
+                kind: "action",
+                id: "delete-part",
+                label: "Delete",
+                shortcut: "Del",
+                destructive: true,
+                onSelect: () => {
+                  void actions
+                    .dispatchCommand({
+                      type: "delete_entity",
+                      entityId: partId,
+                      entityKind: "part",
+                    })
+                    .then(() => setSelection(emptySelection()))
+                    .catch((err) =>
+                      actions.setError(
+                        err instanceof Error ? err.message : "Delete failed",
+                      ),
+                    );
+                },
+              },
+            ],
+          });
+        } else if (wireHit) {
+          if (!selection.wireIds.has(wireHit.wire.id)) {
+            setSelection({
+              partIds: new Set(),
+              wireIds: new Set([wireHit.wire.id]),
+              labelIds: new Set(),
+              primitiveIds: new Set(),
+            });
+          }
+          groups.push({
+            id: "wire-actions",
+            items: [
+              {
+                kind: "action",
+                id: "delete-wire",
+                label: "Delete wire",
+                shortcut: "Del",
+                destructive: true,
+                onSelect: () => {
+                  void actions
+                    .dispatchCommand({
+                      type: "delete_entity",
+                      entityId: wireHit.wire.id,
+                      entityKind: "wire",
+                    })
+                    .then(() => setSelection(emptySelection()))
+                    .catch((err) =>
+                      actions.setError(
+                        err instanceof Error ? err.message : "Delete failed",
+                      ),
+                    );
+                },
+              },
+            ],
+          });
+        } else if (labelId) {
+          if (!selection.labelIds.has(labelId)) {
+            setSelection({
+              partIds: new Set(),
+              wireIds: new Set(),
+              labelIds: new Set([labelId]),
+              primitiveIds: new Set(),
+            });
+          }
+          groups.push({
+            id: "label-actions",
+            items: [
+              {
+                kind: "action",
+                id: "delete-label",
+                label: "Delete label",
+                shortcut: "Del",
+                destructive: true,
+                onSelect: () => {
+                  void actions
+                    .dispatchCommand({
+                      type: "delete_entity",
+                      entityId: labelId,
+                      entityKind: "label",
+                    })
+                    .then(() => setSelection(emptySelection()))
+                    .catch((err) =>
+                      actions.setError(
+                        err instanceof Error ? err.message : "Delete failed",
+                      ),
+                    );
+                },
+              },
+            ],
+          });
+        } else if (primitiveId) {
+          if (!selection.primitiveIds.has(primitiveId)) {
+            setSelection({
+              partIds: new Set(),
+              wireIds: new Set(),
+              labelIds: new Set(),
+              primitiveIds: new Set([primitiveId]),
+            });
+          }
+          const primitive = projection.primitives.find(
+            (p) => p.id === primitiveId,
+          );
+          groups.push({
+            id: "primitive-actions",
+            items: [
+              {
+                kind: "action",
+                id: "rotate-cw",
+                label: "Rotate 90° clockwise",
+                shortcut: "R",
+                onSelect: () => {
+                  if (!primitive) return;
+                  const next = ((((primitive.rotationDeg + 90) % 360) + 360) %
+                    360) as 0 | 90 | 180 | 270;
+                  void actions
+                    .dispatchCommand({
+                      type: "rotate_primitive",
+                      primitiveId,
+                      rotationDeg: next,
+                    })
+                    .catch((err) =>
+                      actions.setError(
+                        err instanceof Error ? err.message : "Rotate failed",
+                      ),
+                    );
+                },
+              },
+              {
+                kind: "action",
+                id: "rotate-ccw",
+                label: "Rotate 90° counter-clockwise",
+                shortcut: "Shift+R",
+                onSelect: () => {
+                  if (!primitive) return;
+                  const next = ((((primitive.rotationDeg - 90) % 360) + 360) %
+                    360) as 0 | 90 | 180 | 270;
+                  void actions
+                    .dispatchCommand({
+                      type: "rotate_primitive",
+                      primitiveId,
+                      rotationDeg: next,
+                    })
+                    .catch((err) =>
+                      actions.setError(
+                        err instanceof Error ? err.message : "Rotate failed",
+                      ),
+                    );
+                },
+              },
+              {
+                kind: "separator",
+                id: "sep-rotate-delete",
+              },
+              {
+                kind: "action",
+                id: "delete-primitive",
+                label: "Delete",
+                shortcut: "Del",
+                destructive: true,
+                onSelect: () => {
+                  void actions
+                    .dispatchCommand({
+                      type: "delete_entity",
+                      entityId: primitiveId,
+                      entityKind: "primitive",
+                    })
+                    .then(() => setSelection(emptySelection()))
+                    .catch((err) =>
+                      actions.setError(
+                        err instanceof Error ? err.message : "Delete failed",
+                      ),
+                    );
+                },
+              },
+            ],
+          });
+        } else {
+          groups.push(
+            {
+              id: "selection",
+              items: [
+                {
+                  kind: "action",
+                  id: "select-all",
+                  label: "Select all",
+                  shortcut: "Ctrl+A",
+                  onSelect: () => {
+                    setSelection({
+                      partIds: new Set(projection.parts.map((p) => p.id)),
+                      wireIds: new Set(projection.wires.map((w) => w.id)),
+                      labelIds: new Set(projection.labels.map((l) => l.id)),
+                      primitiveIds: new Set(
+                        projection.primitives.map((p) => p.id),
+                      ),
+                    });
+                  },
+                },
+                {
+                  kind: "action",
+                  id: "clear-selection",
+                  label: "Clear selection",
+                  shortcut: "Esc",
+                  disabled: selectionIsEmpty(selection),
+                  onSelect: () => setSelection(emptySelection()),
+                },
+              ],
+            },
+            {
+              id: "place",
+              items: [
+                {
+                  kind: "action",
+                  id: "place-gnd",
+                  label: "Place GND",
+                  shortcut: "G",
+                  onSelect: () => setArmedPrimitive({ kind: "gnd" }),
+                },
+                {
+                  kind: "action",
+                  id: "place-pwr",
+                  label: "Place PWR",
+                  shortcut: "P",
+                  onSelect: () => setPwrPickerOpen(true),
+                },
+                {
+                  kind: "action",
+                  id: "place-label",
+                  label: "Place net label",
+                  shortcut: "L",
+                  onSelect: () =>
+                    setArmedLabelText(labelDraftText.trim() || "NET"),
+                },
+              ],
+            },
+          );
+        }
+
+        openContextMenu({
+          scope: "schematic",
+          position: { x: event.screenPoint.x, y: event.screenPoint.y },
+          groups,
+        });
+      },
       onDragEnter(event) {
         const componentId = event.getData(COMPONENT_DND_MIME);
         if (componentId && componentId !== draggingComponentId) {
@@ -1958,7 +2288,8 @@ export const SchematicCanvas = forwardRef<
 
   const dragGhostModel = dragPlacementDetail?.symbol.preview ?? null;
   const componentGhostModel = armedComponentDetail?.symbol.preview ?? null;
-  const componentGhostNm = armedComponentDetail && cursorNm ? snapNm(cursorNm) : null;
+  const componentGhostNm =
+    armedComponentDetail && cursorNm ? snapNm(cursorNm) : null;
   const marqueeOverlay = marquee.overlayProps;
 
   const displayedPrimitives = useMemo(() => {
