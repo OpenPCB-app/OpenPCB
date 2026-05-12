@@ -97,6 +97,8 @@ export interface PcbNetClass {
   viaDrillMm: number;
   /** Color used to render ratsnest airwires for nets in this class. */
   color: string;
+  /** IPC-4761 default applied to new vias on nets in this class. */
+  defaultViaProtection: PcbViaProtection;
 }
 
 export interface PcbBoardSettings {
@@ -111,8 +113,25 @@ export interface PcbBoardSettings {
    * implicit default at session start.
    */
   tracePresets: number[];
+  /**
+   * Manufacturer preset for fab-rule validation. `"custom"` = user-defined
+   * design rules only. Otherwise validation surfaces warnings when traces /
+   * vias fall below the named fab's minimums (see `fab-presets.ts`).
+   */
+  fabricator: PcbFabricatorId;
   updatedAt: string;
 }
+
+/**
+ * Identifiers must match keys of `FAB_PRESETS` in
+ * `src/modules/designer/backend/pcb/fab-presets.ts`.
+ */
+export type PcbFabricatorId =
+  | "custom"
+  | "jlcpcb_2l"
+  | "jlcpcb_4l"
+  | "pcbway_std"
+  | "pcbway_advanced";
 
 export interface PcbPlacedPart {
   id: string;
@@ -139,6 +158,26 @@ export interface PcbTrace {
   segmentMode: PcbTraceSegmentMode;
 }
 
+/**
+ * IPC-4761 via protection (tenting / fill / cap).
+ *  - `tented`: solder mask covers via opening (default; cheapest).
+ *  - `none`:   open via, accessible for test probes.
+ *  - `plugged` / `filled`: non-conductive epoxy fill (Type III–VI).
+ *  - `capped`:  filled + plated copper cap (Type VII; required for via-in-pad).
+ */
+export type PcbViaProtection =
+  | "none"
+  | "tented"
+  | "plugged"
+  | "filled"
+  | "capped";
+
+/**
+ * Via topology. v1 ships only `through`; the schema is forward-compat for HDI
+ * (blind/buried/microvia) when inner layers land in Phase C.
+ */
+export type PcbViaType = "through" | "blind" | "buried" | "micro";
+
 export interface PcbVia {
   id: string;
   netId: string | null;
@@ -146,9 +185,12 @@ export interface PcbVia {
   centerMm: PcbPointMm;
   diameterMm: number;
   drillMm: number;
-  /** Through-via for v1 — always F.Cu↔B.Cu. */
-  fromLayer: "F.Cu";
-  toLayer: "B.Cu";
+  /** Start copper layer of the via barrel. v1 = F.Cu (or B.Cu). */
+  fromLayer: PcbCopperLayerId;
+  /** End copper layer. v1 = B.Cu (or F.Cu). */
+  toLayer: PcbCopperLayerId;
+  viaType: PcbViaType;
+  protection: PcbViaProtection;
 }
 
 export interface RatsnestSegment {
@@ -171,6 +213,12 @@ export interface DesignerPcbProjection {
   traces: PcbTrace[];
   vias: PcbVia[];
   ratsnest: RatsnestSegment[];
+  /**
+   * Net id → display name map (e.g. `"net-7" → "VCC_3V3"`). Sourced from the
+   * schematic's derived nets at projection time. Used by canvas overlays
+   * (net-trace labels) and tooltips.
+   */
+  netNames: Record<string, string>;
   warnings: string[];
 }
 
