@@ -77,6 +77,10 @@ import {
 } from "./pcb/pcb-trace-geometry";
 import type { PcbNetClass, PcbTrace, PcbVia } from "../../../sdks";
 import {
+  validateTraceAgainstFab,
+  validateViaAgainstFab,
+} from "./pcb/fab-presets";
+import {
   insertVertexOnWire,
   parseWirePointsJson,
   sanitizePath,
@@ -410,6 +414,12 @@ export function executeDesignerCommand({
       pointsNm: sanitized,
       segmentMode: command.segmentMode,
     };
+    const traceFabViolations = validateTraceAgainstFab(trace, board.fabricator);
+    if (traceFabViolations.length > 0) {
+      console.warn(
+        `[fab-preset] trace ${trace.id}: ${traceFabViolations.map((v) => v.message).join("; ")}`,
+      );
+    }
     insertPcbTrace(tx, designId, trace, timestamp);
     return okResult(bumpRevision(tx, designId, revision, timestamp), trace.id);
   }
@@ -450,7 +460,18 @@ export function executeDesignerCommand({
       drillMm,
       fromLayer: "F.Cu",
       toLayer: "B.Cu",
+      viaType: "through",
+      protection: netClass.defaultViaProtection,
     };
+    // Fab-preset validation: warn-only. Hard minimums above already gate via
+    // commit; this surfaces design-vs-fab mismatch (e.g. JLCPCB 4L drill on a
+    // PCBWay-Standard board).
+    const fabViolations = validateViaAgainstFab(via, board.fabricator);
+    if (fabViolations.length > 0) {
+      console.warn(
+        `[fab-preset] via ${via.id}: ${fabViolations.map((v) => v.message).join("; ")}`,
+      );
+    }
     insertPcbVia(tx, designId, via, timestamp);
     return okResult(bumpRevision(tx, designId, revision, timestamp), via.id);
   }

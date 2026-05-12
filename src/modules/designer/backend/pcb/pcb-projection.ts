@@ -72,6 +72,7 @@ export function loadPcbProjection(params: {
     traces,
     vias,
     ratsnest,
+    netNames: Object.fromEntries(netNames),
     warnings: correlation.warnings,
   };
 }

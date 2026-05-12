@@ -49,6 +49,7 @@ export function createDefaultPcbBoardSettings(
         viaDiameterMm: 0.8,
         viaDrillMm: 0.4,
         color: "#e5e7eb",
+        defaultViaProtection: "tented",
       },
       {
         id: "power",
@@ -58,6 +59,7 @@ export function createDefaultPcbBoardSettings(
         viaDiameterMm: 0.8,
         viaDrillMm: 0.4,
         color: "#ef4444",
+        defaultViaProtection: "tented",
       },
       {
         id: "gnd",
@@ -67,9 +69,11 @@ export function createDefaultPcbBoardSettings(
         viaDiameterMm: 0.8,
         viaDrillMm: 0.4,
         color: "#475569",
+        defaultViaProtection: "tented",
       },
     ],
     tracePresets: [...DEFAULT_TRACE_PRESETS_MM],
+    fabricator: "jlcpcb_2l",
     updatedAt: timestamp,
   };
 }

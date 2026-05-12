@@ -115,8 +115,25 @@ function parseBoardSettings(value: unknown): PcbBoardSettings | null {
     visibleLayers: parseVisibleLayers(record.visibleLayers),
     tracePresets:
       tracePresets.length > 0 ? tracePresets : defaults.tracePresets,
+    fabricator: parseFabricator(record.fabricator) ?? defaults.fabricator,
     updatedAt,
   };
+}
+
+function parseFabricator(
+  value: unknown,
+): PcbBoardSettings["fabricator"] | null {
+  const s = asString(value);
+  if (
+    s === "custom" ||
+    s === "jlcpcb_2l" ||
+    s === "jlcpcb_4l" ||
+    s === "pcbway_std" ||
+    s === "pcbway_advanced"
+  ) {
+    return s;
+  }
+  return null;
 }
 
 export function ensurePcbBoardSettings(
@@ -783,6 +800,26 @@ function parseVia(value: unknown): PcbVia | null {
   ) {
     return null;
   }
+  // Forward-compat default-fill: pre-Phase-B vias lack `viaType` /
+  // `protection` / per-via layer pair. Defaults match v1 behaviour
+  // (through F→B, tented).
+  const fromLayerRaw = asString(record.fromLayer);
+  const toLayerRaw = asString(record.toLayer);
+  const fromLayer = isCopperLayer(fromLayerRaw) ? fromLayerRaw : "F.Cu";
+  const toLayer = isCopperLayer(toLayerRaw) ? toLayerRaw : "B.Cu";
+  const viaTypeRaw = asString(record.viaType);
+  const viaType: PcbVia["viaType"] =
+    viaTypeRaw === "blind" || viaTypeRaw === "buried" || viaTypeRaw === "micro"
+      ? viaTypeRaw
+      : "through";
+  const protectionRaw = asString(record.protection);
+  const protection: PcbVia["protection"] =
+    protectionRaw === "none" ||
+    protectionRaw === "plugged" ||
+    protectionRaw === "filled" ||
+    protectionRaw === "capped"
+      ? protectionRaw
+      : "tented";
   return {
     id,
     netId: netId ?? null,
@@ -790,8 +827,10 @@ function parseVia(value: unknown): PcbVia | null {
     centerMm: { x: cx, y: cy },
     diameterMm,
     drillMm,
-    fromLayer: "F.Cu",
-    toLayer: "B.Cu",
+    fromLayer,
+    toLayer,
+    viaType,
+    protection,
   };
 }
 
