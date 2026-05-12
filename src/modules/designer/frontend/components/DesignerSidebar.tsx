@@ -19,6 +19,7 @@ interface DesignerSidebarProps {
   actions: DesignerWorkspaceActions;
   activeView: DesignerView;
   pcbSlotRef?: (el: HTMLDivElement | null) => void;
+  pcbLayersSlotRef?: (el: HTMLDivElement | null) => void;
 }
 
 function inferValueKind(
@@ -547,10 +548,12 @@ export function DesignerSidebar({
   actions,
   activeView,
   pcbSlotRef,
+  pcbLayersSlotRef,
 }: DesignerSidebarProps): ReactElement {
   if (activeView === "pcb") {
     return (
       <aside className="flex h-full min-h-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
+        <div ref={pcbLayersSlotRef} />
         <div className="border-b border-slate-200 px-3 py-2 dark:border-slate-800">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Board

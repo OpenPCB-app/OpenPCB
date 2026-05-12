@@ -530,8 +530,8 @@ describe("designer PCB placements", () => {
     }
   });
 
-  test("auto-mirror: parts placed while activeLayer=B.Cu sync as B.Cu mirrored", async () => {
-    isolateTestDb("designer-pcb-auto-mirror");
+  test("new PCB placements start on F.Cu even when activeLayer=B.Cu", async () => {
+    isolateTestDb("designer-pcb-top-default");
     const { moduleRuntime, server } = await createRuntime();
     const designerSdk = moduleRuntime
       .getSdkRegistry()
@@ -575,7 +575,7 @@ describe("designer PCB placements", () => {
     expect(afterLayer!.placements[0]!.layer).toBe("F.Cu");
     expect(afterLayer!.placements[0]!.mirrored).toBe(false);
 
-    // Place B while activeLayer is B.Cu — auto-mirrored on bottom.
+    // Place B while activeLayer is B.Cu — new placements still start on top.
     const placeB = await designerSdk.dispatchCommand(design.id, {
       commandId: "cmd-B",
       sessionId: "s",
@@ -592,8 +592,8 @@ describe("designer PCB placements", () => {
     const afterB = await designerSdk.getPcbProjection(design.id);
     expect(afterB!.placements).toHaveLength(2);
     const onlyNew = afterB!.placements.find((p) => p.id !== placementA.id)!;
-    expect(onlyNew.layer).toBe("B.Cu");
-    expect(onlyNew.mirrored).toBe(true);
+    expect(onlyNew.layer).toBe("F.Cu");
+    expect(onlyNew.mirrored).toBe(false);
   });
 
   test("set visible layers persists and ensures activeLayer remains visible", async () => {

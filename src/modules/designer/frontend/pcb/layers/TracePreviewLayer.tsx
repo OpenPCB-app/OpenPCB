@@ -21,6 +21,8 @@ interface TracePreviewLayerProps {
   pendingTailFromIndex?: number;
   /** Indices of segments that violate DRC (rendered with a red halo). */
   violationSegmentIndexes?: ReadonlyArray<number>;
+  /** Pre-mirror X coordinates (use when parent group has no negative scale). */
+  mirror?: boolean;
 }
 
 /**
@@ -36,15 +38,17 @@ export function TracePreviewLayer({
   widthMm,
   pendingTailFromIndex,
   violationSegmentIndexes,
+  mirror = false,
 }: TracePreviewLayerProps): ReactElement | null {
   const baseColor = PCB_TRACE_COLORS[layer];
+  const xScale = mirror ? -1 : 1;
   const split = useMemo(() => {
     if (pointsNm.length < 2)
       return { committed: null, pending: null, violation: null };
-    const splitIdx =
-      pendingTailFromIndex !== undefined && pendingTailFromIndex > 0
-        ? pendingTailFromIndex
-        : pointsNm.length - 1;
+    const splitIdx = Math.min(
+      Math.max(pendingTailFromIndex ?? pointsNm.length - 1, 0),
+      pointsNm.length - 1,
+    );
     const committed: number[] = [];
     const pending: number[] = [];
     const violation: number[] = [];
@@ -53,11 +57,11 @@ export function TracePreviewLayer({
       const a = pointsNm[i - 1]!;
       const b = pointsNm[i]!;
       const target = i - 1 < splitIdx ? committed : pending;
-      target.push(a.x * NM_TO_MM, a.y * NM_TO_MM, 0);
-      target.push(b.x * NM_TO_MM, b.y * NM_TO_MM, 0);
+      target.push(a.x * NM_TO_MM * xScale, a.y * NM_TO_MM, 0);
+      target.push(b.x * NM_TO_MM * xScale, b.y * NM_TO_MM, 0);
       if (violSet.has(i - 1)) {
-        violation.push(a.x * NM_TO_MM, a.y * NM_TO_MM, 0);
-        violation.push(b.x * NM_TO_MM, b.y * NM_TO_MM, 0);
+        violation.push(a.x * NM_TO_MM * xScale, a.y * NM_TO_MM, 0);
+        violation.push(b.x * NM_TO_MM * xScale, b.y * NM_TO_MM, 0);
       }
     }
     return {
@@ -65,7 +69,7 @@ export function TracePreviewLayer({
       pending: pending.length > 0 ? new Float32Array(pending) : null,
       violation: violation.length > 0 ? new Float32Array(violation) : null,
     };
-  }, [pointsNm, pendingTailFromIndex, violationSegmentIndexes]);
+  }, [pointsNm, pendingTailFromIndex, violationSegmentIndexes, xScale]);
 
   return (
     <>
@@ -104,6 +108,7 @@ function PreviewSegmentGroup({
   opacity: number;
 }): ReactElement | null {
   const size = useThree((s) => s.size);
+  const dpr = useThree((s) => s.viewport.dpr);
 
   const geometry = useMemo(() => {
     if (!positions) return null;
@@ -113,7 +118,7 @@ function PreviewSegmentGroup({
   }, [positions]);
 
   const material = useMemo(() => {
-    return new LineMaterial({
+    const mat = new LineMaterial({
       color: new THREE.Color(color).getHex(),
       linewidth: widthMm,
       worldUnits: true,
@@ -122,23 +127,19 @@ function PreviewSegmentGroup({
       depthTest: false,
       depthWrite: false,
     });
+    return mat;
   }, [color, widthMm, opacity]);
 
-  useEffect(() => {
-    material.resolution.set(size.width, size.height);
-  }, [material, size.width, size.height]);
+  material.resolution.set(size.width * dpr, size.height * dpr);
 
-  const line = useMemo(
-    () => (geometry ? new LineSegments2(geometry, material) : null),
-    [geometry, material],
-  );
-
-  useEffect(() => {
-    if (line) {
-      line.computeLineDistances();
-      line.renderOrder = RENDER_ORDER.PREVIEW;
-    }
-  }, [line]);
+  const line = useMemo(() => {
+    if (!geometry) return null;
+    const built = new LineSegments2(geometry, material);
+    built.computeLineDistances();
+    built.renderOrder = RENDER_ORDER.PREVIEW;
+    built.frustumCulled = false;
+    return built;
+  }, [geometry, material]);
 
   useEffect(
     () => () => {

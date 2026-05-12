@@ -348,6 +348,48 @@ describe("designer PCB traces (Phase 1)", () => {
     expect(proj?.vias[0]?.toLayer).toBe("B.Cu");
   });
 
+  test("combined trace/via command is atomic when via validation fails", async () => {
+    isolateTestDb("traces-via-atomic-fail");
+    const { moduleRuntime } = await createRuntime();
+    const sdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const design = await sdk.createDesign({ name: "Trace Via Atomic" });
+    const proj0 = await sdk.getPcbProjection(design.id);
+    const netClass = proj0!.board.netClasses[0]!;
+
+    const result = await sdk.dispatchCommand(
+      design.id,
+      envelope(design.id, "cmd-trace-via-invalid", SESSION, proj0!.revision, {
+        type: "pcb_add_trace_via",
+        trace: {
+          layer: "F.Cu" as PcbCopperLayerId,
+          pointsNm: [
+            { x: 0, y: 0 },
+            { x: 5_000_000, y: 0 },
+          ],
+          widthMm: 0.25,
+          netId: "net-A",
+          netClassId: netClass.id,
+          segmentMode: "manhattan-90" as PcbTraceSegmentMode,
+        },
+        via: {
+          centerMm: { x: 5, y: 0 },
+          netId: "net-A",
+          netClassId: netClass.id,
+          diameterMmOverride: 0.1,
+          drillMmOverride: 0.05,
+        },
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    const proj = await sdk.getPcbProjection(design.id);
+    expect(proj!.traces).toHaveLength(0);
+    expect(proj!.vias).toHaveLength(0);
+  });
+
   test("smart-via flow: F.Cu trace → via → B.Cu trace yields 2 traces + 1 via with one logical net", async () => {
     isolateTestDb("traces-smart-via");
     const { moduleRuntime } = await createRuntime();

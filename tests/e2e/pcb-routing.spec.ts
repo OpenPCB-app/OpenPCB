@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
  * (requires a footprint with pads to be on the board) — that's deferred to a
  * library-fixture-driven test. Instead we verify:
  *  1. The PCB tab loads and shows the Route button.
- *  2. Pressing R toggles the toolbar pill into "Routing (R)" state.
+ *  2. Pressing R exposes route-only controls.
  *  3. ESC exits Route mode back to Select.
  *  4. The 45°/90° pill appears only while routing is active.
  */
@@ -23,7 +23,7 @@ test("Route tool toggles via R key and toolbar button", async ({ page }) => {
 
   // Click activates Routing.
   await routeButton.click();
-  await expect(page.getByRole("button", { name: "Routing (R)" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "45°" })).toBeVisible();
 
   // ESC exits.
   await page.keyboard.press("Escape");
@@ -35,5 +35,5 @@ test("Route tool toggles via R key and toolbar button", async ({ page }) => {
     .focus()
     .catch(() => {});
   await page.keyboard.press("r");
-  await expect(page.getByRole("button", { name: "Routing (R)" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "45°" })).toBeVisible();
 });

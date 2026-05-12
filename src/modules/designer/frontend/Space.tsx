@@ -86,6 +86,9 @@ function DesignerSpaceInner({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [pcbDrcCount, setPcbDrcCount] = useState(0);
   const [pcbBoardSlot, setPcbBoardSlot] = useState<HTMLDivElement | null>(null);
+  const [pcbLayersSlot, setPcbLayersSlot] = useState<HTMLDivElement | null>(
+    null,
+  );
   const canvasRef = useRef<SchematicCanvasHandle | null>(null);
   const canOpenPalette = state.activeView === "schem" && !!state.projection;
 
@@ -274,6 +277,7 @@ function DesignerSpaceInner({
             actions={actions}
             activeView={state.activeView}
             pcbSlotRef={setPcbBoardSlot}
+            pcbLayersSlotRef={setPcbLayersSlot}
           />
         </div>
 
@@ -297,6 +301,7 @@ function DesignerSpaceInner({
               notifyExternalRevisionBump={actions.notifyExternalRevisionBump}
               onDrcCountChange={setPcbDrcCount}
               boardPanelTarget={pcbBoardSlot}
+              layersPanelTarget={pcbLayersSlot}
             />
           ) : state.activeView === "3d" ? (
             <Board3DCanvas

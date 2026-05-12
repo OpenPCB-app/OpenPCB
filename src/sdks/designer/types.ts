@@ -520,6 +520,12 @@ export interface DesignerPcbAddViaCommand {
   drillMmOverride?: number;
 }
 
+export interface DesignerPcbAddTraceViaCommand {
+  type: "pcb_add_trace_via";
+  trace: Omit<DesignerPcbAddTraceCommand, "type">;
+  via: Omit<DesignerPcbAddViaCommand, "type">;
+}
+
 export interface DesignerPcbDeleteTraceCommand {
   type: "pcb_delete_trace";
   traceId: string;
@@ -563,6 +569,7 @@ export type DesignerCommand =
   | DesignerPcbSetVisibleLayersCommand
   | DesignerPcbAddTraceCommand
   | DesignerPcbAddViaCommand
+  | DesignerPcbAddTraceViaCommand
   | DesignerPcbDeleteTraceCommand
   | DesignerPcbDeleteViaCommand
   | DesignerPcbUpdateTraceGeometryCommand;

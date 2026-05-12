@@ -56,6 +56,7 @@ export type {
   RatsnestSegment,
   DesignerPcbProjection,
   DesignerPcbAddTraceCommand,
+  DesignerPcbAddTraceViaCommand,
   DesignerPcbAddViaCommand,
   DesignerPcbDeleteTraceCommand,
   DesignerPcbDeleteViaCommand,

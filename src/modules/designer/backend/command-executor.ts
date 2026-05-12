@@ -3,10 +3,15 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type {
   DesignerCommand,
   DesignerDispatchResult,
+  DesignerPcbAddTraceCommand,
+  DesignerPcbAddViaCommand,
   DesignerPin,
   DesignerPrimitive,
   DesignerSchematicProjection,
   LibraryComponentPlacementDetail,
+  PcbBoardSettings,
+  PcbTrace,
+  PcbVia,
 } from "../../../sdks";
 import {
   insertPrimitiveRow,
@@ -75,7 +80,6 @@ import {
   validatePath as validateTracePath,
   sanitizePath as sanitizeTracePath,
 } from "./pcb/pcb-trace-geometry";
-import type { PcbNetClass, PcbTrace, PcbVia } from "../../../sdks";
 import {
   validateTraceAgainstFab,
   validateViaAgainstFab,
@@ -154,6 +158,93 @@ function bumpRevision(
     .where(eq(designHeads.id, designId))
     .run();
   return nextRevision;
+}
+
+type PcbTraceInput = Omit<DesignerPcbAddTraceCommand, "type">;
+type PcbViaInput = Omit<DesignerPcbAddViaCommand, "type">;
+
+function buildPcbTraceForInsert(
+  input: PcbTraceInput,
+  board: PcbBoardSettings,
+): { trace: PcbTrace } | { error: DesignerDispatchResult } {
+  const netClass = board.netClasses.find((nc) => nc.id === input.netClassId);
+  if (!netClass) return { error: pcbNetClassNotFound(input.netClassId) };
+  const sanitized = sanitizeTracePath(input.pointsNm);
+  if (sanitized.length < 2) {
+    return {
+      error: invalidPcbTrace("path must have at least 2 distinct points"),
+    };
+  }
+  const reason = validateTracePath(sanitized, input.segmentMode);
+  if (reason) return { error: invalidPcbTrace(reason) };
+  const trace: PcbTrace = {
+    id: crypto.randomUUID(),
+    netId: input.netId,
+    netClassId: input.netClassId,
+    layer: input.layer,
+    widthMm: input.widthMm,
+    pointsNm: sanitized,
+    segmentMode: input.segmentMode,
+  };
+  const violations = validateTraceAgainstFab(trace, board.fabricator);
+  if (violations.length > 0) {
+    console.warn(
+      `[fab-preset] trace ${trace.id}: ${violations
+        .map((v) => v.message)
+        .join("; ")}`,
+    );
+  }
+  return { trace };
+}
+
+function buildPcbViaForInsert(
+  input: PcbViaInput,
+  board: PcbBoardSettings,
+): { via: PcbVia } | { error: DesignerDispatchResult } {
+  const netClass = board.netClasses.find((nc) => nc.id === input.netClassId);
+  if (!netClass) return { error: pcbNetClassNotFound(input.netClassId) };
+  const diameterMm = input.diameterMmOverride ?? netClass.viaDiameterMm;
+  const drillMm = input.drillMmOverride ?? netClass.viaDrillMm;
+  if (!Number.isFinite(diameterMm) || diameterMm <= 0) {
+    return { error: invalidPcbVia("via diameter must be positive") };
+  }
+  if (!Number.isFinite(drillMm) || drillMm <= 0) {
+    return { error: invalidPcbVia("via drill must be positive") };
+  }
+  if (diameterMm <= drillMm) {
+    return { error: invalidPcbVia("via diameter must exceed drill") };
+  }
+  const minimums = board.designRules.minimums;
+  if (diameterMm < minimums.viaDiameterMm) {
+    return { error: invalidPcbVia("via diameter is below board minimum") };
+  }
+  if (drillMm < minimums.viaDrillMm || drillMm < minimums.drillSizeMm) {
+    return { error: invalidPcbVia("via drill is below board minimum") };
+  }
+  if ((diameterMm - drillMm) / 2 < minimums.annularRingMm) {
+    return { error: invalidPcbVia("via annular ring is below board minimum") };
+  }
+  const via: PcbVia = {
+    id: crypto.randomUUID(),
+    netId: input.netId,
+    netClassId: input.netClassId,
+    centerMm: input.centerMm,
+    diameterMm,
+    drillMm,
+    fromLayer: "F.Cu",
+    toLayer: "B.Cu",
+    viaType: "through",
+    protection: netClass.defaultViaProtection,
+  };
+  const violations = validateViaAgainstFab(via, board.fabricator);
+  if (violations.length > 0) {
+    console.warn(
+      `[fab-preset] via ${via.id}: ${violations
+        .map((v) => v.message)
+        .join("; ")}`,
+    );
+  }
+  return { via };
 }
 
 function insertPart(
@@ -395,85 +486,34 @@ export function executeDesignerCommand({
 
   if (command.type === "pcb_add_trace") {
     const board = ensurePcbBoardSettings(tx, designId, timestamp);
-    const netClass = board.netClasses.find(
-      (nc) => nc.id === command.netClassId,
-    );
-    if (!netClass) return pcbNetClassNotFound(command.netClassId);
-    const sanitized = sanitizeTracePath(command.pointsNm);
-    if (sanitized.length < 2) {
-      return invalidPcbTrace("path must have at least 2 distinct points");
-    }
-    const reason = validateTracePath(sanitized, command.segmentMode);
-    if (reason) return invalidPcbTrace(reason);
-    const trace: PcbTrace = {
-      id: crypto.randomUUID(),
-      netId: command.netId,
-      netClassId: command.netClassId,
-      layer: command.layer,
-      widthMm: command.widthMm,
-      pointsNm: sanitized,
-      segmentMode: command.segmentMode,
-    };
-    const traceFabViolations = validateTraceAgainstFab(trace, board.fabricator);
-    if (traceFabViolations.length > 0) {
-      console.warn(
-        `[fab-preset] trace ${trace.id}: ${traceFabViolations.map((v) => v.message).join("; ")}`,
-      );
-    }
+    const built = buildPcbTraceForInsert(command, board);
+    if ("error" in built) return built.error;
+    const { trace } = built;
     insertPcbTrace(tx, designId, trace, timestamp);
     return okResult(bumpRevision(tx, designId, revision, timestamp), trace.id);
   }
 
   if (command.type === "pcb_add_via") {
     const board = ensurePcbBoardSettings(tx, designId, timestamp);
-    const netClass = board.netClasses.find(
-      (nc) => nc.id === command.netClassId,
-    );
-    if (!netClass) return pcbNetClassNotFound(command.netClassId);
-    const diameterMm = command.diameterMmOverride ?? netClass.viaDiameterMm;
-    const drillMm = command.drillMmOverride ?? netClass.viaDrillMm;
-    if (!Number.isFinite(diameterMm) || diameterMm <= 0) {
-      return invalidPcbVia("via diameter must be positive");
-    }
-    if (!Number.isFinite(drillMm) || drillMm <= 0) {
-      return invalidPcbVia("via drill must be positive");
-    }
-    if (diameterMm <= drillMm) {
-      return invalidPcbVia("via diameter must exceed drill");
-    }
-    const minimums = board.designRules.minimums;
-    if (diameterMm < minimums.viaDiameterMm) {
-      return invalidPcbVia("via diameter is below board minimum");
-    }
-    if (drillMm < minimums.viaDrillMm || drillMm < minimums.drillSizeMm) {
-      return invalidPcbVia("via drill is below board minimum");
-    }
-    if ((diameterMm - drillMm) / 2 < minimums.annularRingMm) {
-      return invalidPcbVia("via annular ring is below board minimum");
-    }
-    const via: PcbVia = {
-      id: crypto.randomUUID(),
-      netId: command.netId,
-      netClassId: command.netClassId,
-      centerMm: command.centerMm,
-      diameterMm,
-      drillMm,
-      fromLayer: "F.Cu",
-      toLayer: "B.Cu",
-      viaType: "through",
-      protection: netClass.defaultViaProtection,
-    };
-    // Fab-preset validation: warn-only. Hard minimums above already gate via
-    // commit; this surfaces design-vs-fab mismatch (e.g. JLCPCB 4L drill on a
-    // PCBWay-Standard board).
-    const fabViolations = validateViaAgainstFab(via, board.fabricator);
-    if (fabViolations.length > 0) {
-      console.warn(
-        `[fab-preset] via ${via.id}: ${fabViolations.map((v) => v.message).join("; ")}`,
-      );
-    }
+    const built = buildPcbViaForInsert(command, board);
+    if ("error" in built) return built.error;
+    const { via } = built;
     insertPcbVia(tx, designId, via, timestamp);
     return okResult(bumpRevision(tx, designId, revision, timestamp), via.id);
+  }
+
+  if (command.type === "pcb_add_trace_via") {
+    const board = ensurePcbBoardSettings(tx, designId, timestamp);
+    const builtTrace = buildPcbTraceForInsert(command.trace, board);
+    if ("error" in builtTrace) return builtTrace.error;
+    const builtVia = buildPcbViaForInsert(command.via, board);
+    if ("error" in builtVia) return builtVia.error;
+    insertPcbTrace(tx, designId, builtTrace.trace, timestamp);
+    insertPcbVia(tx, designId, builtVia.via, timestamp);
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      builtVia.via.id,
+    );
   }
 
   if (command.type === "pcb_delete_trace") {

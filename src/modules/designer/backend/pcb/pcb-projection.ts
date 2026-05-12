@@ -40,7 +40,7 @@ export function loadPcbProjection(params: {
           footprint: part.footprint,
         })),
         boardCenter: board.outline.centerMm,
-        defaultLayer: board.activeLayer === "B.Cu" ? "B.Cu" : "F.Cu",
+        defaultLayer: "F.Cu",
         timestamp: params.timestamp,
       })
     : [];

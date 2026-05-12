@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   DesignerCommand,
+  DesignerDispatchResult,
   DesignerPcbProjection,
   PcbCopperLayerId,
   PcbLayerId,
@@ -16,7 +17,9 @@ export function usePcbWorkspace(params: {
   backendURL?: string | null;
   moduleId: string;
   designId: string | null;
-  dispatchCommand: (command: DesignerCommand) => Promise<unknown>;
+  dispatchCommand: (
+    command: DesignerCommand,
+  ) => Promise<DesignerDispatchResult>;
   notifyExternalRevisionBump?: (revision: number) => void;
 }) {
   const {
@@ -48,12 +51,10 @@ export function usePcbWorkspace(params: {
   const pinNetStore = useDesignerHighlight((s) => s.pinNet);
   const clearHighlightStore = useDesignerHighlight((s) => s.clear);
   const [ratsnestVisible, setRatsnestVisible] = useState(true);
-  // View side is purely a UI presentation flag — when "bottom", the canvas
-  // mirrors the scene horizontally so the user sees the board "from below"
-  // (KiCad/Altium/Flux convention). Decoupled from the active routing layer:
-  // changing the routing layer (via toolbar pill / hotkey / smart-via) must
-  // NEVER flip the view; only the explicit Flip-View toggle does.
-  const [viewSide, setViewSide] = useState<"top" | "bottom">("top");
+  // View side mirrors the board for Top/Bottom copper switches. It is still UI
+  // state (not persisted separately); refresh seeds it from the persisted active
+  // copper layer so undo/redo and reload keep the same orientation.
+  const [viewSide, setViewSideState] = useState<"top" | "bottom">("top");
 
   const refresh = useCallback(async () => {
     if (!designId) {
@@ -65,6 +66,7 @@ export function usePcbWorkspace(params: {
     try {
       const next = await api.getPcbProjection(designId);
       setProjection(next);
+      setViewSideState(next.board.activeLayer === "B.Cu" ? "bottom" : "top");
       if (next) notifyExternalRevisionBump?.(next.revision);
     } catch (err) {
       setError(
@@ -277,8 +279,8 @@ export function usePcbWorkspace(params: {
     setRatsnestVisible((v) => !v);
   }, []);
 
-  const toggleViewSide = useCallback(() => {
-    setViewSide((v) => (v === "top" ? "bottom" : "top"));
+  const setViewSide = useCallback((side: "top" | "bottom") => {
+    setViewSideState(side);
   }, []);
 
   const addTrace = useCallback(
@@ -292,9 +294,14 @@ export function usePcbWorkspace(params: {
     }) => {
       setError(null);
       try {
-        await dispatchCommand({ type: "pcb_add_trace", ...input });
+        const result = await dispatchCommand({
+          type: "pcb_add_trace",
+          ...input,
+        });
+        if (!result.ok) throw new Error("Add trace failed");
         await refresh();
         await refreshHistory();
+        return result.createdEntityId;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Add trace failed");
         throw err instanceof Error ? err : new Error("Add trace failed");
@@ -313,12 +320,54 @@ export function usePcbWorkspace(params: {
     }) => {
       setError(null);
       try {
-        await dispatchCommand({ type: "pcb_add_via", ...input });
+        const result = await dispatchCommand({
+          type: "pcb_add_via",
+          ...input,
+        });
+        if (!result.ok) throw new Error("Add via failed");
         await refresh();
         await refreshHistory();
+        return result.createdEntityId;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Add via failed");
         throw err instanceof Error ? err : new Error("Add via failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const addTraceVia = useCallback(
+    async (input: {
+      trace: {
+        layer: PcbCopperLayerId;
+        pointsNm: Array<{ x: number; y: number }>;
+        widthMm: number;
+        netId: string | null;
+        netClassId: string;
+        segmentMode: PcbTraceSegmentMode;
+      };
+      via: {
+        centerMm: PcbPointMm;
+        netId: string | null;
+        netClassId: string;
+        diameterMmOverride?: number;
+        drillMmOverride?: number;
+      };
+    }) => {
+      setError(null);
+      try {
+        const result = await dispatchCommand({
+          type: "pcb_add_trace_via",
+          trace: input.trace,
+          via: input.via,
+        });
+        if (!result.ok) throw new Error("Add trace/via failed");
+        await refresh();
+        await refreshHistory();
+        return result.createdEntityId;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Add trace/via failed");
+        throw err instanceof Error ? err : new Error("Add trace/via failed");
       }
     },
     [dispatchCommand, refresh, refreshHistory],
@@ -385,7 +434,7 @@ export function usePcbWorkspace(params: {
     ratsnestVisible,
     toggleRatsnestVisible,
     viewSide,
-    toggleViewSide,
+    setViewSide,
     refresh,
     updateBoardSize,
     setActiveLayer,
@@ -398,6 +447,7 @@ export function usePcbWorkspace(params: {
     flipPlacement,
     flipPlacements,
     addTrace,
+    addTraceVia,
     addVia,
     deleteTrace,
     deleteVia,

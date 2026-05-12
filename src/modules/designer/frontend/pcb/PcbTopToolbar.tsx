@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
-import { Cable, Eye, FlipHorizontal2, Network, Sparkles } from "lucide-react";
+import { Cable, FlipHorizontal2, Network } from "lucide-react";
 import type { PcbLayerId, PcbTraceSegmentMode } from "../../../../sdks";
 import { PCB_LAYER_COLORS } from "../../../../shared/frontend/canvas/layers";
 import type { RoutePosture } from "./tools/route-tool-state";
@@ -8,16 +8,12 @@ import { VIA_PRESETS, type PcbViaPreset } from "../../backend/pcb/via-presets";
 interface PcbTopToolbarProps {
   activeLayer: PcbLayerId;
   onSetActiveLayer: (layer: PcbLayerId) => void;
-  visibleLayers: ReadonlyArray<PcbLayerId>;
-  onSetVisibleLayers: (layers: ReadonlyArray<PcbLayerId>) => void;
   selectedPlacementCount: number;
   onFlipSelection: () => void;
   ratsnestVisible: boolean;
   onToggleRatsnest: () => void;
   /** Current board view orientation. `"bottom"` mirrors the scene horizontally. */
   viewSide: "top" | "bottom";
-  /** Toggle between top-view and bottom-view (mirrored). */
-  onToggleViewSide: () => void;
   routeMode: boolean;
   routeSessionActive: boolean;
   onToggleRouteMode: () => void;
@@ -46,17 +42,6 @@ interface PcbTopToolbarProps {
   posture: RoutePosture;
   onCyclePosture: () => void;
 }
-
-const VISIBLE_LAYER_OPTIONS: ReadonlyArray<{
-  id: PcbLayerId;
-  label: string;
-}> = [
-  { id: "F.Cu", label: "Top Copper" },
-  { id: "B.Cu", label: "Bottom Copper" },
-  { id: "F.SilkS", label: "Top Silkscreen" },
-  { id: "B.SilkS", label: "Bottom Silkscreen" },
-  { id: "Edge.Cuts", label: "Edge Cuts" },
-];
 
 const LAYER_LABELS: Partial<Record<PcbLayerId, string>> = {
   "F.Cu": "Top Copper",
@@ -147,97 +132,6 @@ function WidthDropdown({
           >
             Custom… (Alt+W)
           </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function LayerVisibilityPopover({
-  activeLayer,
-  visibleLayers,
-  onSetVisibleLayers,
-}: {
-  activeLayer: PcbLayerId;
-  visibleLayers: ReadonlyArray<PcbLayerId>;
-  onSetVisibleLayers: (layers: ReadonlyArray<PcbLayerId>) => void;
-}): ReactElement {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    window.addEventListener("mousedown", handler);
-    return () => window.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const visibleSet = new Set(visibleLayers);
-  const toggle = (layer: PcbLayerId): void => {
-    const next = new Set(visibleSet);
-    if (next.has(layer)) next.delete(layer);
-    else next.add(layer);
-    // Active layer must remain visible — store guards too, but reflect it in UI.
-    next.add(activeLayer);
-    onSetVisibleLayers(Array.from(next));
-  };
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        title="Layer visibility"
-        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-transparent px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-      >
-        <Eye className="h-3.5 w-3.5" />
-        Layers
-      </button>
-      {open ? (
-        <div className="absolute left-0 top-full z-30 mt-1 min-w-[180px] overflow-hidden rounded-md border border-slate-200 bg-white text-xs shadow-xl dark:border-slate-700 dark:bg-slate-950">
-          {VISIBLE_LAYER_OPTIONS.map((opt) => {
-            const checked = visibleSet.has(opt.id);
-            const isActive = opt.id === activeLayer;
-            return (
-              <label
-                key={opt.id}
-                className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 ${
-                  isActive
-                    ? "bg-slate-50 dark:bg-slate-900"
-                    : "hover:bg-slate-100 dark:hover:bg-slate-800"
-                }`}
-                title={
-                  isActive
-                    ? "Active layer is always visible"
-                    : "Toggle visibility"
-                }
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={isActive}
-                  onChange={() => toggle(opt.id)}
-                  className="h-3.5 w-3.5 accent-violet-600"
-                />
-                <span
-                  aria-hidden
-                  className="inline-block h-2.5 w-2.5 rounded-full"
-                  style={{
-                    backgroundColor:
-                      PCB_LAYER_COLORS[
-                        opt.id as keyof typeof PCB_LAYER_COLORS
-                      ] ?? "#64748b",
-                  }}
-                />
-                <span className="text-slate-700 dark:text-slate-200">
-                  {opt.label}
-                </span>
-              </label>
-            );
-          })}
         </div>
       ) : null}
     </div>
@@ -439,14 +333,11 @@ function ViaPresetDropdown({
 export function PcbTopToolbar({
   activeLayer,
   onSetActiveLayer,
-  visibleLayers,
-  onSetVisibleLayers,
   selectedPlacementCount,
   onFlipSelection,
   ratsnestVisible,
   onToggleRatsnest,
   viewSide,
-  onToggleViewSide,
   routeMode,
   routeSessionActive,
   onToggleRouteMode,
@@ -477,8 +368,13 @@ export function PcbTopToolbar({
       <button
         type="button"
         onClick={() => onSetActiveLayer(flipped)}
-        title="Click to flip active copper layer"
-        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-transparent px-2 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+        title="Switch active layer and mirror view (Top ↔ Bottom)"
+        aria-pressed={viewSide === "bottom"}
+        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+          viewSide === "bottom"
+            ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+            : "border-transparent text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+        }`}
       >
         <span
           aria-hidden
@@ -486,27 +382,6 @@ export function PcbTopToolbar({
           style={{ backgroundColor: dotColor }}
         />
         {layerLabel}
-      </button>
-
-      <LayerVisibilityPopover
-        activeLayer={activeLayer}
-        visibleLayers={visibleLayers}
-        onSetVisibleLayers={onSetVisibleLayers}
-      />
-
-      <button
-        type="button"
-        onClick={onToggleViewSide}
-        title="Flip board view — switch between viewing from top and bottom (KiCad/Altium convention)"
-        aria-pressed={viewSide === "bottom"}
-        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
-          viewSide === "bottom"
-            ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-        }`}
-      >
-        <FlipHorizontal2 className="h-3.5 w-3.5" />
-        {viewSide === "bottom" ? "Bottom view" : "Top view"}
       </button>
 
       <button
@@ -538,7 +413,7 @@ export function PcbTopToolbar({
         aria-pressed={routeMode}
       >
         <Cable className="h-3.5 w-3.5" />
-        {routeMode ? "Routing (R)" : "Route (R)"}
+        Route (R)
       </button>
 
       {routeMode ? (
@@ -606,19 +481,10 @@ export function PcbTopToolbar({
         aria-pressed={ratsnestVisible}
       >
         <Network className="h-3.5 w-3.5" />
-        {ratsnestVisible ? "Ratsnest On" : "Ratsnest Off"}
+        Ratsnest
       </button>
 
       <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
-
-      <span
-        title="Auto-routing arrives in Phase 4"
-        aria-disabled
-        className="inline-flex h-7 cursor-not-allowed items-center gap-1.5 rounded-md border border-transparent px-2 text-xs font-medium text-slate-400 dark:text-slate-500"
-      >
-        <Sparkles className="h-3.5 w-3.5" />
-        Auto-Layout
-      </span>
     </div>
   );
 }

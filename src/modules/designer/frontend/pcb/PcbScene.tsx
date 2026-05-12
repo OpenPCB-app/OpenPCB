@@ -4,6 +4,7 @@ import * as THREE from "three";
 import type {
   DesignerPcbProjection,
   PcbBoardOutline,
+  PcbCopperLayerId,
   PcbLayerId,
   PcbPlacedPart,
   PcbPointMm,
@@ -21,8 +22,10 @@ import {
 } from "../../../../shared/frontend/canvas/layers";
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
 import { TraceLayer } from "./layers/TraceLayer";
+import { TracePreviewLayer } from "./layers/TracePreviewLayer";
 import { ViaLayer } from "./layers/ViaLayer";
 import { NetTraceLabels } from "./layers/NetTraceLabels";
+import { SelectionRectOverlay } from "../../../../shared/frontend/canvas/selection";
 import {
   areViasVisible,
   hiddenFootprintLayers,
@@ -615,12 +618,7 @@ interface PcbSceneProps {
   dragOverride?: ReadonlyMap<string, PcbPointMm> | null;
   highlightedNetId?: string | null;
   ratsnestVisible?: boolean;
-  /**
-   * Board view orientation. `"bottom"` flips the scene horizontally so the
-   * user sees the board "from below" (KiCad/Altium convention). Decoupled
-   * from the active routing layer — changing the routing layer mid-route
-   * never flips the view; only an explicit user toggle does.
-   */
+  /** Board view orientation. `"bottom"` mirrors the scene horizontally. */
   viewSide?: "top" | "bottom";
   /**
    * Active route session for dynamic ratsnest guidance. When set, the static
@@ -634,6 +632,26 @@ interface PcbSceneProps {
     /** Pad ids ("placementId|padNumber") to exclude — typically the route's start pad. */
     excludePadIds?: ReadonlySet<string>;
   } | null;
+  /**
+   * In-progress route preview. LineSegments2 cannot live under a negative-scale
+   * parent, so this is rendered outside the mirror group and pre-mirrored.
+   */
+  routePreview?: {
+    pointsNm: Array<{ x: number; y: number }>;
+    layer: PcbCopperLayerId;
+    widthMm: number;
+    pendingTailFromIndex: number;
+    violationSegmentIndexes: ReadonlyArray<number>;
+  } | null;
+  /**
+   * Rubber-band marquee overlay rendered inside the mirror group so selection
+   * rect aligns with board content in both top and bottom view.
+   */
+  marqueeOverlay?: {
+    a: { x: number; y: number } | null;
+    b: { x: number; y: number } | null;
+    color: string;
+  } | null;
 }
 
 export function PcbScene({
@@ -644,6 +662,8 @@ export function PcbScene({
   ratsnestVisible = true,
   viewSide = "top",
   routeGuide = null,
+  routePreview = null,
+  marqueeOverlay = null,
 }: PcbSceneProps): ReactElement {
   const invalidate = useThree((state) => state.invalidate);
 
@@ -655,6 +675,10 @@ export function PcbScene({
     dragOverride,
     highlightedNetId,
     ratsnestVisible,
+    viewSide,
+    routeGuide,
+    routePreview,
+    marqueeOverlay,
     invalidate,
   ]);
 
@@ -671,35 +695,28 @@ export function PcbScene({
     );
   }, [projection.placements, selectedPlacementIds, visibleLayers]);
 
-  // Bottom-view mirror: driven by `viewSide`, NOT by the active routing
-  // layer. Routing-layer changes (toolbar pill, hotkeys, smart-via) never
-  // flip the scene — only an explicit Flip-View toggle does. Pointer events
-  // compensate via the canvas's `interactionCoordinateTransform`.
+  // Bottom-view mirror: driven by the canvas's Top/Bottom layer switch.
+  // Pointer events compensate via `interactionCoordinateTransform`.
   const mirror = viewSide === "bottom";
   const sceneScaleX = mirror ? -1 : 1;
+  const activeCopperLayer: PcbCopperLayerId =
+    projection.board.activeLayer === "B.Cu" ? "B.Cu" : "F.Cu";
 
+  // LineSegments2 does not render correctly under a negative-scale parent
+  // group (the three.js addons line renderer breaks with negative determinant
+  // model matrices). TraceLayer and TracePreviewLayer are therefore rendered
+  // OUTSIDE the mirror group; they use the `mirror` prop to pre-negate X in
+  // their geometry instead. All other primitives stay inside the group.
   return (
-    <group scale={[sceneScaleX, 1, 1]}>
-      <FitBoardOnMount outline={projection.board.outline} />
-      <GridShader gridSize={1} majorEvery={5} alpha={0.16} majorAlpha={0.12} />
-      <BoardFill projection={projection} />
-      <BoardOutline projection={projection} visibleLayers={visibleLayers} />
-      {projection.placements.map((placement) => (
-        <PlacementRender
-          key={placement.id}
-          placement={placement}
-          positionOverrideMm={dragOverride?.get(placement.id)}
-          activeLayer={projection.board.activeLayer}
-          visibleLayers={visibleLayers}
-        />
-      ))}
+    <>
       {isCopperLayerVisible(visibleLayers, "B.Cu") ? (
         <TraceLayer
           traces={projection.traces}
           layer="B.Cu"
           highlightedNetId={highlightedNetId}
           selectedTraceIds={selection?.traceIds}
-          inactive={projection.board.activeLayer === "F.Cu"}
+          inactive={activeCopperLayer === "F.Cu"}
+          mirror={mirror}
         />
       ) : null}
       {isCopperLayerVisible(visibleLayers, "F.Cu") ? (
@@ -708,58 +725,94 @@ export function PcbScene({
           layer="F.Cu"
           highlightedNetId={highlightedNetId}
           selectedTraceIds={selection?.traceIds}
-          inactive={projection.board.activeLayer === "B.Cu"}
+          inactive={activeCopperLayer === "B.Cu"}
+          mirror={mirror}
         />
       ) : null}
-      {areViasVisible(visibleLayers) ? (
-        <ViaLayer
-          vias={projection.vias}
+      {routePreview ? (
+        <TracePreviewLayer
+          pointsNm={routePreview.pointsNm}
+          layer={routePreview.layer}
+          widthMm={routePreview.widthMm}
+          pendingTailFromIndex={routePreview.pendingTailFromIndex}
+          violationSegmentIndexes={routePreview.violationSegmentIndexes}
+          mirror={mirror}
+        />
+      ) : null}
+      <group scale={[sceneScaleX, 1, 1]}>
+        <FitBoardOnMount outline={projection.board.outline} />
+        <GridShader
+          gridSize={1}
+          majorEvery={5}
+          alpha={0.16}
+          majorAlpha={0.12}
+        />
+        <BoardFill projection={projection} />
+        <BoardOutline projection={projection} visibleLayers={visibleLayers} />
+        {projection.placements.map((placement) => (
+          <PlacementRender
+            key={placement.id}
+            placement={placement}
+            positionOverrideMm={dragOverride?.get(placement.id)}
+            activeLayer={projection.board.activeLayer}
+            visibleLayers={visibleLayers}
+          />
+        ))}
+        {areViasVisible(visibleLayers) ? (
+          <ViaLayer
+            vias={projection.vias}
+            highlightedNetId={highlightedNetId}
+            selectedViaIds={selection?.viaIds}
+            activeLayer={projection.board.activeLayer}
+          />
+        ) : null}
+        {isCopperLayerVisible(visibleLayers, "B.Cu") ? (
+          <NetTraceLabels
+            traces={projection.traces}
+            netNames={projection.netNames}
+            layer="B.Cu"
+            inactive={activeCopperLayer === "F.Cu"}
+            counterMirror={mirror}
+          />
+        ) : null}
+        {isCopperLayerVisible(visibleLayers, "F.Cu") ? (
+          <NetTraceLabels
+            traces={projection.traces}
+            netNames={projection.netNames}
+            layer="F.Cu"
+            inactive={activeCopperLayer === "B.Cu"}
+            counterMirror={false}
+          />
+        ) : null}
+        <RatsnestLayer
+          projection={projection}
+          selectedPlacementIds={selectedPlacementIds}
           highlightedNetId={highlightedNetId}
-          selectedViaIds={selection?.viaIds}
-          activeLayer={projection.board.activeLayer}
+          visible={ratsnestVisible}
+          suppressNetId={routeGuide?.netId}
         />
-      ) : null}
-      {isCopperLayerVisible(visibleLayers, "B.Cu") ? (
-        <NetTraceLabels
-          traces={projection.traces}
-          netNames={projection.netNames}
-          layer="B.Cu"
-          inactive={projection.board.activeLayer === "F.Cu"}
-          counterMirror={mirror}
+        {routeGuide ? (
+          <DynamicRatsnestGuide
+            ratsnest={projection.ratsnest}
+            cursorMm={routeGuide.cursorMm}
+            netId={routeGuide.netId}
+            excludePadIds={routeGuide.excludePadIds}
+            netClasses={projection.board.netClasses}
+          />
+        ) : null}
+        {selectedPlacements.map((placement) => (
+          <SelectionOutline
+            key={placement.id}
+            placement={placement}
+            positionOverrideMm={dragOverride?.get(placement.id)}
+          />
+        ))}
+        <SelectionRectOverlay
+          a={marqueeOverlay?.a ?? null}
+          b={marqueeOverlay?.b ?? null}
+          color={marqueeOverlay?.color ?? "#60a5fa"}
         />
-      ) : null}
-      {isCopperLayerVisible(visibleLayers, "F.Cu") ? (
-        <NetTraceLabels
-          traces={projection.traces}
-          netNames={projection.netNames}
-          layer="F.Cu"
-          inactive={projection.board.activeLayer === "B.Cu"}
-          counterMirror={false}
-        />
-      ) : null}
-      <RatsnestLayer
-        projection={projection}
-        selectedPlacementIds={selectedPlacementIds}
-        highlightedNetId={highlightedNetId}
-        visible={ratsnestVisible}
-        suppressNetId={routeGuide?.netId}
-      />
-      {routeGuide ? (
-        <DynamicRatsnestGuide
-          ratsnest={projection.ratsnest}
-          cursorMm={routeGuide.cursorMm}
-          netId={routeGuide.netId}
-          excludePadIds={routeGuide.excludePadIds}
-          netClasses={projection.board.netClasses}
-        />
-      ) : null}
-      {selectedPlacements.map((placement) => (
-        <SelectionOutline
-          key={placement.id}
-          placement={placement}
-          positionOverrideMm={dragOverride?.get(placement.id)}
-        />
-      ))}
-    </group>
+      </group>
+    </>
   );
 }

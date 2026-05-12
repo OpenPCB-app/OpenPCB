@@ -10,9 +10,9 @@ import {
 import { createPortal } from "react-dom";
 import type {
   DesignerCommand,
+  DesignerDispatchResult,
   PcbCopperLayerId,
   PcbPointMm,
-  PcbTraceSegmentMode,
 } from "../../../../sdks";
 import { nmToSceneMm } from "../../../../shared/frontend/canvas/coords";
 import { EdaCanvas } from "../../../../shared/frontend/canvas/interaction/EdaCanvas";
@@ -37,14 +37,11 @@ import {
   togglePlacement,
   type PcbSelection,
 } from "./pcb-selection";
-import {
-  SelectionRectOverlay,
-  useMarqueeSelection,
-} from "../../../../shared/frontend/canvas/selection";
+import { useMarqueeSelection } from "../../../../shared/frontend/canvas/selection";
 import { PcbScene } from "./PcbScene";
 import { PcbTopToolbar } from "./PcbTopToolbar";
 import { PcbBoardPanel } from "./PcbBoardPanel";
-import { TracePreviewLayer } from "./layers/TracePreviewLayer";
+import { PcbLayersPanel } from "./PcbLayersPanel";
 import { runLiveDrc, type DrcViolation } from "./drc/live-drc";
 import {
   initialRouteToolState,
@@ -86,6 +83,12 @@ function pointMmToNm(p: PcbPointMm): PointNm {
 
 type ToolMode = "select" | "route";
 
+function viewSideForCopperLayer(
+  layer: PcbCopperLayerId,
+): "top" | "bottom" {
+  return layer === "B.Cu" ? "bottom" : "top";
+}
+
 interface DragSession {
   primaryPlacementId: string;
   pointerOffsetMm: PcbPointMm;
@@ -100,10 +103,13 @@ interface PcbCanvasProps {
   backendURL?: string | null;
   moduleId: string;
   designId: string | null;
-  dispatchCommand: (command: DesignerCommand) => Promise<unknown>;
+  dispatchCommand: (
+    command: DesignerCommand,
+  ) => Promise<DesignerDispatchResult>;
   notifyExternalRevisionBump?: (revision: number) => void;
   onDrcCountChange?: (count: number) => void;
   boardPanelTarget?: HTMLElement | null;
+  layersPanelTarget?: HTMLElement | null;
 }
 
 export function PcbCanvas(props: PcbCanvasProps): ReactElement {
@@ -122,7 +128,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     routeToolReducer,
     initialRouteToolState,
   );
-  const [cursorMm, setCursorMm] = useState<PcbPointMm | null>(null);
+  const [cursorMm, setCursorMmState] = useState<PcbPointMm | null>(null);
+  const cursorMmRef = useRef<PcbPointMm | null>(null);
+  const setCursorMm = useCallback((next: PcbPointMm | null): void => {
+    cursorMmRef.current = next;
+    setCursorMmState(next);
+  }, []);
   // Viewport-relative cursor position (clientX/Y) — drives the route-mode
   // layer chip that follows the cursor so users can see active layer state
   // without looking at the toolbar.
@@ -139,8 +150,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   tracesRef.current = workspace.projection?.traces ?? [];
   const viasRef = useRef(workspace.projection?.vias ?? []);
   viasRef.current = workspace.projection?.vias ?? [];
-  const projectionRef = useRef(workspace.projection);
-  projectionRef.current = workspace.projection;
 
   const visibleLayers = useMemo(
     () => visibleLayerSet(workspace.projection?.board.visibleLayers ?? []),
@@ -222,6 +231,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     const a = workspace.projection?.board.activeLayer;
     return a === "B.Cu" ? "B.Cu" : "F.Cu";
   }, [workspace.projection?.board.activeLayer]);
+  const displayedCopperLayer: PcbCopperLayerId =
+    routeState.kind === "routing" ? routeState.session.layer : activeCopperLayer;
+  const mirrorActive = workspace.viewSide === "bottom";
 
   // Marquee/rubber-band selection. Uses the shared canvas hook so PCB and
   // schematic behave identically (KiCad direction-based window/crossing modes,
@@ -232,7 +244,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     emptySelection: emptyPcbSelection,
     getSelection: () => selectionRef.current,
     setSelection,
-    applyMarqueeHits: ({ rect, mode, baseSelection }) => {
+    applyMarqueeHits: ({ rect, mode: rawMode, baseSelection }) => {
+      // In bottom view the interaction transform negates X, so dragging
+      // right visually gives decreasing DB-x — invert window/crossing.
+      const mode = mirrorActive
+        ? rawMode === "window"
+          ? "crossing"
+          : "window"
+        : rawMode;
       const placementHit =
         mode === "window" ? placementContainedInRect : placementIntersectsRect;
       const traceHit =
@@ -282,7 +301,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       }
       return { pointMm: snapPointMm(cursor), netId: null, onPad: false };
     },
-    [padToNet],
+    [padToNet, visiblePlacements],
   );
 
   // Commit the current routing session as a `pcb_add_trace` command. Anchors
@@ -290,13 +309,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   // the path matches what the user sees as the ghost.
   const commitTrace = useCallback(
     async (session: RouteSession, finalAnchorNm: PointNm) => {
+      const committedAnchors = sessionAnchors(session);
       const path = buildPreviewPath(
-        [...sessionAnchors(session), finalAnchorNm],
+        [...committedAnchors, finalAnchorNm],
         session.segmentMode,
         session.posture,
       );
-      if (path.length < 2) return;
-      await workspace.addTrace({
+      if (path.length < 2) return null;
+      return await workspace.addTrace({
         layer: session.layer,
         pointsNm: path,
         widthMm: session.widthMm,
@@ -319,37 +339,56 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       session: RouteSession,
       cursorMm: PcbPointMm,
       targetLayer: PcbCopperLayerId,
-    ) => {
+    ): Promise<boolean> => {
       const snapped = snapPointMm(cursorMm);
       const viaCenterNm = pointMmToNm(snapped);
+      const committedAnchors = sessionAnchors(session);
+      const path = buildPreviewPath(
+        [...committedAnchors, viaCenterNm],
+        session.segmentMode,
+        session.posture,
+      );
+      const viaInput = {
+        centerMm: snapped,
+        netId: session.netId,
+        netClassId: session.netClassId,
+        ...(session.viaDiameterMmOverride !== undefined
+          ? { diameterMmOverride: session.viaDiameterMmOverride }
+          : {}),
+        ...(session.viaDrillMmOverride !== undefined
+          ? { drillMmOverride: session.viaDrillMmOverride }
+          : {}),
+      };
       try {
-        await commitTrace(session, viaCenterNm);
-        await workspace.addVia({
-          centerMm: snapped,
-          netId: session.netId,
-          netClassId: session.netClassId,
-          ...(session.viaDiameterMmOverride !== undefined
-            ? { diameterMmOverride: session.viaDiameterMmOverride }
-            : {}),
-          ...(session.viaDrillMmOverride !== undefined
-            ? { drillMmOverride: session.viaDrillMmOverride }
-            : {}),
-        });
+        if (path.length >= 2) {
+          await workspace.addTraceVia({
+            trace: {
+              layer: session.layer,
+              pointsNm: path,
+              widthMm: session.widthMm,
+              netId: session.netId,
+              netClassId: session.netClassId,
+              segmentMode: session.segmentMode,
+            },
+            via: viaInput,
+          });
+        } else {
+          await workspace.addVia(viaInput);
+        }
       } catch {
-        return;
+        return false;
       }
       dispatchRoute({
         kind: "rebase-layer",
         anchorNm: viaCenterNm,
         layer: targetLayer,
       });
-      // Routing context (session.layer) follows the via via `rebase-layer`.
-      // We deliberately do NOT call `workspace.setActiveLayer(targetLayer)`
-      // here — that would persist a board-wide layer change on every via,
-      // which both writes to the DB unnecessarily AND, when coupled with
-      // the bottom-view mirror, would flip the scene mid-route.
+      // Routing context follows the via via `rebase-layer`. The caller decides
+      // whether this via also represents a user-visible board active-layer
+      // switch (toolbar/hotkey) or just a local route rebase.
+      return true;
     },
-    [commitTrace, workspace],
+    [workspace],
   );
 
   // Width preset list (from board settings, fallback to net-class default).
@@ -358,6 +397,39 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     if (fromBoard.length > 0) return fromBoard;
     return defaultNetClass ? [defaultNetClass.traceWidthMm] : [0.25];
   }, [defaultNetClass, workspace.projection?.board.tracePresets]);
+
+  /**
+   * One canonical Top/Bottom switch path. Outside routing it persists the active
+   * copper layer and mirrors the view deterministically. During routing it
+   * inserts a smart via at the cursor before rebasing to the target layer.
+   */
+  const setCopperLayerAndView = useCallback(
+    async (targetLayer: PcbCopperLayerId, cursorOverrideMm?: PcbPointMm) => {
+      if (routeState.kind === "routing") {
+        const session = routeState.session;
+        if (session.layer === targetLayer) {
+          workspace.setViewSide(viewSideForCopperLayer(targetLayer));
+          if (activeCopperLayer !== targetLayer) {
+            await workspace.setActiveLayer(targetLayer);
+          }
+          return;
+        }
+        const viaCursor = cursorOverrideMm ?? cursorMmRef.current;
+        if (!viaCursor) return;
+        const placed = await placeSmartVia(session, viaCursor, targetLayer);
+        if (!placed) return;
+        workspace.setViewSide(viewSideForCopperLayer(targetLayer));
+        await workspace.setActiveLayer(targetLayer);
+        return;
+      }
+
+      workspace.setViewSide(viewSideForCopperLayer(targetLayer));
+      if (activeCopperLayer !== targetLayer) {
+        await workspace.setActiveLayer(targetLayer);
+      }
+    },
+    [activeCopperLayer, placeSmartVia, routeState, workspace],
+  );
 
   // Via-size presets surfaced in the toolbar dropdowns. Conservative starter
   // set covering common JLCPCB / PCBWay capabilities; user can type a custom.
@@ -607,7 +679,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         setDragSession(null);
       },
       onPointerLeave() {
-        setCursorMm(null);
+        // Keep the last board cursor during active routing so toolbar/context
+        // layer switches can still drop a smart via at the last route point.
+        if (routeState.kind !== "routing") setCursorMm(null);
         setCursorClientPx(null);
       },
       onContextMenu(event) {
@@ -647,7 +721,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                 label: "Top Copper (F.Cu)",
                 disabled: routeState.session.layer === "F.Cu",
                 onSelect: () => {
-                  void placeSmartVia(routeState.session, cursor, "F.Cu");
+                  void setCopperLayerAndView("F.Cu", cursor);
                 },
               },
               {
@@ -656,7 +730,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                 label: "Bottom Copper (B.Cu)",
                 disabled: routeState.session.layer === "B.Cu",
                 onSelect: () => {
-                  void placeSmartVia(routeState.session, cursor, "B.Cu");
+                  void setCopperLayerAndView("B.Cu", cursor);
                 },
               },
             ],
@@ -799,14 +873,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                     id: "set-top",
                     label: "Top layer (F.Cu)",
                     disabled: activeCopperLayer === "F.Cu",
-                    onSelect: () => workspace.setActiveLayer("F.Cu"),
+                    onSelect: () => void setCopperLayerAndView("F.Cu"),
                   },
                   {
                     kind: "action",
                     id: "set-bottom",
                     label: "Bottom layer (B.Cu)",
                     disabled: activeCopperLayer === "B.Cu",
-                    onSelect: () => workspace.setActiveLayer("B.Cu"),
+                    onSelect: () => void setCopperLayerAndView("B.Cu"),
                   },
                 ],
               },
@@ -845,10 +919,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     eventToMm,
     marquee,
     padToNet,
-    placeSmartVia,
     resolveAnchor,
     routeState,
     selection,
+    setCopperLayerAndView,
+    setCursorMm,
     toolMode,
     viasVisible,
     visibleLayers,
@@ -972,10 +1047,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         ) {
           event.preventDefault();
           if (!cursorMm) return;
-          const snapped = snapPointMm(cursorMm);
           const nextLayer: PcbCopperLayerId =
             session.layer === "F.Cu" ? "B.Cu" : "F.Cu";
-          void placeSmartVia(session, snapped, nextLayer);
+          void setCopperLayerAndView(nextLayer, snapPointMm(cursorMm));
           return;
         }
       }
@@ -991,7 +1065,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         (event.key === "1" || event.key === "PageUp")
       ) {
         event.preventDefault();
-        void workspace.setActiveLayer("F.Cu");
+        void setCopperLayerAndView("F.Cu");
         return;
       }
       if (
@@ -1001,7 +1075,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         (event.key === "2" || event.key === "PageDown")
       ) {
         event.preventDefault();
-        void workspace.setActiveLayer("B.Cu");
+        void setCopperLayerAndView("B.Cu");
         return;
       }
       if (event.key === "b" || event.key === "B") {
@@ -1059,6 +1133,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     marquee,
     routeState,
     selection,
+    setCopperLayerAndView,
     setSessionWidth,
     toolMode,
     workspace,
@@ -1088,8 +1163,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     if (routeState.kind !== "routing" || !cursorMm) return null;
     const session = routeState.session;
     const cursorAnchor = resolveAnchor(cursorMm);
+    const committedAnchors = sessionAnchors(session);
     const anchors = [
-      ...sessionAnchors(session),
+      ...committedAnchors,
       pointMmToNm(cursorAnchor.pointMm),
     ];
     const path = buildPreviewPath(
@@ -1099,7 +1175,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     );
     if (path.length < 2) return null;
     // Compute the index where the pending tail begins (last committed anchor).
-    const committedCount = sessionAnchors(session).length;
+    const committedCount = committedAnchors.length;
     return {
       pointsNm: path,
       layer: session.layer,
@@ -1119,31 +1195,70 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       layer: routeState.session.layer,
       traces: workspace.projection.traces,
       placements: workspace.projection.placements,
-      padNetMap: (() => {
-        const m = new Map<string, string>();
-        for (const seg of workspace.projection.ratsnest) {
-          m.set(`${seg.fromPlacementId}|${seg.fromPadNumber}`, seg.netId);
-          m.set(`${seg.toPlacementId}|${seg.toPadNumber}`, seg.netId);
-        }
-        return m;
-      })(),
+      padNetMap: padToNet,
       netClasses: workspace.projection.board.netClasses,
       netClassId: routeState.session.netClassId,
       designRules: workspace.projection.board.designRules,
     });
-  }, [routePreview, routeState, workspace.projection]);
+  }, [padToNet, routePreview, routeState, workspace.projection]);
 
   const onDrcCountChange = props.onDrcCountChange;
   useEffect(() => {
     onDrcCountChange?.(drcViolations.length);
   }, [drcViolations.length, onDrcCountChange]);
 
-  // Mirror the X axis when the user has explicitly toggled bottom-view.
-  // PcbScene wraps its tree in `<group scale={[-1,1,1]}>` whenever
-  // `viewSide === "bottom"`; pointer hits come back in post-flip world
-  // space, so negate X here to recover DB-space coords. Decoupled from
-  // the active routing layer — switching layers mid-route never flips.
-  const mirrorActive = workspace.viewSide === "bottom";
+  const routeStartPadId =
+    routeState.kind === "routing" ? routeState.session.startPadId : undefined;
+  const routeGuideExcludePadIds = useMemo(
+    () =>
+      routeStartPadId !== undefined ? new Set([routeStartPadId]) : undefined,
+    [routeStartPadId],
+  );
+
+  const sceneRouteGuide = useMemo(() => {
+    if (
+      routeState.kind !== "routing" ||
+      !routeState.session.netId ||
+      !cursorMm
+    ) {
+      return null;
+    }
+    return {
+      cursorMm,
+      netId: routeState.session.netId,
+      ...(routeGuideExcludePadIds !== undefined
+        ? { excludePadIds: routeGuideExcludePadIds }
+        : {}),
+    };
+  }, [cursorMm, routeGuideExcludePadIds, routeState]);
+
+  const sceneRoutePreview = useMemo(() => {
+    if (!routePreview) return null;
+    return {
+      pointsNm: routePreview.pointsNm,
+      layer: routePreview.layer,
+      widthMm:
+        routeState.kind === "routing"
+          ? routeState.session.widthMm
+          : (defaultNetClass?.traceWidthMm ?? 0.25),
+      pendingTailFromIndex: routePreview.pendingTailFromIndex,
+      violationSegmentIndexes: drcViolations.map((v) => v.segmentIndex),
+    };
+  }, [defaultNetClass?.traceWidthMm, drcViolations, routePreview, routeState]);
+
+  const sceneMarqueeOverlay = useMemo(
+    () => ({
+      a: marquee.overlayProps.a,
+      b: marquee.overlayProps.b,
+      color: marquee.overlayProps.color,
+    }),
+    [marquee.overlayProps.a, marquee.overlayProps.b, marquee.overlayProps.color],
+  );
+
+  // Mirror the X axis in bottom-view.
+  // PcbScene mirrors board content whenever `viewSide === "bottom"`; pointer
+  // hits come back in post-flip world space, so negate X here to recover
+  // DB-space coords.
   const interactionCoordinateTransform =
     useMemo<InteractionCoordinateTransform>(
       () => ({
@@ -1184,54 +1299,22 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             highlightedNetId={workspace.highlightedNetId}
             ratsnestVisible={workspace.ratsnestVisible}
             viewSide={workspace.viewSide}
-            routeGuide={
-              routeState.kind === "routing" &&
-              routeState.session.netId &&
-              cursorMm
-                ? {
-                    cursorMm,
-                    netId: routeState.session.netId,
-                    ...(routeState.session.startPadId !== undefined
-                      ? {
-                          excludePadIds: new Set([
-                            routeState.session.startPadId,
-                          ]),
-                        }
-                      : {}),
-                  }
-                : null
-            }
+            routeGuide={sceneRouteGuide}
+            routePreview={sceneRoutePreview}
+            marqueeOverlay={sceneMarqueeOverlay}
           />
-          <SelectionRectOverlay
-            a={marquee.overlayProps.a}
-            b={marquee.overlayProps.b}
-            color={marquee.overlayProps.color}
-          />
-          {routePreview ? (
-            <TracePreviewLayer
-              pointsNm={routePreview.pointsNm}
-              layer={routePreview.layer}
-              widthMm={
-                routeState.kind === "routing"
-                  ? routeState.session.widthMm
-                  : (defaultNetClass?.traceWidthMm ?? 0.25)
-              }
-              pendingTailFromIndex={routePreview.pendingTailFromIndex}
-              violationSegmentIndexes={drcViolations.map((v) => v.segmentIndex)}
-            />
-          ) : null}
         </EdaCanvas>
       ) : null}
       {workspace.projection ? (
         <div className="pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2">
           <div className="pointer-events-auto">
             <PcbTopToolbar
-              activeLayer={workspace.projection.board.activeLayer}
-              onSetActiveLayer={(layer) => void workspace.setActiveLayer(layer)}
-              visibleLayers={workspace.projection.board.visibleLayers}
-              onSetVisibleLayers={(layers) =>
-                void workspace.setVisibleLayers(layers)
-              }
+              activeLayer={displayedCopperLayer}
+              onSetActiveLayer={(layer) => {
+                if (layer === "F.Cu" || layer === "B.Cu") {
+                  void setCopperLayerAndView(layer);
+                }
+              }}
               selectedPlacementCount={selection.placementIds.size}
               onFlipSelection={() => {
                 const ids = [...selection.placementIds];
@@ -1242,7 +1325,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               ratsnestVisible={workspace.ratsnestVisible}
               onToggleRatsnest={workspace.toggleRatsnestVisible}
               viewSide={workspace.viewSide}
-              onToggleViewSide={workspace.toggleViewSide}
               routeMode={toolMode === "route"}
               routeSessionActive={routeState.kind === "routing"}
               onToggleRouteMode={() => {
@@ -1337,12 +1419,29 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           <span
             aria-hidden
             className="inline-block h-2 w-2 rounded-full"
-            style={{ backgroundColor: PCB_LAYER_COLORS[activeCopperLayer] }}
+            style={{ backgroundColor: PCB_LAYER_COLORS[displayedCopperLayer] }}
           />
-          {activeCopperLayer === "F.Cu" ? "Top" : "Bottom"}
+          {displayedCopperLayer === "F.Cu" ? "Top" : "Bottom"}
         </div>
       ) : null}
 
+      {workspace.projection && props.layersPanelTarget
+        ? createPortal(
+            <PcbLayersPanel
+              activeLayer={displayedCopperLayer}
+              onSetActiveLayer={(layer) => {
+                if (layer === "F.Cu" || layer === "B.Cu") {
+                  void setCopperLayerAndView(layer);
+                }
+              }}
+              visibleLayers={workspace.projection.board.visibleLayers}
+              onSetVisibleLayers={(layers) =>
+                void workspace.setVisibleLayers(layers)
+              }
+            />,
+            props.layersPanelTarget,
+          )
+        : null}
       {workspace.projection && props.boardPanelTarget
         ? createPortal(
             <PcbBoardPanel

@@ -12,6 +12,7 @@ import type {
   DesignerMovePartCommand,
   DesignerMovePrimitiveCommand,
   DesignerPcbAddTraceCommand,
+  DesignerPcbAddTraceViaCommand,
   DesignerPcbAddViaCommand,
   DesignerPcbDeleteTraceCommand,
   DesignerPcbDeleteViaCommand,
@@ -715,6 +716,41 @@ function parsePcbAddViaCommand(
   };
 }
 
+function parsePcbAddTraceViaCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbAddTraceViaCommand {
+  const traceRecord = asRecord(raw.trace);
+  if (!traceRecord) {
+    throw new ValidationError("command.trace must be an object");
+  }
+  const viaRecord = asRecord(raw.via);
+  if (!viaRecord) {
+    throw new ValidationError("command.via must be an object");
+  }
+  const parsedTrace = parsePcbAddTraceCommand(traceRecord);
+  const parsedVia = parsePcbAddViaCommand(viaRecord);
+  const trace = {
+    layer: parsedTrace.layer,
+    pointsNm: parsedTrace.pointsNm,
+    widthMm: parsedTrace.widthMm,
+    netId: parsedTrace.netId,
+    netClassId: parsedTrace.netClassId,
+    segmentMode: parsedTrace.segmentMode,
+  };
+  const via = {
+    centerMm: parsedVia.centerMm,
+    netId: parsedVia.netId,
+    netClassId: parsedVia.netClassId,
+    ...(parsedVia.diameterMmOverride !== undefined
+      ? { diameterMmOverride: parsedVia.diameterMmOverride }
+      : {}),
+    ...(parsedVia.drillMmOverride !== undefined
+      ? { drillMmOverride: parsedVia.drillMmOverride }
+      : {}),
+  };
+  return { type: "pcb_add_trace_via", trace, via };
+}
+
 function parsePcbDeleteTraceCommand(
   raw: Record<string, unknown>,
 ): DesignerPcbDeleteTraceCommand {
@@ -869,6 +905,9 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
       break;
     case "pcb_add_via":
       command = parsePcbAddViaCommand(commandRecord);
+      break;
+    case "pcb_add_trace_via":
+      command = parsePcbAddTraceViaCommand(commandRecord);
       break;
     case "pcb_delete_trace":
       command = parsePcbDeleteTraceCommand(commandRecord);

@@ -26,6 +26,12 @@ interface TraceLayerProps {
    * layer reads as the focused plane. Selected traces always stay full.
    */
   inactive?: boolean;
+  /**
+   * Pre-mirror X coordinates in the geometry. Use when the parent group does
+   * NOT apply a negative-X scale (LineSegments2 does not render correctly
+   * under negative-scale parent groups). Pass `true` when viewSide="bottom".
+   */
+  mirror?: boolean;
 }
 
 /**
@@ -45,6 +51,7 @@ export function TraceLayer({
   selectedTraceIds,
   layer,
   inactive = false,
+  mirror = false,
 }: TraceLayerProps): ReactElement | null {
   const renderOrder =
     layer === "F.Cu" ? RENDER_ORDER.FRONT_COPPER : RENDER_ORDER.BACK_COPPER;
@@ -54,9 +61,9 @@ export function TraceLayer({
   // Group traces by width × state. For each (widthMm, state) bucket we
   // produce one Float32Array of segment vertex positions (6 floats per segment).
   const buckets = useMemo(() => {
-    const layerTraces = traces.filter((t) => t.layer === layer);
     const scopingActive =
       highlightedNetId !== null && highlightedNetId !== undefined;
+    const xScale = mirror ? -1 : 1;
 
     type Bucket = { widthMm: number; positions: number[] };
     const bright = new Map<number, Bucket>();
@@ -75,16 +82,17 @@ export function TraceLayer({
         map.set(widthMm, bucket);
       }
       bucket.positions.push(
-        a.x * NM_TO_MM,
+        a.x * NM_TO_MM * xScale,
         a.y * NM_TO_MM,
         0,
-        b.x * NM_TO_MM,
+        b.x * NM_TO_MM * xScale,
         b.y * NM_TO_MM,
         0,
       );
     };
 
-    for (const trace of layerTraces) {
+    for (const trace of traces) {
+      if (trace.layer !== layer) continue;
       const isSelected = selectedTraceIds?.has(trace.id) ?? false;
       const isHighlighted = scopingActive && trace.netId === highlightedNetId;
       const targetMap = isSelected
@@ -114,7 +122,7 @@ export function TraceLayer({
       dim: toBuckets(dim),
       selected: toBuckets(selected),
     };
-  }, [traces, layer, highlightedNetId, selectedTraceIds]);
+  }, [traces, layer, highlightedNetId, selectedTraceIds, mirror]);
 
   return (
     <>
@@ -170,6 +178,7 @@ function FatLineGroup({
   renderOrder: number;
 }): ReactElement | null {
   const size = useThree((s) => s.size);
+  const dpr = useThree((s) => s.viewport.dpr);
 
   const geometry = useMemo(() => {
     const geom = new LineSegmentsGeometry();
@@ -190,22 +199,16 @@ function FatLineGroup({
     return mat;
   }, [color, widthMm, opacity]);
 
-  // LineMaterial needs the canvas resolution for screen-space pixel sizing
-  // (used for the antialiasing falloff even in worldUnits mode).
-  useEffect(() => {
-    material.resolution.set(size.width, size.height);
-  }, [material, size.width, size.height]);
+  material.resolution.set(size.width * dpr, size.height * dpr);
 
-  // Build the LineSegments2 instance once and update its geometry/material.
-  const line = useMemo(
-    () => new LineSegments2(geometry, material),
-    [geometry, material],
-  );
-
-  useEffect(() => {
-    line.computeLineDistances();
-    line.renderOrder = renderOrder;
-  }, [line, renderOrder]);
+  // Build with render state applied before the first demand-render frame.
+  const line = useMemo(() => {
+    const built = new LineSegments2(geometry, material);
+    built.computeLineDistances();
+    built.renderOrder = renderOrder;
+    built.frustumCulled = false;
+    return built;
+  }, [geometry, material, renderOrder]);
 
   useEffect(
     () => () => {
