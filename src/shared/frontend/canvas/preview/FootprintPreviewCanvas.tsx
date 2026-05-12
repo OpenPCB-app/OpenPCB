@@ -26,7 +26,7 @@ export function FootprintPreviewCanvas({
   fitToGeometryOnly = false,
   className,
   style,
-  backgroundColor = "#0f172a",
+  backgroundColor = "#131313",
   showGrid = true,
   fitPaddingPx = 24,
   minSpanMm = 2,

@@ -2,6 +2,13 @@
 @source "../../../modules";
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  /* Blue-grey slate overrides — light mode tint */
+  --color-slate-50: #f0f4fb;
+  --color-slate-100: #e4eaf4;
+  --color-slate-200: #d2dded;
+}
+
 :root {
   font-family:
     Inter,
@@ -11,12 +18,20 @@
     Roboto,
     sans-serif;
   color: #111827;
-  background-color: #f8fafc;
+  background-color: #f0f4fb;
+  --color-slate-50: #f0f4fb;
+  --color-slate-100: #e4eaf4;
+  --color-slate-200: #d2dded;
 }
 
 html.dark {
-  color: #e5e7eb;
-  background-color: #020617;
+  color: #e2e8f0;
+  background-color: #0f1520;
+  --color-slate-950: #0f1520;
+  --color-slate-900: #151e30;
+  --color-slate-800: #1a2438;
+  --color-slate-700: #2c3a55;
+  --color-slate-600: #3d5070;
 }
 
 html,

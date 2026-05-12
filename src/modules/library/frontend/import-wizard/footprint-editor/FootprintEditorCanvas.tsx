@@ -92,7 +92,7 @@ function EditorCanvasContent({
       readOnly={false}
       interactionHandler={handler}
       className="h-full w-full"
-      backgroundColor="#0f172a"
+      backgroundColor="#131313"
       initialZoom={DEFAULT_PCB_ZOOM}
       themeMode="dark"
     >

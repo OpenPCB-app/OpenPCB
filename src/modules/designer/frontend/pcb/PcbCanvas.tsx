@@ -1173,7 +1173,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           key={props.designId}
           testId="designer-pcb-canvas"
           initialZoom={DEFAULT_PCB_ZOOM}
-          backgroundColor="#020617"
+          backgroundColor="#131313"
           interactionHandler={handler}
           interactionCoordinateTransform={interactionCoordinateTransform}
         >

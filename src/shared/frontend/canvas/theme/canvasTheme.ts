@@ -89,7 +89,7 @@ const SCHEMATIC_LIGHT: SchematicTheme = {
 // at any zoom level. Inspired by KiCad Eagle-Dark structure with violet
 // substituted for the conventional green signal wire.
 const SCHEMATIC_DARK: SchematicTheme = {
-  background: "#0b1120",
+  background: "#131313",
   gridColor: "#94a3b8",
   gridAlpha: 0.16,
   gridMajorAlpha: 0.12,
@@ -129,8 +129,8 @@ const PREVIEW_DARK: PreviewTheme = {
 /** PCB canvas tokens — KiCad/Altium-conventional dark palette.
  * Single token set for both modes; the PCB tab is always dark. */
 const PCB_CANVAS_TOKENS: PcbCanvasTheme = {
-  background: "#0a0f1c",
-  boardFill: "#0a0f1c",
+  background: "#131313",
+  boardFill: "#111111",
   boardFillOpacity: 0.95,
   ratsnestDefault: "#e5e7eb",
   ratsnestPower: "#ef4444",
@@ -181,5 +181,5 @@ export function getCanvasTheme(mode: CanvasThemeMode): CanvasTheme {
 
 /** EdaCanvas default backgrounds per mode */
 export function getDefaultCanvasBackground(mode: CanvasThemeMode): string {
-  return mode === "light" ? "#f5f5f0" : "#0f172a";
+  return mode === "light" ? "#f5f5f0" : "#131313";
 }

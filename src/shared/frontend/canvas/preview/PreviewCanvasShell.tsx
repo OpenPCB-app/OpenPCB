@@ -118,7 +118,7 @@ export function PreviewCanvasShell({
   gridSize,
   className,
   style,
-  backgroundColor = "#0f172a",
+  backgroundColor = "#131313",
   showGrid = true,
   fitPaddingPx = 24,
   minSpanMm = 2,
