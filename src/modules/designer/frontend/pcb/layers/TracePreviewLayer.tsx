@@ -6,7 +6,7 @@ import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import type { PcbCopperLayerId } from "../../../../../sdks";
 import {
-  PCB_LAYER_COLORS,
+  PCB_TRACE_COLORS,
   RENDER_ORDER,
 } from "../../../../../shared/frontend/canvas/layers";
 
@@ -37,7 +37,7 @@ export function TracePreviewLayer({
   pendingTailFromIndex,
   violationSegmentIndexes,
 }: TracePreviewLayerProps): ReactElement | null {
-  const baseColor = PCB_LAYER_COLORS[layer];
+  const baseColor = PCB_TRACE_COLORS[layer];
   const split = useMemo(() => {
     if (pointsNm.length < 2)
       return { committed: null, pending: null, violation: null };

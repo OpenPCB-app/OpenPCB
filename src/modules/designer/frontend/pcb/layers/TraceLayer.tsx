@@ -20,6 +20,12 @@ interface TraceLayerProps {
   selectedTraceIds?: ReadonlySet<string>;
   /** Layer to render. */
   layer: PcbCopperLayerId;
+  /**
+   * True when this layer is not the user's active copper layer. Bright/dim
+   * traces are rendered at 50% opacity (Flux/KiCad convention) so the active
+   * layer reads as the focused plane. Selected traces always stay full.
+   */
+  inactive?: boolean;
 }
 
 /**
@@ -38,10 +44,12 @@ export function TraceLayer({
   highlightedNetId,
   selectedTraceIds,
   layer,
+  inactive = false,
 }: TraceLayerProps): ReactElement | null {
   const renderOrder =
     layer === "F.Cu" ? RENDER_ORDER.FRONT_COPPER : RENDER_ORDER.BACK_COPPER;
   const baseColor = PCB_TRACE_COLORS[layer];
+  const inactiveScale = inactive ? 0.5 : 1;
 
   // Group traces by width × state. For each (widthMm, state) bucket we
   // produce one Float32Array of segment vertex positions (6 floats per segment).
@@ -116,7 +124,7 @@ export function TraceLayer({
           positions={b.positions}
           widthMm={b.widthMm}
           color={baseColor}
-          opacity={1}
+          opacity={1 * inactiveScale}
           renderOrder={renderOrder}
         />
       ))}
@@ -126,7 +134,7 @@ export function TraceLayer({
           positions={b.positions}
           widthMm={b.widthMm}
           color={baseColor}
-          opacity={0.18}
+          opacity={0.18 * inactiveScale}
           renderOrder={renderOrder}
         />
       ))}
