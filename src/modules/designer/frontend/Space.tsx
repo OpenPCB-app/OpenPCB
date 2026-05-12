@@ -82,7 +82,7 @@ function DesignerSpaceInner({
   });
   const [leftWidth, setLeftWidth] = useState(300);
   const [zoomPercent, setZoomPercent] = useState(70);
-  const [gridVisible, setGridVisible] = useState(false);
+  const [gridVisible, setGridVisible] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [pcbDrcCount, setPcbDrcCount] = useState(0);
   const [pcbBoardSlot, setPcbBoardSlot] = useState<HTMLDivElement | null>(null);
@@ -314,6 +314,7 @@ function DesignerSpaceInner({
               <div className="pointer-events-auto">
                 <DesignerFloatingToolbar
                   gridVisible={gridVisible}
+                  onToggleGrid={() => setGridVisible((v) => !v)}
                   canUndo={state.canUndo}
                   canRedo={state.canRedo}
                   onUndo={() => void actions.undo()}
@@ -321,7 +322,6 @@ function DesignerSpaceInner({
                   onZoomIn={() => canvasRef.current?.zoomIn()}
                   onZoomOut={() => canvasRef.current?.zoomOut()}
                   onFit={() => canvasRef.current?.fit()}
-                  onToggleGrid={() => setGridVisible((value) => !value)}
                   onPlaceComponent={openComponentPalette}
                   onPlaceGnd={() => canvasRef.current?.armPrimitive("gnd")}
                   onPlacePwr={() => canvasRef.current?.armPrimitive("pwr")}
@@ -334,13 +334,6 @@ function DesignerSpaceInner({
           ) : null}
         </div>
       </div>
-
-      <DesignerStatusBar
-        gridMm={SCHEMATIC_GRID_MM}
-        zoom={zoomPercent}
-        selection={selectionSummary}
-        drcCount={state.activeView === "pcb" ? pcbDrcCount : undefined}
-      />
 
       <ComponentCommandPalette
         open={paletteOpen}

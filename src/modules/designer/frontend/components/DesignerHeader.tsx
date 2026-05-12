@@ -100,33 +100,37 @@ export function DesignerHeader({
         value={activeView}
         onValueChange={(value) => onViewChange(value as DesignerView)}
       >
-        <TabsList className="h-8 bg-slate-200/80 p-0.5 dark:bg-slate-800">
-          <TabsTrigger value="schem" className="px-3 py-1 text-xs">
+        <TabsList className="h-8 bg-transparent p-0.5 ">
+          <TabsTrigger
+            value="schem"
+            className="cursor-pointer rounded-sm px-3 py-1 text-xs data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-violet-900 dark:data-[state=active]:text-white data-[state=active]:text-black "
+          >
             Schem
           </TabsTrigger>
-          <TabsTrigger value="pcb" className="px-3 py-1 text-xs">
+          <TabsTrigger
+            value="pcb"
+            className="cursor-pointer rounded-sm px-3 py-1 text-xs data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-violet-900 dark:data-[state=active]:text-white data-[state=active]:text-black"
+          >
             PCB
           </TabsTrigger>
-          <TabsTrigger value="3d" className="px-3 py-1 text-xs" data-testid="designer-view-3d">
+          <TabsTrigger
+            value="3d"
+            className="cursor-pointer rounded-sm px-3 py-1 text-xs data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-violet-900 dark:data-[state=active]:text-white data-[state=active]:text-black"
+            data-testid="designer-view-3d"
+          >
             3D
           </TabsTrigger>
-          <TabsTrigger value="bom" className="px-3 py-1 text-xs">
+          <TabsTrigger
+            value="bom"
+            className="cursor-pointer rounded-sm px-3 py-1 text-xs data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-violet-900 dark:data-[state=active]:text-white data-[state=active]:text-black"
+          >
             BOM
           </TabsTrigger>
         </TabsList>
       </Tabs>
 
       <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={onOpenPalette}
-          disabled={!canOpenPalette}
-          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-          title="Place component (⌘/Ctrl K)"
-        >
-          <Search className="h-3.5 w-3.5" />
-          Place
-        </button>
+
       </div>
     </header>
   );

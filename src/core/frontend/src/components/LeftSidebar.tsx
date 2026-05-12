@@ -45,14 +45,18 @@ export function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
 
   return (
     <aside className="flex w-20 flex-col items-center justify-between border-r border-slate-200 bg-white py-3 dark:border-slate-700 dark:bg-slate-900">
-      <button
-        type="button"
-        aria-label="OpenPCB Home"
-        className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-        onClick={navigateHome}
-      >
-        OP
-      </button>
+      <div className="w-10 h-10">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="2"></rect>
+          <line x1="8" y1="8" x2="16" y2="16" stroke="currentColor" stroke-width="1.5"></line>
+          <circle cx="8" cy="8" r="1.5" fill="currentColor"></circle>
+          <circle cx="16" cy="8" r="1.5" fill="currentColor"></circle>
+          <circle cx="8" cy="16" r="1.5" fill="currentColor"></circle>
+          <circle cx="16" cy="16" r="1.5" fill="currentColor"></circle>
+        </svg>
+      </div>
+
+
 
       <nav className="flex flex-1 flex-col items-center justify-start pt-6">
         <button
@@ -100,14 +104,7 @@ export function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
           onClick={onSettingsClick}
         >
           <Settings className="h-6 w-6" strokeWidth={1.8} />
-          <span className="mt-1 text-xs leading-tight text-center text-slate-500 dark:text-slate-400">
-            Settings
-          </span>
         </button>
-        <div
-          className="h-10 w-10 rounded-full bg-slate-200 dark:bg-slate-700"
-          aria-hidden
-        />
       </div>
     </aside>
   );
