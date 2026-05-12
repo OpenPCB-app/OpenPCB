@@ -48,6 +48,13 @@ export interface RouteSession {
   posture: RoutePosture;
   viaDiameterMmOverride?: number;
   viaDrillMmOverride?: number;
+  /**
+   * `"placementId|padNumber"` of the pad the user clicked to start this
+   * route, when the start anchor was on a pad. Used by the dynamic ratsnest
+   * guide to exclude the source pad — the guide should always point at the
+   * destination, never back at the pad we already came from.
+   */
+  startPadId?: string;
 }
 
 export type RouteToolState =
@@ -64,6 +71,8 @@ export type RouteToolEvent =
       netClassId: string;
       widthMm: number;
       posture?: RoutePosture;
+      /** Pad the route originated from (`"placementId|padNumber"`), if any. */
+      startPadId?: string;
     }
   | { kind: "commit-waypoint"; pointNm: PointNm }
   /**
@@ -119,6 +128,9 @@ export function routeToolReducer(
           netClassId: event.netClassId,
           widthMm: event.widthMm,
           posture: event.posture ?? "auto",
+          ...(event.startPadId !== undefined
+            ? { startPadId: event.startPadId }
+            : {}),
         },
       };
     case "cancel":

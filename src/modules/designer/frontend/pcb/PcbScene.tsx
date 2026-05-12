@@ -21,6 +21,7 @@ import {
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
 import { TraceLayer } from "./layers/TraceLayer";
 import { ViaLayer } from "./layers/ViaLayer";
+import { NetTraceLabels } from "./layers/NetTraceLabels";
 import {
   areViasVisible,
   hiddenFootprintLayers,
@@ -105,6 +106,11 @@ interface RatsnestLayerProps {
   selectedPlacementIds?: ReadonlySet<string>;
   highlightedNetId?: string | null;
   visible: boolean;
+  /**
+   * When set, segments matching this net id are skipped — used during route
+   * mode so the static ratsnest doesn't fight with the dynamic cursor-guide.
+   */
+  suppressNetId?: string | null;
 }
 
 interface RatsnestGroup {
@@ -120,6 +126,7 @@ function RatsnestLayer({
   selectedPlacementIds,
   highlightedNetId,
   visible,
+  suppressNetId,
 }: RatsnestLayerProps): ReactElement | null {
   // Net classes by id → color (with sane fallback so a stale class id doesn't drop a segment).
   const classColors = useMemo(() => {
@@ -134,6 +141,7 @@ function RatsnestLayer({
   const groups = useMemo(() => {
     const byColor = new Map<string, { bright: number[]; dim: number[] }>();
     for (const seg of projection.ratsnest) {
+      if (suppressNetId && seg.netId === suppressNetId) continue;
       const color = classColors.get(seg.netClassId) ?? fallbackColor;
       let bucket = byColor.get(color);
       if (!bucket) {
@@ -172,6 +180,7 @@ function RatsnestLayer({
     classColors,
     highlightedNetId,
     selectedPlacementIds,
+    suppressNetId,
   ]);
 
   if (!visible || groups.length === 0) return null;
@@ -471,6 +480,107 @@ function SelectionOutlineMaterial(): ReactElement {
   );
 }
 
+/**
+ * While routing, draws a single dashed airwire from the cursor to the closest
+ * pad on the active net (excluding `excludePadIds`). Mirrors the Flux.ai /
+ * KiCad behaviour where the ratsnest "follows" the cursor as the user routes.
+ */
+function DynamicRatsnestGuide({
+  ratsnest,
+  cursorMm,
+  netId,
+  excludePadIds,
+  netClasses,
+}: {
+  ratsnest: ReadonlyArray<{
+    netId: string;
+    netClassId: string;
+    fromMm: PcbPointMm;
+    toMm: PcbPointMm;
+    fromPlacementId: string;
+    fromPadNumber: string;
+    toPlacementId: string;
+    toPadNumber: string;
+  }>;
+  cursorMm: PcbPointMm;
+  netId: string;
+  excludePadIds?: ReadonlySet<string>;
+  netClasses: ReadonlyArray<{ id: string; color: string }>;
+}): ReactElement | null {
+  const guide = useMemo(() => {
+    type Pad = {
+      id: string;
+      x: number;
+      y: number;
+      netClassId: string;
+    };
+    const pads = new Map<string, Pad>();
+    for (const seg of ratsnest) {
+      if (seg.netId !== netId) continue;
+      const fromKey = `${seg.fromPlacementId}|${seg.fromPadNumber}`;
+      const toKey = `${seg.toPlacementId}|${seg.toPadNumber}`;
+      if (!pads.has(fromKey)) {
+        pads.set(fromKey, {
+          id: fromKey,
+          x: seg.fromMm.x,
+          y: seg.fromMm.y,
+          netClassId: seg.netClassId,
+        });
+      }
+      if (!pads.has(toKey)) {
+        pads.set(toKey, {
+          id: toKey,
+          x: seg.toMm.x,
+          y: seg.toMm.y,
+          netClassId: seg.netClassId,
+        });
+      }
+    }
+    let closest: Pad | null = null;
+    let bestDistSq = Infinity;
+    for (const pad of pads.values()) {
+      if (excludePadIds?.has(pad.id)) continue;
+      const dx = pad.x - cursorMm.x;
+      const dy = pad.y - cursorMm.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < bestDistSq) {
+        bestDistSq = distSq;
+        closest = pad;
+      }
+    }
+    if (!closest) return null;
+    const cls = netClasses.find((c) => c.id === closest!.netClassId);
+    return {
+      from: cursorMm,
+      to: { x: closest.x, y: closest.y },
+      color: cls?.color ?? "#e5e7eb",
+    };
+  }, [ratsnest, cursorMm, netId, excludePadIds, netClasses]);
+
+  const geom = useMemo(() => {
+    if (!guide) return null;
+    const g = new THREE.BufferGeometry();
+    const positions = new Float32Array([
+      guide.from.x,
+      guide.from.y,
+      0,
+      guide.to.x,
+      guide.to.y,
+      0,
+    ]);
+    g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    return g;
+  }, [guide]);
+  useEffect(
+    () => () => {
+      geom?.dispose();
+    },
+    [geom],
+  );
+  if (!guide || !geom) return null;
+  return <DashedLineSegments geometry={geom} color={guide.color} opacity={1} />;
+}
+
 interface PcbSceneProps {
   projection: DesignerPcbProjection;
   selection?: PcbSelection;
@@ -478,6 +588,25 @@ interface PcbSceneProps {
   dragOverride?: ReadonlyMap<string, PcbPointMm> | null;
   highlightedNetId?: string | null;
   ratsnestVisible?: boolean;
+  /**
+   * Board view orientation. `"bottom"` flips the scene horizontally so the
+   * user sees the board "from below" (KiCad/Altium convention). Decoupled
+   * from the active routing layer — changing the routing layer mid-route
+   * never flips the view; only an explicit user toggle does.
+   */
+  viewSide?: "top" | "bottom";
+  /**
+   * Active route session for dynamic ratsnest guidance. When set, the static
+   * ratsnest segments anchored at the route's start pad are hidden and a
+   * single dashed airwire is drawn from `cursorMm` to the closest other pad
+   * on `netId`. Mirrors Flux.ai's cursor-tracking guide.
+   */
+  routeGuide?: {
+    cursorMm: PcbPointMm;
+    netId: string;
+    /** Pad ids ("placementId|padNumber") to exclude — typically the route's start pad. */
+    excludePadIds?: ReadonlySet<string>;
+  } | null;
 }
 
 export function PcbScene({
@@ -486,6 +615,8 @@ export function PcbScene({
   dragOverride,
   highlightedNetId,
   ratsnestVisible = true,
+  viewSide = "top",
+  routeGuide = null,
 }: PcbSceneProps): ReactElement {
   const invalidate = useThree((state) => state.invalidate);
 
@@ -508,12 +639,20 @@ export function PcbScene({
   const selectedPlacements = useMemo(() => {
     if (!selectedPlacementIds || selectedPlacementIds.size === 0) return [];
     return projection.placements.filter(
-      (p) => selectedPlacementIds.has(p.id) && isPlacementVisible(visibleLayers, p),
+      (p) =>
+        selectedPlacementIds.has(p.id) && isPlacementVisible(visibleLayers, p),
     );
   }, [projection.placements, selectedPlacementIds, visibleLayers]);
 
+  // Bottom-view mirror: driven by `viewSide`, NOT by the active routing
+  // layer. Routing-layer changes (toolbar pill, hotkeys, smart-via) never
+  // flip the scene — only an explicit Flip-View toggle does. Pointer events
+  // compensate via the canvas's `interactionCoordinateTransform`.
+  const mirror = viewSide === "bottom";
+  const sceneScaleX = mirror ? -1 : 1;
+
   return (
-    <>
+    <group scale={[sceneScaleX, 1, 1]}>
       <GridShader gridSize={1} majorEvery={5} alpha={0.06} majorAlpha={0.04} />
       <BoardFill projection={projection} />
       <BoardOutline projection={projection} visibleLayers={visibleLayers} />
@@ -532,6 +671,7 @@ export function PcbScene({
           layer="B.Cu"
           highlightedNetId={highlightedNetId}
           selectedTraceIds={selection?.traceIds}
+          inactive={projection.board.activeLayer === "F.Cu"}
         />
       ) : null}
       {isCopperLayerVisible(visibleLayers, "F.Cu") ? (
@@ -540,6 +680,7 @@ export function PcbScene({
           layer="F.Cu"
           highlightedNetId={highlightedNetId}
           selectedTraceIds={selection?.traceIds}
+          inactive={projection.board.activeLayer === "B.Cu"}
         />
       ) : null}
       {areViasVisible(visibleLayers) ? (
@@ -547,6 +688,25 @@ export function PcbScene({
           vias={projection.vias}
           highlightedNetId={highlightedNetId}
           selectedViaIds={selection?.viaIds}
+          activeLayer={projection.board.activeLayer}
+        />
+      ) : null}
+      {isCopperLayerVisible(visibleLayers, "B.Cu") ? (
+        <NetTraceLabels
+          traces={projection.traces}
+          netNames={projection.netNames}
+          layer="B.Cu"
+          inactive={projection.board.activeLayer === "F.Cu"}
+          counterMirror={mirror}
+        />
+      ) : null}
+      {isCopperLayerVisible(visibleLayers, "F.Cu") ? (
+        <NetTraceLabels
+          traces={projection.traces}
+          netNames={projection.netNames}
+          layer="F.Cu"
+          inactive={projection.board.activeLayer === "B.Cu"}
+          counterMirror={false}
         />
       ) : null}
       <RatsnestLayer
@@ -554,7 +714,17 @@ export function PcbScene({
         selectedPlacementIds={selectedPlacementIds}
         highlightedNetId={highlightedNetId}
         visible={ratsnestVisible}
+        suppressNetId={routeGuide?.netId}
       />
+      {routeGuide ? (
+        <DynamicRatsnestGuide
+          ratsnest={projection.ratsnest}
+          cursorMm={routeGuide.cursorMm}
+          netId={routeGuide.netId}
+          excludePadIds={routeGuide.excludePadIds}
+          netClasses={projection.board.netClasses}
+        />
+      ) : null}
       {selectedPlacements.map((placement) => (
         <SelectionOutline
           key={placement.id}
@@ -562,6 +732,6 @@ export function PcbScene({
           positionOverrideMm={dragOverride?.get(placement.id)}
         />
       ))}
-    </>
+    </group>
   );
 }

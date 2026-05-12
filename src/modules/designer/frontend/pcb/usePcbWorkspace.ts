@@ -48,6 +48,12 @@ export function usePcbWorkspace(params: {
   const pinNetStore = useDesignerHighlight((s) => s.pinNet);
   const clearHighlightStore = useDesignerHighlight((s) => s.clear);
   const [ratsnestVisible, setRatsnestVisible] = useState(true);
+  // View side is purely a UI presentation flag — when "bottom", the canvas
+  // mirrors the scene horizontally so the user sees the board "from below"
+  // (KiCad/Altium/Flux convention). Decoupled from the active routing layer:
+  // changing the routing layer (via toolbar pill / hotkey / smart-via) must
+  // NEVER flip the view; only the explicit Flip-View toggle does.
+  const [viewSide, setViewSide] = useState<"top" | "bottom">("top");
 
   const refresh = useCallback(async () => {
     if (!designId) {
@@ -271,6 +277,10 @@ export function usePcbWorkspace(params: {
     setRatsnestVisible((v) => !v);
   }, []);
 
+  const toggleViewSide = useCallback(() => {
+    setViewSide((v) => (v === "top" ? "bottom" : "top"));
+  }, []);
+
   const addTrace = useCallback(
     async (input: {
       layer: PcbCopperLayerId;
@@ -374,6 +384,8 @@ export function usePcbWorkspace(params: {
     clearHighlight,
     ratsnestVisible,
     toggleRatsnestVisible,
+    viewSide,
+    toggleViewSide,
     refresh,
     updateBoardSize,
     setActiveLayer,

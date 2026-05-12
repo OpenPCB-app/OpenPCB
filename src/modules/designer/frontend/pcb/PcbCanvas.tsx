@@ -17,9 +17,11 @@ import type {
 import { nmToSceneMm } from "../../../../shared/frontend/canvas/coords";
 import { EdaCanvas } from "../../../../shared/frontend/canvas/interaction/EdaCanvas";
 import type {
+  InteractionCoordinateTransform,
   InteractionEvent,
   InteractionHandler,
 } from "../../../../shared/frontend/canvas/interaction/types";
+import { sceneMmToNm } from "../../../../shared/frontend/canvas/coords";
 import { hitPad, hitPlacement, hitTrace, hitVia } from "./pcb-hit";
 import {
   placementContainedInRect,
@@ -177,9 +179,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         .filter((t) => isTraceVisible(visibleLayers, t))
         .map((t) => t.id),
     );
-    const viaIds = new Set(
-      viasVisible ? projection.vias.map((v) => v.id) : [],
-    );
+    const viaIds = new Set(viasVisible ? projection.vias.map((v) => v.id) : []);
     setSelection((prev) => {
       const np = new Set(
         [...prev.placementIds].filter((id) => placementIds.has(id)),
@@ -272,12 +272,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       pointMm: PcbPointMm;
       netId: string | null;
       onPad: boolean;
+      padId?: string;
     } => {
       const pad = hitPad(visiblePlacements, cursor);
       if (pad) {
-        const netId =
-          padToNet.get(`${pad.placementId}|${pad.padNumber}`) ?? null;
-        return { pointMm: pad.worldMm, netId, onPad: true };
+        const padId = `${pad.placementId}|${pad.padNumber}`;
+        const netId = padToNet.get(padId) ?? null;
+        return { pointMm: pad.worldMm, netId, onPad: true, padId };
       }
       return { pointMm: snapPointMm(cursor), netId: null, onPad: false };
     },
@@ -342,7 +343,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         anchorNm: viaCenterNm,
         layer: targetLayer,
       });
-      await workspace.setActiveLayer(targetLayer);
+      // Routing context (session.layer) follows the via via `rebase-layer`.
+      // We deliberately do NOT call `workspace.setActiveLayer(targetLayer)`
+      // here — that would persist a board-wide layer change on every via,
+      // which both writes to the DB unnecessarily AND, when coupled with
+      // the bottom-view mirror, would flip the scene mid-route.
     },
     [commitTrace, workspace],
   );
@@ -438,6 +443,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               netId: anchor.netId,
               netClassId: defaultNetClass.id,
               widthMm: defaultNetClass.traceWidthMm,
+              ...(anchor.padId !== undefined
+                ? { startPadId: anchor.padId }
+                : {}),
             });
             return;
           }
@@ -654,7 +662,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             ],
           });
         } else {
-          const traceHit = isCopperLayerVisible(visibleLayers, activeCopperLayer)
+          const traceHit = isCopperLayerVisible(
+            visibleLayers,
+            activeCopperLayer,
+          )
             ? hitTrace(tracesRef.current, cursor, activeCopperLayer)
             : null;
           const viaHit = viasVisible ? hitVia(viasRef.current, cursor) : null;
@@ -950,10 +961,15 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           });
           return;
         }
-        if (event.key === "+" || event.key === "-") {
-          // Smart Via: commit segments-so-far on the current layer, drop a via
-          // at the cursor, then rebase the session onto the opposite layer.
-          // Mirrors the width-change commit-then-rebase pattern above.
+        // Smart Via: V (KiCad/Flux universal) or +/- (alias for back-compat).
+        // Commits segments-so-far on the current layer, drops a via at the
+        // cursor, then rebases the session onto the opposite layer.
+        if (
+          event.key === "+" ||
+          event.key === "-" ||
+          event.key === "v" ||
+          event.key === "V"
+        ) {
           event.preventDefault();
           if (!cursorMm) return;
           const snapped = snapPointMm(cursorMm);
@@ -962,29 +978,32 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           void placeSmartVia(session, snapped, nextLayer);
           return;
         }
-        if (event.key === "v" || event.key === "V") {
-          // Drop via without layer change.
-          event.preventDefault();
-          if (!cursorMm) return;
-          const snapped = snapPointMm(cursorMm);
-          void workspace
-            .addVia({
-              centerMm: snapped,
-              netId: session.netId,
-              netClassId: session.netClassId,
-              ...(session.viaDiameterMmOverride !== undefined
-                ? { diameterMmOverride: session.viaDiameterMmOverride }
-                : {}),
-              ...(session.viaDrillMmOverride !== undefined
-                ? { drillMmOverride: session.viaDrillMmOverride }
-                : {}),
-            })
-            .catch(() => undefined);
-          return;
-        }
       }
 
       // Global keys.
+      // Layer-switch hotkeys: 1=F.Cu, 2=B.Cu, PgUp=F.Cu, PgDn=B.Cu (KiCad
+      // alias). Fire globally so the user can switch active copper layer
+      // outside route mode too.
+      if (
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        (event.key === "1" || event.key === "PageUp")
+      ) {
+        event.preventDefault();
+        void workspace.setActiveLayer("F.Cu");
+        return;
+      }
+      if (
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        (event.key === "2" || event.key === "PageDown")
+      ) {
+        event.preventDefault();
+        void workspace.setActiveLayer("B.Cu");
+        return;
+      }
       if (event.key === "b" || event.key === "B") {
         event.preventDefault();
         workspace.toggleRatsnestVisible();
@@ -1119,6 +1138,26 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     onDrcCountChange?.(drcViolations.length);
   }, [drcViolations.length, onDrcCountChange]);
 
+  // Mirror the X axis when the user has explicitly toggled bottom-view.
+  // PcbScene wraps its tree in `<group scale={[-1,1,1]}>` whenever
+  // `viewSide === "bottom"`; pointer hits come back in post-flip world
+  // space, so negate X here to recover DB-space coords. Decoupled from
+  // the active routing layer — switching layers mid-route never flips.
+  const mirrorActive = workspace.viewSide === "bottom";
+  const interactionCoordinateTransform =
+    useMemo<InteractionCoordinateTransform>(
+      () => ({
+        sceneUnit: "mm",
+        worldUnit: "nm",
+        yAxis: "up",
+        scenePointToWorldPoint: (p) => ({
+          x: sceneMmToNm((mirrorActive ? -p.x : p.x) as typeof p.x),
+          y: sceneMmToNm(p.y),
+        }),
+      }),
+      [mirrorActive],
+    );
+
   if (!props.designId) {
     return (
       <div className="flex h-full items-center justify-center bg-slate-950 text-sm text-slate-500">
@@ -1136,6 +1175,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           initialZoom={DEFAULT_PCB_ZOOM}
           backgroundColor="#020617"
           interactionHandler={handler}
+          interactionCoordinateTransform={interactionCoordinateTransform}
         >
           <PcbScene
             projection={workspace.projection}
@@ -1143,6 +1183,24 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             dragOverride={dragOverride}
             highlightedNetId={workspace.highlightedNetId}
             ratsnestVisible={workspace.ratsnestVisible}
+            viewSide={workspace.viewSide}
+            routeGuide={
+              routeState.kind === "routing" &&
+              routeState.session.netId &&
+              cursorMm
+                ? {
+                    cursorMm,
+                    netId: routeState.session.netId,
+                    ...(routeState.session.startPadId !== undefined
+                      ? {
+                          excludePadIds: new Set([
+                            routeState.session.startPadId,
+                          ]),
+                        }
+                      : {}),
+                  }
+                : null
+            }
           />
           <SelectionRectOverlay
             a={marquee.overlayProps.a}
@@ -1183,6 +1241,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               }}
               ratsnestVisible={workspace.ratsnestVisible}
               onToggleRatsnest={workspace.toggleRatsnestVisible}
+              viewSide={workspace.viewSide}
+              onToggleViewSide={workspace.toggleViewSide}
               routeMode={toolMode === "route"}
               routeSessionActive={routeState.kind === "routing"}
               onToggleRouteMode={() => {
@@ -1240,6 +1300,16 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                   drillMmOverride: mm,
                 })
               }
+              onPickViaPreset={(preset) => {
+                dispatchRoute({
+                  kind: "set-via-diameter",
+                  diameterMmOverride: preset.diameterMm,
+                });
+                dispatchRoute({
+                  kind: "set-via-drill",
+                  drillMmOverride: preset.drillMm,
+                });
+              }}
               posture={
                 routeState.kind === "routing"
                   ? routeState.session.posture
