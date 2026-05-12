@@ -147,9 +147,12 @@ export function SymbolRenderLayer({
     [model.pins],
   );
 
-  const referenceLabel = model.labels.find((label) => label.role === "reference");
+  const referenceLabel = model.labels.find(
+    (label) => label.role === "reference",
+  );
   const hasValueLabel = model.labels.some((label) => label.role === "value");
-  const hasInstanceValue = valueText !== undefined && valueText.trim().length > 0;
+  const hasInstanceValue =
+    valueText !== undefined && valueText.trim().length > 0;
   const fallbackValueLabel: PreviewLabel | null = hasInstanceValue
     ? {
         id: "instance:value",
@@ -208,7 +211,7 @@ export function SymbolRenderLayer({
 
     const labelText =
       label.role === "reference"
-        ? referenceText ?? label.text
+        ? (referenceText ?? label.text)
         : label.role === "value"
           ? label.text
           : label.text;
@@ -254,6 +257,7 @@ export function SymbolRenderLayer({
             color={pt.symbolFill}
             depthTest={false}
             depthWrite={false}
+            transparent
             side={THREE.DoubleSide}
           />
         </mesh>
@@ -276,7 +280,9 @@ export function SymbolRenderLayer({
       />
 
       {model.labels.map((label) => renderLabel(label, label.id))}
-      {fallbackValueLabel ? renderLabel(fallbackValueLabel, fallbackValueLabel.id) : null}
+      {fallbackValueLabel
+        ? renderLabel(fallbackValueLabel, fallbackValueLabel.id)
+        : null}
     </>
   );
 }

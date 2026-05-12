@@ -58,6 +58,7 @@ export function PadInstances({
       new THREE.MeshBasicMaterial({
         depthTest: enableDepthTest,
         depthWrite: enableDepthTest,
+        transparent: !enableDepthTest,
         side: THREE.DoubleSide,
       }),
     [enableDepthTest],

@@ -60,7 +60,7 @@ export function EDAText({
       renderOrder={renderOrder}
       material-depthTest={false}
       material-depthWrite={false}
-      material-transparent={opacity < 1}
+      material-transparent={true}
       material-opacity={opacity}
       outlineWidth={outlineWidth}
       outlineColor={outlineColor}

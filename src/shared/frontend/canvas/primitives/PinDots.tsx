@@ -37,11 +37,15 @@ export function PinDots({
       new THREE.MeshBasicMaterial({
         depthTest: false,
         depthWrite: false,
+        transparent: true,
       }),
     [],
   );
 
-  const defaultCol = useMemo(() => new THREE.Color(defaultColor), [defaultColor]);
+  const defaultCol = useMemo(
+    () => new THREE.Color(defaultColor),
+    [defaultColor],
+  );
   const connectedCol = useMemo(
     () => new THREE.Color(connectedColor),
     [connectedColor],

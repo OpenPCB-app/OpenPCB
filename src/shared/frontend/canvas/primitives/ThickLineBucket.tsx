@@ -54,7 +54,7 @@ export function ThickLineBucket({
       worldUnits: true,
       depthTest: false,
       depthWrite: false,
-      transparent: opacity < 1,
+      transparent: true,
       opacity,
     });
     material.resolution.set(size.width * dpr, size.height * dpr);

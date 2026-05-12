@@ -256,7 +256,7 @@ export function FootprintRenderLayer({
               color={color}
               depthTest={enableDepthTest}
               depthWrite={enableDepthTest}
-              transparent={isDimmed}
+              transparent={!enableDepthTest || isDimmed}
               opacity={isDimmed ? 0.3 : 1}
             />
           </lineSegments>
@@ -283,6 +283,7 @@ export function FootprintRenderLayer({
               color={pt.footprintDrill}
               depthTest={enableDepthTest}
               depthWrite={enableDepthTest}
+              transparent={!enableDepthTest}
             />
           </mesh>
         ) : null,
