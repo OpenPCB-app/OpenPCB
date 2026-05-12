@@ -3,6 +3,7 @@ import { Cable, Eye, FlipHorizontal2, Network, Sparkles } from "lucide-react";
 import type { PcbLayerId, PcbTraceSegmentMode } from "../../../../sdks";
 import { PCB_LAYER_COLORS } from "../../../../shared/frontend/canvas/layers";
 import type { RoutePosture } from "./tools/route-tool-state";
+import { VIA_PRESETS, type PcbViaPreset } from "../../backend/pcb/via-presets";
 
 interface PcbTopToolbarProps {
   activeLayer: PcbLayerId;
@@ -13,6 +14,10 @@ interface PcbTopToolbarProps {
   onFlipSelection: () => void;
   ratsnestVisible: boolean;
   onToggleRatsnest: () => void;
+  /** Current board view orientation. `"bottom"` mirrors the scene horizontally. */
+  viewSide: "top" | "bottom";
+  /** Toggle between top-view and bottom-view (mirrored). */
+  onToggleViewSide: () => void;
   routeMode: boolean;
   routeSessionActive: boolean;
   onToggleRouteMode: () => void;
@@ -33,6 +38,11 @@ interface PcbTopToolbarProps {
   viaDrillPresets: ReadonlyArray<number>;
   onPickViaDiameter: (mm: number | undefined) => void;
   onPickViaDrill: (mm: number | undefined) => void;
+  /**
+   * Apply a paired via preset (drill + diameter together). Net-class default
+   * remains the implicit fallback when both overrides are cleared.
+   */
+  onPickViaPreset: (preset: PcbViaPreset) => void;
   posture: RoutePosture;
   onCyclePosture: () => void;
 }
@@ -344,6 +354,88 @@ function ViaSizeDropdown({
   );
 }
 
+function ViaPresetDropdown({
+  activeDiameterMm,
+  activeDrillMm,
+  onPick,
+}: {
+  activeDiameterMm: number;
+  activeDrillMm: number;
+  onPick: (preset: PcbViaPreset) => void;
+}): ReactElement {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const matched = VIA_PRESETS.find(
+    (p) =>
+      Math.abs(p.diameterMm - activeDiameterMm) < 1e-6 &&
+      Math.abs(p.drillMm - activeDrillMm) < 1e-6,
+  );
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        title="Via preset (paired drill + diameter)"
+        className="inline-flex h-7 items-center gap-1 rounded-md border border-transparent px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+      >
+        <span className="text-slate-700 dark:text-slate-200">
+          {matched?.name ?? "Custom"}
+        </span>
+        <span aria-hidden className="text-slate-400">
+          ▾
+        </span>
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-full z-30 mt-1 min-w-[260px] overflow-hidden rounded-md border border-slate-200 bg-white text-xs shadow-xl dark:border-slate-700 dark:bg-slate-950">
+          {VIA_PRESETS.map((preset) => {
+            const active = matched?.id === preset.id;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => {
+                  onPick(preset);
+                  setOpen(false);
+                }}
+                className={`block w-full px-3 py-1.5 text-left ${
+                  active
+                    ? "bg-violet-600 text-white"
+                    : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                }`}
+              >
+                <div className="flex items-baseline justify-between gap-3 font-mono">
+                  <span className="font-sans font-medium">{preset.name}</span>
+                  <span>
+                    {preset.drillMm.toFixed(2)} / {preset.diameterMm.toFixed(2)}{" "}
+                    mm
+                  </span>
+                </div>
+                <div
+                  className={`text-[10px] ${active ? "text-violet-100" : "text-slate-500 dark:text-slate-400"}`}
+                >
+                  {preset.description}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function PcbTopToolbar({
   activeLayer,
   onSetActiveLayer,
@@ -353,6 +445,8 @@ export function PcbTopToolbar({
   onFlipSelection,
   ratsnestVisible,
   onToggleRatsnest,
+  viewSide,
+  onToggleViewSide,
   routeMode,
   routeSessionActive,
   onToggleRouteMode,
@@ -369,6 +463,7 @@ export function PcbTopToolbar({
   viaDrillPresets,
   onPickViaDiameter,
   onPickViaDrill,
+  onPickViaPreset,
   posture,
   onCyclePosture,
 }: PcbTopToolbarProps): ReactElement {
@@ -398,6 +493,21 @@ export function PcbTopToolbar({
         visibleLayers={visibleLayers}
         onSetVisibleLayers={onSetVisibleLayers}
       />
+
+      <button
+        type="button"
+        onClick={onToggleViewSide}
+        title="Flip board view — switch between viewing from top and bottom (KiCad/Altium convention)"
+        aria-pressed={viewSide === "bottom"}
+        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+          viewSide === "bottom"
+            ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        }`}
+      >
+        <FlipHorizontal2 className="h-3.5 w-3.5" />
+        {viewSide === "bottom" ? "Bottom view" : "Top view"}
+      </button>
 
       <button
         type="button"
@@ -456,6 +566,11 @@ export function PcbTopToolbar({
           />
           {routeSessionActive ? (
             <>
+              <ViaPresetDropdown
+                activeDiameterMm={viaDiameterMm}
+                activeDrillMm={viaDrillMm}
+                onPick={onPickViaPreset}
+              />
               <ViaSizeDropdown
                 label="Ø"
                 hotkeyTitle="Via diameter (route-time override)"
