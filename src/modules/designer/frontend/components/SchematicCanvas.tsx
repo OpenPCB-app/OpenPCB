@@ -2510,8 +2510,6 @@ function SchematicScene({
         color={t.gridColor}
         alpha={t.gridAlpha}
         majorAlpha={t.gridMajorAlpha}
-        originColor={t.gridColor}
-        originAlpha={t.gridMajorAlpha}
       />
 
       {projection ? (

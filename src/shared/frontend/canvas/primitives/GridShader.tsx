@@ -19,8 +19,6 @@ uniform float uMajorEvery;
 uniform vec3 uGridColor;
 uniform float uGridAlpha;
 uniform float uMajorAlpha;
-uniform vec3 uOriginColor;
-uniform float uOriginAlpha;
 uniform float uPixelsPerUnit;
 uniform float uMinSpacingPx;
 varying vec2 vWorldPos;
@@ -32,50 +30,39 @@ void main() {
   vec2 gridCoord = vWorldPos / uGridSize;
   vec2 grid = abs(fract(gridCoord - 0.5) - 0.5);
   vec2 lineWidth = fwidth(gridCoord);
-  vec2 draw = smoothstep(lineWidth * 0.5, lineWidth * 1.5, grid);
-  float minorLine = 1.0 - min(draw.x, draw.y);
+  float dotSize = 1.5;
+  vec2 draw = smoothstep(lineWidth * dotSize * 0.5, lineWidth * dotSize * 1.5, grid);
+  float minorDot = (1.0 - draw.x) * (1.0 - draw.y);
 
   float majorSize = uGridSize * uMajorEvery;
   vec2 majorCoord = vWorldPos / majorSize;
   vec2 majorGrid = abs(fract(majorCoord - 0.5) - 0.5);
   vec2 majorLineWidth = fwidth(majorCoord);
-  vec2 majorDraw = smoothstep(majorLineWidth * 0.5, majorLineWidth * 1.5, majorGrid);
-  float majorLine = 1.0 - min(majorDraw.x, majorDraw.y);
+  vec2 majorDraw = smoothstep(majorLineWidth * 1.0, majorLineWidth * 2.0, majorGrid);
+  float majorDot = (1.0 - majorDraw.x) * (1.0 - majorDraw.y);
 
-  vec2 originDist = abs(vWorldPos);
-  vec2 originWidth = fwidth(vWorldPos) * 2.0;
-  vec2 originDraw = smoothstep(originWidth * 0.5, originWidth * 1.5, originDist);
-  float originLine = 1.0 - min(originDraw.x, originDraw.y);
-
-  float alpha = minorLine * uGridAlpha;
-  alpha = max(alpha, majorLine * uMajorAlpha);
-
-  vec3 color = uGridColor;
-  if (originLine > 0.01) {
-    alpha = max(alpha, originLine * uOriginAlpha);
-    color = mix(color, uOriginColor, originLine * 0.5);
-  }
+  float alpha = minorDot * uGridAlpha;
+  alpha = max(alpha, majorDot * uMajorAlpha);
 
   if (alpha < 0.005) discard;
-  gl_FragColor = vec4(color, alpha);
+  gl_FragColor = vec4(uGridColor, alpha);
 }
 `;
 
 interface GridShaderProps {
   gridSize: number;
   majorEvery?: number;
-  /** Grid line color as hex string or normalized RGB array */
+  /** Grid dot color as hex string or normalized RGB array */
   color?: string | [number, number, number];
   alpha?: number;
   majorAlpha?: number;
-  /** Origin line color as hex string or normalized RGB array */
-  originColor?: string | [number, number, number];
-  originAlpha?: number;
   minSpacingPx?: number;
   visible?: boolean;
 }
 
-function resolveColor(color: string | [number, number, number]): [number, number, number] {
+function resolveColor(
+  color: string | [number, number, number],
+): [number, number, number] {
   if (typeof color === "string") {
     return hexToNormalizedRgb(color);
   }
@@ -88,15 +75,12 @@ export function GridShader({
   color = [0.58, 0.64, 0.72],
   alpha = 0.3,
   majorAlpha = 0.12,
-  originColor = [0.58, 0.64, 0.72],
-  originAlpha = 0.4,
   minSpacingPx = 4,
   visible = true,
 }: GridShaderProps) {
   const meshRef = useRef<THREE.Mesh>(null);
 
   const resolvedColor = resolveColor(color);
-  const resolvedOriginColor = resolveColor(originColor);
 
   const uniforms = useMemo(
     () => ({
@@ -105,21 +89,10 @@ export function GridShader({
       uGridColor: { value: new THREE.Vector3(...resolvedColor) },
       uGridAlpha: { value: alpha },
       uMajorAlpha: { value: majorAlpha },
-      uOriginColor: { value: new THREE.Vector3(...resolvedOriginColor) },
-      uOriginAlpha: { value: originAlpha },
       uPixelsPerUnit: { value: 1.0 },
       uMinSpacingPx: { value: minSpacingPx },
     }),
-    [
-      alpha,
-      resolvedColor,
-      gridSize,
-      majorAlpha,
-      majorEvery,
-      minSpacingPx,
-      originAlpha,
-      resolvedOriginColor,
-    ],
+    [alpha, resolvedColor, gridSize, majorAlpha, majorEvery, minSpacingPx],
   );
 
   uniforms.uGridSize.value = gridSize;
@@ -127,8 +100,6 @@ export function GridShader({
   uniforms.uGridColor.value.set(...resolvedColor);
   uniforms.uGridAlpha.value = alpha;
   uniforms.uMajorAlpha.value = majorAlpha;
-  uniforms.uOriginColor.value.set(...resolvedOriginColor);
-  uniforms.uOriginAlpha.value = originAlpha;
   uniforms.uMinSpacingPx.value = minSpacingPx;
 
   useFrame(({ camera, viewport }) => {
