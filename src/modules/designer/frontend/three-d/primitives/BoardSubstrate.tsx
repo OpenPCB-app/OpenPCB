@@ -8,7 +8,8 @@ import {
   shapeFromBounds,
 } from "./geometry-utils";
 
-const FR4_SUBSTRATE_COLOR = "rgb(30, 50, 30)";
+const FR4_SOLDERMASK_COLOR = "rgb(28, 100, 42)";
+const FR4_SOLDERMASK_EMISSIVE = "rgb(3, 12, 5)";
 
 export function BoardSubstrate({
   projection,
@@ -32,7 +33,10 @@ export function BoardSubstrate({
 
   return (
     <mesh geometry={geometry} position={[0, 0, -thicknessMm]} receiveShadow>
-      <meshLambertMaterial color={FR4_SUBSTRATE_COLOR} />
+      <meshLambertMaterial
+        color={FR4_SOLDERMASK_COLOR}
+        emissive={FR4_SOLDERMASK_EMISSIVE}
+      />
     </mesh>
   );
 }

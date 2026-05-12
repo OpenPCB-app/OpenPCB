@@ -5,6 +5,7 @@ import type { DesignerPcbProjection } from "../../../../sdks";
 import { CanvasThemeProvider } from "../../../../shared/frontend/canvas/theme";
 import { createDesignerApi } from "../api";
 import { BoardGeometry } from "./BoardGeometry";
+import { DEFAULT_BOARD_THICKNESS_MM } from "./primitives/geometry-utils";
 import { ModelCacheProvider } from "./ModelCacheProvider";
 
 interface Board3DCanvasProps {
@@ -28,7 +29,7 @@ const THREE_D_THEME = {
 } as const;
 
 const THREE_D_SCENE_COLORS = {
-  background: "rgb(2, 6, 23)",
+  background: "#131313",
   gridMajor: "rgb(71, 85, 105)",
   gridMinor: "rgb(30, 41, 59)",
 } as const;
@@ -98,14 +99,25 @@ function Board3DStatePanel({
   );
 }
 
-function Board3DInvalidator({ sceneKeyValue }: { sceneKeyValue: string }): ReactElement {
+function Board3DInvalidator({
+  sceneKeyValue,
+}: {
+  sceneKeyValue: string;
+}): ReactElement {
   const invalidate = useThree((state) => state.invalidate);
 
   useEffect(() => {
     invalidate();
   }, [invalidate, sceneKeyValue]);
 
-  return <OrbitControls makeDefault onChange={() => invalidate()} />;
+  return (
+    <OrbitControls
+      makeDefault
+      onChange={() => invalidate()}
+      minPolarAngle={0}
+      maxPolarAngle={Math.PI}
+    />
+  );
 }
 
 function Board3DScene({
@@ -123,7 +135,10 @@ function Board3DScene({
       <directionalLight position={[-18, -24, 24]} intensity={0.35} />
       <ModelCacheProvider>
         <CanvasThemeProvider mode="dark">
-          <BoardGeometry backendURL={backendURL} projection={projection} />
+          {/* Rotate PCB geometry (XY-plane) to lie flat in the XZ-plane, front face up */}
+          <group rotation={[-Math.PI / 2, 0, 0]}>
+            <BoardGeometry backendURL={backendURL} projection={projection} />
+          </group>
         </CanvasThemeProvider>
       </ModelCacheProvider>
       <gridHelper
@@ -133,8 +148,7 @@ function Board3DScene({
           THREE_D_SCENE_COLORS.gridMajor,
           THREE_D_SCENE_COLORS.gridMinor,
         ]}
-        position={[0, 0, -1.62]}
-        rotation={[Math.PI / 2, 0, 0]}
+        position={[0, -DEFAULT_BOARD_THICKNESS_MM / 2, 0]}
       />
       <Board3DInvalidator sceneKeyValue={key} />
     </>
@@ -183,7 +197,9 @@ export function Board3DCanvas({
       .catch((err) => {
         if (!cancelled) {
           setFetchError(
-            err instanceof Error ? err.message : "Failed to load PCB projection",
+            err instanceof Error
+              ? err.message
+              : "Failed to load PCB projection",
           );
         }
       })
@@ -242,9 +258,13 @@ export function Board3DCanvas({
     >
       <Canvas
         frameloop="demand"
-        camera={{ position: [0, 70, 92], fov: 45, near: 0.1, far: 1000 }}
+        camera={{ position: [0, 30, 70], fov: 45, near: 0.1, far: 1000 }}
         dpr={[1, 2]}
-        gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
+        gl={{
+          antialias: true,
+          alpha: false,
+          powerPreference: "high-performance",
+        }}
         className="h-full w-full"
         onCreated={({ invalidate }) => invalidate()}
       >
