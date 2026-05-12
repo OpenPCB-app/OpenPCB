@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, type ReactElement } from "react";
 import * as THREE from "three";
 import type {
   DesignerPcbProjection,
+  PcbBoardOutline,
   PcbLayerId,
   PcbPlacedPart,
   PcbPointMm,
@@ -31,6 +32,32 @@ import {
   visibleLayerSet,
 } from "./pcb-layer-visibility";
 import type { PcbSelection } from "./pcb-selection";
+
+function FitBoardOnMount({ outline }: { outline: PcbBoardOutline }): null {
+  const camera = useThree((s) => s.camera) as THREE.OrthographicCamera;
+  const gl = useThree((s) => s.gl);
+  const invalidate = useThree((s) => s.invalidate);
+
+  useEffect(() => {
+    const { widthMm, heightMm, centerMm } = outline;
+    const canvasWidth = gl.domElement.clientWidth;
+    const canvasHeight = gl.domElement.clientHeight;
+    const paddedWidth = widthMm * 1.15;
+    const paddedHeight = heightMm * 1.15;
+    const zoom = Math.max(
+      1,
+      Math.min(canvasWidth / paddedWidth, canvasHeight / paddedHeight, 500),
+    );
+    camera.position.set(centerMm.x, centerMm.y, camera.position.z);
+    camera.zoom = zoom;
+    camera.updateProjectionMatrix();
+    invalidate();
+    // runs only on mount; PcbCanvas remounts (key=designId) on design switch
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return null;
+}
 
 function BoardOutline({
   projection,
@@ -653,7 +680,8 @@ export function PcbScene({
 
   return (
     <group scale={[sceneScaleX, 1, 1]}>
-      <GridShader gridSize={1} majorEvery={5} alpha={0.06} majorAlpha={0.04} />
+      <FitBoardOnMount outline={projection.board.outline} />
+      <GridShader gridSize={1} majorEvery={5} alpha={0.16} majorAlpha={0.12} />
       <BoardFill projection={projection} />
       <BoardOutline projection={projection} visibleLayers={visibleLayers} />
       {projection.placements.map((placement) => (
