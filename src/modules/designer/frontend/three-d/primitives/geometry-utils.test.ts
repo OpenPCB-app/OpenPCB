@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import type { DesignerPcbProjection, PcbPlacedPart, PcbVia } from "../../../../../sdks";
+import type {
+  DesignerPcbProjection,
+  PcbPlacedPart,
+  PcbVia,
+} from "../../../../../sdks";
 import {
   boardOutlineBoundsMm,
   boardOutlineToShape,
@@ -131,7 +135,10 @@ describe("3D board geometry utilities", () => {
       layer: "B.Cu",
       zSurfaceMm: -1.6,
     });
-    expect(placement.footprint.preview?.pads[0]?.centerMm).toEqual({ x: -1, y: 0 });
+    expect(placement.footprint.preview?.pads[0]?.centerMm).toEqual({
+      x: -1,
+      y: 0,
+    });
   });
 
   test("creates via mesh inputs with safe defaults", () => {
@@ -145,6 +152,8 @@ describe("3D board geometry utilities", () => {
         drillMm: 0,
         fromLayer: "F.Cu",
         toLayer: "B.Cu",
+        viaType: "through",
+        protection: "tented",
       },
     ];
 

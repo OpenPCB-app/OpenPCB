@@ -12,6 +12,7 @@ const NET_CLASSES: PcbNetClass[] = [
     viaDiameterMm: 0.8,
     viaDrillMm: 0.4,
     color: "#e5e7eb",
+    defaultViaProtection: "tented",
   },
 ];
 
