@@ -1,22 +1,46 @@
 appId: com.openpcb.electron
 productName: "OpenPCB (Electron)"
+electronVersion: "41.2.0"
+artifactName: "OpenPCB-${version}-${os}-${arch}.${ext}"
+electronUpdaterCompatibility: ">=2.16"
+generateUpdatesFilesForAllChannels: true
 directories:
   output: dist-electron
   buildResources: resources
+publish:
+  - provider: github
+    owner: andrejvysny
+    repo: OpenPCB
+    releaseType: prerelease
+    channel: "beta-${os}-${arch}"
 files:
   - dist/**/*
 extraResources:
-  - from: ../core/frontend/dist/
+  - from: ../src/core/frontend/dist/
     to: frontend-dist/
+  - from: ../src/
+    to: src/
+    filter:
+      - "modules/**"
+      - "core/**"
+      - "sdks/**"
+      - "shared/**"
   - from: ../bin/
     to: bin/
     filter:
       - "bun-backend-*"
-  - from: ../src-ts/drizzle/migrations/
-    to: migrations/
 asar: true
 mac:
-  target: dmg
+  # Beta builds intentionally use ad-hoc signing. This avoids accidental
+  # Developer ID certificate discovery on local machines while still producing
+  # a runnable ARM macOS app for trusted testers.
+  identity: "-"
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  notarize: false
+  target:
+    - dmg
+    - zip
   category: public.app-category.developer-tools
 win:
   target: nsis

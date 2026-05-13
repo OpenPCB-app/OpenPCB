@@ -15,6 +15,8 @@ let sidecarProcess: ChildProcess | null = null;
 let discoveredPort: number | null = null;
 let backendPayload: BackendReadyPayload | null = null;
 
+const SIDECAR_STARTUP_TIMEOUT_MS = 30_000;
+
 function getSidecarPath(): string {
   const platform = process.platform;
   const arch = process.arch;
@@ -87,7 +89,11 @@ export function spawnSidecar(): Promise<BackendReadyPayload> {
         ...process.env,
         PORT: "0",
         APP_DATA_DIR: appDataDir,
+        OPENPCB_DB_PATH: join(appDataDir, "openpcb.sqlite"),
         OPENPCB_WORKSPACE_ROOT: workspaceRoot,
+        OPENPCB_STATIC_DIR: app.isPackaged
+          ? join(process.resourcesPath, "frontend-dist")
+          : join(app.getAppPath(), "..", "src", "core", "frontend", "dist"),
         NODE_ENV: app.isPackaged ? "production" : "development",
         OPENPCB_ALLOW_UNAUTHENTICATED_API: "true",
       },
@@ -96,16 +102,28 @@ export function spawnSidecar(): Promise<BackendReadyPayload> {
 
     sidecarProcess = child;
     let resolved = false;
+    let stdoutBuffer = "";
+    let stderrTail = "";
+
+    const rejectStartup = (message: string) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      reject(new Error(message));
+    };
 
     const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        reject(new Error("Sidecar startup timed out after 10s"));
-      }
-    }, 10_000);
+      rejectStartup(
+        `Sidecar startup timed out after ${SIDECAR_STARTUP_TIMEOUT_MS / 1000}s${
+          stderrTail ? `\nLast stderr:\n${stderrTail}` : ""
+        }`,
+      );
+    }, SIDECAR_STARTUP_TIMEOUT_MS);
 
     child.stdout?.on("data", (data: Buffer) => {
-      const lines = data.toString().split("\n");
+      stdoutBuffer += data.toString();
+      const lines = stdoutBuffer.split("\n");
+      stdoutBuffer = lines.pop() ?? "";
       for (const line of lines) {
         if (resolved && discoveredPort) {
           // Already discovered, just log
@@ -150,22 +168,25 @@ export function spawnSidecar(): Promise<BackendReadyPayload> {
     });
 
     child.stderr?.on("data", (data: Buffer) => {
-      console.warn(`[sidecar:stderr] ${data.toString().trimEnd()}`);
+      const message = data.toString().trimEnd();
+      stderrTail = `${stderrTail}\n${message}`.slice(-4000).trimStart();
+      console.warn(`[sidecar:stderr] ${message}`);
     });
 
     child.on("error", (err) => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeout);
-        reject(new Error(`Sidecar failed to start: ${err.message}`));
-      }
+      rejectStartup(`Sidecar failed to start: ${err.message}`);
     });
 
-    child.on("exit", (code) => {
-      console.log(`[sidecar] Process exited with code ${code}`);
+    child.on("exit", (code, signal) => {
+      console.log(`[sidecar] Process exited with code ${code} signal ${signal}`);
       sidecarProcess = null;
       discoveredPort = null;
       backendPayload = null;
+      rejectStartup(
+        `Sidecar exited before becoming ready: code=${code ?? "null"} signal=${
+          signal ?? "null"
+        }${stderrTail ? `\nLast stderr:\n${stderrTail}` : ""}`,
+      );
     });
   });
 }

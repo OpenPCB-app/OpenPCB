@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { DiagnosticsController } from "../controllers/diagnostics-controller";
 import { HealthController } from "../controllers/health-controller";
 import { ModuleRuntimeDiagnosticsController } from "../controllers/module-runtime-diagnostics-controller";
@@ -10,6 +12,46 @@ import { createCorsMiddleware } from "../middleware/cors-middleware";
 import { createErrorMiddleware } from "../middleware/error-middleware";
 import { requestLoggingMiddleware } from "../middleware/request-logging-middleware";
 import { requestIdMiddleware } from "../middleware/request-id-middleware";
+
+function resolveStaticDir(): string | null {
+  const fromEnv = process.env.OPENPCB_STATIC_DIR;
+  if (fromEnv) {
+    const resolved = join(fromEnv);
+    if (existsSync(resolved)) return resolved;
+    return null;
+  }
+  if (process.env.NODE_ENV === "production") {
+    const resourcesPath = (process as unknown as Record<string, unknown>).resourcesPath as string | undefined;
+    if (resourcesPath) {
+      const candidate = join(resourcesPath, "frontend-dist");
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+async function serveStaticFile(
+  staticDir: string,
+  pathname: string,
+): Promise<Response | null> {
+  const filePath = join(staticDir, pathname);
+  if (!filePath.startsWith(staticDir)) {
+    return null;
+  }
+  const file = Bun.file(filePath);
+  if (await file.exists()) {
+    return new Response(file);
+  }
+  return null;
+}
+
+function serveSpaFallback(staticDir: string): Response {
+  const indexPath = join(staticDir, "index.html");
+  const file = Bun.file(indexPath);
+  return new Response(file, {
+    headers: { "content-type": "text/html" },
+  });
+}
 
 export interface RuntimeServer {
   fetch(req: Request): Promise<Response>;
@@ -67,6 +109,8 @@ export function createHttpServer(config: HttpServerConfig): RuntimeServer {
     createErrorMiddleware(config.diagnosticsStore),
   ];
 
+  const staticDir = resolveStaticDir();
+
   const fetch = async (req: Request): Promise<Response> => {
     const requestId = req.headers.get("x-request-id") ?? crypto.randomUUID();
     const url = new URL(req.url);
@@ -81,6 +125,18 @@ export function createHttpServer(config: HttpServerConfig): RuntimeServer {
     };
 
     const baseHandler = async (): Promise<Response> => {
+      // Serve static files first for non-API routes when in packaged mode
+      if (
+        staticDir &&
+        req.method === "GET" &&
+        !url.pathname.startsWith("/api/") &&
+        !url.pathname.startsWith("/ws/")
+      ) {
+        const staticResponse = await serveStaticFile(staticDir, url.pathname);
+        if (staticResponse) return staticResponse;
+        return serveSpaFallback(staticDir);
+      }
+
       if (
         url.pathname.startsWith("/api/modules/") &&
         url.pathname !== "/api/modules/registry" &&

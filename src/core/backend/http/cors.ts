@@ -41,6 +41,16 @@ export function isTrustedOrigin(origin: string | null, allowedOrigins: Set<strin
   if (!origin || origin.trim().length === 0) {
     return true;
   }
+  // Allow null origin (file:// or opaque origins) for packaged Electron
+  // when the unauthenticated API flag is set.
+  if (origin === "null" && process.env.OPENPCB_ALLOW_UNAUTHENTICATED_API === "true") {
+    return true;
+  }
+  if (process.env.OPENPCB_ALLOW_UNAUTHENTICATED_API === "true") {
+    if (origin.startsWith("http://127.0.0.1:") || origin.startsWith("http://localhost:")) {
+      return true;
+    }
+  }
   return allowedOrigins.has(origin);
 }
 
