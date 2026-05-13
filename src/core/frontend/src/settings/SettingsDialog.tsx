@@ -11,6 +11,7 @@ import { SettingsSidebar } from "./SettingsSidebar";
 import { settingsNavItems, type SettingsNavItem } from "./nav";
 import { GeneralPanel } from "./panels/GeneralPanel";
 import { AboutPanel } from "./panels/AboutPanel";
+import { AssistantPanel } from "./panels/AssistantPanel";
 
 type SettingsPanelId = SettingsNavItem["id"];
 
@@ -24,6 +25,7 @@ type SettingsDialogProps = {
 
 const panelComponents: Record<SettingsPanelId, () => React.JSX.Element> = {
   general: GeneralPanel,
+  assistant: AssistantPanel,
   about: AboutPanel,
 };
 

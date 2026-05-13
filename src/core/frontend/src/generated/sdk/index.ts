@@ -3,3 +3,5 @@
 
 export * as library from "./library";
 export * as designer from "./designer";
+export * as tasks from "./tasks";
+export * as assistant from "./assistant";

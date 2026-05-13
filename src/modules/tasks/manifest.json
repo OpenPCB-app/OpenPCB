@@ -1,0 +1,21 @@
+{
+  "id": "tasks",
+  "label": "Tasks",
+  "version": "0.1.0",
+  "apiVersion": 2,
+  "namespace": "system.tasks",
+  "kind": "tool",
+  "sidebar": {
+    "label": "Tasks",
+    "icon": "ListChecks",
+    "order": 90,
+    "group": "system",
+    "hidden": true
+  },
+  "runtime": {
+    "backendEntry": "module.backend.ts",
+    "frontendEntry": "module.frontend.ts"
+  },
+  "dependsOn": [],
+  "defaultPinned": false
+}

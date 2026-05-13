@@ -1,0 +1,20 @@
+{
+  "id": "assistant",
+  "label": "Assistant",
+  "version": "0.1.0",
+  "apiVersion": 2,
+  "namespace": "space.assistant",
+  "kind": "space",
+  "sidebar": {
+    "label": "Assistant",
+    "icon": "Bot",
+    "order": 30,
+    "group": "ai"
+  },
+  "runtime": {
+    "backendEntry": "module.backend.ts",
+    "frontendEntry": "module.frontend.ts"
+  },
+  "dependsOn": [{ "id": "tasks", "minVersion": "0.1.0", "optional": false }],
+  "defaultPinned": false
+}

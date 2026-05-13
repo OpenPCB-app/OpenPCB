@@ -1,6 +1,8 @@
 export const MODULE_SDK_TOKENS = {
   LIBRARY: "LibrarySDK",
   DESIGNER: "DesignerSDK",
+  TASKS: "TasksSDK",
+  ASSISTANT: "AssistantSDK",
 } as const;
 
 export type ModuleSdkToken =
@@ -8,3 +10,5 @@ export type ModuleSdkToken =
 
 export * from "./library";
 export * from "./designer";
+export * from "./tasks";
+export * from "./assistant";
