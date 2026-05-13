@@ -81,20 +81,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Repair Rollup optional native dependency
+      - name: Repair optional native dependencies
         run: |
           ROLLUP_VERSION="$(node -p "require('./package-lock.json').packages['node_modules/rollup'].version")"
-          npm install --no-save "@rollup/rollup-${{ matrix.rollup_package }}@${ROLLUP_VERSION}"
-
-      - name: Repair Lightning CSS optional native dependency
-        run: |
           LIGHTNINGCSS_VERSION="$(node -p "require('./package-lock.json').packages['node_modules/lightningcss'].version")"
-          npm install --no-save "lightningcss-${{ matrix.lightningcss_package }}@${LIGHTNINGCSS_VERSION}"
-
-      - name: Repair Tailwind Oxide optional native dependency
-        run: |
           TAILWINDCSS_OXIDE_VERSION="$(node -p "require('./package-lock.json').packages['node_modules/@tailwindcss/oxide'].version")"
-          npm install --no-save "@tailwindcss/oxide-${{ matrix.tailwindcss_oxide_package }}@${TAILWINDCSS_OXIDE_VERSION}"
+          npm install --no-save \
+            "@rollup/rollup-${{ matrix.rollup_package }}@${ROLLUP_VERSION}" \
+            "lightningcss-${{ matrix.lightningcss_package }}@${LIGHTNINGCSS_VERSION}" \
+            "@tailwindcss/oxide-${{ matrix.tailwindcss_oxide_package }}@${TAILWINDCSS_OXIDE_VERSION}"
 
       - name: Validate release version
         run: |
