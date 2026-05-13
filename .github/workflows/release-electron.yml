@@ -26,16 +26,22 @@ jobs:
             platform: mac
             arch: arm64
             rollup_package: darwin-arm64
+            lightningcss_package: darwin-arm64
+            tailwindcss_oxide_package: darwin-arm64
           - name: macOS x64
             os: macos-15-intel
             platform: mac
             arch: x64
             rollup_package: darwin-x64
+            lightningcss_package: darwin-x64
+            tailwindcss_oxide_package: darwin-x64
           - name: Windows x64
             os: windows-latest
             platform: win
             arch: x64
             rollup_package: win32-x64-msvc
+            lightningcss_package: win32-x64-msvc
+            tailwindcss_oxide_package: win32-x64-msvc
 
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -79,6 +85,16 @@ jobs:
         run: |
           ROLLUP_VERSION="$(node -p "require('rollup/package.json').version")"
           npm install --no-save "@rollup/rollup-${{ matrix.rollup_package }}@${ROLLUP_VERSION}"
+
+      - name: Repair Lightning CSS optional native dependency
+        run: |
+          LIGHTNINGCSS_VERSION="$(node -p "require('lightningcss/package.json').version")"
+          npm install --no-save "lightningcss-${{ matrix.lightningcss_package }}@${LIGHTNINGCSS_VERSION}"
+
+      - name: Repair Tailwind Oxide optional native dependency
+        run: |
+          TAILWINDCSS_OXIDE_VERSION="$(node -p "require('@tailwindcss/oxide/package.json').version")"
+          npm install --no-save "@tailwindcss/oxide-${{ matrix.tailwindcss_oxide_package }}@${TAILWINDCSS_OXIDE_VERSION}"
 
       - name: Validate release version
         run: |
