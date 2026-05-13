@@ -25,14 +25,17 @@ jobs:
             os: macos-15
             platform: mac
             arch: arm64
+            rollup_package: darwin-arm64
           - name: macOS x64
             os: macos-15-intel
             platform: mac
             arch: x64
+            rollup_package: darwin-x64
           - name: Windows x64
             os: windows-latest
             platform: win
             arch: x64
+            rollup_package: win32-x64-msvc
 
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -71,6 +74,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Repair Rollup optional native dependency
+        run: |
+          ROLLUP_VERSION="$(node -p "require('rollup/package.json').version")"
+          npm install --no-save "@rollup/rollup-${{ matrix.rollup_package }}@${ROLLUP_VERSION}"
 
       - name: Validate release version
         run: |
