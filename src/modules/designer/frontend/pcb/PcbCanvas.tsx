@@ -22,7 +22,7 @@ import type {
   InteractionHandler,
 } from "../../../../shared/frontend/canvas/interaction/types";
 import { sceneMmToNm } from "../../../../shared/frontend/canvas/coords";
-import { hitPad, hitPlacement, hitTrace, hitVia } from "./pcb-hit";
+import { hitPad, hitPlacement, hitTrace, hitVia, type TraceHit } from "./pcb-hit";
 import {
   placementContainedInRect,
   placementIntersectsRect,
@@ -79,6 +79,34 @@ function snapPointMm(p: PcbPointMm): PcbPointMm {
 
 function pointMmToNm(p: PcbPointMm): PointNm {
   return { x: Math.round(p.x * NM_PER_MM), y: Math.round(p.y * NM_PER_MM) };
+}
+
+function pointsEqualNm(a: PointNm, b: PointNm): boolean {
+  return a.x === b.x && a.y === b.y;
+}
+
+function appendDistinctPoint(points: PointNm[], point: PointNm): void {
+  const last = points[points.length - 1];
+  if (!last || !pointsEqualNm(last, point)) {
+    points.push(point);
+  }
+}
+
+function keepTracePrefixForReroute(
+  tracePoints: readonly PointNm[],
+  segmentIndex: number,
+  splitPoint: PointNm,
+): PointNm[] {
+  const keep: PointNm[] = [];
+  const safeSegmentIndex = Math.max(
+    0,
+    Math.min(segmentIndex, tracePoints.length - 2),
+  );
+  for (let index = 0; index <= safeSegmentIndex; index += 1) {
+    appendDistinctPoint(keep, tracePoints[index]!);
+  }
+  appendDistinctPoint(keep, splitPoint);
+  return keep;
 }
 
 type ToolMode = "select" | "route";
@@ -495,6 +523,39 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     [commitTrace, routeState],
   );
 
+  const splitAndRerouteTrace = useCallback(
+    async (traceHit: TraceHit) => {
+      const trace = traceHit.trace;
+      const splitPointNm = pointMmToNm(traceHit.closestMm);
+      const keepPointsNm = keepTracePrefixForReroute(
+        trace.pointsNm,
+        traceHit.segmentIndex,
+        splitPointNm,
+      );
+
+      setSelection(emptyPcbSelection());
+      setToolMode("route");
+      dispatchRoute({ kind: "cancel" });
+
+      if (keepPointsNm.length >= 2) {
+        await workspace.updateTraceGeometry(trace.id, keepPointsNm);
+      } else {
+        await workspace.deleteTrace(trace.id);
+      }
+
+      dispatchRoute({
+        kind: "start",
+        anchorNm: splitPointNm,
+        layer: trace.layer,
+        segmentMode: trace.segmentMode,
+        netId: trace.netId,
+        netClassId: trace.netClassId,
+        widthMm: trace.widthMm,
+      });
+    },
+    [workspace],
+  );
+
   const handler = useMemo<InteractionHandler>(() => {
     return {
       onPointerDown(event) {
@@ -758,6 +819,18 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               items: [
                 {
                   kind: "action",
+                  id: "split-reroute-trace",
+                  label: "Split and reroute from here",
+                  onSelect: () => {
+                    void splitAndRerouteTrace(traceHit).catch(() => undefined);
+                  },
+                },
+                {
+                  kind: "separator",
+                  id: "sep-delete-trace",
+                },
+                {
+                  kind: "action",
                   id: "delete-trace",
                   label: "Delete trace",
                   shortcut: "Del",
@@ -924,6 +997,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     selection,
     setCopperLayerAndView,
     setCursorMm,
+    splitAndRerouteTrace,
     toolMode,
     viasVisible,
     visibleLayers,
