@@ -14,14 +14,35 @@
 - Backend: 124 tests passing (19 files). Frontend: 11 tests passing. Typecheck clean.
 - Active sprint: post-merge cleanup + dead-code removal (see plan in `.claude/plans/act-as-senior-software-resilient-meadow.md`).
 
+## Active Electron Beta Release CI
+
+- [x] Configure electron-builder for GitHub prerelease publishing on beta channel.
+- [x] Keep macOS development builds unsigned/ad-hoc until signing secrets are provided.
+- [x] Add macOS `dmg` + `zip` targets for updater metadata.
+- [x] Add packaged-app beta auto-update checks via `electron-updater`.
+- [x] Add tag-triggered GitHub Actions matrix for macOS arm64, macOS x64, and Windows x64.
+- [x] Validate locally with Electron typecheck, frontend build, Bun sidecar compile, mac arm64 package, and screenshot.
+- [ ] Validate remote release workflow and downloaded app after commit/tag/push approval.
+
+## Active Task System + Assistant Modules
+
+- [x] Add hidden-sidebar module support.
+- [x] Add hidden `tasks` module with persisted runtime, chunks, events, SSE, SDK.
+- [x] Add visible `assistant` module with global chats and env-configured OpenAI/Ollama/LM Studio providers.
+- [x] Add read-only tools plus simple confirm/reject flow scaffold for write tools.
+- [x] Add persisted Assistant provider settings + API keys.
+- [x] Add global Settings → Assistant provider configuration UI.
+- [x] Redesign Assistant chat UI with professional IDE styling.
+- [ ] Verify with typecheck, backend/frontend tests, module validation, gen check.
+
 ## Active 3D Regression Fix
 
-- [ ] Reproduce `data/ATTINY13A-SU.zip` ZIP+STEP import and stuck 3D conversion.
-- [ ] Trace ZIP model extraction, worker conversion, backend upload, and Designer projection.
-- [ ] Fix import wizard STEP/ZIP 3D UX and conversion reliability.
-- [ ] Fix Library/Designer GLB rendering, transforms, and camera/model fitting.
-- [ ] Add regression coverage with the ATTINY ZIP fixture.
-- [ ] Verify with LSP, focused tests, build, and browser QA.
+- [x] Reproduce ATTINY-style ZIP+STEP import path and stuck conversion risk.
+- [x] Trace ZIP model extraction, worker conversion, backend upload, and preview flow.
+- [x] Fix import wizard / ZIP STEP conversion UX: import commits first; conversion runs in background.
+- [x] Add failed-state retry conversion in Library 3D preview.
+- [x] Add ATTINY-style ZIP regression coverage and STEP conversion failure coverage.
+- [~] Verify with focused backend/frontend tests. Full typecheck blocked by unrelated assistant/tasks WIP errors.
 
 ## Phase 0 — Browser Dev Stabilization (done)
 
@@ -90,11 +111,12 @@ Shipped:
 
 Backlog:
 
-- [ ] Marquee / multi-select / group move on PCB
-- [ ] Trace editing (drag segment, break + reconnect, rip-up & retry)
-- [ ] Layer-visibility panel UI (currently only active layer toggleable from toolbar)
-- [ ] Ratsnest visibility toggle UI (currently always-on)
-- [ ] Explicit `pinmap` field in `LibraryComponent` (currently relies on `pin.number == pad.number`)
+- [x] Marquee / multi-select / group move on PCB
+- [x] Trace split + reroute from context menu
+- [x] Layer-visibility panel UI
+- [x] Ratsnest visibility toggle UI
+- [x] Explicit component-footprint `pinmap` with `pin.number == pad.number` fallback
+- [ ] Trace segment drag editing
 
 ## Backlog (post-Phase 4)
 
