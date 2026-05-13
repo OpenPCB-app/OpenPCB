@@ -33,7 +33,8 @@ export function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
   const { moduleRegistry } = useBootstrap();
 
   const loadedModules = (moduleRegistry?.modules ?? []).filter(
-    (module: ModuleRegistryItem) => module.status === "loaded",
+    (module: ModuleRegistryItem) =>
+      module.status === "loaded" && module.sidebar.hidden !== true,
   );
 
   const orderedModules = [...loadedModules].sort((a, b) => {

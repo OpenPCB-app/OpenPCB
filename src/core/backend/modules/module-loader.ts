@@ -109,10 +109,28 @@ function hasModulesDirectory(workspaceRoot: string): boolean {
   return existsSync(path.join(workspaceRoot, "modules"));
 }
 
+function isPackaged(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
 function resolveWorkspaceRoot(options: ModuleLoaderOptions): string {
   const explicit = options.workspaceRoot ?? process.env.OPENPCB_WORKSPACE_ROOT;
   if (explicit) {
-    return explicit;
+    const resolved = path.resolve(explicit);
+    if (!hasModulesDirectory(resolved)) {
+      if (isPackaged()) {
+        throw new Error(
+          `Packaged runtime requires a valid OPENPCB_WORKSPACE_ROOT with a modules/ directory. Received: ${explicit}`,
+        );
+      }
+    }
+    return resolved;
+  }
+
+  if (isPackaged()) {
+    throw new Error(
+      "Packaged runtime requires OPENPCB_WORKSPACE_ROOT to be set explicitly.",
+    );
   }
 
   const candidates = [
@@ -439,7 +457,18 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
     manifest: NormalizedModuleManifest,
   ): Promise<string> {
     const entry = manifest.runtime.backendEntry;
-    const candidate = path.join(moduleDir, entry);
+    // Reject path traversal or absolute paths in the manifest entry
+    if (path.isAbsolute(entry) || entry.includes("..") || entry.includes("~")) {
+      throw new Error(
+        `Invalid backend entry '${entry}' for module '${manifest.id}': must be a relative path within the module directory`,
+      );
+    }
+    const candidate = path.resolve(moduleDir, entry);
+    if (!candidate.startsWith(`${path.resolve(moduleDir)}${path.sep}`)) {
+      throw new Error(
+        `Backend entry '${entry}' for module '${manifest.id}' escapes the module directory`,
+      );
+    }
     try {
       await access(candidate);
       return candidate;

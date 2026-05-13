@@ -72,6 +72,7 @@ interface ModuleManifestFile {
     icon?: string;
     order?: number;
     group?: string;
+    hidden?: boolean;
   };
   enabled?: boolean;
   dependsOn?: ModuleDependency[];
@@ -300,7 +301,9 @@ function normalizeToV2(
       widgets: parsed.exports?.widgets ?? [],
     },
     registerAsSpaceInTopBar:
-      parsed.ui?.registerAsSpaceInTopBar ?? (parsed.kind ?? "space") === "space",
+      parsed.sidebar?.hidden === true
+        ? false
+        : parsed.ui?.registerAsSpaceInTopBar ?? (parsed.kind ?? "space") === "space",
     defaultPinned: Boolean(parsed.defaultPinned),
   };
 }

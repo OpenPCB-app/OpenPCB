@@ -64,6 +64,7 @@ function normalizeSidebar(raw: ModuleManifest): ModuleSidebarDeclaration {
     icon: sidebar.icon,
     order: sidebar.order,
     group: typeof sidebar.group === "string" ? sidebar.group : undefined,
+    hidden: sidebar.hidden === true,
   };
 }
 

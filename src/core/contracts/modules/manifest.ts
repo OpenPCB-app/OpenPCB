@@ -23,6 +23,8 @@ export interface ModuleSidebarDeclaration {
   order: number;
   /** Optional grouping key for sidebar sections. */
   group?: string;
+  /** Hide from the app sidebar while keeping the module loadable/routable. */
+  hidden?: boolean;
 }
 
 export interface ModuleRuntimeEntries {
