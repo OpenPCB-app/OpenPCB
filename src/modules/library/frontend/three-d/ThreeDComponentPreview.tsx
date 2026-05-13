@@ -1,7 +1,15 @@
 import { Bounds, OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import { Suspense, useEffect, useMemo, useState, type ReactElement } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+} from "react";
 import { ComponentGLB } from "./ComponentGLB";
+import { convertStoredFootprintStepModel } from "./model-conversion";
 
 interface FootprintModelMetadata {
   status: string;
@@ -13,6 +21,9 @@ interface FootprintModelMetadata {
   byteSize: number | null;
   errorMessage: string | null;
 }
+
+const PENDING_CLIENT_CONVERSION = "pending_client_conversion";
+const FAILED = "failed";
 
 type PreviewState =
   | { kind: "loading" }
@@ -48,13 +59,13 @@ export function resolveThreeDPreviewState(
   if (!metadata) {
     return { kind: "loading" };
   }
-  if (metadata.status === "pending" || metadata.status === "pending_client_conversion") {
+  if (metadata.status === "pending" || metadata.status === PENDING_CLIENT_CONVERSION) {
     return { kind: "pending_client_conversion" };
   }
   if (metadata.status === "unsupported_format" || metadata.sourceFilename?.toLowerCase().endsWith(".wrl")) {
     return { kind: "unsupported_format" };
   }
-  if (metadata.status === "failed" || metadata.status === "error") {
+  if (metadata.status === FAILED || metadata.status === "error") {
     return {
       kind: "failed",
       message: metadata.errorMessage ?? "3D model conversion failed",
@@ -80,9 +91,11 @@ function LoadingMessage({ children }: { children: string }): ReactElement {
 export function ThreeDPreviewStatePanel({
   state,
   isBuiltin,
+  onRetry,
 }: {
   state: Exclude<PreviewState, { kind: "ready" }>;
   isBuiltin: boolean;
+  onRetry?: (() => void) | null;
 }): ReactElement {
   if (state.kind === "loading") {
     return <LoadingMessage>Loading 3D model metadata...</LoadingMessage>;
@@ -103,7 +116,19 @@ export function ThreeDPreviewStatePanel({
         className="flex h-full items-center justify-center bg-red-950/70 px-4 text-center text-sm text-red-200"
         data-testid="library-3d-error"
       >
-        {state.message}
+        <div className="space-y-2">
+          <div>{state.message}</div>
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="mx-auto inline-flex h-9 items-center rounded-lg border border-red-400 bg-red-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+              data-testid="library-3d-retry-conversion"
+            >
+              Retry conversion
+            </button>
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -176,6 +201,7 @@ export function ThreeDComponentPreview({
 }): ReactElement {
   const [metadata, setMetadata] = useState<FootprintModelMetadata | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   const baseUrl = useMemo(() => {
     if (!backendURL) {
@@ -215,6 +241,79 @@ export function ThreeDComponentPreview({
     return () => controller.abort();
   }, [baseUrl]);
 
+  const refreshMetadata = useCallback((): void => {
+    if (!baseUrl) return;
+    const controller = new AbortController();
+    setLoadError(null);
+    void (async () => {
+      try {
+        const response = await fetch(`${baseUrl}/meta`, { signal: controller.signal });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(`3D model metadata fetch failed (HTTP ${response.status})`);
+        }
+        setMetadata(normalizeMetadataPayload(payload));
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setLoadError(error instanceof Error ? error.message : "Failed to load 3D model metadata");
+      }
+    })();
+  }, [baseUrl]);
+
+  const canRetryConversion =
+    Boolean(baseUrl) &&
+    !isBuiltin &&
+    metadata?.status === FAILED &&
+    typeof metadata.sourceStepSha256 === "string" &&
+    typeof metadata.sourceFilename === "string";
+
+  const handleRetry = useCallback(() => {
+    if (!backendURL || !baseUrl || !canRetryConversion) {
+      return;
+    }
+    setRetrying(true);
+    setLoadError(null);
+    setMetadata((prev) =>
+      prev ? { ...prev, status: PENDING_CLIENT_CONVERSION } : prev,
+    );
+    void convertStoredFootprintStepModel({
+      backendURL,
+      moduleId,
+      footprintId,
+      sourceStepUrl: `/footprints/${footprintId}/model/source`,
+      sourceFilename: metadata!.sourceFilename!,
+      sourceStepSha256: metadata!.sourceStepSha256!,
+      modelRef: metadata!.modelRef,
+      onProgress: (status, message) => {
+        if (status === "failed") {
+          const failureMessage = message ?? "3D model conversion failed";
+          setMetadata((prev) =>
+            prev
+              ? { ...prev, status: FAILED, errorMessage: failureMessage }
+              : prev,
+          );
+          setLoadError(failureMessage);
+        }
+      },
+    })
+      .then(() => {
+        refreshMetadata();
+      })
+      .catch((error) => {
+        const failureMessage =
+          error instanceof Error ? error.message : "3D model conversion failed";
+        setMetadata((prev) =>
+          prev ? { ...prev, status: FAILED, errorMessage: failureMessage } : prev,
+        );
+        setLoadError(failureMessage);
+      })
+      .finally(() => {
+        setRetrying(false);
+      });
+  }, [backendURL, baseUrl, canRetryConversion, footprintId, metadata, moduleId, refreshMetadata]);
+
   const modelUrl = metadata?.glbSha256 ? `${baseUrl}?sha=${metadata.glbSha256}` : (baseUrl ?? "");
   const state = resolveThreeDPreviewState(metadata, modelUrl, loadError);
 
@@ -223,7 +322,15 @@ export function ThreeDComponentPreview({
       {state.kind === "ready" ? (
         <ThreeDCanvas modelUrl={state.modelUrl} category={category} mountType={mountType} />
       ) : (
-        <ThreeDPreviewStatePanel state={state} isBuiltin={isBuiltin} />
+        <ThreeDPreviewStatePanel
+          state={state}
+          isBuiltin={isBuiltin}
+          onRetry={
+            canRetryConversion && !retrying
+              ? handleRetry
+              : null
+          }
+        />
       )}
     </div>
   );

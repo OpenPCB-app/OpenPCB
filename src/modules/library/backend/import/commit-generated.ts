@@ -9,7 +9,7 @@ import type { CoreBackendModuleContext } from "../../../../core/contracts/module
 import { and, eq } from "drizzle-orm";
 import { buildFootprintRenderModel } from "../../../../shared/rendering/footprint-preview-builder";
 import type { FootprintRenderSource } from "../../../../shared/rendering/types";
-import { components, footprints, symbols } from "../schema";
+import { componentFootprints, components, footprints, symbols } from "../schema";
 import { getDb } from "../queries";
 import { ImportValidationError, parseImportBundle } from "./inspect-kicad";
 import type { CommitKicadResponse } from "./types";
@@ -17,6 +17,7 @@ import {
   validateFootprintPads,
   validateSymbolPinsCoverFootprintPads,
 } from "./validate-pads";
+import { buildIdentityPinMapJson } from "./pinmap";
 
 export interface CommitGeneratedRequest {
   symbolLibrary: { fileName: string; content: string };
@@ -108,6 +109,7 @@ export function commitGeneratedImport(
   validateSymbolPinsCoverFootprintPads(selectedSymbol, fpSource);
   const fpModel = buildFootprintRenderModel(fpSource);
   const sourceHash = hashSource(fpSource);
+  const pinMapJson = buildIdentityPinMapJson(selectedSymbol, fpSource);
 
   const now = new Date().toISOString();
   const symbolId = crypto.randomUUID();
@@ -201,6 +203,18 @@ export function commitGeneratedImport(
         footprintId,
         tagsJson: JSON.stringify(tags),
         createdAt: now,
+      })
+      .run();
+
+    txDb
+      .insert(componentFootprints)
+      .values({
+        componentId,
+        footprintId,
+        isDefault: 1,
+        variantLabel: fpMeta.name,
+        sortOrder: 0,
+        pinMapJson,
       })
       .run();
   });

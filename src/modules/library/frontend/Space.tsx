@@ -291,14 +291,16 @@ export function LibrarySpace({
         );
         setRefreshTick((value) => value + 1);
         setDetailComponentId(result.componentId);
-        if (result.modelConversion?.status === "pending_client_conversion") {
+        const hasPendingModelConversion =
+          result.modelConversion?.status === "pending_client_conversion";
+        if (hasPendingModelConversion) {
           setNotice({
             id: crypto.randomUUID(),
             title: "Converting 3D model",
-            message: "Converting 3D model…",
+            message: "Component imported. Converting 3D model…",
             variant: "success",
           });
-          await convertPendingModelConversion({
+          void convertPendingModelConversion({
             backendURL,
             moduleId,
             conversion: result.modelConversion,
@@ -312,22 +314,27 @@ export function LibrarySpace({
                     : status === "ready"
                       ? "3D model ready"
                       : "Converting 3D model",
-                message: message ?? (status === "ready" ? "Ready" : "Converting 3D model…"),
+                message:
+                  message ??
+                  (status === "ready" ? "Ready" : "Converting 3D model…"),
                 variant: status === "failed" ? "warning" : "success",
               });
             },
-          }).catch((conversionError) => {
-            setNotice({
-              id: crypto.randomUUID(),
-              title: "3D model conversion failed",
-              message:
-                conversionError instanceof Error
-                  ? conversionError.message
-                  : "Imported component remains available without a 3D model.",
-              variant: "warning",
+          })
+            .catch((conversionError) => {
+              setNotice({
+                id: crypto.randomUUID(),
+                title: "3D model conversion failed",
+                message:
+                  conversionError instanceof Error
+                    ? conversionError.message
+                    : "Imported component remains available without a 3D model.",
+                variant: "warning",
+              });
+            })
+            .finally(() => {
+              setDetailModelRefreshToken((token) => token + 1);
             });
-          });
-          setDetailModelRefreshToken((token) => token + 1);
         }
         if (result.warnings.length > 0) {
           const firstWarning = result.warnings[0];
@@ -340,7 +347,7 @@ export function LibrarySpace({
                 : `${firstWarning?.message ?? "Review imported component metadata."} +${result.warnings.length - 1} more`,
             variant: "warning",
           });
-        } else {
+        } else if (!hasPendingModelConversion) {
           setNotice({
             id: crypto.randomUUID(),
             title: result.reused ? "Existing component opened" : "Component imported",

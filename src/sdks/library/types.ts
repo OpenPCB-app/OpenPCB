@@ -13,6 +13,12 @@ export interface LibraryComponent {
   isBuiltin: boolean;
 }
 
+export interface LibraryPinMapEntry {
+  pinNumber: string;
+  padNumber: string;
+  pinName: string | null;
+}
+
 export interface LibrarySymbol {
   id: string;
   name: string;
@@ -76,6 +82,8 @@ export interface LibraryComponentFootprintVariant {
     imperial: string | null;
     metric: string | null;
   };
+  /** Explicit symbol-pin → footprint-pad map. Null means fallback to matching numbers. */
+  pinMap: LibraryPinMapEntry[] | null;
 }
 
 export interface LibraryComponentDetail {
@@ -135,6 +143,8 @@ export interface LibraryFootprintPlacementSnapshot {
   mountType: string | null;
   sourceHash: string | null;
   preview: FootprintRenderModel | null;
+  /** Component-specific symbol-pin → footprint-pad map. Missing/null means fallback to matching numbers. */
+  pinMap?: LibraryPinMapEntry[] | null;
   model3d?: LibraryFootprintModelDescriptor;
 }
 

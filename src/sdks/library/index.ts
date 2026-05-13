@@ -16,6 +16,8 @@ export type {
   LibraryFootprintModelDescriptor,
   LibraryFootprintModelStatus,
   LibraryFootprintPlacementSnapshot,
+  LibraryComponentFootprintVariant,
+  LibraryPinMapEntry,
   LibraryPreviewWarning,
   LibrarySearchParams,
   LibrarySourceProvenance,

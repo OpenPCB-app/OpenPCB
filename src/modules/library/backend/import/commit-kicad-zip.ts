@@ -386,7 +386,10 @@ async function persistPendingSourceStep(
       .from(footprintModels)
       .where(eq(footprintModels.footprintId, footprintId))
       .get();
-    const modelRefJson = JSON.stringify(rawFootprint.model3dRefs);
+    const selectedRef = findSelectedModelRef(rawFootprint, selectedEntry.baseName);
+    // Persist the selected model ref only; retries and previews need the same
+    // transform that was used for conversion.
+    const modelRefJson = JSON.stringify(selectedRef);
 
     db.transaction((tx) => {
       const txDb = tx as typeof db;
@@ -422,7 +425,7 @@ async function persistPendingSourceStep(
       sourceStepUrl: `/footprints/${footprintId}/model/source`,
       sourceFilename: selectedEntry.baseName,
       selectedModel: selectedCandidate,
-      modelRef: findSelectedModelRef(rawFootprint, selectedEntry.baseName),
+      modelRef: selectedRef,
       status: "pending_client_conversion",
     };
   } catch (error) {

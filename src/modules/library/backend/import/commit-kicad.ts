@@ -1,6 +1,6 @@
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { and, eq } from "drizzle-orm";
-import { components, footprints, symbols } from "../schema";
+import { componentFootprints, components, footprints, symbols } from "../schema";
 import { getDb } from "../queries";
 import {
   PLACEHOLDER_FOOTPRINT_ID,
@@ -15,6 +15,7 @@ import {
   validateFootprintPads,
   validateSymbolPinsCoverFootprintPads,
 } from "./validate-pads";
+import { buildIdentityPinMapJson } from "./pinmap";
 
 function trimOrEmpty(value: string): string {
   return value.trim();
@@ -206,6 +207,9 @@ export function commitKicadImport(
   const footprintTags = selectedFootprint
     ? selectedFootprint.tags
     : ([...PLACEHOLDER_TAGS] as string[]);
+  const pinMapJson = selectedFootprint
+    ? buildIdentityPinMapJson(selectedSymbol, selectedFootprint.preview)
+    : null;
 
   const tags = dedupeTags([
     ...footprintTags,
@@ -309,6 +313,18 @@ export function commitKicadImport(
         footprintId,
         tagsJson: JSON.stringify(tags),
         createdAt: now,
+      })
+      .run();
+
+    transactionalDb
+      .insert(componentFootprints)
+      .values({
+        componentId,
+        footprintId,
+        isDefault: 1,
+        variantLabel: selectedFootprint?.name ?? PLACEHOLDER_FOOTPRINT_NAME,
+        sortOrder: 0,
+        pinMapJson,
       })
       .run();
   });

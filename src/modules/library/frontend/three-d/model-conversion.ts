@@ -20,6 +20,18 @@ type ModelConversionProgress =
   | "ready"
   | "failed";
 
+interface StoredStepConversionInput {
+  backendURL: string;
+  moduleId: string;
+  footprintId: string;
+  sourceStepUrl: string;
+  sourceFilename: string;
+  sourceStepSha256: string;
+  modelRef?: unknown | null;
+  signal?: AbortSignal;
+  onProgress?: (status: ModelConversionProgress, message?: string) => void;
+}
+
 interface UploadConvertedModelInput {
   backendURL: string;
   moduleId: string;
@@ -194,24 +206,60 @@ export async function convertPendingModelConversion({
   signal?: AbortSignal;
   onProgress?: (status: ModelConversionProgress, message?: string) => void;
 }): Promise<void> {
-  const sourceUrl = `${backendURL}/api/modules/${encodePathSegment(moduleId)}${conversion.sourceStepUrl}`;
+  await convertStoredFootprintStepModel({
+    backendURL,
+    moduleId,
+    footprintId: conversion.footprintId,
+    sourceStepUrl: conversion.sourceStepUrl,
+    sourceFilename: conversion.sourceFilename,
+    sourceStepSha256: conversion.sourceStepSha256,
+    modelRef: conversion.modelRef,
+    signal,
+    onProgress,
+  });
+}
+
+export async function convertStoredFootprintStepModel({
+  backendURL,
+  moduleId,
+  footprintId,
+  sourceStepUrl,
+  sourceFilename,
+  sourceStepSha256,
+  modelRef,
+  signal,
+  onProgress,
+}: StoredStepConversionInput): Promise<void> {
+  const sourceUrl = `${backendURL}/api/modules/${encodePathSegment(moduleId)}${sourceStepUrl}`;
   onProgress?.("fetching_source", "Fetching STEP source...");
   const sourceResponse = await fetch(sourceUrl, { signal });
   if (!sourceResponse.ok) {
     throw new Error(`STEP source fetch failed (HTTP ${sourceResponse.status})`);
   }
   const stepBytes = await sourceResponse.arrayBuffer();
+  if (stepBytes.byteLength > STEP_SIZE_LIMIT_BYTES) {
+    const message = "STEP file must be 25 MB or smaller.";
+    await markPendingModelConversionFailed({
+      backendURL,
+      moduleId,
+      footprintId,
+      message,
+      signal,
+    });
+    onProgress?.("failed", message);
+    throw new Error(message);
+  }
 
   try {
     await uploadConvertedModel({
       backendURL,
       moduleId,
-      footprintId: conversion.footprintId,
-      sourceFilename: conversion.sourceFilename,
-      sourceStepSha256: conversion.sourceStepSha256,
+      footprintId,
+      sourceFilename,
+      sourceStepSha256,
       stepBytes,
       includeSourceStep: false,
-      modelRef: conversion.modelRef as Model3DRef | null,
+      modelRef: (modelRef ?? null) as Model3DRef | null,
       signal,
       onProgress,
     });
@@ -221,7 +269,7 @@ export async function convertPendingModelConversion({
     await markPendingModelConversionFailed({
       backendURL,
       moduleId,
-      footprintId: conversion.footprintId,
+      footprintId,
       message,
       signal,
     });

@@ -85,6 +85,7 @@ export const componentFootprints = sqliteTable(
     isDefault: integer("is_default").notNull().default(0),
     variantLabel: text("variant_label").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
+    pinMapJson: text("pinmap_json"),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.componentId, table.footprintId] }),

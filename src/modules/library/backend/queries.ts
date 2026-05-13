@@ -1,8 +1,9 @@
-import { asc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, like, or, sql } from "drizzle-orm";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
 import { ValidationError } from "../../../core/contracts/errors";
 import type {
   LibraryComponent,
+  LibraryComponentFootprintVariant,
   LibraryComponentPlacementDetail,
   LibraryComponentDetail,
   LibraryFootprint,
@@ -10,6 +11,7 @@ import type {
   LibraryFootprintModelDescriptor,
   LibraryFootprintPlacementSnapshot,
   LibraryPreviewWarning,
+  LibraryPinMapEntry,
   LibrarySearchParams,
   LibrarySourceProvenance,
   LibrarySDK,
@@ -108,6 +110,28 @@ function parseOptionalJson(value: string | null): unknown | null {
   } catch {
     return null;
   }
+}
+
+function parsePinMapJson(value: string | null): LibraryPinMapEntry[] | null {
+  const parsed = parseOptionalJson(value);
+  if (!Array.isArray(parsed)) {
+    return null;
+  }
+  const entries: LibraryPinMapEntry[] = [];
+  for (const item of parsed) {
+    const record = asRecord(item);
+    const pinNumber = asString(record?.pinNumber)?.trim();
+    const padNumber = asString(record?.padNumber)?.trim();
+    if (!pinNumber || !padNumber) {
+      continue;
+    }
+    entries.push({
+      pinNumber,
+      padNumber,
+      pinName: asString(record?.pinName),
+    });
+  }
+  return entries.length > 0 ? entries : null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -322,6 +346,7 @@ function parseSymbolPlacementSnapshot(
 function parseFootprintPlacementSnapshot(
   row: FootprintRow,
   modelRow?: FootprintModelRow | null,
+  pinMap: LibraryPinMapEntry[] | null = null,
 ): LibraryFootprintPlacementSnapshot {
   // Footprint preview is optional (null allowed) while schematic-only workflows remain supported.
   const data = parseJsonObject(row.dataJson);
@@ -335,6 +360,7 @@ function parseFootprintPlacementSnapshot(
     mountType: asString(normalized?.mountType) ?? asString(data.mountType),
     sourceHash: asString(provenance?.sourceHash),
     preview: isFootprintRenderModel(previewRaw) ? previewRaw : null,
+    pinMap,
   };
   if (modelRow) {
     snapshot.model3d = mapFootprintModelDescriptor(modelRow);
@@ -556,9 +582,7 @@ export async function resolveComponent(
 async function loadComponentFootprintVariants(
   ctx: CoreBackendModuleContext,
   componentRow: ComponentRow,
-): Promise<
-  import("../../../sdks/library/types").LibraryComponentFootprintVariant[]
-> {
+): Promise<LibraryComponentFootprintVariant[]> {
   const db = getDb(ctx);
   const joinRows = await db
     .select({
@@ -566,6 +590,7 @@ async function loadComponentFootprintVariants(
       isDefault: componentFootprints.isDefault,
       variantLabel: componentFootprints.variantLabel,
       sortOrder: componentFootprints.sortOrder,
+      pinMapJson: componentFootprints.pinMapJson,
     })
     .from(componentFootprints)
     .where(eq(componentFootprints.componentId, componentRow.id))
@@ -593,6 +618,7 @@ async function loadComponentFootprintVariants(
         mountType: detail.mountType,
         padCount: detail.padCount,
         packageCode: detail.packageCode,
+        pinMap: null,
       },
     ];
   }
@@ -609,8 +635,7 @@ async function loadComponentFootprintVariants(
     .all();
   const fpById = new Map(fpRows.map((row) => [row.id, row]));
 
-  const variants: import("../../../sdks/library/types").LibraryComponentFootprintVariant[] =
-    [];
+  const variants: LibraryComponentFootprintVariant[] = [];
   for (const row of joinRows) {
     const fp = fpById.get(row.footprintId);
     if (!fp) continue; // referential integrity is enforced via FK + ON DELETE CASCADE; this is defensive
@@ -624,9 +649,28 @@ async function loadComponentFootprintVariants(
       mountType: detail.mountType,
       padCount: detail.padCount,
       packageCode: detail.packageCode,
+      pinMap: parsePinMapJson(row.pinMapJson),
     });
   }
   return variants;
+}
+
+async function loadDefaultFootprintPinMap(
+  ctx: CoreBackendModuleContext,
+  componentRow: ComponentRow,
+): Promise<LibraryPinMapEntry[] | null> {
+  const db = getDb(ctx);
+  const row = await db
+    .select({ pinMapJson: componentFootprints.pinMapJson })
+    .from(componentFootprints)
+    .where(
+      and(
+        eq(componentFootprints.componentId, componentRow.id),
+        eq(componentFootprints.footprintId, componentRow.footprintId),
+      ),
+    )
+    .get();
+  return parsePinMapJson(row?.pinMapJson ?? null);
 }
 
 export async function getComponentDetail(
@@ -709,10 +753,12 @@ export async function resolveComponentForPlacement(
     componentRow,
   );
 
+  const pinMap = await loadDefaultFootprintPinMap(ctx, componentRow);
+
   return {
     component: mapComponent(componentRow),
     symbol: parseSymbolPlacementSnapshot(symbolRow),
-    footprint: parseFootprintPlacementSnapshot(footprintRow, footprintModelRow),
+    footprint: parseFootprintPlacementSnapshot(footprintRow, footprintModelRow, pinMap),
     footprintVariants,
     resolvedAt: new Date().toISOString(),
   };

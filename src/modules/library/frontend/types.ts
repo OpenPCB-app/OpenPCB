@@ -1,4 +1,4 @@
-import type { LibraryComponent } from "../../../sdks/library";
+import type { LibraryComponent, LibraryPinMapEntry } from "../../../sdks/library";
 import type {
   FootprintRenderModel,
   SymbolRenderModel,
@@ -61,6 +61,7 @@ export interface ComponentFootprintVariant {
     imperial: string | null;
     metric: string | null;
   };
+  pinMap: LibraryPinMapEntry[] | null;
 }
 
 export interface ComponentDetailPayload {

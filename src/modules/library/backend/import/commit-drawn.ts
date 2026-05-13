@@ -12,7 +12,7 @@ import type {
   FootprintRenderSource,
   SymbolRenderSource,
 } from "../../../../shared/rendering/types";
-import { components, footprints, symbols } from "../schema";
+import { componentFootprints, components, footprints, symbols } from "../schema";
 import { getDb } from "../queries";
 import { ImportValidationError, parseImportBundle } from "./inspect-kicad";
 import type { CommitKicadResponse } from "./types";
@@ -20,6 +20,7 @@ import {
   validateFootprintPads,
   validateSymbolPinsCoverFootprintPads,
 } from "./validate-pads";
+import { buildIdentityPinMapJson } from "./pinmap";
 
 export interface CommitDrawnRequest {
   drawnSymbol: {
@@ -131,6 +132,7 @@ export function commitDrawnImport(
   let footprintDataJson: string;
   let footprintName: string;
   let tags: string[];
+  let pinMapJson: string | null = null;
 
   if (input.footprintMode === "generated" && input.generatedFootprint) {
     const fpSource = input.generatedFootprint.source;
@@ -139,6 +141,7 @@ export function commitDrawnImport(
     validateSymbolPinsCoverFootprintPads(symbolSource, fpSource);
     const fpModel = buildFootprintRenderModel(fpSource);
     const fpHash = hashString(JSON.stringify(fpSource));
+    pinMapJson = buildIdentityPinMapJson(symbolSource, fpSource);
     footprintName = fpMeta.name;
     tags = dedupeTags([...fpMeta.tags, "drawn-symbol", "generated"]);
 
@@ -173,6 +176,7 @@ export function commitDrawnImport(
     validateSymbolPinsCoverFootprintPads(symbolSource, fpSource);
     const fpModel = buildFootprintRenderModel(fpSource);
     const fpHash = hashString(JSON.stringify(fpSource));
+    pinMapJson = buildIdentityPinMapJson(symbolSource, fpSource);
     footprintName = fpMeta.name;
     tags = dedupeTags([...fpMeta.tags, "drawn-symbol", "drawn-footprint"]);
 
@@ -219,6 +223,7 @@ export function commitDrawnImport(
     validateFootprintPads(selectedFp.preview);
     validateSymbolPinsCoverFootprintPads(symbolSource, selectedFp.preview);
     const rawFp = parsed.raw.footprintById[selectedFp.id];
+    pinMapJson = buildIdentityPinMapJson(symbolSource, selectedFp.preview);
     footprintName = selectedFp.name;
     tags = dedupeTags([...selectedFp.tags, "drawn-symbol"]);
 
@@ -303,6 +308,18 @@ export function commitDrawnImport(
         footprintId,
         tagsJson: JSON.stringify(tags),
         createdAt: now,
+      })
+      .run();
+
+    txDb
+      .insert(componentFootprints)
+      .values({
+        componentId,
+        footprintId,
+        isDefault: 1,
+        variantLabel: footprintName,
+        sortOrder: 0,
+        pinMapJson,
       })
       .run();
   });

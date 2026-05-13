@@ -478,7 +478,7 @@ export function ImportWizardPage({
           componentId: result.componentId,
           signal: controller.signal,
         });
-        await uploadFootprintStepModel({
+        void uploadFootprintStepModel({
           backendURL,
           moduleId,
           footprintId,
@@ -501,7 +501,9 @@ export function ImportWizardPage({
         });
       }
       if (modelConversion) {
-        await convertPendingModelConversion({
+        // Don't block commit UX on conversion: model conversion happens client-side
+        // and can hang/timeout independently; import should still succeed.
+        void convertPendingModelConversion({
           backendURL,
           moduleId,
           conversion: modelConversion,

@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("./steps/SymbolStep", () => ({ SymbolStep: () => null }));
 vi.mock("./steps/FootprintStep", () => ({ FootprintStep: () => null }));
@@ -8,6 +8,7 @@ vi.mock("./editor", () => ({ useSymbolEditorStore: { getState: () => ({ reset: v
 vi.mock("./footprint-editor", () => ({ useFootprintEditorStore: { getState: () => ({ reset: vi.fn() }) } }));
 import {
   convertPendingModelConversion,
+  convertStoredFootprintStepModel,
   uploadFootprintStepModel,
 } from "../three-d/model-conversion";
 
@@ -38,6 +39,11 @@ const conversion = {
   modelRef: null,
   status: "pending_client_conversion" as const,
 };
+
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.unstubAllGlobals();
+});
 
 function response(bytes: string, ok = true): Response {
   return new Response(new TextEncoder().encode(bytes), { status: ok ? 200 : 500 });
@@ -90,6 +96,38 @@ describe("ZIP post-commit model conversion", () => {
 
     expect(progress).toEqual(["fetching_source", "converting", "failed"]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "PATCH" });
+  });
+
+  test("oversized STEP source marks failed", async () => {
+    const progress: string[] = [];
+    const large = new Uint8Array(25 * 1024 * 1024 + 1);
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        return new Response(JSON.stringify({ ok: true, data: { status: "failed" } }));
+      }
+      return new Response(large, { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { convertStepToGlb } = await import("../three-d/step-to-glb");
+
+    await expect(
+      convertStoredFootprintStepModel({
+        backendURL: "http://localhost:3000",
+        moduleId: "library",
+        footprintId: "fp-1",
+        sourceStepUrl: "/footprints/fp-1/model/source",
+        sourceFilename: "big.step",
+        sourceStepSha256: "1".repeat(64),
+        modelRef: null,
+        onProgress: (status) => progress.push(status),
+      }),
+    ).rejects.toThrow("25 MB");
+
+    expect(progress).toEqual(["fetching_source", "failed"]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(convertStepToGlb).not.toHaveBeenCalled();
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "PATCH" });
   });
 });

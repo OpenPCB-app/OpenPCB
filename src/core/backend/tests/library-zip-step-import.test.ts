@@ -133,6 +133,63 @@ async function readKicadFixtures(): Promise<{
   return { symbolContent, footprintContent };
 }
 
+function createAttinySymbolFixture(): string {
+  const pins = Array.from({ length: 8 }, (_, index) => {
+    const number = String(index + 1);
+    const y = -8.89 + index * 2.54;
+    return `      (pin passive line (at -7.62 ${y.toFixed(2)} 0) (length 2.54) (name "P${number}" (effects (font (size 1.27 1.27)))) (number "${number}" (effects (font (size 1.27 1.27)))))`;
+  }).join("\n");
+
+  return `(kicad_symbol_lib
+  (version 20231120)
+  (generator "openpcb_test")
+  (symbol "ATTINY13A-SU"
+    (property "Reference" "U" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "ATTINY13A-SU" (at 0 -2.54 0) (effects (font (size 1.27 1.27))))
+    (property "Footprint" "SOIC127P798X216-8N" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
+    (symbol "ATTINY13A-SU_0_1"
+      (rectangle (start -5.08 10.16) (end 5.08 -10.16) (stroke (width 0.254) (type default)) (fill (type background)))
+    )
+    (symbol "ATTINY13A-SU_1_1"
+${pins}
+    )
+  )
+)
+`;
+}
+
+function createAttinyFootprintFixture(): string {
+  const leftPads = Array.from({ length: 4 }, (_, index) => {
+    const number = String(index + 1);
+    const y = -1.905 + index * 1.27;
+    return `  (pad "${number}" smd roundrect (at -2.7 ${y.toFixed(3)}) (size 1.5 0.6) (layers "F.Cu" "F.Mask" "F.Paste") (roundrect_rratio 0.25))`;
+  }).join("\n");
+  const rightPads = Array.from({ length: 4 }, (_, index) => {
+    const number = String(8 - index);
+    const y = -1.905 + index * 1.27;
+    return `  (pad "${number}" smd roundrect (at 2.7 ${y.toFixed(3)}) (size 1.5 0.6) (layers "F.Cu" "F.Mask" "F.Paste") (roundrect_rratio 0.25))`;
+  }).join("\n");
+
+  return `(footprint "SOIC127P798X216-8N"
+  (version 20240108)
+  (generator "openpcb_test")
+  (layer "F.Cu")
+  (descr "Synthetic SOIC-8 footprint for ATTINY13A-SU ZIP regression")
+  (tags "SOIC-8 ATTINY13A")
+  (property "Reference" "REF**" (at 0 -3.7 0) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))
+  (property "Value" "SOIC127P798X216-8N" (at 0 3.7 0) (layer "F.Fab") (effects (font (size 1 1) (thickness 0.15))))
+  (attr smd)
+${leftPads}
+${rightPads}
+  (model "\${KIPRJMOD}/MISSING-SOIC8.step"
+    (offset (xyz 0 0 0))
+    (scale (xyz 1 1 1))
+    (rotate (xyz 0 0 0))
+  )
+)
+`;
+}
+
 async function importZip(
   server: ReturnType<typeof createHttpServer>,
   zipBytes: Uint8Array,
@@ -299,10 +356,15 @@ describe("library KiCad ZIP STEP import", () => {
     expect(metaBody.data?.sourceStepSha256).toBeNull();
   });
 
-  test("imports real ATTINY ZIP and queues its orphan STEP by symbol name", async () => {
+  test("imports ATTINY ZIP and queues its orphan STEP by symbol name", async () => {
     const server = await createLibraryServer("library-zip-attiny-step-import");
-    const zipPath = path.resolve(import.meta.dir, "../../../../data/ATTINY13A-SU.zip");
-    const zipBytes = new Uint8Array(await Bun.file(zipPath).arrayBuffer());
+    const encoder = new TextEncoder();
+    const stepBytes = encoder.encode("ISO-10303-21;ATTINY13A-SU;END-ISO-10303-21;");
+    const zipBytes = createStoredZip([
+      { name: "ATTINY13A-SU.kicad_sym", bytes: encoder.encode(createAttinySymbolFixture()) },
+      { name: "SOIC127P798X216-8N.kicad_mod", bytes: encoder.encode(createAttinyFootprintFixture()) },
+      { name: "ATTINY13A-SU.step", bytes: stepBytes },
+    ]);
     const importResponse = await importZip(server, zipBytes, "ATTINY13A-SU.zip");
 
     expect(importResponse.status).toBe(201);

@@ -29,6 +29,7 @@ interface VariantBinding {
   variantLabel: string;
   isDefault: boolean;
   sortOrder: number;
+  pinMapJson: string;
 }
 
 interface BuiltinComponentSeed {
@@ -42,6 +43,10 @@ interface BuiltinComponentSeed {
 }
 
 const BUILTIN_TAGS = ["passive", "builtin", "system"] as const;
+const PASSIVE_PIN_MAP_JSON = JSON.stringify([
+  { pinNumber: "1", padNumber: "1", pinName: "1" },
+  { pinNumber: "2", padNumber: "2", pinName: "2" },
+]);
 
 /**
  * Sized component rows that previous versions of this seeder created
@@ -158,6 +163,7 @@ function buildVariantBindings(
     variantLabel: entry.variantLabel,
     isDefault: entry.footprintId === defaultFootprintId,
     sortOrder: index,
+    pinMapJson: PASSIVE_PIN_MAP_JSON,
   }));
 }
 
@@ -363,6 +369,7 @@ export function seedBuiltinComponents(
           isDefault: componentFootprints.isDefault,
           variantLabel: componentFootprints.variantLabel,
           sortOrder: componentFootprints.sortOrder,
+          pinMapJson: componentFootprints.pinMapJson,
         })
         .from(componentFootprints)
         .where(eq(componentFootprints.componentId, entry.componentId))
@@ -399,6 +406,7 @@ export function seedBuiltinComponents(
               isDefault: desiredIsDefault,
               variantLabel: variant.variantLabel,
               sortOrder: variant.sortOrder,
+              pinMapJson: variant.pinMapJson,
             })
             .onConflictDoNothing()
             .run();
@@ -406,7 +414,8 @@ export function seedBuiltinComponents(
         } else if (
           existing.isDefault !== desiredIsDefault ||
           existing.variantLabel !== variant.variantLabel ||
-          existing.sortOrder !== variant.sortOrder
+          existing.sortOrder !== variant.sortOrder ||
+          existing.pinMapJson !== variant.pinMapJson
         ) {
           transactionalDb
             .update(componentFootprints)
@@ -414,6 +423,7 @@ export function seedBuiltinComponents(
               isDefault: desiredIsDefault,
               variantLabel: variant.variantLabel,
               sortOrder: variant.sortOrder,
+              pinMapJson: variant.pinMapJson,
             })
             .where(
               and(
