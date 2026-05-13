@@ -83,17 +83,17 @@ jobs:
 
       - name: Repair Rollup optional native dependency
         run: |
-          ROLLUP_VERSION="$(node -p "require('rollup/package.json').version")"
+          ROLLUP_VERSION="$(node -p "require('./package-lock.json').packages['node_modules/rollup'].version")"
           npm install --no-save "@rollup/rollup-${{ matrix.rollup_package }}@${ROLLUP_VERSION}"
 
       - name: Repair Lightning CSS optional native dependency
         run: |
-          LIGHTNINGCSS_VERSION="$(node -p "require('lightningcss/package.json').version")"
+          LIGHTNINGCSS_VERSION="$(node -p "require('./package-lock.json').packages['node_modules/lightningcss'].version")"
           npm install --no-save "lightningcss-${{ matrix.lightningcss_package }}@${LIGHTNINGCSS_VERSION}"
 
       - name: Repair Tailwind Oxide optional native dependency
         run: |
-          TAILWINDCSS_OXIDE_VERSION="$(node -p "require('@tailwindcss/oxide/package.json').version")"
+          TAILWINDCSS_OXIDE_VERSION="$(node -p "require('./package-lock.json').packages['node_modules/@tailwindcss/oxide'].version")"
           npm install --no-save "@tailwindcss/oxide-${{ matrix.tailwindcss_oxide_package }}@${TAILWINDCSS_OXIDE_VERSION}"
 
       - name: Validate release version
