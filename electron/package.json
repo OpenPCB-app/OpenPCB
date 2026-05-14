@@ -8,9 +8,13 @@
     "build": "tsup",
     "build:watch": "tsup --watch",
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@sentry/electron": "^7.0.0",
+    "@sentry/node-native": "10.50.0",
+    "electron-log": "^5.4.4",
     "electron-updater": "^6.3.9"
   },
   "devDependencies": {

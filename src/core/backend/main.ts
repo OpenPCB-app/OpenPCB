@@ -1,9 +1,22 @@
+import { initBackendSentry, captureBackendException } from "./sentry";
+
+initBackendSentry();
+
 import {
   createHttpServer,
   DiagnosticsStore,
   ModuleRouterRegistry,
   ModuleRuntime,
 } from "./index";
+
+process.on("uncaughtException", (err) => {
+  console.error("[core-backend] uncaughtException", err);
+  captureBackendException(err, { phase: "uncaughtException" });
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[core-backend] unhandledRejection", reason);
+  captureBackendException(reason, { phase: "unhandledRejection" });
+});
 
 const port = Number.parseInt(process.env.PORT ?? "3000", 10);
 const host = process.env.HOST ?? "127.0.0.1";

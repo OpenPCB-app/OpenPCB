@@ -1,3 +1,11 @@
+// electron-log/preload exposes a renderer-side bridge over the global
+// `__electronLog` symbol so renderer code calling electron-log/renderer routes
+// to the main process logger (and disk).
+import "electron-log/preload";
+// @sentry/electron/preload sets up the IPC channel + native crash listener so
+// renderer-side Sentry.init() can communicate with the main-process SDK.
+import "@sentry/electron/preload";
+
 import { contextBridge, ipcRenderer } from "electron";
 
 interface BackendReadyPayload {
@@ -8,6 +16,13 @@ interface BackendReadyPayload {
   startupLicenseCode: string;
 }
 
+interface DiagnosticsPaths {
+  logs: string;
+  crashDumps: string;
+  userData: string;
+  appVersion: string;
+}
+
 contextBridge.exposeInMainWorld("electronAPI", {
   onBackendReady: (callback: (payload: BackendReadyPayload) => void) => {
     ipcRenderer.on("backend-ready", (_event, payload: BackendReadyPayload) => {
@@ -16,5 +31,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   getBackendUrl: (): Promise<BackendReadyPayload | null> => {
     return ipcRenderer.invoke("get-backend-url");
+  },
+  openLogsFolder: (): Promise<{ dir: string; error: string | null }> => {
+    return ipcRenderer.invoke("diagnostics:open-logs");
+  },
+  openCrashDumpsFolder: (): Promise<{ dir: string; error: string | null }> => {
+    return ipcRenderer.invoke("diagnostics:open-crash-dumps");
+  },
+  getDiagnosticsPaths: (): Promise<DiagnosticsPaths> => {
+    return ipcRenderer.invoke("diagnostics:paths");
   },
 });

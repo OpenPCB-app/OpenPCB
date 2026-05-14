@@ -71,12 +71,35 @@ function compileBunSidecar(): void {
     process.exit(1);
   }
 
+  // Bake Sentry DSN / release / env into the compiled binary via --define so
+  // the sidecar reports crashes even when launched without env vars.
+  const defines: string[] = [];
+  if (process.env.OPENPCB_SENTRY_DSN) {
+    defines.push(
+      `--define=process.env.OPENPCB_SENTRY_DSN='${JSON.stringify(process.env.OPENPCB_SENTRY_DSN)}'`,
+    );
+  }
+  if (process.env.OPENPCB_SENTRY_ENV) {
+    defines.push(
+      `--define=process.env.OPENPCB_SENTRY_ENV='${JSON.stringify(process.env.OPENPCB_SENTRY_ENV)}'`,
+    );
+  }
+  if (process.env.OPENPCB_SENTRY_RELEASE) {
+    defines.push(
+      `--define=process.env.OPENPCB_SENTRY_RELEASE='${JSON.stringify(process.env.OPENPCB_SENTRY_RELEASE)}'`,
+    );
+  }
+  const defineFlags = defines.length > 0 ? ` ${defines.join(" ")}` : "";
+
   try {
     // Compile with Bun
-    execSync(`bun build --compile --outfile="${outputPath}" "${entrypoint}"`, {
-      stdio: "inherit",
-      cwd: projectRoot,
-    });
+    execSync(
+      `bun build --compile${defineFlags} --outfile="${outputPath}" "${entrypoint}"`,
+      {
+        stdio: "inherit",
+        cwd: projectRoot,
+      },
+    );
 
     console.log(`✅ Successfully compiled Bun sidecar: ${outputName}`);
   } catch (error: unknown) {

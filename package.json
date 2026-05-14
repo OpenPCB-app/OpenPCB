@@ -39,7 +39,8 @@
     "test:backend:watch": "npm run test:watch --workspace src/core/backend",
     "test:react": "npm run test --workspace src/core/frontend",
     "test:react:watch": "npm run test:watch --workspace src/core/frontend",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "release:sourcemaps": "node scripts/upload-sourcemaps.mjs"
   },
   "devDependencies": {
     "@inquirer/prompts": "^8.0.2",

@@ -1,10 +1,15 @@
 import { app } from "electron";
 import electronUpdater, { type AppUpdater } from "electron-updater";
+import { log as electronLog } from "./logger.js";
+import { Sentry } from "./sentry.js";
 
+const log = electronLog.scope("updater");
 let initialized = false;
 
 function getAutoUpdater(): AppUpdater {
-  const updaterModule = electronUpdater as unknown as { autoUpdater: AppUpdater };
+  const updaterModule = electronUpdater as unknown as {
+    autoUpdater: AppUpdater;
+  };
   return updaterModule.autoUpdater;
 }
 
@@ -16,7 +21,12 @@ function formatError(error: unknown): string {
 }
 
 function getUpdateChannel(): string {
-  const os = process.platform === "darwin" ? "mac" : process.platform === "win32" ? "win" : process.platform;
+  const os =
+    process.platform === "darwin"
+      ? "mac"
+      : process.platform === "win32"
+        ? "win"
+        : process.platform;
   return `beta-${os}-${process.arch}`;
 }
 
@@ -27,6 +37,10 @@ export function initializeAutoUpdater(): void {
   initialized = true;
 
   const autoUpdater = getAutoUpdater();
+  // Route electron-updater's internal logs through electron-log so update
+  // failures land in the same main.log as everything else.
+  autoUpdater.logger = log;
+
   const channel = getUpdateChannel();
   autoUpdater.channel = channel;
   autoUpdater.allowPrerelease = true;
@@ -34,27 +48,31 @@ export function initializeAutoUpdater(): void {
   autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on("checking-for-update", () => {
-    console.log(`[updater] Checking for ${channel} updates`);
+    log.info(`Checking for ${channel} updates`);
   });
   autoUpdater.on("update-available", (info) => {
-    console.log(`[updater] Update available: ${info.version}`);
+    log.info(`Update available: ${info.version}`);
   });
   autoUpdater.on("update-not-available", (info) => {
-    console.log(`[updater] No update available: ${info.version}`);
+    log.info(`No update available: ${info.version}`);
   });
   autoUpdater.on("download-progress", (progress) => {
-    console.log(`[updater] Download ${progress.percent.toFixed(1)}%`);
+    log.info(`Download ${progress.percent.toFixed(1)}%`);
   });
   autoUpdater.on("update-downloaded", (info) => {
-    console.log(`[updater] Update downloaded: ${info.version}`);
+    log.info(`Update downloaded: ${info.version}`);
   });
   autoUpdater.on("error", (error) => {
-    console.warn(`[updater] ${formatError(error)}`);
+    log.warn(formatError(error));
+    Sentry.captureException(error, { tags: { component: "updater" } });
   });
 
   setTimeout(() => {
     void autoUpdater.checkForUpdatesAndNotify().catch((error: unknown) => {
-      console.warn(`[updater] ${formatError(error)}`);
+      log.warn(formatError(error));
+      Sentry.captureException(error, {
+        tags: { component: "updater", phase: "check" },
+      });
     });
   }, 5_000);
 }

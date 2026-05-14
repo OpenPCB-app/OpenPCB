@@ -1,7 +1,16 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  type WriteStream,
+} from "node:fs";
 import { join } from "node:path";
 import { app, BrowserWindow } from "electron";
+import { log as electronLog } from "./logger.js";
+import { Sentry } from "./sentry.js";
+
+const log = electronLog.scope("sidecar");
 
 interface BackendReadyPayload {
   url: string;
@@ -14,6 +23,7 @@ interface BackendReadyPayload {
 let sidecarProcess: ChildProcess | null = null;
 let discoveredPort: number | null = null;
 let backendPayload: BackendReadyPayload | null = null;
+let sidecarLogStream: WriteStream | null = null;
 
 const SIDECAR_STARTUP_TIMEOUT_MS = 30_000;
 
@@ -67,6 +77,32 @@ function getBackendWorkspaceRoot(): string {
   return join(app.getAppPath(), "..", "src");
 }
 
+function openSidecarLogStream(): WriteStream {
+  if (sidecarLogStream && !sidecarLogStream.closed) {
+    return sidecarLogStream;
+  }
+  const logsDir = app.getPath("logs");
+  mkdirSync(logsDir, { recursive: true });
+  const stream = createWriteStream(join(logsDir, "sidecar.log"), {
+    flags: "a",
+  });
+  stream.on("error", (err) => {
+    log.warn(`[sidecar-log] write stream error: ${err.message}`);
+  });
+  sidecarLogStream = stream;
+  return stream;
+}
+
+function writeSidecarLine(channel: "stdout" | "stderr", line: string): void {
+  if (!line) return;
+  try {
+    const ts = new Date().toISOString();
+    openSidecarLogStream().write(`[${ts}] [${channel}] ${line}\n`);
+  } catch {
+    // Logging failure must never break the sidecar.
+  }
+}
+
 export function getBackendPayload(): BackendReadyPayload | null {
   return backendPayload;
 }
@@ -80,9 +116,9 @@ export function spawnSidecar(): Promise<BackendReadyPayload> {
     // Ensure data directory exists before sidecar tries to create DB
     mkdirSync(appDataDir, { recursive: true });
 
-    console.log(`[sidecar] Spawning: ${binaryPath}`);
-    console.log(`[sidecar] APP_DATA_DIR: ${appDataDir}`);
-    console.log(`[sidecar] OPENPCB_WORKSPACE_ROOT: ${workspaceRoot}`);
+    log.info(`Spawning: ${binaryPath}`);
+    log.info(`APP_DATA_DIR: ${appDataDir}`);
+    log.info(`OPENPCB_WORKSPACE_ROOT: ${workspaceRoot}`);
 
     const child = spawn(binaryPath, [], {
       env: {
@@ -96,6 +132,15 @@ export function spawnSidecar(): Promise<BackendReadyPayload> {
           : join(app.getAppPath(), "..", "src", "core", "frontend", "dist"),
         NODE_ENV: app.isPackaged ? "production" : "development",
         OPENPCB_ALLOW_UNAUTHENTICATED_API: "true",
+        OPENPCB_LOG_DIR: app.getPath("logs"),
+        // Forward Sentry config to the sidecar; the compiled binary also inlines
+        // DSN/release/env at build time via scripts/compile-bun-sidecar.ts, but
+        // these env values let dev / unsigned builds still report.
+        OPENPCB_SENTRY_DSN: process.env.OPENPCB_SENTRY_DSN ?? "",
+        OPENPCB_SENTRY_ENV:
+          process.env.OPENPCB_SENTRY_ENV ??
+          (app.isPackaged ? "production" : "development"),
+        OPENPCB_SENTRY_RELEASE: `openpcb@${app.getVersion()}`,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -125,9 +170,11 @@ export function spawnSidecar(): Promise<BackendReadyPayload> {
       const lines = stdoutBuffer.split("\n");
       stdoutBuffer = lines.pop() ?? "";
       for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed) writeSidecarLine("stdout", trimmed);
+
         if (resolved && discoveredPort) {
-          // Already discovered, just log
-          if (line.trim()) console.log(`[sidecar:stdout] ${line}`);
+          if (trimmed) log.debug(trimmed);
           continue;
         }
 
@@ -149,7 +196,6 @@ export function spawnSidecar(): Promise<BackendReadyPayload> {
             };
             backendPayload = payload;
 
-            // Notify all windows
             for (const win of BrowserWindow.getAllWindows()) {
               win.webContents.send("backend-ready", payload);
             }
@@ -157,12 +203,12 @@ export function spawnSidecar(): Promise<BackendReadyPayload> {
             if (!resolved) {
               resolved = true;
               clearTimeout(timeout);
-              console.log(`[sidecar] Backend ready at port ${json.serverPort}`);
+              log.info(`Backend ready at port ${json.serverPort}`);
               resolve(payload);
             }
           }
         } catch {
-          if (line.trim()) console.log(`[sidecar:stdout] ${line}`);
+          if (trimmed) log.debug(trimmed);
         }
       }
     });
@@ -170,15 +216,36 @@ export function spawnSidecar(): Promise<BackendReadyPayload> {
     child.stderr?.on("data", (data: Buffer) => {
       const message = data.toString().trimEnd();
       stderrTail = `${stderrTail}\n${message}`.slice(-4000).trimStart();
-      console.warn(`[sidecar:stderr] ${message}`);
+      writeSidecarLine("stderr", message);
+      log.warn(message);
     });
 
     child.on("error", (err) => {
+      log.error(`Failed to spawn: ${err.message}`);
+      Sentry.captureException(err, {
+        tags: { component: "sidecar", phase: "spawn" },
+      });
       rejectStartup(`Sidecar failed to start: ${err.message}`);
     });
 
     child.on("exit", (code, signal) => {
-      console.log(`[sidecar] Process exited with code ${code} signal ${signal}`);
+      log.warn(`Process exited code=${code} signal=${signal}`);
+      const exitedAbnormally =
+        code !== 0 && code !== null && signal !== "SIGTERM";
+      if (exitedAbnormally) {
+        const err = new Error(
+          `Sidecar exited abnormally: code=${code ?? "null"} signal=${signal ?? "null"}`,
+        );
+        Sentry.captureException(err, {
+          tags: { component: "sidecar", phase: "exit" },
+          extra: {
+            exitCode: code,
+            signal,
+            stderrTail: stderrTail.slice(-4000),
+            backendReady: backendPayload !== null,
+          },
+        });
+      }
       sidecarProcess = null;
       discoveredPort = null;
       backendPayload = null;
@@ -193,10 +260,14 @@ export function spawnSidecar(): Promise<BackendReadyPayload> {
 
 export function killSidecar(): void {
   if (sidecarProcess) {
-    console.log("[sidecar] Sending SIGTERM");
+    log.info("Sending SIGTERM");
     sidecarProcess.kill("SIGTERM");
     sidecarProcess = null;
     discoveredPort = null;
     backendPayload = null;
+  }
+  if (sidecarLogStream && !sidecarLogStream.closed) {
+    sidecarLogStream.end();
+    sidecarLogStream = null;
   }
 }

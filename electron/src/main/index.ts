@@ -1,7 +1,34 @@
+// Boot order is intentional: crashReporter and Sentry MUST be initialized
+// before any window opens or any child process spawns. electron-log is
+// initialized first so the rest of bootstrap is captured to disk.
 import { app, BrowserWindow, ipcMain } from "electron";
 import { join } from "node:path";
+import { initLogger, log } from "./logger.js";
+import { initCrashReporter } from "./crash.js";
+import { initSentry } from "./sentry.js";
+import { Sentry } from "./sentry.js";
+import { registerDiagnosticsIpc } from "./diagnostics-ipc.js";
 import { spawnSidecar, killSidecar, getBackendPayload } from "./sidecar.js";
 import { initializeAutoUpdater } from "./updater.js";
+
+initLogger();
+initCrashReporter();
+const sentryEnabled = initSentry();
+
+if (process.env.OPENPCB_DEBUG === "1" || !app.isPackaged) {
+  app.commandLine.appendSwitch("enable-logging");
+  app.commandLine.appendSwitch(
+    "log-file",
+    join(app.getPath("logs"), "chromium.log"),
+  );
+  app.commandLine.appendSwitch("enable-stack-dumping");
+}
+
+log.info(
+  `[boot] OpenPCB ${app.getVersion()} | packaged=${app.isPackaged} | sentry=${sentryEnabled} | platform=${process.platform}-${process.arch}`,
+);
+
+registerDiagnosticsIpc();
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -22,14 +49,49 @@ function createWindow(): void {
     mainWindow = null;
   });
 
-  mainWindow.webContents.on("did-fail-load", (_event, code, description, url) => {
-    console.error(`[electron] Failed to load ${url}: ${code} ${description}`);
-  });
+  mainWindow.webContents.on(
+    "did-fail-load",
+    (_event, code, description, url) => {
+      log.error(`[window] did-fail-load ${url}: ${code} ${description}`);
+    },
+  );
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
-    console.error(`[electron] Renderer process gone: ${details.reason}`);
+    log.error(
+      `[window] renderer gone: reason=${details.reason} exitCode=${details.exitCode}`,
+    );
+    if (sentryEnabled && details.reason !== "clean-exit") {
+      Sentry.captureMessage(
+        `Renderer process gone: ${details.reason}`,
+        "error",
+      );
+    }
+  });
+
+  mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
+    log.error(`[window] preload-error ${preloadPath}: ${error?.message}`);
+    if (sentryEnabled) Sentry.captureException(error);
+  });
+
+  mainWindow.webContents.on("unresponsive", () => {
+    log.warn("[window] renderer unresponsive");
+  });
+  mainWindow.webContents.on("responsive", () => {
+    log.info("[window] renderer responsive again");
   });
 }
+
+app.on("child-process-gone", (_event, details) => {
+  log.error(
+    `[app] child-process-gone type=${details.type} reason=${details.reason} exitCode=${details.exitCode} name=${details.name ?? ""}`,
+  );
+  if (sentryEnabled && details.reason !== "clean-exit") {
+    Sentry.captureMessage(
+      `Child process gone: ${details.type} ${details.reason}`,
+      "error",
+    );
+  }
+});
 
 function loadWindow(window: BrowserWindow, url: string): void {
   window.loadURL(url);
@@ -64,39 +126,36 @@ function loadStartupError(window: BrowserWindow, err: unknown): void {
     <h1>OpenPCB could not start</h1>
     <p>The desktop backend failed to start, so the frontend cannot render.</p>
     <pre>${escapeHtml(message)}</pre>
+    <p style="margin-top:24px;font-size:13px;color:#6b7280">Logs: ${escapeHtml(app.getPath("logs"))}</p>
   </body>
 </html>`;
   window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 }
 
-// IPC: fallback for getting backend URL if event was missed
 ipcMain.handle("get-backend-url", () => {
   return getBackendPayload();
 });
 
 app.whenReady().then(async () => {
-  // In dev mode, the backend runs separately via `npm run dev:backend`
-  // and Vite proxies /api and /ws to it. No sidecar spawn needed.
-  // In prod, we spawn the compiled sidecar binary ourselves and load
-  // the frontend from the backend's static file server.
   if (app.isPackaged) {
     try {
       const result = await spawnSidecar();
-      console.log(`[electron] Sidecar ready: port=${result.port}`);
+      log.info(`[electron] Sidecar ready: port=${result.port}`);
       createWindow();
       if (mainWindow) {
         loadWindow(mainWindow, result.url);
       }
       initializeAutoUpdater();
     } catch (err) {
-      console.error("[electron] Failed to start sidecar:", err);
+      log.error("[electron] Failed to start sidecar:", err);
+      if (sentryEnabled) Sentry.captureException(err);
       createWindow();
       if (mainWindow) {
         loadStartupError(mainWindow, err);
       }
     }
   } else {
-    console.log("[electron] Dev mode: using external backend via Vite proxy");
+    log.info("[electron] Dev mode: using external backend via Vite proxy");
     createWindow();
     if (mainWindow) {
       loadWindow(mainWindow, "http://127.0.0.1:1420");

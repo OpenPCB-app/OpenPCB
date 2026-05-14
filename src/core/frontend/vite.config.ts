@@ -51,7 +51,9 @@ export default defineConfig({
   build: {
     target: "safari13",
     minify: "esbuild",
-    sourcemap: false,
+    // Hidden source maps: emitted to disk so Sentry can upload them, but the
+    // bundle does not advertise //# sourceMappingURL so end users don't fetch.
+    sourcemap: "hidden",
     rollupOptions: {
       input: {
         app: path.resolve(__dirname, "index.html"),

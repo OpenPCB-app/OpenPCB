@@ -2,6 +2,7 @@ import { AppError, type ProblemDetails } from "../../contracts/errors";
 import type { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { problemDetailsResponse } from "../http/problem-details";
 import type { Middleware } from "../http/request-context";
+import { captureBackendException } from "../sentry";
 
 function toProblem(error: unknown, path: string): ProblemDetails {
   if (error instanceof AppError) {
@@ -46,6 +47,16 @@ export function createErrorMiddleware(
           `[core-backend] ${ctx.req.method} ${ctx.url.pathname} ${problem.status}`,
           error,
         );
+      }
+      // Only ship 5xx / unknown errors to Sentry; 4xx AppErrors are client
+      // contract violations and would otherwise drown signal.
+      if (problem.status >= 500) {
+        captureBackendException(error, {
+          requestId: ctx.requestId,
+          method: ctx.req.method,
+          path: ctx.url.pathname,
+          status: problem.status,
+        });
       }
       return problemDetailsResponse(
         problem,
