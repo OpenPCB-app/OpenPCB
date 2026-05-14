@@ -9,6 +9,9 @@ module.exports = {
     executableName: "OpenPCB",
     appBundleId: "com.openpcb.electron",
     appCategoryType: "public.app-category.developer-tools",
+    // Stem path — electron-packager picks the right ext per platform:
+    //   macOS  → icon.icns, Windows → icon.ico, Linux → icon.png
+    icon: path.join(__dirname, "icon"),
     asar: {
       unpack: "**/*.node",
     },
@@ -39,6 +42,8 @@ module.exports = {
         name: "OpenPCB",
         authors: "OpenPCB",
         description: "OpenPCB desktop application",
+        setupIcon: path.join(__dirname, "icon.ico"),
+        iconUrl: "https://raw.githubusercontent.com/andrejvysny/OpenPCB/master/electron/icon.ico",
       },
     },
     {
@@ -53,6 +58,7 @@ module.exports = {
           categories: ["Development"],
           maintainer: "OpenPCB",
           homepage: "https://github.com/andrejvysny/OpenPCB",
+          icon: path.join(__dirname, "icon.png"),
         },
       },
     },
@@ -68,6 +74,7 @@ module.exports = {
           categories: ["Development"],
           homepage: "https://github.com/andrejvysny/OpenPCB",
           license: "PolyForm-Noncommercial-1.0.0",
+          icon: path.join(__dirname, "icon.png"),
         },
       },
     },

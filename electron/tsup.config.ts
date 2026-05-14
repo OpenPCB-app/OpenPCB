@@ -16,17 +16,44 @@ if (process.env.OPENPCB_SENTRY_ENV) {
     process.env.OPENPCB_SENTRY_ENV,
   );
 }
+// Source files use `createRequire(import.meta.url)` which is an ESM
+// idiom. With CJS output, `import.meta` is undefined; map it to a
+// global that the banner defines.
+define["import.meta.url"] = "__cjsBundleEntryUrl";
 
 export default defineConfig([
   {
     entry: { "main/index": "src/main/index.ts" },
-    format: "esm",
+    // CJS, not ESM. Electron's main "electron" module is CommonJS;
+    // Node 22 ESM refuses named imports from CJS, breaking the bundle
+    // silently at startup. Emitting CJS sidesteps that and lets the
+    // bundled OTel/Sentry/electron-log CJS code run unchanged.
+    format: "cjs",
     platform: "node",
     target: "node22",
     outDir: "dist",
     sourcemap: true,
     clean: true,
+    splitting: false,
+    bundle: true,
+    banner: {
+      js: 'var __cjsBundleEntryUrl = require("url").pathToFileURL(__filename).toString();',
+    },
+    // Only true natives + electron runtime stay external. Everything else
+    // (pure-JS deps from electron/package.json plus their transitive graph)
+    // gets bundled here. This avoids npm-workspaces hoisting leaving deps
+    // outside electron/node_modules where electron-forge cannot find them.
     external: ["electron", "better-sqlite3"],
+    // Bundle simple pure-JS deps. Sentry + OTel stay out of the bundle
+    // because they use require-in-the-middle / dynamic-require patterns
+    // that bundlers can't reliably trace; they are loaded lazily via
+    // createRequire at runtime when present.
+    noExternal: [
+      "electron-squirrel-startup",
+      "electron-log",
+      "drizzle-orm",
+      "zod",
+    ],
     loader: { ".kicad_mod": "text" },
     define,
   },
@@ -38,7 +65,10 @@ export default defineConfig([
     outDir: "dist",
     sourcemap: true,
     clean: false,
+    splitting: false,
+    bundle: true,
     external: ["electron"],
+    noExternal: ["electron-log", "@sentry/electron"],
     define,
   },
 ]);

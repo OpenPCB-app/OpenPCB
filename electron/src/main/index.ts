@@ -46,7 +46,7 @@ function createWindow(): void {
     height: 600,
     title: "OpenPCB (Electron)",
     webPreferences: {
-      preload: join(import.meta.dirname, "..", "preload", "index.cjs"),
+      preload: join(__dirname, "..", "preload", "index.js"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,

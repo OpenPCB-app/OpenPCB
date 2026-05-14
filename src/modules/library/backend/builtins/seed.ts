@@ -512,18 +512,65 @@ export function seedBuiltinComponents(
   return result;
 }
 
-const BUILTIN_SEED_LIST_CACHED = listBuiltinSeeds();
+// Lazy caches — these touch the bundled kicad-assets via readFileSync, so they
+// MUST NOT execute at module-load time. In the packaged Electron build the
+// bundle is required before app.whenReady runs and before
+// OPENPCB_WORKSPACE_ROOT is set, so eager evaluation here aborts the entire
+// main process at startup with ENOENT. Defer to first call.
+let BUILTIN_SEED_LIST_CACHED: ReturnType<typeof listBuiltinSeeds> | null = null;
+function getBuiltinSeedListCached(): ReturnType<typeof listBuiltinSeeds> {
+  if (!BUILTIN_SEED_LIST_CACHED) {
+    BUILTIN_SEED_LIST_CACHED = listBuiltinSeeds();
+  }
+  return BUILTIN_SEED_LIST_CACHED;
+}
 
+let BUILTIN_COMPONENT_IDS_CACHED: ReadonlySet<string> | null = null;
 /** Reserved IDs of builtin components — used by route guards (delete/clone) */
-export const BUILTIN_COMPONENT_IDS: ReadonlySet<string> = new Set(
-  BUILTIN_SEED_LIST_CACHED.map((seed) => seed.componentId),
+export function getBuiltinComponentIds(): ReadonlySet<string> {
+  if (!BUILTIN_COMPONENT_IDS_CACHED) {
+    BUILTIN_COMPONENT_IDS_CACHED = new Set(
+      getBuiltinSeedListCached().map((seed) => seed.componentId),
+    );
+  }
+  return BUILTIN_COMPONENT_IDS_CACHED;
+}
+
+let BUILTIN_FOOTPRINT_IDS_CACHED: ReadonlySet<string> | null = null;
+/** All footprint IDs reserved by builtin seeding (excluding the placeholder). */
+export function getBuiltinFootprintIds(): ReadonlySet<string> {
+  if (!BUILTIN_FOOTPRINT_IDS_CACHED) {
+    BUILTIN_FOOTPRINT_IDS_CACHED = new Set(
+      listAllBuiltinFootprintSeeds().map(
+        (seed: BuiltinFootprintSeed) => seed.footprintId,
+      ),
+    );
+  }
+  return BUILTIN_FOOTPRINT_IDS_CACHED;
+}
+
+function makeLazySetProxy(
+  resolve: () => ReadonlySet<string>,
+): ReadonlySet<string> {
+  return new Proxy({} as ReadonlySet<string>, {
+    get(_target, prop) {
+      const set = resolve();
+      const value = (set as unknown as Record<PropertyKey, unknown>)[prop];
+      return typeof value === "function"
+        ? (value as (...a: unknown[]) => unknown).bind(set)
+        : value;
+    },
+  });
+}
+
+/** Lazy facade preserving `.has()/.size/iteration` consumers. */
+export const BUILTIN_COMPONENT_IDS: ReadonlySet<string> = makeLazySetProxy(
+  getBuiltinComponentIds,
 );
 
-/** All footprint IDs reserved by builtin seeding (excluding the placeholder). */
-export const BUILTIN_FOOTPRINT_IDS: ReadonlySet<string> = new Set(
-  listAllBuiltinFootprintSeeds().map(
-    (seed: BuiltinFootprintSeed) => seed.footprintId,
-  ),
+/** Lazy facade preserving `.has()/.size/iteration` consumers. */
+export const BUILTIN_FOOTPRINT_IDS: ReadonlySet<string> = makeLazySetProxy(
+  getBuiltinFootprintIds,
 );
 
 /** Legacy sized component IDs that the seeder removes on boot. Exported for tests. */

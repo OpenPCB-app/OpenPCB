@@ -4,7 +4,6 @@
   "description": "OpenPCB desktop application",
   "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
-  "type": "module",
   "main": "dist/main/index.js",
   "scripts": {
     "build": "tsup",
@@ -17,7 +16,6 @@
   "dependencies": {
     "@sentry/electron": "^7.0.0",
     "@sentry/node": "^10.53.1",
-    "@sentry/node-native": "10.50.0",
     "better-sqlite3": "^12.10.0",
     "drizzle-orm": "^0.45.2",
     "electron-log": "^5.4.4",
