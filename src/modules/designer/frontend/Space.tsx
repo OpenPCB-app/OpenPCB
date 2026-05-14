@@ -502,6 +502,7 @@ function DesignerSpaceInner({
               backendURL={backendURL}
               moduleId={moduleId}
               designId={state.selectedDesignId}
+              gridVisible={gridVisible}
               dispatchCommand={actions.dispatchCommand}
               notifyExternalRevisionBump={actions.notifyExternalRevisionBump}
               onDrcCountChange={setPcbDrcCount}

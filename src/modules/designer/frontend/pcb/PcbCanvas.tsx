@@ -77,12 +77,13 @@ import {
 
 const NM_PER_MM = 1_000_000;
 
-function snapMm(value: number): number {
+function snapMm(value: number, gridEnabled: boolean): number {
+  if (!gridEnabled) return value;
   return Math.round(value / PCB_GRID_MM) * PCB_GRID_MM;
 }
 
-function snapPointMm(p: PcbPointMm): PcbPointMm {
-  return { x: snapMm(p.x), y: snapMm(p.y) };
+function snapPointMm(p: PcbPointMm, gridEnabled: boolean): PcbPointMm {
+  return { x: snapMm(p.x, gridEnabled), y: snapMm(p.y, gridEnabled) };
 }
 
 function pointMmToNm(p: PcbPointMm): PointNm {
@@ -133,6 +134,7 @@ interface PcbCanvasProps {
   backendURL?: string | null;
   moduleId: string;
   designId: string | null;
+  gridVisible?: boolean;
   dispatchCommand: (
     command: DesignerCommand,
   ) => Promise<DesignerDispatchResult>;
@@ -145,6 +147,10 @@ interface PcbCanvasProps {
 }
 
 export function PcbCanvas(props: PcbCanvasProps): ReactElement {
+  const gridEnabled = props.gridVisible ?? false;
+  const snap = (v: number) => snapMm(v, gridEnabled);
+  const snapPoint = (p: PcbPointMm) => snapPointMm(p, gridEnabled);
+
   const workspace = usePcbWorkspace({
     backendURL: props.backendURL,
     moduleId: props.moduleId,
@@ -333,7 +339,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         const netId = padToNet.get(padId) ?? null;
         return { pointMm: pad.worldMm, netId, onPad: true, padId };
       }
-      return { pointMm: snapPointMm(cursor), netId: null, onPad: false };
+      return { pointMm: snapPoint(cursor), netId: null, onPad: false };
     },
     [padToNet, visiblePlacements],
   );
@@ -374,7 +380,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       cursorMm: PcbPointMm,
       targetLayer: PcbCopperLayerId,
     ): Promise<boolean> => {
-      const snapped = snapPointMm(cursorMm);
+      const snapped = snapPoint(cursorMm);
       const viaCenterNm = pointMmToNm(snapped);
       const committedAnchors = sessionAnchors(session);
       const path = buildPreviewPath(
@@ -717,8 +723,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         setDragSession((prev) => {
           if (!prev) return prev;
           const next = {
-            x: snapMm(cursor.x - prev.pointerOffsetMm.x),
-            y: snapMm(cursor.y - prev.pointerOffsetMm.y),
+            x: snap(cursor.x - prev.pointerOffsetMm.x),
+            y: snap(cursor.y - prev.pointerOffsetMm.y),
           };
           if (
             next.x === prev.currentPrimaryMm.x &&
@@ -1145,7 +1151,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           if (!cursorMm) return;
           const nextLayer: PcbCopperLayerId =
             session.layer === "F.Cu" ? "B.Cu" : "F.Cu";
-          void setActiveCopperLayer(nextLayer, snapPointMm(cursorMm));
+          void setActiveCopperLayer(nextLayer, snapPoint(cursorMm));
           return;
         }
       }
