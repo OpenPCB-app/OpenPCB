@@ -20,6 +20,7 @@ import {
 } from "./backend-module";
 import { discoverModuleManifests } from "./manifest-discovery";
 import { RuntimeSdkRegistry } from "./sdk-registry";
+import { STATIC_MODULES, type StaticModuleExports } from "./static-modules";
 
 interface ModuleLoadRecord {
   id: string;
@@ -55,6 +56,7 @@ export interface ModuleLoaderOptions {
   moduleRegistry: ModuleRouterRegistry;
   workspaceRoot?: string;
   sdkRegistry?: RuntimeSdkRegistry;
+  staticModules?: ReadonlyMap<string, StaticModuleExports>;
 }
 
 const FALLBACK_SIDEBAR = {
@@ -155,6 +157,8 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
 
   private readonly sdkRegistry: RuntimeSdkRegistry;
 
+  private readonly staticModules: ReadonlyMap<string, StaticModuleExports>;
+
   private readonly records = new Map<string, ModuleLoadRecord>();
 
   private readonly loaded = new Map<string, LoadedRuntimeModule>();
@@ -163,6 +167,7 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
     this.moduleRegistry = options.moduleRegistry;
     this.workspaceRoot = resolveWorkspaceRoot(options);
     this.sdkRegistry = options.sdkRegistry ?? new RuntimeSdkRegistry();
+    this.staticModules = options.staticModules ?? STATIC_MODULES;
   }
 
   getSdkRegistry(): RuntimeSdkRegistry {
@@ -388,13 +393,27 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
       );
     }
 
-    // 2. Dynamic-import the backend barrel.
-    const modulePath = await this.resolveBackendEntryPath(
-      discoveredManifest.moduleDir,
-      manifest,
-    );
-    const moduleUrl = pathToFileURL(modulePath).toString();
-    const moduleExports = (await import(moduleUrl)) as Record<string, unknown>;
+    // 2. Resolve the backend exports. Prefer the static registry (modules
+    //    compiled into the binary) so packaged builds do not depend on
+    //    `node_modules/` being shipped alongside the on-disk module sources.
+    //    Fall back to a dynamic filesystem import for unknown modules
+    //    (e.g. third-party plugins dropped into modules/ at dev time).
+    let moduleExports: Record<string, unknown>;
+    let moduleSource: string;
+    const staticExports = this.staticModules.get(manifest.id);
+    if (staticExports) {
+      moduleExports = staticExports as Record<string, unknown>;
+      moduleSource = `static:${manifest.id}`;
+    } else {
+      const modulePath = await this.resolveBackendEntryPath(
+        discoveredManifest.moduleDir,
+        manifest,
+      );
+      const moduleUrl = pathToFileURL(modulePath).toString();
+      moduleExports = (await import(moduleUrl)) as Record<string, unknown>;
+      moduleSource = modulePath;
+    }
+
     const definitionCandidate =
       moduleExports.definition ??
       moduleExports.default ??
@@ -402,7 +421,7 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
 
     if (!isCoreBackendModuleDefinition(definitionCandidate)) {
       throw new Error(
-        `Backend entry '${modulePath}' does not export a ModuleDefinition (expected 'definition' or default export)`,
+        `Backend entry '${moduleSource}' does not export a ModuleDefinition (expected 'definition' or default export)`,
       );
     }
 
