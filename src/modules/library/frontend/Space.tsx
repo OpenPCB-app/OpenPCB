@@ -298,7 +298,7 @@ export function LibrarySpace({
         setDetailComponentId(result.componentId);
         const hasPendingModelConversion =
           result.modelConversion?.status === "pending_client_conversion";
-        if (hasPendingModelConversion) {
+        if (hasPendingModelConversion && result.modelConversion) {
           setNotice({
             id: crypto.randomUUID(),
             title: "Converting 3D model",

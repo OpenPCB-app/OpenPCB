@@ -7,19 +7,31 @@
   "scripts": {
     "build": "tsup",
     "build:watch": "tsup --watch",
-    "start": "electron .",
-    "dist": "electron-builder",
-    "postinstall": "electron-builder install-app-deps"
+    "start": "electron-forge start",
+    "package": "npm run build && electron-forge package",
+    "make": "npm run build && electron-forge make",
+    "publish": "npm run build && electron-forge publish"
   },
   "dependencies": {
     "@sentry/electron": "^7.0.0",
+    "@sentry/node": "^10.53.1",
     "@sentry/node-native": "10.50.0",
+    "better-sqlite3": "^12.10.0",
+    "drizzle-orm": "^0.45.2",
     "electron-log": "^5.4.4",
-    "electron-updater": "^6.3.9"
+    "electron-squirrel-startup": "^1.0.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/maker-deb": "^7.11.1",
+    "@electron-forge/maker-dmg": "^7.11.1",
+    "@electron-forge/maker-rpm": "^7.11.1",
+    "@electron-forge/maker-squirrel": "^7.11.1",
+    "@electron-forge/maker-zip": "^7.11.1",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.11.1",
+    "@types/better-sqlite3": "^7.6.13",
     "electron": "^41.0.0",
-    "electron-builder": "^26.0.0",
     "tsup": "^8.4.0",
     "typescript": "~5.8.3"
   }

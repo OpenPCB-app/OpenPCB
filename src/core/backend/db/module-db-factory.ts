@@ -1,4 +1,4 @@
-import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { ModuleDbClient } from "../../contracts/modules/backend-module";
 import { getSharedDb, getSharedSqlite } from "./sqlite-client";
 
@@ -9,8 +9,8 @@ import { getSharedDb, getSharedSqlite } from "./sqlite-client";
  * instances exposed to modules use this richer type.
  */
 export interface DrizzleModuleDbClient extends ModuleDbClient {
-  readonly db: BunSQLiteDatabase<Record<string, unknown>>;
-  transaction<T>(fn: (tx: BunSQLiteDatabase<Record<string, unknown>>) => T): T;
+  readonly db: BetterSQLite3Database<Record<string, unknown>>;
+  transaction<T>(fn: (tx: BetterSQLite3Database<Record<string, unknown>>) => T): T;
 }
 
 function normalizeModuleId(moduleId: string): string {
@@ -34,13 +34,18 @@ export function createModuleDb(moduleId: string): DrizzleModuleDbClient {
     db,
     rawSql<T = unknown>(query: string, params: unknown[] = []): T[] {
       const statement = sqlite.query(query);
-      return statement.all(...(params as [])) as T[];
+      const keyword = query.trimStart().split(/\s+/, 1)[0]?.toLowerCase();
+      if (keyword && !["select", "with", "pragma"].includes(keyword)) {
+        statement.run(...params);
+        return [];
+      }
+      return statement.all(...params) as T[];
     },
     transaction<T>(
-      fn: (tx: BunSQLiteDatabase<Record<string, unknown>>) => T,
+      fn: (tx: BetterSQLite3Database<Record<string, unknown>>) => T,
     ): T {
       return db.transaction((tx) =>
-        fn(tx as BunSQLiteDatabase<Record<string, unknown>>),
+        fn(tx as BetterSQLite3Database<Record<string, unknown>>),
       );
     },
   };

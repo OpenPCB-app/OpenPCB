@@ -1,5 +1,5 @@
 import { asc, eq } from "drizzle-orm";
-import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
   DesignerDesignRecord,
   DesignerDesignSummary,
@@ -23,7 +23,7 @@ import {
 import { parseJsonRecord } from "./value-guards";
 import { parseWirePointsJson } from "./wire-geometry";
 
-type DbClient = BunSQLiteDatabase<Record<string, unknown>>;
+type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 type PartRow = typeof schematicParts.$inferSelect;
 type PinRow = typeof schematicPins.$inferSelect;
 type WireRow = typeof schematicWires.$inferSelect;

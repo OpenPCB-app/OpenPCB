@@ -1,10 +1,10 @@
 import { eq } from "drizzle-orm";
-import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { getDb } from "../queries";
 import { footprints } from "../schema";
 
-type LibraryDb = BunSQLiteDatabase<Record<string, unknown>>;
+type LibraryDb = BetterSQLite3Database<Record<string, unknown>>;
 
 export const PLACEHOLDER_FOOTPRINT_ID = "fp-no-footprint-yet";
 export const PLACEHOLDER_FOOTPRINT_NAME = "No footprint yet";

@@ -26,7 +26,8 @@ export default defineConfig([
     outDir: "dist",
     sourcemap: true,
     clean: true,
-    external: ["electron"],
+    external: ["electron", "better-sqlite3"],
+    loader: { ".kicad_mod": "text" },
     define,
   },
   {

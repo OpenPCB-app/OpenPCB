@@ -1,4 +1,4 @@
-import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { DesignerPcbProjection } from "../../../../sdks/designer";
 import { loadSchematicProjection } from "../projection-read";
 import { correlateNetPads } from "./net-pad-correlation";
@@ -10,7 +10,7 @@ import {
 } from "./pcb-store";
 import { computeRatsnest } from "./ratsnest";
 
-type DbClient = BunSQLiteDatabase<Record<string, unknown>>;
+type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
 export function loadPcbProjection(params: {
   db: DbClient;

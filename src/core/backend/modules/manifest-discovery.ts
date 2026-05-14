@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import type {
   ModuleDependency,
@@ -117,8 +117,9 @@ export async function discoverModuleManifests(
     const manifestPath = path.join(moduleDir, "manifest.json");
 
     try {
-      const file = Bun.file(manifestPath);
-      if (!(await file.exists())) {
+      try {
+        await access(manifestPath);
+      } catch {
         failures.push({
           moduleId: entry.name,
           reason: "manifest.json missing",
@@ -126,7 +127,7 @@ export async function discoverModuleManifests(
         continue;
       }
 
-      const parsed = JSON.parse(await file.text()) as unknown;
+      const parsed = JSON.parse(await readFile(manifestPath, "utf8")) as unknown;
       if (!isRecord(parsed)) {
         throw new Error("Manifest must be an object");
       }

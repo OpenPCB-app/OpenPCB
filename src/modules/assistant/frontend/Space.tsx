@@ -81,7 +81,8 @@ export function AssistantSpace({ backendURL, moduleId }: ModuleSpaceProps): Reac
   }, [base, providerId]);
   useEffect(() => {
     if (models.length === 0) return;
-    if (!models.some((entry) => entry.modelId === model)) setModel(models[0].modelId);
+    const firstModel = models[0];
+    if (firstModel && !models.some((entry) => entry.modelId === model)) setModel(firstModel.modelId);
   }, [model, models]);
   useEffect(() => () => { streamRef.current?.close(); }, []);
   useEffect(() => {
@@ -194,7 +195,7 @@ export function AssistantSpace({ backendURL, moduleId }: ModuleSpaceProps): Reac
               <select value={providerId} onChange={(event) => { const provider = providers.find((entry) => entry.id === event.target.value); setProviderId(event.target.value); if (provider) setModel(provider.defaultModel); }} className="max-w-[120px] truncate bg-transparent text-xs text-slate-300 outline-none hover:text-white cursor-pointer">{providers.filter((provider) => provider.enabled).map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select>
               <span className="text-slate-600">/</span>
               {models.length > 0 ? (
-                <select value={models.some((entry) => entry.modelId === model) ? model : models[0].modelId} onChange={(event) => setModel(event.target.value)} className="max-w-[200px] truncate bg-transparent text-xs text-slate-300 outline-none hover:text-white cursor-pointer">
+                <select value={models.some((entry) => entry.modelId === model) ? model : (models[0]?.modelId ?? "")} onChange={(event) => setModel(event.target.value)} className="max-w-[200px] truncate bg-transparent text-xs text-slate-300 outline-none hover:text-white cursor-pointer">
                   {models.map((entry) => <option key={entry.modelId} value={entry.modelId}>{entry.displayName ?? entry.modelId}</option>)}
                 </select>
               ) : (

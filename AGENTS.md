@@ -18,7 +18,7 @@ Compact repo facts only. If this conflicts with executable config, trust config.
 - Module bootstrap: discover manifests -> resolve dependencies -> run `backend/migrations/*.sql` -> import backend entry -> `onActivate` -> `registerSdk` -> `registerRoutes`.
 - Module backend export may be `definition`, default, or `backendModule`; its `id` must match `manifest.json`.
 - Frontend entry: `src/core/frontend/src/main.tsx`; provider stack in `App.tsx` is `RuntimeProvider -> BootstrapProvider -> ThemeProvider -> AppShell`.
-- Electron dev loads Vite at `127.0.0.1:1420` and does not spawn backend; packaged Electron spawns the compiled Bun sidecar and waits for the first JSON stdout line containing `serverPort`.
+- Electron dev loads Vite at `127.0.0.1:1420`; Electron main starts the backend in-process on `127.0.0.1:0` for dev and packaged builds.
 
 ## Commands that matter
 
@@ -29,8 +29,7 @@ npm run dev:backend      # cd src/core/backend && PORT=3000 NODE_ENV=development
 npm run dev:frontend     # Vite only
 
 npm run typecheck        # root composite tsc -b; excludes electron
-npm run build            # compile Bun sidecar, frontend build, electron build+dist
-npm run bun:compile      # builds bin/bun-backend-{rust-host-triple}
+npm run build            # frontend build + Electron Forge make
 
 npm run test:backend     # workspace bun test
 npm run test:react       # frontend vitest
@@ -106,4 +105,4 @@ OpenPCB is a single-user desktop app. There is no auth layer.
 - Older nested `AGENTS.md` files may still say module routes are `/api/v1/{module}` or module discovery is broken; current code uses `/api/modules/{moduleId}` and the loader has fallback discovery.
 - `bun.lock` is stale relative to root `package.json`; use `package-lock.json`/npm workspaces for dependency truth.
 - Do not auto commit/push/pull; only when explicitly asked.
-- `electron-builder.yml` references non-existent `../src-ts/drizzle/migrations/` — stale path from pre-restructure.
+- Older reports may mention electron-builder or Bun sidecars; current desktop packaging uses Electron Forge and an Electron-owned backend.

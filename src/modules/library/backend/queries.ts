@@ -26,7 +26,7 @@ import type {
   FootprintRenderModel,
   SymbolRenderModel,
 } from "../../../shared/rendering";
-import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import {
   componentFootprints,
   components,
@@ -76,8 +76,8 @@ export interface UpsertFootprintModelInput {
 
 export function getDb(
   ctx: CoreBackendModuleContext,
-): BunSQLiteDatabase<Record<string, unknown>> {
-  return (ctx.db as { db: BunSQLiteDatabase<Record<string, unknown>> }).db;
+): BetterSQLite3Database<Record<string, unknown>> {
+  return (ctx.db as { db: BetterSQLite3Database<Record<string, unknown>> }).db;
 }
 
 function parseJsonObject(value: string): Record<string, unknown> {

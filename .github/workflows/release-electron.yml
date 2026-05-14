@@ -23,31 +23,37 @@ jobs:
         include:
           - name: macOS arm64
             os: macos-15
-            platform: mac
+            platform: darwin
             arch: arm64
             rollup_package: darwin-arm64
             lightningcss_package: darwin-arm64
             tailwindcss_oxide_package: darwin-arm64
           - name: macOS x64
             os: macos-15-intel
-            platform: mac
+            platform: darwin
             arch: x64
             rollup_package: darwin-x64
             lightningcss_package: darwin-x64
             tailwindcss_oxide_package: darwin-x64
           - name: Windows x64
             os: windows-latest
-            platform: win
+            platform: win32
             arch: x64
             rollup_package: win32-x64-msvc
             lightningcss_package: win32-x64-msvc
             tailwindcss_oxide_package: win32-x64-msvc
+          - name: Linux x64
+            os: ubuntu-latest
+            platform: linux
+            arch: x64
+            rollup_package: linux-x64-gnu
+            lightningcss_package: linux-x64-gnu
+            tailwindcss_oxide_package: linux-x64-gnu
 
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
-      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
 
     steps:
       - name: Checkout
@@ -60,26 +66,21 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.6"
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
       - name: Cache Electron downloads
         uses: actions/cache@v4
         with:
           path: |
             .cache/electron
-            .cache/electron-builder
           key: ${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-electron-
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Install Linux maker dependencies
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg rpm
 
       - name: Repair optional native dependencies
         run: |
@@ -111,31 +112,25 @@ jobs:
           console.log(`Release version ${tagVersion} validated`);
           NODE
 
-      - name: Compile Bun sidecar
-        run: npm run bun:compile
+      - name: Typecheck
+        run: npm run typecheck
 
       - name: Build frontend
         run: npm run build:frontend
 
-      - name: Build Electron main process
-        run: npm run build --workspace electron
+      - name: Make Electron app
+        run: npm run make --workspace electron -- --platform=${{ matrix.platform }} --arch=${{ matrix.arch }}
 
-      - name: Package Electron app
-        run: npm run dist --workspace electron -- --${{ matrix.platform }} --${{ matrix.arch }} --publish never
+      - name: List Forge artifacts
+        run: find electron/out/make -type f -print | sort
 
       - name: Upload build artifacts
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: electron-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            electron/dist-electron/*.dmg
-            electron/dist-electron/*.zip
-            electron/dist-electron/*.exe
-            electron/dist-electron/*.blockmap
-            electron/dist-electron/*.yml
-            electron/dist-electron/*.yaml
-          if-no-files-found: ignore
+            electron/out/make/**/*
+          if-no-files-found: error
 
   publish:
     name: Publish GitHub release
@@ -154,23 +149,17 @@ jobs:
 
       - name: Publish complete prerelease
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
           gh release delete "${GITHUB_REF_NAME}" --yes || true
+          mapfile -d '' files < <(find release-artifacts -type f -print0)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No release artifacts found" >&2
+            exit 1
+          fi
+          printf 'Publishing artifacts:\n'
+          printf '  %s\n' "${files[@]}"
           gh release create "${GITHUB_REF_NAME}" \
             --verify-tag \
             --prerelease \
             --title "${GITHUB_REF_NAME}" \
-            --notes "Unsigned beta Electron builds for macOS arm64, macOS x64, and Windows x64." \
-            release-artifacts/electron-mac-arm64/beta-mac-arm64-mac.yml \
-            "release-artifacts/electron-mac-arm64/OpenPCB-${VERSION}-mac-arm64.dmg" \
-            "release-artifacts/electron-mac-arm64/OpenPCB-${VERSION}-mac-arm64.dmg.blockmap" \
-            "release-artifacts/electron-mac-arm64/OpenPCB-${VERSION}-mac-arm64.zip" \
-            "release-artifacts/electron-mac-arm64/OpenPCB-${VERSION}-mac-arm64.zip.blockmap" \
-            release-artifacts/electron-mac-x64/beta-mac-x64-mac.yml \
-            "release-artifacts/electron-mac-x64/OpenPCB-${VERSION}-mac-x64.dmg" \
-            "release-artifacts/electron-mac-x64/OpenPCB-${VERSION}-mac-x64.dmg.blockmap" \
-            "release-artifacts/electron-mac-x64/OpenPCB-${VERSION}-mac-x64.zip" \
-            "release-artifacts/electron-mac-x64/OpenPCB-${VERSION}-mac-x64.zip.blockmap" \
-            release-artifacts/electron-win-x64/beta-win-x64.yml \
-            "release-artifacts/electron-win-x64/OpenPCB-${VERSION}-win-x64.exe" \
-            "release-artifacts/electron-win-x64/OpenPCB-${VERSION}-win-x64.exe.blockmap"
+            --notes "Unsigned beta Electron Forge builds for macOS arm64, macOS x64, Windows x64, and Linux x64." \
+            "${files[@]}"

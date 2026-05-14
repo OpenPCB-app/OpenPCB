@@ -14,6 +14,16 @@
 - Backend: 124 tests passing (19 files). Frontend: 11 tests passing. Typecheck clean.
 - Active sprint: post-merge cleanup + dead-code removal (see plan in `.claude/plans/act-as-senior-software-resilient-meadow.md`).
 
+## Active Electron Forge + Electron-owned backend migration
+
+- [x] Migrate Electron packaging from electron-builder to Electron Forge.
+- [x] Start backend as Electron-owned localhost server.
+- [x] Remove Bun sidecar runtime and package path.
+- [x] Update release workflow for Forge artifacts.
+- [x] Validate typecheck, frontend build, Electron build, and macOS Forge make locally.
+- [ ] Revisit auto-update metadata before first public release.
+- [ ] Add AppImage maker/hook after Forge baseline.
+
 ## Active Electron Beta Release CI
 
 - [x] Configure electron-builder for GitHub prerelease publishing on beta channel.

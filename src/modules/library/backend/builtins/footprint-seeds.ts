@@ -1,27 +1,13 @@
 /// <reference path="./kicad-assets/kicad-mod.d.ts" />
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildFootprintPreviewFromParsed } from "../import/build-preview-models";
 import {
   type ParsedKicadFootprint,
   parseKicadFootprint,
 } from "../infrastructure/parsers/kicad/kicad-footprint-parser";
-
-import rSMD0402 from "./kicad-assets/Resistor_SMD/R_0402_1005Metric.kicad_mod" with { type: "text" };
-import rSMD0603 from "./kicad-assets/Resistor_SMD/R_0603_1608Metric.kicad_mod" with { type: "text" };
-import rSMD0805 from "./kicad-assets/Resistor_SMD/R_0805_2012Metric.kicad_mod" with { type: "text" };
-import rSMD1206 from "./kicad-assets/Resistor_SMD/R_1206_3216Metric.kicad_mod" with { type: "text" };
-import rSMD1210 from "./kicad-assets/Resistor_SMD/R_1210_3225Metric.kicad_mod" with { type: "text" };
-import rSMD2512 from "./kicad-assets/Resistor_SMD/R_2512_6332Metric.kicad_mod" with { type: "text" };
-import rTHT0207p762 from "./kicad-assets/Resistor_THT/R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal.kicad_mod" with { type: "text" };
-import rTHT0207p1016 from "./kicad-assets/Resistor_THT/R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal.kicad_mod" with { type: "text" };
-import rTHT0309p1270 from "./kicad-assets/Resistor_THT/R_Axial_DIN0309_L9.0mm_D3.2mm_P12.70mm_Horizontal.kicad_mod" with { type: "text" };
-import cSMD0402 from "./kicad-assets/Capacitor_SMD/C_0402_1005Metric.kicad_mod" with { type: "text" };
-import cSMD0603 from "./kicad-assets/Capacitor_SMD/C_0603_1608Metric.kicad_mod" with { type: "text" };
-import cSMD0805 from "./kicad-assets/Capacitor_SMD/C_0805_2012Metric.kicad_mod" with { type: "text" };
-import cSMD1206 from "./kicad-assets/Capacitor_SMD/C_1206_3216Metric.kicad_mod" with { type: "text" };
-import cSMD1210 from "./kicad-assets/Capacitor_SMD/C_1210_3225Metric.kicad_mod" with { type: "text" };
-import cTHTd3 from "./kicad-assets/Capacitor_THT/C_Disc_D3.0mm_W2.0mm_P2.50mm.kicad_mod" with { type: "text" };
-import cTHTd5 from "./kicad-assets/Capacitor_THT/C_Disc_D5.0mm_W2.5mm_P5.00mm.kicad_mod" with { type: "text" };
-import cTHTd75 from "./kicad-assets/Capacitor_THT/C_Disc_D7.5mm_W5.0mm_P5.00mm.kicad_mod" with { type: "text" };
 
 export type BuiltinFootprintMountType = "smd" | "through_hole";
 
@@ -44,6 +30,7 @@ interface SeedInput {
 }
 
 const SOURCE_HASH_VERSION = "v1";
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const PARSE_CACHE = new Map<string, ParsedKicadFootprint>();
 const PREVIEW_CACHE = new Map<
@@ -52,10 +39,29 @@ const PREVIEW_CACHE = new Map<
 >();
 const SHA1_CACHE = new Map<string, string>();
 
+function assetsRoot(): string {
+  const workspaceRoot = process.env.OPENPCB_WORKSPACE_ROOT;
+  if (workspaceRoot) {
+    return path.join(
+      workspaceRoot,
+      "modules",
+      "library",
+      "backend",
+      "builtins",
+      "kicad-assets",
+    );
+  }
+  return path.join(MODULE_DIR, "kicad-assets");
+}
+
+function readAsset(...segments: string[]): string {
+  return readFileSync(path.join(assetsRoot(), ...segments), "utf8");
+}
+
 function sha1Hex(text: string): string {
   const cached = SHA1_CACHE.get(text);
   if (cached) return cached;
-  const hash = new Bun.CryptoHasher("sha1").update(text).digest("hex");
+  const hash = createHash("sha1").update(text).digest("hex");
   SHA1_CACHE.set(text, hash);
   return hash;
 }
@@ -189,42 +195,42 @@ export function listAllBuiltinFootprintSeeds(): readonly BuiltinFootprintSeed[] 
       displayName: "R_0402_1005Metric",
       fileName: "R_0402_1005Metric.kicad_mod",
       mountType: "smd",
-      source: rSMD0402,
+      source: readAsset("Resistor_SMD", "R_0402_1005Metric.kicad_mod"),
     }),
     makeSeed({
       footprintId: "builtin:fp:r-0603-1608m",
       displayName: "R_0603_1608Metric",
       fileName: "R_0603_1608Metric.kicad_mod",
       mountType: "smd",
-      source: rSMD0603,
+      source: readAsset("Resistor_SMD", "R_0603_1608Metric.kicad_mod"),
     }),
     makeSeed({
       footprintId: "builtin:fp:r-0805-2012m",
       displayName: "R_0805_2012Metric",
       fileName: "R_0805_2012Metric.kicad_mod",
       mountType: "smd",
-      source: rSMD0805,
+      source: readAsset("Resistor_SMD", "R_0805_2012Metric.kicad_mod"),
     }),
     makeSeed({
       footprintId: "builtin:fp:r-1206-3216m",
       displayName: "R_1206_3216Metric",
       fileName: "R_1206_3216Metric.kicad_mod",
       mountType: "smd",
-      source: rSMD1206,
+      source: readAsset("Resistor_SMD", "R_1206_3216Metric.kicad_mod"),
     }),
     makeSeed({
       footprintId: "builtin:fp:r-1210-3225m",
       displayName: "R_1210_3225Metric",
       fileName: "R_1210_3225Metric.kicad_mod",
       mountType: "smd",
-      source: rSMD1210,
+      source: readAsset("Resistor_SMD", "R_1210_3225Metric.kicad_mod"),
     }),
     makeSeed({
       footprintId: "builtin:fp:r-2512-6332m",
       displayName: "R_2512_6332Metric",
       fileName: "R_2512_6332Metric.kicad_mod",
       mountType: "smd",
-      source: rSMD2512,
+      source: readAsset("Resistor_SMD", "R_2512_6332Metric.kicad_mod"),
     }),
     // Resistor THT axial
     makeSeed({
@@ -232,21 +238,30 @@ export function listAllBuiltinFootprintSeeds(): readonly BuiltinFootprintSeed[] 
       displayName: "R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal",
       fileName: "R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal.kicad_mod",
       mountType: "through_hole",
-      source: rTHT0207p762,
+      source: readAsset(
+        "Resistor_THT",
+        "R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal.kicad_mod",
+      ),
     }),
     makeSeed({
       footprintId: "builtin:fp:r-axial-din0207-p10.16",
       displayName: "R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal",
       fileName: "R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal.kicad_mod",
       mountType: "through_hole",
-      source: rTHT0207p1016,
+      source: readAsset(
+        "Resistor_THT",
+        "R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal.kicad_mod",
+      ),
     }),
     makeSeed({
       footprintId: "builtin:fp:r-axial-din0309-p12.70",
       displayName: "R_Axial_DIN0309_L9.0mm_D3.2mm_P12.70mm_Horizontal",
       fileName: "R_Axial_DIN0309_L9.0mm_D3.2mm_P12.70mm_Horizontal.kicad_mod",
       mountType: "through_hole",
-      source: rTHT0309p1270,
+      source: readAsset(
+        "Resistor_THT",
+        "R_Axial_DIN0309_L9.0mm_D3.2mm_P12.70mm_Horizontal.kicad_mod",
+      ),
     }),
     // Capacitor SMD
     makeSeed({
@@ -254,35 +269,35 @@ export function listAllBuiltinFootprintSeeds(): readonly BuiltinFootprintSeed[] 
       displayName: "C_0402_1005Metric",
       fileName: "C_0402_1005Metric.kicad_mod",
       mountType: "smd",
-      source: cSMD0402,
+      source: readAsset("Capacitor_SMD", "C_0402_1005Metric.kicad_mod"),
     }),
     makeSeed({
       footprintId: "builtin:fp:c-0603-1608m",
       displayName: "C_0603_1608Metric",
       fileName: "C_0603_1608Metric.kicad_mod",
       mountType: "smd",
-      source: cSMD0603,
+      source: readAsset("Capacitor_SMD", "C_0603_1608Metric.kicad_mod"),
     }),
     makeSeed({
       footprintId: "builtin:fp:c-0805-2012m",
       displayName: "C_0805_2012Metric",
       fileName: "C_0805_2012Metric.kicad_mod",
       mountType: "smd",
-      source: cSMD0805,
+      source: readAsset("Capacitor_SMD", "C_0805_2012Metric.kicad_mod"),
     }),
     makeSeed({
       footprintId: "builtin:fp:c-1206-3216m",
       displayName: "C_1206_3216Metric",
       fileName: "C_1206_3216Metric.kicad_mod",
       mountType: "smd",
-      source: cSMD1206,
+      source: readAsset("Capacitor_SMD", "C_1206_3216Metric.kicad_mod"),
     }),
     makeSeed({
       footprintId: "builtin:fp:c-1210-3225m",
       displayName: "C_1210_3225Metric",
       fileName: "C_1210_3225Metric.kicad_mod",
       mountType: "smd",
-      source: cSMD1210,
+      source: readAsset("Capacitor_SMD", "C_1210_3225Metric.kicad_mod"),
     }),
     // Capacitor THT disc
     makeSeed({
@@ -290,21 +305,30 @@ export function listAllBuiltinFootprintSeeds(): readonly BuiltinFootprintSeed[] 
       displayName: "C_Disc_D3.0mm_W2.0mm_P2.50mm",
       fileName: "C_Disc_D3.0mm_W2.0mm_P2.50mm.kicad_mod",
       mountType: "through_hole",
-      source: cTHTd3,
+      source: readAsset(
+        "Capacitor_THT",
+        "C_Disc_D3.0mm_W2.0mm_P2.50mm.kicad_mod",
+      ),
     }),
     makeSeed({
       footprintId: "builtin:fp:c-disc-d5-p5",
       displayName: "C_Disc_D5.0mm_W2.5mm_P5.00mm",
       fileName: "C_Disc_D5.0mm_W2.5mm_P5.00mm.kicad_mod",
       mountType: "through_hole",
-      source: cTHTd5,
+      source: readAsset(
+        "Capacitor_THT",
+        "C_Disc_D5.0mm_W2.5mm_P5.00mm.kicad_mod",
+      ),
     }),
     makeSeed({
       footprintId: "builtin:fp:c-disc-d7.5-p5",
       displayName: "C_Disc_D7.5mm_W5.0mm_P5.00mm",
       fileName: "C_Disc_D7.5mm_W5.0mm_P5.00mm.kicad_mod",
       mountType: "through_hole",
-      source: cTHTd75,
+      source: readAsset(
+        "Capacitor_THT",
+        "C_Disc_D7.5mm_W5.0mm_P5.00mm.kicad_mod",
+      ),
     }),
   ]);
   return SEEDS;

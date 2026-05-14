@@ -1,7 +1,4 @@
-// Bun sidecar Sentry init. DSN/release/env are inlined at compile time via
-// scripts/compile-bun-sidecar.ts (--define) and also read from runtime env so
-// dev runs without recompile still report.
-import * as Sentry from "@sentry/bun";
+import * as Sentry from "@sentry/node";
 
 // Public Sentry DSN. Override per-process via OPENPCB_SENTRY_DSN.
 const DEFAULT_DSN =

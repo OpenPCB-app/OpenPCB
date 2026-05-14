@@ -1,5 +1,5 @@
 import { asc, eq } from "drizzle-orm";
-import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
   CoreBackendModuleContext,
   ModuleDbClient,
@@ -73,7 +73,7 @@ import {
 } from "./projection-read";
 import { conflict, parseDispatchResultJson } from "./results";
 
-type DbClient = BunSQLiteDatabase<Record<string, unknown>>;
+type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
 function getDb(moduleDb: ModuleDbClient): DbClient {
   return (moduleDb as { db: DbClient }).db;

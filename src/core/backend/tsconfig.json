@@ -10,6 +10,7 @@
   },
   "include": [
     "main.ts",
+    "runtime.ts",
     "index.ts",
     "http/**/*.ts",
     "router/**/*.ts",

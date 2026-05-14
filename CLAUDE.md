@@ -15,13 +15,13 @@ Run from repo root unless noted.
 **Dev**
 
 - `npm run dev` — backend (Bun) + frontend (Vite), browser mode
-- `npm run dev:electron` — backend + frontend + Electron shell (waits on `http://127.0.0.1:1420`)
+- `npm run dev:electron` — frontend + Electron shell; backend starts inside Electron main
 - `npm run dev:backend` — Bun backend only (`src/core/backend/main.ts`, port 3000, `--watch`)
 - `npm run dev:frontend` — Vite dev server only (port 1420, proxies `/api` and `/ws` → 3000)
 
 **Build / check**
 
-- `npm run build` — bun sidecar compile + frontend bundle + electron build + dist
+- `npm run build` — frontend bundle + Electron Forge make
 - `npm run typecheck` — `tsc -b` over composite project (core/backend, core/frontend, modules)
 - `npm run lint` — misnomer: runs `tsc --noEmit` in `src/core/frontend` (no ESLint wired). Same effect as typecheck for the frontend workspace.
 
@@ -88,8 +88,8 @@ src/
     ├── backend/        ECS world, command/patch/history infrastructure
     └── frontend/canvas/ canvas engine + theme-aware layers
 
-electron/               Electron main + preload + backend-manager (separate workspace)
-scripts/                module-cli.ts, gen-modules.ts, gen-sdk.ts, generate-openapi.ts, compile-bun-sidecar.ts
+electron/               Electron main + preload + embedded backend manager (separate workspace)
+scripts/                module-cli.ts, gen-modules.ts, gen-sdk.ts, generate-openapi.ts
 docs/                   PROPOSED_ARCHITECTURE.md, COMMAND_PATTERN.md, DATA_MODEL.md
 tests/e2e/              Playwright E2E tests
 ```

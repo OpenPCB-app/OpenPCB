@@ -166,7 +166,7 @@ export class AssistantSettingsStore {
       defaultModel: input.defaultModel ?? current.defaultModel,
       enabled: input.enabled ?? current.enabled,
     };
-    this.assertProviderInput(next, true);
+    this.assertProviderInput({ ...next, apiKey: next.apiKey ?? undefined }, true);
     this.rawSql(
       "UPDATE assistant_provider_config SET label=?, kind=?, base_url=?, api_key=?, default_model=?, enabled=?, updated_at=? WHERE id=?",
       [next.label, next.kind, next.baseUrl, next.apiKey, next.defaultModel, next.enabled ? 1 : 0, now(), idValue],

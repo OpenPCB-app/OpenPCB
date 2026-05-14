@@ -1,13 +1,7 @@
 import { initBackendSentry, captureBackendException } from "./sentry";
+import { startBackendRuntime } from "./runtime";
 
 initBackendSentry();
-
-import {
-  createHttpServer,
-  DiagnosticsStore,
-  ModuleRouterRegistry,
-  ModuleRuntime,
-} from "./index";
 
 process.on("uncaughtException", (err) => {
   console.error("[core-backend] uncaughtException", err);
@@ -21,33 +15,19 @@ process.on("unhandledRejection", (reason) => {
 const port = Number.parseInt(process.env.PORT ?? "3000", 10);
 const host = process.env.HOST ?? "127.0.0.1";
 
-const diagnosticsStore = new DiagnosticsStore(100);
-const moduleRegistry = new ModuleRouterRegistry();
-const moduleRuntime = new ModuleRuntime({
-  moduleRegistry,
-});
-
-await moduleRuntime.bootstrap();
-const snapshot = moduleRuntime.snapshot();
-
-const server = createHttpServer({
+const runtime = await startBackendRuntime({
   host,
   port,
-  diagnosticsStore,
-  moduleRegistry,
-  moduleRuntime,
 });
-
-const bunServer = server.start();
 console.log(
   JSON.stringify({
-    serverPort: bunServer.port,
+    serverPort: runtime.port,
     startupContractVersion: 1,
     startupLicenseState: "active",
     startupLicenseCode: "CORE_BACKEND",
-    loadedModules: snapshot.loadedModules,
+    loadedModules: runtime.snapshot.loadedModules,
   }),
 );
 console.log(
-  `[core-backend] listening on http://${bunServer.hostname}:${bunServer.port}`,
+  `[core-backend] listening on ${runtime.url}`,
 );

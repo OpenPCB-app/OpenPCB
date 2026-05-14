@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
   PcbBoardSettings,
   PcbCopperLayerId,
@@ -14,7 +14,7 @@ import { pcbEntities } from "../schema";
 import { asNumber, asRecord, asString } from "../value-guards";
 import { createDefaultPcbBoardSettings } from "./pcb-defaults";
 
-type DbClient = BunSQLiteDatabase<Record<string, unknown>>;
+type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
 const BOARD_SETTINGS_KIND = "board_settings";
 const PLACEMENT_KIND = "placement";

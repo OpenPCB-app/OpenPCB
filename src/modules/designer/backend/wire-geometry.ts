@@ -1,9 +1,9 @@
 import { and, eq, inArray, or } from "drizzle-orm";
-import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { asNumber, asRecord } from "./value-guards";
 import { schematicWires } from "./schema";
 
-type DbClient = BunSQLiteDatabase<Record<string, unknown>>;
+type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 type Point = { x: number; y: number };
 
 function pointKey(point: Point): string {

@@ -1,8 +1,8 @@
 /**
  * Static module registry.
  *
- * Statically imports every first-party module backend so the compiled Bun
- * sidecar binary embeds all module code and their npm dependencies. The
+ * Statically imports every first-party module backend so desktop builds embed
+ * all module code and their npm dependencies. The
  * module loader uses these exports at runtime instead of resolving a
  * dynamic import against the on-disk `module.backend.ts`, which would
  * otherwise fail in packaged mode because `node_modules/` is not shipped

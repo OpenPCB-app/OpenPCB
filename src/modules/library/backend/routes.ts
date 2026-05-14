@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { deflateRawSync } from "node:zlib";
 import os from "node:os";
 import path from "node:path";
@@ -1318,7 +1319,7 @@ export function registerRoutes(
       throw new NotFoundError("Footprint model not found");
     }
     const absolutePath = resolveStoredModelPath(model.glbPath, ".glb");
-    return new Response(Bun.file(absolutePath), {
+    return new Response(await readFile(absolutePath), {
       headers: {
         "content-type": "model/gltf-binary",
         etag: `"${model.glbSha256}"`,
@@ -1338,7 +1339,7 @@ export function registerRoutes(
       throw new NotFoundError("Footprint source model not found");
     }
     const absolutePath = resolveStoredModelPath(model.sourceStepPath, ".step");
-    return new Response(Bun.file(absolutePath), {
+    return new Response(await readFile(absolutePath), {
       headers: {
         "content-type": "model/step",
         "cache-control": "private, no-store",

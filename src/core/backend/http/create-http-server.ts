@@ -1,5 +1,8 @@
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { DiagnosticsController } from "../controllers/diagnostics-controller";
 import { HealthController } from "../controllers/health-controller";
 import { ModuleRuntimeDiagnosticsController } from "../controllers/module-runtime-diagnostics-controller";
@@ -30,6 +33,16 @@ function resolveStaticDir(): string | null {
   return null;
 }
 
+function contentTypeFor(pathname: string): string {
+  if (pathname.endsWith(".html")) return "text/html; charset=utf-8";
+  if (pathname.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (pathname.endsWith(".css")) return "text/css; charset=utf-8";
+  if (pathname.endsWith(".json")) return "application/json; charset=utf-8";
+  if (pathname.endsWith(".svg")) return "image/svg+xml";
+  if (pathname.endsWith(".wasm")) return "application/wasm";
+  return "application/octet-stream";
+}
+
 async function serveStaticFile(
   staticDir: string,
   pathname: string,
@@ -38,24 +51,87 @@ async function serveStaticFile(
   if (!filePath.startsWith(staticDir)) {
     return null;
   }
-  const file = Bun.file(filePath);
-  if (await file.exists()) {
-    return new Response(file);
+  try {
+    const file = await readFile(filePath);
+    return new Response(file, {
+      headers: { "content-type": contentTypeFor(filePath) },
+    });
+  } catch {
+    return null;
   }
-  return null;
 }
 
-function serveSpaFallback(staticDir: string): Response {
+async function serveSpaFallback(staticDir: string): Promise<Response> {
   const indexPath = join(staticDir, "index.html");
-  const file = Bun.file(indexPath);
+  const file = await readFile(indexPath);
   return new Response(file, {
     headers: { "content-type": "text/html" },
   });
 }
 
+export interface StartedRuntimeServer {
+  hostname: string;
+  port: number;
+  close(): Promise<void>;
+}
+
 export interface RuntimeServer {
   fetch(req: Request): Promise<Response>;
-  start(): ReturnType<typeof Bun.serve>;
+  start(): Promise<StartedRuntimeServer>;
+}
+
+function buildRequest(
+  req: IncomingMessage,
+  hostname: string,
+  controller: AbortController,
+): Request {
+  const host = req.headers.host ?? `${hostname}:0`;
+  const url = new URL(req.url ?? "/", `http://${host}`);
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (Array.isArray(value)) {
+      for (const item of value) headers.append(key, item);
+    } else if (typeof value === "string") {
+      headers.set(key, value);
+    }
+  }
+
+  const init: RequestInit & { duplex?: "half" } = {
+    method: req.method,
+    headers,
+    signal: controller.signal,
+  };
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    init.body = Readable.toWeb(req) as unknown as ReadableStream<Uint8Array>;
+    init.duplex = "half";
+  }
+  return new Request(url, init);
+}
+
+async function writeResponse(
+  response: Response,
+  res: ServerResponse,
+): Promise<void> {
+  res.statusCode = response.status;
+  res.statusMessage = response.statusText;
+  response.headers.forEach((value, key) => {
+    res.setHeader(key, value);
+  });
+  if (!response.body) {
+    res.end();
+    return;
+  }
+  const reader = response.body.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) res.write(value);
+    }
+    res.end();
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 function applyMiddlewares(
@@ -150,11 +226,51 @@ export function createHttpServer(config: HttpServerConfig): RuntimeServer {
     return applyMiddlewares(ctx, middlewares, baseHandler);
   };
 
-  const start = (): ReturnType<typeof Bun.serve> => {
-    return Bun.serve({
-      hostname: config.host ?? "127.0.0.1",
-      port: config.port ?? 3000,
-      fetch,
+  const start = (): Promise<StartedRuntimeServer> => {
+    const hostname = config.host ?? "127.0.0.1";
+    const port = config.port ?? 3000;
+    const server = createServer((incoming, outgoing) => {
+      const controller = new AbortController();
+      incoming.on("aborted", () => controller.abort());
+      void fetch(buildRequest(incoming, hostname, controller))
+        .then((response) => writeResponse(response, outgoing))
+        .catch((error: unknown) => {
+          if (!outgoing.headersSent) {
+            outgoing.statusCode = 500;
+            outgoing.setHeader("content-type", "application/problem+json");
+          }
+          outgoing.end(
+            JSON.stringify({
+              type: "about:blank",
+              title: "Internal Server Error",
+              status: 500,
+              detail: error instanceof Error ? error.message : "Unknown error",
+            }),
+          );
+        });
+    });
+
+    return new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(port, hostname, () => {
+        server.off("error", reject);
+        const address = server.address();
+        if (!address || typeof address === "string") {
+          reject(new Error("Backend server did not expose a TCP address"));
+          return;
+        }
+        resolve({
+          hostname,
+          port: address.port,
+          close: () =>
+            new Promise<void>((closeResolve, closeReject) => {
+              server.close((error) => {
+                if (error) closeReject(error);
+                else closeResolve();
+              });
+            }),
+        });
+      });
     });
   };
 

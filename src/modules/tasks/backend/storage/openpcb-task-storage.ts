@@ -109,7 +109,7 @@ export class OpenPcbTaskStorage implements TaskStorage {
     if (!created) {
       throw new Error(`Task insert failed: task ${taskId} not found after insert`);
     }
-    return created;
+    return created as Task<TPayload>;
   }
 
   async updateTask(idValue: string, patch: Partial<Task>): Promise<Task> {

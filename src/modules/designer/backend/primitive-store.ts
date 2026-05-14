@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
   DesignerPin,
   DesignerPrimitive,
@@ -8,7 +8,7 @@ import type {
 import { schematicPrimitives } from "./schema";
 import { asRecord, asString, parseJsonRecord } from "./value-guards";
 
-type DbClient = BunSQLiteDatabase<Record<string, unknown>>;
+type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 type PrimitiveRow = typeof schematicPrimitives.$inferSelect;
 
 export const PRIMITIVE_PIN_PREFIX = "primitive:";

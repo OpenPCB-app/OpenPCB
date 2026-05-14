@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
   CommandHistory,
   CommandHistorySnapshot,
@@ -8,7 +8,7 @@ import type { DesignerCommand } from "../../../sdks";
 import type { DesignerWorldComponent } from "./projection-world";
 import { sessionHistories } from "./schema";
 
-type DbClient = BunSQLiteDatabase<Record<string, unknown>>;
+type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
 function historyRowId(designId: string, sessionId: string): string {
   return `${designId}:${sessionId}`;

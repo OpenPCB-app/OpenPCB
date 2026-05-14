@@ -17,7 +17,9 @@ import {
  * .sql files at runtime; here we hand-create the bare `pcbEntities` table
  * to keep the test focused on the hydrator default-fill behaviour.
  */
-function makeDb() {
+type PcbDb = Parameters<typeof loadPcbVias>[0];
+
+function makeDb(): PcbDb {
   const sqlite = new Database(":memory:");
   sqlite.exec(`
     CREATE TABLE designer_pcb_entities (
@@ -29,7 +31,7 @@ function makeDb() {
       updated_at TEXT NOT NULL
     );
   `);
-  return drizzle(sqlite);
+  return drizzle(sqlite) as unknown as PcbDb;
 }
 
 describe("PcbVia hydrator default-fill", () => {

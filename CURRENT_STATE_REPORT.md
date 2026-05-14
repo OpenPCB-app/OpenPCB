@@ -23,8 +23,8 @@ Read-only audit. Source of truth is code under `src/`, not docs.
 | UI framework     | React 19            | `react ^19.1.0`, `react-dom ^19.1.0`                                 | ✅     |
 | Styling          | Tailwind 4          | `tailwindcss ^4.0.0`, `@tailwindcss/vite ^4`                         | ✅     |
 | ORM              | Drizzle             | `drizzle-orm ^0.45.1`, `drizzle-kit ^0.31.8`                         | ✅     |
-| DB               | SQLite (Bun native) | `drizzle-orm/bun-sqlite`                                             | ✅     |
-| Electron         | —                   | `electron ^41.0.0`, `electron-builder ^26`                           | ✅     |
+| DB               | SQLite              | `better-sqlite3` + `drizzle-orm/better-sqlite3`                      | ✅     |
+| Electron         | —                   | `electron ^41.0.0`, Electron Forge                                  | ✅     |
 | 3D / canvas      | R3F (skill docs)    | `@react-three/fiber ^9.5`, `three ^0.183`, `@react-three/drei ^10.7` | ✅     |
 | State            | Zustand             | `zustand ^5.0.9`                                                     | ✅     |
 | Validation       | Zod                 | `zod ^4.1.13`                                                        | ✅     |
@@ -66,8 +66,8 @@ src/
     └── designer/                         (backend, frontend, manifest, 8 SQL migrations)
         ├── backend/  pcb/  commands/
         └── frontend/  pcb/{drc,layers,tools}/
-electron/                                 ✅ thin shell (main, preload, sidecar)
-scripts/                                  🟡 module-cli + sidecar compile; README claims Rust/bridge codegen that does not exist
+electron/                                 ✅ Electron main, preload, embedded backend manager
+scripts/                                  🟡 module-cli + README claims Rust/bridge codegen that does not exist
 docs/                                     🟡 stale paths under core/backend/designer
 tests/e2e/                                ✅ Playwright (3 specs)
 data/footprints/                          ✅ KiCad fixtures (built-in seeds)
@@ -201,11 +201,11 @@ Frontend lazy-loads modules via `import.meta.glob` (`src/core/frontend/src/compo
 
 | Path                               | Purpose                                                                   | Status               |
 | ---------------------------------- | ------------------------------------------------------------------------- | -------------------- |
-| `electron/src/main/index.ts`       | Window mgmt, dev = load Vite, prod = sidecar + frontend-dist              | ✅                   |
-| `electron/src/main/sidecar.ts`     | Spawn compiled Bun binary `bun-backend-{triple}`, parse `serverPort` JSON | ✅                   |
+| `electron/src/main/index.ts`       | Window mgmt, starts Electron-owned backend, dev = Vite, prod = backend-served frontend | ✅                   |
+| `electron/src/main/backend-server.ts` | Starts backend runtime on localhost and exposes readiness IPC          | ✅                   |
 | `electron/src/preload/index.ts`    | `electronAPI.onBackendReady` / `getBackendUrl` via contextBridge          | ✅                   |
 | Native menus (PROPOSED `menus.ts`) | —                                                                         | 🔴 not present       |
-| Auto-update                        | `electron-updater` declared in deps                                       | 🟡 not wired in main |
+| Auto-update                        | Disabled until Forge release artifacts/update metadata are finalized       | 🟡 planned          |
 | File dialogs / IPC for file ops    | —                                                                         | 🔴 not present       |
 
 ### AI
@@ -287,8 +287,7 @@ Routes (`AppRouter.tsx`): `home`, `module`.
 | `dev:browser`                                        | backend + Playwright UI                              | ✅                                  |
 | `dev:backend`                                        | `cd src/core/backend && bun --watch main.ts`         | ✅                                  |
 | `dev:frontend`                                       | Vite at :1420                                        | ✅                                  |
-| `build`                                              | bun:compile + frontend build + electron build + dist | ✅ (untested in this audit)         |
-| `bun:compile`                                        | `scripts/compile-bun-sidecar.ts`                     | ✅                                  |
+| `build`                                              | frontend build + Electron Forge make                 | ✅ (untested in this audit)         |
 | `typecheck`                                          | `tsc -b` over composite project                      | ✅                                  |
 | `typecheck:frontend` / `lint`                        | `tsc --noEmit` (NOT ESLint)                          | 🟡 misnomer                         |
 | `module*`                                            | module CLI (`scripts/module-cli.ts`)                 | ✅                                  |
@@ -360,9 +359,9 @@ In-source TODOs are sparse — most planning lives in `TODO.md`. Top items:
 ## 17. Notable dependencies
 
 - `@react-three/fiber ^9.5`, `@react-three/drei ^10.7`, `three ^0.183` — sole rendering engine for both editors. Skill files mandate R3F-only, no Canvas2D.
-- `drizzle-orm/bun-sqlite` — Bun-native SQLite driver, single shared DB.
+- `better-sqlite3` — Node/Electron SQLite driver, single shared DB.
 - `zustand ^5` — all client-side state (navigation, designer, library, editor stores).
-- `electron-updater ^6.3.9` — declared but not wired.
+- Auto-update is intentionally disabled until Electron Forge release artifacts are finalized.
 - `@inquirer/prompts` + `ajv` — module CLI.
 - `wait-on`, `concurrently` — dev orchestration.
 - `tsup` — electron bundle.

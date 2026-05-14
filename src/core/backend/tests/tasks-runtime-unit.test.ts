@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, test } from "bun:test";
 import { TaskRuntime } from "../../../modules/tasks/backend/runtime/task-runtime";
 import { OpenPcbTaskStorage } from "../../../modules/tasks/backend/storage/openpcb-task-storage";
@@ -113,7 +114,7 @@ describe("TaskRuntime", () => {
     const runtime = new TaskRuntime(storage, { info: () => {}, error: () => {} });
     runtime.registerExecutor("tasks.slow", {
       async execute(taskCtx) {
-        await new Promise((_, reject) => {
+        await new Promise((resolve, reject) => {
           taskCtx.signal.addEventListener("abort", () => reject(new Error("aborted")));
           setTimeout(() => resolve(undefined), 5000);
         });

@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type {
   ModuleRegistryItem,
   ModuleRegistryResponse,
@@ -64,6 +64,8 @@ const FALLBACK_SIDEBAR = {
   icon: "Box",
   order: 999,
 } as const;
+
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 interface ParsedSemver {
   major: number;
@@ -136,7 +138,7 @@ function resolveWorkspaceRoot(options: ModuleLoaderOptions): string {
   }
 
   const candidates = [
-    path.resolve(import.meta.dir, "../../.."),
+    path.resolve(MODULE_DIR, "../../.."),
     path.resolve(process.cwd(), "src"),
     process.cwd(),
   ];

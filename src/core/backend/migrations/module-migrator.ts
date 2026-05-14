@@ -26,10 +26,9 @@ function ensureTrackingTable(): void {
 function listAppliedMigrations(moduleId: string): Set<string> {
   const db = getSharedSqlite();
   const rows = db
-    .query<
-      { migration_name: string },
-      [string]
-    >(`SELECT migration_name FROM ${TRACKING_TABLE} WHERE module_id = ? ORDER BY migration_name`)
+    .query<{ migration_name: string }, [string]>(
+      `SELECT migration_name FROM ${TRACKING_TABLE} WHERE module_id = ? ORDER BY migration_name`,
+    )
     .all(moduleId);
   return new Set(rows.map((row) => row.migration_name));
 }

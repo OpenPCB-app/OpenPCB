@@ -59,8 +59,7 @@ scripts/
 ├── gen-modules.ts             ← Legacy (called by generate-registry)
 ├── gen-sdk.ts                 ← Legacy (called by generate-sdk)
 ├── gen-types.ts               ← Legacy (called by generate-types)
-├── gen-bridge.ts              ← Legacy (called by generate-bridge)
-└── compile-bun-sidecar.ts     ← Bun sidecar compilation
+└── gen-bridge.ts              ← Legacy (called by generate-bridge)
 ```
 
 ## Commands

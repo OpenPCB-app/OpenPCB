@@ -2,14 +2,22 @@
 // before any window opens or any child process spawns. electron-log is
 // initialized first so the rest of bootstrap is captured to disk.
 import { app, BrowserWindow, ipcMain } from "electron";
+import squirrelStartup from "electron-squirrel-startup";
 import { join } from "node:path";
 import { initLogger, log } from "./logger.js";
 import { initCrashReporter } from "./crash.js";
 import { initSentry } from "./sentry.js";
 import { Sentry } from "./sentry.js";
 import { registerDiagnosticsIpc } from "./diagnostics-ipc.js";
-import { spawnSidecar, killSidecar, getBackendPayload } from "./sidecar.js";
-import { initializeAutoUpdater } from "./updater.js";
+import {
+  startBackendServer,
+  stopBackendServer,
+  getBackendPayload,
+} from "./backend-server.js";
+
+if (squirrelStartup) {
+  app.quit();
+}
 
 initLogger();
 initCrashReporter();
@@ -137,17 +145,33 @@ ipcMain.handle("get-backend-url", () => {
 });
 
 app.whenReady().then(async () => {
+  if (squirrelStartup) return;
+
+  try {
+    const result = await startBackendServer();
+    log.info(`[electron] Backend ready: port=${result.port}`);
+  } catch (err) {
+    log.error("[electron] Failed to start backend:", err);
+    if (sentryEnabled) Sentry.captureException(err);
+    createWindow();
+    if (mainWindow) {
+      loadStartupError(mainWindow, err);
+    }
+    return;
+  }
+
   if (app.isPackaged) {
     try {
-      const result = await spawnSidecar();
-      log.info(`[electron] Sidecar ready: port=${result.port}`);
       createWindow();
+      const result = getBackendPayload();
+      if (!result) {
+        throw new Error("Backend payload unavailable after startup");
+      }
       if (mainWindow) {
         loadWindow(mainWindow, result.url);
       }
-      initializeAutoUpdater();
     } catch (err) {
-      log.error("[electron] Failed to start sidecar:", err);
+      log.error("[electron] Failed to load packaged window:", err);
       if (sentryEnabled) Sentry.captureException(err);
       createWindow();
       if (mainWindow) {
@@ -155,7 +179,7 @@ app.whenReady().then(async () => {
       }
     }
   } else {
-    log.info("[electron] Dev mode: using external backend via Vite proxy");
+    log.info("[electron] Dev mode: using Vite renderer and Electron backend");
     createWindow();
     if (mainWindow) {
       loadWindow(mainWindow, "http://127.0.0.1:1420");
@@ -166,10 +190,10 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
       const payload = getBackendPayload();
-      if (payload && mainWindow) {
-        loadWindow(mainWindow, payload.url);
-      } else if (!app.isPackaged && mainWindow) {
+      if (!app.isPackaged && mainWindow) {
         loadWindow(mainWindow, "http://127.0.0.1:1420");
+      } else if (payload && mainWindow) {
+        loadWindow(mainWindow, payload.url);
       }
     }
   });
@@ -182,5 +206,5 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  killSidecar();
+  void stopBackendServer();
 });
