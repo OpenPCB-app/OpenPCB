@@ -46,6 +46,11 @@ module.exports = {
       platforms: ["linux"],
       config: {
         options: {
+          name: "openpcb",
+          productName: "OpenPCB",
+          description: "OpenPCB desktop application",
+          bin: "OpenPCB",
+          categories: ["Development"],
           maintainer: "OpenPCB",
           homepage: "https://github.com/andrejvysny/OpenPCB",
         },
@@ -56,6 +61,11 @@ module.exports = {
       platforms: ["linux"],
       config: {
         options: {
+          name: "openpcb",
+          productName: "OpenPCB",
+          description: "OpenPCB desktop application",
+          bin: "OpenPCB",
+          categories: ["Development"],
           homepage: "https://github.com/andrejvysny/OpenPCB",
         },
       },
