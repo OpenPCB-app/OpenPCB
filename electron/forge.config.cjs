@@ -60,18 +60,6 @@ module.exports = {
         },
       },
     },
-    {
-      name: "@reforged/maker-appimage",
-      platforms: ["linux"],
-      config: {
-        options: {
-          productName: "OpenPCB",
-          name: "openpcb",
-          categories: ["Development"],
-          icon: path.join(__dirname, "icon.png"),
-        },
-      },
-    },
   ],
   plugins: [
     {

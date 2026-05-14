@@ -22,7 +22,7 @@
 - [x] Update release workflow for Forge artifacts.
 - [x] Validate typecheck, frontend build, Electron build, and macOS Forge make locally.
 - [ ] Revisit auto-update metadata before first public release.
-- [x] Add AppImage maker/hook after Forge baseline.
+- [ ] Add AppImage maker/hook after Forge baseline.
 
 ## Active Electron Beta Release CI
 

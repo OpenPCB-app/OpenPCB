@@ -80,7 +80,7 @@ jobs:
 
       - name: Install Linux maker dependencies
         if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg rpm squashfs-tools
+        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg rpm
 
       - name: Install Linux Forge maker packages
         if: matrix.platform == 'linux'
@@ -125,7 +125,12 @@ jobs:
         run: npm run build:frontend
 
       - name: Make Electron app
-        run: npm run make --workspace electron -- --platform=${{ matrix.platform }} --arch=${{ matrix.arch }}
+        run: |
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            npm run make --workspace electron -- --platform=linux --arch=${{ matrix.arch }} --targets=@electron-forge/maker-deb,@electron-forge/maker-rpm
+          else
+            npm run make --workspace electron -- --platform=${{ matrix.platform }} --arch=${{ matrix.arch }}
+          fi
 
       - name: List Forge artifacts
         run: find electron/out/make -type f -print | sort
@@ -167,5 +172,5 @@ jobs:
             --verify-tag \
             --prerelease \
             --title "${GITHUB_REF_NAME}" \
-            --notes "Unsigned beta Electron Forge builds for macOS arm64, macOS x64, Windows x64, and Linux x64, including deb, rpm, and AppImage packages." \
+            --notes "Unsigned beta Electron Forge builds for macOS arm64, macOS x64, Windows x64, and Linux x64, including deb and rpm packages." \
             "${files[@]}"
