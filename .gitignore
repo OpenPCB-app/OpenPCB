@@ -34,8 +34,16 @@ dist-electron/
 
 # Development databases (default OPENPCB_DB_PATH = dev-data/openpcb.sqlite)
 dev-data/
+src/core/backend/dev-data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 .data
 .sisyphus/
+
+# Claude Code / agent scratch outside repo source
+.claude/plans/
+.claude/skills/
 
 # Local Playwright artifacts
 .playwright-mcp/
