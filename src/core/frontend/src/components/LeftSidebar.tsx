@@ -3,6 +3,7 @@ import { useNavigationStore } from "../stores/navigation-store";
 import { useBootstrap } from "../providers/BootstrapProvider";
 import type { ModuleRegistryItem } from "../../../contracts/modules/registry";
 import { resolveLucideIcon } from "./icon-resolver";
+import { getFrontendModuleEntry } from "./ModuleSpaceHost";
 
 interface LeftSidebarProps {
   onSettingsClick: () => void;
@@ -33,8 +34,21 @@ export function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
   const { moduleRegistry } = useBootstrap();
 
   const loadedModules = (moduleRegistry?.modules ?? []).filter(
-    (module: ModuleRegistryItem) =>
-      module.status === "loaded" && module.sidebar.hidden !== true,
+    (module: ModuleRegistryItem) => {
+      if (module.status !== "loaded" || module.sidebar.hidden === true) {
+        return false;
+      }
+      // Defense in depth: even if the backend reports a dev-only module as
+      // loaded (e.g. a stale registry response), never expose it from a
+      // production build.
+      if (import.meta.env.PROD) {
+        const entry = getFrontendModuleEntry(module.id);
+        if (entry?.manifest.availability === "dev") {
+          return false;
+        }
+      }
+      return true;
+    },
   );
 
   const orderedModules = [...loadedModules].sort((a, b) => {
@@ -48,16 +62,29 @@ export function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
     <aside className="flex w-20 flex-col items-center justify-between border-r border-slate-200 bg-white py-3 dark:border-slate-700 dark:bg-slate-900">
       <div className="w-10 h-10">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
-          <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="2"></rect>
-          <line x1="8" y1="8" x2="16" y2="16" stroke="currentColor" stroke-width="1.5"></line>
+          <rect
+            x="3"
+            y="3"
+            width="18"
+            height="18"
+            rx="3"
+            stroke="currentColor"
+            stroke-width="2"
+          ></rect>
+          <line
+            x1="8"
+            y1="8"
+            x2="16"
+            y2="16"
+            stroke="currentColor"
+            stroke-width="1.5"
+          ></line>
           <circle cx="8" cy="8" r="1.5" fill="currentColor"></circle>
           <circle cx="16" cy="8" r="1.5" fill="currentColor"></circle>
           <circle cx="8" cy="16" r="1.5" fill="currentColor"></circle>
           <circle cx="16" cy="16" r="1.5" fill="currentColor"></circle>
         </svg>
       </div>
-
-
 
       <nav className="flex flex-1 flex-col items-center justify-start pt-6">
         <button

@@ -5,6 +5,7 @@
   "apiVersion": 2,
   "namespace": "space.assistant",
   "kind": "space",
+  "availability": "dev",
   "sidebar": {
     "label": "Assistant",
     "icon": "Bot",

@@ -1,4 +1,4 @@
-import type { ComponentType, LazyExoticComponent } from "react";
+import type { ComponentType } from "react";
 import type { ModuleManifest } from "./manifest";
 
 /**
@@ -17,9 +17,9 @@ export interface ModuleSpaceProps {
  * Default export shape of every module's `module.frontend.ts` barrel.
  *
  * - `manifest`: the module's manifest.json (imported directly by the barrel)
- * - `Space`: a lazy component rendered when the user navigates to the module
+ * - `Space`: component rendered when the user navigates to the module
  */
 export interface FrontendModuleEntry {
   manifest: ModuleManifest;
-  Space: LazyExoticComponent<ComponentType<ModuleSpaceProps>>;
+  Space: ComponentType<ModuleSpaceProps>;
 }

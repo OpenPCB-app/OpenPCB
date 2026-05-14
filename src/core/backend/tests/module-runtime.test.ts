@@ -150,6 +150,101 @@ describe("module runtime bootstrap", () => {
     expect(byId.get("c")?.status).toBe("skipped");
   });
 
+  test("skips availability:dev modules when NODE_ENV=production", async () => {
+    const workspace = await createWorkspace();
+    await writeModule(
+      workspace,
+      "stable",
+      baseManifest("stable"),
+      `export default { id: "stable", registerRoutes() {} };`,
+    );
+    await writeModule(
+      workspace,
+      "experimental",
+      { ...baseManifest("experimental"), availability: "dev" },
+      `export default { id: "experimental", registerRoutes() {} };`,
+    );
+
+    const previousEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      const moduleRegistry = new ModuleRouterRegistry();
+      const moduleRuntime = new ModuleRuntime({
+        moduleRegistry,
+        workspaceRoot: workspace,
+      });
+      await moduleRuntime.bootstrap();
+      const snapshot = moduleRuntime.snapshot();
+      const byId = new Map(snapshot.modules.map((item) => [item.id, item]));
+
+      expect(byId.get("stable")?.status).toBe("loaded");
+      expect(byId.get("experimental")?.status).toBe("skipped");
+      expect(byId.get("experimental")?.reason).toContain("availability");
+      expect(snapshot.loadedModules).toEqual(["stable"]);
+    } finally {
+      process.env.NODE_ENV = previousEnv;
+    }
+  });
+
+  test("loads availability:dev modules in non-production", async () => {
+    const workspace = await createWorkspace();
+    await writeModule(
+      workspace,
+      "experimental",
+      { ...baseManifest("experimental"), availability: "dev" },
+      `export default { id: "experimental", registerRoutes() {} };`,
+    );
+
+    const previousEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+    try {
+      const moduleRegistry = new ModuleRouterRegistry();
+      const moduleRuntime = new ModuleRuntime({
+        moduleRegistry,
+        workspaceRoot: workspace,
+      });
+      await moduleRuntime.bootstrap();
+      const snapshot = moduleRuntime.snapshot();
+      expect(snapshot.loadedModules).toEqual(["experimental"]);
+    } finally {
+      process.env.NODE_ENV = previousEnv;
+    }
+  });
+
+  test("availability defaults to 'all' when omitted or invalid", async () => {
+    const workspace = await createWorkspace();
+    await writeModule(
+      workspace,
+      "defaultmod",
+      baseManifest("defaultmod"),
+      `export default { id: "defaultmod", registerRoutes() {} };`,
+    );
+    await writeModule(
+      workspace,
+      "invalidmod",
+      { ...baseManifest("invalidmod"), availability: "weird" },
+      `export default { id: "invalidmod", registerRoutes() {} };`,
+    );
+
+    const previousEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      const moduleRegistry = new ModuleRouterRegistry();
+      const moduleRuntime = new ModuleRuntime({
+        moduleRegistry,
+        workspaceRoot: workspace,
+      });
+      await moduleRuntime.bootstrap();
+      const snapshot = moduleRuntime.snapshot();
+      expect(snapshot.loadedModules.sort()).toEqual([
+        "defaultmod",
+        "invalidmod",
+      ]);
+    } finally {
+      process.env.NODE_ENV = previousEnv;
+    }
+  });
+
   test("exposes registry snapshot and module routes through HTTP server", async () => {
     const workspace = await createWorkspace();
     await writeModule(

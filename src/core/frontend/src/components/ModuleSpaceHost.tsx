@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo, type ComponentType } from "react";
+import { useMemo, type ComponentType } from "react";
 import type { FrontendModuleEntry } from "../../../contracts/modules/frontend-entry";
 import type { ModuleRegistryItem } from "../../../contracts/modules/registry";
 import { useBootstrap } from "../providers/BootstrapProvider";
@@ -14,15 +14,28 @@ type ModuleHostProps = {
 };
 
 /**
- * Fully lazy glob of every module's frontend barrel. Each entry is a
- * loader function that dynamically imports `module.frontend.ts` on first
- * call. Nothing module-specific enters the initial bundle.
+ * Eager glob of every module's frontend barrel. All module Spaces are
+ * resolved at app bootstrap, so navigation between modules is instant and
+ * no Suspense boundary is required at the host level.
  */
 const moduleEntries = import.meta.glob<FrontendModuleEntryFile>(
   "../../../../modules/*/module.frontend.ts",
+  { eager: true },
 );
 
-const moduleCache = new Map<string, ComponentType<ModuleHostProps>>();
+const moduleEntriesById: ReadonlyMap<string, FrontendModuleEntry> = new Map(
+  Object.entries(moduleEntries).map(([entryPath, file]) => {
+    const match = entryPath.match(/\/modules\/([^/]+)\/module\.frontend\.ts$/);
+    const moduleId = match?.[1] ?? entryPath;
+    return [moduleId, file.default] as const;
+  }),
+);
+
+export function getFrontendModuleEntry(
+  moduleId: string,
+): FrontendModuleEntry | undefined {
+  return moduleEntriesById.get(moduleId);
+}
 
 function ModuleLoadError({ message }: { message: string }) {
   return (
@@ -32,52 +45,36 @@ function ModuleLoadError({ message }: { message: string }) {
   );
 }
 
-function ModuleLoading({ moduleId }: { moduleId: string }) {
-  return (
-    <div className="m-6 rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-      Loading module {moduleId}...
-    </div>
-  );
-}
-
 function resolveModuleComponent(
   moduleId: string,
 ): ComponentType<ModuleHostProps> | null {
-  const cached = moduleCache.get(moduleId);
-  if (cached) {
-    return cached;
-  }
-
-  const entryPath = `../../../../modules/${moduleId}/module.frontend.ts`;
-  const loader = moduleEntries[entryPath];
-  if (!loader) {
+  const entry = moduleEntriesById.get(moduleId);
+  if (!entry) {
     return null;
   }
-
-  // React.lazy expects a loader that resolves to `{ default: Component }`.
-  // Our barrel's default export is `{ manifest, Space }`, so we wrap it:
-  // load the barrel, then return a small adapter whose default is a
-  // component that renders the barrel's Space with injected props.
-  const LazyHost = lazy(async () => {
-    const loaded = await loader();
-    const entry = loaded.default;
-    const Space = entry.Space;
-    const Host: ComponentType<ModuleHostProps> = ({ module, backendURL, designId }) => (
-      <Space
-        moduleId={module.id}
-        namespace={module.namespace}
-        backendURL={backendURL}
-        designId={designId}
-      />
-    );
-    return { default: Host };
-  });
-
-  moduleCache.set(moduleId, LazyHost);
-  return LazyHost;
+  const Space = entry.Space;
+  const Host: ComponentType<ModuleHostProps> = ({
+    module,
+    backendURL,
+    designId,
+  }) => (
+    <Space
+      moduleId={module.id}
+      namespace={module.namespace}
+      backendURL={backendURL}
+      designId={designId}
+    />
+  );
+  return Host;
 }
 
-export function ModuleSpaceHost({ module, designId }: { module: ModuleRegistryItem; designId?: string }) {
+export function ModuleSpaceHost({
+  module,
+  designId,
+}: {
+  module: ModuleRegistryItem;
+  designId?: string;
+}) {
   const { backendURL } = useBootstrap();
   const Component = useMemo(
     () => resolveModuleComponent(module.id),
@@ -93,8 +90,6 @@ export function ModuleSpaceHost({ module, designId }: { module: ModuleRegistryIt
   }
 
   return (
-    <Suspense fallback={<ModuleLoading moduleId={module.id} />}>
-      <Component module={module} backendURL={backendURL} designId={designId} />
-    </Suspense>
+    <Component module={module} backendURL={backendURL} designId={designId} />
   );
 }

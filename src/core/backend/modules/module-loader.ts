@@ -231,6 +231,15 @@ export class ModuleRuntime implements ModuleRuntimeSnapshotProvider {
           continue;
         }
 
+        if (manifest.availability === "dev" && isPackaged()) {
+          record.dependencies = this.resolveDependencies(manifest);
+          record.status = "skipped";
+          record.reason = "Unavailable in production build (availability: dev)";
+          pending.delete(moduleId);
+          progressed = true;
+          continue;
+        }
+
         record.dependencies = this.resolveDependencies(manifest);
         const blocking = record.dependencies.find(
           (dep) =>

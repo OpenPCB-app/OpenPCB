@@ -8,6 +8,13 @@
 
 export type ModuleKind = "space" | "tool";
 
+/**
+ * Build-target gate for a module.
+ * - "all": always available
+ * - "dev": only available when NODE_ENV !== "production" (hidden in release builds)
+ */
+export type ModuleAvailability = "all" | "dev";
+
 export interface ModuleDependency {
   id: string;
   minVersion?: string;
@@ -42,6 +49,7 @@ export interface ModuleManifest {
   namespace: string;
   kind?: ModuleKind;
   enabled?: boolean;
+  availability?: ModuleAvailability;
 
   sidebar: ModuleSidebarDeclaration;
   runtime?: ModuleRuntimeEntries;
@@ -61,6 +69,7 @@ export interface NormalizedModuleManifest {
   namespace: string;
   kind: ModuleKind;
   enabled: boolean;
+  availability: ModuleAvailability;
   sidebar: ModuleSidebarDeclaration;
   runtime: Required<ModuleRuntimeEntries>;
   dependsOn: ModuleDependency[];

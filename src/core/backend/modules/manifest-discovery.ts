@@ -92,6 +92,7 @@ function normalizeManifest(raw: ModuleManifest): NormalizedModuleManifest {
     version: raw.version,
     apiVersion: 2,
     enabled: raw.enabled !== false,
+    availability: raw.availability === "dev" ? "dev" : "all",
     kind: raw.kind ?? "space",
     sidebar,
     runtime,
@@ -127,7 +128,9 @@ export async function discoverModuleManifests(
         continue;
       }
 
-      const parsed = JSON.parse(await readFile(manifestPath, "utf8")) as unknown;
+      const parsed = JSON.parse(
+        await readFile(manifestPath, "utf8"),
+      ) as unknown;
       if (!isRecord(parsed)) {
         throw new Error("Manifest must be an object");
       }
