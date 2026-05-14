@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import { Cable, FlipHorizontal2, Network } from "lucide-react";
-import type { PcbLayerId, PcbTraceSegmentMode } from "../../../../sdks";
-import { PCB_LAYER_COLORS } from "../../../../shared/frontend/canvas/layers";
+import type { PcbTraceSegmentMode } from "../../../../sdks";
 import type { RoutePosture } from "./tools/route-tool-state";
 import { VIA_PRESETS, type PcbViaPreset } from "../../backend/pcb/via-presets";
 
 interface PcbTopToolbarProps {
-  activeLayer: PcbLayerId;
-  onSetActiveLayer: (layer: PcbLayerId) => void;
   selectedPlacementCount: number;
   onFlipSelection: () => void;
   ratsnestVisible: boolean;
@@ -44,11 +41,6 @@ interface PcbTopToolbarProps {
   posture: RoutePosture;
   onCyclePosture: () => void;
 }
-
-const LAYER_LABELS: Partial<Record<PcbLayerId, string>> = {
-  "F.Cu": "Top Copper",
-  "B.Cu": "Bottom Copper",
-};
 
 const POSTURE_LABEL: Record<RoutePosture, string> = {
   auto: "Auto",
@@ -333,8 +325,6 @@ function ViaPresetDropdown({
 }
 
 export function PcbTopToolbar({
-  activeLayer,
-  onSetActiveLayer,
   selectedPlacementCount,
   onFlipSelection,
   ratsnestVisible,
@@ -361,27 +351,8 @@ export function PcbTopToolbar({
   posture,
   onCyclePosture,
 }: PcbTopToolbarProps): ReactElement {
-  const flipped: PcbLayerId =
-    activeLayer === "F.Cu" ? "B.Cu" : activeLayer === "B.Cu" ? "F.Cu" : "F.Cu";
-  const layerLabel = LAYER_LABELS[activeLayer] ?? activeLayer;
-  const dotColor = PCB_LAYER_COLORS[activeLayer];
-
   return (
     <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200/90 bg-white/95 px-2 py-1 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/90">
-      <button
-        type="button"
-        onClick={() => onSetActiveLayer(flipped)}
-        title="Switch active drawing layer (Top ↔ Bottom Copper) — T / B"
-        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-transparent px-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-      >
-        <span
-          aria-hidden
-          className="inline-block h-2.5 w-2.5 rounded-full"
-          style={{ backgroundColor: dotColor }}
-        />
-        {layerLabel}
-      </button>
-
       <button
         type="button"
         onClick={onToggleViewSide}

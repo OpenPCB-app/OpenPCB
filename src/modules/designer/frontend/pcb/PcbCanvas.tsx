@@ -1465,12 +1465,6 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         <div className="pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2">
           <div className="pointer-events-auto">
             <PcbTopToolbar
-              activeLayer={displayedCopperLayer}
-              onSetActiveLayer={(layer) => {
-                if (layer === "F.Cu" || layer === "B.Cu") {
-                  void setActiveCopperLayer(layer);
-                }
-              }}
               selectedPlacementCount={selection.placementIds.size}
               onFlipSelection={() => {
                 const ids = [...selection.placementIds];
