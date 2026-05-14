@@ -51,10 +51,27 @@ export function usePcbWorkspace(params: {
   const pinNetStore = useDesignerHighlight((s) => s.pinNet);
   const clearHighlightStore = useDesignerHighlight((s) => s.clear);
   const [ratsnestVisible, setRatsnestVisible] = useState(true);
-  // View side mirrors the board for Top/Bottom copper switches. It is still UI
-  // state (not persisted separately); refresh seeds it from the persisted active
-  // copper layer so undo/redo and reload keep the same orientation.
+  // View side is independent of active layer (per UX: switching layer never
+  // flips, and flipping never changes layer). Persisted per-design in
+  // localStorage so reload restores the user's last orientation.
+  const viewSideStorageKey = designId
+    ? `openpcb.pcb.viewSide.${designId}`
+    : null;
   const [viewSide, setViewSideState] = useState<"top" | "bottom">("top");
+
+  // Rehydrate viewSide whenever the design changes (mount or designId switch).
+  useEffect(() => {
+    if (!viewSideStorageKey) {
+      setViewSideState("top");
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(viewSideStorageKey);
+      setViewSideState(raw === "bottom" ? "bottom" : "top");
+    } catch {
+      setViewSideState("top");
+    }
+  }, [viewSideStorageKey]);
 
   const refresh = useCallback(async () => {
     if (!designId) {
@@ -66,7 +83,6 @@ export function usePcbWorkspace(params: {
     try {
       const next = await api.getPcbProjection(designId);
       setProjection(next);
-      setViewSideState(next.board.activeLayer === "B.Cu" ? "bottom" : "top");
       if (next) notifyExternalRevisionBump?.(next.revision);
     } catch (err) {
       setError(
@@ -279,9 +295,23 @@ export function usePcbWorkspace(params: {
     setRatsnestVisible((v) => !v);
   }, []);
 
-  const setViewSide = useCallback((side: "top" | "bottom") => {
-    setViewSideState(side);
-  }, []);
+  const setViewSide = useCallback(
+    (side: "top" | "bottom") => {
+      setViewSideState(side);
+      if (viewSideStorageKey) {
+        try {
+          window.localStorage.setItem(viewSideStorageKey, side);
+        } catch {
+          // Storage may be unavailable (private mode, quota); ignore.
+        }
+      }
+    },
+    [viewSideStorageKey],
+  );
+
+  const toggleViewSide = useCallback(() => {
+    setViewSide(viewSide === "bottom" ? "top" : "bottom");
+  }, [setViewSide, viewSide]);
 
   const addTrace = useCallback(
     async (input: {
@@ -435,6 +465,7 @@ export function usePcbWorkspace(params: {
     toggleRatsnestVisible,
     viewSide,
     setViewSide,
+    toggleViewSide,
     refresh,
     updateBoardSize,
     setActiveLayer,

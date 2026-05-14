@@ -181,7 +181,8 @@ function toNm(pointMm: PointMm): PointNm {
   };
 }
 
-function snapNm(pointNm: PointNm): PointNm {
+function snapNm(pointNm: PointNm, gridEnabled: boolean): PointNm {
+  if (!gridEnabled) return pointNm;
   return {
     x: Math.round(pointNm.x / SCHEMATIC_GRID_NM) * SCHEMATIC_GRID_NM,
     y: Math.round(pointNm.y / SCHEMATIC_GRID_NM) * SCHEMATIC_GRID_NM,
@@ -703,6 +704,8 @@ export const SchematicCanvas = forwardRef<
     initialViewport,
     onViewportChange,
   } = props;
+
+  const snap = (pointNm: PointNm) => snapNm(pointNm, gridVisible);
 
   const [cursorNm, setCursorNm] = useState<PointNm | null>(null);
   const [selection, setSelection] = useState<SelectionState>(emptySelection);
@@ -1486,7 +1489,7 @@ export const SchematicCanvas = forwardRef<
             x: worldNm.x - dragSession.startPointerNm.x,
             y: worldNm.y - dragSession.startPointerNm.y,
           };
-          const snappedDelta = snapNm(rawDelta);
+          const snappedDelta = snap(rawDelta);
           if (
             snappedDelta.x !== dragSession.deltaNm.x ||
             snappedDelta.y !== dragSession.deltaNm.y
@@ -1514,7 +1517,7 @@ export const SchematicCanvas = forwardRef<
           x: Math.round(event.worldPoint.x),
           y: Math.round(event.worldPoint.y),
         };
-        const snappedWorldNm = snapNm(worldNm);
+        const snappedWorldNm = snap(worldNm);
         const pin = hitPin(worldNm);
         const wireHit = hitWire(worldNm);
         const partId = hitPartId(worldNm);
@@ -2255,7 +2258,7 @@ export const SchematicCanvas = forwardRef<
           return;
         }
 
-        const snapped = snapNm({
+        const snapped = snap({
           x: Math.round(event.snappedPoint.x),
           y: Math.round(event.snappedPoint.y),
         });
@@ -2330,7 +2333,7 @@ export const SchematicCanvas = forwardRef<
     const anchors = [
       sourcePin.worldPositionNm,
       ...wireSession.waypointsNm,
-      snapNm(cursorNm),
+      snap(cursorNm),
     ];
     const pointsNm = buildManhattanPathThroughAnchors(anchors);
     return {
@@ -2344,7 +2347,7 @@ export const SchematicCanvas = forwardRef<
   const dragGhostModel = dragPlacementDetail?.symbol.preview ?? null;
   const componentGhostModel = armedComponentDetail?.symbol.preview ?? null;
   const componentGhostNm =
-    armedComponentDetail && cursorNm ? snapNm(cursorNm) : null;
+    armedComponentDetail && cursorNm ? snap(cursorNm) : null;
   const marqueeOverlay = marquee.overlayProps;
 
   const displayedPrimitives = useMemo(() => {
@@ -2366,7 +2369,7 @@ export const SchematicCanvas = forwardRef<
 
   const primitiveGhost: DesignerPrimitive | null = useMemo(() => {
     if (!armedPrimitive || !cursorNm) return null;
-    const snapped = snapNm(cursorNm);
+    const snapped = snap(cursorNm);
     const id = "primitive-ghost";
     if (armedPrimitive.kind === "gnd") {
       return { id, kind: "gnd", positionNm: snapped, rotationDeg: 0 };

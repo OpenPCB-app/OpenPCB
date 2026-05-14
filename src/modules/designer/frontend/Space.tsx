@@ -112,7 +112,7 @@ function DesignerSpaceInner({
 
   const [leftWidth, setLeftWidth] = useState(300);
   const [zoomPercent, setZoomPercent] = useState(20);
-  const [gridVisible, setGridVisible] = useState(true);
+  const [gridVisible, setGridVisible] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [pcbDrcCount, setPcbDrcCount] = useState(0);
   const [pcbBoardSlot, setPcbBoardSlot] = useState<HTMLDivElement | null>(null);

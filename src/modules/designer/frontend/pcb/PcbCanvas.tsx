@@ -64,6 +64,7 @@ import {
   PCB_GRID_MM,
 } from "../../../../shared/frontend/canvas/defaults";
 import { PCB_LAYER_COLORS } from "../../../../shared/frontend/canvas/layers";
+import { FlipHorizontal2 } from "lucide-react";
 import { openContextMenu } from "../../../../shared/frontend/context-menu";
 import type { ContextMenuGroup } from "../../../../shared/frontend/context-menu";
 import {
@@ -117,10 +118,6 @@ function keepTracePrefixForReroute(
 }
 
 type ToolMode = "select" | "route";
-
-function viewSideForCopperLayer(layer: PcbCopperLayerId): "top" | "bottom" {
-  return layer === "B.Cu" ? "bottom" : "top";
-}
 
 interface DragSession {
   primaryPlacementId: string;
@@ -436,16 +433,16 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   }, [defaultNetClass, workspace.projection?.board.tracePresets]);
 
   /**
-   * One canonical Top/Bottom switch path. Outside routing it persists the active
-   * copper layer and mirrors the view deterministically. During routing it
-   * inserts a smart via at the cursor before rebasing to the target layer.
+   * Set the active copper layer without changing the board view orientation.
+   * During routing this also places a smart via at the cursor and rebases the
+   * route session onto the target layer. View flip is a separate user gesture
+   * (Flip view button / Shift+F) — never coupled with layer switches.
    */
-  const setCopperLayerAndView = useCallback(
+  const setActiveCopperLayer = useCallback(
     async (targetLayer: PcbCopperLayerId, cursorOverrideMm?: PcbPointMm) => {
       if (routeState.kind === "routing") {
         const session = routeState.session;
         if (session.layer === targetLayer) {
-          workspace.setViewSide(viewSideForCopperLayer(targetLayer));
           if (activeCopperLayer !== targetLayer) {
             await workspace.setActiveLayer(targetLayer);
           }
@@ -455,18 +452,33 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         if (!viaCursor) return;
         const placed = await placeSmartVia(session, viaCursor, targetLayer);
         if (!placed) return;
-        workspace.setViewSide(viewSideForCopperLayer(targetLayer));
         await workspace.setActiveLayer(targetLayer);
         return;
       }
 
-      workspace.setViewSide(viewSideForCopperLayer(targetLayer));
       if (activeCopperLayer !== targetLayer) {
         await workspace.setActiveLayer(targetLayer);
       }
     },
     [activeCopperLayer, placeSmartVia, routeState, workspace],
   );
+
+  // Flip the board view and sync the active copper layer to the side now
+  // facing the user (bottom view → B.Cu active, top view → F.Cu active).
+  // This is a one-way coupling: changing layer alone never flips the view.
+  // While routing the active layer is left alone so a smart via isn't dropped
+  // mid-session; the route session continues on its own layer until the user
+  // explicitly switches (V / T / B).
+  const handleToggleViewSide = useCallback(() => {
+    const nextSide = workspace.viewSide === "bottom" ? "top" : "bottom";
+    workspace.setViewSide(nextSide);
+    if (routeState.kind === "routing") return;
+    const targetLayer: PcbCopperLayerId =
+      nextSide === "bottom" ? "B.Cu" : "F.Cu";
+    if (activeCopperLayer !== targetLayer) {
+      void workspace.setActiveLayer(targetLayer);
+    }
+  }, [activeCopperLayer, routeState, workspace]);
 
   // Via-size presets surfaced in the toolbar dropdowns. Conservative starter
   // set covering common JLCPCB / PCBWay capabilities; user can type a custom.
@@ -791,7 +803,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                 label: "Top Copper (F.Cu)",
                 disabled: routeState.session.layer === "F.Cu",
                 onSelect: () => {
-                  void setCopperLayerAndView("F.Cu", cursor);
+                  void setActiveCopperLayer("F.Cu", cursor);
                 },
               },
               {
@@ -800,7 +812,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                 label: "Bottom Copper (B.Cu)",
                 disabled: routeState.session.layer === "B.Cu",
                 onSelect: () => {
-                  void setCopperLayerAndView("B.Cu", cursor);
+                  void setActiveCopperLayer("B.Cu", cursor);
                 },
               },
             ],
@@ -955,14 +967,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                     id: "set-top",
                     label: "Top layer (F.Cu)",
                     disabled: activeCopperLayer === "F.Cu",
-                    onSelect: () => void setCopperLayerAndView("F.Cu"),
+                    onSelect: () => void setActiveCopperLayer("F.Cu"),
                   },
                   {
                     kind: "action",
                     id: "set-bottom",
                     label: "Bottom layer (B.Cu)",
                     disabled: activeCopperLayer === "B.Cu",
-                    onSelect: () => void setCopperLayerAndView("B.Cu"),
+                    onSelect: () => void setActiveCopperLayer("B.Cu"),
                   },
                 ],
               },
@@ -1004,7 +1016,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     resolveAnchor,
     routeState,
     selection,
-    setCopperLayerAndView,
+    setActiveCopperLayer,
     setCursorMm,
     splitAndRerouteTrace,
     toolMode,
@@ -1024,6 +1036,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       // Disabled while routing — routing-mode keys are handled below.
       if (
         (event.key === "f" || event.key === "F") &&
+        !event.shiftKey &&
         toolMode === "select" &&
         routeState.kind !== "routing" &&
         selection.placementIds.size > 0 &&
@@ -1132,36 +1145,66 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           if (!cursorMm) return;
           const nextLayer: PcbCopperLayerId =
             session.layer === "F.Cu" ? "B.Cu" : "F.Cu";
-          void setCopperLayerAndView(nextLayer, snapPointMm(cursorMm));
+          void setActiveCopperLayer(nextLayer, snapPointMm(cursorMm));
           return;
         }
       }
 
       // Global keys.
-      // Layer-switch hotkeys: 1=F.Cu, 2=B.Cu, PgUp=F.Cu, PgDn=B.Cu (KiCad
-      // alias). Fire globally so the user can switch active copper layer
-      // outside route mode too.
+      // Flip board view (Shift+F). One-way sync: the active copper layer
+      // follows the side now facing the user (bottom → B.Cu, top → F.Cu).
+      // Changing layer alone still never flips the view.
+      if (
+        (event.key === "F" || event.key === "f") &&
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        handleToggleViewSide();
+        return;
+      }
+      // Layer-switch hotkeys (no view flip — that's Shift+F):
+      //   T / 1 / PgUp → F.Cu, B / 2 / PgDn → B.Cu.
+      // Fire globally so the user can switch active copper layer outside route
+      // mode too.
       if (
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey &&
-        (event.key === "1" || event.key === "PageUp")
+        !event.shiftKey &&
+        (event.key === "1" ||
+          event.key === "PageUp" ||
+          event.key === "t" ||
+          event.key === "T")
       ) {
         event.preventDefault();
-        void setCopperLayerAndView("F.Cu");
+        void setActiveCopperLayer("F.Cu");
         return;
       }
       if (
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey &&
-        (event.key === "2" || event.key === "PageDown")
+        !event.shiftKey &&
+        (event.key === "2" ||
+          event.key === "PageDown" ||
+          event.key === "b" ||
+          event.key === "B")
       ) {
         event.preventDefault();
-        void setCopperLayerAndView("B.Cu");
+        void setActiveCopperLayer("B.Cu");
         return;
       }
-      if (event.key === "b" || event.key === "B") {
+      // Ratsnest toggle moved to Shift+B (B alone now selects Bottom Copper).
+      if (
+        (event.key === "B" || event.key === "b") &&
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
         event.preventDefault();
         workspace.toggleRatsnestVisible();
         return;
@@ -1213,10 +1256,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   }, [
     cursorMm,
     cycleWidth,
+    handleToggleViewSide,
     marquee,
     routeState,
     selection,
-    setCopperLayerAndView,
+    setActiveCopperLayer,
     setSessionWidth,
     toolMode,
     workspace,
@@ -1391,6 +1435,26 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           />
         </EdaCanvas>
       ) : null}
+      {workspace.projection && mirrorActive ? (
+        <>
+          {/* Cool-blue background tint signals bottom-view at-a-glance.
+              DOM overlay only — does not affect R3F clear color. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-10 bg-blue-500/[0.04]"
+            data-testid="pcb-flip-tint"
+          />
+          {/* Status badge — always visible when flipped, even if toolbar is
+              occluded. */}
+          <div
+            className="pointer-events-none absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full border border-violet-500/60 bg-violet-100/95 px-2 py-0.5 text-[11px] font-medium text-violet-700 shadow-sm backdrop-blur dark:bg-violet-900/60 dark:text-violet-200"
+            data-testid="pcb-viewing-bottom-badge"
+          >
+            <FlipHorizontal2 className="h-3 w-3" />
+            Viewing from bottom
+          </div>
+        </>
+      ) : null}
       {workspace.projection ? (
         <div className="pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2">
           <div className="pointer-events-auto">
@@ -1398,7 +1462,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               activeLayer={displayedCopperLayer}
               onSetActiveLayer={(layer) => {
                 if (layer === "F.Cu" || layer === "B.Cu") {
-                  void setCopperLayerAndView(layer);
+                  void setActiveCopperLayer(layer);
                 }
               }}
               selectedPlacementCount={selection.placementIds.size}
@@ -1411,6 +1475,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               ratsnestVisible={workspace.ratsnestVisible}
               onToggleRatsnest={workspace.toggleRatsnestVisible}
               viewSide={workspace.viewSide}
+              onToggleViewSide={handleToggleViewSide}
               routeMode={toolMode === "route"}
               routeSessionActive={routeState.kind === "routing"}
               onToggleRouteMode={() => {
@@ -1517,7 +1582,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               activeLayer={displayedCopperLayer}
               onSetActiveLayer={(layer) => {
                 if (layer === "F.Cu" || layer === "B.Cu") {
-                  void setCopperLayerAndView(layer);
+                  void setActiveCopperLayer(layer);
                 }
               }}
               visibleLayers={workspace.projection.board.visibleLayers}

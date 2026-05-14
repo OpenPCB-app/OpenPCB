@@ -14,6 +14,8 @@ interface PcbTopToolbarProps {
   onToggleRatsnest: () => void;
   /** Current board view orientation. `"bottom"` mirrors the scene horizontally. */
   viewSide: "top" | "bottom";
+  /** Toggle the board view between top and bottom (orthogonal to active layer). */
+  onToggleViewSide: () => void;
   routeMode: boolean;
   routeSessionActive: boolean;
   onToggleRouteMode: () => void;
@@ -338,6 +340,7 @@ export function PcbTopToolbar({
   ratsnestVisible,
   onToggleRatsnest,
   viewSide,
+  onToggleViewSide,
   routeMode,
   routeSessionActive,
   onToggleRouteMode,
@@ -368,13 +371,8 @@ export function PcbTopToolbar({
       <button
         type="button"
         onClick={() => onSetActiveLayer(flipped)}
-        title="Switch active layer and mirror view (Top ↔ Bottom)"
-        aria-pressed={viewSide === "bottom"}
-        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
-          viewSide === "bottom"
-            ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-            : "border-transparent text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-        }`}
+        title="Switch active drawing layer (Top ↔ Bottom Copper) — T / B"
+        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-transparent px-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
       >
         <span
           aria-hidden
@@ -386,17 +384,37 @@ export function PcbTopToolbar({
 
       <button
         type="button"
+        onClick={onToggleViewSide}
+        title={
+          viewSide === "bottom"
+            ? "Viewing from bottom — click or Shift+F to flip back"
+            : "Flip board view (Shift+F)"
+        }
+        aria-pressed={viewSide === "bottom"}
+        data-testid="pcb-flip-view-button"
+        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+          viewSide === "bottom"
+            ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        }`}
+      >
+        <FlipHorizontal2 className="h-3.5 w-3.5" />
+        Flip view
+      </button>
+
+      <button
+        type="button"
         onClick={onFlipSelection}
         disabled={selectedPlacementCount === 0}
         title={
           selectedPlacementCount === 0
-            ? "Select a placement, then F to flip to the other side"
+            ? "Select a placement, then F to flip it to the other side"
             : `Flip ${selectedPlacementCount} placement${selectedPlacementCount === 1 ? "" : "s"} to the opposite side (F)`
         }
         className="inline-flex h-7 items-center gap-1.5 rounded-md border border-transparent px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800 dark:disabled:hover:bg-transparent"
       >
         <FlipHorizontal2 className="h-3.5 w-3.5" />
-        Flip
+        Flip part
       </button>
 
       <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
@@ -472,7 +490,7 @@ export function PcbTopToolbar({
       <button
         type="button"
         onClick={onToggleRatsnest}
-        title="Toggle ratsnest visibility (B)"
+        title="Toggle ratsnest visibility (Shift+B)"
         className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
           ratsnestVisible
             ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
