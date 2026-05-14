@@ -53,7 +53,7 @@
     "vite": "^7.0.4",
     "wait-on": "^9.0.4"
   },
-  "version": "0.1.9-alpha",
+  "version": "0.1.10-alpha",
   "packageManager": "npm@10.9.2",
   "dependencies": {
     "drizzle-orm": "^0.45.1",
