@@ -67,6 +67,7 @@ module.exports = {
           bin: "OpenPCB",
           categories: ["Development"],
           homepage: "https://github.com/andrejvysny/OpenPCB",
+          license: "PolyForm-Noncommercial-1.0.0",
         },
       },
     },

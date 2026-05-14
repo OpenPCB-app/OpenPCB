@@ -2,6 +2,7 @@
   "name": "openpcb-electron",
   "version": "0.1.10-alpha",
   "description": "OpenPCB desktop application",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "type": "module",
   "main": "dist/main/index.js",
