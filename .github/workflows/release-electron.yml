@@ -82,12 +82,6 @@ jobs:
         if: matrix.platform == 'linux'
         run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg rpm
 
-      - name: Install Linux Forge maker packages
-        if: matrix.platform == 'linux'
-        run: |
-          npm install --no-save --no-package-lock --include=optional electron-installer-debian@3.2.0 electron-installer-redhat@3.4.0
-          node -e "require('electron-installer-debian'); require('electron-installer-redhat'); console.log('Linux Forge maker packages installed')"
-
       - name: Repair optional native dependencies
         run: |
           ROLLUP_VERSION="$(node -p "require('./package-lock.json').packages['node_modules/rollup'].version")"
@@ -97,6 +91,12 @@ jobs:
             "@rollup/rollup-${{ matrix.rollup_package }}@${ROLLUP_VERSION}" \
             "lightningcss-${{ matrix.lightningcss_package }}@${LIGHTNINGCSS_VERSION}" \
             "@tailwindcss/oxide-${{ matrix.tailwindcss_oxide_package }}@${TAILWINDCSS_OXIDE_VERSION}"
+
+      - name: Install Linux Forge maker packages
+        if: matrix.platform == 'linux'
+        run: |
+          npm install --no-save --no-package-lock --include=optional electron-installer-debian@3.2.0 electron-installer-redhat@3.4.0
+          node -e "require('electron-installer-debian'); require('electron-installer-redhat'); console.log('Linux Forge maker packages installed')"
 
       - name: Validate release version
         run: |
