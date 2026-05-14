@@ -60,6 +60,7 @@ import type {
 import type { SymbolRenderModel } from "../../../../shared/rendering";
 import type { DesignerWorkspaceActions } from "../hooks/useDesignerWorkspace";
 import { SCHEMATIC_GRID_NM, SCHEMATIC_GRID_MM } from "../types";
+import type { ViewportState } from "../types";
 import { COMPONENT_DND_MIME } from "./DesignerSidebar";
 import { useDesignerHighlight } from "../useDesignerHighlight";
 import {
@@ -156,6 +157,8 @@ interface SchematicCanvasProps {
   dragGhostNm: { x: number; y: number } | null;
   actions: DesignerWorkspaceActions;
   onZoomChange?: (zoomPercent: number) => void;
+  initialViewport?: ViewportState | null;
+  onViewportChange?: (zoom: number, posX: number, posY: number) => void;
 }
 
 function distanceMm(a: PointMm, b: PointMm): number {
@@ -653,6 +656,36 @@ function ZoomReporter({
   return null;
 }
 
+function ViewportReporter({
+  onViewportChange,
+}: {
+  onViewportChange: (zoom: number, posX: number, posY: number) => void;
+}): null {
+  const camera = useThree((s) => s.camera) as OrthographicCamera;
+  const lastRef = useRef({
+    zoom: camera.zoom,
+    posX: camera.position.x,
+    posY: camera.position.y,
+  });
+
+  useFrame(() => {
+    const { zoom, position } = camera;
+    const l = lastRef.current;
+    if (
+      Math.abs(l.zoom - zoom) > 0.001 ||
+      Math.abs(l.posX - position.x) > 0.1 ||
+      Math.abs(l.posY - position.y) > 0.1
+    ) {
+      l.zoom = zoom;
+      l.posX = position.x;
+      l.posY = position.y;
+      onViewportChange(zoom, position.x, position.y);
+    }
+  });
+
+  return null;
+}
+
 export const SchematicCanvas = forwardRef<
   SchematicCanvasHandle,
   SchematicCanvasProps
@@ -667,6 +700,8 @@ export const SchematicCanvas = forwardRef<
     dragGhostNm,
     actions,
     onZoomChange,
+    initialViewport,
+    onViewportChange,
   } = props;
 
   const [cursorNm, setCursorNm] = useState<PointNm | null>(null);
@@ -749,7 +784,7 @@ export const SchematicCanvas = forwardRef<
     const bounds = computeProjectionBoundsMm(projection);
     if (!bounds) {
       camera.position.set(0, 0, camera.position.z);
-      camera.zoom = 35;
+      camera.zoom = 10;
       camera.updateProjectionMatrix();
       onZoomChange?.(camera.zoom * 2);
       return;
@@ -786,13 +821,33 @@ export const SchematicCanvas = forwardRef<
     if (!cameraReady) return;
     if (!projection?.designId) return;
     if (lastAutoFittedDesignIdRef.current === projection.designId) {
-      // Already auto-fitted this design within this mount; do not re-fit
-      // on unrelated projection updates (revision bumps, edits).
+      // Already handled this design within this mount; skip revision bumps.
       return;
     }
-    fitCamera();
     lastAutoFittedDesignIdRef.current = projection.designId;
-  }, [cameraReady, projection?.designId, fitCamera]);
+
+    const camera = cameraRef.current;
+    if (!camera) return;
+
+    if (initialViewport) {
+      camera.position.set(
+        initialViewport.posX,
+        initialViewport.posY,
+        camera.position.z,
+      );
+      camera.zoom = initialViewport.zoom;
+      camera.updateProjectionMatrix();
+      onZoomChange?.(camera.zoom * 2);
+    } else {
+      fitCamera();
+    }
+  }, [
+    cameraReady,
+    projection?.designId,
+    initialViewport,
+    fitCamera,
+    onZoomChange,
+  ]);
 
   useImperativeHandle(ref, () => ({
     zoomIn() {
@@ -2350,6 +2405,9 @@ export const SchematicCanvas = forwardRef<
           onReady={() => setCameraReady(true)}
         />
         <ZoomReporter onZoomChange={onZoomChange} />
+        {onViewportChange && (
+          <ViewportReporter onViewportChange={onViewportChange} />
+        )}
         <InvalidateOnCanvasChange
           projection={projection}
           cursorNm={cursorNm}

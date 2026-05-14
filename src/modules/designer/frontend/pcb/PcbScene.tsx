@@ -1,4 +1,4 @@
-import { useThree } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, type ReactElement } from "react";
 import * as THREE from "three";
 import type {
@@ -35,29 +35,75 @@ import {
   visibleLayerSet,
 } from "./pcb-layer-visibility";
 import type { PcbSelection } from "./pcb-selection";
+import type { ViewportState } from "../types";
 
-function FitBoardOnMount({ outline }: { outline: PcbBoardOutline }): null {
+function FitBoardOnMount({
+  outline,
+  initialViewport,
+}: {
+  outline: PcbBoardOutline;
+  initialViewport?: ViewportState | null;
+}): null {
   const camera = useThree((s) => s.camera) as THREE.OrthographicCamera;
   const gl = useThree((s) => s.gl);
   const invalidate = useThree((s) => s.invalidate);
 
   useEffect(() => {
-    const { widthMm, heightMm, centerMm } = outline;
-    const canvasWidth = gl.domElement.clientWidth;
-    const canvasHeight = gl.domElement.clientHeight;
-    const paddedWidth = widthMm * 1.15;
-    const paddedHeight = heightMm * 1.15;
-    const zoom = Math.max(
-      1,
-      Math.min(canvasWidth / paddedWidth, canvasHeight / paddedHeight, 500),
-    );
-    camera.position.set(centerMm.x, centerMm.y, camera.position.z);
-    camera.zoom = zoom;
+    if (initialViewport) {
+      camera.position.set(
+        initialViewport.posX,
+        initialViewport.posY,
+        camera.position.z,
+      );
+      camera.zoom = initialViewport.zoom;
+    } else {
+      const { widthMm, heightMm, centerMm } = outline;
+      const canvasWidth = gl.domElement.clientWidth;
+      const canvasHeight = gl.domElement.clientHeight;
+      const paddedWidth = widthMm * 1.15;
+      const paddedHeight = heightMm * 1.15;
+      const zoom = Math.max(
+        1,
+        Math.min(canvasWidth / paddedWidth, canvasHeight / paddedHeight, 500),
+      );
+      camera.position.set(centerMm.x, centerMm.y, camera.position.z);
+      camera.zoom = zoom;
+    }
     camera.updateProjectionMatrix();
     invalidate();
     // runs only on mount; PcbCanvas remounts (key=designId) on design switch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  return null;
+}
+
+function ViewportReporter({
+  onViewportChange,
+}: {
+  onViewportChange: (zoom: number, posX: number, posY: number) => void;
+}): null {
+  const camera = useThree((s) => s.camera) as THREE.OrthographicCamera;
+  const lastRef = useRef({
+    zoom: camera.zoom,
+    posX: camera.position.x,
+    posY: camera.position.y,
+  });
+
+  useFrame(() => {
+    const { zoom, position } = camera;
+    const l = lastRef.current;
+    if (
+      Math.abs(l.zoom - zoom) > 0.001 ||
+      Math.abs(l.posX - position.x) > 0.1 ||
+      Math.abs(l.posY - position.y) > 0.1
+    ) {
+      l.zoom = zoom;
+      l.posX = position.x;
+      l.posY = position.y;
+      onViewportChange(zoom, position.x, position.y);
+    }
+  });
 
   return null;
 }
@@ -652,6 +698,8 @@ interface PcbSceneProps {
     b: { x: number; y: number } | null;
     color: string;
   } | null;
+  initialViewport?: ViewportState | null;
+  onViewportChange?: (zoom: number, posX: number, posY: number) => void;
 }
 
 export function PcbScene({
@@ -664,6 +712,8 @@ export function PcbScene({
   routeGuide = null,
   routePreview = null,
   marqueeOverlay = null,
+  initialViewport,
+  onViewportChange,
 }: PcbSceneProps): ReactElement {
   const invalidate = useThree((state) => state.invalidate);
 
@@ -740,13 +790,14 @@ export function PcbScene({
         />
       ) : null}
       <group scale={[sceneScaleX, 1, 1]}>
-        <FitBoardOnMount outline={projection.board.outline} />
-        <GridShader
-          gridSize={1}
-          majorEvery={5}
-          alpha={0.16}
-          majorAlpha={0.12}
+        <FitBoardOnMount
+          outline={projection.board.outline}
+          initialViewport={initialViewport}
         />
+        {onViewportChange && (
+          <ViewportReporter onViewportChange={onViewportChange} />
+        )}
+        {/* <GridShader gridSize={1} majorEvery={5} alpha={0.16} majorAlpha={0.12} /> */}
         <BoardFill projection={projection} />
         <BoardOutline projection={projection} visibleLayers={visibleLayers} />
         {projection.placements.map((placement) => (

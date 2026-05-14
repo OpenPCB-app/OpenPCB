@@ -22,7 +22,7 @@ import { useDesignerWorkspace } from "./hooks/useDesignerWorkspace";
 import { PcbCanvas } from "./pcb/PcbCanvas";
 import { Board3DCanvas } from "./three-d/Board3DCanvas";
 import type { LibraryComponent } from "../../../sdks";
-import type { ModuleSpaceProps } from "./types";
+import type { ModuleSpaceProps, ViewportState } from "./types";
 import { SCHEMATIC_GRID_MM } from "./types";
 import { isEditableShortcutTarget } from "../../../shared/frontend/canvas/utils/keyboard-shortcuts";
 
@@ -81,7 +81,7 @@ function DesignerSpaceInner({
     onNotify: addToast,
   });
   const [leftWidth, setLeftWidth] = useState(300);
-  const [zoomPercent, setZoomPercent] = useState(70);
+  const [zoomPercent, setZoomPercent] = useState(20);
   const [gridVisible, setGridVisible] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [pcbDrcCount, setPcbDrcCount] = useState(0);
@@ -90,6 +90,32 @@ function DesignerSpaceInner({
     null,
   );
   const canvasRef = useRef<SchematicCanvasHandle | null>(null);
+  const viewportRef = useRef<Map<string, ViewportState>>(new Map());
+
+  const onSchemViewportChange = useCallback(
+    (zoom: number, posX: number, posY: number) => {
+      if (state.selectedDesignId)
+        viewportRef.current.set(`schem:${state.selectedDesignId}`, {
+          zoom,
+          posX,
+          posY,
+        });
+    },
+    [state.selectedDesignId],
+  );
+
+  const onPcbViewportChange = useCallback(
+    (zoom: number, posX: number, posY: number) => {
+      if (state.selectedDesignId)
+        viewportRef.current.set(`pcb:${state.selectedDesignId}`, {
+          zoom,
+          posX,
+          posY,
+        });
+    },
+    [state.selectedDesignId],
+  );
+
   const canOpenPalette = state.activeView === "schem" && !!state.projection;
 
   const openComponentPalette = useCallback(() => {
@@ -246,6 +272,13 @@ function DesignerSpaceInner({
         dragGhostNm={state.dragGhostNm}
         actions={actions}
         onZoomChange={setZoomPercent}
+        initialViewport={
+          state.selectedDesignId
+            ? (viewportRef.current.get(`schem:${state.selectedDesignId}`) ??
+              null)
+            : null
+        }
+        onViewportChange={onSchemViewportChange}
       />
     );
   };
@@ -302,6 +335,13 @@ function DesignerSpaceInner({
               onDrcCountChange={setPcbDrcCount}
               boardPanelTarget={pcbBoardSlot}
               layersPanelTarget={pcbLayersSlot}
+              initialViewport={
+                state.selectedDesignId
+                  ? (viewportRef.current.get(`pcb:${state.selectedDesignId}`) ??
+                    null)
+                  : null
+              }
+              onViewportChange={onPcbViewportChange}
             />
           ) : state.activeView === "3d" ? (
             <Board3DCanvas

@@ -112,7 +112,7 @@ const SCHEMATIC_DARK: SchematicTheme = {
 /** Default preview theme for dark backgrounds (legacy compatibility) */
 const PREVIEW_DARK: PreviewTheme = {
   symbolStroke: "#e2e8f0", // slate-200 — soft white, less heavy on large IC bodies
-  symbolFill: "#0f172a", // slate-900 — slightly darker than canvas BG
+  symbolFill: "#111111",
   symbolPinDot: "#7dd3fc", // sky-300 — softer terminals, less "Christmas-lights" effect
   symbolPinLine: "#e2e8f0",
   symbolPinLabel: "#94a3b8", // muted slate-blue inside body

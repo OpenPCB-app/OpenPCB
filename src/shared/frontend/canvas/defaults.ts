@@ -41,7 +41,7 @@ export const VALUE_OFFSET_MM = 1.27;
 
 /** Default symbol body stroke (mm). Slightly lighter than KLC's 10 mil for a
  *  balanced on-screen appearance against text and pin dots. */
-export const BODY_STROKE_MM = 0.2;
+export const BODY_STROKE_MM = 0.1;
 
 /** Pin endpoint dot radius in the schematic preview (mm). Sized to be a
  *  visible wiring target without dominating the symbol. */

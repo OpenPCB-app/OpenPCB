@@ -22,7 +22,13 @@ import type {
   InteractionHandler,
 } from "../../../../shared/frontend/canvas/interaction/types";
 import { sceneMmToNm } from "../../../../shared/frontend/canvas/coords";
-import { hitPad, hitPlacement, hitTrace, hitVia, type TraceHit } from "./pcb-hit";
+import {
+  hitPad,
+  hitPlacement,
+  hitTrace,
+  hitVia,
+  type TraceHit,
+} from "./pcb-hit";
 import {
   placementContainedInRect,
   placementIntersectsRect,
@@ -39,6 +45,7 @@ import {
 } from "./pcb-selection";
 import { useMarqueeSelection } from "../../../../shared/frontend/canvas/selection";
 import { PcbScene } from "./PcbScene";
+import type { ViewportState } from "../types";
 import { PcbTopToolbar } from "./PcbTopToolbar";
 import { PcbBoardPanel } from "./PcbBoardPanel";
 import { PcbLayersPanel } from "./PcbLayersPanel";
@@ -111,9 +118,7 @@ function keepTracePrefixForReroute(
 
 type ToolMode = "select" | "route";
 
-function viewSideForCopperLayer(
-  layer: PcbCopperLayerId,
-): "top" | "bottom" {
+function viewSideForCopperLayer(layer: PcbCopperLayerId): "top" | "bottom" {
   return layer === "B.Cu" ? "bottom" : "top";
 }
 
@@ -138,6 +143,8 @@ interface PcbCanvasProps {
   onDrcCountChange?: (count: number) => void;
   boardPanelTarget?: HTMLElement | null;
   layersPanelTarget?: HTMLElement | null;
+  initialViewport?: ViewportState | null;
+  onViewportChange?: (zoom: number, posX: number, posY: number) => void;
 }
 
 export function PcbCanvas(props: PcbCanvasProps): ReactElement {
@@ -260,7 +267,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     return a === "B.Cu" ? "B.Cu" : "F.Cu";
   }, [workspace.projection?.board.activeLayer]);
   const displayedCopperLayer: PcbCopperLayerId =
-    routeState.kind === "routing" ? routeState.session.layer : activeCopperLayer;
+    routeState.kind === "routing"
+      ? routeState.session.layer
+      : activeCopperLayer;
   const mirrorActive = workspace.viewSide === "bottom";
 
   // Marquee/rubber-band selection. Uses the shared canvas hook so PCB and
@@ -1238,10 +1247,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     const session = routeState.session;
     const cursorAnchor = resolveAnchor(cursorMm);
     const committedAnchors = sessionAnchors(session);
-    const anchors = [
-      ...committedAnchors,
-      pointMmToNm(cursorAnchor.pointMm),
-    ];
+    const anchors = [...committedAnchors, pointMmToNm(cursorAnchor.pointMm)];
     const path = buildPreviewPath(
       anchors,
       session.segmentMode,
@@ -1326,7 +1332,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       b: marquee.overlayProps.b,
       color: marquee.overlayProps.color,
     }),
-    [marquee.overlayProps.a, marquee.overlayProps.b, marquee.overlayProps.color],
+    [
+      marquee.overlayProps.a,
+      marquee.overlayProps.b,
+      marquee.overlayProps.color,
+    ],
   );
 
   // Mirror the X axis in bottom-view.
@@ -1376,6 +1386,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             routeGuide={sceneRouteGuide}
             routePreview={sceneRoutePreview}
             marqueeOverlay={sceneMarqueeOverlay}
+            initialViewport={props.initialViewport}
+            onViewportChange={props.onViewportChange}
           />
         </EdaCanvas>
       ) : null}
