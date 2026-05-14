@@ -1,6 +1,6 @@
 {
   "name": "openpcb-electron",
-  "version": "0.1.1-alpha",
+  "version": "0.1.2-alpha",
   "private": true,
   "type": "module",
   "main": "dist/main/index.js",
