@@ -10,6 +10,7 @@ import type {
   LibraryFootprintDetail,
   LibraryFootprintModelDescriptor,
   LibraryFootprintPlacementSnapshot,
+  LibraryListTagsOptions,
   LibraryPreviewWarning,
   LibraryPinMapEntry,
   LibrarySearchParams,
@@ -18,6 +19,8 @@ import type {
   LibrarySymbol,
   LibrarySymbolPlacementSnapshot,
   LibrarySymbolDetail,
+  LibraryTagStat,
+  LibraryUpdateComponentInput,
 } from "../../../sdks/library";
 import type {
   FootprintRenderModel,
@@ -758,7 +761,11 @@ export async function resolveComponentForPlacement(
   return {
     component: mapComponent(componentRow),
     symbol: parseSymbolPlacementSnapshot(symbolRow),
-    footprint: parseFootprintPlacementSnapshot(footprintRow, footprintModelRow, pinMap),
+    footprint: parseFootprintPlacementSnapshot(
+      footprintRow,
+      footprintModelRow,
+      pinMap,
+    ),
     footprintVariants,
     resolvedAt: new Date().toISOString(),
   };
@@ -1151,6 +1158,125 @@ export function deleteComponents(
   return summary;
 }
 
+const SYSTEM_TAGS = new Set([
+  "builtin",
+  "system",
+  "core",
+  "drawn-footprint",
+  "placeholder-footprint",
+]);
+
+function normalizeTag(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function normalizeTagList(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of values) {
+    if (typeof raw !== "string") continue;
+    const tag = normalizeTag(raw);
+    if (tag.length === 0 || seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
+  }
+  return out;
+}
+
+export async function listTags(
+  ctx: CoreBackendModuleContext,
+  options: LibraryListTagsOptions = {},
+): Promise<LibraryTagStat[]> {
+  const db = getDb(ctx);
+  const rows = await db
+    .select({ tagsJson: components.tagsJson })
+    .from(components)
+    .all();
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const tags = parseJsonStringArray(row.tagsJson);
+    const dedup = new Set<string>();
+    for (const tag of tags) {
+      const normalized = normalizeTag(tag);
+      if (!normalized) continue;
+      if (options.excludeSystem && SYSTEM_TAGS.has(normalized)) continue;
+      if (dedup.has(normalized)) continue;
+      dedup.add(normalized);
+      counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+    }
+  }
+  const out: LibraryTagStat[] = Array.from(counts.entries()).map(
+    ([tag, count]) => ({ tag, count }),
+  );
+  out.sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.tag.localeCompare(b.tag);
+  });
+  return out;
+}
+
+export async function updateComponent(
+  ctx: CoreBackendModuleContext,
+  componentId: string,
+  patch: LibraryUpdateComponentInput,
+): Promise<LibraryComponent | null> {
+  const db = getDb(ctx);
+  const existing = await db
+    .select()
+    .from(components)
+    .where(eq(components.id, componentId))
+    .get();
+  if (!existing) return null;
+  if (existing.isBuiltin) {
+    throw new ValidationError(
+      `Cannot edit built-in component "${existing.name}". Use "Duplicate to my library" to create an editable copy.`,
+    );
+  }
+
+  const updates: Partial<typeof components.$inferInsert> = {};
+  if (patch.name !== undefined) {
+    const trimmed = patch.name.trim();
+    if (trimmed.length === 0) {
+      throw new ValidationError("name must be a non-empty string");
+    }
+    if (trimmed.length > 200) {
+      throw new ValidationError("name must be 200 characters or fewer");
+    }
+    updates.name = trimmed;
+  }
+  if (patch.description !== undefined) {
+    if (typeof patch.description !== "string") {
+      throw new ValidationError("description must be a string");
+    }
+    if (patch.description.length > 2000) {
+      throw new ValidationError("description must be 2000 characters or fewer");
+    }
+    updates.description = patch.description;
+  }
+  if (patch.tags !== undefined) {
+    if (!Array.isArray(patch.tags)) {
+      throw new ValidationError("tags must be an array of strings");
+    }
+    updates.tagsJson = JSON.stringify(normalizeTagList(patch.tags));
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return mapComponent(existing);
+  }
+
+  db.update(components)
+    .set(updates)
+    .where(eq(components.id, componentId))
+    .run();
+
+  const refreshed = await db
+    .select()
+    .from(components)
+    .where(eq(components.id, componentId))
+    .get();
+  return refreshed ? mapComponent(refreshed) : null;
+}
+
 export function buildSdk(ctx: CoreBackendModuleContext): LibrarySDK {
   return {
     resolveComponent: (componentId) => resolveComponent(ctx, componentId),
@@ -1160,5 +1286,8 @@ export function buildSdk(ctx: CoreBackendModuleContext): LibrarySDK {
     searchComponents: (params) => searchComponents(ctx, params),
     resolveComponentForPlacement: (componentId) =>
       resolveComponentForPlacement(ctx, componentId),
+    listTags: (options) => listTags(ctx, options),
+    updateComponent: (componentId, patch) =>
+      updateComponent(ctx, componentId, patch),
   };
 }

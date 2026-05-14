@@ -19,18 +19,53 @@ import {
   type SchematicCanvasHandle,
 } from "./components/SchematicCanvas";
 import { ComponentCommandPalette } from "./components/ComponentCommandPalette";
+import { PartFootprintBadge } from "./components/PartFootprintBadge";
 import { ToastProvider, useToast } from "./hooks/use-toast";
 import { useDesignerWorkspace } from "./hooks/useDesignerWorkspace";
 import { PcbCanvas } from "./pcb/PcbCanvas";
 import { Board3DCanvas } from "./three-d/Board3DCanvas";
 import { useDesignerTabsStore } from "./stores/designer-tabs-store";
-import type { LibraryComponent } from "../../../sdks";
+import type {
+  LibraryComponent,
+  LibraryComponentFootprintVariant,
+  LibraryComponentPlacementDetail,
+} from "../../../sdks";
+import type { DesignerWorkspaceState } from "./hooks/useDesignerWorkspace";
 import type { ModuleSpaceProps, ViewportState } from "./types";
 import { isEditableShortcutTarget } from "../../../shared/frontend/canvas/utils/keyboard-shortcuts";
 
 const MIN_LEFT = 240;
 const MAX_LEFT = 520;
 const DEFAULT_COMPONENT_LIMIT = 8;
+const RECENT_PLACEMENTS_KEY = "openpcb:designer:recents";
+const RECENT_PLACEMENTS_CAP = 20;
+const PALETTE_RECENTS_LIMIT = 3;
+const PALETTE_DEFAULTS_LIMIT = 50;
+
+function readPersistedRecents(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_PLACEMENTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is string => typeof entry === "string");
+  } catch {
+    return [];
+  }
+}
+
+function writePersistedRecents(componentId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const current = readPersistedRecents();
+    const filtered = current.filter((entry) => entry !== componentId);
+    const next = [componentId, ...filtered].slice(0, RECENT_PLACEMENTS_CAP);
+    window.localStorage.setItem(RECENT_PLACEMENTS_KEY, JSON.stringify(next));
+  } catch {
+    // localStorage unavailable / quota — recents are best-effort, fall through.
+  }
+}
 
 function commonComponentRank(component: LibraryComponent): number {
   const text = [component.name, component.description, ...component.tags]
@@ -79,6 +114,80 @@ function CanvasEmptyState({ message }: { message: string }): ReactElement {
     <div className="flex h-full w-full items-center justify-center bg-slate-950">
       <p className="text-sm text-slate-500 dark:text-slate-400">{message}</p>
     </div>
+  );
+}
+
+function SelectedPartFootprintOverlay({
+  projection,
+  selectedPartId,
+  selectedPartIds,
+  backendURL,
+  moduleId,
+  resolvePlacement,
+  addToast,
+}: {
+  projection: NonNullable<DesignerWorkspaceState["projection"]>;
+  selectedPartId: string | null;
+  selectedPartIds: Set<string>;
+  backendURL: string | null | undefined;
+  moduleId: string;
+  resolvePlacement: (
+    componentId: string,
+  ) => Promise<LibraryComponentPlacementDetail>;
+  addToast: (message: string, level: "info" | "warning" | "error") => void;
+}): ReactElement | null {
+  const onlySelectedId =
+    selectedPartIds.size === 1
+      ? Array.from(selectedPartIds)[0]
+      : selectedPartId;
+  const part = useMemo(
+    () =>
+      onlySelectedId
+        ? projection.parts.find((entry) => entry.id === onlySelectedId)
+        : null,
+    [projection.parts, onlySelectedId],
+  );
+
+  const [variants, setVariants] = useState<LibraryComponentFootprintVariant[]>(
+    [],
+  );
+
+  useEffect(() => {
+    if (!part) {
+      setVariants([]);
+      return;
+    }
+    let cancelled = false;
+    resolvePlacement(part.componentId)
+      .then((detail) => {
+        if (cancelled) return;
+        setVariants(detail.footprintVariants ?? []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setVariants([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [part, resolvePlacement, backendURL, moduleId]);
+
+  if (!part) return null;
+
+  return (
+    <PartFootprintBadge
+      partReference={part.reference || part.id.slice(0, 6)}
+      componentName={part.symbol.name}
+      currentFootprintId={part.footprint.footprintId}
+      variants={variants}
+      onSelectVariant={() =>
+        addToast(
+          "Per-instance footprint override is not yet wired — coming in a future designer phase.",
+          "info",
+        )
+      }
+      disabledMessage="Per-instance override coming soon"
+    />
   );
 }
 
@@ -307,6 +416,7 @@ function DesignerSpaceInner({
           return;
         }
         canvasRef.current.armComponentPlacement(detail);
+        writePersistedRecents(componentId);
       } catch (err) {
         addToast(
           err instanceof Error ? err.message : "Failed to resolve component",
@@ -318,46 +428,72 @@ function DesignerSpaceInner({
   );
 
   const searchPaletteComponents = useCallback(
-    (q: string) => actions.searchComponentsByQuery(q).catch(() => []),
+    (q: string, tags: readonly string[] = []) =>
+      actions.searchComponentsByQuery(q, tags).catch(() => []),
     [actions.searchComponentsByQuery],
   );
 
   const loadPaletteDefaults = useCallback(async () => {
+    // Collect recent component IDs: persistent localStorage first (cross-session),
+    // then schematic parts as fallback. Cap at PALETTE_RECENTS_LIMIT.
     const recentIds: string[] = [];
     const seen = new Set<string>();
+    for (const componentId of readPersistedRecents()) {
+      if (!componentId || seen.has(componentId)) continue;
+      seen.add(componentId);
+      recentIds.push(componentId);
+      if (recentIds.length >= PALETTE_RECENTS_LIMIT) break;
+    }
     const parts = state.projection?.parts ?? [];
-    for (let index = parts.length - 1; index >= 0; index -= 1) {
+    for (
+      let index = parts.length - 1;
+      index >= 0 && recentIds.length < PALETTE_RECENTS_LIMIT;
+      index -= 1
+    ) {
       const componentId = parts[index]?.componentId;
       if (!componentId || seen.has(componentId)) continue;
       seen.add(componentId);
       recentIds.push(componentId);
-      if (recentIds.length >= DEFAULT_COMPONENT_LIMIT) break;
     }
 
-    if (recentIds.length > 0) {
-      const details = await Promise.all(
-        recentIds.map((componentId) =>
-          actions.resolvePlacement(componentId).catch(() => null),
-        ),
-      );
-      const components = details
-        .map((detail) => detail?.component ?? null)
-        .filter(
-          (component): component is LibraryComponent => component !== null,
-        );
-      if (components.length > 0) {
-        return { label: "Recently used", components };
-      }
-    }
+    const [recents, allDefaults] = await Promise.all([
+      recentIds.length === 0
+        ? Promise.resolve<LibraryComponent[]>([])
+        : Promise.all(
+            recentIds.map((componentId) =>
+              actions.resolvePlacement(componentId).catch(() => null),
+            ),
+          ).then((details) =>
+            details
+              .map((detail) => detail?.component ?? null)
+              .filter(
+                (component): component is LibraryComponent =>
+                  component !== null,
+              ),
+          ),
+      actions.searchComponentsByQuery("").catch(() => []),
+    ]);
 
-    const components = await actions.searchComponentsByQuery("");
-    return {
-      label: "Common components",
-      components: sortCommonComponents(components).slice(
-        0,
-        DEFAULT_COMPONENT_LIMIT,
-      ),
-    };
+    const recentIdSet = new Set(recents.map((c) => c.id));
+    const remaining = allDefaults.filter((c) => !recentIdSet.has(c.id));
+    // Place curated common components first; everything else after (already
+    // alphabetical from backend).
+    const sortedRemaining = sortCommonComponents(remaining).slice(
+      0,
+      PALETTE_DEFAULTS_LIMIT,
+    );
+
+    const groups: Array<{ label: string; components: LibraryComponent[] }> = [];
+    if (recents.length > 0) {
+      groups.push({ label: "Recently used", components: recents });
+    }
+    if (sortedRemaining.length > 0) {
+      groups.push({
+        label: recents.length > 0 ? "All components" : "Common components",
+        components: sortedRemaining,
+      });
+    }
+    return { groups };
   }, [
     actions.resolvePlacement,
     actions.searchComponentsByQuery,
@@ -528,6 +664,18 @@ function DesignerSpaceInner({
           )}
 
           {!noTabsOpen && state.activeView === "schem" && state.projection ? (
+            <SelectedPartFootprintOverlay
+              projection={state.projection}
+              selectedPartId={state.selectedPartId}
+              selectedPartIds={state.selectedPartIds}
+              backendURL={backendURL}
+              moduleId={moduleId}
+              resolvePlacement={actions.resolvePlacement}
+              addToast={addToast}
+            />
+          ) : null}
+
+          {!noTabsOpen && state.activeView === "schem" && state.projection ? (
             <div className="pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2">
               <div className="pointer-events-auto">
                 <DesignerFloatingToolbar
@@ -559,6 +707,8 @@ function DesignerSpaceInner({
         onSelect={handlePaletteSelect}
         searchComponents={searchPaletteComponents}
         loadDefaultComponents={loadPaletteDefaults}
+        fetchPlacementDetail={actions.resolvePlacement}
+        fetchAvailableTags={actions.fetchAvailableTags}
       />
     </div>
   );

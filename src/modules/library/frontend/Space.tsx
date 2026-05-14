@@ -8,6 +8,7 @@ import {
   type ReactElement,
 } from "react";
 import {
+  ArrowDownAZ,
   Filter,
   Plus,
   Search,
@@ -18,10 +19,18 @@ import {
 } from "lucide-react";
 import type { LibraryComponent } from "../../../sdks/library";
 import { ComponentDetailPage } from "./ComponentDetailPage";
+import { TagFilterChips } from "./components/TagFilterChips";
+import { useLibraryTags } from "./hooks/useLibraryTags";
+import { groupTags } from "./tag-grouping";
 import { commitKicadZipImportRequest } from "./import-wizard/import-api";
-import { convertPendingModelConversion, ImportWizardPage } from "./import-wizard";
+import {
+  convertPendingModelConversion,
+  ImportWizardPage,
+} from "./import-wizard";
 import { LibraryCard } from "./LibraryCard";
 import { toUserError } from "./utils";
+
+type LibrarySortKey = "name" | "recent";
 
 interface ModuleSpaceProps {
   moduleId: string;
@@ -151,35 +160,18 @@ function NoticeViewport({
   );
 }
 
-function FilterChip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}): ReactElement {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-        active
-          ? "bg-violet-600 text-white hover:bg-violet-700"
-          : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-      }`}
-    >
-      {label}
-    </button>
-  );
+function sortComponents(
+  list: LibraryComponent[],
+  key: LibrarySortKey,
+): LibraryComponent[] {
+  const copy = [...list];
+  if (key === "name") {
+    copy.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  // "recent" relies on backend ORDER BY name fallback today; preserved-as-fetched
+  // is the closest proxy for newest-first until createdAt surfaces in the DTO.
+  return copy;
 }
-
-const FILTER_TAGS = [
-  { label: "SMD", tag: "smd" },
-  { label: "Through-hole", tag: "through-hole" },
-  { label: "Virtual", tag: "placeholder-footprint" },
-] as const;
 
 export function LibrarySpace({
   backendURL,
@@ -201,7 +193,20 @@ export function LibrarySpace({
   const [deleting, setDeleting] = useState(false);
   const [zipImporting, setZipImporting] = useState(false);
   const [notice, setNotice] = useState<LibraryNotice | null>(null);
+  const [sortKey, setSortKey] = useState<LibrarySortKey>("name");
   const zipInputRef = useRef<HTMLInputElement | null>(null);
+
+  const { tags: allTags } = useLibraryTags({
+    backendURL,
+    moduleId,
+    excludeSystem: true,
+    refreshToken: refreshTick,
+  });
+
+  const tagGroups = useMemo(
+    () => groupTags(allTags, { excludeSystem: true, dropEmpty: true }),
+    [allTags],
+  );
 
   const selectionMode = selectedIds.size > 0;
 
@@ -343,14 +348,17 @@ export function LibrarySpace({
             title: "Imported with warnings",
             message:
               result.warnings.length === 1
-                ? (firstWarning?.message ?? "Review imported component metadata.")
+                ? (firstWarning?.message ??
+                  "Review imported component metadata.")
                 : `${firstWarning?.message ?? "Review imported component metadata."} +${result.warnings.length - 1} more`,
             variant: "warning",
           });
         } else if (!hasPendingModelConversion) {
           setNotice({
             id: crypto.randomUUID(),
-            title: result.reused ? "Existing component opened" : "Component imported",
+            title: result.reused
+              ? "Existing component opened"
+              : "Component imported",
             message: result.componentName,
             variant: "success",
           });
@@ -535,36 +543,54 @@ export function LibrarySpace({
         </div>
       </header>
 
-      <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50/80 px-6 py-2.5 dark:border-slate-800 dark:bg-slate-900/50">
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-slate-400" />
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            Mount:
-          </span>
-          <div className="flex items-center gap-1.5">
-            {FILTER_TAGS.map((f) => (
-              <FilterChip
-                key={f.tag}
-                label={f.label}
-                active={activeTags.has(f.tag)}
-                onClick={() => toggleTag(f.tag)}
-              />
-            ))}
+      <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/80 px-6 py-2.5 dark:border-slate-800 dark:bg-slate-900/50">
+        <div className="flex items-start gap-2">
+          <Filter className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
+          <div className="min-w-0 flex-1">
+            <TagFilterChips
+              groups={tagGroups}
+              active={activeTags}
+              onToggle={toggleTag}
+              onClear={() => setActiveTags(new Set())}
+            />
           </div>
         </div>
-
-        <label className="flex select-none items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={
-              selectableCount > 0 && selectedIds.size === selectableCount
-            }
-            onChange={toggleSelectAll}
-            disabled={selectableCount === 0}
-            className="h-4 w-4 cursor-pointer rounded border-slate-300 text-violet-600 focus:ring-violet-600 dark:border-slate-600"
-          />
-          <span>Select All</span>
-        </label>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            {components.length} component{components.length === 1 ? "" : "s"}
+            {activeTags.size > 0
+              ? ` · filtered by ${activeTags.size} tag${activeTags.size === 1 ? "" : "s"}`
+              : ""}
+          </span>
+          <div className="flex items-center gap-3">
+            <label className="flex select-none items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+              <ArrowDownAZ className="h-3.5 w-3.5 text-slate-400" />
+              <span>Sort</span>
+              <select
+                value={sortKey}
+                onChange={(event) =>
+                  setSortKey(event.target.value as LibrarySortKey)
+                }
+                className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-700 outline-none focus:border-violet-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                <option value="name">Name</option>
+                <option value="recent">As loaded</option>
+              </select>
+            </label>
+            <label className="flex select-none items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={
+                  selectableCount > 0 && selectedIds.size === selectableCount
+                }
+                onChange={toggleSelectAll}
+                disabled={selectableCount === 0}
+                className="h-4 w-4 cursor-pointer rounded border-slate-300 text-violet-600 focus:ring-violet-600 dark:border-slate-600"
+              />
+              <span>Select All</span>
+            </label>
+          </div>
+        </div>
       </div>
 
       {selectionMode && (
@@ -619,7 +645,7 @@ export function LibrarySpace({
 
           {!loading && !error && components.length > 0 && (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-5">
-              {components.map((component) => (
+              {sortComponents(components, sortKey).map((component) => (
                 <LibraryCard
                   key={component.id}
                   component={component}

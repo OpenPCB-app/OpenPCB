@@ -9,7 +9,12 @@ import type { CoreBackendModuleContext } from "../../../../core/contracts/module
 import { and, eq } from "drizzle-orm";
 import { buildFootprintRenderModel } from "../../../../shared/rendering/footprint-preview-builder";
 import type { FootprintRenderSource } from "../../../../shared/rendering/types";
-import { componentFootprints, components, footprints, symbols } from "../schema";
+import {
+  componentFootprints,
+  components,
+  footprints,
+  symbols,
+} from "../schema";
 import { getDb } from "../queries";
 import { ImportValidationError, parseImportBundle } from "./inspect-kicad";
 import type { CommitKicadResponse } from "./types";
@@ -33,7 +38,7 @@ export interface CommitGeneratedRequest {
   };
   /** "generated" (default) for IPC presets; "drawn" for user-drawn footprints with imported symbol. */
   footprintProvenance?: "generated" | "drawn";
-  component: { name: string; description: string };
+  component: { name: string; description: string; tags?: string[] };
 }
 
 function requireNonEmpty(value: string, field: string): string {
@@ -85,6 +90,7 @@ export function commitGeneratedImport(
   );
   const componentName = requireNonEmpty(input.component.name, "component.name");
   const componentDescription = input.component.description.trim();
+  const userTags = dedupeTags(input.component.tags ?? []);
 
   const selectedSymbol = parsed.normalizedSymbols.find(
     (s) => s.id === selectedSymbolId,
@@ -118,8 +124,8 @@ export function commitGeneratedImport(
 
   const isDrawn = input.footprintProvenance === "drawn";
   const tags = isDrawn
-    ? dedupeTags([...fpMeta.tags, "drawn-footprint"])
-    : dedupeTags([...fpMeta.tags, "generated", "ipc-7351b"]);
+    ? dedupeTags([...userTags, ...fpMeta.tags, "drawn-footprint"])
+    : dedupeTags([...userTags, ...fpMeta.tags, "generated", "ipc-7351b"]);
 
   const symbolDataJson = JSON.stringify({
     provenance: {

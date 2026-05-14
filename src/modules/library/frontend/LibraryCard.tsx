@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import type { LibraryComponent } from "../../../sdks/library";
+import { classifyTag, type TagGroupId } from "./tag-grouping";
 
 const SYMBOL_GLYPHS: Array<[RegExp, string]> = [
   [/(^|[-_/])ground($|[-_/])/, "GND"],
@@ -9,14 +10,8 @@ const SYMBOL_GLYPHS: Array<[RegExp, string]> = [
   [/(^|[-_/])inductor($|[-_/])/, "L"],
 ];
 
-const MOUNT_TAGS = new Set(["smd", "through-hole", "tht", "virtual"]);
-
-function compactToken(id: string): string {
-  return id
-    .replace(/^(sym|fp|comp)-/i, "")
-    .replace(/-/g, " ")
-    .trim();
-}
+const CHIP_LIMIT = 4;
+const CHIP_PRIORITY: TagGroupId[] = ["family", "package", "mount", "other"];
 
 function previewGlyph(component: LibraryComponent): string {
   const symbol = component.symbolId.toLowerCase();
@@ -30,41 +25,45 @@ function previewGlyph(component: LibraryComponent): string {
   return fallback.length > 0 ? fallback : "U";
 }
 
-function cardChips(component: LibraryComponent): string[] {
-  const chips: string[] = [];
-  const seen = new Set<string>();
-  const push = (raw: string) => {
-    const value = raw.trim();
-    if (value.length === 0) {
-      return;
-    }
-    const key = value.toLowerCase();
-    if (seen.has(key)) {
-      return;
-    }
-    seen.add(key);
-    chips.push(value);
-  };
+interface CardChipsResult {
+  visible: string[];
+  hidden: number;
+  hasPlaceholderFootprint: boolean;
+}
 
-  const packageTag = component.tags.find((tag) => /^\d{4}$/.test(tag));
-  if (packageTag) {
-    push(packageTag);
+function cardChips(component: LibraryComponent): CardChipsResult {
+  const buckets = new Map<TagGroupId, string[]>();
+  let hasPlaceholderFootprint = false;
+  for (const raw of component.tags) {
+    const normalized = raw.trim().toLowerCase();
+    if (!normalized) continue;
+    if (normalized === "placeholder-footprint") {
+      hasPlaceholderFootprint = true;
+      continue;
+    }
+    const group = classifyTag(normalized);
+    if (group === "system") continue;
+    if (!buckets.has(group)) buckets.set(group, []);
+    buckets.get(group)!.push(normalized);
   }
-  const mountTag = component.tags.find((tag) =>
-    MOUNT_TAGS.has(tag.toLowerCase()),
+
+  const visible: string[] = [];
+  for (const group of CHIP_PRIORITY) {
+    const list = buckets.get(group);
+    if (!list) continue;
+    for (const tag of list) {
+      if (visible.length >= CHIP_LIMIT) break;
+      visible.push(tag);
+    }
+    if (visible.length >= CHIP_LIMIT) break;
+  }
+
+  const allCount = Array.from(buckets.values()).reduce(
+    (sum, list) => sum + list.length,
+    0,
   );
-  if (mountTag) {
-    push(mountTag);
-  }
-  if (
-    component.tags.some((tag) => tag.toLowerCase() === "placeholder-footprint")
-  ) {
-    push("No footprint yet");
-  } else {
-    push(compactToken(component.footprintId));
-  }
-
-  return chips.slice(0, 2);
+  const hidden = Math.max(0, allCount - visible.length);
+  return { visible, hidden, hasPlaceholderFootprint };
 }
 
 export function LibraryCard({
@@ -79,7 +78,11 @@ export function LibraryCard({
   onToggleSelect?: (componentId: string) => void;
 }): ReactElement {
   const glyph = previewGlyph(component);
-  const chips = cardChips(component);
+  const {
+    visible: chips,
+    hidden,
+    hasPlaceholderFootprint,
+  } = cardChips(component);
   const isBuiltin = component.isBuiltin;
 
   const borderClass = selected
@@ -131,6 +134,14 @@ export function LibraryCard({
           </p>
 
           <div className="mt-auto flex flex-wrap items-center gap-1 pt-2">
+            {hasPlaceholderFootprint && (
+              <span
+                className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[0.6875rem] font-medium text-violet-700 dark:border-violet-900 dark:bg-violet-950/60 dark:text-violet-300"
+                title="Component imported without a footprint"
+              >
+                No footprint
+              </span>
+            )}
             {chips.map((chip) => (
               <span
                 key={`${component.id}-${chip}`}
@@ -139,6 +150,14 @@ export function LibraryCard({
                 {chip}
               </span>
             ))}
+            {hidden > 0 && (
+              <span
+                className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[0.6875rem] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-500"
+                title={`${hidden} more tag${hidden === 1 ? "" : "s"}`}
+              >
+                +{hidden}
+              </span>
+            )}
           </div>
         </div>
       </button>

@@ -366,6 +366,7 @@ export function ImportWizardPage({
             component: {
               name: store.componentName.trim(),
               description: store.description.trim(),
+              tags: store.tagsDirty ? store.tags : undefined,
             },
           },
           controller.signal,
@@ -397,6 +398,7 @@ export function ImportWizardPage({
             component: {
               name: store.componentName.trim(),
               description: store.description.trim(),
+              tags: store.tagsDirty ? store.tags : undefined,
             },
           },
           controller.signal,
@@ -423,6 +425,7 @@ export function ImportWizardPage({
             component: {
               name: store.componentName.trim(),
               description: store.description.trim(),
+              tags: store.tagsDirty ? store.tags : undefined,
             },
           },
           controller.signal,
@@ -455,6 +458,7 @@ export function ImportWizardPage({
             component: {
               name: store.componentName.trim(),
               description: store.description.trim(),
+              tags: store.tagsDirty ? store.tags : undefined,
             },
           },
           controller.signal,
@@ -550,7 +554,15 @@ export function ImportWizardPage({
         commitAbortRef.current = null;
       }
     }
-  }, [backendURL, moduleId, symbolFile, footprintFiles, modelFile, onImported, onClose]);
+  }, [
+    backendURL,
+    moduleId,
+    symbolFile,
+    footprintFiles,
+    modelFile,
+    onImported,
+    onClose,
+  ]);
 
   const handleClose = useCallback(
     (skipConfirm = false) => {
@@ -596,7 +608,10 @@ export function ImportWizardPage({
       case STEP_FOOTPRINT:
         return readyForAdvancedSteps;
       case STEP_MODEL:
-        return readyForAdvancedSteps && (!modelFile || !validateStepUploadFile(modelFile));
+        return (
+          readyForAdvancedSteps &&
+          (!modelFile || !validateStepUploadFile(modelFile))
+        );
       case STEP_METADATA:
         return readyForAdvancedSteps && canProceedMetadata;
       default:
@@ -700,7 +715,9 @@ export function ImportWizardPage({
         {currentStep === STEP_SYMBOL && <SymbolStep />}
         {currentStep === STEP_FOOTPRINT && <FootprintStep />}
         {currentStep === STEP_MODEL && <ModelStep />}
-        {currentStep === STEP_METADATA && <MetadataStep />}
+        {currentStep === STEP_METADATA && (
+          <MetadataStep backendURL={backendURL} moduleId={moduleId} />
+        )}
       </div>
 
       {commitResult?.reused && currentStep === STEP_METADATA ? (

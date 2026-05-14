@@ -8,6 +8,7 @@ import type {
   DesignerSchematicProjection,
   LibraryComponent,
   LibraryComponentPlacementDetail,
+  LibraryTagStat,
 } from "../../../sdks";
 
 function buildModuleUrl(
@@ -133,12 +134,17 @@ export function createDesignerApi(params: {
     async searchComponents(
       query: string,
       limit = 30,
+      tags: readonly string[] = [],
     ): Promise<LibraryComponent[]> {
+      const params = new URLSearchParams();
+      if (query.length > 0) params.set("q", query);
+      params.set("limit", String(limit));
+      if (tags.length > 0) params.set("tags", tags.join(","));
       const data = await fetchData<{ components: LibraryComponent[] }>(
         buildModuleUrl(
           backendURL,
           moduleId,
-          `/library/components?q=${encodeURIComponent(query)}&limit=${limit}`,
+          `/library/components?${params.toString()}`,
         ),
       );
       return data.components;
@@ -155,6 +161,23 @@ export function createDesignerApi(params: {
         ),
       );
       return data.detail;
+    },
+
+    async fetchLibraryTags(
+      options: { excludeSystem?: boolean } = {},
+    ): Promise<LibraryTagStat[]> {
+      const params = new URLSearchParams();
+      if (options.excludeSystem) params.set("excludeSystem", "true");
+      const data = await fetchData<{ tags: LibraryTagStat[] }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          params.toString().length > 0
+            ? `/library/tags?${params.toString()}`
+            : "/library/tags",
+        ),
+      );
+      return data.tags;
     },
 
     async dispatch(

@@ -12,7 +12,12 @@ import type {
   FootprintRenderSource,
   SymbolRenderSource,
 } from "../../../../shared/rendering/types";
-import { componentFootprints, components, footprints, symbols } from "../schema";
+import {
+  componentFootprints,
+  components,
+  footprints,
+  symbols,
+} from "../schema";
 import { getDb } from "../queries";
 import { ImportValidationError, parseImportBundle } from "./inspect-kicad";
 import type { CommitKicadResponse } from "./types";
@@ -51,7 +56,7 @@ export interface CommitDrawnRequest {
       tags: string[];
     };
   };
-  component: { name: string; description: string };
+  component: { name: string; description: string; tags?: string[] };
 }
 
 function requireNonEmpty(value: string, field: string): string {
@@ -82,6 +87,7 @@ export function commitDrawnImport(
 ): CommitKicadResponse {
   const componentName = requireNonEmpty(input.component.name, "component.name");
   const componentDescription = input.component.description.trim();
+  const userTags = dedupeTags(input.component.tags ?? []);
 
   // Build symbol model from drawn source
   const symbolSource = input.drawnSymbol.source;
@@ -143,7 +149,12 @@ export function commitDrawnImport(
     const fpHash = hashString(JSON.stringify(fpSource));
     pinMapJson = buildIdentityPinMapJson(symbolSource, fpSource);
     footprintName = fpMeta.name;
-    tags = dedupeTags([...fpMeta.tags, "drawn-symbol", "generated"]);
+    tags = dedupeTags([
+      ...userTags,
+      ...fpMeta.tags,
+      "drawn-symbol",
+      "generated",
+    ]);
 
     footprintDataJson = JSON.stringify({
       provenance: {
@@ -178,7 +189,12 @@ export function commitDrawnImport(
     const fpHash = hashString(JSON.stringify(fpSource));
     pinMapJson = buildIdentityPinMapJson(symbolSource, fpSource);
     footprintName = fpMeta.name;
-    tags = dedupeTags([...fpMeta.tags, "drawn-symbol", "drawn-footprint"]);
+    tags = dedupeTags([
+      ...userTags,
+      ...fpMeta.tags,
+      "drawn-symbol",
+      "drawn-footprint",
+    ]);
 
     footprintDataJson = JSON.stringify({
       provenance: {
@@ -225,7 +241,7 @@ export function commitDrawnImport(
     const rawFp = parsed.raw.footprintById[selectedFp.id];
     pinMapJson = buildIdentityPinMapJson(symbolSource, selectedFp.preview);
     footprintName = selectedFp.name;
-    tags = dedupeTags([...selectedFp.tags, "drawn-symbol"]);
+    tags = dedupeTags([...userTags, ...selectedFp.tags, "drawn-symbol"]);
 
     footprintDataJson = JSON.stringify({
       provenance: {
@@ -242,7 +258,12 @@ export function commitDrawnImport(
   } else {
     // No footprint — use placeholder
     footprintName = "No footprint yet";
-    tags = dedupeTags(["drawn-symbol", "placeholder-footprint", "virtual"]);
+    tags = dedupeTags([
+      ...userTags,
+      "drawn-symbol",
+      "placeholder-footprint",
+      "virtual",
+    ]);
 
     footprintDataJson = JSON.stringify({
       provenance: {

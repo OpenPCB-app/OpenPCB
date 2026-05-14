@@ -1,6 +1,11 @@
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { and, eq } from "drizzle-orm";
-import { componentFootprints, components, footprints, symbols } from "../schema";
+import {
+  componentFootprints,
+  components,
+  footprints,
+  symbols,
+} from "../schema";
 import { getDb } from "../queries";
 import {
   PLACEHOLDER_FOOTPRINT_ID,
@@ -132,6 +137,7 @@ export function commitKicadImport(
   const symbolOnlyImport = selectedFootprintId.length === 0;
   const componentName = requireNonEmpty(input.component.name, "component.name");
   const componentDescription = trimOrEmpty(input.component.description);
+  const userTags = dedupeTags(input.component.tags ?? []);
 
   const selectedSymbol = parsed.normalizedSymbols.find(
     (symbol) => symbol.id === selectedSymbolId,
@@ -212,6 +218,7 @@ export function commitKicadImport(
     : null;
 
   const tags = dedupeTags([
+    ...userTags,
     ...footprintTags,
     warningCount > 0 ? "has-warnings" : "",
   ]);

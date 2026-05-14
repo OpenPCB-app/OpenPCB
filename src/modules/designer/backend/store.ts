@@ -22,7 +22,9 @@ import {
   type DesignerSearchLibraryParams,
   type LibraryComponent,
   type LibraryComponentPlacementDetail,
+  type LibraryListTagsOptions,
   type LibrarySDK,
+  type LibraryTagStat,
 } from "../../../sdks";
 import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { executeDesignerCommand } from "./command-executor";
@@ -108,6 +110,7 @@ export interface DesignerStore {
   resolveLibraryComponentForPlacement(
     componentId: string,
   ): Promise<LibraryComponentPlacementDetail | null>;
+  listLibraryTags(options?: LibraryListTagsOptions): Promise<LibraryTagStat[]>;
   dispatchCommand(
     designId: string,
     envelope: DesignerCommandEnvelope,
@@ -335,6 +338,11 @@ export function createDesignerStore(
     async resolveLibraryComponentForPlacement(componentId) {
       const library = resolveLibrarySdk(ctx);
       return library.resolveComponentForPlacement(componentId);
+    },
+
+    async listLibraryTags(options) {
+      const library = resolveLibrarySdk(ctx);
+      return library.listTags(options);
     },
 
     async dispatchCommand(designId, envelope) {

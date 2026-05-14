@@ -1103,4 +1103,10 @@ export function registerRoutes(
       return success({ detail });
     },
   );
+
+  router.get("/library/tags", async ({ query }) => {
+    const excludeSystem = query.get("excludeSystem") === "true";
+    const tags = await store.listLibraryTags({ excludeSystem });
+    return success({ tags });
+  });
 }

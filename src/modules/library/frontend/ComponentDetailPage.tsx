@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Lock, Upload } from "lucide-react";
+import { ArrowLeft, Copy, Lock, Pencil, Save, Upload, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -10,10 +10,14 @@ import {
   FootprintPreviewCanvas,
   SymbolPreviewCanvas,
 } from "../../../shared/frontend/canvas/preview";
+import type { LibraryComponent } from "../../../sdks/library";
 import type {
   FootprintRenderModel,
   SymbolRenderModel,
 } from "../../../shared/rendering";
+import { TagChip } from "./components/TagChip";
+import { TagTokenInput } from "./components/TagTokenInput";
+import { useLibraryTags } from "./hooks/useLibraryTags";
 import type { ComponentDetailPayload } from "./types";
 import { ThreeDComponentPreview } from "./three-d/ThreeDComponentPreview";
 import {
@@ -48,6 +52,7 @@ export function ComponentDetailPage({
   componentId,
   onBack,
   onCloned,
+  onUpdated,
   modelRefreshToken: externalModelRefreshToken = 0,
 }: {
   backendURL: string | null | undefined;
@@ -55,6 +60,7 @@ export function ComponentDetailPage({
   componentId: string;
   onBack: () => void;
   onCloned?: (newComponentId: string) => void;
+  onUpdated?: (component: LibraryComponent) => void;
   modelRefreshToken?: number;
 }): ReactElement {
   const [loading, setLoading] = useState(true);
@@ -64,6 +70,20 @@ export function ComponentDetailPage({
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [modelRefreshToken, setModelRefreshToken] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
+  const [draftTags, setDraftTags] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [tagsRefreshToken, setTagsRefreshToken] = useState(0);
+
+  const { tags: tagSuggestions } = useLibraryTags({
+    backendURL,
+    moduleId,
+    excludeSystem: true,
+    refreshToken: tagsRefreshToken,
+  });
 
   useEffect(() => {
     if (!backendURL) {
@@ -136,6 +156,83 @@ export function ComponentDetailPage({
     ) ??
     detail?.component.name ??
     "component";
+
+  const beginEdit = useCallback(() => {
+    if (!detail || isBuiltin) return;
+    setDraftName(detail.component.name);
+    setDraftDescription(detail.component.description);
+    setDraftTags([...detail.component.tags]);
+    setSaveError(null);
+    setEditing(true);
+  }, [detail, isBuiltin]);
+
+  const cancelEdit = useCallback(() => {
+    setEditing(false);
+    setSaveError(null);
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!backendURL || !detail) return;
+    const trimmedName = draftName.trim();
+    if (trimmedName.length === 0) {
+      setSaveError("Name must not be empty");
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const response = await fetch(
+        `${backendURL}/api/modules/${moduleId}/components/${componentId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: trimmedName,
+            description: draftDescription,
+            tags: draftTags,
+          }),
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        data?: { component?: LibraryComponent };
+      } | null;
+      if (!response.ok || !payload?.ok || !payload.data?.component) {
+        throw new Error(
+          toUserError(payload, `Update failed (HTTP ${response.status})`),
+        );
+      }
+      const updated = payload.data.component;
+      setDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              component: updated,
+            }
+          : prev,
+      );
+      setEditing(false);
+      setTagsRefreshToken((tick) => tick + 1);
+      onUpdated?.(updated);
+    } catch (updateError) {
+      setSaveError(
+        updateError instanceof Error
+          ? updateError.message
+          : "Failed to update component",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [
+    backendURL,
+    componentId,
+    detail,
+    draftDescription,
+    draftName,
+    draftTags,
+    moduleId,
+    onUpdated,
+  ]);
 
   const handleClone = useCallback(async () => {
     if (!backendURL || !detail) return;
@@ -239,10 +336,45 @@ export function ComponentDetailPage({
                 Core
               </span>
             )}
+            {!isBuiltin && !editing && (
+              <button
+                type="button"
+                onClick={beginEdit}
+                disabled={!backendURL}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                data-testid="component-edit-button"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit
+              </button>
+            )}
+            {editing && (
+              <>
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  disabled={saving}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  <X className="h-4 w-4" />
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSave()}
+                  disabled={saving || !backendURL}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-600 bg-violet-600 px-3 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                  data-testid="component-save-button"
+                >
+                  <Save className="h-4 w-4" />
+                  {saving ? "Saving…" : "Save"}
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={() => void handleClone()}
-              disabled={cloning || !backendURL}
+              disabled={cloning || !backendURL || editing}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 disabled:opacity-50 dark:border-violet-700 dark:bg-slate-800 dark:text-violet-300 dark:hover:bg-slate-700"
             >
               <Copy className="h-4 w-4" />
@@ -275,28 +407,81 @@ export function ComponentDetailPage({
               </div>
             )}
             <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                {detail.component.name}
-              </h2>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                {detail.component.description || "No description"}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {detail.component.tags.length > 0 ? (
-                  detail.component.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+              {editing ? (
+                <div className="space-y-3">
+                  <div>
+                    <label
+                      htmlFor="component-edit-name"
+                      className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
                     >
-                      {tag}
+                      Name
+                    </label>
+                    <input
+                      id="component-edit-name"
+                      type="text"
+                      value={draftName}
+                      onChange={(event) => setDraftName(event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      maxLength={200}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="component-edit-description"
+                      className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+                    >
+                      Description
+                    </label>
+                    <textarea
+                      id="component-edit-description"
+                      value={draftDescription}
+                      onChange={(event) =>
+                        setDraftDescription(event.target.value)
+                      }
+                      rows={3}
+                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      maxLength={2000}
+                    />
+                  </div>
+                  <div>
+                    <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Tags
                     </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    No tags
-                  </span>
-                )}
-              </div>
+                    <div className="mt-1">
+                      <TagTokenInput
+                        value={draftTags}
+                        onChange={setDraftTags}
+                        suggestions={tagSuggestions}
+                      />
+                    </div>
+                  </div>
+                  {saveError ? (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+                      {saveError}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                    {detail.component.name}
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                    {detail.component.description || "No description"}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {detail.component.tags.length > 0 ? (
+                      detail.component.tags.map((tag) => (
+                        <TagChip key={tag} label={tag} />
+                      ))
+                    ) : (
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        No tags
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             <div

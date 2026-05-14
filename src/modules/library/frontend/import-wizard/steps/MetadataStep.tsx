@@ -1,15 +1,28 @@
-import { memo, type ReactElement } from "react";
+import { memo, useEffect, type ReactElement } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useImportWizardStore } from "../useImportWizardStore";
 import { useSymbolEditorStore } from "../editor";
 import { useFootprintEditorStore } from "../footprint-editor";
+import { TagTokenInput } from "../../components/TagTokenInput";
+import { useLibraryTags } from "../../hooks/useLibraryTags";
 
-export const MetadataStep = memo(function MetadataStep(): ReactElement {
+interface MetadataStepProps {
+  backendURL: string | null | undefined;
+  moduleId: string;
+}
+
+export const MetadataStep = memo(function MetadataStep({
+  backendURL,
+  moduleId,
+}: MetadataStepProps): ReactElement {
   const {
     componentName,
     setComponentName,
     description,
     setDescription,
+    tags,
+    setTags,
+    tagsDirty,
     inspectData,
     selectedSymbolId,
     selectedFootprintId,
@@ -24,6 +37,9 @@ export const MetadataStep = memo(function MetadataStep(): ReactElement {
       setComponentName: s.setComponentName,
       description: s.description,
       setDescription: s.setDescription,
+      tags: s.tags,
+      setTags: s.setTags,
+      tagsDirty: s.tagsDirty,
       inspectData: s.inspectData,
       selectedSymbolId: s.selectedSymbolId,
       selectedFootprintId: s.selectedFootprintId,
@@ -36,6 +52,28 @@ export const MetadataStep = memo(function MetadataStep(): ReactElement {
       generatedFootprint: s.generatedFootprint,
     })),
   );
+
+  const { tags: tagSuggestions } = useLibraryTags({
+    backendURL,
+    moduleId,
+    excludeSystem: true,
+  });
+
+  // Auto-seed tags from generated footprint metadata if the user hasn't touched them.
+  useEffect(() => {
+    if (tagsDirty) return;
+    const auto: string[] = [];
+    if (generatedFootprint?.metadata?.tags) {
+      for (const tag of generatedFootprint.metadata.tags) {
+        if (typeof tag === "string" && tag.trim().length > 0) {
+          auto.push(tag.trim().toLowerCase());
+        }
+      }
+    }
+    if (auto.length > 0 && auto.join("|") !== tags.join("|")) {
+      setTags(auto, false);
+    }
+  }, [generatedFootprint, tagsDirty, tags, setTags]);
 
   // Pin count: drawn editor pins, or parsed symbol pin count
   const drawnPinCount = useSymbolEditorStore((s) => s.pins.length);
@@ -113,6 +151,22 @@ export const MetadataStep = memo(function MetadataStep(): ReactElement {
               className="w-full resize-none rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             />
           </label>
+
+          <div className="block space-y-1 text-sm">
+            <div className="flex items-baseline justify-between">
+              <span className="text-slate-700 dark:text-slate-300">Tags</span>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                Enter, comma, or Tab to commit · Backspace to remove
+              </span>
+            </div>
+            <TagTokenInput
+              value={tags}
+              onChange={(next) => setTags(next, true)}
+              suggestions={tagSuggestions}
+              disabled={inputsLocked}
+              placeholder="e.g. passive, 0603, resistor"
+            />
+          </div>
         </div>
 
         {totalWarnings > 0 && (

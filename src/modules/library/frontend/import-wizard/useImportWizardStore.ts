@@ -42,8 +42,10 @@ export interface ImportWizardState {
   selectedFootprintId: string;
   componentName: string;
   description: string;
+  tags: string[];
   componentNameDirty: boolean;
   descriptionDirty: boolean;
+  tagsDirty: boolean;
 
   symbolSource: "import" | "draw";
 
@@ -82,6 +84,7 @@ export interface ImportWizardState {
   setSelectedFootprintId: (id: string) => void;
   setComponentName: (name: string, markDirty?: boolean) => void;
   setDescription: (desc: string, markDirty?: boolean) => void;
+  setTags: (tags: string[], markDirty?: boolean) => void;
   resetMetadataDraftFlags: () => void;
 
   setLoadingCommit: (loading: boolean) => void;
@@ -138,8 +141,10 @@ const INITIAL_STATE = {
   selectedFootprintId: "",
   componentName: "",
   description: "",
+  tags: [],
   componentNameDirty: false,
   descriptionDirty: false,
+  tagsDirty: false,
   symbolSource: "import" as const,
   footprintSource: "import" as const,
   presetFamily: null,
@@ -217,8 +222,14 @@ export const useImportWizardStore = create<ImportWizardState>((set) => ({
     set({ componentName: name, componentNameDirty: markDirty }),
   setDescription: (desc, markDirty = true) =>
     set({ description: desc, descriptionDirty: markDirty }),
+  setTags: (tags, markDirty = true) =>
+    set({ tags: [...tags], tagsDirty: markDirty }),
   resetMetadataDraftFlags: () =>
-    set({ componentNameDirty: false, descriptionDirty: false }),
+    set({
+      componentNameDirty: false,
+      descriptionDirty: false,
+      tagsDirty: false,
+    }),
 
   setLoadingCommit: (loading) => set({ loadingCommit: loading }),
   setCommitError: (error) => set({ commitError: error }),

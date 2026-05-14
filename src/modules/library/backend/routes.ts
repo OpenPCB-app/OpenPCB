@@ -13,6 +13,7 @@ import {
   getComponentDetail,
   cloneComponent,
   deleteComponents,
+  listTags,
   resolveComponent,
   assertFootprintNotBuiltinComponent,
   deleteFootprintModelRecord,
@@ -23,6 +24,7 @@ import {
   markFootprintModelConversionFailed,
   searchComponents,
   toFootprintModelMetadata,
+  updateComponent,
   upsertFootprintModelRecord,
 } from "./queries";
 import {
@@ -599,6 +601,7 @@ function parseCommitRequestBody(value: unknown): CommitKicadRequest {
         "description",
         "component.description",
       ),
+      tags: readOptionalTagsField(componentRaw, "tags", "component.tags"),
     },
   };
 }
@@ -1048,8 +1051,31 @@ function parseCommitGeneratedBody(value: unknown): CommitGeneratedRequest {
         "description",
         "component.description",
       ),
+      tags: readOptionalTagsField(componentRaw, "tags", "component.tags"),
     },
   };
+}
+
+function readOptionalTagsField(
+  record: Record<string, unknown>,
+  key: string,
+  fieldPath: string,
+): string[] | undefined {
+  if (!(key in record)) return undefined;
+  const value = record[key];
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new ValidationError(`${fieldPath} must be an array of strings`);
+  }
+  const tags: string[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const entry = value[index];
+    if (typeof entry !== "string") {
+      throw new ValidationError(`${fieldPath}[${index}] must be a string`);
+    }
+    tags.push(entry);
+  }
+  return tags;
 }
 
 function parseLimit(limitRaw: string | null): number | undefined {
@@ -1106,6 +1132,56 @@ export function registerRoutes(
     const tags = parseTags(routeCtx.query.get("tags"));
     const result = await searchComponents(ctx, { query, limit, tags });
     return success({ components: result });
+  });
+
+  router.get("/tags", async (routeCtx) => {
+    const excludeSystem = routeCtx.query.get("excludeSystem") === "true";
+    const tags = await listTags(ctx, { excludeSystem });
+    return success({ tags });
+  });
+
+  router.patch("/components/:componentId", async (routeCtx) => {
+    const componentId = routeCtx.params.getOrThrow("componentId");
+    const body = await parseJsonBody<unknown>(routeCtx.req);
+    if (!isRecord(body)) {
+      throw new ValidationError("Request body must be an object");
+    }
+    const patch: {
+      name?: string;
+      description?: string;
+      tags?: string[];
+    } = {};
+    if ("name" in body) {
+      if (typeof body.name !== "string") {
+        throw new ValidationError("name must be a string");
+      }
+      patch.name = body.name;
+    }
+    if ("description" in body) {
+      if (typeof body.description !== "string") {
+        throw new ValidationError("description must be a string");
+      }
+      patch.description = body.description;
+    }
+    if ("tags" in body) {
+      if (!Array.isArray(body.tags)) {
+        throw new ValidationError("tags must be an array of strings");
+      }
+      const tags: string[] = [];
+      for (let index = 0; index < body.tags.length; index += 1) {
+        const entry = body.tags[index];
+        if (typeof entry !== "string") {
+          throw new ValidationError(`tags[${index}] must be a string`);
+        }
+        tags.push(entry);
+      }
+      patch.tags = tags;
+    }
+    const component = await updateComponent(ctx, componentId, patch);
+    if (!component) {
+      throw new NotFoundError("Component not found");
+    }
+    return success({ component });
   });
 
   router.get("/models/export", async () => {

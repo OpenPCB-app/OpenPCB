@@ -165,3 +165,18 @@ export interface LibrarySearchParams {
   limit?: number;
   tags?: string[];
 }
+
+export interface LibraryTagStat {
+  tag: string;
+  count: number;
+}
+
+export interface LibraryListTagsOptions {
+  excludeSystem?: boolean;
+}
+
+export interface LibraryUpdateComponentInput {
+  name?: string;
+  description?: string;
+  tags?: string[];
+}

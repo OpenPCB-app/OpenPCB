@@ -10,6 +10,7 @@ import type {
   DesignerSchematicProjection,
   LibraryComponent,
   LibraryComponentPlacementDetail,
+  LibraryTagStat,
 } from "../../../../sdks";
 import { createDesignerApi } from "../api";
 import type { DesignerView } from "../types";
@@ -57,7 +58,11 @@ export interface DesignerWorkspaceActions {
   setQuery(value: string): void;
   setLabelDraftText(value: string): void;
   searchComponents(): Promise<void>;
-  searchComponentsByQuery(query: string): Promise<LibraryComponent[]>;
+  searchComponentsByQuery(
+    query: string,
+    tags?: readonly string[],
+  ): Promise<LibraryComponent[]>;
+  fetchAvailableTags(): Promise<LibraryTagStat[]>;
   resolvePlacement(
     componentId: string,
   ): Promise<LibraryComponentPlacementDetail>;
@@ -396,11 +401,15 @@ export function useDesignerWorkspace(params: {
   }, [api, query]);
 
   const searchComponentsByQuery = useCallback(
-    async (q: string) => {
-      return api.searchComponents(q, 50);
+    async (q: string, tags: readonly string[] = []) => {
+      return api.searchComponents(q, 50, tags);
     },
     [api],
   );
+
+  const fetchAvailableTags = useCallback(async () => {
+    return api.fetchLibraryTags({ excludeSystem: true });
+  }, [api]);
 
   const resolvePlacement = useCallback(
     async (componentId: string) => {
@@ -648,6 +657,7 @@ export function useDesignerWorkspace(params: {
       setLabelDraftText,
       searchComponents,
       searchComponentsByQuery,
+      fetchAvailableTags,
       resolvePlacement,
       beginDragComponent,
       setDragGhostNm,

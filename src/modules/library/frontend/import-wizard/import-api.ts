@@ -107,7 +107,7 @@ export interface CommitGeneratedBody {
     metadata: GeneratedFootprintMetadata;
   };
   footprintProvenance?: "generated" | "drawn";
-  component: { name: string; description: string };
+  component: { name: string; description: string; tags?: string[] };
 }
 
 export async function commitGeneratedImportRequest(
@@ -152,7 +152,7 @@ export interface CommitDrawnBody {
     source: FootprintRenderSource;
     metadata: GeneratedFootprintMetadata;
   };
-  component: { name: string; description: string };
+  component: { name: string; description: string; tags?: string[] };
 }
 
 export async function commitDrawnImportRequest(

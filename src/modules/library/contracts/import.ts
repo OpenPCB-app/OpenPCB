@@ -94,6 +94,12 @@ export interface CommitKicadRequest {
   component: {
     name: string;
     description: string;
+    /**
+     * Optional user-supplied tags. Merged with auto-derived tags
+     * (footprint metadata, warnings, etc.) — user-supplied tags appear
+     * first and auto tags are appended de-duped after them.
+     */
+    tags?: string[];
   };
 }
 
