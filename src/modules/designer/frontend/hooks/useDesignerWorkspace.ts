@@ -136,7 +136,7 @@ export function useDesignerWorkspace(params: {
 
   const notify = params.onNotify;
 
-  const [loadingDesigns, setLoadingDesigns] = useState(false);
+  const [loadingDesigns, setLoadingDesigns] = useState(true);
   const [creatingDesign, setCreatingDesign] = useState(false);
   const [loadingProjection, setLoadingProjection] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
