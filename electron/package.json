@@ -1,6 +1,7 @@
 {
   "name": "openpcb-electron",
   "version": "0.1.8-alpha",
+  "description": "OpenPCB desktop application",
   "private": true,
   "type": "module",
   "main": "dist/main/index.js",
