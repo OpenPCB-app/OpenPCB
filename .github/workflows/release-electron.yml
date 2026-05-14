@@ -84,7 +84,9 @@ jobs:
 
       - name: Install Linux Forge maker packages
         if: matrix.platform == 'linux'
-        run: npm install --no-save electron-installer-debian@3.2.0 electron-installer-redhat@3.4.0
+        run: |
+          npm install --no-save --no-package-lock --include=optional electron-installer-debian@3.2.0 electron-installer-redhat@3.4.0
+          node -e "require('electron-installer-debian'); require('electron-installer-redhat'); console.log('Linux Forge maker packages installed')"
 
       - name: Repair optional native dependencies
         run: |
