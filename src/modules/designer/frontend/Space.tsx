@@ -7,11 +7,13 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { useNavigationStore } from "@/stores/navigation-store";
 import { DesignerFloatingToolbar } from "./components/DesignerFloatingToolbar";
 import { DesignerHeader } from "./components/DesignerHeader";
+import { DesignerEmptyState } from "./components/DesignerEmptyState";
 import { DesignerPlaceholderView } from "./components/DesignerPlaceholderView";
 import { DesignerSidebar } from "./components/DesignerSidebar";
-import { DesignerStatusBar } from "./components/DesignerStatusBar";
 import {
   SchematicCanvas,
   type SchematicCanvasHandle,
@@ -21,9 +23,9 @@ import { ToastProvider, useToast } from "./hooks/use-toast";
 import { useDesignerWorkspace } from "./hooks/useDesignerWorkspace";
 import { PcbCanvas } from "./pcb/PcbCanvas";
 import { Board3DCanvas } from "./three-d/Board3DCanvas";
+import { useDesignerTabsStore } from "./stores/designer-tabs-store";
 import type { LibraryComponent } from "../../../sdks";
 import type { ModuleSpaceProps, ViewportState } from "./types";
-import { SCHEMATIC_GRID_MM } from "./types";
 import { isEditableShortcutTarget } from "../../../shared/frontend/canvas/utils/keyboard-shortcuts";
 
 const MIN_LEFT = 240;
@@ -60,6 +62,18 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+const UNTITLED_PREFIX = "Untitled Design";
+
+function nextUntitledName(existingNames: readonly string[]): string {
+  const taken = new Set(existingNames);
+  if (!taken.has(UNTITLED_PREFIX)) return UNTITLED_PREFIX;
+  for (let i = 2; i < 10_000; i += 1) {
+    const candidate = `${UNTITLED_PREFIX} ${i}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${UNTITLED_PREFIX} ${Date.now()}`;
+}
+
 function CanvasEmptyState({ message }: { message: string }): ReactElement {
   return (
     <div className="flex h-full w-full items-center justify-center bg-slate-950">
@@ -80,6 +94,22 @@ function DesignerSpaceInner({
     initialDesignId: designId,
     onNotify: addToast,
   });
+
+  const { openDesignIds, activeDesignId } = useDesignerTabsStore(
+    useShallow((s) => ({
+      openDesignIds: s.openDesignIds,
+      activeDesignId: s.activeDesignId,
+    })),
+  );
+  const openTab = useDesignerTabsStore((s) => s.openTab);
+  const closeTabAction = useDesignerTabsStore((s) => s.closeTab);
+  const closeOthers = useDesignerTabsStore((s) => s.closeOthers);
+  const closeAllTabs = useDesignerTabsStore((s) => s.closeAll);
+  const reorderTabs = useDesignerTabsStore((s) => s.reorder);
+  const setActiveTab = useDesignerTabsStore((s) => s.setActive);
+  const pruneMissing = useDesignerTabsStore((s) => s.pruneMissing);
+  const navigateToModule = useNavigationStore((s) => s.navigateToModule);
+
   const [leftWidth, setLeftWidth] = useState(300);
   const [zoomPercent, setZoomPercent] = useState(20);
   const [gridVisible, setGridVisible] = useState(true);
@@ -91,6 +121,68 @@ function DesignerSpaceInner({
   );
   const canvasRef = useRef<SchematicCanvasHandle | null>(null);
   const viewportRef = useRef<Map<string, ViewportState>>(new Map());
+  const designsLoadedRef = useRef(false);
+  const reconciledRef = useRef(false);
+
+  // Prune tabs whose designs were deleted out-of-band, once designs load.
+  useEffect(() => {
+    if (state.loadingDesigns) return;
+    if (designsLoadedRef.current) return;
+    designsLoadedRef.current = true;
+    pruneMissing(new Set(state.designs.map((d) => d.id)));
+  }, [pruneMissing, state.designs, state.loadingDesigns]);
+
+  // Reconcile initial route + persisted tabs once designs are loaded.
+  useEffect(() => {
+    if (reconciledRef.current) return;
+    if (state.loadingDesigns) return;
+    reconciledRef.current = true;
+
+    const knownIds = new Set(state.designs.map((d) => d.id));
+    const tabs = useDesignerTabsStore.getState();
+
+    const routeDesignId = designId && knownIds.has(designId) ? designId : null;
+
+    if (routeDesignId) {
+      if (!tabs.openDesignIds.includes(routeDesignId)) {
+        openTab(routeDesignId);
+      } else {
+        setActiveTab(routeDesignId);
+      }
+      return;
+    }
+
+    if (tabs.activeDesignId && knownIds.has(tabs.activeDesignId)) {
+      navigateToModule("designer", tabs.activeDesignId);
+      return;
+    }
+
+    if (tabs.openDesignIds.length > 0) {
+      const first = tabs.openDesignIds.find((id) => knownIds.has(id));
+      if (first) {
+        setActiveTab(first);
+        navigateToModule("designer", first);
+      }
+    }
+  }, [
+    designId,
+    navigateToModule,
+    openTab,
+    setActiveTab,
+    state.designs,
+    state.loadingDesigns,
+  ]);
+
+  // Keep hook-owned selectedDesignId in sync with the active tab. `selectDesign`
+  // is React's useState setter underneath — stable — so we capture the
+  // reference once via a ref to avoid re-running this effect when the
+  // surrounding `actions` object is rebuilt each render.
+  const selectDesignRef = useRef(actions.selectDesign);
+  selectDesignRef.current = actions.selectDesign;
+  useEffect(() => {
+    if (activeDesignId === state.selectedDesignId) return;
+    selectDesignRef.current(activeDesignId ?? null);
+  }, [activeDesignId, state.selectedDesignId]);
 
   const onSchemViewportChange = useCallback(
     (zoom: number, posX: number, posY: number) => {
@@ -124,20 +216,86 @@ function DesignerSpaceInner({
     }
   }, [canOpenPalette]);
 
+  const handleActivateTab = useCallback(
+    (id: string) => {
+      setActiveTab(id);
+      navigateToModule("designer", id);
+    },
+    [navigateToModule, setActiveTab],
+  );
+
+  const handleCloseTab = useCallback(
+    (id: string) => {
+      const { nextActiveId } = closeTabAction(id);
+      navigateToModule("designer", nextActiveId ?? undefined);
+    },
+    [closeTabAction, navigateToModule],
+  );
+
+  const handleCloseOthers = useCallback(
+    (id: string) => {
+      closeOthers(id);
+      navigateToModule("designer", id);
+    },
+    [closeOthers, navigateToModule],
+  );
+
+  const handleCloseAll = useCallback(() => {
+    closeAllTabs();
+    navigateToModule("designer", undefined);
+  }, [closeAllTabs, navigateToModule]);
+
+  const handleRenameTab = useCallback(
+    async (id: string, name: string) => {
+      await actions.renameDesign(id, name);
+    },
+    [actions],
+  );
+
+  const handleCreateDesign = useCallback(async () => {
+    const name = nextUntitledName(state.designs.map((d) => d.name));
+    const created = await actions.createDesign(name);
+    if (created) {
+      openTab(created.id);
+      navigateToModule("designer", created.id);
+    }
+  }, [actions, navigateToModule, openTab, state.designs]);
+
+  const handleOpenFromEmptyState = useCallback(
+    (id: string) => {
+      openTab(id);
+      navigateToModule("designer", id);
+    },
+    [navigateToModule, openTab],
+  );
+
+  // Cmd/Ctrl+K to open palette; Cmd/Ctrl+W to close active tab (capture phase
+  // so the Electron accelerator does not also fire).
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isEditableShortcutTarget(event.target)) {
         return;
       }
       const hasModifier = event.metaKey || event.ctrlKey;
-      if (hasModifier && event.key.toLowerCase() === "k") {
+      if (!hasModifier) return;
+      const key = event.key.toLowerCase();
+      if (key === "k") {
         event.preventDefault();
         openComponentPalette();
+        return;
+      }
+      if (key === "w") {
+        const tabsState = useDesignerTabsStore.getState();
+        if (tabsState.activeDesignId) {
+          event.preventDefault();
+          event.stopPropagation();
+          handleCloseTab(tabsState.activeDesignId);
+        }
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openComponentPalette]);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [handleCloseTab, openComponentPalette]);
 
   const handlePaletteSelect = useCallback(
     async (componentId: string) => {
@@ -206,13 +364,6 @@ function DesignerSpaceInner({
     state.projection?.parts,
   ]);
 
-  const selectedDesign = useMemo(
-    () =>
-      state.designs.find((design) => design.id === state.selectedDesignId) ??
-      null,
-    [state.designs, state.selectedDesignId],
-  );
-
   const selectionSummary = useMemo(() => {
     if (state.selectedPinId) {
       return `Pin: ${state.selectedPinId}`;
@@ -247,11 +398,21 @@ function DesignerSpaceInner({
     window.addEventListener("pointercancel", stop);
   };
 
+  const noTabsOpen = openDesignIds.length === 0;
+
   const canvasContent = () => {
-    if (!state.selectedDesignId) {
+    if (noTabsOpen) {
       return (
-        <CanvasEmptyState message="Select or create a design to start editing" />
+        <DesignerEmptyState
+          designs={state.designs}
+          creatingDesign={state.creatingDesign}
+          onCreate={() => void handleCreateDesign()}
+          onOpen={handleOpenFromEmptyState}
+        />
       );
+    }
+    if (!state.selectedDesignId) {
+      return <CanvasEmptyState message="Loading design…" />;
     }
     if (!state.projection) {
       return <CanvasEmptyState message="Loading schematic..." />;
@@ -287,14 +448,18 @@ function DesignerSpaceInner({
     <div className="flex h-full w-full flex-col bg-slate-950">
       <DesignerHeader
         activeView={state.activeView}
-        selectedDesign={selectedDesign}
         designs={state.designs}
+        openDesignIds={openDesignIds}
+        activeDesignId={activeDesignId}
         creatingDesign={state.creatingDesign}
         onViewChange={actions.setActiveView}
-        onSelectDesign={actions.selectDesign}
-        onCreateDesign={actions.createDesign}
-        canOpenPalette={canOpenPalette}
-        onOpenPalette={openComponentPalette}
+        onActivateTab={handleActivateTab}
+        onCloseTab={handleCloseTab}
+        onCloseOthers={handleCloseOthers}
+        onCloseAll={handleCloseAll}
+        onRenameTab={handleRenameTab}
+        onReorderTabs={reorderTabs}
+        onCreateDesign={() => void handleCreateDesign()}
       />
 
       {state.error ? (
@@ -323,7 +488,14 @@ function DesignerSpaceInner({
         </div>
 
         <div className="relative min-h-0 min-w-0 flex-1">
-          {state.activeView === "schem" ? (
+          {noTabsOpen ? (
+            <DesignerEmptyState
+              designs={state.designs}
+              creatingDesign={state.creatingDesign}
+              onCreate={() => void handleCreateDesign()}
+              onOpen={handleOpenFromEmptyState}
+            />
+          ) : state.activeView === "schem" ? (
             canvasContent()
           ) : state.activeView === "pcb" ? (
             <PcbCanvas
@@ -354,7 +526,7 @@ function DesignerSpaceInner({
             <DesignerPlaceholderView view={state.activeView} />
           )}
 
-          {state.activeView === "schem" && state.projection ? (
+          {!noTabsOpen && state.activeView === "schem" && state.projection ? (
             <div className="pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2">
               <div className="pointer-events-auto">
                 <DesignerFloatingToolbar

@@ -36,7 +36,9 @@ async function fetchData<T>(url: string, init?: RequestInit): Promise<T> {
     const contentType = response.headers.get("content-type") ?? "";
     if (contentType.includes("application/problem+json")) {
       const problem = (await response.json()) as ProblemDetails;
-      throw new Error(problem.detail ?? problem.title ?? `HTTP ${response.status}`);
+      throw new Error(
+        problem.detail ?? problem.title ?? `HTTP ${response.status}`,
+      );
     }
     throw new Error(`HTTP ${response.status}`);
   }
@@ -73,6 +75,37 @@ export function createDesignerApi(params: {
       return data.design;
     },
 
+    async updateDesign(
+      designId: string,
+      input: { name: string },
+    ): Promise<DesignerDesignSummary> {
+      const data = await fetchData<{ design: DesignerDesignSummary }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}`,
+        ),
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      );
+      return data.design;
+    },
+
+    async deleteDesign(designId: string): Promise<void> {
+      const url = buildModuleUrl(
+        backendURL,
+        moduleId,
+        `/designs/${encodeURIComponent(designId)}`,
+      );
+      const response = await fetch(url, { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    },
+
     async getSchematicProjection(
       designId: string,
     ): Promise<DesignerSchematicProjection> {
@@ -97,7 +130,10 @@ export function createDesignerApi(params: {
       return data.projection;
     },
 
-    async searchComponents(query: string, limit = 30): Promise<LibraryComponent[]> {
+    async searchComponents(
+      query: string,
+      limit = 30,
+    ): Promise<LibraryComponent[]> {
       const data = await fetchData<{ components: LibraryComponent[] }>(
         buildModuleUrl(
           backendURL,

@@ -58,5 +58,9 @@
   "dependencies": {
     "drizzle-orm": "^0.45.1",
     "zod": "^4.1.13"
+  },
+  "overrides": {
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
   }
 }

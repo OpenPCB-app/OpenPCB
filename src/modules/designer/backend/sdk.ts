@@ -1,6 +1,4 @@
-import type {
-  CoreBackendModuleContext,
-} from "../../../core/contracts/modules/backend-module";
+import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
 import type { DesignerSDK } from "../../../sdks/designer";
 import { createDesignerStore } from "./store";
 
@@ -10,7 +8,9 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
     createDesign: (input) => store.createDesign(input),
     listDesigns: () => store.listDesigns(),
     getDesign: (designId) => store.getDesign(designId),
-    getSchematicProjection: (designId) => store.getSchematicProjection(designId),
+    updateDesign: (designId, input) => store.updateDesign(designId, input),
+    getSchematicProjection: (designId) =>
+      store.getSchematicProjection(designId),
     getPcbProjection: (designId) => store.getPcbProjection(designId),
     searchLibraryComponents: (params) => store.searchLibraryComponents(params),
     resolveLibraryComponentForPlacement: (componentId) =>

@@ -40,6 +40,10 @@ export interface CreateDesignerDesignInput {
   name?: string;
 }
 
+export interface UpdateDesignerDesignInput {
+  name: string;
+}
+
 export interface DesignerSchematicProjection {
   designId: string;
   revision: number;

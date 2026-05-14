@@ -84,6 +84,25 @@ function parseCreateDesignBody(body: unknown): { name?: string } {
   return { name };
 }
 
+function parseUpdateDesignBody(body: unknown): { name: string } {
+  const record = asRecord(body);
+  if (!record) {
+    throw new ValidationError("Request body must be an object");
+  }
+  const raw = record.name;
+  if (typeof raw !== "string") {
+    throw new ValidationError("name must be a string");
+  }
+  const name = raw.trim();
+  if (!name) {
+    throw new ValidationError("name must not be empty");
+  }
+  if (name.length > 120) {
+    throw new ValidationError("name must be 120 characters or fewer");
+  }
+  return { name };
+}
+
 function parseHistoryBody(body: unknown): { sessionId: string } {
   const record = asRecord(body);
   if (!record) {
@@ -962,6 +981,16 @@ export function registerRoutes(
   router.get("/designs/:designId", async ({ params }) => {
     const designId = params.getOrThrow("designId");
     const design = await store.getDesign(designId);
+    if (!design) {
+      throw new NotFoundError(`Design '${designId}' not found`);
+    }
+    return success({ design });
+  });
+
+  router.patch("/designs/:designId", async ({ params, req }) => {
+    const designId = params.getOrThrow("designId");
+    const input = parseUpdateDesignBody(await parseJsonBody<unknown>(req));
+    const design = await store.updateDesign(designId, input);
     if (!design) {
       throw new NotFoundError(`Design '${designId}' not found`);
     }

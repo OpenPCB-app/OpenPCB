@@ -9,6 +9,7 @@ import type {
   DesignerPcbProjection,
   DesignerSchematicProjection,
   DesignerSearchLibraryParams,
+  UpdateDesignerDesignInput,
 } from "./types";
 import type {
   LibraryComponent,
@@ -89,6 +90,7 @@ export type {
   DesignerUpdatePartsPropertiesCommand,
   DesignerUpsertLabelCommand,
   DesignerWire,
+  UpdateDesignerDesignInput,
 } from "./types";
 export type { DesignerInvalidatedEvent } from "./events";
 export { placementMirrorX } from "./pcb-helpers";
@@ -99,6 +101,10 @@ export interface DesignerSDK {
   ): Promise<DesignerDesignSummary>;
   listDesigns(): Promise<DesignerDesignSummary[]>;
   getDesign(designId: string): Promise<DesignerDesignRecord | null>;
+  updateDesign(
+    designId: string,
+    input: UpdateDesignerDesignInput,
+  ): Promise<DesignerDesignSummary | null>;
   getSchematicProjection(
     designId: string,
   ): Promise<DesignerSchematicProjection | null>;

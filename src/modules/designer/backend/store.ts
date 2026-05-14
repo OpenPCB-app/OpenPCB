@@ -93,6 +93,10 @@ export interface DesignerStore {
   createDesign(input?: { name?: string }): Promise<DesignerDesignSummary>;
   listDesigns(): Promise<DesignerDesignSummary[]>;
   getDesign(designId: string): Promise<DesignerDesignRecord | null>;
+  updateDesign(
+    designId: string,
+    input: { name: string },
+  ): Promise<DesignerDesignSummary | null>;
   deleteDesign(designId: string): Promise<void>;
   getSchematicProjection(
     designId: string,
@@ -247,6 +251,36 @@ export function createDesignerStore(
       }
 
       return toDesignRecordFromProjection(mapDesignSummary(head), projection);
+    },
+
+    async updateDesign(designId, input) {
+      const name = input.name;
+      const timestamp = nowIso();
+      const updated = ctx.db.transaction((txRaw) => {
+        const tx = txRaw as DbClient;
+        const head = tx
+          .select()
+          .from(designHeads)
+          .where(eq(designHeads.id, designId))
+          .get();
+        if (!head) {
+          return null;
+        }
+        tx.update(designHeads)
+          .set({ name, updatedAt: timestamp })
+          .where(eq(designHeads.id, designId))
+          .run();
+        return {
+          ...head,
+          name,
+          updatedAt: timestamp,
+        };
+      });
+
+      if (!updated) {
+        return null;
+      }
+      return mapDesignSummary(updated);
     },
 
     async deleteDesign(designId) {

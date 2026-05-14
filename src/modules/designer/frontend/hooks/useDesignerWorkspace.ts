@@ -48,7 +48,8 @@ export interface DesignerWorkspaceState {
 export interface DesignerWorkspaceActions {
   setError(message: string | null): void;
   refreshDesigns(): Promise<void>;
-  createDesign(): Promise<void>;
+  createDesign(name?: string): Promise<DesignerDesignSummary | null>;
+  renameDesign(designId: string, name: string): Promise<void>;
   selectDesign(designId: string | null): void;
   refreshProjection(): Promise<void>;
   refreshHistory(): Promise<void>;
@@ -57,7 +58,9 @@ export interface DesignerWorkspaceActions {
   setLabelDraftText(value: string): void;
   searchComponents(): Promise<void>;
   searchComponentsByQuery(query: string): Promise<LibraryComponent[]>;
-  resolvePlacement(componentId: string): Promise<LibraryComponentPlacementDetail>;
+  resolvePlacement(
+    componentId: string,
+  ): Promise<LibraryComponentPlacementDetail>;
   beginDragComponent(componentId: string): Promise<void>;
   setDragGhostNm(point: { x: number; y: number } | null): void;
   clearDragState(): void;
@@ -147,7 +150,9 @@ export function useDesignerWorkspace(params: {
   const [query, setQuery] = useState("");
   const [components, setComponents] = useState<LibraryComponent[]>([]);
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
-  const [selectedPartIds, setSelectedPartIds] = useState<Set<string>>(new Set());
+  const [selectedPartIds, setSelectedPartIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
   const [wireSourcePinId, setWireSourcePinId] = useState<string | null>(null);
@@ -193,16 +198,6 @@ export function useDesignerWorkspace(params: {
     try {
       const next = await api.listDesigns();
       setDesigns(next);
-      if (!selectedDesignId) {
-        if (
-          params.initialDesignId &&
-          next.some((d) => d.id === params.initialDesignId)
-        ) {
-          setSelectedDesignId(params.initialDesignId);
-        } else if (next[0]) {
-          setSelectedDesignId(next[0].id);
-        }
-      }
     } catch (listError) {
       const message =
         listError instanceof Error
@@ -213,7 +208,7 @@ export function useDesignerWorkspace(params: {
     } finally {
       setLoadingDesigns(false);
     }
-  }, [api, selectedDesignId, params.initialDesignId]);
+  }, [api]);
 
   const refreshProjectionForDesign = useCallback(
     async (designId: string) => {
@@ -336,24 +331,52 @@ export function useDesignerWorkspace(params: {
     }
   }, [api, selectedDesignId]);
 
-  const createDesign = useCallback(async () => {
-    setCreatingDesign(true);
-    setError(null);
-    try {
-      const created = await api.createDesign();
-      await refreshDesigns();
-      setSelectedDesignId(created.id);
-      notify?.("Design created", "success");
-    } catch (createError) {
-      const message =
-        createError instanceof Error
-          ? createError.message
-          : "Failed to create design";
-      setError(message);
-    } finally {
-      setCreatingDesign(false);
-    }
-  }, [api, refreshDesigns, notify]);
+  const createDesign = useCallback(
+    async (name?: string): Promise<DesignerDesignSummary | null> => {
+      setCreatingDesign(true);
+      setError(null);
+      try {
+        const created = await api.createDesign(name);
+        await refreshDesigns();
+        setSelectedDesignId(created.id);
+        notify?.("Design created", "success");
+        return created;
+      } catch (createError) {
+        const message =
+          createError instanceof Error
+            ? createError.message
+            : "Failed to create design";
+        setError(message);
+        return null;
+      } finally {
+        setCreatingDesign(false);
+      }
+    },
+    [api, refreshDesigns, notify],
+  );
+
+  const renameDesign = useCallback(
+    async (designId: string, name: string): Promise<void> => {
+      try {
+        const updated = await api.updateDesign(designId, { name });
+        setDesigns((current) =>
+          current.map((design) =>
+            design.id === designId
+              ? { ...design, name: updated.name, updatedAt: updated.updatedAt }
+              : design,
+          ),
+        );
+      } catch (renameError) {
+        const message =
+          renameError instanceof Error
+            ? renameError.message
+            : "Failed to rename design";
+        notify?.(message, "error");
+        throw renameError;
+      }
+    },
+    [api, notify],
+  );
 
   const searchComponents = useCallback(async () => {
     setSearchingComponents(true);
@@ -616,6 +639,7 @@ export function useDesignerWorkspace(params: {
       setError,
       refreshDesigns,
       createDesign,
+      renameDesign,
       selectDesign: setSelectedDesignId,
       refreshProjection,
       refreshHistory,
