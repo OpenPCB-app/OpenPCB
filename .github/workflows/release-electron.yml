@@ -80,7 +80,7 @@ jobs:
 
       - name: Install Linux maker dependencies
         if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg rpm
+        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg rpm squashfs-tools
 
       - name: Repair optional native dependencies
         run: |
@@ -161,5 +161,5 @@ jobs:
             --verify-tag \
             --prerelease \
             --title "${GITHUB_REF_NAME}" \
-            --notes "Unsigned beta Electron Forge builds for macOS arm64, macOS x64, Windows x64, and Linux x64." \
+            --notes "Unsigned beta Electron Forge builds for macOS arm64, macOS x64, Windows x64, and Linux x64, including deb, rpm, and AppImage packages." \
             "${files[@]}"
