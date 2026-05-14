@@ -144,6 +144,7 @@ jobs:
     needs: build
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
 
     steps:
       - name: Download build artifacts
