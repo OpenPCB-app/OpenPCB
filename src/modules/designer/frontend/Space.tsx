@@ -19,7 +19,10 @@ import {
   type SchematicCanvasHandle,
 } from "./components/SchematicCanvas";
 import { ComponentCommandPalette } from "./components/ComponentCommandPalette";
-import { PartFootprintBadge } from "./components/PartFootprintBadge";
+import {
+  SelectionInspector,
+  type InspectorSelection,
+} from "./components/SelectionInspector/SelectionInspector";
 import { ToastProvider, useToast } from "./hooks/use-toast";
 import { useDesignerWorkspace } from "./hooks/useDesignerWorkspace";
 import { PcbCanvas } from "./pcb/PcbCanvas";
@@ -117,48 +120,89 @@ function CanvasEmptyState({ message }: { message: string }): ReactElement {
   );
 }
 
-function SelectedPartFootprintOverlay({
+function SelectionInspectorMount({
   projection,
-  selectedPartId,
-  selectedPartIds,
-  backendURL,
-  moduleId,
+  state,
   resolvePlacement,
-  addToast,
+  dispatchCommand,
+  setError,
+  onClose,
+  onOpenInLibrary,
 }: {
   projection: NonNullable<DesignerWorkspaceState["projection"]>;
-  selectedPartId: string | null;
-  selectedPartIds: Set<string>;
-  backendURL: string | null | undefined;
-  moduleId: string;
+  state: DesignerWorkspaceState;
   resolvePlacement: (
     componentId: string,
   ) => Promise<LibraryComponentPlacementDetail>;
-  addToast: (message: string, level: "info" | "warning" | "error") => void;
+  dispatchCommand: ReturnType<
+    typeof useDesignerWorkspace
+  >["actions"]["dispatchCommand"];
+  setError: ReturnType<typeof useDesignerWorkspace>["actions"]["setError"];
+  onClose(): void;
+  onOpenInLibrary(componentId: string): void;
 }): ReactElement | null {
-  const onlySelectedId =
-    selectedPartIds.size === 1
-      ? Array.from(selectedPartIds)[0]
-      : selectedPartId;
-  const part = useMemo(
+  const selectedIds = useMemo(() => {
+    if (state.selectedPartIds.size > 0) {
+      return Array.from(state.selectedPartIds);
+    }
+    return state.selectedPartId ? [state.selectedPartId] : [];
+  }, [state.selectedPartIds, state.selectedPartId]);
+
+  const selectedParts = useMemo(
     () =>
-      onlySelectedId
-        ? projection.parts.find((entry) => entry.id === onlySelectedId)
-        : null,
-    [projection.parts, onlySelectedId],
+      selectedIds
+        .map((id) => projection.parts.find((part) => part.id === id))
+        .filter((part): part is NonNullable<typeof part> => part != null),
+    [projection.parts, selectedIds],
   );
 
+  const selectedLabel = useMemo(
+    () =>
+      state.selectedLabelId
+        ? (projection.labels.find(
+            (label) => label.id === state.selectedLabelId,
+          ) ?? null)
+        : null,
+    [projection.labels, state.selectedLabelId],
+  );
+
+  const selectedWire = useMemo(
+    () =>
+      state.selectedWireId
+        ? (projection.wires.find((wire) => wire.id === state.selectedWireId) ??
+          null)
+        : null,
+    [projection.wires, state.selectedWireId],
+  );
+
+  const selection: InspectorSelection = useMemo(() => {
+    if (selectedParts.length === 1 && selectedParts[0]) {
+      return { kind: "part", part: selectedParts[0] };
+    }
+    if (selectedParts.length > 1) {
+      return { kind: "multi", parts: selectedParts };
+    }
+    if (selectedLabel) {
+      return { kind: "label", label: selectedLabel };
+    }
+    if (selectedWire) {
+      return { kind: "wire", wire: selectedWire };
+    }
+    return null;
+  }, [selectedParts, selectedLabel, selectedWire]);
+
+  const partForVariants = selection?.kind === "part" ? selection.part : null;
   const [variants, setVariants] = useState<LibraryComponentFootprintVariant[]>(
     [],
   );
 
   useEffect(() => {
-    if (!part) {
+    if (!partForVariants) {
       setVariants([]);
       return;
     }
     let cancelled = false;
-    resolvePlacement(part.componentId)
+    resolvePlacement(partForVariants.componentId)
       .then((detail) => {
         if (cancelled) return;
         setVariants(detail.footprintVariants ?? []);
@@ -170,23 +214,19 @@ function SelectedPartFootprintOverlay({
     return () => {
       cancelled = true;
     };
-  }, [part, resolvePlacement, backendURL, moduleId]);
+  }, [partForVariants?.componentId, resolvePlacement]);
 
-  if (!part) return null;
+  if (!selection) return null;
 
   return (
-    <PartFootprintBadge
-      partReference={part.reference || part.id.slice(0, 6)}
-      componentName={part.symbol.name}
-      currentFootprintId={part.footprint.footprintId}
+    <SelectionInspector
+      selection={selection}
+      projection={projection}
       variants={variants}
-      onSelectVariant={() =>
-        addToast(
-          "Per-instance footprint override is not yet wired — coming in a future designer phase.",
-          "info",
-        )
-      }
-      disabledMessage="Per-instance override coming soon"
+      dispatchCommand={dispatchCommand}
+      setError={setError}
+      onClose={onClose}
+      onOpenInLibrary={onOpenInLibrary}
     />
   );
 }
@@ -612,6 +652,12 @@ function DesignerSpaceInner({
             activeView={state.activeView}
             pcbSlotRef={setPcbBoardSlot}
             pcbLayersSlotRef={setPcbLayersSlot}
+            onPlaceComponent={openComponentPalette}
+            onAddNetLabel={() => canvasRef.current?.armPrimitive("net_portal")}
+            onBrowseLibrary={() => navigateToModule("library")}
+            onFrameBoundsMm={(bounds) =>
+              canvasRef.current?.frameToBoundsMm(bounds)
+            }
           />
         </div>
 
@@ -664,14 +710,20 @@ function DesignerSpaceInner({
           )}
 
           {!noTabsOpen && state.activeView === "schem" && state.projection ? (
-            <SelectedPartFootprintOverlay
+            <SelectionInspectorMount
               projection={state.projection}
-              selectedPartId={state.selectedPartId}
-              selectedPartIds={state.selectedPartIds}
-              backendURL={backendURL}
-              moduleId={moduleId}
+              state={state}
               resolvePlacement={actions.resolvePlacement}
-              addToast={addToast}
+              dispatchCommand={actions.dispatchCommand}
+              setError={actions.setError}
+              onClose={() => {
+                actions.setSelectedPartId(null);
+                actions.setSelectedPartIds(new Set<string>());
+                actions.setSelectedLabelId(null);
+                actions.setSelectedWireId(null);
+                actions.setSelectedPinId(null);
+              }}
+              onOpenInLibrary={() => navigateToModule("library")}
             />
           ) : null}
 

@@ -8,6 +8,7 @@ import type {
   DesignerPin,
   DesignerPlacedPart,
   DesignerSchematicProjection,
+  DesignerWire,
   LibraryComponent,
   LibraryComponentPlacementDetail,
   LibraryTagStat,
@@ -34,6 +35,7 @@ export interface DesignerWorkspaceState {
   selectedPartIds: Set<string>;
   selectedPinId: string | null;
   selectedLabelId: string | null;
+  selectedWireId: string | null;
   wireSourcePinId: string | null;
   labelDraftText: string;
   draggingComponentId: string | null;
@@ -73,6 +75,7 @@ export interface DesignerWorkspaceActions {
   setSelectedPartIds(partIds: Set<string>): void;
   setSelectedPinId(pinId: string | null): void;
   setSelectedLabelId(labelId: string | null): void;
+  setSelectedWireId(wireId: string | null): void;
   setWireSourcePinId(pinId: string | null): void;
   dispatchCommand(command: DesignerCommand): Promise<DesignerDispatchResult>;
   undo(): Promise<void>;
@@ -85,6 +88,7 @@ export interface DesignerWorkspaceDerived {
   selectedParts: DesignerPlacedPart[];
   selectedPin: DesignerPin | null;
   selectedLabel: DesignerLabel | null;
+  selectedWire: DesignerWire | null;
   wireSourcePin: DesignerPin | null;
 }
 
@@ -160,6 +164,7 @@ export function useDesignerWorkspace(params: {
   );
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
+  const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
   const [wireSourcePinId, setWireSourcePinId] = useState<string | null>(null);
   const [labelDraftText, setLabelDraftText] = useState("NET");
   const [draggingComponentId, setDraggingComponentId] = useState<string | null>(
@@ -608,6 +613,13 @@ export function useDesignerWorkspace(params: {
     );
   }, [projection, selectedLabelId]);
 
+  const selectedWire = useMemo(() => {
+    if (!projection || !selectedWireId) {
+      return null;
+    }
+    return projection.wires.find((wire) => wire.id === selectedWireId) ?? null;
+  }, [projection, selectedWireId]);
+
   const selectedParts = useMemo(() => {
     if (!projection || selectedPartIds.size === 0) {
       return [];
@@ -633,6 +645,7 @@ export function useDesignerWorkspace(params: {
       selectedPartIds,
       selectedPinId,
       selectedLabelId,
+      selectedWireId,
       wireSourcePinId,
       labelDraftText,
       draggingComponentId,
@@ -666,6 +679,7 @@ export function useDesignerWorkspace(params: {
       setSelectedPartIds,
       setSelectedPinId,
       setSelectedLabelId,
+      setSelectedWireId,
       setWireSourcePinId,
       dispatchCommand,
       undo,
@@ -677,6 +691,7 @@ export function useDesignerWorkspace(params: {
       selectedParts,
       selectedPin,
       selectedLabel,
+      selectedWire,
       wireSourcePin,
     },
   };

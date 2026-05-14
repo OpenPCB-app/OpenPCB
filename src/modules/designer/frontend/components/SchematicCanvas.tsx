@@ -132,6 +132,16 @@ export interface SchematicCanvasHandle {
   zoomOut(): void;
   fit(): void;
   /**
+   * Frame the camera onto a bounding box in millimeters. Used by the outline
+   * panel's "Frame to canvas" action to pan/zoom to a single entity.
+   */
+  frameToBoundsMm(bounds: {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+  }): void;
+  /**
    * Arm the next click for a primitive placement. PWR/portal need text;
    * supplying an empty string lets the canvas open its inline picker.
    */
@@ -908,6 +918,27 @@ export const SchematicCanvas = forwardRef<
     },
     fit() {
       fitCamera();
+    },
+    frameToBoundsMm(bounds) {
+      const camera = cameraRef.current;
+      if (!camera) return;
+      const canvas = camera.userData?.canvas as HTMLCanvasElement | undefined;
+      const width = canvas?.clientWidth ?? 800;
+      const height = canvas?.clientHeight ?? 600;
+      const contentWidth = Math.max(bounds.maxX - bounds.minX, 1);
+      const contentHeight = Math.max(bounds.maxY - bounds.minY, 1);
+      const padding = Math.max(contentWidth, contentHeight) * 0.4;
+      const paddedWidth = contentWidth + padding * 2;
+      const paddedHeight = contentHeight + padding * 2;
+      const zoomX = width / paddedWidth;
+      const zoomY = height / paddedHeight;
+      const targetZoom = Math.max(20, Math.min(Math.min(zoomX, zoomY), 200));
+      const centerX = (bounds.minX + bounds.maxX) / 2;
+      const centerY = (bounds.minY + bounds.maxY) / 2;
+      camera.position.set(centerX, centerY, camera.position.z);
+      camera.zoom = targetZoom;
+      camera.updateProjectionMatrix();
+      onZoomChange?.(camera.zoom * 2);
     },
   }));
 
