@@ -55,10 +55,56 @@ export interface DesignerSchematicProjection {
   nets: DesignerDerivedNet[];
 }
 
-export type PcbLayerId = "F.Cu" | "B.Cu" | "F.SilkS" | "B.SilkS" | "Edge.Cuts";
+/**
+ * PCB layer identifier. The wire-format contract — persisted in `board_settings`
+ * payloadJson. Adding a layer here means migrations must accept it; removing
+ * one means a migration must rewrite saved boards. Kept in sync with the
+ * frontend canvas `PcbLayerId` in `src/shared/frontend/canvas/layers.ts`.
+ *
+ * Grouping:
+ *  - Copper:     F.Cu, In1.Cu, In2.Cu, B.Cu  (traces + vias + pads live here)
+ *  - Solder mask:F.Mask, B.Mask              (translucent green overlay)
+ *  - Solder paste:F.Paste, B.Paste           (SMD stencil aperture)
+ *  - Silkscreen: F.SilkS, B.SilkS            (component outlines + refdes)
+ *  - Courtyard:  F.CrtYd, B.CrtYd            (no-go zone marker)
+ *  - Fabrication:F.Fab, B.Fab                (assembly notes, hidden by default)
+ *  - Edge:       Edge.Cuts                   (board outline)
+ *  - Drill:      Drill                       (virtual layer — all PTH + via holes)
+ *  - Metadata:   Metadata                    (refdes/value annotation)
+ */
+export type PcbLayerId =
+  | "F.Cu"
+  | "In1.Cu"
+  | "In2.Cu"
+  | "B.Cu"
+  | "F.Mask"
+  | "B.Mask"
+  | "F.Paste"
+  | "B.Paste"
+  | "F.SilkS"
+  | "B.SilkS"
+  | "F.CrtYd"
+  | "B.CrtYd"
+  | "F.Fab"
+  | "B.Fab"
+  | "Edge.Cuts"
+  | "Drill"
+  | "Metadata";
 
 /** Subset of PcbLayerId that traces and vias may live on (copper only). */
-export type PcbCopperLayerId = "F.Cu" | "B.Cu";
+export type PcbCopperLayerId = "F.Cu" | "In1.Cu" | "In2.Cu" | "B.Cu";
+
+/**
+ * Display emphasis mode controlling how non-active layers render relative to
+ * the active layer. Mirrors KiCad's Ctrl+H cycle.
+ *  - `normal`: every visible layer at full color/opacity.
+ *  - `dim`:    non-active layers desaturated + reduced opacity (~0.18).
+ *  - `solo`:   non-active layers hidden entirely.
+ */
+export type PcbDisplayMode = "normal" | "dim" | "solo";
+
+/** Stackup layer count. v1 supports 2 or 4 (inner copper = In1.Cu/In2.Cu). */
+export type PcbLayerCount = 2 | 4;
 
 export type PcbTraceSegmentMode = "manhattan-90" | "manhattan-45";
 
@@ -123,6 +169,23 @@ export interface PcbBoardSettings {
    * vias fall below the named fab's minimums (see `fab-presets.ts`).
    */
   fabricator: PcbFabricatorId;
+  /**
+   * Stackup layer count. Controls whether In1.Cu / In2.Cu are routable and
+   * appear in the layer panel.
+   */
+  layerCount: PcbLayerCount;
+  /** Non-active layer emphasis cycle (Normal/Dim/Solo). Default `normal`. */
+  displayMode: PcbDisplayMode;
+  /**
+   * Solder-mask aperture expansion (mm, per side). IPC-7351 typ. 0.05–0.075
+   * SMD, 0.10 THT. Board-global v1; per-pad override deferred.
+   */
+  solderMaskExpansionMm: number;
+  /**
+   * Solder-paste aperture inset (mm, per side). Negative = aperture smaller
+   * than pad. Typical −0.05 mm. Affects SMD pads only (THT skipped).
+   */
+  solderPasteExpansionMm: number;
   updatedAt: string;
 }
 
