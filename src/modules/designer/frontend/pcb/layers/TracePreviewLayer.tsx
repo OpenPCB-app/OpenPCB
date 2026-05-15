@@ -29,7 +29,7 @@ interface TracePreviewLayerProps {
  * Renders the in-progress route during a routing session at true world-width
  * using LineSegments2 + LineMaterial:
  *  - committed segments at full opacity
- *  - pending tail at reduced opacity
+ *  - pending tail as a white cursor guide (Flux-style, not yet committed)
  *  - DRC-violating segments overlaid in red
  */
 export function TracePreviewLayer({
@@ -81,9 +81,9 @@ export function TracePreviewLayer({
       />
       <PreviewSegmentGroup
         positions={split.pending}
-        widthMm={widthMm}
-        color={baseColor}
-        opacity={0.55}
+        widthMm={Math.max(widthMm * 0.55, 0.08)}
+        color="#ffffff"
+        opacity={0.95}
       />
       {/* DRC violation halo: slightly larger width to "bleed" around the offending segment. */}
       <PreviewSegmentGroup

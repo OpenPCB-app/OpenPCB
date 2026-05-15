@@ -46,8 +46,14 @@ export interface FootprintRenderLayerProps {
    * by the 2D PCB canvas to remap F.* ↔ B.* atomically when a placement is
    * on the bottom side, mirroring the KiCad flip semantics. Through-hole
    * (`*.Cu`) and `Edge.Cuts` should pass through unchanged.
-   */
+  */
   layerRemap?: (layer: string | undefined) => string | undefined;
+  /** Pad numbers to visually dim while keeping them rendered for context. */
+  dimmedPadNumbers?: ReadonlySet<string>;
+  /** Strength for pad dimming; color is multiplied instead of per-instance alpha. */
+  padDimFactor?: number;
+  /** Opacity for dimmed footprint graphics/labels. */
+  dimmedOpacity?: number;
 }
 
 const REFERENCE_TOKEN_RE = /\$\{REFERENCE\}|REF\*\*/g;
@@ -78,9 +84,9 @@ function layerColor(
   );
 }
 
-/** Color for *.Cu (all-copper) pads — blend of F.Cu and B.Cu. */
-const ALL_CU_COLOR = "#9a6a30";
-const DIM_FACTOR = 0.3;
+/** Color for *.Cu (all-copper) pads — copper/gold for plated through-hole. */
+const ALL_CU_COLOR = "#d4925b";
+const DIM_FACTOR = 0.32;
 
 /**
  * Pick the canvas render order for a silkscreen / courtyard / fab stroke
@@ -130,6 +136,9 @@ export function FootprintRenderLayer({
   enableDepthTest = false,
   hidePadNumbers = false,
   layerRemap,
+  dimmedPadNumbers,
+  padDimFactor = DIM_FACTOR,
+  dimmedOpacity = 0.3,
 }: FootprintRenderLayerProps) {
   const remap = (layer: string | undefined): string | undefined =>
     layerRemap ? layerRemap(layer) : layer;
@@ -212,13 +221,15 @@ export function FootprintRenderLayer({
             : "rect";
 
         const effectiveLayer = remap(pad.layer ?? "F.Cu");
-        const isDimmed =
+        const isDimmedLayer =
           (effectiveLayer !== undefined && dimmedLayers?.has(effectiveLayer)) ??
           false;
+        const isDimmedPad = dimmedPadNumbers?.has(pad.number) ?? false;
+        const isDimmed = isDimmedLayer || isDimmedPad;
         let color = useLayerColors
           ? padLayerColor(effectiveLayer, pt)
           : undefined;
-        if (isDimmed && color) color = dimHex(color, DIM_FACTOR);
+        if (isDimmed && color) color = dimHex(color, padDimFactor);
 
         return {
           id: pad.id,
@@ -233,7 +244,7 @@ export function FootprintRenderLayer({
           selected: false,
         };
       }),
-    [model.pads, dimmedLayers, useLayerColors, layerRemap],
+    [model.pads, dimmedLayers, dimmedPadNumbers, padDimFactor, useLayerColors, layerRemap],
   );
 
   return (
@@ -268,7 +279,7 @@ export function FootprintRenderLayer({
               depthTest={enableDepthTest}
               depthWrite={enableDepthTest}
               transparent={!enableDepthTest || isDimmed}
-              opacity={isDimmed ? 0.3 : 1}
+              opacity={isDimmed ? dimmedOpacity : 1}
             />
           </lineSegments>
         );
@@ -302,18 +313,22 @@ export function FootprintRenderLayer({
 
       {/* Pad numbers — hidden in 3D PCB board view (clutter on top of bodies) */}
       {!hidePadNumbers &&
-        model.pads.map((pad) => (
-          <EDAText
-            key={`${pad.id}:number`}
-            position={[pad.centerMm.x, pad.centerMm.y, 0]}
-            color={pt.footprintPadNumber}
-            fontSize={0.28}
-            anchorX="center"
-            anchorY="middle"
-          >
-            {pad.number}
-          </EDAText>
-        ))}
+        model.pads.map((pad) => {
+          const isDimmedPad = dimmedPadNumbers?.has(pad.number) ?? false;
+          return (
+            <EDAText
+              key={`${pad.id}:number`}
+              position={[pad.centerMm.x, pad.centerMm.y, 0]}
+              color={pt.footprintPadNumber}
+              fontSize={0.28}
+              anchorX="center"
+              anchorY="middle"
+              opacity={isDimmedPad ? Math.max(dimmedOpacity, 0.18) : undefined}
+            >
+              {pad.number}
+            </EDAText>
+          );
+        })}
 
       {/* Labels — per-layer color, with PCB-surface override for Fab text */}
       {model.labels.map((label) => {
@@ -341,7 +356,7 @@ export function FootprintRenderLayer({
             fontSize={label.fontSizeMm}
             anchorX={label.anchorX}
             anchorY={label.anchorY}
-            opacity={isDimmed ? 0.3 : undefined}
+            opacity={isDimmed ? dimmedOpacity : undefined}
             rotation={
               label.rotationDeg === 0
                 ? undefined

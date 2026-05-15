@@ -150,6 +150,7 @@ function InstancedDrillMesh({
         depthTest={false}
         depthWrite={false}
         side={THREE.DoubleSide}
+        transparent={false}
       />
     </instancedMesh>
   );
@@ -171,6 +172,10 @@ function MountingHoleRings({
   );
 }
 
+/** Mounting-hole annulus color (Flux convention). Bright magenta so non-electrical
+ * mechanical holes are visually distinct from electrical PTH pads + vias. */
+const MOUNTING_HOLE_RING_COLOR = "#ec4899";
+
 function MountingHoleRing({ hole }: { hole: DrillInstance }): ReactElement {
   const geom = useMemo(
     () =>
@@ -189,9 +194,9 @@ function MountingHoleRing({ hole }: { hole: DrillInstance }): ReactElement {
       renderOrder={RENDER_ORDER.ANNULAR}
     >
       <meshBasicMaterial
-        color={PCB_LAYER_COLORS["B.SilkS"]}
+        color={MOUNTING_HOLE_RING_COLOR}
         transparent
-        opacity={0.95}
+        opacity={0.92}
         depthTest={false}
         depthWrite={false}
         side={THREE.DoubleSide}

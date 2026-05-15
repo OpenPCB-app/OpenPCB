@@ -69,7 +69,7 @@ function parseVisibleLayers(value: unknown): PcbBoardSettings["visibleLayers"] {
     );
   return layers && layers.length > 0
     ? layers
-    : ["F.Cu", "B.Cu", "F.SilkS", "F.Mask", "Edge.Cuts", "Drill", "Metadata"];
+    : ["F.Cu", "B.Cu", "F.SilkS", "Edge.Cuts", "Drill", "Metadata"];
 }
 
 function parseDisplayMode(value: unknown): PcbBoardSettings["displayMode"] {

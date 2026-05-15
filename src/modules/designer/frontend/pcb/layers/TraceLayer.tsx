@@ -20,12 +20,10 @@ interface TraceLayerProps {
   selectedTraceIds?: ReadonlySet<string>;
   /** Layer to render. */
   layer: PcbCopperLayerId;
-  /**
-   * True when this layer is not the user's active copper layer. Bright/dim
-   * traces are rendered at 50% opacity (Flux/KiCad convention) so the active
-   * layer reads as the focused plane. Selected traces always stay full.
-   */
-  inactive?: boolean;
+  /** Opacity applied to bright traces on this layer. */
+  inactiveOpacity?: number;
+  /** Opacity applied to non-highlighted traces when net scoping is active. */
+  dimOpacity?: number;
   /**
    * Pre-mirror X coordinates in the geometry. Use when the parent group does
    * NOT apply a negative-X scale (LineSegments2 does not render correctly
@@ -50,7 +48,8 @@ export function TraceLayer({
   highlightedNetId,
   selectedTraceIds,
   layer,
-  inactive = false,
+  inactiveOpacity = 1,
+  dimOpacity = 0.18,
   mirror = false,
 }: TraceLayerProps): ReactElement | null {
   const renderOrder =
@@ -62,7 +61,7 @@ export function TraceLayer({
           ? RENDER_ORDER.IN2_COPPER
           : RENDER_ORDER.BACK_COPPER;
   const baseColor = PCB_TRACE_COLORS[layer];
-  const inactiveScale = inactive ? 0.5 : 1;
+  const brightOpacity = Math.max(0, Math.min(1, inactiveOpacity));
 
   // Group traces by width × state. For each (widthMm, state) bucket we
   // produce one Float32Array of segment vertex positions (6 floats per segment).
@@ -138,7 +137,7 @@ export function TraceLayer({
           positions={b.positions}
           widthMm={b.widthMm}
           color={baseColor}
-          opacity={1 * inactiveScale}
+          opacity={brightOpacity}
           renderOrder={renderOrder}
         />
       ))}
@@ -148,7 +147,7 @@ export function TraceLayer({
           positions={b.positions}
           widthMm={b.widthMm}
           color={baseColor}
-          opacity={0.18 * inactiveScale}
+          opacity={dimOpacity}
           renderOrder={renderOrder}
         />
       ))}
@@ -197,7 +196,11 @@ function FatLineGroup({
       color: new THREE.Color(color).getHex(),
       linewidth: widthMm,
       worldUnits: true,
-      transparent: opacity < 1,
+      // Always transparent so traces sort with the (transparent) solder-mask
+      // layer by `renderOrder`. With `transparent: false`, three.js renders
+      // opaque traces in the opaque pass *before* the transparent mask pass,
+      // so the mask ends up painted over them regardless of renderOrder.
+      transparent: true,
       opacity,
       depthTest: false,
       depthWrite: false,

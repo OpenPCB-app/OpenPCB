@@ -3,15 +3,18 @@ import { preloadFont } from "troika-three-text";
 import type { ReactNode } from "react";
 import { RENDER_ORDER } from "../layers";
 
-// Eagerly preload the default Troika font so drei's <Text> suspend() call
-// finds a cached result on first render, avoiding a Suspense flash.
-preloadFont(
-  {
-    characters:
-      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-+/()[]{}#~:;,!?@$%^&*=<>_ Ωωµμ",
-  } as unknown as Parameters<typeof preloadFont>[0],
-  () => {},
-);
+// Eagerly preload the default Troika font in browser contexts so drei's
+// <Text> suspend() call finds a cached result on first render. Vitest's node
+// environment has no `self`, and troika reads it at preload time.
+if (typeof self !== "undefined") {
+  preloadFont(
+    {
+      characters:
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-+/()[]{}#~:;,!?@$%^&*=<>_ Ωωµμ",
+    } as unknown as Parameters<typeof preloadFont>[0],
+    () => {},
+  );
+}
 
 export interface EDATextProps {
   position: [number, number, number];

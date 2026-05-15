@@ -1,6 +1,7 @@
-import { ChevronDown, ChevronRight, Eye, EyeOff } from "lucide-react";
+import { ChevronDown, ChevronRight, Droplet, Eye, EyeOff } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactElement } from "react";
 import type {
+  PcbCopperLayerId,
   PcbDisplayMode,
   PcbLayerCount,
   PcbLayerId,
@@ -12,7 +13,9 @@ import {
 } from "../../../../shared/frontend/canvas/layers";
 
 interface PcbLayersPanelProps {
-  activeLayer: PcbLayerId;
+  activeLayer: PcbLayerId | null;
+  /** Layer that must stay visible for route/edit commands, even when no layer is focused. */
+  lockedVisibleLayer?: PcbLayerId | null;
   onSetActiveLayer: (layer: PcbLayerId) => void;
   visibleLayers: ReadonlyArray<PcbLayerId>;
   onSetVisibleLayers: (layers: ReadonlyArray<PcbLayerId>) => void;
@@ -20,6 +23,8 @@ interface PcbLayersPanelProps {
   layerCount?: PcbLayerCount;
   displayMode?: PcbDisplayMode;
   onSetDisplayMode?: (mode: PcbDisplayMode) => void;
+  copperFillLayers?: ReadonlyArray<PcbCopperLayerId>;
+  onToggleCopperFillLayer?: (layer: PcbCopperLayerId) => void;
 }
 
 const DISPLAY_MODES: ReadonlyArray<{
@@ -31,6 +36,15 @@ const DISPLAY_MODES: ReadonlyArray<{
   { id: "solo", label: "Solo" },
 ];
 
+function isCopperLayer(layer: PcbLayerId): layer is PcbCopperLayerId {
+  return (
+    layer === "F.Cu" ||
+    layer === "In1.Cu" ||
+    layer === "In2.Cu" ||
+    layer === "B.Cu"
+  );
+}
+
 /**
  * Hybrid layer panel — Flux-style grouped tree with KiCad-style display mode
  * cycle. Group headers ("Top Layers", "Bottom Layers") toggle every child
@@ -39,14 +53,21 @@ const DISPLAY_MODES: ReadonlyArray<{
  */
 export function PcbLayersPanel({
   activeLayer,
+  lockedVisibleLayer = null,
   onSetActiveLayer,
   visibleLayers,
   onSetVisibleLayers,
   layerCount = 2,
   displayMode = "normal",
   onSetDisplayMode,
+  copperFillLayers = [],
+  onToggleCopperFillLayer,
 }: PcbLayersPanelProps): ReactElement {
   const visibleSet = useMemo(() => new Set(visibleLayers), [visibleLayers]);
+  const copperFillSet = useMemo(
+    () => new Set(copperFillLayers),
+    [copperFillLayers],
+  );
   const [topOpen, setTopOpen] = useState(true);
   const [bottomOpen, setBottomOpen] = useState(true);
 
@@ -64,11 +85,14 @@ export function PcbLayersPanel({
     (next: ReadonlySet<PcbLayerId>) => {
       const arr: PcbLayerId[] = [];
       next.forEach((id) => arr.push(id));
-      // Always keep active layer visible.
-      if (!next.has(activeLayer)) arr.push(activeLayer);
+      // Always keep the edit/routing layer visible. Layer focus itself can be
+      // cleared, but command-target copper must remain renderable.
+      if (lockedVisibleLayer && !next.has(lockedVisibleLayer)) {
+        arr.push(lockedVisibleLayer);
+      }
       onSetVisibleLayers(arr);
     },
-    [activeLayer, onSetVisibleLayers],
+    [lockedVisibleLayer, onSetVisibleLayers],
   );
 
   const toggleLayer = useCallback(
@@ -182,17 +206,27 @@ export function PcbLayersPanel({
           const color = PCB_LAYER_COLORS[node.id] ?? "#64748b";
           const isChild =
             TOP_CHILDREN.includes(node.id) || BOTTOM_CHILDREN.includes(node.id);
+          const copperLayer = isCopperLayer(node.id) ? node.id : null;
+          const copperFillActive =
+            copperLayer !== null && copperFillSet.has(copperLayer);
           return (
             <div
               key={node.id}
-              className={`group flex items-center gap-2 py-1 pr-2 ${
+              className={`group relative flex items-center gap-2 py-1 pr-2 ${
                 isChild ? "pl-7" : "pl-3"
               } ${
                 isActive
-                  ? "bg-violet-600/20 dark:bg-violet-700/30"
+                  ? "bg-slate-200/70 dark:bg-slate-800/80"
                   : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
               }`}
             >
+              {isActive ? (
+                <span
+                  aria-hidden
+                  className="absolute left-0 top-0 h-full w-1 rounded-r"
+                  style={{ backgroundColor: color }}
+                />
+              ) : null}
               <button
                 type="button"
                 onClick={() => {
@@ -202,7 +236,9 @@ export function PcbLayersPanel({
                 className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default"
                 title={
                   node.activatable
-                    ? `Set active layer: ${node.label}`
+                    ? isActive
+                      ? `Clear layer focus: ${node.label}`
+                      : `Focus layer: ${node.label}`
                     : node.label
                 }
               >
@@ -214,22 +250,49 @@ export function PcbLayersPanel({
                 <span
                   className={`truncate text-xs ${
                     isActive
-                      ? "font-semibold text-violet-700 dark:text-violet-300"
-                      : "text-slate-700 dark:text-slate-300"
+                      ? "font-semibold text-slate-950 dark:text-slate-50"
+                      : isVisible
+                        ? "text-slate-700 dark:text-slate-300"
+                        : "text-slate-400 dark:text-slate-500"
                   }`}
                 >
                   {node.label}
                 </span>
                 {isActive ? (
-                  <span className="ml-auto rounded bg-violet-500/30 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-violet-800 dark:bg-violet-400/30 dark:text-violet-200">
-                    Active
+                  <span
+                    className="ml-auto rounded px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-slate-950 ring-1 ring-black/10 dark:text-white"
+                    style={{ backgroundColor: `${color}55` }}
+                  >
+                    Focus
                   </span>
                 ) : null}
               </button>
+              {copperLayer !== null && onToggleCopperFillLayer ? (
+                <button
+                  type="button"
+                  onClick={() => onToggleCopperFillLayer(copperLayer)}
+                  title={
+                    copperFillActive ? "Hide copper fills" : "Show copper fills"
+                  }
+                  className={`relative shrink-0 rounded p-0.5 transition-colors ${
+                    copperFillActive
+                      ? "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-white"
+                      : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-100"
+                  }`}
+                >
+                  <Droplet className="h-3 w-3" />
+                  {!copperFillActive ? (
+                    <span
+                      aria-hidden
+                      className="absolute left-1/2 top-1/2 h-px w-4 -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-current"
+                    />
+                  ) : null}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => toggleLayer(node.id)}
-                disabled={isActive}
+                disabled={node.id === lockedVisibleLayer}
                 title={isVisible ? "Hide layer" : "Show layer"}
                 className="shrink-0 rounded p-0.5 text-slate-400 transition-opacity hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30 dark:hover:text-slate-100"
               >

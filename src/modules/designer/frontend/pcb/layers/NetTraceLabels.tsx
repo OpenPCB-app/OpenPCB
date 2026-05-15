@@ -22,6 +22,7 @@ interface NetTraceLabelsProps {
   netNames: Readonly<Record<string, string>>;
   layer: PcbCopperLayerId;
   inactive?: boolean;
+  opacity?: number;
   /**
    * True when the camera is X-mirrored (active layer is B.Cu) AND this layer
    * matches the active layer. Each label is rendered with `scale-x={-1}` so
@@ -41,6 +42,7 @@ export function NetTraceLabels({
   netNames,
   layer,
   inactive = false,
+  opacity,
   counterMirror = false,
 }: NetTraceLabelsProps): ReactElement | null {
   const camera = useThree((s) => s.camera);
@@ -118,7 +120,7 @@ export function NetTraceLabels({
   }, [traces, layer, netNames, pxPerMm]);
 
   if (labels.length === 0) return null;
-  const opacity = inactive ? 0.5 : 1;
+  const labelOpacity = opacity ?? (inactive ? 0.22 : 1);
   const scaleX = counterMirror ? -1 : 1;
 
   return (
@@ -132,7 +134,7 @@ export function NetTraceLabels({
             anchorX="center"
             anchorY="middle"
             rotation={[0, 0, l.angle]}
-            opacity={opacity}
+            opacity={labelOpacity}
             renderOrder={RENDER_ORDER.LABELS}
             outlineWidth={LABEL_FONT_MM * 0.18}
             outlineColor="#000000"

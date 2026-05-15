@@ -69,6 +69,15 @@ export function usePcbWorkspace(params: {
     : null;
   const [displayMode, setDisplayModeState] = useState<PcbDisplayMode>("normal");
 
+  // Per-copper-layer visual pour toggle. This is display state only for now:
+  // no persistent copper-zone entity exists yet, so keep it local per design.
+  const copperFillStorageKey = designId
+    ? `openpcb.pcb.copperFillLayers.${designId}`
+    : null;
+  const [copperFillLayers, setCopperFillLayersState] = useState<
+    ReadonlyArray<PcbCopperLayerId>
+  >([]);
+
   // Rehydrate viewSide whenever the design changes (mount or designId switch).
   useEffect(() => {
     if (!viewSideStorageKey) {
@@ -98,6 +107,35 @@ export function usePcbWorkspace(params: {
       setDisplayModeState("normal");
     }
   }, [displayModeStorageKey]);
+
+  // Rehydrate copper-fill visibility.
+  useEffect(() => {
+    if (!copperFillStorageKey) {
+      setCopperFillLayersState([]);
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(copperFillStorageKey);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+      const seen = new Set<PcbCopperLayerId>();
+      if (Array.isArray(parsed)) {
+        for (const value of parsed) {
+          if (
+            (value === "F.Cu" ||
+              value === "In1.Cu" ||
+              value === "In2.Cu" ||
+              value === "B.Cu") &&
+            !seen.has(value)
+          ) {
+            seen.add(value);
+          }
+        }
+      }
+      setCopperFillLayersState([...seen]);
+    } catch {
+      setCopperFillLayersState([]);
+    }
+  }, [copperFillStorageKey]);
 
   const refresh = useCallback(async () => {
     if (!designId) {
@@ -359,9 +397,41 @@ export function usePcbWorkspace(params: {
         ? "dim"
         : displayMode === "dim"
           ? "solo"
-          : "normal",
+        : "normal",
     );
   }, [displayMode, setDisplayMode]);
+
+  const setCopperFillLayers = useCallback(
+    (layers: ReadonlyArray<PcbCopperLayerId>) => {
+      const seen = new Set<PcbCopperLayerId>();
+      const next: PcbCopperLayerId[] = [];
+      for (const layer of layers) {
+        if (!seen.has(layer)) {
+          seen.add(layer);
+          next.push(layer);
+        }
+      }
+      setCopperFillLayersState(next);
+      if (copperFillStorageKey) {
+        try {
+          window.localStorage.setItem(copperFillStorageKey, JSON.stringify(next));
+        } catch {
+          // ignore storage errors
+        }
+      }
+    },
+    [copperFillStorageKey],
+  );
+
+  const toggleCopperFillLayer = useCallback(
+    (layer: PcbCopperLayerId) => {
+      const current = new Set(copperFillLayers);
+      if (current.has(layer)) current.delete(layer);
+      else current.add(layer);
+      setCopperFillLayers([...current]);
+    },
+    [copperFillLayers, setCopperFillLayers],
+  );
 
   const addTrace = useCallback(
     async (input: {
@@ -519,6 +589,9 @@ export function usePcbWorkspace(params: {
     displayMode,
     setDisplayMode,
     cycleDisplayMode,
+    copperFillLayers,
+    setCopperFillLayers,
+    toggleCopperFillLayer,
     refresh,
     updateBoardSize,
     setActiveLayer,

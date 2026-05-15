@@ -14,6 +14,18 @@
 - Backend: 124 tests passing (19 files). Frontend: 11 tests passing. Typecheck clean.
 - Active sprint: post-merge cleanup + dead-code removal (see plan in `.claude/plans/act-as-senior-software-resilient-meadow.md`).
 
+## Active PCB Canvas UX Optimization
+
+- [x] Add centralized PCB visual-state resolver for layer/net focus.
+- [x] Apply Flux-like route-focus after first routing click only.
+- [x] Keep same-net copper bright across layers during route focus.
+- [x] Use neutral ratsnest and white pending route preview.
+- [x] Add route hint / active-session hotkey strip.
+- [x] Improve layer panel active styling with layer-colored accent.
+- [x] Improve component selection with cyan bbox and handles.
+- [x] Make mask, paste, drills, selection, and ratsnest follow live component drag positions.
+- [x] Validate with typecheck/tests and Playwright manual review.
+
 ## Active Electron Forge + Electron-owned backend migration
 
 - [x] Migrate Electron packaging from electron-builder to Electron Forge.

@@ -1,5 +1,5 @@
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, type ReactElement } from "react";
 import * as THREE from "three";
 import type {
   DesignerPcbProjection,
@@ -23,6 +23,7 @@ import {
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
 import { TraceLayer } from "./layers/TraceLayer";
 import { TracePreviewLayer } from "./layers/TracePreviewLayer";
+import { CopperFillLayer } from "./layers/CopperFillLayer";
 import { ViaLayer } from "./layers/ViaLayer";
 import { DrillLayer } from "./layers/DrillLayer";
 import { SolderMaskLayer } from "./layers/SolderMaskLayer";
@@ -39,6 +40,12 @@ import {
 } from "./pcb-layer-visibility";
 import type { PcbSelection } from "./pcb-selection";
 import type { ViewportState } from "../types";
+import {
+  createPcbVisualState,
+  layerOpacity,
+  shouldRenderCopperLayer,
+  type PcbVisualState,
+} from "./pcb-visual-state";
 
 function FitBoardOnMount({
   outline,
@@ -152,6 +159,8 @@ function BoardOutline({
         color={tintColor ?? PCB_LAYER_COLORS["Edge.Cuts"]}
         depthTest={false}
         depthWrite={false}
+        transparent
+        opacity={0.85}
       />
     </lineSegments>
   );
@@ -159,32 +168,59 @@ function BoardOutline({
 
 function BoardFill({
   projection,
+  visualState,
 }: {
   projection: DesignerPcbProjection;
+  visualState: PcbVisualState;
 }): ReactElement {
   const { theme } = useCanvasTheme();
   const { widthMm, heightMm, centerMm } = projection.board.outline;
+  const fillColor = useMemo(() => {
+    if (visualState.boardTintOpacity <= 0) return theme.pcbCanvas.boardFill;
+    const base = new THREE.Color(theme.pcbCanvas.boardFill);
+    const tint = new THREE.Color(
+      PCB_LAYER_COLORS[visualState.activeLayer ?? "F.Cu"],
+    );
+    base.lerp(tint, visualState.boardTintOpacity);
+    return `#${base.getHexString()}`;
+  }, [theme.pcbCanvas.boardFill, visualState]);
   // NOTE: must be opaque. With `transparent: true`, three.js renders this in
   // the transparent pass *after* opaque pads / silkscreen, so a 0.95-opacity
   // fill paints over the components and washes them out. depthTest:false
   // alone doesn't change the opaque/transparent pass split.
+  //
+  // Two-pass substrate: outer slightly-lighter "shoulder" ring + inner dark
+  // FR4 plate, giving the board a subtle physical edge against the canvas
+  // background. Modern EDA tools (Flux, KiCad, Altium) all use a 1–2 px
+  // shoulder so the board reads as a 3D object even in flat 2D rendering.
+  const shoulderMm = 0.35;
   return (
-    <mesh
-      position={[centerMm.x, centerMm.y, -0.01]}
-      renderOrder={RENDER_ORDER.BOARD_FILL}
-    >
-      <planeGeometry args={[widthMm, heightMm]} />
-      <meshBasicMaterial
-        color={theme.pcbCanvas.boardFill}
-        depthTest={false}
-        depthWrite={false}
-      />
-    </mesh>
+    <group position={[centerMm.x, centerMm.y, 0]}>
+      <mesh position={[0, 0, -0.02]} renderOrder={RENDER_ORDER.BOARD_FILL - 1}>
+        <planeGeometry
+          args={[widthMm + shoulderMm * 2, heightMm + shoulderMm * 2]}
+        />
+        <meshBasicMaterial
+          color="#1f242c"
+          depthTest={false}
+          depthWrite={false}
+        />
+      </mesh>
+      <mesh position={[0, 0, -0.01]} renderOrder={RENDER_ORDER.BOARD_FILL}>
+        <planeGeometry args={[widthMm, heightMm]} />
+        <meshBasicMaterial
+          color={fillColor}
+          depthTest={false}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
   );
 }
 
 interface RatsnestLayerProps {
   projection: DesignerPcbProjection;
+  dragOverride?: ReadonlyMap<string, PcbPointMm> | null;
   selectedPlacementIds?: ReadonlySet<string>;
   highlightedNetId?: string | null;
   visible: boolean;
@@ -193,6 +229,7 @@ interface RatsnestLayerProps {
    * mode so the static ratsnest doesn't fight with the dynamic cursor-guide.
    */
   suppressNetId?: string | null;
+  visualState: PcbVisualState;
 }
 
 interface RatsnestGroup {
@@ -205,26 +242,42 @@ interface RatsnestGroup {
 
 function RatsnestLayer({
   projection,
+  dragOverride,
   selectedPlacementIds,
   highlightedNetId,
   visible,
   suppressNetId,
+  visualState,
 }: RatsnestLayerProps): ReactElement | null {
-  // Net classes by id → color (with sane fallback so a stale class id doesn't drop a segment).
-  const classColors = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const c of projection.board.netClasses) {
-      map.set(c.id, c.color);
+  const fallbackColor = "#d4d4d8";
+
+  const placementPositions = useMemo(() => {
+    const map = new Map<string, PcbPointMm>();
+    for (const placement of projection.placements) {
+      map.set(placement.id, placement.positionMm);
     }
     return map;
-  }, [projection.board.netClasses]);
-  const fallbackColor = "#e5e7eb";
+  }, [projection.placements]);
+
+  const adjustEndpoint = useCallback(
+    (placementId: string, point: PcbPointMm): PcbPointMm => {
+      const override = dragOverride?.get(placementId);
+      if (!override) return point;
+      const original = placementPositions.get(placementId);
+      if (!original) return point;
+      return {
+        x: point.x + override.x - original.x,
+        y: point.y + override.y - original.y,
+      };
+    },
+    [dragOverride, placementPositions],
+  );
 
   const groups = useMemo(() => {
     const byColor = new Map<string, { bright: number[]; dim: number[] }>();
     for (const seg of projection.ratsnest) {
       if (suppressNetId && seg.netId === suppressNetId) continue;
-      const color = classColors.get(seg.netClassId) ?? fallbackColor;
+      const color = fallbackColor;
       let bucket = byColor.get(color);
       if (!bucket) {
         bucket = { bright: [], dim: [] };
@@ -246,7 +299,9 @@ function RatsnestLayer({
         placementsScoped;
       const target =
         !scopingActive || isHighlighted || isLocal ? bucket.bright : bucket.dim;
-      target.push(seg.fromMm.x, seg.fromMm.y, 0, seg.toMm.x, seg.toMm.y, 0);
+      const fromMm = adjustEndpoint(seg.fromPlacementId, seg.fromMm);
+      const toMm = adjustEndpoint(seg.toPlacementId, seg.toMm);
+      target.push(fromMm.x, fromMm.y, 0, toMm.x, toMm.y, 0);
     }
     const result: RatsnestGroup[] = [];
     for (const [color, vals] of byColor) {
@@ -259,7 +314,7 @@ function RatsnestLayer({
     return result;
   }, [
     projection.ratsnest,
-    classColors,
+    adjustEndpoint,
     highlightedNetId,
     selectedPlacementIds,
     suppressNetId,
@@ -270,7 +325,7 @@ function RatsnestLayer({
   return (
     <>
       {groups.map((g, idx) => (
-        <RatsnestGroupRender key={idx} group={g} />
+        <RatsnestGroupRender key={idx} group={g} visualState={visualState} />
       ))}
     </>
   );
@@ -278,8 +333,10 @@ function RatsnestLayer({
 
 function RatsnestGroupRender({
   group,
+  visualState,
 }: {
   group: RatsnestGroup;
+  visualState: PcbVisualState;
 }): ReactElement {
   // Buffer geometry with computeLineDistances() so LineDashedMaterial can draw
   // dashes. lineSegments uses pairs of vertices per segment, so we let three
@@ -311,14 +368,14 @@ function RatsnestGroupRender({
         <DashedLineSegments
           geometry={brightGeom}
           color={group.color}
-          opacity={0.85}
+          opacity={visualState.ratsnestOpacity}
         />
       ) : null}
       {dimGeom ? (
         <DashedLineSegments
           geometry={dimGeom}
           color={group.color}
-          opacity={0.18}
+          opacity={visualState.ratsnestDimOpacity}
         />
       ) : null}
     </>
@@ -352,8 +409,8 @@ function DashedLineSegments({
         opacity={opacity}
         depthTest={false}
         depthWrite={false}
-        dashSize={0.6}
-        gapSize={0.4}
+        dashSize={0.45}
+        gapSize={0.35}
       />
     </lineSegments>
   );
@@ -376,13 +433,15 @@ const PCB_HIDDEN_LAYERS: ReadonlySet<string> = new Set([
 function PlacementRender({
   placement,
   positionOverrideMm,
-  activeLayer,
   visibleLayers,
+  visualState,
+  padNetIds,
 }: {
   placement: PcbPlacedPart;
   positionOverrideMm?: PcbPointMm;
-  activeLayer: PcbLayerId;
   visibleLayers: ReadonlySet<PcbLayerId>;
+  visualState: PcbVisualState;
+  padNetIds: ReadonlyMap<string, string>;
 }): ReactElement | null {
   const model = placement.footprint.preview;
   const position = positionOverrideMm ?? placement.positionMm;
@@ -407,13 +466,14 @@ function PlacementRender({
   // (pads, silk, mask, paste, courtyard, fab). `*.Cu` (through-hole) untouched.
   const layerRemap = isBackLayer ? flipLayerSide : undefined;
 
-  // Dim every layer the placement contributes when it lives on the off-active
-  // side. Using the remapped contributing-layers set means we cover all
-  // child layers with one prop.
+  // Dim every layer the placement contributes only while a PCB layer/net focus
+  // is active. With no focused layer, all visible layers render undimmed even
+  // though the board still has a routing-active copper layer.
   const dimmedLayers = useMemo<ReadonlySet<string> | undefined>(() => {
-    if (placement.layer === activeLayer) return undefined;
+    if (visualState.activeLayer === null) return undefined;
+    if (placement.layer === visualState.activeLayer) return undefined;
     return placementContributingLayers(placement.layer);
-  }, [placement.layer, activeLayer]);
+  }, [placement.layer, visualState.activeLayer]);
 
   const hiddenLayers = useMemo(() => {
     return new Set([
@@ -421,6 +481,17 @@ function PlacementRender({
       ...hiddenFootprintLayers(visibleLayers),
     ]);
   }, [visibleLayers]);
+
+  const dimmedPadNumbers = useMemo<ReadonlySet<string> | undefined>(() => {
+    if (!visualState.routeFocusActive || !visualState.activeNetId) return undefined;
+    const pads = model?.pads ?? [];
+    const dimmed = new Set<string>();
+    for (const pad of pads) {
+      const netId = padNetIds.get(`${placement.id}|${pad.number}`);
+      if (netId !== visualState.activeNetId) dimmed.add(pad.number);
+    }
+    return dimmed;
+  }, [model?.pads, padNetIds, placement.id, visualState]);
 
   // Layer-visibility filter: hide entire placement when its primary copper
   // layer is not in the visible set. Hooks stay above this return.
@@ -439,6 +510,9 @@ function PlacementRender({
           surface="pcb"
           hiddenLayers={hiddenLayers}
           dimmedLayers={dimmedLayers}
+          dimmedPadNumbers={dimmedPadNumbers}
+          padDimFactor={layerFocusDimFactor(visualState)}
+          dimmedOpacity={layerFocusDimFactor(visualState)}
           layerRemap={layerRemap}
           placeholderSubstitutions={{ reference: placement.reference }}
         />
@@ -527,17 +601,30 @@ function SelectionOutline({
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cy = (bounds.minY + bounds.maxY) / 2;
   const padMm = 0.4;
-  const points = [
-    new THREE.Vector3(cx - w / 2 - padMm, cy - h / 2 - padMm, 0),
-    new THREE.Vector3(cx + w / 2 + padMm, cy - h / 2 - padMm, 0),
-    new THREE.Vector3(cx + w / 2 + padMm, cy - h / 2 - padMm, 0),
-    new THREE.Vector3(cx + w / 2 + padMm, cy + h / 2 + padMm, 0),
-    new THREE.Vector3(cx + w / 2 + padMm, cy + h / 2 + padMm, 0),
-    new THREE.Vector3(cx - w / 2 - padMm, cy + h / 2 + padMm, 0),
-    new THREE.Vector3(cx - w / 2 - padMm, cy + h / 2 + padMm, 0),
-    new THREE.Vector3(cx - w / 2 - padMm, cy - h / 2 - padMm, 0),
+  const minX = cx - w / 2 - padMm;
+  const maxX = cx + w / 2 + padMm;
+  const minY = cy - h / 2 - padMm;
+  const maxY = cy + h / 2 + padMm;
+  const geometry = useMemo(() => {
+    const points = [
+      new THREE.Vector3(minX, minY, 0),
+      new THREE.Vector3(maxX, minY, 0),
+      new THREE.Vector3(maxX, minY, 0),
+      new THREE.Vector3(maxX, maxY, 0),
+      new THREE.Vector3(maxX, maxY, 0),
+      new THREE.Vector3(minX, maxY, 0),
+      new THREE.Vector3(minX, maxY, 0),
+      new THREE.Vector3(minX, minY, 0),
+    ];
+    return new THREE.BufferGeometry().setFromPoints(points);
+  }, [maxX, maxY, minX, minY]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  const handles: ReadonlyArray<readonly [number, number]> = [
+    [minX, minY],
+    [maxX, minY],
+    [maxX, maxY],
+    [minX, maxY],
   ];
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
   return (
     <group
       position={[position.x, position.y, 0]}
@@ -547,7 +634,62 @@ function SelectionOutline({
       <lineSegments geometry={geometry} renderOrder={RENDER_ORDER.SELECTION}>
         <SelectionOutlineMaterial />
       </lineSegments>
+      {handles.map(([x, y], index) => (
+        <SelectionHandle key={index} x={x} y={y} />
+      ))}
     </group>
+  );
+}
+
+type PcbLayerSide = "top" | "bottom";
+
+function focusedLayerSide(layer: PcbCopperLayerId | null): PcbLayerSide | null {
+  if (layer === null) return null;
+  if (layer === "B.Cu") return "bottom";
+  return "top";
+}
+
+function maskOpacityForSide(
+  visualState: PcbVisualState,
+  side: PcbLayerSide,
+): number {
+  if (visualState.routeFocusActive) return 0.16;
+  const focusedSide = focusedLayerSide(visualState.activeLayer);
+  // In all-layers mode the solder-mask pass is contextual only. A high-opacity
+  // black mask plane physically sits above bottom copper and makes B.Cu look
+  // incorrectly dimmed even when no layer is focused.
+  if (focusedSide === null) return 0.08;
+  return focusedSide === side ? 0.18 : 0.05;
+}
+
+function pasteOpacityForSide(
+  visualState: PcbVisualState,
+  side: PcbLayerSide,
+): number {
+  if (visualState.routeFocusActive) return 0.25;
+  const focusedSide = focusedLayerSide(visualState.activeLayer);
+  if (focusedSide === null) return 0.85;
+  return focusedSide === side ? 0.45 : 0.08;
+}
+
+function layerFocusDimFactor(visualState: PcbVisualState): number {
+  if (visualState.routeFocusActive) return 0.18;
+  if (visualState.activeLayer !== null) return 0.14;
+  return 0.32;
+}
+
+function SelectionHandle({ x, y }: { x: number; y: number }): ReactElement {
+  const { theme } = useCanvasTheme();
+  return (
+    <mesh position={[x, y, 0]} renderOrder={RENDER_ORDER.SELECTION + 1}>
+      <circleGeometry args={[0.16, 16]} />
+      <meshBasicMaterial
+        color={theme.pcbCanvas.selectionOutline}
+        depthTest={false}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
   );
 }
 
@@ -632,10 +774,11 @@ function DynamicRatsnestGuide({
     }
     if (!closest) return null;
     const cls = netClasses.find((c) => c.id === closest!.netClassId);
+    void cls;
     return {
       from: cursorMm,
       to: { x: closest.x, y: closest.y },
-      color: cls?.color ?? "#e5e7eb",
+      color: "#d4d4d8",
     };
   }, [ratsnest, cursorMm, netId, excludePadIds, netClasses]);
 
@@ -702,6 +845,10 @@ interface PcbSceneProps {
     pendingTailFromIndex: number;
     violationSegmentIndexes: ReadonlyArray<number>;
   } | null;
+  routeFocusActive?: boolean;
+  routeFocusLayer?: PcbCopperLayerId;
+  focusedLayer?: PcbCopperLayerId | null;
+  copperFillLayers?: ReadonlyArray<PcbCopperLayerId>;
   /**
    * Rubber-band marquee overlay rendered inside the mirror group so selection
    * rect aligns with board content in both top and bottom view.
@@ -725,6 +872,10 @@ export function PcbScene({
   displayMode = "normal",
   routeGuide = null,
   routePreview = null,
+  routeFocusActive = false,
+  routeFocusLayer,
+  focusedLayer = null,
+  copperFillLayers = [],
   marqueeOverlay = null,
   initialViewport,
   onViewportChange,
@@ -740,8 +891,12 @@ export function PcbScene({
     highlightedNetId,
     ratsnestVisible,
     viewSide,
+    displayMode,
     routeGuide,
     routePreview,
+    routeFocusActive,
+    focusedLayer,
+    copperFillLayers,
     marqueeOverlay,
     invalidate,
   ]);
@@ -751,13 +906,24 @@ export function PcbScene({
     () => visibleLayerSet(projection.board.visibleLayers),
     [projection.board.visibleLayers],
   );
+  const renderPlacements = useMemo<ReadonlyArray<PcbPlacedPart>>(() => {
+    if (!dragOverride || dragOverride.size === 0) return projection.placements;
+    return projection.placements.map((placement) => {
+      const override = dragOverride.get(placement.id);
+      if (!override) return placement;
+      return {
+        ...placement,
+        positionMm: override,
+      };
+    });
+  }, [dragOverride, projection.placements]);
   const selectedPlacements = useMemo(() => {
     if (!selectedPlacementIds || selectedPlacementIds.size === 0) return [];
-    return projection.placements.filter(
+    return renderPlacements.filter(
       (p) =>
         selectedPlacementIds.has(p.id) && isPlacementVisible(visibleLayers, p),
     );
-  }, [projection.placements, selectedPlacementIds, visibleLayers]);
+  }, [renderPlacements, selectedPlacementIds, visibleLayers]);
 
   // Bottom-view mirror: driven by the canvas's Top/Bottom layer switch.
   // Pointer events compensate via `interactionCoordinateTransform`.
@@ -769,6 +935,43 @@ export function PcbScene({
     projection.board.activeLayer === "In2.Cu"
       ? projection.board.activeLayer
       : "F.Cu";
+  const visualState = useMemo(
+    () =>
+      createPcbVisualState({
+        displayMode,
+        activeLayer: routeFocusActive
+          ? (routeFocusLayer ?? routePreview?.layer ?? activeCopperLayer)
+          : focusedLayer,
+        routeNetId: routeGuide?.netId ?? null,
+        routeFocusActive,
+      }),
+    [
+      activeCopperLayer,
+      displayMode,
+      routeFocusActive,
+      routeFocusLayer,
+      focusedLayer,
+      routeGuide?.netId,
+      routePreview?.layer,
+    ],
+  );
+  const padNetIds = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const seg of projection.ratsnest) {
+      map.set(`${seg.fromPlacementId}|${seg.fromPadNumber}`, seg.netId);
+      map.set(`${seg.toPlacementId}|${seg.toPadNumber}`, seg.netId);
+    }
+    return map;
+  }, [projection.ratsnest]);
+  const copperFillSet = useMemo(
+    () => new Set<PcbCopperLayerId>(copperFillLayers),
+    [copperFillLayers],
+  );
+  const effectiveHighlightedNetId = visualState.routeFocusActive
+    ? visualState.activeNetId
+    : visualState.activeLayer === null
+      ? highlightedNetId
+      : null;
 
   // LineSegments2 does not render correctly under a negative-scale parent
   // group (the three.js addons line renderer breaks with negative determinant
@@ -779,14 +982,19 @@ export function PcbScene({
     <>
       {(["B.Cu", "In2.Cu", "In1.Cu", "F.Cu"] as const).map((layer) =>
         isCopperLayerVisible(visibleLayers, layer) &&
-        !(displayMode === "solo" && activeCopperLayer !== layer) ? (
+        shouldRenderCopperLayer(visualState, layer) ? (
           <TraceLayer
             key={layer}
             traces={projection.traces}
             layer={layer}
-            highlightedNetId={highlightedNetId}
+            highlightedNetId={effectiveHighlightedNetId}
             selectedTraceIds={selection?.traceIds}
-            inactive={activeCopperLayer !== layer && displayMode !== "normal"}
+            inactiveOpacity={
+              visualState.routeFocusActive && visualState.activeNetId
+                ? 1
+                : layerOpacity(visualState, layer)
+            }
+            dimOpacity={visualState.inactiveNetOpacity}
             mirror={mirror}
           />
         ) : null,
@@ -809,89 +1017,116 @@ export function PcbScene({
         {onViewportChange && (
           <ViewportReporter onViewportChange={onViewportChange} />
         )}
-        {/* <GridShader gridSize={1} majorEvery={5} alpha={0.16} majorAlpha={0.12} /> */}
-        <BoardFill projection={projection} />
+        <GridShader
+          gridSize={1}
+          majorEvery={5}
+          color="#3f4754"
+          alpha={0.22}
+          majorAlpha={0.45}
+          minSpacingPx={5}
+        />
+        <BoardFill projection={projection} visualState={visualState} />
         <BoardOutline
           projection={projection}
           visibleLayers={visibleLayers}
-          tintColor={
-            displayMode === "solo"
-              ? PCB_LAYER_COLORS[projection.board.activeLayer]
-              : undefined
-          }
         />
-        {projection.placements.map((placement) => (
+        {(["B.Cu", "In2.Cu", "In1.Cu", "F.Cu"] as const).map((layer) =>
+          copperFillSet.has(layer) &&
+          isCopperLayerVisible(visibleLayers, layer) &&
+          shouldRenderCopperLayer(visualState, layer) ? (
+            <CopperFillLayer
+              key={`fill:${layer}`}
+              layer={layer}
+              outline={projection.board.outline}
+              placements={renderPlacements}
+              traces={projection.traces}
+              vias={projection.vias}
+              designRules={projection.board.designRules}
+              opacity={layerOpacity(visualState, layer)}
+            />
+          ) : null,
+        )}
+        {renderPlacements.map((placement) => (
           <PlacementRender
             key={placement.id}
             placement={placement}
-            positionOverrideMm={dragOverride?.get(placement.id)}
-            activeLayer={projection.board.activeLayer}
             visibleLayers={visibleLayers}
+            visualState={visualState}
+            padNetIds={padNetIds}
           />
         ))}
         {areViasVisible(visibleLayers) ? (
           <ViaLayer
             vias={projection.vias}
-            highlightedNetId={highlightedNetId}
+            highlightedNetId={effectiveHighlightedNetId}
             selectedViaIds={selection?.viaIds}
             activeLayer={projection.board.activeLayer}
+            focusNetAcrossLayers={visualState.routeFocusActive}
           />
         ) : null}
         {isPcbLayerVisible(visibleLayers, "Drill") ? (
           <DrillLayer
             vias={projection.vias}
-            placements={projection.placements}
+            placements={renderPlacements}
             showMountingHoleRing={isPcbLayerVisible(visibleLayers, "F.SilkS")}
           />
         ) : null}
         {isPcbLayerVisible(visibleLayers, "B.Mask") ? (
           <SolderMaskLayer
             side="bottom"
-            placements={projection.placements}
+            placements={renderPlacements}
             outline={projection.board.outline}
             expansionMm={projection.board.solderMaskExpansionMm}
+            opacity={maskOpacityForSide(visualState, "bottom")}
           />
         ) : null}
         {isPcbLayerVisible(visibleLayers, "F.Mask") ? (
           <SolderMaskLayer
             side="top"
-            placements={projection.placements}
+            placements={renderPlacements}
             outline={projection.board.outline}
             expansionMm={projection.board.solderMaskExpansionMm}
+            opacity={maskOpacityForSide(visualState, "top")}
           />
         ) : null}
         {isPcbLayerVisible(visibleLayers, "B.Paste") ? (
           <SolderPasteLayer
             side="bottom"
-            placements={projection.placements}
+            placements={renderPlacements}
             expansionMm={projection.board.solderPasteExpansionMm}
+            opacity={pasteOpacityForSide(visualState, "bottom")}
           />
         ) : null}
         {isPcbLayerVisible(visibleLayers, "F.Paste") ? (
           <SolderPasteLayer
             side="top"
-            placements={projection.placements}
+            placements={renderPlacements}
             expansionMm={projection.board.solderPasteExpansionMm}
+            opacity={pasteOpacityForSide(visualState, "top")}
           />
         ) : null}
         {(["B.Cu", "In2.Cu", "In1.Cu", "F.Cu"] as const).map((layer) =>
-          isCopperLayerVisible(visibleLayers, layer) ? (
+          isCopperLayerVisible(visibleLayers, layer) &&
+          shouldRenderCopperLayer(visualState, layer) ? (
             <NetTraceLabels
               key={layer}
               traces={projection.traces}
               netNames={projection.netNames}
               layer={layer}
-              inactive={activeCopperLayer !== layer}
+              inactive={layerOpacity(visualState, layer) < 1}
+              opacity={layerOpacity(visualState, layer)}
               counterMirror={layer === "B.Cu" ? mirror : false}
             />
           ) : null,
         )}
         <RatsnestLayer
           projection={projection}
+          dragOverride={dragOverride}
           selectedPlacementIds={selectedPlacementIds}
-          highlightedNetId={highlightedNetId}
+          highlightedNetId={effectiveHighlightedNetId}
           visible={ratsnestVisible}
           suppressNetId={routeGuide?.netId}
+          visualState={visualState}
         />
         {routeGuide ? (
           <DynamicRatsnestGuide
@@ -906,7 +1141,6 @@ export function PcbScene({
           <SelectionOutline
             key={placement.id}
             placement={placement}
-            positionOverrideMm={dragOverride?.get(placement.id)}
           />
         ))}
         <SelectionRectOverlay

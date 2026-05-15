@@ -147,6 +147,37 @@ interface PcbCanvasProps {
   onViewportChange?: (zoom: number, posX: number, posY: number) => void;
 }
 
+function RouteHintStrip({ active }: { active: boolean }): ReactElement {
+  if (!active) {
+    return (
+      <div className="rounded-full border border-slate-700/80 bg-slate-950/80 px-3 py-1 text-[11px] font-medium text-slate-300 shadow-lg backdrop-blur">
+        Click a pad, trace, or via to start routing · Esc cancel
+      </div>
+    );
+  }
+  const keys: ReadonlyArray<[string, string]> = [
+    ["F", "Flip Elbow"],
+    ["V", "Switch Layer"],
+    ["W", "Cycle Width"],
+    ["Shift", "Unconstrain"],
+    ["/", "Posture"],
+    ["Backspace", "Undo Segment"],
+    ["Esc", "Cancel"],
+  ];
+  return (
+    <div className="flex items-center gap-2 rounded-full border border-slate-700/80 bg-slate-950/90 px-3 py-1 text-[11px] text-slate-300 shadow-xl backdrop-blur">
+      {keys.map(([key, label]) => (
+        <span key={key} className="inline-flex items-center gap-1">
+          <kbd className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-100 shadow-inner">
+            {key}
+          </kbd>
+          <span>{label}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const gridEnabled = props.gridVisible ?? false;
   const snap = (v: number) => snapMm(v, gridEnabled);
@@ -162,11 +193,15 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const [widthText, setWidthText] = useState("100");
   const [heightText, setHeightText] = useState("80");
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
+  const [committedDragOverride, setCommittedDragOverride] =
+    useState<ReadonlyMap<string, PcbPointMm> | null>(null);
   const [toolMode, setToolMode] = useState<ToolMode>("select");
   const [routeState, dispatchRoute] = useReducer(
     routeToolReducer,
     initialRouteToolState,
   );
+  const [focusedLayer, setFocusedLayer] =
+    useState<PcbCopperLayerId | null>(null);
   const [cursorMm, setCursorMmState] = useState<PcbPointMm | null>(null);
   const cursorMmRef = useRef<PcbPointMm | null>(null);
   const setCursorMm = useCallback((next: PcbPointMm | null): void => {
@@ -638,6 +673,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           ? hitTrace(tracesRef.current, cursor, activeCopperLayer)
           : null;
         if (traceHit) {
+          setCommittedDragOverride(null);
           setDragSession(null);
           setSelection(
             shift
@@ -652,6 +688,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         const viaHit = viasVisible ? hitVia(viasRef.current, cursor) : null;
         if (viaHit) {
+          setCommittedDragOverride(null);
           setDragSession(null);
           setSelection(
             shift
@@ -666,6 +703,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         const hit = hitPlacement(visiblePlacements, cursor);
         if (hit) {
+          setCommittedDragOverride(null);
           if (shift) {
             // Shift-click toggles placement membership; no drag.
             setDragSession(null);
@@ -704,6 +742,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           return;
         }
         // Empty space → start marquee (no drag).
+        setCommittedDragOverride(null);
         setDragSession(null);
         marquee.beginMarquee(cursor, shift);
       },
@@ -753,19 +792,25 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             placementId: string;
             positionMm: PcbPointMm;
           }> = [];
+          const optimistic = new Map<string, PcbPointMm>();
           for (const [id, initial] of session.initialPositionsByPlacementId) {
+            const positionMm = { x: initial.x + dx, y: initial.y + dy };
             updates.push({
               placementId: id,
-              positionMm: { x: initial.x + dx, y: initial.y + dy },
+              positionMm,
             });
+            optimistic.set(id, positionMm);
           }
+          setCommittedDragOverride(optimistic);
+          const clearOptimistic = () => setCommittedDragOverride(null);
           if (updates.length === 1) {
-            void workspace.movePlacement(
-              updates[0]!.placementId,
-              updates[0]!.positionMm,
-            );
+            void workspace
+              .movePlacement(updates[0]!.placementId, updates[0]!.positionMm)
+              .finally(clearOptimistic);
           } else if (updates.length > 1) {
-            void workspace.movePlacements(updates);
+            void workspace.movePlacements(updates).finally(clearOptimistic);
+          } else {
+            clearOptimistic();
           }
         }
         setDragSession(null);
@@ -1131,6 +1176,17 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           dispatchRoute({ kind: "cycle-posture" });
           return;
         }
+        if (
+          (event.key === "f" || event.key === "F") &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey &&
+          !event.shiftKey
+        ) {
+          event.preventDefault();
+          dispatchRoute({ kind: "cycle-posture" });
+          return;
+        }
         if (event.shiftKey && event.key === " ") {
           event.preventDefault();
           dispatchRoute({
@@ -1246,6 +1302,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         setSelection(emptyPcbSelection());
         setDragSession(null);
+        setCommittedDragOverride(null);
         workspace.clearHighlight();
         if (toolMode === "route") {
           setToolMode("select");
@@ -1296,7 +1353,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     heightMm > 0;
 
   const dragOverride = useMemo<ReadonlyMap<string, PcbPointMm> | null>(() => {
-    if (!dragSession || !dragSession.moved) return null;
+    if (!dragSession || !dragSession.moved) return committedDragOverride;
     const dx = dragSession.currentPrimaryMm.x - dragSession.initialPrimaryMm.x;
     const dy = dragSession.currentPrimaryMm.y - dragSession.initialPrimaryMm.y;
     const map = new Map<string, PcbPointMm>();
@@ -1304,7 +1361,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       map.set(id, { x: initial.x + dx, y: initial.y + dy });
     }
     return map;
-  }, [dragSession]);
+  }, [committedDragOverride, dragSession]);
 
   // Live route preview: build path through committed anchors + cursor.
   const routePreview = useMemo(() => {
@@ -1437,7 +1494,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           key={props.designId}
           testId="designer-pcb-canvas"
           initialZoom={DEFAULT_PCB_ZOOM}
-          backgroundColor="#131313"
+          backgroundColor="#0e1116"
           interactionHandler={handler}
           interactionCoordinateTransform={interactionCoordinateTransform}
         >
@@ -1451,6 +1508,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             displayMode={workspace.displayMode}
             routeGuide={sceneRouteGuide}
             routePreview={sceneRoutePreview}
+            routeFocusActive={routeState.kind === "routing"}
+            routeFocusLayer={
+              routeState.kind === "routing"
+                ? routeState.session.layer
+                : activeCopperLayer
+            }
+            focusedLayer={focusedLayer}
+            copperFillLayers={workspace.copperFillLayers}
             marqueeOverlay={sceneMarqueeOverlay}
             initialViewport={props.initialViewport}
             onViewportChange={props.onViewportChange}
@@ -1603,10 +1668,17 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         </div>
       ) : null}
 
+      {toolMode === "route" ? (
+        <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
+          <RouteHintStrip active={routeState.kind === "routing"} />
+        </div>
+      ) : null}
+
       {workspace.projection && props.layersPanelTarget
         ? createPortal(
             <PcbLayersPanel
-              activeLayer={displayedCopperLayer}
+              activeLayer={focusedLayer}
+              lockedVisibleLayer={displayedCopperLayer}
               onSetActiveLayer={(layer) => {
                 if (
                   layer === "F.Cu" ||
@@ -1614,6 +1686,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                   layer === "In1.Cu" ||
                   layer === "In2.Cu"
                 ) {
+                  setFocusedLayer((prev) => (prev === layer ? null : layer));
                   void setActiveCopperLayer(layer);
                 }
               }}
@@ -1624,6 +1697,17 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               layerCount={workspace.projection.board.layerCount}
               displayMode={workspace.displayMode}
               onSetDisplayMode={workspace.setDisplayMode}
+              copperFillLayers={workspace.copperFillLayers}
+              onToggleCopperFillLayer={(layer) => {
+                const enabling = !workspace.copperFillLayers.includes(layer);
+                if (enabling && !visibleLayers.has(layer)) {
+                  void workspace.setVisibleLayers([
+                    ...(workspace.projection?.board.visibleLayers ?? []),
+                    layer,
+                  ]);
+                }
+                workspace.toggleCopperFillLayer(layer);
+              }}
             />,
             props.layersPanelTarget,
           )

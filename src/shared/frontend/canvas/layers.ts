@@ -76,44 +76,49 @@ export type PcbLayerId =
   | "Metadata";
 
 /**
- * Per-layer base color (hex). Mask layers use `#RRGGBBAA` because their
- * material is translucent. Convention follows Altium/Flux (red top copper,
- * blue bottom copper; green mask; cyan top silk / magenta bottom silk).
+ * Per-layer base color (6-char hex only — `THREE.Color.setStyle` silently
+ * falls back to white when handed 8-char `#RRGGBBAA`). Mask translucency
+ * is applied via the material's `opacity` prop, not the color string.
+ * Convention follows Altium/Flux: saturated red top copper, saturated blue
+ * bottom copper, professional green mask, pure-white top silk, soft-cyan
+ * bottom silk. Tuned for ≥4.5:1 contrast against the #15191f board substrate
+ * so every layer reads at a glance.
  */
 export const PCB_LAYER_COLORS: Record<PcbLayerId, string> = {
-  "F.Cu": "#c0392b",
-  "In1.Cu": "#d4b347",
-  "In2.Cu": "#3aa3c8",
-  "B.Cu": "#2e6fd6",
-  "F.Mask": "#1a8b3cb3",
-  "B.Mask": "#1a8b3cb3",
-  "F.Paste": "#c8a8d6",
-  "B.Paste": "#7fd0d6",
-  "F.SilkS": "#e8eef5",
-  "B.SilkS": "#d63aa3",
+  "F.Cu": "#e64545",
+  "In1.Cu": "#f59e0b",
+  "In2.Cu": "#06b6d4",
+  "B.Cu": "#3b82f6",
+  "F.Mask": "#0a0d12",
+  "B.Mask": "#0a0d12",
+  "F.Paste": "#cbd5e1",
+  "B.Paste": "#94a3b8",
+  "F.SilkS": "#f8fafc",
+  "B.SilkS": "#a5f3fc",
   "F.CrtYd": "#a78050",
   "B.CrtYd": "#604836",
   "F.Fab": "#64748b",
   "B.Fab": "#475569",
-  "Edge.Cuts": "#f0c040",
-  Drill: "#050505",
+  "Edge.Cuts": "#fbbf24",
+  Drill: "#000000",
   Metadata: "#a3a3a3",
 };
 
 /**
- * Trace-only color overrides for copper layers. Pads continue to use
- * PCB_LAYER_COLORS so footprint pads retain their static copper appearance;
- * traces use slightly more saturated red/blue/yellow/cyan so the routed
- * signal flow stays visually distinct from pad copper.
+ * Trace-only color overrides for copper layers. Traces are rendered slightly
+ * brighter / more saturated than pad fills so the signal flow remains the
+ * dominant visual element at every zoom level. Pads use PCB_LAYER_COLORS
+ * (warmer / slightly desaturated) so they read as "deposits" rather than
+ * "wires".
  */
 export const PCB_TRACE_COLORS: Record<
   "F.Cu" | "In1.Cu" | "In2.Cu" | "B.Cu",
   string
 > = {
-  "F.Cu": "#b91c1c",
-  "In1.Cu": "#ca8a04",
-  "In2.Cu": "#0e7490",
-  "B.Cu": "#1d4ed8",
+  "F.Cu": "#ff5757",
+  "In1.Cu": "#fbbf24",
+  "In2.Cu": "#22d3ee",
+  "B.Cu": "#60a5fa",
 };
 
 /** All copper layer ids in render-stack order (top → inner → bottom). */

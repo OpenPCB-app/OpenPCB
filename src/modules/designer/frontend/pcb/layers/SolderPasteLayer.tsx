@@ -16,6 +16,7 @@ interface SolderPasteLayerProps {
   /** Aperture inset (mm, per side). Typ negative (e.g. -0.05) so paste
    *  stencil is slightly smaller than the copper pad. */
   expansionMm: number;
+  opacity?: number;
 }
 
 interface PasteAperture {
@@ -34,6 +35,7 @@ export function SolderPasteLayer({
   side,
   placements,
   expansionMm,
+  opacity = 0.85,
 }: SolderPasteLayerProps): ReactElement | null {
   const apertures = useMemo(
     () => collectApertures(side, placements, expansionMm),
@@ -66,7 +68,7 @@ export function SolderPasteLayer({
           <meshBasicMaterial
             color={color}
             transparent
-            opacity={0.85}
+            opacity={opacity}
             depthTest={false}
             depthWrite={false}
             side={THREE.DoubleSide}

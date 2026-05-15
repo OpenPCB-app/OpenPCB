@@ -126,24 +126,28 @@ const PREVIEW_DARK: PreviewTheme = {
   footprintDrill: "#0f172a",
 };
 
-/** PCB canvas tokens — KiCad/Altium-conventional dark palette.
- * Single token set for both modes; the PCB tab is always dark. */
+/** PCB canvas tokens — KiCad/Altium/Flux-style dark palette.
+ * Single token set for both modes; the PCB tab is always dark.
+ *
+ * Board substrate is a slightly cool dark grey (#15191f), distinct from the
+ * canvas background so the board reads as a physical object. Drill holes are
+ * true black for max contrast over any mask/substrate. */
 const PCB_CANVAS_TOKENS: PcbCanvasTheme = {
-  background: "#131313",
-  boardFill: "#111111",
-  boardFillOpacity: 0.95,
-  ratsnestDefault: "#e5e7eb",
-  ratsnestPower: "#ef4444",
-  ratsnestGround: "#475569",
+  background: "#0e1116",
+  boardFill: "#15191f",
+  boardFillOpacity: 1,
+  ratsnestDefault: "#d4d4d8",
+  ratsnestPower: "#f87171",
+  ratsnestGround: "#64748b",
   selectionOutline: "#22d3ee",
   highlightNet: "#22d3ee",
-  refdesLabel: "#cbd5e1",
+  refdesLabel: "#f1f5f9",
   valueLabel: "#cbd5e1",
   padNumberText: "#ffffff",
-  silkscreen: "#e2e8f0",
+  silkscreen: "#f8fafc",
   fab: "#22d3ee",
-  courtyard: "#f5d142",
-  drill: "#0a0f1c",
+  courtyard: "#facc15",
+  drill: "#000000",
 };
 
 /** Build the full canvas theme for a given mode */
@@ -181,5 +185,5 @@ export function getCanvasTheme(mode: CanvasThemeMode): CanvasTheme {
 
 /** EdaCanvas default backgrounds per mode */
 export function getDefaultCanvasBackground(mode: CanvasThemeMode): string {
-  return mode === "light" ? "#f5f5f0" : "#131313";
+  return mode === "light" ? "#f5f5f0" : "#0e1116";
 }

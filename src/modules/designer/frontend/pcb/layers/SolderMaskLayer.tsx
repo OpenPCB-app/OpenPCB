@@ -20,21 +20,28 @@ interface SolderMaskLayerProps {
   outline: PcbBoardOutline;
   /** IPC-7351 mask aperture expansion (mm, per side). Typ 0.075. */
   expansionMm: number;
+  opacity?: number;
 }
 
 /**
- * Solder mask render pass — a single translucent green plane covering the
- * board with aperture cutouts (`THREE.Shape.holes`) at every pad on this
- * side. Pads expanded by `expansionMm` per IPC-7351 (typ 0.05–0.10 mm).
+ * Solder mask render pass — a single translucent plane covering the board
+ * with aperture cutouts (`THREE.Shape.holes`) at every pad on this side.
+ * Pads expanded by `expansionMm` per IPC-7351 (typ 0.05–0.10 mm).
  *
  * One mesh per side. Pads on the other side (or on the wrong copper layer)
  * are ignored. Through-hole pads emit apertures on both sides.
+ *
+ * Black-mask convention (Apple/Pi/premium consumer-electronics look). The
+ * mask renders at high opacity so the board reads as a solid black surface;
+ * copper traces (rendered in the transparent pass with higher `renderOrder`)
+ * remain fully readable on top.
  */
 export function SolderMaskLayer({
   side,
   placements,
   outline,
   expansionMm,
+  opacity = 0.7,
 }: SolderMaskLayerProps): ReactElement | null {
   const geometry = useMemo(
     () => buildMaskGeometry(side, placements, outline, expansionMm),
@@ -52,7 +59,7 @@ export function SolderMaskLayer({
       <meshBasicMaterial
         color={color}
         transparent
-        opacity={0.7}
+        opacity={opacity}
         depthTest={false}
         depthWrite={false}
         side={THREE.DoubleSide}
