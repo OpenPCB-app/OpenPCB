@@ -82,6 +82,17 @@ function layerColor(
 const ALL_CU_COLOR = "#9a6a30";
 const DIM_FACTOR = 0.3;
 
+/**
+ * Pick the canvas render order for a silkscreen / courtyard / fab stroke
+ * group. Back-side layers must draw at `BACK_SILKSCREEN` (lower) so they
+ * sit beneath bottom copper finish; front-side layers draw at
+ * `FRONT_SILKSCREEN` (above bottom + mid stack).
+ */
+function silkscreenRenderOrder(layer: string | undefined): number {
+  if (layer && layer.startsWith("B.")) return RENDER_ORDER.BACK_SILKSCREEN;
+  return RENDER_ORDER.FRONT_SILKSCREEN;
+}
+
 /** Darken a hex color to simulate dimming (multiply RGB by factor). */
 function dimHex(hex: string, factor: number): string {
   const r = Number.parseInt(hex.slice(1, 3), 16);
@@ -243,7 +254,7 @@ export function FootprintRenderLayer({
         return (
           <lineSegments
             key={group.layer}
-            renderOrder={RENDER_ORDER.FRONT_SILKSCREEN}
+            renderOrder={silkscreenRenderOrder(effectiveLayer)}
             frustumCulled={false}
           >
             <bufferGeometry>
