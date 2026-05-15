@@ -1,5 +1,6 @@
 const path = require("node:path");
 const fs = require("node:fs");
+const { execFileSync } = require("node:child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
 
@@ -16,6 +17,9 @@ module.exports = {
       unpack: "**/*.node",
     },
     prune: false,
+    // Ad-hoc signing is handled in the packageAfterCopy hook via direct
+    // codesign invocation. @electron/osx-sign's identity discovery
+    // rejects the `-` identity, so we cannot use forge's osxSign here.
     osxSign: false,
     extraResource: [
       path.join(repoRoot, "src", "core", "frontend", "dist"),
@@ -96,6 +100,31 @@ module.exports = {
           path.join(targetRoot, moduleName),
           { recursive: true, force: true },
         );
+      }
+    },
+    // Ad-hoc sign the macOS app after packaging. Without any signature,
+    // downloaded .app bundles get the "is damaged" message from
+    // Gatekeeper; an ad-hoc signature replaces it with the standard
+    // "cannot verify developer" dialog that has an Open Anyway path.
+    // Skip on non-macOS platforms (Windows/Linux runners) where
+    // codesign isn't available.
+    postPackage: async (_config, packageResult) => {
+      if (packageResult.platform !== "darwin") return;
+      for (const appOutputPath of packageResult.outputPaths) {
+        const appBundle = fs
+          .readdirSync(appOutputPath)
+          .find((entry) => entry.endsWith(".app"));
+        if (!appBundle) continue;
+        const appPath = path.join(appOutputPath, appBundle);
+        // --deep recurses into nested helpers/frameworks/.node files.
+        // --force overwrites the linker-applied default signature.
+        // identity `-` = ad-hoc (no certificate needed).
+        execFileSync(
+          "codesign",
+          ["--force", "--deep", "--sign", "-", appPath],
+          { stdio: "inherit" },
+        );
+        console.log(`[forge] ad-hoc signed ${appPath}`);
       }
     },
   },
