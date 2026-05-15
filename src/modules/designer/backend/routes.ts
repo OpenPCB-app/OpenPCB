@@ -509,10 +509,22 @@ function parsePcbRotatePlacementCommand(
 
 const PCB_LAYER_VALUES = new Set<string>([
   "F.Cu",
+  "In1.Cu",
+  "In2.Cu",
   "B.Cu",
+  "F.Mask",
+  "B.Mask",
+  "F.Paste",
+  "B.Paste",
   "F.SilkS",
   "B.SilkS",
+  "F.CrtYd",
+  "B.CrtYd",
+  "F.Fab",
+  "B.Fab",
   "Edge.Cuts",
+  "Drill",
+  "Metadata",
 ]);
 
 function parsePcbSetActiveLayerCommand(
@@ -521,7 +533,7 @@ function parsePcbSetActiveLayerCommand(
   const layer = asString(raw.layer);
   if (!layer || !PCB_LAYER_VALUES.has(layer)) {
     throw new ValidationError(
-      "command.layer must be one of F.Cu / B.Cu / F.SilkS / B.SilkS / Edge.Cuts",
+      `command.layer must be a valid PcbLayerId (got ${JSON.stringify(layer)})`,
     );
   }
   return {
@@ -640,7 +652,7 @@ function parseCreateWireJunctionCommand(
   };
 }
 
-const PCB_COPPER_LAYERS = new Set<string>(["F.Cu", "B.Cu"]);
+const PCB_COPPER_LAYERS = new Set<string>(["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"]);
 const PCB_TRACE_SEGMENT_MODES = new Set<string>([
   "manhattan-90",
   "manhattan-45",
@@ -651,7 +663,9 @@ function parsePcbAddTraceCommand(
 ): DesignerPcbAddTraceCommand {
   const layer = asString(raw.layer);
   if (!layer || !PCB_COPPER_LAYERS.has(layer)) {
-    throw new ValidationError("command.layer must be 'F.Cu' or 'B.Cu'");
+    throw new ValidationError(
+      "command.layer must be a copper layer (F.Cu / In1.Cu / In2.Cu / B.Cu)",
+    );
   }
   const widthMm = asNumber(raw.widthMm);
   if (widthMm === null || widthMm <= 0) {

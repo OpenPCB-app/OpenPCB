@@ -22,39 +22,64 @@ const TRACE_KIND = "trace";
 const VIA_KIND = "via";
 
 function isCopperLayer(value: string | null): value is PcbCopperLayerId {
-  return value === "F.Cu" || value === "B.Cu";
+  return (
+    value === "F.Cu" ||
+    value === "In1.Cu" ||
+    value === "In2.Cu" ||
+    value === "B.Cu"
+  );
 }
 
 function isSegmentMode(value: string | null): value is PcbTraceSegmentMode {
   return value === "manhattan-90" || value === "manhattan-45";
 }
 
+const ALL_PCB_LAYER_IDS: ReadonlySet<PcbLayerId> = new Set<PcbLayerId>([
+  "F.Cu",
+  "In1.Cu",
+  "In2.Cu",
+  "B.Cu",
+  "F.Mask",
+  "B.Mask",
+  "F.Paste",
+  "B.Paste",
+  "F.SilkS",
+  "B.SilkS",
+  "F.CrtYd",
+  "B.CrtYd",
+  "F.Fab",
+  "B.Fab",
+  "Edge.Cuts",
+  "Drill",
+  "Metadata",
+]);
+
 function isPcbLayerId(
   value: string | null,
 ): value is PcbBoardSettings["activeLayer"] {
-  return (
-    value === "F.Cu" ||
-    value === "B.Cu" ||
-    value === "F.SilkS" ||
-    value === "B.SilkS" ||
-    value === "Edge.Cuts"
-  );
+  return value !== null && ALL_PCB_LAYER_IDS.has(value as PcbLayerId);
 }
 
 function parseVisibleLayers(value: unknown): PcbBoardSettings["visibleLayers"] {
   const layers = (Array.isArray(value) ? value : [])
     ?.map((item) => asString(item))
     .filter(
-      (item): item is PcbBoardSettings["visibleLayers"][number] =>
-        item === "F.Cu" ||
-        item === "B.Cu" ||
-        item === "F.SilkS" ||
-        item === "B.SilkS" ||
-        item === "Edge.Cuts",
+      (item): item is PcbLayerId =>
+        item !== null && ALL_PCB_LAYER_IDS.has(item as PcbLayerId),
     );
   return layers && layers.length > 0
     ? layers
-    : ["F.Cu", "B.Cu", "F.SilkS", "B.SilkS", "Edge.Cuts"];
+    : ["F.Cu", "B.Cu", "F.SilkS", "F.Mask", "Edge.Cuts", "Drill", "Metadata"];
+}
+
+function parseDisplayMode(value: unknown): PcbBoardSettings["displayMode"] {
+  const s = asString(value);
+  return s === "dim" || s === "solo" || s === "normal" ? s : "normal";
+}
+
+function parseLayerCount(value: unknown): PcbBoardSettings["layerCount"] {
+  const n = asNumber(value);
+  return n === 4 ? 4 : 2;
 }
 
 function parsePayload(payloadJson: string): unknown {
@@ -116,6 +141,13 @@ function parseBoardSettings(value: unknown): PcbBoardSettings | null {
     tracePresets:
       tracePresets.length > 0 ? tracePresets : defaults.tracePresets,
     fabricator: parseFabricator(record.fabricator) ?? defaults.fabricator,
+    layerCount: parseLayerCount(record.layerCount),
+    displayMode: parseDisplayMode(record.displayMode),
+    solderMaskExpansionMm:
+      asNumber(record.solderMaskExpansionMm) ?? defaults.solderMaskExpansionMm,
+    solderPasteExpansionMm:
+      asNumber(record.solderPasteExpansionMm) ??
+      defaults.solderPasteExpansionMm,
     updatedAt,
   };
 }

@@ -22,7 +22,15 @@ export function createDefaultPcbBoardSettings(
       centerMm: { x: 0, y: 0 },
     },
     activeLayer: "F.Cu",
-    visibleLayers: ["F.Cu", "B.Cu", "F.SilkS", "B.SilkS", "Edge.Cuts"],
+    visibleLayers: [
+      "F.Cu",
+      "B.Cu",
+      "F.SilkS",
+      "F.Mask",
+      "Edge.Cuts",
+      "Drill",
+      "Metadata",
+    ],
     designRules: {
       clearance: {
         traceToTraceMm: 0.2,
@@ -74,6 +82,10 @@ export function createDefaultPcbBoardSettings(
     ],
     tracePresets: [...DEFAULT_TRACE_PRESETS_MM],
     fabricator: "jlcpcb_2l",
+    layerCount: 2,
+    displayMode: "normal",
+    solderMaskExpansionMm: 0.075,
+    solderPasteExpansionMm: -0.05,
     updatedAt: timestamp,
   };
 }
