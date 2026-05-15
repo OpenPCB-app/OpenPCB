@@ -1,66 +1,193 @@
-import { Eye, EyeOff } from "lucide-react";
-import { useCallback, useMemo, type ReactElement } from "react";
-import type { PcbLayerId } from "../../../../sdks";
-import { PCB_LAYER_COLORS } from "../../../../shared/frontend/canvas/layers";
-
-const LAYERS: ReadonlyArray<{
-  id: PcbLayerId;
-  label: string;
-  copper: boolean;
-}> = [
-  { id: "F.Cu", label: "Top Copper", copper: true },
-  { id: "B.Cu", label: "Bottom Copper", copper: true },
-  { id: "F.SilkS", label: "Top Silkscreen", copper: false },
-  { id: "B.SilkS", label: "Bottom Silkscreen", copper: false },
-  { id: "Edge.Cuts", label: "Edge Cuts", copper: false },
-];
+import { ChevronDown, ChevronRight, Eye, EyeOff } from "lucide-react";
+import { useCallback, useMemo, useState, type ReactElement } from "react";
+import type {
+  PcbDisplayMode,
+  PcbLayerCount,
+  PcbLayerId,
+} from "../../../../sdks";
+import {
+  PCB_LAYER_COLORS,
+  PCB_LAYER_TREE,
+  type LayerTreeNode,
+} from "../../../../shared/frontend/canvas/layers";
 
 interface PcbLayersPanelProps {
   activeLayer: PcbLayerId;
   onSetActiveLayer: (layer: PcbLayerId) => void;
   visibleLayers: ReadonlyArray<PcbLayerId>;
   onSetVisibleLayers: (layers: ReadonlyArray<PcbLayerId>) => void;
+  /** 2 → hide In1.Cu / In2.Cu nodes. */
+  layerCount?: PcbLayerCount;
+  displayMode?: PcbDisplayMode;
+  onSetDisplayMode?: (mode: PcbDisplayMode) => void;
 }
 
+const DISPLAY_MODES: ReadonlyArray<{
+  id: PcbDisplayMode;
+  label: string;
+}> = [
+  { id: "normal", label: "Normal" },
+  { id: "dim", label: "Dim" },
+  { id: "solo", label: "Solo" },
+];
+
+/**
+ * Hybrid layer panel — Flux-style grouped tree with KiCad-style display mode
+ * cycle. Group headers ("Top Layers", "Bottom Layers") toggle every child
+ * layer at once; per-layer eye icons toggle individuals. Copper layers may
+ * be set as the active layer.
+ */
 export function PcbLayersPanel({
   activeLayer,
   onSetActiveLayer,
   visibleLayers,
   onSetVisibleLayers,
+  layerCount = 2,
+  displayMode = "normal",
+  onSetDisplayMode,
 }: PcbLayersPanelProps): ReactElement {
   const visibleSet = useMemo(() => new Set(visibleLayers), [visibleLayers]);
+  const [topOpen, setTopOpen] = useState(true);
+  const [bottomOpen, setBottomOpen] = useState(true);
 
-  const toggleVisibility = useCallback(
-    (id: PcbLayerId): void => {
+  const filteredNodes = useMemo(
+    () =>
+      PCB_LAYER_TREE.filter(
+        (n) =>
+          n.kind === "group" ||
+          (n.requiresLayerCount ? layerCount >= n.requiresLayerCount : true),
+      ),
+    [layerCount],
+  );
+
+  const setVisibility = useCallback(
+    (next: ReadonlySet<PcbLayerId>) => {
+      const arr: PcbLayerId[] = [];
+      next.forEach((id) => arr.push(id));
+      // Always keep active layer visible.
+      if (!next.has(activeLayer)) arr.push(activeLayer);
+      onSetVisibleLayers(arr);
+    },
+    [activeLayer, onSetVisibleLayers],
+  );
+
+  const toggleLayer = useCallback(
+    (id: PcbLayerId) => {
       const next = new Set(visibleSet);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      // Active layer must remain visible
-      next.add(activeLayer);
-      onSetVisibleLayers(Array.from(next));
+      setVisibility(next);
     },
-    [activeLayer, onSetVisibleLayers, visibleSet],
+    [setVisibility, visibleSet],
   );
 
+  const toggleGroup = useCallback(
+    (children: ReadonlyArray<PcbLayerId>) => {
+      // If every child currently visible → hide all; otherwise show all.
+      const allVisible = children.every((c) => visibleSet.has(c));
+      const next = new Set(visibleSet);
+      for (const c of children) {
+        if (allVisible) next.delete(c);
+        else next.add(c);
+      }
+      setVisibility(next);
+    },
+    [setVisibility, visibleSet],
+  );
+
+  // Track which sub-layers belong inside expanded groups so we hide them when
+  // the group is collapsed (purely visual).
+  const TOP_CHILDREN: ReadonlyArray<PcbLayerId> = [
+    "F.SilkS",
+    "F.Paste",
+    "F.Mask",
+    "F.Cu",
+  ];
+  const BOTTOM_CHILDREN: ReadonlyArray<PcbLayerId> = [
+    "B.Cu",
+    "B.Mask",
+    "B.Paste",
+    "B.SilkS",
+  ];
+
+  const groupOpen: Record<"group:top" | "group:bottom", boolean> = {
+    "group:top": topOpen,
+    "group:bottom": bottomOpen,
+  };
+
+  const isHidden = (node: LayerTreeNode): boolean => {
+    if (node.kind === "group") return false;
+    if (TOP_CHILDREN.includes(node.id) && !groupOpen["group:top"]) return true;
+    if (BOTTOM_CHILDREN.includes(node.id) && !groupOpen["group:bottom"])
+      return true;
+    return false;
+  };
+
   return (
-    <div>
+    <div className="flex h-full flex-col">
       <div className="border-b border-slate-200 px-3 py-2 dark:border-slate-800">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           Layers
         </p>
       </div>
-      <div>
-        {LAYERS.map((layer) => {
-          const isActive = layer.id === activeLayer;
-          const isVisible = visibleSet.has(layer.id);
-          const color =
-            PCB_LAYER_COLORS[layer.id as keyof typeof PCB_LAYER_COLORS] ??
-            "#64748b";
+      <div className="flex-1 overflow-y-auto py-1">
+        {filteredNodes.map((node) => {
+          if (isHidden(node)) return null;
+          if (node.kind === "group") {
+            const open = groupOpen[node.id];
+            const allVisible = node.children.every((c) => visibleSet.has(c));
+            const anyVisible = node.children.some((c) => visibleSet.has(c));
+            return (
+              <div
+                key={node.id}
+                className="group flex items-center gap-1 px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    node.id === "group:top"
+                      ? setTopOpen((v) => !v)
+                      : setBottomOpen((v) => !v)
+                  }
+                  className="shrink-0 rounded p-0.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
+                  title={open ? "Collapse group" : "Expand group"}
+                >
+                  {open ? (
+                    <ChevronDown className="h-3 w-3" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3" />
+                  )}
+                </button>
+                <span className="flex-1 truncate text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  {node.label}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(node.children)}
+                  className="shrink-0 rounded p-0.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
+                  title={allVisible ? "Hide all" : "Show all"}
+                >
+                  {anyVisible ? (
+                    <Eye className="h-3 w-3" />
+                  ) : (
+                    <EyeOff className="h-3 w-3" />
+                  )}
+                </button>
+              </div>
+            );
+          }
 
+          const isActive = node.id === activeLayer;
+          const isVisible = visibleSet.has(node.id);
+          const color = PCB_LAYER_COLORS[node.id] ?? "#64748b";
+          const isChild =
+            TOP_CHILDREN.includes(node.id) || BOTTOM_CHILDREN.includes(node.id);
           return (
             <div
-              key={layer.id}
-              className={`group flex items-center gap-2 px-3 py-1.5 ${
+              key={node.id}
+              className={`group flex items-center gap-2 py-1 pr-2 ${
+                isChild ? "pl-7" : "pl-3"
+              } ${
                 isActive
                   ? "bg-violet-600/20 dark:bg-violet-700/30"
                   : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
@@ -69,18 +196,19 @@ export function PcbLayersPanel({
               <button
                 type="button"
                 onClick={() => {
-                  if (layer.copper) onSetActiveLayer(layer.id);
+                  if (node.activatable) onSetActiveLayer(node.id);
                 }}
-                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                disabled={!node.activatable}
+                className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default"
                 title={
-                  layer.copper
-                    ? `Set active layer: ${layer.label}`
-                    : layer.label
+                  node.activatable
+                    ? `Set active layer: ${node.label}`
+                    : node.label
                 }
               >
                 <span
                   aria-hidden
-                  className="inline-block h-3 w-3 shrink-0 rounded-sm"
+                  className="inline-block h-3 w-3 shrink-0 rounded-sm ring-1 ring-black/20"
                   style={{ backgroundColor: color }}
                 />
                 <span
@@ -90,15 +218,20 @@ export function PcbLayersPanel({
                       : "text-slate-700 dark:text-slate-300"
                   }`}
                 >
-                  {layer.label}
+                  {node.label}
                 </span>
+                {isActive ? (
+                  <span className="ml-auto rounded bg-violet-500/30 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-violet-800 dark:bg-violet-400/30 dark:text-violet-200">
+                    Active
+                  </span>
+                ) : null}
               </button>
               <button
                 type="button"
-                onClick={() => toggleVisibility(layer.id)}
+                onClick={() => toggleLayer(node.id)}
                 disabled={isActive}
                 title={isVisible ? "Hide layer" : "Show layer"}
-                className="shrink-0 rounded p-0.5 text-slate-400 opacity-0 transition-opacity hover:text-slate-600 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-0 dark:hover:text-slate-200"
+                className="shrink-0 rounded p-0.5 text-slate-400 transition-opacity hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30 dark:hover:text-slate-100"
               >
                 {isVisible ? (
                   <Eye className="h-3 w-3" />
@@ -110,6 +243,30 @@ export function PcbLayersPanel({
           );
         })}
       </div>
+      {onSetDisplayMode ? (
+        <div className="border-t border-slate-200 px-2 py-2 dark:border-slate-800">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Display Mode
+          </p>
+          <div className="flex overflow-hidden rounded border border-slate-300 dark:border-slate-700">
+            {DISPLAY_MODES.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => onSetDisplayMode(m.id)}
+                className={`flex-1 px-1.5 py-1 text-[11px] ${
+                  displayMode === m.id
+                    ? "bg-violet-600 text-white"
+                    : "bg-slate-50 text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                }`}
+                title={`Display mode: ${m.label} (Ctrl+H)`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

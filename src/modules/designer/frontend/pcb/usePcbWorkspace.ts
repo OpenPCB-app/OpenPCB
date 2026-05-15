@@ -4,6 +4,7 @@ import type {
   DesignerDispatchResult,
   DesignerPcbProjection,
   PcbCopperLayerId,
+  PcbDisplayMode,
   PcbLayerId,
   PcbPointMm,
   PcbTraceSegmentMode,
@@ -59,6 +60,15 @@ export function usePcbWorkspace(params: {
     : null;
   const [viewSide, setViewSideState] = useState<"top" | "bottom">("top");
 
+  // Display mode (Normal / Dim / Solo) — controls how non-active layers fade
+  // relative to the active layer. Mirrors KiCad's Ctrl+H cycle. Persisted in
+  // localStorage per-design; backend persistence in PcbBoardSettings is a
+  // follow-up so a missing command type doesn't block visual work.
+  const displayModeStorageKey = designId
+    ? `openpcb.pcb.displayMode.${designId}`
+    : null;
+  const [displayMode, setDisplayModeState] = useState<PcbDisplayMode>("normal");
+
   // Rehydrate viewSide whenever the design changes (mount or designId switch).
   useEffect(() => {
     if (!viewSideStorageKey) {
@@ -72,6 +82,22 @@ export function usePcbWorkspace(params: {
       setViewSideState("top");
     }
   }, [viewSideStorageKey]);
+
+  // Rehydrate displayMode.
+  useEffect(() => {
+    if (!displayModeStorageKey) {
+      setDisplayModeState("normal");
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(displayModeStorageKey);
+      setDisplayModeState(
+        raw === "dim" || raw === "solo" || raw === "normal" ? raw : "normal",
+      );
+    } catch {
+      setDisplayModeState("normal");
+    }
+  }, [displayModeStorageKey]);
 
   const refresh = useCallback(async () => {
     if (!designId) {
@@ -313,6 +339,30 @@ export function usePcbWorkspace(params: {
     setViewSide(viewSide === "bottom" ? "top" : "bottom");
   }, [setViewSide, viewSide]);
 
+  const setDisplayMode = useCallback(
+    (mode: PcbDisplayMode) => {
+      setDisplayModeState(mode);
+      if (displayModeStorageKey) {
+        try {
+          window.localStorage.setItem(displayModeStorageKey, mode);
+        } catch {
+          // ignore storage errors
+        }
+      }
+    },
+    [displayModeStorageKey],
+  );
+
+  const cycleDisplayMode = useCallback(() => {
+    setDisplayMode(
+      displayMode === "normal"
+        ? "dim"
+        : displayMode === "dim"
+          ? "solo"
+          : "normal",
+    );
+  }, [displayMode, setDisplayMode]);
+
   const addTrace = useCallback(
     async (input: {
       layer: PcbCopperLayerId;
@@ -466,6 +516,9 @@ export function usePcbWorkspace(params: {
     viewSide,
     setViewSide,
     toggleViewSide,
+    displayMode,
+    setDisplayMode,
+    cycleDisplayMode,
     refresh,
     updateBoardSize,
     setActiveLayer,

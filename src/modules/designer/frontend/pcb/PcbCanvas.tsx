@@ -49,6 +49,7 @@ import type { ViewportState } from "../types";
 import { PcbTopToolbar } from "./PcbTopToolbar";
 import { PcbBoardPanel } from "./PcbBoardPanel";
 import { PcbLayersPanel } from "./PcbLayersPanel";
+import { PcbActiveLayerPill } from "./PcbActiveLayerPill";
 import { runLiveDrc, type DrcViolation } from "./drc/live-drc";
 import {
   initialRouteToolState,
@@ -267,7 +268,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   // happens on copper.
   const activeCopperLayer: PcbCopperLayerId = useMemo(() => {
     const a = workspace.projection?.board.activeLayer;
-    return a === "B.Cu" ? "B.Cu" : "F.Cu";
+    return a === "B.Cu" || a === "In1.Cu" || a === "In2.Cu" ? a : "F.Cu";
   }, [workspace.projection?.board.activeLayer]);
   const displayedCopperLayer: PcbCopperLayerId =
     routeState.kind === "routing"
@@ -302,8 +303,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       for (const p of visiblePlacements) {
         if (placementHit(p, rect)) placementIds.add(p.id);
       }
+      const aLayer = workspace.projection?.board.activeLayer;
       const layer: PcbCopperLayerId =
-        workspace.projection?.board.activeLayer === "B.Cu" ? "B.Cu" : "F.Cu";
+        aLayer === "B.Cu" || aLayer === "In1.Cu" || aLayer === "In2.Cu"
+          ? aLayer
+          : "F.Cu";
       for (const t of tracesRef.current) {
         if (t.layer !== layer) continue;
         if (!isTraceVisible(visibleLayers, t)) continue;
@@ -1215,6 +1219,17 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         workspace.toggleRatsnestVisible();
         return;
       }
+      // Display-mode cycle (Normal → Dim → Solo) — KiCad's Ctrl+H.
+      if (
+        (event.key === "h" || event.key === "H") &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey
+      ) {
+        event.preventDefault();
+        workspace.cycleDisplayMode();
+        return;
+      }
       if (event.key === "`") {
         event.preventDefault();
         if (workspace.highlightedNetId) {
@@ -1433,6 +1448,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             highlightedNetId={workspace.highlightedNetId}
             ratsnestVisible={workspace.ratsnestVisible}
             viewSide={workspace.viewSide}
+            displayMode={workspace.displayMode}
             routeGuide={sceneRouteGuide}
             routePreview={sceneRoutePreview}
             marqueeOverlay={sceneMarqueeOverlay}
@@ -1440,6 +1456,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             onViewportChange={props.onViewportChange}
           />
         </EdaCanvas>
+      ) : null}
+      {workspace.projection ? (
+        <div className="pointer-events-none absolute left-3 bottom-3 z-20">
+          <PcbActiveLayerPill layer={displayedCopperLayer} />
+        </div>
       ) : null}
       {workspace.projection && mirrorActive ? (
         <>
@@ -1572,7 +1593,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             className="inline-block h-2 w-2 rounded-full"
             style={{ backgroundColor: PCB_LAYER_COLORS[displayedCopperLayer] }}
           />
-          {displayedCopperLayer === "F.Cu" ? "Top" : "Bottom"}
+          {displayedCopperLayer === "F.Cu"
+            ? "Top"
+            : displayedCopperLayer === "In1.Cu"
+              ? "Mid 1"
+              : displayedCopperLayer === "In2.Cu"
+                ? "Mid 2"
+                : "Bottom"}
         </div>
       ) : null}
 
@@ -1581,7 +1608,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             <PcbLayersPanel
               activeLayer={displayedCopperLayer}
               onSetActiveLayer={(layer) => {
-                if (layer === "F.Cu" || layer === "B.Cu") {
+                if (
+                  layer === "F.Cu" ||
+                  layer === "B.Cu" ||
+                  layer === "In1.Cu" ||
+                  layer === "In2.Cu"
+                ) {
                   void setActiveCopperLayer(layer);
                 }
               }}
@@ -1589,6 +1621,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               onSetVisibleLayers={(layers) =>
                 void workspace.setVisibleLayers(layers)
               }
+              layerCount={workspace.projection.board.layerCount}
+              displayMode={workspace.displayMode}
+              onSetDisplayMode={workspace.setDisplayMode}
             />,
             props.layersPanelTarget,
           )

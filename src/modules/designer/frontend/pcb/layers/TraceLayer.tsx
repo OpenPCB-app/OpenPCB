@@ -54,7 +54,13 @@ export function TraceLayer({
   mirror = false,
 }: TraceLayerProps): ReactElement | null {
   const renderOrder =
-    layer === "F.Cu" ? RENDER_ORDER.FRONT_COPPER : RENDER_ORDER.BACK_COPPER;
+    layer === "F.Cu"
+      ? RENDER_ORDER.FRONT_COPPER
+      : layer === "In1.Cu"
+        ? RENDER_ORDER.IN1_COPPER
+        : layer === "In2.Cu"
+          ? RENDER_ORDER.IN2_COPPER
+          : RENDER_ORDER.BACK_COPPER;
   const baseColor = PCB_TRACE_COLORS[layer];
   const inactiveScale = inactive ? 0.5 : 1;
 

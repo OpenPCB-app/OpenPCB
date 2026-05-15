@@ -35,7 +35,11 @@ export function ViaLayer({
 }: ViaLayerProps): ReactElement | null {
   const { theme } = useCanvasTheme();
   if (vias.length === 0) return null;
-  const activeIsCopper = activeLayer === "F.Cu" || activeLayer === "B.Cu";
+  const activeIsCopper =
+    activeLayer === "F.Cu" ||
+    activeLayer === "In1.Cu" ||
+    activeLayer === "In2.Cu" ||
+    activeLayer === "B.Cu";
   return (
     <>
       {vias.map((via) => {

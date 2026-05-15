@@ -24,6 +24,9 @@ import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
 import { TraceLayer } from "./layers/TraceLayer";
 import { TracePreviewLayer } from "./layers/TracePreviewLayer";
 import { ViaLayer } from "./layers/ViaLayer";
+import { DrillLayer } from "./layers/DrillLayer";
+import { SolderMaskLayer } from "./layers/SolderMaskLayer";
+import { SolderPasteLayer } from "./layers/SolderPasteLayer";
 import { NetTraceLabels } from "./layers/NetTraceLabels";
 import { SelectionRectOverlay } from "../../../../shared/frontend/canvas/selection";
 import {
@@ -111,9 +114,12 @@ function ViewportReporter({
 function BoardOutline({
   projection,
   visibleLayers,
+  tintColor,
 }: {
   projection: DesignerPcbProjection;
   visibleLayers: ReadonlySet<PcbLayerId>;
+  /** Optional active-layer color override (Flux convention in Solo mode). */
+  tintColor?: string;
 }): ReactElement | null {
   const geometry = useMemo(() => {
     const { widthMm, heightMm, centerMm } = projection.board.outline;
@@ -143,7 +149,7 @@ function BoardOutline({
   return (
     <lineSegments geometry={geometry} renderOrder={RENDER_ORDER.BOARD_OUTLINE}>
       <lineBasicMaterial
-        color={PCB_LAYER_COLORS["Edge.Cuts"]}
+        color={tintColor ?? PCB_LAYER_COLORS["Edge.Cuts"]}
         depthTest={false}
         depthWrite={false}
       />
@@ -667,6 +673,13 @@ interface PcbSceneProps {
   /** Board view orientation. `"bottom"` mirrors the scene horizontally. */
   viewSide?: "top" | "bottom";
   /**
+   * Non-active layer emphasis (KiCad-style Normal/Dim/Solo). When unset,
+   * defaults to `"normal"` and matches pre-Phase-6 behavior. Trace and via
+   * layers consume this via the existing `inactive` channel — Solo collapses
+   * non-active copper to hidden, Dim keeps the existing 50%-opacity dim.
+   */
+  displayMode?: "normal" | "dim" | "solo";
+  /**
    * Active route session for dynamic ratsnest guidance. When set, the static
    * ratsnest segments anchored at the route's start pad are hidden and a
    * single dashed airwire is drawn from `cursorMm` to the closest other pad
@@ -709,6 +722,7 @@ export function PcbScene({
   highlightedNetId,
   ratsnestVisible = true,
   viewSide = "top",
+  displayMode = "normal",
   routeGuide = null,
   routePreview = null,
   marqueeOverlay = null,
@@ -750,7 +764,11 @@ export function PcbScene({
   const mirror = viewSide === "bottom";
   const sceneScaleX = mirror ? -1 : 1;
   const activeCopperLayer: PcbCopperLayerId =
-    projection.board.activeLayer === "B.Cu" ? "B.Cu" : "F.Cu";
+    projection.board.activeLayer === "B.Cu" ||
+    projection.board.activeLayer === "In1.Cu" ||
+    projection.board.activeLayer === "In2.Cu"
+      ? projection.board.activeLayer
+      : "F.Cu";
 
   // LineSegments2 does not render correctly under a negative-scale parent
   // group (the three.js addons line renderer breaks with negative determinant
@@ -759,26 +777,20 @@ export function PcbScene({
   // their geometry instead. All other primitives stay inside the group.
   return (
     <>
-      {isCopperLayerVisible(visibleLayers, "B.Cu") ? (
-        <TraceLayer
-          traces={projection.traces}
-          layer="B.Cu"
-          highlightedNetId={highlightedNetId}
-          selectedTraceIds={selection?.traceIds}
-          inactive={activeCopperLayer === "F.Cu"}
-          mirror={mirror}
-        />
-      ) : null}
-      {isCopperLayerVisible(visibleLayers, "F.Cu") ? (
-        <TraceLayer
-          traces={projection.traces}
-          layer="F.Cu"
-          highlightedNetId={highlightedNetId}
-          selectedTraceIds={selection?.traceIds}
-          inactive={activeCopperLayer === "B.Cu"}
-          mirror={mirror}
-        />
-      ) : null}
+      {(["B.Cu", "In2.Cu", "In1.Cu", "F.Cu"] as const).map((layer) =>
+        isCopperLayerVisible(visibleLayers, layer) &&
+        !(displayMode === "solo" && activeCopperLayer !== layer) ? (
+          <TraceLayer
+            key={layer}
+            traces={projection.traces}
+            layer={layer}
+            highlightedNetId={highlightedNetId}
+            selectedTraceIds={selection?.traceIds}
+            inactive={activeCopperLayer !== layer && displayMode !== "normal"}
+            mirror={mirror}
+          />
+        ) : null,
+      )}
       {routePreview ? (
         <TracePreviewLayer
           pointsNm={routePreview.pointsNm}
@@ -799,7 +811,15 @@ export function PcbScene({
         )}
         {/* <GridShader gridSize={1} majorEvery={5} alpha={0.16} majorAlpha={0.12} /> */}
         <BoardFill projection={projection} />
-        <BoardOutline projection={projection} visibleLayers={visibleLayers} />
+        <BoardOutline
+          projection={projection}
+          visibleLayers={visibleLayers}
+          tintColor={
+            displayMode === "solo"
+              ? PCB_LAYER_COLORS[projection.board.activeLayer]
+              : undefined
+          }
+        />
         {projection.placements.map((placement) => (
           <PlacementRender
             key={placement.id}
@@ -817,24 +837,55 @@ export function PcbScene({
             activeLayer={projection.board.activeLayer}
           />
         ) : null}
-        {isCopperLayerVisible(visibleLayers, "B.Cu") ? (
-          <NetTraceLabels
-            traces={projection.traces}
-            netNames={projection.netNames}
-            layer="B.Cu"
-            inactive={activeCopperLayer === "F.Cu"}
-            counterMirror={mirror}
+        {isPcbLayerVisible(visibleLayers, "Drill") ? (
+          <DrillLayer
+            vias={projection.vias}
+            placements={projection.placements}
+            showMountingHoleRing={isPcbLayerVisible(visibleLayers, "F.SilkS")}
           />
         ) : null}
-        {isCopperLayerVisible(visibleLayers, "F.Cu") ? (
-          <NetTraceLabels
-            traces={projection.traces}
-            netNames={projection.netNames}
-            layer="F.Cu"
-            inactive={activeCopperLayer === "B.Cu"}
-            counterMirror={false}
+        {isPcbLayerVisible(visibleLayers, "B.Mask") ? (
+          <SolderMaskLayer
+            side="bottom"
+            placements={projection.placements}
+            outline={projection.board.outline}
+            expansionMm={projection.board.solderMaskExpansionMm}
           />
         ) : null}
+        {isPcbLayerVisible(visibleLayers, "F.Mask") ? (
+          <SolderMaskLayer
+            side="top"
+            placements={projection.placements}
+            outline={projection.board.outline}
+            expansionMm={projection.board.solderMaskExpansionMm}
+          />
+        ) : null}
+        {isPcbLayerVisible(visibleLayers, "B.Paste") ? (
+          <SolderPasteLayer
+            side="bottom"
+            placements={projection.placements}
+            expansionMm={projection.board.solderPasteExpansionMm}
+          />
+        ) : null}
+        {isPcbLayerVisible(visibleLayers, "F.Paste") ? (
+          <SolderPasteLayer
+            side="top"
+            placements={projection.placements}
+            expansionMm={projection.board.solderPasteExpansionMm}
+          />
+        ) : null}
+        {(["B.Cu", "In2.Cu", "In1.Cu", "F.Cu"] as const).map((layer) =>
+          isCopperLayerVisible(visibleLayers, layer) ? (
+            <NetTraceLabels
+              key={layer}
+              traces={projection.traces}
+              netNames={projection.netNames}
+              layer={layer}
+              inactive={activeCopperLayer !== layer}
+              counterMirror={layer === "B.Cu" ? mirror : false}
+            />
+          ) : null,
+        )}
         <RatsnestLayer
           projection={projection}
           selectedPlacementIds={selectedPlacementIds}
