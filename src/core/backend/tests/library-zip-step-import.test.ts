@@ -7,6 +7,13 @@ import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
+import type { LibrarySDK } from "../../../sdks";
+import { MODULE_SDK_TOKENS } from "../../../sdks";
+
+interface LibraryHarness {
+  server: ReturnType<typeof createHttpServer>;
+  librarySdk: LibrarySDK;
+}
 
 function isolateTestDb(testLabel: string): void {
   resetSharedSqliteForTesting();
@@ -103,17 +110,24 @@ function createStoredZip(entries: Array<{ name: string; bytes: Uint8Array }>): U
   return concatBytes([local, central, end]);
 }
 
-async function createLibraryServer(testLabel: string) {
+async function createLibraryHarness(testLabel: string): Promise<LibraryHarness> {
   isolateTestDb(testLabel);
   const repoRoot = path.resolve(import.meta.dir, "../../..");
   const moduleRegistry = new ModuleRouterRegistry();
   const moduleRuntime = new ModuleRuntime({ moduleRegistry, workspaceRoot: repoRoot });
   await moduleRuntime.bootstrap();
-  return createHttpServer({
+  const sdkRegistry = moduleRuntime.getSdkRegistry();
+  const librarySdk = sdkRegistry.resolve<LibrarySDK>(MODULE_SDK_TOKENS.LIBRARY);
+  const server = createHttpServer({
     diagnosticsStore: new DiagnosticsStore(),
     moduleRegistry,
     moduleRuntime,
   });
+  return { server, librarySdk };
+}
+
+async function createLibraryServer(testLabel: string) {
+  return (await createLibraryHarness(testLabel)).server;
 }
 
 async function readKicadFixtures(): Promise<{
@@ -186,6 +200,42 @@ ${rightPads}
     (scale (xyz 1 1 1))
     (rotate (xyz 0 0 0))
   )
+)
+`;
+}
+
+function createHiddenPinAlignmentSymbolFixture(): string {
+  return `(kicad_symbol_lib
+  (version 20231120)
+  (generator "openpcb_test")
+  (symbol "HIDDENSHIFT"
+    (property "Reference" "U" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "HIDDENSHIFT" (at 0 -2.54 0) (effects (font (size 1.27 1.27))))
+    (property "Footprint" "HIDDENSHIFT_FP" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
+    (symbol "HIDDENSHIFT_0_1"
+      (rectangle (start -5.08 5.08) (end 5.08 -5.08) (stroke (width 0.254) (type default)) (fill (type none)))
+    )
+    (symbol "HIDDENSHIFT_1_1"
+      (pin passive line (at -7.62 2.54 0) (length 2.54) (name "VISIBLE_A" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))
+      (pin power_in line (at -7.62 2.54 0) (length 2.54) (name "HIDDEN_PWR" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27)))) hide)
+      (pin passive line (at -7.62 0 0) (length 2.54) (name "VISIBLE_B" (effects (font (size 1.27 1.27)))) (number "3" (effects (font (size 1.27 1.27)))))
+      (pin passive line (at 7.62 0 180) (length 2.54) (name "VISIBLE_C" (effects (font (size 1.27 1.27)))) (number "4" (effects (font (size 1.27 1.27)))))
+    )
+  )
+)
+`;
+}
+
+function createHiddenPinAlignmentFootprintFixture(): string {
+  return `(footprint "HIDDENSHIFT_FP"
+  (version 20240108)
+  (generator "openpcb_test")
+  (layer "F.Cu")
+  (attr smd)
+  (pad "1" smd rect (at -1.5 1.5) (size 0.8 0.8) (layers "F.Cu" "F.Mask" "F.Paste"))
+  (pad "2" smd rect (at -0.5 1.5) (size 0.8 0.8) (layers "F.Cu" "F.Mask" "F.Paste"))
+  (pad "3" smd rect (at 0.5 1.5) (size 0.8 0.8) (layers "F.Cu" "F.Mask" "F.Paste"))
+  (pad "4" smd rect (at 1.5 1.5) (size 0.8 0.8) (layers "F.Cu" "F.Mask" "F.Paste"))
 )
 `;
 }
@@ -354,6 +404,46 @@ describe("library KiCad ZIP STEP import", () => {
     };
     expect(metaBody.data?.status).toBe("missing");
     expect(metaBody.data?.sourceStepSha256).toBeNull();
+  });
+
+  test("keeps preview pins aligned when hidden pins remain in placement", async () => {
+    const { server, librarySdk } = await createLibraryHarness(
+      "library-zip-hidden-pin-alignment",
+    );
+    const encoder = new TextEncoder();
+    const zipBytes = createStoredZip([
+      {
+        name: "HIDDENSHIFT.kicad_sym",
+        bytes: encoder.encode(createHiddenPinAlignmentSymbolFixture()),
+      },
+      {
+        name: "HIDDENSHIFT_FP.kicad_mod",
+        bytes: encoder.encode(createHiddenPinAlignmentFootprintFixture()),
+      },
+    ]);
+
+    const importResponse = await importZip(server, zipBytes, "HIDDENSHIFT.zip");
+    expect(importResponse.status).toBe(201);
+    const importBody = (await importResponse.json()) as {
+      data?: { componentId?: string };
+    };
+    const componentId = importBody.data?.componentId;
+    if (!componentId) throw new Error("ZIP import did not return component id");
+
+    const placement = await librarySdk.resolveComponentForPlacement(componentId);
+    expect(placement).not.toBeNull();
+    expect(placement?.symbol.pins.length).toBe(4);
+    expect(placement?.symbol.preview.pins.length).toBe(3);
+
+    const pinsByOrigin = new Map(
+      placement!.symbol.pins.map((pin) => [pin.originPinKey, pin]),
+    );
+    for (const previewPin of placement!.symbol.preview.pins) {
+      const localPin = pinsByOrigin.get(previewPin.id);
+      expect(localPin).toBeDefined();
+      expect(previewPin.anchor.x).toBeCloseTo(localPin!.localPositionMm.x, 6);
+      expect(previewPin.anchor.y).toBeCloseTo(localPin!.localPositionMm.y, 6);
+    }
   });
 
   test("imports ATTINY ZIP and queues its orphan STEP by symbol name", async () => {

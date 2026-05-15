@@ -231,22 +231,58 @@ function alignPreviewToPinSnapshot(
     return preview;
   }
 
-  const pairs = Math.min(preview.pins.length, pins.length);
-  let deltaX = 0;
-  let deltaY = 0;
-  for (let index = 0; index < pairs; index += 1) {
-    const previewPin = preview.pins[index];
-    const localPin = pins[index];
-    if (!previewPin || !localPin) {
-      continue;
+  const pinsByKey = new Map<
+    string,
+    LibrarySymbolPlacementSnapshot["pins"][number]
+  >();
+  for (const pin of pins) {
+    pinsByKey.set(pin.originPinKey, pin);
+    const number = pin.number?.trim();
+    if (number) {
+      pinsByKey.set(`u${pin.unit}:${number}`, pin);
     }
-    deltaX += previewPin.anchor.x - localPin.localPositionMm.x;
-    deltaY += previewPin.anchor.y - localPin.localPositionMm.y;
   }
 
-  const dx = deltaX / pairs;
-  const dy = deltaY / pairs;
+  const deltas: Array<{ dx: number; dy: number }> = [];
+  for (const previewPin of preview.pins) {
+    const number = previewPin.number?.trim();
+    const localPin =
+      pinsByKey.get(previewPin.id) ??
+      (number ? pinsByKey.get(`u${previewPin.unit}:${number}`) : undefined) ??
+      pinsByKey.get(`u${previewPin.unit}:${previewPin.id}`);
+
+    if (!localPin) {
+      continue;
+    }
+    deltas.push({
+      dx: previewPin.anchor.x - localPin.localPositionMm.x,
+      dy: previewPin.anchor.y - localPin.localPositionMm.y,
+    });
+  }
+
+  if (deltas.length === 0) {
+    return preview;
+  }
+
+  let deltaX = 0;
+  let deltaY = 0;
+  for (const delta of deltas) {
+    deltaX += delta.dx;
+    deltaY += delta.dy;
+  }
+
+  const dx = deltaX / deltas.length;
+  const dy = deltaY / deltas.length;
   if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) {
+    return preview;
+  }
+
+  const maxDeviation = Math.max(
+    ...deltas.map((delta) =>
+      Math.max(Math.abs(delta.dx - dx), Math.abs(delta.dy - dy)),
+    ),
+  );
+  if (maxDeviation > 1e-3) {
     return preview;
   }
 
