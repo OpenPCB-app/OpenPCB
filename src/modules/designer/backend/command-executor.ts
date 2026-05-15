@@ -60,6 +60,7 @@ import {
   schematicWires,
 } from "./schema";
 import {
+  deletePcbPlacement,
   deletePcbTrace,
   deletePcbVia,
   ensurePcbBoardSettings,
@@ -74,6 +75,7 @@ import {
   updatePcbActiveLayer,
   updatePcbBoardSize,
   updatePcbTrace,
+  updatePcbViewState,
   updatePcbVisibleLayers,
 } from "./pcb/pcb-store";
 import {
@@ -540,6 +542,23 @@ export function executeDesignerCommand({
     const reason = validateTracePath(sanitized, existing.segmentMode);
     if (reason) return invalidPcbTrace(reason);
     updatePcbTrace(tx, { ...existing, pointsNm: sanitized }, timestamp);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_set_view_state") {
+    updatePcbViewState({
+      db: tx,
+      designId,
+      patch: command.patch,
+      timestamp,
+    });
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_delete_placement") {
+    const existing = loadPcbPlacementById(tx, designId, command.placementId);
+    if (!existing) return pcbPlacementNotFound(command.placementId);
+    deletePcbPlacement(tx, command.placementId);
     return okResult(bumpRevision(tx, designId, revision, timestamp), null);
   }
 

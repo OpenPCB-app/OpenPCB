@@ -1,10 +1,11 @@
 import { useEffect, useMemo, type ReactElement } from "react";
 import * as THREE from "three";
-import type { PcbPlacedPart } from "../../../../../sdks";
+import type { PcbPlacedPart, PcbViewSide } from "../../../../../sdks";
 import { placementMirrorX } from "../../../../../sdks/designer/pcb-helpers";
 import {
   PCB_LAYER_COLORS,
   RENDER_ORDER,
+  effectiveRenderOrder,
 } from "../../../../../shared/frontend/canvas/layers";
 import { padAperturePath } from "../../../../../shared/frontend/canvas/scene/pad-aperture-geometry";
 
@@ -17,6 +18,8 @@ interface SolderPasteLayerProps {
    *  stencil is slightly smaller than the copper pad. */
   expansionMm: number;
   opacity?: number;
+  /** Side-flip indicator. Drives renderOrder reversal (spec §5.2). */
+  viewSide?: PcbViewSide;
 }
 
 interface PasteAperture {
@@ -36,6 +39,7 @@ export function SolderPasteLayer({
   placements,
   expansionMm,
   opacity = 0.85,
+  viewSide = "top",
 }: SolderPasteLayerProps): ReactElement | null {
   const apertures = useMemo(
     () => collectApertures(side, placements, expansionMm),
@@ -53,8 +57,12 @@ export function SolderPasteLayer({
 
   if (geometries.length === 0) return null;
   const color = PCB_LAYER_COLORS[side === "top" ? "F.Paste" : "B.Paste"];
-  const renderOrder =
-    side === "top" ? RENDER_ORDER.F_PASTE : RENDER_ORDER.B_PASTE;
+  const renderOrder = effectiveRenderOrder(
+    side === "top" ? "F.Paste" : "B.Paste",
+    viewSide,
+    "object",
+  );
+  void RENDER_ORDER;
   return (
     <group renderOrder={renderOrder}>
       {geometries.map((g, i) => (

@@ -108,6 +108,45 @@ export type PcbLayerCount = 2 | 4;
 
 export type PcbTraceSegmentMode = "manhattan-90" | "manhattan-45";
 
+/** Side of the board the viewer is looking at. Drives X-mirror + z-flip. */
+export type PcbViewSide = "top" | "bottom";
+
+/**
+ * Built-in layer-set presets. Match the four cards the user picked during
+ * planning. `custom` = user-modified visibility set (no preset matched). The
+ * canvas tracks the active preset so the panel can highlight it; switching
+ * presets replaces visibleLayers + activeLayer + (optionally) viewSide.
+ */
+export type PcbLayerPreset =
+  | "custom"
+  | "top-side"
+  | "bottom-side"
+  | "all-copper"
+  | "assembly";
+
+/**
+ * Per-design persisted display state. Carries everything the layer panel /
+ * canvas chrome needs to re-render identically on reload. Additive: missing
+ * fields fall back to defaults (no destructive migration).
+ *
+ *  - copperFillLayers: which copper layers render their pour mesh.
+ *  - copperFillPourNetIds: pour-net per copper layer; objects on the same net
+ *    merge silently into the pour; different-net objects render with a visible
+ *    clearance halo (spec §7). null/undefined = no merging (every object haloed).
+ *  - perLayerOpacity: 0..1 override applied on top of displayMode dimming.
+ *  - layerPreset: tracks which built-in preset (if any) the visibleLayers set
+ *    currently matches; UI uses it to highlight the active preset chip.
+ */
+export interface PcbViewState {
+  displayMode: PcbDisplayMode;
+  viewSide: PcbViewSide;
+  copperFillLayers: PcbCopperLayerId[];
+  copperFillPourNetIds: Partial<Record<PcbCopperLayerId, string | null>>;
+  perLayerOpacity: Partial<Record<PcbLayerId, number>>;
+  layerPreset: PcbLayerPreset;
+  ratsnestVisible: boolean;
+}
+
 export interface PcbPointMm {
   x: number;
   y: number;
@@ -186,6 +225,12 @@ export interface PcbBoardSettings {
    * than pad. Typical −0.05 mm. Affects SMD pads only (THT skipped).
    */
   solderPasteExpansionMm: number;
+  /**
+   * Per-design display state (view-side, fill toggles, presets, opacities…).
+   * Optional for backward-compat with pre-viewState saves; readers must
+   * apply a default fallback when this field is absent.
+   */
+  viewState?: PcbViewState;
   updatedAt: string;
 }
 
@@ -609,6 +654,27 @@ export interface DesignerPcbUpdateTraceGeometryCommand {
   pointsNm: Array<{ x: number; y: number }>;
 }
 
+/**
+ * Replace the per-design display state (viewSide / displayMode / preset / fill
+ * toggles / opacities). Front-end debounces ~200ms so slider drags don't
+ * spam undo history. The command persists straight into
+ * `PcbBoardSettings.viewState`; partial updates merge into existing state.
+ */
+export interface DesignerPcbSetViewStateCommand {
+  type: "pcb_set_view_state";
+  patch: Partial<PcbViewState>;
+}
+
+/**
+ * Delete a placement (component) from the PCB. Schematic-side reference is
+ * unaffected — auto-sync will re-create the placement on next projection
+ * unless the schematic part is also removed.
+ */
+export interface DesignerPcbDeletePlacementCommand {
+  type: "pcb_delete_placement";
+  placementId: string;
+}
+
 export type DesignerCommand =
   | DesignerPlacePartCommand
   | DesignerCreateWireCommand
@@ -639,7 +705,9 @@ export type DesignerCommand =
   | DesignerPcbAddTraceViaCommand
   | DesignerPcbDeleteTraceCommand
   | DesignerPcbDeleteViaCommand
-  | DesignerPcbUpdateTraceGeometryCommand;
+  | DesignerPcbUpdateTraceGeometryCommand
+  | DesignerPcbSetViewStateCommand
+  | DesignerPcbDeletePlacementCommand;
 
 export type DesignerCommandEnvelope = CommandEnvelope<DesignerCommand>;
 

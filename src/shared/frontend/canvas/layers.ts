@@ -5,6 +5,15 @@
  *
  *   bottom side → inner copper → drill → top side → annotations.
  *
+ * Each copper layer carries two slots — `*_COPPER_FILL` (pour mesh) and
+ * `*_COPPER` (traces / pad copper / vias) — so the panel's per-layer fill
+ * toggle does not collide with the object visibility toggle.
+ *
+ * Side-mode flip (top↔bottom) reverses physical-layer z but leaves
+ * annotation layers (drill, edge, metadata, ratsnest, labels, selection,
+ * preview, grid, board fill) untouched. Use `effectiveRenderOrder()` to read
+ * the side-aware value.
+ *
  * Selection / preview always win.
  */
 export const RENDER_ORDER = {
@@ -12,13 +21,16 @@ export const RENDER_ORDER = {
   GRID: -2,
   BOARD_FILL: -1,
   // Bottom side (drawn first / lowest)
+  B_COPPER_FILL: -0.35,
   B_COPPER: 0,
   B_MASK: 1,
   B_PASTE: 2,
   B_SILK: 3,
   B_FAB: 4,
   // Inner copper (between bottom finish and top finish)
+  IN2_COPPER_FILL: 4.65,
   IN2_COPPER: 5,
+  IN1_COPPER_FILL: 5.65,
   IN1_COPPER: 6,
   // Drill: above all copper, below top finish, visible through mask cutouts
   DRILL: 7,
@@ -27,6 +39,7 @@ export const RENDER_ORDER = {
   F_SILK: 9,
   F_MASK: 10,
   F_PASTE: 11,
+  F_COPPER_FILL: 11.65,
   F_COPPER: 12,
   // Annulus overlay (mounting-hole pink ring on top silk)
   ANNULAR: 13,
@@ -85,10 +98,10 @@ export type PcbLayerId =
  * so every layer reads at a glance.
  */
 export const PCB_LAYER_COLORS: Record<PcbLayerId, string> = {
-  "F.Cu": "#e64545",
+  "F.Cu": "#ff0000",
   "In1.Cu": "#f59e0b",
   "In2.Cu": "#06b6d4",
-  "B.Cu": "#3b82f6",
+  "B.Cu": "#1e40af",
   "F.Mask": "#0a0d12",
   "B.Mask": "#0a0d12",
   "F.Paste": "#cbd5e1",
@@ -115,10 +128,10 @@ export const PCB_TRACE_COLORS: Record<
   "F.Cu" | "In1.Cu" | "In2.Cu" | "B.Cu",
   string
 > = {
-  "F.Cu": "#ff5757",
+  "F.Cu": "#ff0000",
   "In1.Cu": "#fbbf24",
   "In2.Cu": "#22d3ee",
-  "B.Cu": "#60a5fa",
+  "B.Cu": "#2563eb",
 };
 
 /** All copper layer ids in render-stack order (top → inner → bottom). */
@@ -257,3 +270,343 @@ export const PCB_LAYER_LABELS: Record<PcbLayerId, string> = (() => {
   out["B.Fab"] = "Bottom Fab";
   return out as Record<PcbLayerId, string>;
 })();
+
+/**
+ * Closed-form metadata describing each Tier-1 layer. `gerberFileFunction` is
+ * reserved (consumed by a future export path); never read inside the canvas.
+ * `family` groups layers for the panel and the side-flip logic — only
+ * `physical` layers reverse z when the view side flips.
+ */
+export type PcbLayerFamily =
+  | "copper"
+  | "mask"
+  | "paste"
+  | "silk"
+  | "courtyard"
+  | "fab"
+  | "annotation";
+
+export type PcbLayerSide = "F" | "B" | "inner" | "none";
+
+export interface PcbLayerMetadata {
+  family: PcbLayerFamily;
+  side: PcbLayerSide;
+  /** Eligible for export to manufacturing (Tier-1 + Tier-2 with opt-in). */
+  exportable: boolean;
+  /**
+   * Gerber `%TF.FileFunction` payload. Closed for modification: future
+   * export code reads this verbatim. Annotation layers carry `null`.
+   */
+  gerberFileFunction: string | null;
+  /**
+   * Whether this layer is mirrored visually with the rest of the side when
+   * `viewSide = bottom`. Annotation layers (drill, edge, metadata) opt out so
+   * they always render right-reading regardless of side mode.
+   */
+  reverseOnFlip: boolean;
+}
+
+export const PCB_LAYER_METADATA: Record<PcbLayerId, PcbLayerMetadata> = {
+  "F.Cu": {
+    family: "copper",
+    side: "F",
+    exportable: true,
+    gerberFileFunction: "Copper,L1,Top,Signal",
+    reverseOnFlip: true,
+  },
+  "In1.Cu": {
+    family: "copper",
+    side: "inner",
+    exportable: true,
+    gerberFileFunction: "Copper,L2,Inr,Signal",
+    reverseOnFlip: true,
+  },
+  "In2.Cu": {
+    family: "copper",
+    side: "inner",
+    exportable: true,
+    gerberFileFunction: "Copper,L3,Inr,Signal",
+    reverseOnFlip: true,
+  },
+  "B.Cu": {
+    family: "copper",
+    side: "B",
+    exportable: true,
+    gerberFileFunction: "Copper,L4,Bot,Signal",
+    reverseOnFlip: true,
+  },
+  "F.Mask": {
+    family: "mask",
+    side: "F",
+    exportable: true,
+    gerberFileFunction: "Soldermask,Top",
+    reverseOnFlip: true,
+  },
+  "B.Mask": {
+    family: "mask",
+    side: "B",
+    exportable: true,
+    gerberFileFunction: "Soldermask,Bot",
+    reverseOnFlip: true,
+  },
+  "F.Paste": {
+    family: "paste",
+    side: "F",
+    exportable: true,
+    gerberFileFunction: "Paste,Top",
+    reverseOnFlip: true,
+  },
+  "B.Paste": {
+    family: "paste",
+    side: "B",
+    exportable: true,
+    gerberFileFunction: "Paste,Bot",
+    reverseOnFlip: true,
+  },
+  "F.SilkS": {
+    family: "silk",
+    side: "F",
+    exportable: true,
+    gerberFileFunction: "Legend,Top",
+    reverseOnFlip: true,
+  },
+  "B.SilkS": {
+    family: "silk",
+    side: "B",
+    exportable: true,
+    gerberFileFunction: "Legend,Bot",
+    reverseOnFlip: true,
+  },
+  "F.CrtYd": {
+    family: "courtyard",
+    side: "F",
+    exportable: false,
+    gerberFileFunction: null,
+    reverseOnFlip: true,
+  },
+  "B.CrtYd": {
+    family: "courtyard",
+    side: "B",
+    exportable: false,
+    gerberFileFunction: null,
+    reverseOnFlip: true,
+  },
+  "F.Fab": {
+    family: "fab",
+    side: "F",
+    exportable: false,
+    gerberFileFunction: null,
+    reverseOnFlip: true,
+  },
+  "B.Fab": {
+    family: "fab",
+    side: "B",
+    exportable: false,
+    gerberFileFunction: null,
+    reverseOnFlip: true,
+  },
+  "Edge.Cuts": {
+    family: "annotation",
+    side: "none",
+    exportable: true,
+    gerberFileFunction: "Profile,NP",
+    reverseOnFlip: false,
+  },
+  Drill: {
+    family: "annotation",
+    side: "none",
+    exportable: true,
+    gerberFileFunction: null,
+    reverseOnFlip: false,
+  },
+  Metadata: {
+    family: "annotation",
+    side: "none",
+    exportable: false,
+    gerberFileFunction: null,
+    reverseOnFlip: false,
+  },
+};
+
+/**
+ * Per-layer render slots. `fill` is defined only for copper. Components pull
+ * the slot they're drawing — `CopperFillLayer` uses `fill`, `TraceLayer`/
+ * pads/vias use `object`. Side-flip reverses physical layers around a pivot
+ * (`F_COPPER` ↔ `B_COPPER`, `F_FAB` ↔ `B_FAB`, etc.). Annotation layers
+ * (`reverseOnFlip = false`) keep their base z under either side.
+ */
+export interface PcbLayerRenderSlots {
+  object: number;
+  fill?: number;
+}
+
+const BASE_RENDER_SLOTS: Record<PcbLayerId, PcbLayerRenderSlots> = {
+  "F.Cu": { object: RENDER_ORDER.F_COPPER, fill: RENDER_ORDER.F_COPPER_FILL },
+  "In1.Cu": {
+    object: RENDER_ORDER.IN1_COPPER,
+    fill: RENDER_ORDER.IN1_COPPER_FILL,
+  },
+  "In2.Cu": {
+    object: RENDER_ORDER.IN2_COPPER,
+    fill: RENDER_ORDER.IN2_COPPER_FILL,
+  },
+  "B.Cu": { object: RENDER_ORDER.B_COPPER, fill: RENDER_ORDER.B_COPPER_FILL },
+  "F.Mask": { object: RENDER_ORDER.F_MASK },
+  "B.Mask": { object: RENDER_ORDER.B_MASK },
+  "F.Paste": { object: RENDER_ORDER.F_PASTE },
+  "B.Paste": { object: RENDER_ORDER.B_PASTE },
+  "F.SilkS": { object: RENDER_ORDER.F_SILK },
+  "B.SilkS": { object: RENDER_ORDER.B_SILK },
+  "F.CrtYd": { object: RENDER_ORDER.COURTYARD },
+  "B.CrtYd": { object: RENDER_ORDER.COURTYARD - 0.5 },
+  "F.Fab": { object: RENDER_ORDER.F_FAB },
+  "B.Fab": { object: RENDER_ORDER.B_FAB },
+  "Edge.Cuts": { object: RENDER_ORDER.EDGE_CUTS },
+  Drill: { object: RENDER_ORDER.DRILL },
+  Metadata: { object: RENDER_ORDER.METADATA },
+};
+
+// Each physical layer that flips has a counterpart on the opposite side.
+// At viewSide = bottom we render with the counterpart's slot — keeps each
+// family's internal ordering intact (e.g. copper above mask, mask above
+// paste) while swapping which side is foreground (spec §5.2).
+const FLIP_COUNTERPART: Partial<Record<PcbLayerId, PcbLayerId>> = {
+  "F.Cu": "B.Cu",
+  "B.Cu": "F.Cu",
+  "F.Mask": "B.Mask",
+  "B.Mask": "F.Mask",
+  "F.Paste": "B.Paste",
+  "B.Paste": "F.Paste",
+  "F.SilkS": "B.SilkS",
+  "B.SilkS": "F.SilkS",
+  "F.CrtYd": "B.CrtYd",
+  "B.CrtYd": "F.CrtYd",
+  "F.Fab": "B.Fab",
+  "B.Fab": "F.Fab",
+};
+
+/**
+ * Render-order helper. Centralizes the side-flip rule so individual layer
+ * components never inspect viewSide. Pass `slot = "fill"` for the copper
+ * pour mesh, otherwise `"object"`. Annotation layers ignore viewSide.
+ */
+export function effectiveRenderOrder(
+  layer: PcbLayerId,
+  viewSide: "top" | "bottom",
+  slot: "object" | "fill" = "object",
+): number {
+  const meta = PCB_LAYER_METADATA[layer];
+  const sourceLayer =
+    viewSide === "bottom" && meta.reverseOnFlip
+      ? (FLIP_COUNTERPART[layer] ?? layer)
+      : layer;
+  const base = BASE_RENDER_SLOTS[sourceLayer];
+  return slot === "fill" && base.fill !== undefined ? base.fill : base.object;
+}
+
+/** Built-in layer-set presets shown in the panel's preset dropdown. */
+export type PcbLayerPresetId =
+  | "top-side"
+  | "bottom-side"
+  | "all-copper"
+  | "assembly";
+
+export interface PcbLayerPresetSpec {
+  id: PcbLayerPresetId;
+  label: string;
+  description: string;
+  visibleLayers: PcbLayerId[];
+  /** Optional activeLayer override (must be activatable). */
+  activeLayer?: PcbLayerId;
+  /** Optional viewSide override. */
+  viewSide?: "top" | "bottom";
+}
+
+export const PCB_LAYER_PRESETS: ReadonlyArray<PcbLayerPresetSpec> = [
+  {
+    id: "top-side",
+    label: "Top side",
+    description: "Top copper + finish + drill + chrome.",
+    visibleLayers: [
+      "F.Cu",
+      "F.Mask",
+      "F.Paste",
+      "F.SilkS",
+      "Edge.Cuts",
+      "Drill",
+      "Metadata",
+    ],
+    activeLayer: "F.Cu",
+    viewSide: "top",
+  },
+  {
+    id: "bottom-side",
+    label: "Bottom side",
+    description: "Bottom copper + finish + drill + chrome.",
+    visibleLayers: [
+      "B.Cu",
+      "B.Mask",
+      "B.Paste",
+      "B.SilkS",
+      "Edge.Cuts",
+      "Drill",
+      "Metadata",
+    ],
+    activeLayer: "B.Cu",
+    viewSide: "bottom",
+  },
+  {
+    id: "all-copper",
+    label: "All copper",
+    description: "Every routable copper layer + edge + drill. No finish.",
+    visibleLayers: [
+      "F.Cu",
+      "In1.Cu",
+      "In2.Cu",
+      "B.Cu",
+      "Edge.Cuts",
+      "Drill",
+      "Metadata",
+    ],
+    viewSide: "top",
+  },
+  {
+    id: "assembly",
+    label: "Assembly view",
+    description: "Silk + courtyard + fab + drill. Copper dimmed.",
+    visibleLayers: [
+      "F.SilkS",
+      "B.SilkS",
+      "F.CrtYd",
+      "B.CrtYd",
+      "F.Fab",
+      "B.Fab",
+      "Edge.Cuts",
+      "Drill",
+      "Metadata",
+    ],
+    viewSide: "top",
+  },
+];
+
+/**
+ * Best-effort match of a visibility set to a preset. Returns `"custom"` when
+ * no preset matches exactly. Used by the panel to highlight the active chip.
+ */
+export function detectLayerPreset(
+  visibleLayers: ReadonlyArray<PcbLayerId>,
+): PcbLayerPresetId | "custom" {
+  const visible = new Set(visibleLayers);
+  for (const preset of PCB_LAYER_PRESETS) {
+    if (preset.visibleLayers.length !== visible.size) continue;
+    let match = true;
+    for (const id of preset.visibleLayers) {
+      if (!visible.has(id)) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return preset.id;
+  }
+  return "custom";
+}

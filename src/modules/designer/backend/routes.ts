@@ -23,8 +23,10 @@ import type {
   DesignerPcbRotatePlacementCommand,
   DesignerPcbSetActiveLayerCommand,
   DesignerPcbSetBoardSettingsCommand,
+  DesignerPcbSetViewStateCommand,
   DesignerPcbSetVisibleLayersCommand,
   DesignerPcbUpdateTraceGeometryCommand,
+  DesignerPcbDeletePlacementCommand,
   DesignerPlaceGndPortCommand,
   DesignerPlaceNetPortalCommand,
   DesignerPlacePartCommand,
@@ -820,6 +822,32 @@ function parsePcbUpdateTraceGeometryCommand(
   return { type: "pcb_update_trace_geometry", traceId, pointsNm };
 }
 
+function parsePcbSetViewStateCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbSetViewStateCommand {
+  const patch = asRecord(raw.patch);
+  if (!patch) {
+    throw new ValidationError("command.patch must be an object");
+  }
+  // The backend store (`pcb-store.ts`) re-validates every viewState field
+  // before persisting. The route layer accepts the raw patch verbatim and
+  // forwards it; unknown fields are dropped at parse time downstream.
+  return {
+    type: "pcb_set_view_state",
+    patch: patch as DesignerPcbSetViewStateCommand["patch"],
+  };
+}
+
+function parsePcbDeletePlacementCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbDeletePlacementCommand {
+  const placementId = asString(raw.placementId);
+  if (!placementId) {
+    throw new ValidationError("command.placementId must be a string");
+  }
+  return { type: "pcb_delete_placement", placementId };
+}
+
 function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
   const record = asRecord(body);
   if (!record) {
@@ -950,6 +978,12 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
       break;
     case "pcb_update_trace_geometry":
       command = parsePcbUpdateTraceGeometryCommand(commandRecord);
+      break;
+    case "pcb_set_view_state":
+      command = parsePcbSetViewStateCommand(commandRecord);
+      break;
+    case "pcb_delete_placement":
+      command = parsePcbDeletePlacementCommand(commandRecord);
       break;
     default:
       throw new ValidationError(`Unsupported command type '${type}'`);

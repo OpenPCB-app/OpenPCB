@@ -192,7 +192,16 @@ export function createDesignerStore(
       applyPatches(world, patches);
       const next = combinedStateFromWorld(designId, nextRevision, world);
       replaceSchematicProjection(tx, designId, next.schematic, timestamp);
-      replacePcbBoardSettings(tx, designId, next.pcb, timestamp);
+      // viewState is intentionally stripped from the world snapshot (see
+      // combinedStateToWorld) so undo never reverts the user's current
+      // display configuration. Re-attach the live viewState from the DB
+      // before persisting the post-undo board settings.
+      replacePcbBoardSettings(
+        tx,
+        designId,
+        { ...next.pcb, viewState: pcb.viewState },
+        timestamp,
+      );
       replacePcbPlacements(tx, designId, next.placements, timestamp);
       replacePcbTraces(tx, designId, next.traces, timestamp);
       replacePcbVias(tx, designId, next.vias, timestamp);
@@ -486,7 +495,13 @@ export function createDesignerStore(
             placeComponentDetail,
           });
 
-          if (result.ok) {
+          // View-only commands mutate display state in board_settings.viewState
+          // but are not undoable — debounced slider drags would otherwise spam
+          // the undo stack. Skip patch capture; the command still bumps the
+          // revision so the projection refreshes.
+          const isViewOnlyCommand = command.type === "pcb_set_view_state";
+
+          if (result.ok && !isViewOnlyCommand) {
             const nextProjection = loadSchematicProjection(tx, designId);
             if (nextProjection) {
               if (pcbBefore) {

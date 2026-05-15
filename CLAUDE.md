@@ -6,8 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenPCB — desktop PCB design suite. Bun HTTP backend + React 19/Vite 7/Tailwind 4 frontend + Electron shell + SQLite (Drizzle ORM). Root uses **npm workspaces**; backend uses Bun runtime + Bun test; root-level lockfile is `bun.lock` (kept for tooling) but installs go through npm.
 
-Branch `aggresive-cleanup` is mid-restructuring. Most paths have been migrated to `src/core/*`, `src/modules/*`, `src/sdks/*`, `src/shared/*`, but a few stale references remain in `bunfig.toml` and some scripts. **Verify paths before running unfamiliar scripts.**
-
 ## Commands
 
 Run from repo root unless noted.
@@ -15,15 +13,17 @@ Run from repo root unless noted.
 **Dev**
 
 - `npm run dev` — backend (Bun) + frontend (Vite), browser mode
-- `npm run dev:electron` — frontend + Electron shell; backend starts inside Electron main
+- `npm run dev:electron` (alias `dev:desktop`) — frontend + Electron shell; embedded backend manager boots backend inside Electron main
 - `npm run dev:backend` — Bun backend only (`src/core/backend/main.ts`, port 3000, `--watch`)
 - `npm run dev:frontend` — Vite dev server only (port 1420, proxies `/api` and `/ws` → 3000)
+- `npm run dev:browser` — backend + Playwright UI runner against the dev backend
 
 **Build / check**
 
 - `npm run build` — frontend bundle + Electron Forge make
 - `npm run typecheck` — `tsc -b` over composite project (core/backend, core/frontend, modules)
-- `npm run lint` — misnomer: runs `tsc --noEmit` in `src/core/frontend` (no ESLint wired). Same effect as typecheck for the frontend workspace.
+- `npm run typecheck:frontend` — `tsc --noEmit` in `src/core/frontend` only (no ESLint wired anywhere)
+- `npm run release:sourcemaps` — uploads sourcemaps (post-release)
 
 **Tests**
 
@@ -35,9 +35,11 @@ Run from repo root unless noted.
 
 **Modules / codegen**
 
-- `npm run module` — interactive module CLI (`scripts/module-cli.ts`)
-- `npm run module:validate` / `npm run module:codegen` / `npm run modules:generate`
-- `npm run gen` — alias for `module:codegen` only (does **not** chain `gen:openapi` or `gen:sdk:orval`; run those separately if needed). `npm run gen:check` fails if `src/core/frontend/src/generated/` is dirty.
+- `npm run module` — interactive module CLI (`scripts/module-cli.ts`); subcommands: `module:create`, `module:validate`, `module:codegen`
+- `npm run scripts:build` — compile `scripts/` via `tsconfig.scripts.json` (prereq for `modules:generate`, `sdk:generate`)
+- `npm run modules:generate` — module registry codegen → `src/core/frontend/src/generated/modules.ts`
+- `npm run sdk:generate` — module SDK codegen → `src/core/frontend/src/generated/sdk/`
+- `npm run gen` — alias for `module:codegen` only. `npm run gen:check` fails if the two generated paths above are dirty.
 - `npm run db:generate|push|studio|check` — Drizzle Kit. `db:migrate` is a no-op message; module SQL migrations are applied automatically on backend startup.
 
 ## Architecture
@@ -78,18 +80,23 @@ src/
 │   └── contracts/      app/* (runtime, bootstrap, routes) + modules/* (manifest, backend-module, sdk facades)
 ├── modules/
 │   ├── library/        component library: symbols, footprints, KiCad import, seeding
-│   └── designer/       schematic + PCB editor (commands, history, projection, ECS world, store, wire-geometry, pcb/)
-│       └── backend/migrations/0000…0004_pcb_foundation.sql
+│   ├── designer/       schematic + PCB editor (commands, history, projection, ECS world, store, wire-geometry, pcb/)
+│   │   └── backend/migrations/0000…0007_*.sql
+│   ├── tasks/          task tracking module
+│   └── assistant/      AI assistant module
 ├── sdks/               public inter-module contracts
-│   ├── index.ts        MODULE_SDK_TOKENS = { LIBRARY, DESIGNER }
+│   ├── index.ts        MODULE_SDK_TOKENS = { LIBRARY, DESIGNER, TASKS, ASSISTANT }
 │   ├── library/        types.ts, index.ts
-│   └── designer/       types.ts, events.ts, index.ts
+│   ├── designer/       types.ts, events.ts, index.ts
+│   ├── tasks/
+│   └── assistant/
 └── shared/
-    ├── backend/        ECS world, command/patch/history infrastructure
-    └── frontend/canvas/ canvas engine + theme-aware layers
+    ├── domain/         ECS world, commands, events, revision, patch/history infrastructure
+    ├── frontend/       canvas engine, context-menu, ui primitives
+    └── rendering/      geometry, IPC-7351B footprint generator, symbol/footprint preview builders
 
 electron/               Electron main + preload + embedded backend manager (separate workspace)
-scripts/                module-cli.ts, gen-modules.ts, gen-sdk.ts, generate-openapi.ts
+scripts/                module-cli.ts, gen-modules.ts, gen-sdk.ts, diagnose-pcb-correlation.ts, upload-sourcemaps.mjs, lib/
 docs/                   PROPOSED_ARCHITECTURE.md, COMMAND_PATTERN.md, DATA_MODEL.md
 tests/e2e/              Playwright E2E tests
 ```
@@ -155,7 +162,7 @@ See `docs/COMMAND_PATTERN.md`, `docs/DATA_MODEL.md`. Designer backend (`src/modu
 
 - ECS world (entities/components) persisted as JSON blobs (decision locked in `TODO.md`)
 - Command flow: `CommandEnvelope` → idempotency check (command log) → load `DesignWorld` → validate `baseRevision` → command-bus dispatch → handler plans patches → apply → persist → publish invalidation → return `CommandResult`
-- Patches/inverse via `shared/backend` ECS + patch infrastructure → enables undo/redo
+- Patches/inverse via `shared/domain` ECS + patch infrastructure → enables undo/redo
 - Reads via `SchematicProjection` (`projection-read.ts`, `projection-world.ts`)
 - Per-session undo/redo persisted across runtime reloads (`history-persistence.ts`, `history-state.ts`)
 - PCB foundation in progress (Phase 3): board settings, placements auto-synced from schematic, traces/vias/ratsnest pending

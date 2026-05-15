@@ -22,6 +22,14 @@ export interface PadInstancesProps {
   selectedColor?: string;
   /** When true, pads participate in depth testing/writing so 3D bodies above can occlude them. Default false matches 2D canvas overlay convention. */
   enableDepthTest?: boolean;
+  /** Global opacity multiplier applied to all pad instances. Default 1. */
+  opacity?: number;
+  /**
+   * Override renderOrder for the pad meshes. Defaults to `RENDER_ORDER.PINS`.
+   * Set per-placement so off-side placements sort under the active side's
+   * copper pour when viewing from the opposite side.
+   */
+  renderOrder?: number;
 }
 
 /** Build a THREE.Shape for a rectangle with rounded corners. */
@@ -47,6 +55,8 @@ export function PadInstances({
   defaultColor = "#c9a227",
   selectedColor = "#38bdf8",
   enableDepthTest = false,
+  opacity = 1,
+  renderOrder = RENDER_ORDER.PINS,
 }: PadInstancesProps) {
   const invalidate = useThree((s) => s.invalidate);
 
@@ -58,10 +68,11 @@ export function PadInstances({
       new THREE.MeshBasicMaterial({
         depthTest: enableDepthTest,
         depthWrite: enableDepthTest,
-        transparent: !enableDepthTest,
+        transparent: !enableDepthTest || opacity < 1,
+        opacity,
         side: THREE.DoubleSide,
       }),
-    [enableDepthTest],
+    [enableDepthTest, opacity],
   );
 
   const defCol = useMemo(() => new THREE.Color(defaultColor), [defaultColor]);
@@ -175,7 +186,7 @@ export function PadInstances({
         <instancedMesh
           ref={circleMeshRef}
           args={[circleGeom, material, Math.max(circlePads.length, 1)]}
-          renderOrder={RENDER_ORDER.PINS}
+          renderOrder={renderOrder}
           frustumCulled={false}
         />
       )}
@@ -183,7 +194,7 @@ export function PadInstances({
         <instancedMesh
           ref={rectMeshRef}
           args={[rectGeom, material, Math.max(rectPads.length, 1)]}
-          renderOrder={RENDER_ORDER.PINS}
+          renderOrder={renderOrder}
           frustumCulled={false}
         />
       )}
@@ -198,7 +209,7 @@ export function PadInstances({
             key={pad.id}
             position={[pad.x, pad.y, 0]}
             rotation={[0, 0, (pad.rotation * Math.PI) / 180]}
-            renderOrder={RENDER_ORDER.PINS}
+            renderOrder={renderOrder}
             frustumCulled={false}
           >
             <primitive object={geom} attach="geometry" />
@@ -206,6 +217,8 @@ export function PadInstances({
               color={padColor}
               depthTest={enableDepthTest}
               depthWrite={enableDepthTest}
+              transparent={!enableDepthTest || opacity < 1}
+              opacity={opacity}
               side={THREE.DoubleSide}
             />
           </mesh>

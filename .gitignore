@@ -48,6 +48,7 @@ src/core/backend/dev-data/
 
 # Local Playwright artifacts
 .playwright-mcp/
+.playwright-cli/
 test-results/
 test-*.png
 wizard-*.png

@@ -1,16 +1,36 @@
-import { ChevronDown, ChevronRight, Droplet, Eye, EyeOff } from "lucide-react";
-import { useCallback, useMemo, useState, type ReactElement } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Droplet,
+  Eye,
+  EyeOff,
+  Focus,
+  SlidersHorizontal,
+} from "lucide-react";
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type MouseEvent,
+  type ReactElement,
+} from "react";
 import type {
   PcbCopperLayerId,
   PcbDisplayMode,
   PcbLayerCount,
   PcbLayerId,
+  PcbLayerPreset,
+  PcbViewSide,
 } from "../../../../sdks";
 import {
   PCB_LAYER_COLORS,
+  PCB_LAYER_PRESETS,
   PCB_LAYER_TREE,
+  detectLayerPreset,
   type LayerTreeNode,
+  type PcbLayerPresetId,
 } from "../../../../shared/frontend/canvas/layers";
+import { PcbSideModeButton } from "./PcbSideModeButton";
 
 interface PcbLayersPanelProps {
   activeLayer: PcbLayerId | null;
@@ -25,6 +45,25 @@ interface PcbLayersPanelProps {
   onSetDisplayMode?: (mode: PcbDisplayMode) => void;
   copperFillLayers?: ReadonlyArray<PcbCopperLayerId>;
   onToggleCopperFillLayer?: (layer: PcbCopperLayerId) => void;
+  /** Side-mode toolbar state + handlers. When omitted the chip is hidden. */
+  viewSide?: PcbViewSide;
+  onToggleViewSide?: () => void;
+  /** Preset chip handler. Receives the preset id; "custom" should be ignored. */
+  onSelectLayerPreset?: (preset: PcbLayerPreset) => void;
+  /**
+   * Per-layer opacity map. Optional. When provided, each row gains a
+   * collapsible chevron that reveals a 0–100% slider for the layer.
+   */
+  perLayerOpacity?: Partial<Record<PcbLayerId, number>>;
+  /** Slider commit handler. */
+  onSetLayerOpacity?: (layer: PcbLayerId, opacity: number) => void;
+  /**
+   * Row solo. When non-null, only this layer + always-on chrome are
+   * visible. Alt+click a row to enter/exit. The icon highlights the
+   * currently-soloed row.
+   */
+  soloLayer?: PcbLayerId | null;
+  onToggleSoloLayer?: (layer: PcbLayerId, isActivatable: boolean) => void;
 }
 
 const DISPLAY_MODES: ReadonlyArray<{
@@ -62,8 +101,32 @@ export function PcbLayersPanel({
   onSetDisplayMode,
   copperFillLayers = [],
   onToggleCopperFillLayer,
+  viewSide,
+  onToggleViewSide,
+  onSelectLayerPreset,
+  perLayerOpacity,
+  onSetLayerOpacity,
+  soloLayer = null,
+  onToggleSoloLayer,
 }: PcbLayersPanelProps): ReactElement {
+  const activePresetId = useMemo(
+    () => detectLayerPreset(visibleLayers),
+    [visibleLayers],
+  );
   const visibleSet = useMemo(() => new Set(visibleLayers), [visibleLayers]);
+  // Per-row expansion state for the opacity slider. Hidden by default to
+  // keep the panel scannable; expand on chevron click.
+  const [expandedOpacityRows, setExpandedOpacityRows] = useState<
+    ReadonlySet<PcbLayerId>
+  >(new Set());
+  const toggleOpacityRow = useCallback((id: PcbLayerId) => {
+    setExpandedOpacityRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
   const copperFillSet = useMemo(
     () => new Set(copperFillLayers),
     [copperFillLayers],
@@ -147,13 +210,45 @@ export function PcbLayersPanel({
     return false;
   };
 
+  const handlePresetClick = useCallback(
+    (preset: PcbLayerPresetId) => {
+      onSelectLayerPreset?.(preset);
+    },
+    [onSelectLayerPreset],
+  );
+
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-800">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           Layers
         </p>
+        {viewSide && onToggleViewSide ? (
+          <PcbSideModeButton viewSide={viewSide} onToggle={onToggleViewSide} />
+        ) : null}
       </div>
+      {onSelectLayerPreset ? (
+        <div className="flex flex-wrap gap-1 border-b border-slate-200 px-2 py-2 dark:border-slate-800">
+          {PCB_LAYER_PRESETS.map((preset) => {
+            const active = activePresetId === preset.id;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => handlePresetClick(preset.id)}
+                title={preset.description}
+                className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+                  active
+                    ? "bg-violet-600 text-white"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                }`}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
       <div className="flex-1 overflow-y-auto py-1">
         {filteredNodes.map((node) => {
           if (isHidden(node)) return null;
@@ -209,99 +304,179 @@ export function PcbLayersPanel({
           const copperLayer = isCopperLayer(node.id) ? node.id : null;
           const copperFillActive =
             copperLayer !== null && copperFillSet.has(copperLayer);
+          const isSoloed = soloLayer === node.id;
+          const opacityValue = perLayerOpacity?.[node.id] ?? 1;
+          const opacityExpanded = expandedOpacityRows.has(node.id);
+          const handleRowClick = (
+            event: MouseEvent<HTMLButtonElement>,
+          ): void => {
+            if (event.altKey && onToggleSoloLayer) {
+              event.preventDefault();
+              onToggleSoloLayer(node.id, node.activatable);
+              return;
+            }
+            if (node.activatable) onSetActiveLayer(node.id);
+          };
           return (
-            <div
-              key={node.id}
-              className={`group relative flex items-center gap-2 py-1 pr-2 ${
-                isChild ? "pl-7" : "pl-3"
-              } ${
-                isActive
-                  ? "bg-slate-200/70 dark:bg-slate-800/80"
-                  : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-              }`}
-            >
-              {isActive ? (
-                <span
-                  aria-hidden
-                  className="absolute left-0 top-0 h-full w-1 rounded-r"
-                  style={{ backgroundColor: color }}
-                />
-              ) : null}
-              <button
-                type="button"
-                onClick={() => {
-                  if (node.activatable) onSetActiveLayer(node.id);
-                }}
-                disabled={!node.activatable}
-                className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default"
-                title={
-                  node.activatable
-                    ? isActive
-                      ? `Clear layer focus: ${node.label}`
-                      : `Focus layer: ${node.label}`
-                    : node.label
-                }
+            <div key={node.id}>
+              <div
+                className={`group relative flex items-center gap-2 py-1 pr-2 ${
+                  isChild ? "pl-7" : "pl-3"
+                } ${
+                  isActive
+                    ? "bg-slate-200/70 dark:bg-slate-800/80"
+                    : isSoloed
+                      ? "bg-violet-100/70 dark:bg-violet-900/40"
+                      : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                }`}
               >
-                <span
-                  aria-hidden
-                  className="inline-block h-3 w-3 shrink-0 rounded-sm ring-1 ring-black/20"
-                  style={{ backgroundColor: color }}
-                />
-                <span
-                  className={`truncate text-xs ${
-                    isActive
-                      ? "font-semibold text-slate-950 dark:text-slate-50"
-                      : isVisible
-                        ? "text-slate-700 dark:text-slate-300"
-                        : "text-slate-400 dark:text-slate-500"
-                  }`}
-                >
-                  {node.label}
-                </span>
                 {isActive ? (
                   <span
-                    className="ml-auto rounded px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-slate-950 ring-1 ring-black/10 dark:text-white"
-                    style={{ backgroundColor: `${color}55` }}
-                  >
-                    Focus
-                  </span>
+                    aria-hidden
+                    className="absolute left-0 top-0 h-full w-1 rounded-r"
+                    style={{ backgroundColor: color }}
+                  />
                 ) : null}
-              </button>
-              {copperLayer !== null && onToggleCopperFillLayer ? (
                 <button
                   type="button"
-                  onClick={() => onToggleCopperFillLayer(copperLayer)}
+                  onClick={handleRowClick}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default"
                   title={
-                    copperFillActive ? "Hide copper fills" : "Show copper fills"
+                    onToggleSoloLayer
+                      ? `${
+                          node.activatable
+                            ? isActive
+                              ? `Clear focus: ${node.label}`
+                              : `Focus: ${node.label}`
+                            : node.label
+                        } · Alt+click to solo`
+                      : node.activatable
+                        ? isActive
+                          ? `Clear focus: ${node.label}`
+                          : `Focus: ${node.label}`
+                        : node.label
                   }
-                  className={`relative shrink-0 rounded p-0.5 transition-colors ${
-                    copperFillActive
-                      ? "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-white"
-                      : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-100"
-                  }`}
                 >
-                  <Droplet className="h-3 w-3" />
-                  {!copperFillActive ? (
+                  <span
+                    aria-hidden
+                    className="inline-block h-3 w-3 shrink-0 rounded-sm ring-1 ring-black/20"
+                    style={{ backgroundColor: color }}
+                  />
+                  <span
+                    className={`truncate text-xs ${
+                      isActive
+                        ? "font-semibold text-slate-950 dark:text-slate-50"
+                        : isVisible
+                          ? "text-slate-700 dark:text-slate-300"
+                          : "text-slate-400 dark:text-slate-500"
+                    }`}
+                  >
+                    {node.label}
+                  </span>
+                  {isActive ? (
                     <span
-                      aria-hidden
-                      className="absolute left-1/2 top-1/2 h-px w-4 -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-current"
-                    />
+                      className="ml-auto rounded px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-slate-950 ring-1 ring-black/10 dark:text-white"
+                      style={{ backgroundColor: `${color}55` }}
+                    >
+                      Focus
+                    </span>
+                  ) : null}
+                  {isSoloed ? (
+                    <span
+                      className="ml-auto inline-flex items-center gap-1 rounded bg-violet-600 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-white"
+                      title="Soloed (Alt+click to exit)"
+                    >
+                      <Focus className="h-2.5 w-2.5" />
+                      Solo
+                    </span>
                   ) : null}
                 </button>
+                {onSetLayerOpacity ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleOpacityRow(node.id)}
+                    title={
+                      opacityExpanded
+                        ? "Collapse opacity slider"
+                        : "Expand opacity slider"
+                    }
+                    aria-label="Toggle opacity slider"
+                    aria-expanded={opacityExpanded}
+                    className={`shrink-0 rounded p-0.5 transition-colors ${
+                      opacityExpanded
+                        ? "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-white"
+                        : opacityValue < 1
+                          ? "text-violet-500 hover:text-violet-700"
+                          : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-100"
+                    }`}
+                  >
+                    <SlidersHorizontal className="h-3 w-3" />
+                  </button>
+                ) : null}
+                {copperLayer !== null && onToggleCopperFillLayer ? (
+                  <button
+                    type="button"
+                    onClick={() => onToggleCopperFillLayer(copperLayer)}
+                    title={
+                      copperFillActive
+                        ? "Hide copper fills"
+                        : "Show copper fills"
+                    }
+                    className={`relative shrink-0 rounded p-0.5 transition-colors ${
+                      copperFillActive
+                        ? "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-white"
+                        : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-100"
+                    }`}
+                  >
+                    <Droplet className="h-3 w-3" />
+                    {!copperFillActive ? (
+                      <span
+                        aria-hidden
+                        className="absolute left-1/2 top-1/2 h-px w-4 -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-current"
+                      />
+                    ) : null}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => toggleLayer(node.id)}
+                  disabled={node.id === lockedVisibleLayer}
+                  title={isVisible ? "Hide layer" : "Show layer"}
+                  className="shrink-0 rounded p-0.5 text-slate-400 transition-opacity hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30 dark:hover:text-slate-100"
+                >
+                  {isVisible ? (
+                    <Eye className="h-3 w-3" />
+                  ) : (
+                    <EyeOff className="h-3 w-3" />
+                  )}
+                </button>
+              </div>
+              {onSetLayerOpacity && opacityExpanded ? (
+                <div
+                  className={`flex items-center gap-2 pb-1 pr-2 ${
+                    isChild ? "pl-7" : "pl-3"
+                  }`}
+                >
+                  <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Opacity
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={opacityValue}
+                    onChange={(e) =>
+                      onSetLayerOpacity(node.id, Number(e.target.value))
+                    }
+                    aria-label={`${node.label} opacity`}
+                    className="flex-1 accent-violet-600"
+                  />
+                  <span className="w-8 text-right text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                    {Math.round(opacityValue * 100)}%
+                  </span>
+                </div>
               ) : null}
-              <button
-                type="button"
-                onClick={() => toggleLayer(node.id)}
-                disabled={node.id === lockedVisibleLayer}
-                title={isVisible ? "Hide layer" : "Show layer"}
-                className="shrink-0 rounded p-0.5 text-slate-400 transition-opacity hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30 dark:hover:text-slate-100"
-              >
-                {isVisible ? (
-                  <Eye className="h-3 w-3" />
-                ) : (
-                  <EyeOff className="h-3 w-3" />
-                )}
-              </button>
             </div>
           );
         })}

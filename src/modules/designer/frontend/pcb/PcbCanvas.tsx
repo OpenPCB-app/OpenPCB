@@ -23,17 +23,25 @@ import type {
 } from "../../../../shared/frontend/canvas/interaction/types";
 import { sceneMmToNm } from "../../../../shared/frontend/canvas/coords";
 import {
+  hitAll,
   hitPad,
   hitPlacement,
   hitTrace,
   hitVia,
+  type PcbHitCandidate,
   type TraceHit,
 } from "./pcb-hit";
+import {
+  PcbDisambiguationPopup,
+  formatCandidateLabel,
+} from "./PcbDisambiguationPopup";
 import {
   placementContainedInRect,
   placementIntersectsRect,
   traceContainedInRect,
   traceIntersectsRect,
+  viaContainedInRect,
+  viaIntersectsRect,
 } from "./pcb-rect-hit";
 import {
   clonePcbSelection,
@@ -50,6 +58,8 @@ import { PcbTopToolbar } from "./PcbTopToolbar";
 import { PcbBoardPanel } from "./PcbBoardPanel";
 import { PcbLayersPanel } from "./PcbLayersPanel";
 import { PcbActiveLayerPill } from "./PcbActiveLayerPill";
+import { PcbSelectionFilter } from "./PcbSelectionFilter";
+import { findSnapTarget, type SnapTarget } from "./snap";
 import { runLiveDrc, type DrcViolation } from "./drc/live-drc";
 import {
   initialRouteToolState,
@@ -60,11 +70,15 @@ import {
 } from "./tools/route-tool-state";
 import { buildPreviewPath } from "./tools/route-preview-geometry";
 import { usePcbWorkspace } from "./usePcbWorkspace";
+import { usePcbViewStore } from "./pcb-view-store";
 import {
   DEFAULT_PCB_ZOOM,
   PCB_GRID_MM,
 } from "../../../../shared/frontend/canvas/defaults";
-import { PCB_LAYER_COLORS } from "../../../../shared/frontend/canvas/layers";
+import {
+  PCB_LAYER_COLORS,
+  PCB_LAYER_PRESETS,
+} from "../../../../shared/frontend/canvas/layers";
 import { FlipHorizontal2 } from "lucide-react";
 import { openContextMenu } from "../../../../shared/frontend/context-menu";
 import type { ContextMenuGroup } from "../../../../shared/frontend/context-menu";
@@ -190,6 +204,20 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     dispatchCommand: props.dispatchCommand,
     notifyExternalRevisionBump: props.notifyExternalRevisionBump,
   });
+  // Per-layer opacity + row solo live in the unified view store. Subscribing
+  // here keeps the panel + scene reactive to slider drags and Alt+click
+  // gestures without prop drilling through the workspace hook.
+  const layerOpacity = usePcbViewStore((s) => s.viewState.perLayerOpacity);
+  const soloLayer = usePcbViewStore((s) => s.soloLayer);
+  // Selection filter — opt-out per primitive kind. Wired into both click
+  // and marquee selection paths so disabling "Vias" stops a via click from
+  // ever landing in the selection set.
+  const selectionFilter = usePcbViewStore((s) => s.selectionFilter);
+  const selectionFilterRef = useRef(selectionFilter);
+  selectionFilterRef.current = selectionFilter;
+  const selectionFilterPanelOpen = usePcbViewStore(
+    (s) => s.selectionFilterPanelOpen,
+  );
   const [widthText, setWidthText] = useState("100");
   const [heightText, setHeightText] = useState("80");
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
@@ -200,8 +228,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     routeToolReducer,
     initialRouteToolState,
   );
-  const [focusedLayer, setFocusedLayer] =
-    useState<PcbCopperLayerId | null>(null);
+  const [focusedLayer, setFocusedLayer] = useState<PcbCopperLayerId | null>(
+    null,
+  );
   const [cursorMm, setCursorMmState] = useState<PcbPointMm | null>(null);
   const cursorMmRef = useRef<PcbPointMm | null>(null);
   const setCursorMm = useCallback((next: PcbPointMm | null): void => {
@@ -218,6 +247,15 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const [selection, setSelection] = useState<PcbSelection>(emptyPcbSelection);
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
+  // Disambiguation popup state. Populated on Alt+click when multiple
+  // primitives sit under the cursor; user picks one with mouse, arrow
+  // keys + Enter, or Alt+click again to cycle.
+  const [disambigPopup, setDisambigPopup] = useState<{
+    candidates: ReadonlyArray<PcbHitCandidate>;
+    activeIndex: number;
+    screenX: number;
+    screenY: number;
+  } | null>(null);
   const placementsRef = useRef(workspace.projection?.placements ?? []);
   placementsRef.current = workspace.projection?.placements ?? [];
   const tracesRef = useRef(workspace.projection?.traces ?? []);
@@ -298,6 +336,22 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     return map;
   }, [workspace.projection?.ratsnest]);
 
+  const traceToNet = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const t of workspace.projection?.traces ?? []) {
+      map.set(t.id, t.netId);
+    }
+    return map;
+  }, [workspace.projection?.traces]);
+
+  const viaToNet = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const v of workspace.projection?.vias ?? []) {
+      map.set(v.id, v.netId);
+    }
+    return map;
+  }, [workspace.projection?.vias]);
+
   // Resolve the active layer of the workspace, defaulting to F.Cu when the
   // active layer is a non-copper layer (silkscreen, edge cuts) — routing only
   // happens on copper.
@@ -310,6 +364,22 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       ? routeState.session.layer
       : activeCopperLayer;
   const mirrorActive = workspace.viewSide === "bottom";
+  // Snap target derived from cursor + nearby primitives. Tolerance is a
+  // fixed world-mm radius (0.5mm) so the indicator stays consistent at any
+  // zoom without piping viewport state through here. A future Phase 3 swap
+  // can switch to screen-px tolerance once the rbush index lands.
+  const snapTarget = useMemo<SnapTarget | null>(() => {
+    if (!cursorMm) return null;
+    if (!workspace.projection) return null;
+    return findSnapTarget({
+      cursorMm,
+      toleranceMm: 0.5,
+      placements: workspace.projection.placements,
+      traces: workspace.projection.traces,
+      vias: workspace.projection.vias,
+      activeLayer: activeCopperLayer,
+    });
+  }, [cursorMm, workspace.projection, activeCopperLayer]);
 
   // Marquee/rubber-band selection. Uses the shared canvas hook so PCB and
   // schematic behave identically (KiCad direction-based window/crossing modes,
@@ -328,25 +398,36 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           ? "crossing"
           : "window"
         : rawMode;
+      const sf = selectionFilterRef.current;
       const placementHit =
         mode === "window" ? placementContainedInRect : placementIntersectsRect;
       const traceHit =
         mode === "window" ? traceContainedInRect : traceIntersectsRect;
+      const viaHit = mode === "window" ? viaContainedInRect : viaIntersectsRect;
       const placementIds = new Set(baseSelection.placementIds);
       const traceIds = new Set(baseSelection.traceIds);
       const viaIds = new Set(baseSelection.viaIds);
-      for (const p of visiblePlacements) {
-        if (placementHit(p, rect)) placementIds.add(p.id);
+      if (!sf || sf.pads || sf.placements) {
+        for (const p of visiblePlacements) {
+          if (placementHit(p, rect)) placementIds.add(p.id);
+        }
       }
       const aLayer = workspace.projection?.board.activeLayer;
       const layer: PcbCopperLayerId =
         aLayer === "B.Cu" || aLayer === "In1.Cu" || aLayer === "In2.Cu"
           ? aLayer
           : "F.Cu";
-      for (const t of tracesRef.current) {
-        if (t.layer !== layer) continue;
-        if (!isTraceVisible(visibleLayers, t)) continue;
-        if (traceHit(t, rect)) traceIds.add(t.id);
+      if (!sf || sf.traces) {
+        for (const t of tracesRef.current) {
+          if (t.layer !== layer) continue;
+          if (!isTraceVisible(visibleLayers, t)) continue;
+          if (traceHit(t, rect)) traceIds.add(t.id);
+        }
+      }
+      if ((!sf || sf.vias) && viasVisible) {
+        for (const v of viasRef.current) {
+          if (viaHit(v, rect)) viaIds.add(v.id);
+        }
       }
       return { placementIds, traceIds, viaIds };
     },
@@ -378,9 +459,23 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         const netId = padToNet.get(padId) ?? null;
         return { pointMm: pad.worldMm, netId, onPad: true, padId };
       }
+      if (snapTarget) {
+        if (
+          snapTarget.kind === "trace-endpoint" ||
+          snapTarget.kind === "trace-segment-end"
+        ) {
+          const traceId = snapTarget.sourceId.split("|")[0]!;
+          const netId = traceToNet.get(traceId) ?? null;
+          return { pointMm: snapTarget.pointMm, netId, onPad: false };
+        }
+        if (snapTarget.kind === "via-center") {
+          const netId = viaToNet.get(snapTarget.sourceId) ?? null;
+          return { pointMm: snapTarget.pointMm, netId, onPad: false };
+        }
+      }
       return { pointMm: snapPoint(cursor), netId: null, onPad: false };
     },
-    [padToNet, visiblePlacements],
+    [padToNet, visiblePlacements, snapTarget, traceToNet, viaToNet],
   );
 
   // Commit the current routing session as a `pcb_add_trace` command. Anchors
@@ -512,6 +607,47 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   // facing the user (bottom view → B.Cu active, top view → F.Cu active).
   // This is a one-way coupling: changing layer alone never flips the view.
   // While routing the active layer is left alone so a smart via isn't dropped
+  /**
+   * Apply a single disambiguation-popup pick: replace selection with the
+   * chosen primitive. Plain selection semantics (no shift-merge from the
+   * popup) — the popup is for "I meant THAT one of the overlapping items",
+   * not for set arithmetic.
+   */
+  const applyDisambigPick = useCallback((candidate: PcbHitCandidate) => {
+    switch (candidate.kind) {
+      case "trace":
+        setSelection({
+          placementIds: new Set(),
+          traceIds: new Set([candidate.hit.trace.id]),
+          viaIds: new Set(),
+        });
+        return;
+      case "via":
+        setSelection({
+          placementIds: new Set(),
+          traceIds: new Set(),
+          viaIds: new Set([candidate.via.id]),
+        });
+        return;
+      case "placement":
+        setSelection({
+          placementIds: new Set([candidate.placement.id]),
+          traceIds: new Set(),
+          viaIds: new Set(),
+        });
+        return;
+      case "pad":
+        // Pads aren't selectable on their own; selecting the parent
+        // placement is the next-best UX.
+        setSelection({
+          placementIds: new Set([candidate.hit.placementId]),
+          traceIds: new Set(),
+          viaIds: new Set(),
+        });
+        return;
+    }
+  }, []);
+
   // mid-session; the route session continues on its own layer until the user
   // explicitly switches (V / T / B).
   const handleToggleViewSide = useCallback(() => {
@@ -666,12 +802,58 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           return;
         }
 
+        // Alt+click — open the disambiguation popup at the cursor with every
+        // primitive under the pointer (spec §4.4 / research §4.4). Plain
+        // click still uses the first-match-wins flow below.
+        if (event.modifiers.alt) {
+          const candidates = hitAll({
+            placements: visiblePlacements,
+            traces: tracesRef.current,
+            vias: viasRef.current,
+            cursorMm: cursor,
+            activeLayer: activeCopperLayer,
+          });
+          if (candidates.length > 0) {
+            const clientX =
+              cursorClientPx?.x ?? event.nativeEvent?.nativeEvent.clientX ?? 0;
+            const clientY =
+              cursorClientPx?.y ?? event.nativeEvent?.nativeEvent.clientY ?? 0;
+            setDisambigPopup((prev) => {
+              // Repeat Alt+click on the SAME stack → cycle to next candidate.
+              if (
+                prev &&
+                prev.candidates.length === candidates.length &&
+                prev.screenX === clientX &&
+                prev.screenY === clientY
+              ) {
+                const nextIndex = (prev.activeIndex + 1) % candidates.length;
+                applyDisambigPick(candidates[nextIndex]!);
+                return {
+                  ...prev,
+                  candidates,
+                  activeIndex: nextIndex,
+                };
+              }
+              applyDisambigPick(candidates[0]!);
+              return {
+                candidates,
+                activeIndex: 0,
+                screenX: clientX,
+                screenY: clientY,
+              };
+            });
+            return;
+          }
+        }
+
         // Select mode: click trace/via first, then placement.
         const shift = event.modifiers.shift;
         const current = selectionRef.current;
-        const traceHit = isCopperLayerVisible(visibleLayers, activeCopperLayer)
-          ? hitTrace(tracesRef.current, cursor, activeCopperLayer)
-          : null;
+        const sf = selectionFilterRef.current;
+        const traceHit =
+          sf.traces && isCopperLayerVisible(visibleLayers, activeCopperLayer)
+            ? hitTrace(tracesRef.current, cursor, activeCopperLayer)
+            : null;
         if (traceHit) {
           setCommittedDragOverride(null);
           setDragSession(null);
@@ -686,7 +868,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           );
           return;
         }
-        const viaHit = viasVisible ? hitVia(viasRef.current, cursor) : null;
+        const viaHit =
+          sf.vias && viasVisible ? hitVia(viasRef.current, cursor) : null;
         if (viaHit) {
           setCommittedDragOverride(null);
           setDragSession(null);
@@ -701,7 +884,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           );
           return;
         }
-        const hit = hitPlacement(visiblePlacements, cursor);
+        const hit = sf.placements
+          ? hitPlacement(visiblePlacements, cursor)
+          : null;
         if (hit) {
           setCommittedDragOverride(null);
           if (shift) {
@@ -984,6 +1169,26 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                     void workspace.flipPlacement(placementHit.id);
                   },
                 },
+                {
+                  kind: "separator",
+                  id: "sep-delete-placement",
+                },
+                {
+                  kind: "action",
+                  id: "delete-placement",
+                  label: "Delete placement",
+                  shortcut: "Del",
+                  destructive: true,
+                  onSelect: () => {
+                    void workspace.deletePlacement(placementHit.id).then(() =>
+                      setSelection((prev) => ({
+                        placementIds: new Set(),
+                        traceIds: prev.traceIds,
+                        viaIds: prev.viaIds,
+                      })),
+                    );
+                  },
+                },
               ],
             });
           } else {
@@ -1231,6 +1436,20 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         handleToggleViewSide();
         return;
       }
+      // Toggle the selection-filter floating panel (F alone, no modifiers,
+      // select mode only). Route mode uses F for posture flip.
+      if (
+        toolMode === "select" &&
+        (event.key === "f" || event.key === "F") &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        usePcbViewStore.getState().toggleSelectionFilterPanel();
+        return;
+      }
       // Layer-switch hotkeys (no view flip — that's Shift+F):
       //   T / 1 / PgUp → F.Cu, B / 2 / PgDn → B.Cu.
       // Fire globally so the user can switch active copper layer outside route
@@ -1261,6 +1480,34 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       ) {
         event.preventDefault();
         void setActiveCopperLayer("B.Cu");
+        return;
+      }
+      // 3 / 4 → inner copper layers (only on 4-layer boards). Silently
+      // ignored when the board doesn't expose them so the key isn't
+      // hijacked from text-input fields that happen to be focused
+      // (handler short-circuits early on input target above).
+      if (
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key === "3" &&
+        workspace.projection?.board.layerCount === 4
+      ) {
+        event.preventDefault();
+        void setActiveCopperLayer("In1.Cu");
+        return;
+      }
+      if (
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key === "4" &&
+        workspace.projection?.board.layerCount === 4
+      ) {
+        event.preventDefault();
+        void setActiveCopperLayer("In2.Cu");
         return;
       }
       // Ratsnest toggle moved to Shift+B (B alone now selects Bottom Copper).
@@ -1310,21 +1557,26 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         return;
       }
-      // Delete all selected traces + vias.
+      // Delete all selected placements + traces + vias.
       if (event.key === "Delete" || event.key === "Backspace") {
+        const placementIds = [...selection.placementIds];
         const traceIds = [...selection.traceIds];
         const viaIds = [...selection.viaIds];
-        if (traceIds.length === 0 && viaIds.length === 0) return;
+        if (
+          placementIds.length === 0 &&
+          traceIds.length === 0 &&
+          viaIds.length === 0
+        ) {
+          return;
+        }
         event.preventDefault();
         const tasks: Array<Promise<unknown>> = [];
+        for (const id of placementIds)
+          tasks.push(workspace.deletePlacement(id));
         for (const id of traceIds) tasks.push(workspace.deleteTrace(id));
         for (const id of viaIds) tasks.push(workspace.deleteVia(id));
         void Promise.allSettled(tasks).then(() => {
-          setSelection((prev) => ({
-            placementIds: prev.placementIds,
-            traceIds: new Set(),
-            viaIds: new Set(),
-          }));
+          setSelection(emptyPcbSelection());
         });
         return;
       }
@@ -1376,13 +1628,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       session.posture,
     );
     if (path.length < 2) return null;
-    // Compute the index where the pending tail begins (last committed anchor).
-    const committedCount = committedAnchors.length;
     return {
       pointsNm: path,
       layer: session.layer,
-      // Number of segments fully committed = committedCount - 1.
-      pendingTailFromIndex: Math.max(0, committedCount - 1),
     };
   }, [cursorMm, resolveAnchor, routeState]);
 
@@ -1443,10 +1691,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         routeState.kind === "routing"
           ? routeState.session.widthMm
           : (defaultNetClass?.traceWidthMm ?? 0.25),
-      pendingTailFromIndex: routePreview.pendingTailFromIndex,
-      violationSegmentIndexes: drcViolations.map((v) => v.segmentIndex),
     };
-  }, [defaultNetClass?.traceWidthMm, drcViolations, routePreview, routeState]);
+  }, [defaultNetClass?.traceWidthMm, routePreview, routeState]);
 
   const sceneMarqueeOverlay = useMemo(
     () => ({
@@ -1517,6 +1763,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             focusedLayer={focusedLayer}
             copperFillLayers={workspace.copperFillLayers}
             marqueeOverlay={sceneMarqueeOverlay}
+            snapTarget={snapTarget}
             initialViewport={props.initialViewport}
             onViewportChange={props.onViewportChange}
           />
@@ -1526,6 +1773,44 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         <div className="pointer-events-none absolute left-3 bottom-3 z-20">
           <PcbActiveLayerPill layer={displayedCopperLayer} />
         </div>
+      ) : null}
+      {workspace.projection && selectionFilterPanelOpen ? (
+        <PcbSelectionFilter
+          filter={selectionFilter}
+          onChange={(kind, enabled) =>
+            usePcbViewStore.getState().setSelectionFilter(kind, enabled)
+          }
+          onClose={() =>
+            usePcbViewStore.getState().toggleSelectionFilterPanel()
+          }
+        />
+      ) : null}
+      {disambigPopup ? (
+        <PcbDisambiguationPopup
+          items={disambigPopup.candidates.map((candidate) => ({
+            candidate,
+            label: formatCandidateLabel(candidate),
+          }))}
+          activeIndex={disambigPopup.activeIndex}
+          screenX={disambigPopup.screenX}
+          screenY={disambigPopup.screenY}
+          onPick={(index) => {
+            const candidate = disambigPopup.candidates[index];
+            if (candidate) applyDisambigPick(candidate);
+            setDisambigPopup(null);
+          }}
+          onClose={() => setDisambigPopup(null)}
+          onCycle={(direction) =>
+            setDisambigPopup((prev) => {
+              if (!prev) return prev;
+              const len = prev.candidates.length;
+              const nextIndex = (prev.activeIndex + direction + len) % len;
+              const next = prev.candidates[nextIndex];
+              if (next) applyDisambigPick(next);
+              return { ...prev, activeIndex: nextIndex };
+            })
+          }
+        />
       ) : null}
       {workspace.projection && mirrorActive ? (
         <>
@@ -1707,6 +1992,63 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                   ]);
                 }
                 workspace.toggleCopperFillLayer(layer);
+              }}
+              viewSide={workspace.viewSide}
+              onToggleViewSide={handleToggleViewSide}
+              onSelectLayerPreset={(preset) => {
+                if (preset === "custom") return;
+                // Resolve the preset spec, then apply via workspace methods
+                // so the projection refresh + focusedLayer state update both
+                // run. The view-side portion lands through the store (the
+                // store dispatches `pcb_set_view_state` debounced).
+                const spec = PCB_LAYER_PRESETS.find((p) => p.id === preset);
+                if (!spec) return;
+                void (async () => {
+                  // Active layer FIRST so the backend's auto-pin into
+                  // visibleLayers uses the new active layer (avoids
+                  // force-adding the old activeLayer to the new preset's set).
+                  if (spec.activeLayer) {
+                    if (
+                      spec.activeLayer === "F.Cu" ||
+                      spec.activeLayer === "B.Cu" ||
+                      spec.activeLayer === "In1.Cu" ||
+                      spec.activeLayer === "In2.Cu"
+                    ) {
+                      setFocusedLayer(spec.activeLayer);
+                      await setActiveCopperLayer(spec.activeLayer);
+                    }
+                  }
+                  await workspace.setVisibleLayers(spec.visibleLayers);
+                  // viewSide + layerPreset live in the view state (durable
+                  // but non-undoable); apply through the store.
+                  usePcbViewStore.getState().setLayerPreset(preset);
+                })();
+              }}
+              perLayerOpacity={layerOpacity}
+              onSetLayerOpacity={(layer, opacity) =>
+                usePcbViewStore.getState().setLayerOpacity(layer, opacity)
+              }
+              soloLayer={soloLayer}
+              onToggleSoloLayer={(layer, isActivatable) => {
+                usePcbViewStore
+                  .getState()
+                  .toggleSoloLayer(layer, isActivatable);
+                const next = usePcbViewStore.getState();
+                void workspace.setVisibleLayers(next.visibleLayers);
+                if (next.activeLayer) {
+                  void workspace.setActiveLayer(next.activeLayer);
+                }
+                // Solo also bumps focus to the soloed layer when activatable
+                // so the active-layer pill + tool routing target follow.
+                if (
+                  isActivatable &&
+                  (layer === "F.Cu" ||
+                    layer === "B.Cu" ||
+                    layer === "In1.Cu" ||
+                    layer === "In2.Cu")
+                ) {
+                  setFocusedLayer(layer);
+                }
               }}
             />,
             props.layersPanelTarget,

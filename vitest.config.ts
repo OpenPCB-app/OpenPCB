@@ -9,7 +9,10 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    include: ["src/core/frontend/src/**/*.test.{ts,tsx,js,jsx}"],
+    include: [
+      "src/core/frontend/src/**/*.test.{ts,tsx,js,jsx}",
+      "src/core/frontend/src/**/*.spec.{ts,tsx,js,jsx}",
+    ],
   },
   resolve: {
     alias: {

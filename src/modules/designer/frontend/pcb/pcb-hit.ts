@@ -174,6 +174,137 @@ export function hitVia(
   return null;
 }
 
+/**
+ * Aggregate hit-test result: an ordered list of candidates under the cursor,
+ * paint order first (closest visible thing first). Used for Alt+click
+ * disambiguation popups so the user can cycle through stacked items.
+ *
+ * Order: pad → trace → via → placement. Mirrors plain-click priority but
+ * returns ALL matches so the UI can render a chooser.
+ */
+export type PcbHitCandidate =
+  | { kind: "pad"; hit: PadHit }
+  | { kind: "trace"; hit: TraceHit }
+  | { kind: "via"; via: PcbVia }
+  | { kind: "placement"; placement: PcbPlacedPart };
+
+export interface HitAllInput {
+  placements: readonly PcbPlacedPart[];
+  traces: readonly PcbTrace[];
+  vias: readonly PcbVia[];
+  cursorMm: PcbPointMm;
+  activeLayer: PcbCopperLayerId;
+  selectionFilter?: {
+    traces: boolean;
+    vias: boolean;
+    pads: boolean;
+    placements: boolean;
+  };
+}
+
+export function hitAll(input: HitAllInput): PcbHitCandidate[] {
+  const out: PcbHitCandidate[] = [];
+  const sf = input.selectionFilter;
+  // Pads — every match (not just first) so the user can cycle near stacked
+  // BGA pads. Hit-test re-uses hitPad's bounds check inline.
+  if (!sf || sf.pads || sf.placements) {
+    for (const placement of input.placements) {
+      const pads = placement.footprint.preview?.pads ?? [];
+      for (const pad of pads) {
+        const offset = transformLocal(
+          pad.centerMm,
+          placement.rotationDeg,
+          placementMirrorX(placement),
+        );
+        const cx = placement.positionMm.x + offset.x;
+        const cy = placement.positionMm.y + offset.y;
+        const halfW = pad.widthMm / 2 + PAD_HIT_PAD_MM;
+        const halfH = pad.heightMm / 2 + PAD_HIT_PAD_MM;
+        if (
+          Math.abs(input.cursorMm.x - cx) <= halfW &&
+          Math.abs(input.cursorMm.y - cy) <= halfH
+        ) {
+          out.push({
+            kind: "pad",
+            hit: {
+              placementId: placement.id,
+              padNumber: pad.number,
+              worldMm: { x: cx, y: cy },
+            },
+          });
+        }
+      }
+    }
+  }
+  // Traces on the active copper layer.
+  if (!sf || sf.traces) {
+    for (const trace of input.traces) {
+      if (trace.layer !== input.activeLayer) continue;
+      const tolerance = trace.widthMm / 2 + TRACE_HIT_MM;
+      let best: TraceHit | null = null;
+      for (let i = 1; i < trace.pointsNm.length; i += 1) {
+        const a = {
+          x: trace.pointsNm[i - 1]!.x / 1_000_000,
+          y: trace.pointsNm[i - 1]!.y / 1_000_000,
+        };
+        const b = {
+          x: trace.pointsNm[i]!.x / 1_000_000,
+          y: trace.pointsNm[i]!.y / 1_000_000,
+        };
+        const proj = projectPointToSegment(input.cursorMm, a, b);
+        if (
+          proj.distance <= tolerance &&
+          (!best || proj.distance < best.distanceMm)
+        ) {
+          best = {
+            trace,
+            segmentIndex: i - 1,
+            closestMm: proj.closest,
+            distanceMm: proj.distance,
+          };
+        }
+      }
+      if (best) out.push({ kind: "trace", hit: best });
+    }
+  }
+  // Vias — all matches.
+  if (!sf || sf.vias) {
+    for (const via of input.vias) {
+      const r = via.diameterMm / 2;
+      const dx = input.cursorMm.x - via.centerMm.x;
+      const dy = input.cursorMm.y - via.centerMm.y;
+      if (dx * dx + dy * dy <= r * r) {
+        out.push({ kind: "via", via });
+      }
+    }
+  }
+  // Placements — bounding-box match.
+  if (!sf || sf.placements) {
+    for (const placement of input.placements) {
+      const bounds = placement.footprint.preview?.bounds;
+      if (!bounds) continue;
+      const delta = {
+        x: input.cursorMm.x - placement.positionMm.x,
+        y: input.cursorMm.y - placement.positionMm.y,
+      };
+      const local = inverseTransform(
+        delta,
+        placement.rotationDeg,
+        placementMirrorX(placement),
+      );
+      if (
+        local.x >= bounds.minX &&
+        local.x <= bounds.maxX &&
+        local.y >= bounds.minY &&
+        local.y <= bounds.maxY
+      ) {
+        out.push({ kind: "placement", placement });
+      }
+    }
+  }
+  return out;
+}
+
 export function hitPlacement(
   placements: readonly PcbPlacedPart[],
   cursorMm: PcbPointMm,

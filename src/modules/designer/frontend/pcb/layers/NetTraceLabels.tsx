@@ -5,14 +5,24 @@ import { EDAText } from "../../../../../shared/frontend/canvas/primitives/EDATex
 import { RENDER_ORDER } from "../../../../../shared/frontend/canvas/layers";
 
 const NM_TO_MM = 1 / 1_000_000;
-/** Drop a label every ~2.5 mm of arc length along the routed polyline. */
-const LABEL_INTERVAL_MM = 2.5;
-/** Don't repeat a label within 1.5 mm of either endpoint (crowds the pad). */
+/**
+ * Minimum segment length (mm) that earns a label. Below this the segment is
+ * skipped — short bend/jog segments stay clean.
+ */
+const MIN_SEGMENT_LEN_MM = 4;
+/**
+ * Long segments get one label per this much arc length so a very long run
+ * gets a few labels (one is unreadable at full zoom). 12 mm balances
+ * "readable" against "not too dense". One label per segment under this
+ * threshold.
+ */
+const LONG_SEGMENT_LABEL_SPACING_MM = 12;
+/** Don't repeat a label within 1.5 mm of either segment endpoint (crowds the pad/bend). */
 const ENDPOINT_GUARD_MM = 1.5;
 /** Zoom gate: skip rendering when fewer than this many screen px per mm. */
 const MIN_PX_PER_MM = 10;
 /** Max labels per trace (prevents runaway count on long power rails). */
-const LABEL_CAP_PER_TRACE = 20;
+const LABEL_CAP_PER_TRACE = 8;
 /** Label font height in mm (~0.5 mm reads at typical zooms). */
 const LABEL_FONT_MM = 0.5;
 
@@ -76,44 +86,57 @@ export function NetTraceLabels({
       const text = netNames[trace.netId];
       if (!text) continue;
 
-      // Cumulative arc length walk through the polyline in mm.
-      let arc = 0;
-      let nextDrop = LABEL_INTERVAL_MM;
+      // Per-segment labeling: each polyline segment that exceeds the
+      // minimum length earns 1 label at its midpoint. Segments longer than
+      // `LONG_SEGMENT_LABEL_SPACING_MM` get extra labels evenly spaced so
+      // long power rails don't go un-named between widely-separated bends.
       let placed = 0;
-      const totalLen = polylineLengthMm(trace.pointsNm);
-      for (let i = 1; i < trace.pointsNm.length; i += 1) {
+      for (
+        let i = 1;
+        i < trace.pointsNm.length && placed < LABEL_CAP_PER_TRACE;
+        i += 1
+      ) {
         const a = trace.pointsNm[i - 1]!;
         const b = trace.pointsNm[i]!;
         const dxMm = (b.x - a.x) * NM_TO_MM;
         const dyMm = (b.y - a.y) * NM_TO_MM;
         const segLen = Math.hypot(dxMm, dyMm);
-        if (segLen === 0) continue;
+        if (segLen < MIN_SEGMENT_LEN_MM) continue;
+
         const angleRaw = Math.atan2(dyMm, dxMm);
         // Flip text past vertical so it never reads upside-down.
         const angle =
           angleRaw > Math.PI / 2 || angleRaw < -Math.PI / 2
             ? angleRaw + Math.PI
             : angleRaw;
-        while (
-          nextDrop <= arc + segLen &&
-          placed < LABEL_CAP_PER_TRACE &&
-          nextDrop >= ENDPOINT_GUARD_MM &&
-          totalLen - nextDrop >= ENDPOINT_GUARD_MM
+
+        // Distribute labels across the segment: 1 in the middle for normal
+        // segments; for long segments, ceil(segLen / spacing) labels evenly
+        // spaced. Endpoint guard keeps text off pad/bend.
+        const usable = Math.max(0, segLen - 2 * ENDPOINT_GUARD_MM);
+        if (usable <= 0) continue;
+        const labelsThisSeg = Math.max(
+          1,
+          Math.ceil(segLen / LONG_SEGMENT_LABEL_SPACING_MM),
+        );
+        const stride = usable / labelsThisSeg;
+        for (
+          let k = 0;
+          k < labelsThisSeg && placed < LABEL_CAP_PER_TRACE;
+          k += 1
         ) {
-          const t = (nextDrop - arc) / segLen;
+          const t = (ENDPOINT_GUARD_MM + stride * (k + 0.5)) / segLen;
           const xMm = a.x * NM_TO_MM + dxMm * t;
           const yMm = a.y * NM_TO_MM + dyMm * t;
           out.push({
-            key: `${trace.id}-${placed}`,
+            key: `${trace.id}-${i}-${k}`,
             xMm,
             yMm,
             angle,
             text,
           });
           placed += 1;
-          nextDrop += LABEL_INTERVAL_MM;
         }
-        arc += segLen;
       }
     }
     return out;
@@ -135,7 +158,7 @@ export function NetTraceLabels({
             anchorY="middle"
             rotation={[0, 0, l.angle]}
             opacity={labelOpacity}
-            renderOrder={RENDER_ORDER.LABELS}
+            renderOrder={RENDER_ORDER.METADATA}
             outlineWidth={LABEL_FONT_MM * 0.18}
             outlineColor="#000000"
           >
@@ -145,16 +168,4 @@ export function NetTraceLabels({
       ))}
     </>
   );
-}
-
-function polylineLengthMm(
-  pointsNm: ReadonlyArray<{ x: number; y: number }>,
-): number {
-  let len = 0;
-  for (let i = 1; i < pointsNm.length; i += 1) {
-    const a = pointsNm[i - 1]!;
-    const b = pointsNm[i]!;
-    len += Math.hypot((b.x - a.x) * NM_TO_MM, (b.y - a.y) * NM_TO_MM);
-  }
-  return len;
 }

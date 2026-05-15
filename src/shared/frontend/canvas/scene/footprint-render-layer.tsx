@@ -46,7 +46,7 @@ export interface FootprintRenderLayerProps {
    * by the 2D PCB canvas to remap F.* ↔ B.* atomically when a placement is
    * on the bottom side, mirroring the KiCad flip semantics. Through-hole
    * (`*.Cu`) and `Edge.Cuts` should pass through unchanged.
-  */
+   */
   layerRemap?: (layer: string | undefined) => string | undefined;
   /** Pad numbers to visually dim while keeping them rendered for context. */
   dimmedPadNumbers?: ReadonlySet<string>;
@@ -54,6 +54,38 @@ export interface FootprintRenderLayerProps {
   padDimFactor?: number;
   /** Opacity for dimmed footprint graphics/labels. */
   dimmedOpacity?: number;
+  /**
+   * Per-layer opacity multiplier. Receives the effective layer string
+   * (after layerRemap) and returns 0..1. Applied on top of dimming.
+   */
+  layerOpacity?: (layer: string) => number;
+  /**
+   * Explicit renderOrder for pad-number labels. On the PCB canvas this
+   * should be set to `RENDER_ORDER.METADATA` so pad numbers stack with
+   * other metadata primitives (ratsnest) rather than inheriting the
+   * footprint's implicit layer.
+   */
+  padNumberRenderOrder?: number;
+  /**
+   * Explicit renderOrder for pad meshes. Defaults to `RENDER_ORDER.PINS`.
+   * PCB canvas passes the placement's effective copper render slot (after
+   * `effectiveRenderOrder` side flip) so off-side pads sort under the
+   * active side's copper pour.
+   */
+  padRenderOrder?: number;
+  /**
+   * Explicit renderOrder for footprint silkscreen / fab graphics. Defaults
+   * to `silkscreenRenderOrder(layer)` per stroke layer. Pass a constant to
+   * collapse all graphics to one slot (used by the PCB canvas to sort the
+   * whole footprint as a unit with side-flip awareness).
+   */
+  graphicsRenderOrder?: number;
+  /**
+   * Explicit renderOrder for drill circles. Defaults to
+   * `RENDER_ORDER.PINS + 0.2`. PCB canvas passes `RENDER_ORDER.DRILL` so
+   * drills stay between top and bottom copper through side flip.
+   */
+  drillRenderOrder?: number;
 }
 
 const REFERENCE_TOKEN_RE = /\$\{REFERENCE\}|REF\*\*/g;
@@ -139,6 +171,11 @@ export function FootprintRenderLayer({
   dimmedPadNumbers,
   padDimFactor = DIM_FACTOR,
   dimmedOpacity = 0.3,
+  layerOpacity,
+  padNumberRenderOrder,
+  padRenderOrder,
+  graphicsRenderOrder,
+  drillRenderOrder,
 }: FootprintRenderLayerProps) {
   const remap = (layer: string | undefined): string | undefined =>
     layerRemap ? layerRemap(layer) : layer;
@@ -150,6 +187,11 @@ export function FootprintRenderLayer({
     if (!dimmedLayers) return false;
     const effective = remap(layer);
     return effective !== undefined && dimmedLayers.has(effective);
+  };
+  const getLayerOpacity = (layer: string | undefined): number => {
+    const effective = remap(layer);
+    if (effective === undefined) return 1;
+    return layerOpacity?.(effective) ?? 1;
   };
   const { theme } = useCanvasTheme();
   const basePreview = theme.preview;
@@ -244,7 +286,14 @@ export function FootprintRenderLayer({
           selected: false,
         };
       }),
-    [model.pads, dimmedLayers, dimmedPadNumbers, padDimFactor, useLayerColors, layerRemap],
+    [
+      model.pads,
+      dimmedLayers,
+      dimmedPadNumbers,
+      padDimFactor,
+      useLayerColors,
+      layerRemap,
+    ],
   );
 
   return (
@@ -262,6 +311,8 @@ export function FootprintRenderLayer({
           dimmedLayers !== undefined &&
           effectiveLayer !== undefined &&
           dimmedLayers.has(effectiveLayer);
+        const layerOp = getLayerOpacity(effectiveLayer);
+        const finalOpacity = (isDimmed ? dimmedOpacity : 1) * layerOp;
         return (
           <lineSegments
             key={group.layer}
@@ -278,18 +329,25 @@ export function FootprintRenderLayer({
               color={color}
               depthTest={enableDepthTest}
               depthWrite={enableDepthTest}
-              transparent={!enableDepthTest || isDimmed}
-              opacity={isDimmed ? dimmedOpacity : 1}
+              transparent={!enableDepthTest || isDimmed || layerOp < 1}
+              opacity={finalOpacity}
             />
           </lineSegments>
         );
       })}
 
-      {/* Pads */}
+      {/* Pads — single opacity derived from the most-visible pad layer. */}
       <PadInstances
         pads={padData}
         defaultColor={pt.footprintPad}
         enableDepthTest={enableDepthTest}
+        opacity={Math.max(
+          ...model.pads.map((pad) =>
+            getLayerOpacity(remap(pad.layer ?? "F.Cu")),
+          ),
+          0,
+        )}
+        renderOrder={padRenderOrder}
       />
 
       {/* Drill holes */}
@@ -298,14 +356,15 @@ export function FootprintRenderLayer({
           <mesh
             key={`${pad.id}:drill`}
             position={[pad.centerMm.x, pad.centerMm.y, 0]}
-            renderOrder={RENDER_ORDER.PINS + 0.2}
+            renderOrder={drillRenderOrder ?? RENDER_ORDER.PINS + 0.2}
           >
             <circleGeometry args={[pad.drillDiameterMm / 2, 20]} />
             <meshBasicMaterial
               color={pt.footprintDrill}
               depthTest={enableDepthTest}
               depthWrite={enableDepthTest}
-              transparent={!enableDepthTest}
+              transparent={!enableDepthTest || getLayerOpacity("Drill") < 1}
+              opacity={getLayerOpacity("Drill")}
             />
           </mesh>
         ) : null,
@@ -323,7 +382,11 @@ export function FootprintRenderLayer({
               fontSize={0.28}
               anchorX="center"
               anchorY="middle"
-              opacity={isDimmedPad ? Math.max(dimmedOpacity, 0.18) : undefined}
+              renderOrder={padNumberRenderOrder}
+              opacity={
+                (isDimmedPad ? Math.max(dimmedOpacity, 0.18) : 1) *
+                getLayerOpacity(remap(pad.layer ?? "F.Cu"))
+              }
             >
               {pad.number}
             </EDAText>
@@ -356,7 +419,9 @@ export function FootprintRenderLayer({
             fontSize={label.fontSizeMm}
             anchorX={label.anchorX}
             anchorY={label.anchorY}
-            opacity={isDimmed ? dimmedOpacity : undefined}
+            opacity={
+              (isDimmed ? dimmedOpacity : 1) * getLayerOpacity(effectiveLayer)
+            }
             rotation={
               label.rotationDeg === 0
                 ? undefined

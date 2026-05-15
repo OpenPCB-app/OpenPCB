@@ -1,4 +1,9 @@
-import type { PcbPlacedPart, PcbPointMm, PcbTrace } from "../../../../sdks";
+import type {
+  PcbPlacedPart,
+  PcbPointMm,
+  PcbTrace,
+  PcbVia,
+} from "../../../../sdks";
 import { placementMirrorX } from "../../../../sdks/designer/pcb-helpers";
 import type { BoundsMm } from "../../../../shared/rendering/types";
 import {
@@ -99,4 +104,26 @@ export function traceContainedInRect(trace: PcbTrace, rect: BoundsMm): boolean {
 /** Trace touches `rect` (any vertex inside or any segment crosses). */
 export function traceIntersectsRect(trace: PcbTrace, rect: BoundsMm): boolean {
   return polylineIntersectsAabb(tracePointsMm(trace), rect);
+}
+
+/** Via center is fully inside `rect`. */
+export function viaContainedInRect(via: PcbVia, rect: BoundsMm): boolean {
+  return (
+    via.centerMm.x >= rect.minX &&
+    via.centerMm.x <= rect.maxX &&
+    via.centerMm.y >= rect.minY &&
+    via.centerMm.y <= rect.maxY
+  );
+}
+
+/** Via bounding box overlaps `rect`. */
+export function viaIntersectsRect(via: PcbVia, rect: BoundsMm): boolean {
+  const r = via.diameterMm / 2;
+  const b = {
+    minX: via.centerMm.x - r,
+    minY: via.centerMm.y - r,
+    maxX: via.centerMm.x + r,
+    maxY: via.centerMm.y + r,
+  };
+  return aabbOverlap(b, rect);
 }

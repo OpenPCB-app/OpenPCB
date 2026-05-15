@@ -13,8 +13,11 @@ export default defineConfig({
     globals: true,
     include: [
       "src/core/frontend/src/**/*.test.{ts,tsx,js,jsx}",
+      "src/core/frontend/src/**/*.spec.{ts,tsx,js,jsx}",
       "src/modules/*/frontend/**/*.test.{ts,tsx,js,jsx}",
+      "src/modules/*/frontend/**/*.spec.{ts,tsx,js,jsx}",
       "src/shared/frontend/**/*.test.{ts,tsx,js,jsx}",
+      "src/shared/frontend/**/*.spec.{ts,tsx,js,jsx}",
     ],
   },
   resolve: {

@@ -1,4 +1,4 @@
-import type { PcbBoardSettings } from "../../../../sdks/designer";
+import type { PcbBoardSettings, PcbViewState } from "../../../../sdks/designer";
 
 export const DEFAULT_PCB_WIDTH_MM = 50;
 export const DEFAULT_PCB_HEIGHT_MM = 30;
@@ -10,6 +10,23 @@ export const DEFAULT_PCB_HEIGHT_MM = 30;
 export const DEFAULT_TRACE_PRESETS_MM: ReadonlyArray<number> = [
   0.15, 0.2, 0.25, 0.5, 1.0,
 ];
+
+/**
+ * View state seed for fresh designs. Mirrors KiCad's defaults:
+ * top view, normal display mode, ratsnest on, no copper-fill toggles.
+ * `layerPreset = "custom"` until the user picks a preset chip.
+ */
+export function createDefaultPcbViewState(): PcbViewState {
+  return {
+    displayMode: "normal",
+    viewSide: "top",
+    copperFillLayers: [],
+    copperFillPourNetIds: {},
+    perLayerOpacity: {},
+    layerPreset: "custom",
+    ratsnestVisible: true,
+  };
+}
 
 export function createDefaultPcbBoardSettings(
   timestamp: string,
@@ -32,10 +49,10 @@ export function createDefaultPcbBoardSettings(
     ],
     designRules: {
       clearance: {
-        traceToTraceMm: 0.2,
-        traceToPadMm: 0.2,
-        padToPadMm: 0.2,
-        traceToViaMm: 0.2,
+        traceToTraceMm: 0.25,
+        traceToPadMm: 0.25,
+        padToPadMm: 0.25,
+        traceToViaMm: 0.25,
         viaToViaMm: 0.3,
         copperToBoardEdgeMm: 0.5,
       },
@@ -52,7 +69,7 @@ export function createDefaultPcbBoardSettings(
         id: "default",
         name: "Default",
         traceWidthMm: 0.25,
-        clearanceMm: 0.2,
+        clearanceMm: 0.25,
         viaDiameterMm: 0.8,
         viaDrillMm: 0.4,
         color: "#d4d4d8",
@@ -62,7 +79,7 @@ export function createDefaultPcbBoardSettings(
         id: "power",
         name: "Power",
         traceWidthMm: 0.5,
-        clearanceMm: 0.2,
+        clearanceMm: 0.25,
         viaDiameterMm: 0.8,
         viaDrillMm: 0.4,
         color: "#f87171",
@@ -72,7 +89,7 @@ export function createDefaultPcbBoardSettings(
         id: "gnd",
         name: "GND",
         traceWidthMm: 0.4,
-        clearanceMm: 0.2,
+        clearanceMm: 0.25,
         viaDiameterMm: 0.8,
         viaDrillMm: 0.4,
         color: "#64748b",
@@ -85,6 +102,7 @@ export function createDefaultPcbBoardSettings(
     displayMode: "normal",
     solderMaskExpansionMm: 0.075,
     solderPasteExpansionMm: -0.05,
+    viewState: createDefaultPcbViewState(),
     updatedAt: timestamp,
   };
 }

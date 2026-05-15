@@ -4,15 +4,21 @@ import type {
   PcbBoardSettings,
   PcbCopperLayerId,
   PcbLayerId,
+  PcbLayerPreset,
   PcbPlacedPart,
   PcbPointMm,
   PcbTrace,
   PcbTraceSegmentMode,
   PcbVia,
+  PcbViewSide,
+  PcbViewState,
 } from "../../../../sdks/designer";
 import { pcbEntities } from "../schema";
 import { asNumber, asRecord, asString } from "../value-guards";
-import { createDefaultPcbBoardSettings } from "./pcb-defaults";
+import {
+  createDefaultPcbBoardSettings,
+  createDefaultPcbViewState,
+} from "./pcb-defaults";
 
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
@@ -90,6 +96,122 @@ function parsePayload(payloadJson: string): unknown {
   }
 }
 
+function isCopperLayerId(value: unknown): value is PcbCopperLayerId {
+  return (
+    value === "F.Cu" ||
+    value === "In1.Cu" ||
+    value === "In2.Cu" ||
+    value === "B.Cu"
+  );
+}
+
+function parseViewSide(value: unknown): PcbViewSide {
+  const s = asString(value);
+  return s === "bottom" ? "bottom" : "top";
+}
+
+function parseLayerPreset(value: unknown): PcbLayerPreset {
+  const s = asString(value);
+  if (
+    s === "top-side" ||
+    s === "bottom-side" ||
+    s === "all-copper" ||
+    s === "assembly"
+  ) {
+    return s;
+  }
+  return "custom";
+}
+
+function parseCopperFillLayers(value: unknown): PcbCopperLayerId[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<PcbCopperLayerId>();
+  const out: PcbCopperLayerId[] = [];
+  for (const item of value) {
+    if (isCopperLayerId(item) && !seen.has(item)) {
+      seen.add(item);
+      out.push(item);
+    }
+  }
+  return out;
+}
+
+function parsePourNetIds(
+  value: unknown,
+): Partial<Record<PcbCopperLayerId, string | null>> {
+  const record = asRecord(value);
+  if (!record) return {};
+  const out: Partial<Record<PcbCopperLayerId, string | null>> = {};
+  for (const key of ["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"] as const) {
+    const raw = record[key];
+    if (raw === null) {
+      out[key] = null;
+    } else if (typeof raw === "string" && raw.length > 0) {
+      out[key] = raw;
+    }
+  }
+  return out;
+}
+
+function parsePerLayerOpacity(
+  value: unknown,
+): Partial<Record<PcbLayerId, number>> {
+  const record = asRecord(value);
+  if (!record) return {};
+  const out: Partial<Record<PcbLayerId, number>> = {};
+  for (const key of Object.keys(record)) {
+    if (!ALL_PCB_LAYER_IDS.has(key as PcbLayerId)) continue;
+    const n = asNumber(record[key]);
+    if (n === null) continue;
+    out[key as PcbLayerId] = Math.max(0, Math.min(1, n));
+  }
+  return out;
+}
+
+function parseViewState(value: unknown): PcbViewState {
+  const record = asRecord(value);
+  const defaults = createDefaultPcbViewState();
+  if (!record) return defaults;
+  return {
+    displayMode: parseDisplayMode(record.displayMode),
+    viewSide: parseViewSide(record.viewSide),
+    copperFillLayers: parseCopperFillLayers(record.copperFillLayers),
+    copperFillPourNetIds: parsePourNetIds(record.copperFillPourNetIds),
+    perLayerOpacity: parsePerLayerOpacity(record.perLayerOpacity),
+    layerPreset: parseLayerPreset(record.layerPreset),
+    ratsnestVisible:
+      record.ratsnestVisible === false
+        ? false
+        : record.ratsnestVisible === true
+          ? true
+          : defaults.ratsnestVisible,
+  };
+}
+
+function mergeViewState(
+  current: PcbViewState,
+  patch: Partial<PcbViewState>,
+): PcbViewState {
+  return {
+    displayMode: patch.displayMode ?? current.displayMode,
+    viewSide: patch.viewSide ?? current.viewSide,
+    copperFillLayers: patch.copperFillLayers
+      ? parseCopperFillLayers(patch.copperFillLayers)
+      : current.copperFillLayers,
+    copperFillPourNetIds: patch.copperFillPourNetIds
+      ? { ...current.copperFillPourNetIds, ...patch.copperFillPourNetIds }
+      : current.copperFillPourNetIds,
+    perLayerOpacity: patch.perLayerOpacity
+      ? { ...current.perLayerOpacity, ...patch.perLayerOpacity }
+      : current.perLayerOpacity,
+    layerPreset: patch.layerPreset ?? current.layerPreset,
+    ratsnestVisible:
+      patch.ratsnestVisible !== undefined
+        ? patch.ratsnestVisible
+        : current.ratsnestVisible,
+  };
+}
+
 function parseBoardSettings(value: unknown): PcbBoardSettings | null {
   const record = asRecord(value);
   const outline = asRecord(record?.outline);
@@ -148,6 +270,10 @@ function parseBoardSettings(value: unknown): PcbBoardSettings | null {
     solderPasteExpansionMm:
       asNumber(record.solderPasteExpansionMm) ??
       defaults.solderPasteExpansionMm,
+    viewState:
+      record.viewState !== undefined
+        ? parseViewState(record.viewState)
+        : defaults.viewState,
     updatedAt,
   };
 }
@@ -289,7 +415,12 @@ export function updatePcbVisibleLayers(params: {
     params.designId,
     params.timestamp,
   );
-  // Dedupe + preserve order; ensure activeLayer remains visible.
+  // Dedupe + preserve order; auto-pin the active layer ONLY when the new
+  // set still contains its family (i.e. the user is reshuffling copper
+  // visibility). Presets that intentionally omit all copper (e.g.
+  // "Assembly view") shouldn't drag the routing layer back in — that
+  // would leave the panel and chip detection out of sync with the user's
+  // chosen preset.
   const seen = new Set<PcbLayerId>();
   const visible: PcbLayerId[] = [];
   for (const layer of params.visibleLayers) {
@@ -298,10 +429,49 @@ export function updatePcbVisibleLayers(params: {
       visible.push(layer);
     }
   }
-  if (!seen.has(settings.activeLayer)) visible.push(settings.activeLayer);
+  const hasAnyCopper =
+    seen.has("F.Cu") ||
+    seen.has("In1.Cu") ||
+    seen.has("In2.Cu") ||
+    seen.has("B.Cu");
+  const activeIsCopper = isCopperLayer(settings.activeLayer);
+  if (hasAnyCopper && activeIsCopper && !seen.has(settings.activeLayer)) {
+    visible.push(settings.activeLayer);
+  }
   const next: PcbBoardSettings = {
     ...settings,
     visibleLayers: visible,
+    updatedAt: params.timestamp,
+  };
+  params.db
+    .update(pcbEntities)
+    .set({ payloadJson: JSON.stringify(next), updatedAt: params.timestamp })
+    .where(
+      and(
+        eq(pcbEntities.designId, params.designId),
+        eq(pcbEntities.kind, BOARD_SETTINGS_KIND),
+      ),
+    )
+    .run();
+  return next;
+}
+
+export function updatePcbViewState(params: {
+  db: DbClient;
+  designId: string;
+  patch: Partial<PcbViewState>;
+  timestamp: string;
+}): PcbBoardSettings {
+  const settings = ensurePcbBoardSettings(
+    params.db,
+    params.designId,
+    params.timestamp,
+  );
+  const current = settings.viewState ?? createDefaultPcbViewState();
+  const nextViewState = mergeViewState(current, params.patch);
+  const next: PcbBoardSettings = {
+    ...settings,
+    viewState: nextViewState,
     updatedAt: params.timestamp,
   };
   params.db

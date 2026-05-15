@@ -1,10 +1,15 @@
 import { useEffect, useMemo, type ReactElement } from "react";
 import * as THREE from "three";
-import type { PcbBoardOutline, PcbPlacedPart } from "../../../../../sdks";
+import type {
+  PcbBoardOutline,
+  PcbPlacedPart,
+  PcbViewSide,
+} from "../../../../../sdks";
 import { placementMirrorX } from "../../../../../sdks/designer/pcb-helpers";
 import {
   PCB_LAYER_COLORS,
   RENDER_ORDER,
+  effectiveRenderOrder,
 } from "../../../../../shared/frontend/canvas/layers";
 import {
   padAperturePath,
@@ -21,6 +26,8 @@ interface SolderMaskLayerProps {
   /** IPC-7351 mask aperture expansion (mm, per side). Typ 0.075. */
   expansionMm: number;
   opacity?: number;
+  /** Side-flip indicator. Drives renderOrder reversal (spec §5.2). */
+  viewSide?: PcbViewSide;
 }
 
 /**
@@ -42,6 +49,7 @@ export function SolderMaskLayer({
   outline,
   expansionMm,
   opacity = 0.7,
+  viewSide = "top",
 }: SolderMaskLayerProps): ReactElement | null {
   const geometry = useMemo(
     () => buildMaskGeometry(side, placements, outline, expansionMm),
@@ -50,11 +58,17 @@ export function SolderMaskLayer({
   useEffect(() => () => geometry?.dispose(), [geometry]);
   if (!geometry) return null;
   const color = PCB_LAYER_COLORS[side === "top" ? "F.Mask" : "B.Mask"];
+  const renderOrder = effectiveRenderOrder(
+    side === "top" ? "F.Mask" : "B.Mask",
+    viewSide,
+    "object",
+  );
+  void RENDER_ORDER;
   return (
     <mesh
       geometry={geometry}
       position={[outline.centerMm.x, outline.centerMm.y, 0]}
-      renderOrder={side === "top" ? RENDER_ORDER.F_MASK : RENDER_ORDER.B_MASK}
+      renderOrder={renderOrder}
     >
       <meshBasicMaterial
         color={color}

@@ -11,6 +11,7 @@ import type {
 } from "../../../../sdks";
 import { createDesignerApi } from "../api";
 import { useDesignerHighlight } from "../useDesignerHighlight";
+import { syncLayerPresetFromVisible, usePcbViewStore } from "./pcb-view-store";
 
 const PCB_SESSION_ID = "designer-pcb-session";
 
@@ -44,98 +45,45 @@ export function usePcbWorkspace(params: {
   const [canRedo, setCanRedo] = useState(false);
   // Cross-probe highlight state lives in a designer-wide store so the schematic
   // and PCB views stay in lockstep (hover a pad on PCB → schematic dims; hover
-  // a wire on schematic → PCB dims). UI state local to the PCB tab — like the
-  // ratsnest visibility toggle — stays here.
+  // a wire on schematic → PCB dims).
   const highlightedNetId = useDesignerHighlight((s) => s.highlightedNetId);
   const pinnedHighlight = useDesignerHighlight((s) => s.pinned);
   const hoverNetStore = useDesignerHighlight((s) => s.hoverNet);
   const pinNetStore = useDesignerHighlight((s) => s.pinNet);
   const clearHighlightStore = useDesignerHighlight((s) => s.clear);
-  const [ratsnestVisible, setRatsnestVisible] = useState(true);
-  // View side is independent of active layer (per UX: switching layer never
-  // flips, and flipping never changes layer). Persisted per-design in
-  // localStorage so reload restores the user's last orientation.
-  const viewSideStorageKey = designId
-    ? `openpcb.pcb.viewSide.${designId}`
-    : null;
-  const [viewSide, setViewSideState] = useState<"top" | "bottom">("top");
 
-  // Display mode (Normal / Dim / Solo) — controls how non-active layers fade
-  // relative to the active layer. Mirrors KiCad's Ctrl+H cycle. Persisted in
-  // localStorage per-design; backend persistence in PcbBoardSettings is a
-  // follow-up so a missing command type doesn't block visual work.
-  const displayModeStorageKey = designId
-    ? `openpcb.pcb.displayMode.${designId}`
-    : null;
-  const [displayMode, setDisplayModeState] = useState<PcbDisplayMode>("normal");
+  // Unified PCB view state lives in pcb-view-store (Zustand). It's hydrated
+  // from `board_settings.viewState` on every projection load and persists
+  // changes through a debounced `pcb_set_view_state` command, replacing the
+  // earlier per-design localStorage hooks. The hook surface stays
+  // compatible: callers continue to use viewSide / displayMode /
+  // copperFillLayers but those values now come from the store.
+  const viewState = usePcbViewStore((s) => s.viewState);
+  const setViewSideStore = usePcbViewStore((s) => s.setViewSide);
+  const toggleViewSideStore = usePcbViewStore((s) => s.toggleViewSide);
+  const setDisplayModeStore = usePcbViewStore((s) => s.setDisplayMode);
+  const cycleDisplayModeStore = usePcbViewStore((s) => s.cycleDisplayMode);
+  const setCopperFillLayersStore = usePcbViewStore(
+    (s) => s.setCopperFillLayers,
+  );
+  const toggleCopperFillLayerStore = usePcbViewStore(
+    (s) => s.toggleCopperFillLayer,
+  );
+  const setRatsnestVisibleStore = usePcbViewStore((s) => s.setRatsnestVisible);
+  const toggleRatsnestVisibleStore = usePcbViewStore(
+    (s) => s.toggleRatsnestVisible,
+  );
+  const hydrateView = usePcbViewStore((s) => s.hydrateFromProjection);
+  const setStoreDispatcher = usePcbViewStore((s) => s.setDispatcher);
+  const flushView = usePcbViewStore((s) => s.flush);
 
-  // Per-copper-layer visual pour toggle. This is display state only for now:
-  // no persistent copper-zone entity exists yet, so keep it local per design.
-  const copperFillStorageKey = designId
-    ? `openpcb.pcb.copperFillLayers.${designId}`
-    : null;
-  const [copperFillLayers, setCopperFillLayersState] = useState<
-    ReadonlyArray<PcbCopperLayerId>
-  >([]);
-
-  // Rehydrate viewSide whenever the design changes (mount or designId switch).
+  // Wire the command dispatcher exactly once per designer mount. The store
+  // closes over it so debounced flushes work regardless of which component
+  // is mounted at the time.
   useEffect(() => {
-    if (!viewSideStorageKey) {
-      setViewSideState("top");
-      return;
-    }
-    try {
-      const raw = window.localStorage.getItem(viewSideStorageKey);
-      setViewSideState(raw === "bottom" ? "bottom" : "top");
-    } catch {
-      setViewSideState("top");
-    }
-  }, [viewSideStorageKey]);
-
-  // Rehydrate displayMode.
-  useEffect(() => {
-    if (!displayModeStorageKey) {
-      setDisplayModeState("normal");
-      return;
-    }
-    try {
-      const raw = window.localStorage.getItem(displayModeStorageKey);
-      setDisplayModeState(
-        raw === "dim" || raw === "solo" || raw === "normal" ? raw : "normal",
-      );
-    } catch {
-      setDisplayModeState("normal");
-    }
-  }, [displayModeStorageKey]);
-
-  // Rehydrate copper-fill visibility.
-  useEffect(() => {
-    if (!copperFillStorageKey) {
-      setCopperFillLayersState([]);
-      return;
-    }
-    try {
-      const raw = window.localStorage.getItem(copperFillStorageKey);
-      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
-      const seen = new Set<PcbCopperLayerId>();
-      if (Array.isArray(parsed)) {
-        for (const value of parsed) {
-          if (
-            (value === "F.Cu" ||
-              value === "In1.Cu" ||
-              value === "In2.Cu" ||
-              value === "B.Cu") &&
-            !seen.has(value)
-          ) {
-            seen.add(value);
-          }
-        }
-      }
-      setCopperFillLayersState([...seen]);
-    } catch {
-      setCopperFillLayersState([]);
-    }
-  }, [copperFillStorageKey]);
+    setStoreDispatcher(dispatchCommand);
+    return () => setStoreDispatcher(null);
+  }, [dispatchCommand, setStoreDispatcher]);
 
   const refresh = useCallback(async () => {
     if (!designId) {
@@ -147,7 +95,19 @@ export function usePcbWorkspace(params: {
     try {
       const next = await api.getPcbProjection(designId);
       setProjection(next);
-      if (next) notifyExternalRevisionBump?.(next.revision);
+      if (next) {
+        notifyExternalRevisionBump?.(next.revision);
+        // Hydrate the view store from the fresh projection. The store
+        // diffs against current state to avoid clobbering unflushed local
+        // edits when a remote change arrives mid-debounce.
+        hydrateView({
+          designId,
+          viewState: next.board.viewState,
+          activeLayer: next.board.activeLayer,
+          visibleLayers: next.board.visibleLayers,
+        });
+        syncLayerPresetFromVisible();
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load PCB projection",
@@ -155,7 +115,7 @@ export function usePcbWorkspace(params: {
     } finally {
       setLoading(false);
     }
-  }, [api, designId, notifyExternalRevisionBump]);
+  }, [api, designId, hydrateView, notifyExternalRevisionBump]);
 
   const refreshHistory = useCallback(async () => {
     if (!designId) {
@@ -177,6 +137,14 @@ export function usePcbWorkspace(params: {
     void refresh();
     void refreshHistory();
   }, [refresh, refreshHistory]);
+
+  // Flush any in-flight view-state changes when the design switches or the
+  // tab unmounts. Prevents losing the last slider tweak.
+  useEffect(() => {
+    return () => {
+      void flushView();
+    };
+  }, [designId, flushView]);
 
   const updateBoardSize = useCallback(
     async (widthMm: number, heightMm: number) => {
@@ -312,6 +280,22 @@ export function usePcbWorkspace(params: {
     [dispatchCommand, refresh, refreshHistory],
   );
 
+  const deletePlacement = useCallback(
+    async (placementId: string) => {
+      setError(null);
+      try {
+        await dispatchCommand({ type: "pcb_delete_placement", placementId });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Delete placement failed",
+        );
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
   const setActiveLayer = useCallback(
     async (layer: PcbLayerId) => {
       setError(null);
@@ -355,82 +339,47 @@ export function usePcbWorkspace(params: {
   const pinHighlightedNet = pinNetStore;
   const clearHighlight = clearHighlightStore;
 
-  const toggleRatsnestVisible = useCallback(() => {
-    setRatsnestVisible((v) => !v);
-  }, []);
+  // Store-backed setters. These mutate local state immediately and schedule
+  // a debounced backend write. Refresh isn't called — the view-state
+  // command is non-undoable and the projection's revision bump triggers a
+  // re-fetch on the next regular refresh cycle. The optimistic store value
+  // remains visible meanwhile.
+  const setRatsnestVisible = useCallback(
+    (visible: boolean) => setRatsnestVisibleStore(visible),
+    [setRatsnestVisibleStore],
+  );
+  const toggleRatsnestVisible = useCallback(
+    () => toggleRatsnestVisibleStore(),
+    [toggleRatsnestVisibleStore],
+  );
 
   const setViewSide = useCallback(
-    (side: "top" | "bottom") => {
-      setViewSideState(side);
-      if (viewSideStorageKey) {
-        try {
-          window.localStorage.setItem(viewSideStorageKey, side);
-        } catch {
-          // Storage may be unavailable (private mode, quota); ignore.
-        }
-      }
-    },
-    [viewSideStorageKey],
+    (side: "top" | "bottom") => setViewSideStore(side),
+    [setViewSideStore],
   );
-
-  const toggleViewSide = useCallback(() => {
-    setViewSide(viewSide === "bottom" ? "top" : "bottom");
-  }, [setViewSide, viewSide]);
+  const toggleViewSide = useCallback(
+    () => toggleViewSideStore(),
+    [toggleViewSideStore],
+  );
 
   const setDisplayMode = useCallback(
-    (mode: PcbDisplayMode) => {
-      setDisplayModeState(mode);
-      if (displayModeStorageKey) {
-        try {
-          window.localStorage.setItem(displayModeStorageKey, mode);
-        } catch {
-          // ignore storage errors
-        }
-      }
-    },
-    [displayModeStorageKey],
+    (mode: PcbDisplayMode) => setDisplayModeStore(mode),
+    [setDisplayModeStore],
+  );
+  const cycleDisplayMode = useCallback(
+    () => cycleDisplayModeStore(),
+    [cycleDisplayModeStore],
   );
 
-  const cycleDisplayMode = useCallback(() => {
-    setDisplayMode(
-      displayMode === "normal"
-        ? "dim"
-        : displayMode === "dim"
-          ? "solo"
-        : "normal",
-    );
-  }, [displayMode, setDisplayMode]);
-
   const setCopperFillLayers = useCallback(
-    (layers: ReadonlyArray<PcbCopperLayerId>) => {
-      const seen = new Set<PcbCopperLayerId>();
-      const next: PcbCopperLayerId[] = [];
-      for (const layer of layers) {
-        if (!seen.has(layer)) {
-          seen.add(layer);
-          next.push(layer);
-        }
-      }
-      setCopperFillLayersState(next);
-      if (copperFillStorageKey) {
-        try {
-          window.localStorage.setItem(copperFillStorageKey, JSON.stringify(next));
-        } catch {
-          // ignore storage errors
-        }
-      }
-    },
-    [copperFillStorageKey],
+    (layers: ReadonlyArray<PcbCopperLayerId>) =>
+      setCopperFillLayersStore(layers),
+    [setCopperFillLayersStore],
   );
 
   const toggleCopperFillLayer = useCallback(
-    (layer: PcbCopperLayerId) => {
-      const current = new Set(copperFillLayers);
-      if (current.has(layer)) current.delete(layer);
-      else current.add(layer);
-      setCopperFillLayers([...current]);
-    },
-    [copperFillLayers, setCopperFillLayers],
+    (layer: PcbCopperLayerId) => toggleCopperFillLayerStore(layer),
+    [toggleCopperFillLayerStore],
   );
 
   const addTrace = useCallback(
@@ -581,15 +530,16 @@ export function usePcbWorkspace(params: {
     hoverNet,
     pinHighlightedNet,
     clearHighlight,
-    ratsnestVisible,
+    ratsnestVisible: viewState.ratsnestVisible,
+    setRatsnestVisible,
     toggleRatsnestVisible,
-    viewSide,
+    viewSide: viewState.viewSide,
     setViewSide,
     toggleViewSide,
-    displayMode,
+    displayMode: viewState.displayMode,
     setDisplayMode,
     cycleDisplayMode,
-    copperFillLayers,
+    copperFillLayers: viewState.copperFillLayers,
     setCopperFillLayers,
     toggleCopperFillLayer,
     refresh,
@@ -603,6 +553,7 @@ export function usePcbWorkspace(params: {
     rotatePlacement,
     flipPlacement,
     flipPlacements,
+    deletePlacement,
     addTrace,
     addTraceVia,
     addVia,

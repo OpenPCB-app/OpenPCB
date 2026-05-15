@@ -273,9 +273,17 @@ export function combinedStateToWorld(
 ): EcsWorld<DesignerWorldComponent> {
   const world = projectionToWorld(state.schematic);
   world.ensureEntity(PCB_SETTINGS_ENTITY_ID);
+  // Strip `viewState` from the snapshot fed into the history patch builder.
+  // View state (viewSide / displayMode / fill toggles / opacities) is
+  // display-only and changes via a non-undoable `pcb_set_view_state`
+  // command. Including it would (a) make every viewState change emit a
+  // history entry and (b) cause unrelated undos to revert the user's
+  // current viewport configuration. board_settings persistence is
+  // unaffected — the field still round-trips through `pcb-store.ts`.
+  const { viewState: _viewState, ...pcbWithoutViewState } = state.pcb;
   world.setComponent(PCB_SETTINGS_ENTITY_ID, {
     type: "designer.pcb_settings",
-    payload: toPayloadRecord(state.pcb),
+    payload: toPayloadRecord(pcbWithoutViewState as typeof state.pcb),
   });
   for (const placement of state.placements) {
     const entityId = asEntityId(`${PCB_PLACEMENT_PREFIX}${placement.id}`);

@@ -4,10 +4,15 @@ import * as THREE from "three";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import type { PcbCopperLayerId, PcbTrace } from "../../../../../sdks";
+import type {
+  PcbCopperLayerId,
+  PcbTrace,
+  PcbViewSide,
+} from "../../../../../sdks";
 import {
   PCB_TRACE_COLORS,
   RENDER_ORDER,
+  effectiveRenderOrder,
 } from "../../../../../shared/frontend/canvas/layers";
 
 const NM_TO_MM = 1 / 1_000_000;
@@ -30,6 +35,18 @@ interface TraceLayerProps {
    * under negative-scale parent groups). Pass `true` when viewSide="bottom".
    */
   mirror?: boolean;
+  /**
+   * Side-flip indicator. Drives renderOrder reversal so bottom-view brings
+   * B.Cu traces above F.Cu (spec §5.2). Defaults to "top" for back-compat.
+   */
+  viewSide?: PcbViewSide;
+  /**
+   * Net-class color map keyed by net class id. When provided, traces emit
+   * a thin halo accent in the net-class color underneath the main trace —
+   * useful for telling power / GND / signal nets apart at a glance without
+   * forcing per-net coloring on the whole trace.
+   */
+  netClassColors?: Record<string, string>;
 }
 
 /**
@@ -43,6 +60,9 @@ interface TraceLayerProps {
  *   - dim      : non-highlighted-net traces (when scoping is active)
  *   - selected : the active selection trace, rendered above everything else
  */
+const NET_CLASS_HALO_EXTRA_MM = 0.12;
+const NET_CLASS_HALO_OPACITY = 0.55;
+
 export function TraceLayer({
   traces,
   highlightedNetId,
@@ -51,15 +71,12 @@ export function TraceLayer({
   inactiveOpacity = 1,
   dimOpacity = 0.18,
   mirror = false,
+  viewSide = "top",
+  netClassColors,
 }: TraceLayerProps): ReactElement | null {
-  const renderOrder =
-    layer === "F.Cu"
-      ? RENDER_ORDER.FRONT_COPPER
-      : layer === "In1.Cu"
-        ? RENDER_ORDER.IN1_COPPER
-        : layer === "In2.Cu"
-          ? RENDER_ORDER.IN2_COPPER
-          : RENDER_ORDER.BACK_COPPER;
+  const renderOrder = effectiveRenderOrder(layer, viewSide, "object");
+  // Keep RENDER_ORDER referenced (selection slot below uses it).
+  void RENDER_ORDER;
   const baseColor = PCB_TRACE_COLORS[layer];
   const brightOpacity = Math.max(0, Math.min(1, inactiveOpacity));
 
@@ -74,6 +91,10 @@ export function TraceLayer({
     const bright = new Map<number, Bucket>();
     const dim = new Map<number, Bucket>();
     const selected = new Map<number, Bucket>();
+    // Halo buckets keyed by `${widthMm}|${color}` so each net-class color
+    // produces one batched LineSegments2 call. Halos always use the
+    // trace's bright width + extra so they appear as colored outlines.
+    const halos = new Map<string, Bucket & { color: string }>();
 
     const upsert = (
       map: Map<number, Bucket>,
@@ -96,6 +117,28 @@ export function TraceLayer({
       );
     };
 
+    const upsertHalo = (
+      widthMm: number,
+      color: string,
+      a: { x: number; y: number },
+      b: { x: number; y: number },
+    ) => {
+      const key = `${widthMm}|${color}`;
+      let bucket = halos.get(key);
+      if (!bucket) {
+        bucket = { widthMm, color, positions: [] };
+        halos.set(key, bucket);
+      }
+      bucket.positions.push(
+        a.x * NM_TO_MM * xScale,
+        a.y * NM_TO_MM,
+        0,
+        b.x * NM_TO_MM * xScale,
+        b.y * NM_TO_MM,
+        0,
+      );
+    };
+
     for (const trace of traces) {
       if (trace.layer !== layer) continue;
       const isSelected = selectedTraceIds?.has(trace.id) ?? false;
@@ -105,6 +148,11 @@ export function TraceLayer({
         : !scopingActive || isHighlighted
           ? bright
           : dim;
+      const netClassColor = netClassColors?.[trace.netClassId];
+      const wantsHalo =
+        !isSelected &&
+        netClassColor !== undefined &&
+        (!scopingActive || isHighlighted);
       for (let i = 1; i < trace.pointsNm.length; i += 1) {
         upsert(
           targetMap,
@@ -112,6 +160,14 @@ export function TraceLayer({
           trace.pointsNm[i - 1]!,
           trace.pointsNm[i]!,
         );
+        if (wantsHalo) {
+          upsertHalo(
+            trace.widthMm + NET_CLASS_HALO_EXTRA_MM,
+            netClassColor,
+            trace.pointsNm[i - 1]!,
+            trace.pointsNm[i]!,
+          );
+        }
       }
     }
 
@@ -122,15 +178,45 @@ export function TraceLayer({
           widthMm: b.widthMm,
           positions: new Float32Array(b.positions),
         }));
+    const toHaloBuckets = () =>
+      [...halos.values()]
+        .filter((b) => b.positions.length > 0)
+        .map((b) => ({
+          widthMm: b.widthMm,
+          color: b.color,
+          positions: new Float32Array(b.positions),
+        }));
     return {
       bright: toBuckets(bright),
       dim: toBuckets(dim),
       selected: toBuckets(selected),
+      halos: toHaloBuckets(),
     };
-  }, [traces, layer, highlightedNetId, selectedTraceIds, mirror]);
+  }, [
+    traces,
+    layer,
+    highlightedNetId,
+    selectedTraceIds,
+    mirror,
+    netClassColors,
+  ]);
 
   return (
     <>
+      {/* Net-class color halos render UNDERNEATH the main trace so the
+          colored accent only peeks out at the trace edges. renderOrder is
+          biased down so each halo group paints before its matching trace
+          group on the same layer. */}
+      {buckets.halos.map((b, i) => (
+        <FatLineGroup
+          key={`h-${b.widthMm}-${b.color}-${i}`}
+          positions={b.positions}
+          widthMm={b.widthMm}
+          color={b.color}
+          opacity={NET_CLASS_HALO_OPACITY * brightOpacity}
+          renderOrder={renderOrder - 0.05}
+        />
+      ))}
       {buckets.bright.map((b, i) => (
         <FatLineGroup
           key={`b-${b.widthMm}-${i}`}

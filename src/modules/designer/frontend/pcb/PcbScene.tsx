@@ -1,5 +1,11 @@
 import { useFrame, useThree } from "@react-three/fiber";
-import { useCallback, useEffect, useMemo, useRef, type ReactElement } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactElement,
+} from "react";
 import * as THREE from "three";
 import type {
   DesignerPcbProjection,
@@ -8,6 +14,8 @@ import type {
   PcbLayerId,
   PcbPlacedPart,
   PcbPointMm,
+  PcbTrace,
+  PcbVia,
 } from "../../../../sdks";
 import { FootprintRenderLayer } from "../../../../shared/frontend/canvas/scene";
 import {
@@ -19,16 +27,20 @@ import { GridShader } from "../../../../shared/frontend/canvas/primitives/GridSh
 import {
   PCB_LAYER_COLORS,
   RENDER_ORDER,
+  effectiveRenderOrder,
 } from "../../../../shared/frontend/canvas/layers";
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
 import { TraceLayer } from "./layers/TraceLayer";
 import { TracePreviewLayer } from "./layers/TracePreviewLayer";
 import { CopperFillLayer } from "./layers/CopperFillLayer";
+import { viaCrossesLayer } from "./layers/copper-fill-trace-geometry";
 import { ViaLayer } from "./layers/ViaLayer";
 import { DrillLayer } from "./layers/DrillLayer";
 import { SolderMaskLayer } from "./layers/SolderMaskLayer";
 import { SolderPasteLayer } from "./layers/SolderPasteLayer";
 import { NetTraceLabels } from "./layers/NetTraceLabels";
+import { SnapTargetIndicator } from "./layers/SnapTargetIndicator";
+import { usePcbViewStore } from "./pcb-view-store";
 import { SelectionRectOverlay } from "../../../../shared/frontend/canvas/selection";
 import {
   areViasVisible,
@@ -401,7 +413,7 @@ function DashedLineSegments({
     <lineSegments
       ref={ref}
       geometry={geometry}
-      renderOrder={RENDER_ORDER.RATSNEST}
+      renderOrder={RENDER_ORDER.METADATA}
     >
       <lineDashedMaterial
         color={color}
@@ -436,12 +448,16 @@ function PlacementRender({
   visibleLayers,
   visualState,
   padNetIds,
+  layerOpacity,
+  viewSide = "top",
 }: {
   placement: PcbPlacedPart;
   positionOverrideMm?: PcbPointMm;
   visibleLayers: ReadonlySet<PcbLayerId>;
   visualState: PcbVisualState;
   padNetIds: ReadonlyMap<string, string>;
+  layerOpacity?: (layer: string) => number;
+  viewSide?: "top" | "bottom";
 }): ReactElement | null {
   const model = placement.footprint.preview;
   const position = positionOverrideMm ?? placement.positionMm;
@@ -483,7 +499,8 @@ function PlacementRender({
   }, [visibleLayers]);
 
   const dimmedPadNumbers = useMemo<ReadonlySet<string> | undefined>(() => {
-    if (!visualState.routeFocusActive || !visualState.activeNetId) return undefined;
+    if (!visualState.routeFocusActive || !visualState.activeNetId)
+      return undefined;
     const pads = model?.pads ?? [];
     const dimmed = new Set<string>();
     for (const pad of pads) {
@@ -514,6 +531,15 @@ function PlacementRender({
           padDimFactor={layerFocusDimFactor(visualState)}
           dimmedOpacity={layerFocusDimFactor(visualState)}
           layerRemap={layerRemap}
+          layerOpacity={layerOpacity}
+          hidePadNumbers={!isPcbLayerVisible(visibleLayers, "Metadata")}
+          padNumberRenderOrder={RENDER_ORDER.METADATA}
+          padRenderOrder={effectiveRenderOrder(
+            placement.layer === "B.Cu" ? "B.Cu" : "F.Cu",
+            viewSide,
+            "object",
+          )}
+          drillRenderOrder={RENDER_ORDER.DRILL}
           placeholderSubstitutions={{ reference: placement.reference }}
         />
       ) : null}
@@ -842,8 +868,6 @@ interface PcbSceneProps {
     pointsNm: Array<{ x: number; y: number }>;
     layer: PcbCopperLayerId;
     widthMm: number;
-    pendingTailFromIndex: number;
-    violationSegmentIndexes: ReadonlyArray<number>;
   } | null;
   routeFocusActive?: boolean;
   routeFocusLayer?: PcbCopperLayerId;
@@ -857,6 +881,16 @@ interface PcbSceneProps {
     a: { x: number; y: number } | null;
     b: { x: number; y: number } | null;
     color: string;
+  } | null;
+  /**
+   * Active snap target. Rendered as a color-coded ring at the resolved
+   * point so the user can see where a click would land. The snap engine
+   * (`snap.ts`) chooses pad-center > trace-end > via-center; this prop is
+   * what gets visualized.
+   */
+  snapTarget?: {
+    kind: "pad-center" | "trace-endpoint" | "trace-segment-end" | "via-center";
+    pointMm: PcbPointMm;
   } | null;
   initialViewport?: ViewportState | null;
   onViewportChange?: (zoom: number, posX: number, posY: number) => void;
@@ -877,6 +911,7 @@ export function PcbScene({
   focusedLayer = null,
   copperFillLayers = [],
   marqueeOverlay = null,
+  snapTarget = null,
   initialViewport,
   onViewportChange,
 }: PcbSceneProps): ReactElement {
@@ -957,16 +992,95 @@ export function PcbScene({
   );
   const padNetIds = useMemo(() => {
     const map = new Map<string, string>();
+    // Source 1 — ratsnest. Each airwire endpoint carries its netId; covers
+    // every pad with at least one unrouted same-net connection.
     for (const seg of projection.ratsnest) {
       map.set(`${seg.fromPlacementId}|${seg.fromPadNumber}`, seg.netId);
       map.set(`${seg.toPlacementId}|${seg.toPadNumber}`, seg.netId);
     }
+    // Source 2 — trace endpoints landing on pad world-centres. Fills in
+    // pads whose airwires have all been routed away (so they're absent from
+    // the ratsnest). Backend net-pad correlation would give 100% coverage,
+    // but exposing that needs an API change — handle in v2.
+    const padPosIndex = new Map<string, string>();
+    for (const placement of projection.placements) {
+      const pads = placement.footprint.preview?.pads ?? [];
+      if (pads.length === 0) continue;
+      const radians = (placement.rotationDeg * Math.PI) / 180;
+      const cos = Math.cos(radians);
+      const sin = Math.sin(radians);
+      const sx = placement.mirrored ? -1 : 1;
+      for (const pad of pads) {
+        const mx = sx * pad.centerMm.x;
+        const wx = cos * mx - sin * pad.centerMm.y + placement.positionMm.x;
+        const wy = sin * mx + cos * pad.centerMm.y + placement.positionMm.y;
+        // Quantise to nm to match trace endpoint coordinates exactly.
+        const xnm = Math.round(wx * 1_000_000);
+        const ynm = Math.round(wy * 1_000_000);
+        padPosIndex.set(`${xnm}|${ynm}`, `${placement.id}|${pad.number}`);
+      }
+    }
+    for (const trace of projection.traces) {
+      if (!trace.netId || trace.pointsNm.length < 2) continue;
+      const head = trace.pointsNm[0]!;
+      const tail = trace.pointsNm[trace.pointsNm.length - 1]!;
+      for (const end of [head, tail]) {
+        const padKey = padPosIndex.get(`${end.x}|${end.y}`);
+        if (padKey) map.set(padKey, trace.netId);
+      }
+    }
     return map;
-  }, [projection.ratsnest]);
+  }, [projection.ratsnest, projection.placements, projection.traces]);
+  // Per-layer opacity overrides from the panel's slider. Multiplied against
+  // the layer's display-mode opacity so dim + per-layer attenuation compose.
+  const perLayerOpacity = usePcbViewStore((s) => s.viewState.perLayerOpacity);
+  const layerOpacityFor = useCallback(
+    (layer: string): number => {
+      const v = perLayerOpacity[layer as PcbLayerId];
+      return v === undefined ? 1 : v;
+    },
+    [perLayerOpacity],
+  );
   const copperFillSet = useMemo(
     () => new Set<PcbCopperLayerId>(copperFillLayers),
     [copperFillLayers],
   );
+  const copperFillPourNetIds = usePcbViewStore(
+    (s) => s.viewState.copperFillPourNetIds,
+  );
+  // Pre-bucket traces and vias by copper layer once per projection so each
+  // <CopperFillLayer> receives an identity-stable array slice. Without this
+  // the inner useMemo would invalidate on every render (fresh filter result
+  // each time defeats reference equality).
+  const tracesByLayer = useMemo(() => {
+    const map: Record<PcbCopperLayerId, PcbTrace[]> = {
+      "F.Cu": [],
+      "In1.Cu": [],
+      "In2.Cu": [],
+      "B.Cu": [],
+    };
+    for (const trace of projection.traces) {
+      map[trace.layer].push(trace);
+    }
+    return map;
+  }, [projection.traces]);
+  // Vias are bucketed by every layer their barrel crosses. v1 vias are always
+  // through (F.Cu↔B.Cu) so every via lands in all four buckets; the helper
+  // keeps the door open for v2 blind/buried vias without changing this site.
+  const viasByLayer = useMemo(() => {
+    const map: Record<PcbCopperLayerId, PcbVia[]> = {
+      "F.Cu": [],
+      "In1.Cu": [],
+      "In2.Cu": [],
+      "B.Cu": [],
+    };
+    for (const via of projection.vias) {
+      for (const layer of ["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"] as const) {
+        if (viaCrossesLayer(via, layer)) map[layer].push(via);
+      }
+    }
+    return map;
+  }, [projection.vias]);
   const effectiveHighlightedNetId = visualState.routeFocusActive
     ? visualState.activeNetId
     : visualState.activeLayer === null
@@ -990,12 +1104,13 @@ export function PcbScene({
             highlightedNetId={effectiveHighlightedNetId}
             selectedTraceIds={selection?.traceIds}
             inactiveOpacity={
-              visualState.routeFocusActive && visualState.activeNetId
+              (visualState.routeFocusActive && visualState.activeNetId
                 ? 1
-                : layerOpacity(visualState, layer)
+                : layerOpacity(visualState, layer)) * layerOpacityFor(layer)
             }
             dimOpacity={visualState.inactiveNetOpacity}
             mirror={mirror}
+            viewSide={viewSide}
           />
         ) : null,
       )}
@@ -1004,8 +1119,6 @@ export function PcbScene({
           pointsNm={routePreview.pointsNm}
           layer={routePreview.layer}
           widthMm={routePreview.widthMm}
-          pendingTailFromIndex={routePreview.pendingTailFromIndex}
-          violationSegmentIndexes={routePreview.violationSegmentIndexes}
           mirror={mirror}
         />
       ) : null}
@@ -1026,10 +1139,7 @@ export function PcbScene({
           minSpacingPx={5}
         />
         <BoardFill projection={projection} visualState={visualState} />
-        <BoardOutline
-          projection={projection}
-          visibleLayers={visibleLayers}
-        />
+        <BoardOutline projection={projection} visibleLayers={visibleLayers} />
         {(["B.Cu", "In2.Cu", "In1.Cu", "F.Cu"] as const).map((layer) =>
           copperFillSet.has(layer) &&
           isCopperLayerVisible(visibleLayers, layer) &&
@@ -1039,10 +1149,15 @@ export function PcbScene({
               layer={layer}
               outline={projection.board.outline}
               placements={renderPlacements}
-              traces={projection.traces}
-              vias={projection.vias}
+              traces={tracesByLayer[layer]}
+              vias={viasByLayer[layer]}
+              pourNetId={copperFillPourNetIds[layer] ?? null}
+              padNetIds={padNetIds}
               designRules={projection.board.designRules}
-              opacity={layerOpacity(visualState, layer)}
+              opacity={
+                layerOpacity(visualState, layer) * layerOpacityFor(layer)
+              }
+              viewSide={viewSide}
             />
           ) : null,
         )}
@@ -1053,6 +1168,8 @@ export function PcbScene({
             visibleLayers={visibleLayers}
             visualState={visualState}
             padNetIds={padNetIds}
+            layerOpacity={layerOpacityFor}
+            viewSide={viewSide}
           />
         ))}
         {areViasVisible(visibleLayers) ? (
@@ -1077,7 +1194,11 @@ export function PcbScene({
             placements={renderPlacements}
             outline={projection.board.outline}
             expansionMm={projection.board.solderMaskExpansionMm}
-            opacity={maskOpacityForSide(visualState, "bottom")}
+            opacity={
+              maskOpacityForSide(visualState, "bottom") *
+              layerOpacityFor("B.Mask")
+            }
+            viewSide={viewSide}
           />
         ) : null}
         {isPcbLayerVisible(visibleLayers, "F.Mask") ? (
@@ -1086,7 +1207,10 @@ export function PcbScene({
             placements={renderPlacements}
             outline={projection.board.outline}
             expansionMm={projection.board.solderMaskExpansionMm}
-            opacity={maskOpacityForSide(visualState, "top")}
+            opacity={
+              maskOpacityForSide(visualState, "top") * layerOpacityFor("F.Mask")
+            }
+            viewSide={viewSide}
           />
         ) : null}
         {isPcbLayerVisible(visibleLayers, "B.Paste") ? (
@@ -1094,7 +1218,11 @@ export function PcbScene({
             side="bottom"
             placements={renderPlacements}
             expansionMm={projection.board.solderPasteExpansionMm}
-            opacity={pasteOpacityForSide(visualState, "bottom")}
+            opacity={
+              pasteOpacityForSide(visualState, "bottom") *
+              layerOpacityFor("B.Paste")
+            }
+            viewSide={viewSide}
           />
         ) : null}
         {isPcbLayerVisible(visibleLayers, "F.Paste") ? (
@@ -1102,33 +1230,39 @@ export function PcbScene({
             side="top"
             placements={renderPlacements}
             expansionMm={projection.board.solderPasteExpansionMm}
-            opacity={pasteOpacityForSide(visualState, "top")}
+            opacity={
+              pasteOpacityForSide(visualState, "top") *
+              layerOpacityFor("F.Paste")
+            }
+            viewSide={viewSide}
           />
         ) : null}
-        {(["B.Cu", "In2.Cu", "In1.Cu", "F.Cu"] as const).map((layer) =>
-          isCopperLayerVisible(visibleLayers, layer) &&
-          shouldRenderCopperLayer(visualState, layer) ? (
-            <NetTraceLabels
-              key={layer}
-              traces={projection.traces}
-              netNames={projection.netNames}
-              layer={layer}
-              inactive={layerOpacity(visualState, layer) < 1}
-              opacity={layerOpacity(visualState, layer)}
-              counterMirror={layer === "B.Cu" ? mirror : false}
-            />
-          ) : null,
-        )}
+        {isPcbLayerVisible(visibleLayers, "Metadata")
+          ? (["B.Cu", "In2.Cu", "In1.Cu", "F.Cu"] as const).map((layer) =>
+              isCopperLayerVisible(visibleLayers, layer) ? (
+                <NetTraceLabels
+                  key={layer}
+                  traces={projection.traces}
+                  netNames={projection.netNames}
+                  layer={layer}
+                  opacity={1}
+                  counterMirror={mirror}
+                />
+              ) : null,
+            )
+          : null}
         <RatsnestLayer
           projection={projection}
           dragOverride={dragOverride}
           selectedPlacementIds={selectedPlacementIds}
           highlightedNetId={effectiveHighlightedNetId}
-          visible={ratsnestVisible}
+          visible={
+            ratsnestVisible && isPcbLayerVisible(visibleLayers, "Metadata")
+          }
           suppressNetId={routeGuide?.netId}
           visualState={visualState}
         />
-        {routeGuide ? (
+        {routeGuide && isPcbLayerVisible(visibleLayers, "Metadata") ? (
           <DynamicRatsnestGuide
             ratsnest={projection.ratsnest}
             cursorMm={routeGuide.cursorMm}
@@ -1138,16 +1272,19 @@ export function PcbScene({
           />
         ) : null}
         {selectedPlacements.map((placement) => (
-          <SelectionOutline
-            key={placement.id}
-            placement={placement}
-          />
+          <SelectionOutline key={placement.id} placement={placement} />
         ))}
         <SelectionRectOverlay
           a={marqueeOverlay?.a ?? null}
           b={marqueeOverlay?.b ?? null}
           color={marqueeOverlay?.color ?? "#60a5fa"}
         />
+        {snapTarget ? (
+          <SnapTargetIndicator
+            pointMm={snapTarget.pointMm}
+            kind={snapTarget.kind}
+          />
+        ) : null}
       </group>
     </>
   );
