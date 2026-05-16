@@ -13,7 +13,8 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "rm -f /tmp/openpcb-e2e.sqlite /tmp/openpcb-e2e.sqlite-shm /tmp/openpcb-e2e.sqlite-wal && OPENPCB_DB_PATH=/tmp/openpcb-e2e.sqlite npm run dev:backend",
+      command:
+        "rm -f /tmp/openpcb-e2e.sqlite /tmp/openpcb-e2e.sqlite-shm /tmp/openpcb-e2e.sqlite-wal && OPENPCB_DB_PATH=/tmp/openpcb-e2e.sqlite npm run dev:backend",
       url: "http://127.0.0.1:3000/api/health",
       reuseExistingServer: false,
       timeout: 120_000,

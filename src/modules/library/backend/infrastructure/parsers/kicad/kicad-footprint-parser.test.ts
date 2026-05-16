@@ -128,4 +128,63 @@ describe("kicad-footprint-parser", () => {
     expect(fp.graphics.length).toBeGreaterThanOrEqual(20);
     expect(fp.attributes.type).toBe("smd");
   });
+
+  test("captures fp_text font size, justify, and hide flag", () => {
+    const src = `(footprint "T1" (layer F.Cu)
+      (fp_text reference REF** (at 0 -3.5 0) (layer F.SilkS)
+        (effects (font (size 1.27 1.27) (thickness 0.15)) (justify left)))
+      (fp_text value "T1-Long-Value" (at 5 0 0) (layer F.Fab)
+        (effects (font (size 1.0 1.0))) hide)
+      (pad "1" smd rect (at 0 0) (size 1 1) (layers F.Cu)))`;
+    const parsed = parseKicadFootprint(src);
+    const texts = parsed.graphics.filter((g) => g.type === "text");
+    expect(texts).toHaveLength(2);
+    const ref = texts.find((g) => g.text?.kind === "reference");
+    expect(ref?.text?.fontSizeMm).toBeCloseTo(1.27, 2);
+    expect(ref?.text?.justifyH).toBe("left");
+    expect(ref?.text?.hidden).toBe(false);
+    expect(ref?.text?.position).toEqual({ x: 0, y: -3.5 });
+    const val = texts.find((g) => g.text?.kind === "value");
+    expect(val?.text?.fontSizeMm).toBeCloseTo(1.0, 2);
+    expect(val?.text?.hidden).toBe(true);
+    expect(val?.text?.position.x).toBe(5);
+  });
+
+  test("synthesizes text graphics from (property Reference|Value)", () => {
+    const src = `(footprint "T2" (layer F.Cu)
+      (property "Reference" "REF**" (at 0 -2 0) (layer F.SilkS)
+        (effects (font (size 1.0 1.0))))
+      (property "Value" "T2-Value" (at 0 2 0) (layer F.Fab)
+        (effects (font (size 1.0 1.0))))
+      (property "Footprint" "Lib:T2" (at 0 0 0) (effects (font (size 1.0 1.0))))
+      (property "Datasheet" "" (at 0 0 0))
+      (pad "1" smd rect (at 0 0) (size 1 1) (layers F.Cu)))`;
+    const parsed = parseKicadFootprint(src);
+    const texts = parsed.graphics.filter((g) => g.type === "text");
+    expect(texts).toHaveLength(2);
+    const kinds = texts.map((g) => g.text?.kind).sort();
+    expect(kinds).toEqual(["reference", "value"]);
+  });
+
+  test("(hide yes) inside property is detected", () => {
+    const src = `(footprint "T3" (layer F.Cu)
+      (property "Value" "Hidden Value" (at 0 5 0) (layer F.Fab)
+        (hide yes)
+        (effects (font (size 1.0 1.0))))
+      (pad "1" smd rect (at 0 0) (size 1 1) (layers F.Cu)))`;
+    const parsed = parseKicadFootprint(src);
+    const val = parsed.graphics.find((g) => g.text?.kind === "value");
+    expect(val?.text?.hidden).toBe(true);
+  });
+
+  test("justify mirror is recorded", () => {
+    const src = `(footprint "T4" (layer F.Cu)
+      (fp_text user "X" (at 0 0 0) (layer F.SilkS)
+        (effects (font (size 1.0 1.0)) (justify right mirror)))
+      (pad "1" smd rect (at 0 0) (size 1 1) (layers F.Cu)))`;
+    const parsed = parseKicadFootprint(src);
+    const t = parsed.graphics.find((g) => g.type === "text");
+    expect(t?.text?.justifyH).toBe("right");
+    expect(t?.text?.mirrored).toBe(true);
+  });
 });

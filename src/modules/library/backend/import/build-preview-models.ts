@@ -386,6 +386,42 @@ function footprintGraphicFromParsed(
   }
 
   if (graphic.type === "text") {
+    // Prefer structured `text` payload from the parser (covers fp_text and
+    // KiCad 8+ `(property "Reference"|"Value" ...)`); fall back to the legacy
+    // freeform path for parser builds that don't populate it.
+    const parsed = graphic.text;
+    if (parsed) {
+      if (parsed.hidden) {
+        // KiCad `hide` flag: never display, never contribute to bounds.
+        return { graphic: null, label: null };
+      }
+      const role: PreviewLabel["role"] =
+        parsed.kind === "reference"
+          ? "reference"
+          : parsed.kind === "value"
+            ? "value"
+            : "footprint-text";
+      return {
+        graphic: null,
+        label: {
+          id: `fp-text:${layer}:${parsed.position.x}:${parsed.position.y}:${parsed.content}`,
+          text: normalizeFootprintText(parsed.content),
+          at: parsed.position,
+          fontSizeMm: parsed.fontSizeMm ?? 1.0,
+          rotationDeg: parsed.rotation,
+          anchorX: parsed.justifyH,
+          anchorY:
+            parsed.justifyV === "top"
+              ? "top"
+              : parsed.justifyV === "bottom"
+                ? "bottom"
+                : "middle",
+          layer,
+          role,
+        },
+      };
+    }
+
     const args = Array.isArray(graphic.data.__args) ? graphic.data.__args : [];
     const contentRaw = args[1] ?? args[0];
     const content = typeof contentRaw === "string" ? contentRaw : "";
@@ -399,7 +435,7 @@ function footprintGraphicFromParsed(
         id: `fp-text:${layer}:${x}:${y}:${content}`,
         text: normalizeFootprintText(content),
         at: { x, y },
-        fontSizeMm: 0.8,
+        fontSizeMm: 1.0,
         rotationDeg,
         anchorX: "center",
         anchorY: "middle",

@@ -26,6 +26,11 @@ import type {
   FootprintRenderModel,
   SymbolRenderModel,
 } from "../../../shared/rendering";
+import { boundsFromPadsAndGraphics } from "../../../shared/rendering";
+import {
+  isFiniteBoundsMm,
+  normalizeBounds,
+} from "../../../shared/rendering/geometry";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import {
   componentFootprints,
@@ -393,18 +398,36 @@ function parseFootprintPlacementSnapshot(
   const provenance = asRecord(data.provenance);
   const previewRaw = normalized?.preview;
 
+  const preview = isFootprintRenderModel(previewRaw)
+    ? rederivedFootprintPreview(previewRaw)
+    : null;
+
   const snapshot: LibraryFootprintPlacementSnapshot = {
     footprintId: row.id,
     name: row.name,
     mountType: asString(normalized?.mountType) ?? asString(data.mountType),
     sourceHash: asString(provenance?.sourceHash),
-    preview: isFootprintRenderModel(previewRaw) ? previewRaw : null,
+    preview,
     pinMap,
   };
   if (modelRow) {
     snapshot.model3d = mapFootprintModelDescriptor(modelRow);
   }
   return snapshot;
+}
+
+/**
+ * Recompute geometry-only bounds for previews loaded from the DB. Older
+ * imports baked label text (often KiCad value/reference anchored far outside
+ * the body) into `bounds`, which inflated PCB selection and hit regions. New
+ * imports already exclude labels; this guards round-tripping for legacy data.
+ */
+function rederivedFootprintPreview(
+  preview: FootprintRenderModel,
+): FootprintRenderModel {
+  const raw = boundsFromPadsAndGraphics(preview);
+  const bounds = isFiniteBoundsMm(raw) ? normalizeBounds(raw, 2.0) : null;
+  return { ...preview, bounds };
 }
 
 function mapFootprintModelDescriptor(

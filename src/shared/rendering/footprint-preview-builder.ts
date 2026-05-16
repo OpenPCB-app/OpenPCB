@@ -1,11 +1,5 @@
-import {
-  boundsFromGraphics,
-  emptyBoundsMm,
-  includeLabel,
-  includePoint,
-  isFiniteBoundsMm,
-  normalizeBounds,
-} from "./geometry";
+import { boundsFromPadsAndGraphics } from "./footprint-bounds";
+import { isFiniteBoundsMm, normalizeBounds } from "./geometry";
 import type {
   BuildFootprintRenderModelOptions,
   FootprintRenderModel,
@@ -23,22 +17,6 @@ function filterByLayer(
     return false;
   }
   return includeLayerNames.includes(layer);
-}
-
-function rotatedPadHalfExtents(
-  widthMm: number,
-  heightMm: number,
-  rotationDeg: number,
-): { halfX: number; halfY: number } {
-  const halfWidth = Math.abs(widthMm) / 2;
-  const halfHeight = Math.abs(heightMm) / 2;
-  const radians = (rotationDeg * Math.PI) / 180;
-  const cos = Math.abs(Math.cos(radians));
-  const sin = Math.abs(Math.sin(radians));
-  return {
-    halfX: cos * halfWidth + sin * halfHeight,
-    halfY: sin * halfWidth + cos * halfHeight,
-  };
 }
 
 export function buildFootprintRenderModel(
@@ -59,27 +37,11 @@ export function buildFootprintRenderModel(
       )
     : source.pads;
 
-  let bounds = boundsFromGraphics(graphics) ?? emptyBoundsMm();
-
-  for (const pad of pads) {
-    const { halfX, halfY } = rotatedPadHalfExtents(
-      pad.widthMm,
-      pad.heightMm,
-      pad.rotationDeg,
-    );
-    bounds = includePoint(bounds, {
-      x: pad.centerMm.x - halfX,
-      y: pad.centerMm.y - halfY,
-    });
-    bounds = includePoint(bounds, {
-      x: pad.centerMm.x + halfX,
-      y: pad.centerMm.y + halfY,
-    });
-  }
-
-  for (const label of labels) {
-    bounds = includeLabel(bounds, label);
-  }
+  // Bounds from pads + graphics only. Labels are excluded so that PCB
+  // selection/hit regions are not inflated by KiCad value/reference text
+  // anchored far outside the body. Library preview tile recomputes a
+  // label-inclusive bbox at runtime via `footprintVisualBounds`.
+  const bounds = boundsFromPadsAndGraphics({ pads, graphics });
 
   const resolvedBounds = isFiniteBoundsMm(bounds)
     ? normalizeBounds(bounds, 2.0)

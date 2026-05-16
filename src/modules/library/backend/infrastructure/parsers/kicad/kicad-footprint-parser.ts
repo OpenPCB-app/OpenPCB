@@ -38,6 +38,37 @@ export interface ParsedGraphic {
   type: "line" | "rect" | "circle" | "arc" | "poly" | "text";
   layer: string;
   data: Record<string, unknown>;
+  /**
+   * Present when `type === "text"`. Structured view of the KiCad text node
+   * (covers both `fp_text` and KiCad 8+ `(property "Reference"|"Value" ...)`).
+   */
+  text?: ParsedTextGraphic;
+}
+
+export interface ParsedTextGraphic {
+  /** Display content, with KiCad placeholders preserved (`${REFERENCE}` etc.). */
+  content: string;
+  /** Origin in mm. */
+  position: { x: number; y: number };
+  /** Rotation in degrees (CCW). */
+  rotation: number;
+  /** Font height in mm; `null` when unspecified (consumer applies a default). */
+  fontSizeMm: number | null;
+  /** Horizontal justification (left/right/center). */
+  justifyH: "left" | "center" | "right";
+  /** Vertical justification (top/middle/bottom). */
+  justifyV: "top" | "middle" | "bottom";
+  /** KiCad `(justify mirror)` — text is rendered with horizontal flip. */
+  mirrored: boolean;
+  /** KiCad `hide` flag (either `(hide yes)` or bare `hide` token). */
+  hidden: boolean;
+  /**
+   * Origin tag:
+   * - `"reference"` / `"value"`: KiCad designator/value text (from `fp_text` or
+   *    KiCad 8+ `(property ...)`). Carry render semantics.
+   * - `"user"`: free-form `fp_text user ...`.
+   */
+  kind: "reference" | "value" | "user";
 }
 
 export interface Model3DRef {
@@ -126,6 +157,128 @@ function nodeToRecord(node: SExpr[]): Record<string, unknown> {
     rec.__args = args;
   }
   return rec;
+}
+
+function detectHidden(node: SExpr[]): boolean {
+  // Two forms: bare `hide` token, or nested `(hide yes)`.
+  for (let i = 1; i < node.length; i++) {
+    const child = node[i];
+    if (child === "hide") return true;
+    if (
+      Array.isArray(child) &&
+      child[0] === "hide" &&
+      (child[1] === "yes" || child[1] === undefined)
+    ) {
+      return true;
+    }
+  }
+  // Some KiCad libraries also place `hide` inside `(effects ...)`.
+  const effects = findNode(node, "effects");
+  if (effects) {
+    for (let i = 1; i < effects.length; i++) {
+      if (effects[i] === "hide") return true;
+    }
+  }
+  return false;
+}
+
+function extractFontSize(node: SExpr[]): number | null {
+  const effects = findNode(node, "effects");
+  if (!effects) return null;
+  const font = findNode(effects, "font");
+  if (!font) return null;
+  const size = findNode(font, "size");
+  if (!size) return null;
+  // KiCad encodes size as `(size width height)`; height ≈ visual font cap height.
+  return getNumberValue(size, 2) ?? getNumberValue(size, 1) ?? null;
+}
+
+function extractJustify(node: SExpr[]): {
+  h: "left" | "center" | "right";
+  v: "top" | "middle" | "bottom";
+  mirrored: boolean;
+} {
+  const effects = findNode(node, "effects");
+  let h: "left" | "center" | "right" = "center";
+  let v: "top" | "middle" | "bottom" = "middle";
+  let mirrored = false;
+  if (!effects) return { h, v, mirrored };
+  const justify = findNode(effects, "justify");
+  if (!justify) return { h, v, mirrored };
+  for (let i = 1; i < justify.length; i++) {
+    const token = justify[i];
+    if (token === "left") h = "left";
+    else if (token === "right") h = "right";
+    else if (token === "top") v = "top";
+    else if (token === "bottom") v = "bottom";
+    else if (token === "mirror") mirrored = true;
+  }
+  return { h, v, mirrored };
+}
+
+function extractAtRotation(node: SExpr[]): {
+  x: number;
+  y: number;
+  rotation: number;
+} {
+  const at = findNode(node, "at");
+  if (!at) return { x: 0, y: 0, rotation: 0 };
+  return {
+    x: getNumberValue(at, 1) ?? 0,
+    y: getNumberValue(at, 2) ?? 0,
+    rotation: getNumberValue(at, 3) ?? 0,
+  };
+}
+
+function extractFpTextGraphic(node: SExpr[]): ParsedTextGraphic {
+  // `(fp_text reference|value|user "content" (at ...) (layer ...) (effects ...) [hide])`
+  const kindToken = getStringValue(node, 1);
+  const kind: ParsedTextGraphic["kind"] =
+    kindToken === "reference"
+      ? "reference"
+      : kindToken === "value"
+        ? "value"
+        : "user";
+  const content = getStringValue(node, 2) ?? "";
+  const at = extractAtRotation(node);
+  const justify = extractJustify(node);
+  return {
+    content,
+    position: { x: at.x, y: at.y },
+    rotation: at.rotation,
+    fontSizeMm: extractFontSize(node),
+    justifyH: justify.h,
+    justifyV: justify.v,
+    mirrored: justify.mirrored,
+    hidden: detectHidden(node),
+    kind,
+  };
+}
+
+function extractPropertyTextGraphic(node: SExpr[]): ParsedGraphic | null {
+  // `(property "Reference"|"Value" "content" (at ...) (layer ...) (effects ...))`
+  const propName = getStringValue(node, 1);
+  if (propName !== "Reference" && propName !== "Value") return null;
+  const content = getStringValue(node, 2) ?? "";
+  const at = extractAtRotation(node);
+  const justify = extractJustify(node);
+  const text: ParsedTextGraphic = {
+    content,
+    position: { x: at.x, y: at.y },
+    rotation: at.rotation,
+    fontSizeMm: extractFontSize(node),
+    justifyH: justify.h,
+    justifyV: justify.v,
+    mirrored: justify.mirrored,
+    hidden: detectHidden(node),
+    kind: propName === "Reference" ? "reference" : "value",
+  };
+  return {
+    type: "text",
+    layer: extractLayer(node),
+    data: nodeToRecord(node),
+    text,
+  };
 }
 
 // ── Main parser ────────────────────────────────────────────────────
@@ -246,12 +399,26 @@ export function parseKicadFootprint(source: string): ParsedKicadFootprint {
   const graphics: ParsedGraphic[] = [];
   for (const [tag, gType] of Object.entries(GRAPHIC_TAG_MAP)) {
     for (const gNode of findNodes(tree, tag)) {
-      graphics.push({
+      const entry: ParsedGraphic = {
         type: gType,
         layer: extractLayer(gNode),
         data: nodeToRecord(gNode),
-      });
+      };
+      if (gType === "text") {
+        entry.text = extractFpTextGraphic(gNode);
+      }
+      graphics.push(entry);
     }
+  }
+
+  // KiCad 8+ `(property "Reference"|"Value" ...)` carry the visible designator
+  // and value text. Older formats put the same data in `fp_text reference|value`.
+  // Synthesize text graphics from properties so downstream code sees one shape.
+  for (const propNode of findNodes(tree, "property")) {
+    const propName = getStringValue(propNode, 1);
+    if (propName !== "Reference" && propName !== "Value") continue;
+    const synthesized = extractPropertyTextGraphic(propNode);
+    if (synthesized) graphics.push(synthesized);
   }
 
   // 3D model references
