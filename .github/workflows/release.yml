@@ -132,6 +132,8 @@ jobs:
 
       - name: Package with electron-builder
         working-directory: electron
+        env:
+          RELEASE_NAME: ${{ github.ref_name }}
         run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --config electron-builder.cjs --publish never
 
       - name: List build artifacts

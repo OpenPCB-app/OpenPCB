@@ -1,6 +1,12 @@
 const path = require("node:path");
 const repoRoot = path.resolve(__dirname, "..");
 
+// When publishing from CI, override artifact version token with the git tag
+// (RELEASE_NAME=${GITHUB_REF_NAME}) so filenames reflect the release, not the
+// stale package.json version. Falls back to the electron-builder ${version}
+// placeholder for local builds.
+const versionToken = process.env.RELEASE_NAME || "${version}";
+
 /** @type {import("electron-builder").Configuration} */
 module.exports = {
   appId: "com.openpcb.electron",
@@ -81,7 +87,7 @@ module.exports = {
     identity: null,
     gatekeeperAssess: false,
     hardenedRuntime: false,
-    artifactName: "${productName}-${version}-${arch}.${ext}",
+    artifactName: `\${productName}-${versionToken}-\${arch}.\${ext}`,
   },
   dmg: {
     format: "ULFO",
@@ -92,7 +98,7 @@ module.exports = {
   win: {
     icon: "icon.ico",
     target: ["nsis", "portable"],
-    artifactName: "${productName}-${version}-${arch}.${ext}",
+    artifactName: `\${productName}-${versionToken}-\${arch}.\${ext}`,
   },
   nsis: {
     oneClick: false,
@@ -101,10 +107,10 @@ module.exports = {
     allowElevation: true,
     deleteAppDataOnUninstall: false,
     shortcutName: "OpenPCB",
-    artifactName: "${productName}-Setup-${version}.${ext}",
+    artifactName: `\${productName}-Setup-${versionToken}.\${ext}`,
   },
   portable: {
-    artifactName: "${productName}-Portable-${version}.${ext}",
+    artifactName: `\${productName}-Portable-${versionToken}.\${ext}`,
   },
 
   // -------- Linux --------
@@ -128,7 +134,7 @@ module.exports = {
     },
     // ${name} resolves to package.json#name ("openpcb-electron") — override
     // here so linux packages are "openpcb_*.deb" / "openpcb-*.rpm".
-    artifactName: "openpcb_${version}_${arch}.${ext}",
+    artifactName: `openpcb_${versionToken}_\${arch}.\${ext}`,
   },
   deb: { fpm: ["--deb-no-default-config-files"], packageName: "openpcb" },
   rpm: {
@@ -136,7 +142,7 @@ module.exports = {
     packageName: "openpcb",
   },
   appImage: {
-    artifactName: "${productName}-${version}-${arch}.AppImage",
+    artifactName: `\${productName}-${versionToken}-\${arch}.AppImage`,
   },
 
   // -------- Hooks --------
