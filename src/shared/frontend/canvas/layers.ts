@@ -142,6 +142,21 @@ export const PCB_COPPER_LAYERS: ReadonlyArray<PcbLayerId> = [
   "B.Cu",
 ];
 
+/**
+ * Lime-green outline color drawn around every drill hole (PTH pads + vias).
+ * Provides a high-contrast boundary regardless of which substrate / theme
+ * shows through the cutout. Tailwind lime-400 — adjusted for visibility on
+ * both dark and light board fills.
+ */
+export const PCB_DRILL_OUTLINE_COLOR = "#a3e635";
+
+/**
+ * Drill-outline ring thickness in mm. Constant in board space — does not
+ * scale with the drill radius. Tuned to read as a thin halo at typical
+ * routing zooms without eclipsing the actual hole at small drills.
+ */
+export const PCB_DRILL_OUTLINE_THICKNESS_MM = 0.06;
+
 export function createDefaultLayerVisibility(): Set<PcbLayerId> {
   return new Set<PcbLayerId>([
     "F.Cu",

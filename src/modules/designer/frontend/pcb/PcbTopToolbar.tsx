@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import {
   Cable,
+  CircleDot,
   FlipHorizontal2,
   Minus,
   Network,
   Plus,
   Redo2,
   ScanSearch,
+  Square,
+  Type,
   Undo2,
 } from "lucide-react";
 import type { PcbTraceSegmentMode } from "../../../../sdks";
@@ -52,6 +55,15 @@ interface PcbTopToolbarProps {
   onPickViaPreset: (preset: PcbViaPreset) => void;
   posture: RoutePosture;
   onCyclePosture: () => void;
+  /** F5 mounting-hole drop tool. Click on canvas drops a free hole. */
+  holeMode: boolean;
+  onToggleHoleMode: () => void;
+  /** F5 free-pad drop tool. Click on canvas drops a free SMD pad. */
+  padMode: boolean;
+  onTogglePadMode: () => void;
+  /** F5 overlay-text drop tool. Click on canvas opens prompt → silkscreen label. */
+  textMode: boolean;
+  onToggleTextMode: () => void;
 }
 
 const POSTURE_LABEL: Record<RoutePosture, string> = {
@@ -367,6 +379,12 @@ export function PcbTopToolbar({
   onPickViaPreset,
   posture,
   onCyclePosture,
+  holeMode,
+  onToggleHoleMode,
+  padMode,
+  onTogglePadMode,
+  textMode,
+  onToggleTextMode,
 }: PcbTopToolbarProps): ReactElement {
   return (
     <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200/90 bg-white/95 px-2 py-1 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/90">
@@ -505,6 +523,53 @@ export function PcbTopToolbar({
           ) : null}
         </>
       ) : null}
+
+      <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
+
+      <button
+        type="button"
+        onClick={onToggleHoleMode}
+        title="Drop mounting hole (H) — click on the board to place a 3.2 mm hole"
+        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+          holeMode
+            ? "border-lime-500 bg-lime-100 text-lime-700 dark:bg-lime-900/40 dark:text-lime-300"
+            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        }`}
+        aria-pressed={holeMode}
+      >
+        <CircleDot className="h-3.5 w-3.5" />
+        Hole (H)
+      </button>
+
+      <button
+        type="button"
+        onClick={onTogglePadMode}
+        title="Drop free pad (P) — click on the board to place a free SMD pad on the active copper layer"
+        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+          padMode
+            ? "border-amber-500 bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        }`}
+        aria-pressed={padMode}
+      >
+        <Square className="h-3.5 w-3.5" />
+        Pad (P)
+      </button>
+
+      <button
+        type="button"
+        onClick={onToggleTextMode}
+        title="Add silkscreen text (T) — click on the board, then type the label"
+        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+          textMode
+            ? "border-cyan-500 bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300"
+            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        }`}
+        aria-pressed={textMode}
+      >
+        <Type className="h-3.5 w-3.5" />
+        Text (T)
+      </button>
 
       <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
 

@@ -44,6 +44,13 @@ import {
 import { commitKicadImport } from "./import/commit-kicad";
 import { commitKicadZipImport } from "./import/commit-kicad-zip";
 import {
+  PARAMETRIC_TEMPLATES,
+  defaultValues,
+  getTemplate,
+  hashParams,
+  validateParams,
+} from "../../../shared/rendering/parametric";
+import {
   commitGeneratedImport,
   type CommitGeneratedRequest,
 } from "./import/commit-generated";
@@ -1133,6 +1140,74 @@ export function registerRoutes(
     const tags = parseTags(routeCtx.query.get("tags"));
     const result = await searchComponents(ctx, { query, limit, tags });
     return success({ components: result });
+  });
+
+  // ── Parametric component templates (F2) ─────────────────────────────
+  // v1 is materialize-on-demand without DB persistence; consumers POST
+  // params, receive `{ source, metadata, paramsHash }`, and commit the
+  // resulting footprint via the existing /imports/generated route.
+  router.get("/templates", async () => {
+    return success({
+      templates: PARAMETRIC_TEMPLATES.map((t) => ({
+        id: t.id,
+        label: t.label,
+        description: t.description,
+        generatorVersion: t.generatorVersion,
+        schema: t.schema,
+        defaults: defaultValues(t.schema),
+      })),
+    });
+  });
+
+  router.get("/templates/:templateId", async (routeCtx) => {
+    const id = routeCtx.params.getOrThrow("templateId");
+    const template = getTemplate(id);
+    if (!template) {
+      throw new NotFoundError(`Template '${id}' not found`);
+    }
+    return success({
+      template: {
+        id: template.id,
+        label: template.label,
+        description: template.description,
+        generatorVersion: template.generatorVersion,
+        schema: template.schema,
+        defaults: defaultValues(template.schema),
+      },
+    });
+  });
+
+  router.post("/templates/:templateId/materialize", async (routeCtx) => {
+    const id = routeCtx.params.getOrThrow("templateId");
+    const template = getTemplate(id);
+    if (!template) {
+      throw new NotFoundError(`Template '${id}' not found`);
+    }
+    const body = await parseJsonBody<{ params?: Record<string, unknown> }>(
+      routeCtx.req,
+    );
+    const validated = validateParams(template.schema, body.params ?? {});
+    if (!validated.ok) {
+      throw new ValidationError(
+        `Invalid template params: ${validated.errors
+          .map((e) => `${e.key} ${e.message}`)
+          .join("; ")}`,
+      );
+    }
+    const result = template.generate(validated.values);
+    return success({
+      templateId: template.id,
+      generatorVersion: template.generatorVersion,
+      params: validated.values,
+      paramsHash: hashParams(validated.values),
+      source: result.source,
+      metadata: {
+        name: result.name,
+        mountType: result.mountType,
+        packageCode: result.packageCode,
+        tags: result.tags,
+      },
+    });
   });
 
   router.get("/tags", async (routeCtx) => {

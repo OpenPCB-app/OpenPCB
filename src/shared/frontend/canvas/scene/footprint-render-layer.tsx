@@ -350,25 +350,31 @@ export function FootprintRenderLayer({
         renderOrder={padRenderOrder}
       />
 
-      {/* Drill holes */}
-      {model.pads.map((pad) =>
-        pad.drillDiameterMm && pad.drillDiameterMm > 0 ? (
-          <mesh
-            key={`${pad.id}:drill`}
-            position={[pad.centerMm.x, pad.centerMm.y, 0]}
-            renderOrder={drillRenderOrder ?? RENDER_ORDER.PINS + 0.2}
-          >
-            <circleGeometry args={[pad.drillDiameterMm / 2, 20]} />
-            <meshBasicMaterial
-              color={pt.footprintDrill}
-              depthTest={enableDepthTest}
-              depthWrite={enableDepthTest}
-              transparent={!enableDepthTest || getLayerOpacity("Drill") < 1}
-              opacity={getLayerOpacity("Drill")}
-            />
-          </mesh>
-        ) : null,
-      )}
+      {/* Drill holes.
+         On the PCB canvas the substrate has real geometric cutouts at every
+         drill (`BoardFill.ShapeGeometry.holes[]`) and `DrillLayer` paints a
+         lime outline ring. Painting a filled disc here would cover the
+         cutout, so skip on `pcb` surface and keep the painted-disc fallback
+         for previews (library/symbol tiles have no board substrate). */}
+      {surface !== "pcb" &&
+        model.pads.map((pad) =>
+          pad.drillDiameterMm && pad.drillDiameterMm > 0 ? (
+            <mesh
+              key={`${pad.id}:drill`}
+              position={[pad.centerMm.x, pad.centerMm.y, 0]}
+              renderOrder={drillRenderOrder ?? RENDER_ORDER.PINS + 0.2}
+            >
+              <circleGeometry args={[pad.drillDiameterMm / 2, 20]} />
+              <meshBasicMaterial
+                color={pt.footprintDrill}
+                depthTest={enableDepthTest}
+                depthWrite={enableDepthTest}
+                transparent={!enableDepthTest || getLayerOpacity("Drill") < 1}
+                opacity={getLayerOpacity("Drill")}
+              />
+            </mesh>
+          ) : null,
+        )}
 
       {/* Pad numbers — hidden in 3D PCB board view (clutter on top of bodies) */}
       {!hidePadNumbers &&

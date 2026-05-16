@@ -36,6 +36,9 @@ import { CopperFillLayer } from "./layers/CopperFillLayer";
 import { viaCrossesLayer } from "./layers/copper-fill-trace-geometry";
 import { ViaLayer } from "./layers/ViaLayer";
 import { DrillLayer } from "./layers/DrillLayer";
+import { FreePadLayer } from "./layers/FreePadLayer";
+import { OverlayLayer } from "./layers/OverlayLayer";
+import { collectDrills } from "./pcb-drills";
 import { SolderMaskLayer } from "./layers/SolderMaskLayer";
 import { SolderPasteLayer } from "./layers/SolderPasteLayer";
 import { NetTraceLabels } from "./layers/NetTraceLabels";
@@ -248,15 +251,63 @@ function BoardFill({
     base.lerp(tint, visualState.boardTintOpacity);
     return `#${base.getHexString()}`;
   }, [theme.pcbCanvas.boardFill, visualState]);
+
+  // Inner board substrate as a punched ShapeGeometry: outer rectangle path,
+  // one circular hole per drill so the canvas background shows through.
+  // `centerMm` is the group offset, so drill coords are converted to local.
+  const fillGeometry = useMemo(() => {
+    const halfW = widthMm / 2;
+    const halfH = heightMm / 2;
+    const shape = new THREE.Shape();
+    shape.moveTo(-halfW, -halfH);
+    shape.lineTo(halfW, -halfH);
+    shape.lineTo(halfW, halfH);
+    shape.lineTo(-halfW, halfH);
+    shape.closePath();
+    const drills = collectDrills(
+      projection.vias,
+      projection.placements,
+      projection.freeHoles,
+      projection.freePads,
+    );
+    for (const drill of drills) {
+      const localX = drill.centerMm.x - centerMm.x;
+      const localY = drill.centerMm.y - centerMm.y;
+      // Reject drills outside the outline (defensive — placements past board
+      // edge punch nothing, otherwise THREE silently produces invalid geom).
+      if (
+        localX - drill.radiusMm < -halfW ||
+        localX + drill.radiusMm > halfW ||
+        localY - drill.radiusMm < -halfH ||
+        localY + drill.radiusMm > halfH
+      ) {
+        continue;
+      }
+      const hole = new THREE.Path();
+      hole.absarc(localX, localY, drill.radiusMm, 0, Math.PI * 2, false);
+      shape.holes.push(hole);
+    }
+    return new THREE.ShapeGeometry(shape);
+  }, [
+    widthMm,
+    heightMm,
+    centerMm.x,
+    centerMm.y,
+    projection.vias,
+    projection.placements,
+    projection.freeHoles,
+    projection.freePads,
+  ]);
+  useEffect(() => () => fillGeometry.dispose(), [fillGeometry]);
+
   // NOTE: must be opaque. With `transparent: true`, three.js renders this in
   // the transparent pass *after* opaque pads / silkscreen, so a 0.95-opacity
   // fill paints over the components and washes them out. depthTest:false
   // alone doesn't change the opaque/transparent pass split.
   //
-  // Two-pass substrate: outer slightly-lighter "shoulder" ring + inner dark
-  // FR4 plate, giving the board a subtle physical edge against the canvas
-  // background. Modern EDA tools (Flux, KiCad, Altium) all use a 1–2 px
-  // shoulder so the board reads as a 3D object even in flat 2D rendering.
+  // Two-pass substrate: outer solid "shoulder" plane provides a subtle
+  // bevel; inner ShapeGeometry plane is punched at every drill so the
+  // background reads through (real cutouts, not painted-on black discs).
   const shoulderMm = 0.35;
   return (
     <group position={[centerMm.x, centerMm.y, 0]}>
@@ -270,8 +321,11 @@ function BoardFill({
           depthWrite={false}
         />
       </mesh>
-      <mesh position={[0, 0, -0.01]} renderOrder={RENDER_ORDER.BOARD_FILL}>
-        <planeGeometry args={[widthMm, heightMm]} />
+      <mesh
+        geometry={fillGeometry}
+        position={[0, 0, -0.01]}
+        renderOrder={RENDER_ORDER.BOARD_FILL}
+      >
         <meshBasicMaterial
           color={fillColor}
           depthTest={false}
@@ -1246,9 +1300,31 @@ export function PcbScene({
           <DrillLayer
             vias={projection.vias}
             placements={renderPlacements}
+            freeHoles={projection.freeHoles}
+            freePads={projection.freePads}
             showMountingHoleRing={isPcbLayerVisible(visibleLayers, "F.SilkS")}
           />
         ) : null}
+        {(["B.Cu", "In2.Cu", "In1.Cu", "F.Cu"] as const).map((layer) =>
+          isCopperLayerVisible(visibleLayers, layer) &&
+          shouldRenderCopperLayer(visualState, layer) ? (
+            <FreePadLayer
+              key={`free-pad:${layer}`}
+              freePads={projection.freePads}
+              layer={layer}
+              viewSide={viewSide}
+              selectedFreePadIds={selection?.freePadIds}
+              opacity={
+                layerOpacity(visualState, layer) * layerOpacityFor(layer)
+              }
+            />
+          ) : null,
+        )}
+        <OverlayLayer
+          texts={projection.overlayTexts}
+          shapes={projection.overlayShapes}
+          viewSide={viewSide}
+        />
         {isPcbLayerVisible(visibleLayers, "B.Mask") ? (
           <SolderMaskLayer
             side="bottom"

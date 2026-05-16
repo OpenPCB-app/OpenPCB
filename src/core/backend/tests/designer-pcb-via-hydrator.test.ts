@@ -83,6 +83,7 @@ describe("PcbVia hydrator default-fill", () => {
       toLayer: "B.Cu",
       viaType: "through",
       protection: "filled",
+      provenance: "route",
     };
     insertPcbVia(db, "d2", via, "2026-05-10T00:00:00Z");
     const loaded = loadPcbVias(db, "d2");

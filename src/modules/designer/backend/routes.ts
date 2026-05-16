@@ -27,6 +27,23 @@ import type {
   DesignerPcbSetVisibleLayersCommand,
   DesignerPcbUpdateTraceGeometryCommand,
   DesignerPcbDeletePlacementCommand,
+  DesignerPcbAddFreeHoleCommand,
+  DesignerPcbUpdateFreeHoleCommand,
+  DesignerPcbDeleteFreeHoleCommand,
+  DesignerPcbAddFreePadCommand,
+  DesignerPcbUpdateFreePadCommand,
+  DesignerPcbDeleteFreePadCommand,
+  DesignerPcbAddManualViaCommand,
+  DesignerPcbAddOverlayShapeCommand,
+  DesignerPcbAddOverlayTextCommand,
+  DesignerPcbDeleteOverlayShapeCommand,
+  DesignerPcbDeleteOverlayTextCommand,
+  DesignerPcbUpdateOverlayShapeCommand,
+  DesignerPcbUpdateOverlayTextCommand,
+  PcbFreePadShape,
+  PcbFreePadType,
+  PcbOverlayLayer,
+  PcbOverlayShapeKind,
   DesignerPlaceGndPortCommand,
   DesignerPlaceNetPortalCommand,
   DesignerPlacePartCommand,
@@ -42,6 +59,7 @@ import type {
   PcbTraceSegmentMode,
 } from "../../../sdks/designer";
 import { createDesignerStore } from "./store";
+import { runErc } from "./erc/erc-engine";
 import { asNumber, asRecord, asString } from "./value-guards";
 
 function success<T>(data: T, status = 200): Response {
@@ -848,6 +866,493 @@ function parsePcbDeletePlacementCommand(
   return { type: "pcb_delete_placement", placementId };
 }
 
+function parsePcbAddFreeHoleCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbAddFreeHoleCommand {
+  const drillMm = asNumber(raw.drillMm);
+  if (drillMm === null || drillMm <= 0) {
+    throw new ValidationError("command.drillMm must be a positive number");
+  }
+  return {
+    type: "pcb_add_free_hole",
+    centerMm: parsePointMm(raw.centerMm, "command.centerMm"),
+    drillMm,
+  };
+}
+
+function parsePcbUpdateFreeHoleCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbUpdateFreeHoleCommand {
+  const freeHoleId = asString(raw.freeHoleId);
+  if (!freeHoleId) {
+    throw new ValidationError("command.freeHoleId must be a string");
+  }
+  const out: DesignerPcbUpdateFreeHoleCommand = {
+    type: "pcb_update_free_hole",
+    freeHoleId,
+  };
+  if (raw.centerMm !== undefined) {
+    out.centerMm = parsePointMm(raw.centerMm, "command.centerMm");
+  }
+  if (raw.drillMm !== undefined) {
+    const drillMm = asNumber(raw.drillMm);
+    if (drillMm === null || drillMm <= 0) {
+      throw new ValidationError("command.drillMm must be a positive number");
+    }
+    out.drillMm = drillMm;
+  }
+  if (raw.locked !== undefined) {
+    if (typeof raw.locked !== "boolean") {
+      throw new ValidationError("command.locked must be a boolean");
+    }
+    out.locked = raw.locked;
+  }
+  return out;
+}
+
+function parsePcbDeleteFreeHoleCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbDeleteFreeHoleCommand {
+  const freeHoleId = asString(raw.freeHoleId);
+  if (!freeHoleId) {
+    throw new ValidationError("command.freeHoleId must be a string");
+  }
+  return { type: "pcb_delete_free_hole", freeHoleId };
+}
+
+const FREE_PAD_TYPES = new Set<PcbFreePadType>(["smd", "hole", "std", "conn"]);
+const FREE_PAD_SHAPES = new Set<PcbFreePadShape>([
+  "rect",
+  "circle",
+  "oval",
+  "roundrect",
+]);
+
+function parseFreePadType(raw: unknown, field: string): PcbFreePadType {
+  const s = asString(raw);
+  if (s && FREE_PAD_TYPES.has(s as PcbFreePadType)) return s as PcbFreePadType;
+  throw new ValidationError(`${field} must be one of: smd, hole, std, conn`);
+}
+
+function parseFreePadShape(raw: unknown, field: string): PcbFreePadShape {
+  const s = asString(raw);
+  if (s && FREE_PAD_SHAPES.has(s as PcbFreePadShape)) {
+    return s as PcbFreePadShape;
+  }
+  throw new ValidationError(
+    `${field} must be one of: rect, circle, oval, roundrect`,
+  );
+}
+
+function parseCopperLayerOrThrow(
+  raw: unknown,
+  field: string,
+): PcbCopperLayerId {
+  const s = asString(raw);
+  if (s === "F.Cu" || s === "In1.Cu" || s === "In2.Cu" || s === "B.Cu") {
+    return s;
+  }
+  throw new ValidationError(`${field} must be a copper layer id`);
+}
+
+function parsePositiveNumber(raw: unknown, field: string): number {
+  const n = asNumber(raw);
+  if (n === null || !(n > 0)) {
+    throw new ValidationError(`${field} must be a positive number`);
+  }
+  return n;
+}
+
+function parsePcbAddFreePadCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbAddFreePadCommand {
+  const padType = parseFreePadType(raw.padType, "command.padType");
+  const shape = parseFreePadShape(raw.shape, "command.shape");
+  const widthMm = parsePositiveNumber(raw.widthMm, "command.widthMm");
+  const heightMm = parsePositiveNumber(raw.heightMm, "command.heightMm");
+  const rotationRaw =
+    raw.rotationDeg === undefined ? 0 : asNumber(raw.rotationDeg);
+  if (rotationRaw === null) {
+    throw new ValidationError("command.rotationDeg must be a number");
+  }
+  const layer = parseCopperLayerOrThrow(raw.layer, "command.layer");
+  const out: DesignerPcbAddFreePadCommand = {
+    type: "pcb_add_free_pad",
+    centerMm: parsePointMm(raw.centerMm, "command.centerMm"),
+    rotationDeg: rotationRaw,
+    padType,
+    shape,
+    widthMm,
+    heightMm,
+    layer,
+  };
+  if (raw.roundrectRatio !== undefined) {
+    const r = asNumber(raw.roundrectRatio);
+    if (r === null || r < 0 || r > 0.5) {
+      throw new ValidationError(
+        "command.roundrectRatio must be between 0 and 0.5",
+      );
+    }
+    out.roundrectRatio = r;
+  }
+  if (raw.drillMm !== undefined && raw.drillMm !== null) {
+    out.drillMm = parsePositiveNumber(raw.drillMm, "command.drillMm");
+  }
+  if (raw.netId !== undefined) {
+    out.netId = raw.netId === null ? null : asString(raw.netId);
+  }
+  if (raw.solderMaskExpansionMm !== undefined) {
+    const v = asNumber(raw.solderMaskExpansionMm);
+    if (v === null) {
+      throw new ValidationError(
+        "command.solderMaskExpansionMm must be a number",
+      );
+    }
+    out.solderMaskExpansionMm = v;
+  }
+  if (raw.solderPasteExpansionMm !== undefined) {
+    const v = asNumber(raw.solderPasteExpansionMm);
+    if (v === null) {
+      throw new ValidationError(
+        "command.solderPasteExpansionMm must be a number",
+      );
+    }
+    out.solderPasteExpansionMm = v;
+  }
+  return out;
+}
+
+function parsePcbUpdateFreePadCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbUpdateFreePadCommand {
+  const freePadId = asString(raw.freePadId);
+  if (!freePadId) {
+    throw new ValidationError("command.freePadId must be a string");
+  }
+  const out: DesignerPcbUpdateFreePadCommand = {
+    type: "pcb_update_free_pad",
+    freePadId,
+  };
+  if (raw.centerMm !== undefined) {
+    out.centerMm = parsePointMm(raw.centerMm, "command.centerMm");
+  }
+  if (raw.rotationDeg !== undefined) {
+    const n = asNumber(raw.rotationDeg);
+    if (n === null) {
+      throw new ValidationError("command.rotationDeg must be a number");
+    }
+    out.rotationDeg = n;
+  }
+  if (raw.padType !== undefined) {
+    out.padType = parseFreePadType(raw.padType, "command.padType");
+  }
+  if (raw.shape !== undefined) {
+    out.shape = parseFreePadShape(raw.shape, "command.shape");
+  }
+  if (raw.widthMm !== undefined) {
+    out.widthMm = parsePositiveNumber(raw.widthMm, "command.widthMm");
+  }
+  if (raw.heightMm !== undefined) {
+    out.heightMm = parsePositiveNumber(raw.heightMm, "command.heightMm");
+  }
+  if (raw.roundrectRatio !== undefined) {
+    const r = asNumber(raw.roundrectRatio);
+    if (r === null || r < 0 || r > 0.5) {
+      throw new ValidationError(
+        "command.roundrectRatio must be between 0 and 0.5",
+      );
+    }
+    out.roundrectRatio = r;
+  }
+  if (raw.drillMm !== undefined) {
+    if (raw.drillMm === null) {
+      out.drillMm = null;
+    } else {
+      out.drillMm = parsePositiveNumber(raw.drillMm, "command.drillMm");
+    }
+  }
+  if (raw.layer !== undefined) {
+    out.layer = parseCopperLayerOrThrow(raw.layer, "command.layer");
+  }
+  if (raw.netId !== undefined) {
+    out.netId = raw.netId === null ? null : asString(raw.netId);
+  }
+  if (raw.solderMaskExpansionMm !== undefined) {
+    out.solderMaskExpansionMm =
+      raw.solderMaskExpansionMm === null
+        ? null
+        : asNumber(raw.solderMaskExpansionMm);
+  }
+  if (raw.solderPasteExpansionMm !== undefined) {
+    out.solderPasteExpansionMm =
+      raw.solderPasteExpansionMm === null
+        ? null
+        : asNumber(raw.solderPasteExpansionMm);
+  }
+  if (raw.locked !== undefined) {
+    if (typeof raw.locked !== "boolean") {
+      throw new ValidationError("command.locked must be a boolean");
+    }
+    out.locked = raw.locked;
+  }
+  return out;
+}
+
+function parsePcbDeleteFreePadCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbDeleteFreePadCommand {
+  const freePadId = asString(raw.freePadId);
+  if (!freePadId) {
+    throw new ValidationError("command.freePadId must be a string");
+  }
+  return { type: "pcb_delete_free_pad", freePadId };
+}
+
+const OVERLAY_LAYERS = new Set<PcbOverlayLayer>([
+  "F.SilkS",
+  "B.SilkS",
+  "F.Fab",
+  "B.Fab",
+  "F.CrtYd",
+  "B.CrtYd",
+  "Edge.Cuts",
+]);
+
+const OVERLAY_SHAPE_KINDS = new Set<PcbOverlayShapeKind>([
+  "rect",
+  "circle",
+  "line",
+  "polyline",
+  "polygon",
+]);
+
+function parseOverlayLayerOrThrow(
+  raw: unknown,
+  field: string,
+): PcbOverlayLayer {
+  const s = asString(raw);
+  if (s && OVERLAY_LAYERS.has(s as PcbOverlayLayer)) {
+    return s as PcbOverlayLayer;
+  }
+  throw new ValidationError(
+    `${field} must be one of: F.SilkS, B.SilkS, F.Fab, B.Fab, F.CrtYd, B.CrtYd, Edge.Cuts`,
+  );
+}
+
+function parseOverlayShapeKindOrThrow(
+  raw: unknown,
+  field: string,
+): PcbOverlayShapeKind {
+  const s = asString(raw);
+  if (s && OVERLAY_SHAPE_KINDS.has(s as PcbOverlayShapeKind)) {
+    return s as PcbOverlayShapeKind;
+  }
+  throw new ValidationError(
+    `${field} must be one of: rect, circle, line, polyline, polygon`,
+  );
+}
+
+function parseJustify(raw: unknown): "left" | "center" | "right" {
+  const s = asString(raw);
+  if (s === "left" || s === "right" || s === "center") return s;
+  throw new ValidationError(
+    "command.justify must be one of: left, center, right",
+  );
+}
+
+function parseFill(raw: unknown): "none" | "solid" {
+  const s = asString(raw);
+  if (s === "none" || s === "solid") return s;
+  throw new ValidationError("command.fill must be 'none' or 'solid'");
+}
+
+function parsePointMmArray(
+  raw: unknown,
+  field: string,
+): Array<{ x: number; y: number }> {
+  if (!Array.isArray(raw)) {
+    throw new ValidationError(`${field} must be an array`);
+  }
+  return raw.map((p, i) => parsePointMm(p, `${field}[${i}]`));
+}
+
+function parsePcbAddOverlayTextCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbAddOverlayTextCommand {
+  const text = asString(raw.text);
+  if (text === null || text.length === 0) {
+    throw new ValidationError("command.text must be a non-empty string");
+  }
+  const fontSizeMm = parsePositiveNumber(raw.fontSizeMm, "command.fontSizeMm");
+  const rotationDeg = asNumber(raw.rotationDeg) ?? 0;
+  const out: DesignerPcbAddOverlayTextCommand = {
+    type: "pcb_add_overlay_text",
+    layer: parseOverlayLayerOrThrow(raw.layer, "command.layer"),
+    positionMm: parsePointMm(raw.positionMm, "command.positionMm"),
+    text,
+    fontSizeMm,
+    rotationDeg,
+  };
+  if (raw.mirror !== undefined) {
+    if (typeof raw.mirror !== "boolean") {
+      throw new ValidationError("command.mirror must be a boolean");
+    }
+    out.mirror = raw.mirror;
+  }
+  if (raw.justify !== undefined) {
+    out.justify = parseJustify(raw.justify);
+  }
+  return out;
+}
+
+function parsePcbUpdateOverlayTextCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbUpdateOverlayTextCommand {
+  const overlayTextId = asString(raw.overlayTextId);
+  if (!overlayTextId) {
+    throw new ValidationError("command.overlayTextId must be a string");
+  }
+  const out: DesignerPcbUpdateOverlayTextCommand = {
+    type: "pcb_update_overlay_text",
+    overlayTextId,
+  };
+  if (raw.layer !== undefined) {
+    out.layer = parseOverlayLayerOrThrow(raw.layer, "command.layer");
+  }
+  if (raw.positionMm !== undefined) {
+    out.positionMm = parsePointMm(raw.positionMm, "command.positionMm");
+  }
+  if (raw.text !== undefined) {
+    const text = asString(raw.text);
+    if (text === null || text.length === 0) {
+      throw new ValidationError("command.text must be a non-empty string");
+    }
+    out.text = text;
+  }
+  if (raw.fontSizeMm !== undefined) {
+    out.fontSizeMm = parsePositiveNumber(raw.fontSizeMm, "command.fontSizeMm");
+  }
+  if (raw.rotationDeg !== undefined) {
+    const n = asNumber(raw.rotationDeg);
+    if (n === null) {
+      throw new ValidationError("command.rotationDeg must be a number");
+    }
+    out.rotationDeg = n;
+  }
+  if (raw.mirror !== undefined) {
+    if (typeof raw.mirror !== "boolean") {
+      throw new ValidationError("command.mirror must be a boolean");
+    }
+    out.mirror = raw.mirror;
+  }
+  if (raw.justify !== undefined) {
+    out.justify = parseJustify(raw.justify);
+  }
+  if (raw.locked !== undefined) {
+    if (typeof raw.locked !== "boolean") {
+      throw new ValidationError("command.locked must be a boolean");
+    }
+    out.locked = raw.locked;
+  }
+  return out;
+}
+
+function parsePcbDeleteOverlayTextCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbDeleteOverlayTextCommand {
+  const overlayTextId = asString(raw.overlayTextId);
+  if (!overlayTextId) {
+    throw new ValidationError("command.overlayTextId must be a string");
+  }
+  return { type: "pcb_delete_overlay_text", overlayTextId };
+}
+
+function parsePcbAddOverlayShapeCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbAddOverlayShapeCommand {
+  const strokeWidthMm = parsePositiveNumber(
+    raw.strokeWidthMm,
+    "command.strokeWidthMm",
+  );
+  const out: DesignerPcbAddOverlayShapeCommand = {
+    type: "pcb_add_overlay_shape",
+    layer: parseOverlayLayerOrThrow(raw.layer, "command.layer"),
+    kind: parseOverlayShapeKindOrThrow(raw.kind, "command.kind"),
+    pointsMm: parsePointMmArray(raw.pointsMm, "command.pointsMm"),
+    strokeWidthMm,
+  };
+  if (raw.fill !== undefined) {
+    out.fill = parseFill(raw.fill);
+  }
+  return out;
+}
+
+function parsePcbUpdateOverlayShapeCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbUpdateOverlayShapeCommand {
+  const overlayShapeId = asString(raw.overlayShapeId);
+  if (!overlayShapeId) {
+    throw new ValidationError("command.overlayShapeId must be a string");
+  }
+  const out: DesignerPcbUpdateOverlayShapeCommand = {
+    type: "pcb_update_overlay_shape",
+    overlayShapeId,
+  };
+  if (raw.layer !== undefined) {
+    out.layer = parseOverlayLayerOrThrow(raw.layer, "command.layer");
+  }
+  if (raw.kind !== undefined) {
+    out.kind = parseOverlayShapeKindOrThrow(raw.kind, "command.kind");
+  }
+  if (raw.pointsMm !== undefined) {
+    out.pointsMm = parsePointMmArray(raw.pointsMm, "command.pointsMm");
+  }
+  if (raw.strokeWidthMm !== undefined) {
+    out.strokeWidthMm = parsePositiveNumber(
+      raw.strokeWidthMm,
+      "command.strokeWidthMm",
+    );
+  }
+  if (raw.fill !== undefined) {
+    out.fill = parseFill(raw.fill);
+  }
+  if (raw.locked !== undefined) {
+    if (typeof raw.locked !== "boolean") {
+      throw new ValidationError("command.locked must be a boolean");
+    }
+    out.locked = raw.locked;
+  }
+  return out;
+}
+
+function parsePcbDeleteOverlayShapeCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbDeleteOverlayShapeCommand {
+  const overlayShapeId = asString(raw.overlayShapeId);
+  if (!overlayShapeId) {
+    throw new ValidationError("command.overlayShapeId must be a string");
+  }
+  return { type: "pcb_delete_overlay_shape", overlayShapeId };
+}
+
+function parsePcbAddManualViaCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbAddManualViaCommand {
+  const base = parsePcbAddViaCommand(raw);
+  return {
+    type: "pcb_add_manual_via",
+    centerMm: base.centerMm,
+    netId: base.netId,
+    netClassId: base.netClassId,
+    ...(base.diameterMmOverride !== undefined
+      ? { diameterMmOverride: base.diameterMmOverride }
+      : {}),
+    ...(base.drillMmOverride !== undefined
+      ? { drillMmOverride: base.drillMmOverride }
+      : {}),
+  };
+}
+
 function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
   const record = asRecord(body);
   if (!record) {
@@ -985,6 +1490,45 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
     case "pcb_delete_placement":
       command = parsePcbDeletePlacementCommand(commandRecord);
       break;
+    case "pcb_add_free_hole":
+      command = parsePcbAddFreeHoleCommand(commandRecord);
+      break;
+    case "pcb_update_free_hole":
+      command = parsePcbUpdateFreeHoleCommand(commandRecord);
+      break;
+    case "pcb_delete_free_hole":
+      command = parsePcbDeleteFreeHoleCommand(commandRecord);
+      break;
+    case "pcb_add_free_pad":
+      command = parsePcbAddFreePadCommand(commandRecord);
+      break;
+    case "pcb_update_free_pad":
+      command = parsePcbUpdateFreePadCommand(commandRecord);
+      break;
+    case "pcb_delete_free_pad":
+      command = parsePcbDeleteFreePadCommand(commandRecord);
+      break;
+    case "pcb_add_manual_via":
+      command = parsePcbAddManualViaCommand(commandRecord);
+      break;
+    case "pcb_add_overlay_text":
+      command = parsePcbAddOverlayTextCommand(commandRecord);
+      break;
+    case "pcb_update_overlay_text":
+      command = parsePcbUpdateOverlayTextCommand(commandRecord);
+      break;
+    case "pcb_delete_overlay_text":
+      command = parsePcbDeleteOverlayTextCommand(commandRecord);
+      break;
+    case "pcb_add_overlay_shape":
+      command = parsePcbAddOverlayShapeCommand(commandRecord);
+      break;
+    case "pcb_update_overlay_shape":
+      command = parsePcbUpdateOverlayShapeCommand(commandRecord);
+      break;
+    case "pcb_delete_overlay_shape":
+      command = parsePcbDeleteOverlayShapeCommand(commandRecord);
+      break;
     default:
       throw new ValidationError(`Unsupported command type '${type}'`);
   }
@@ -1067,6 +1611,15 @@ export function registerRoutes(
       throw new NotFoundError(`Design '${designId}' not found`);
     }
     return success({ projection });
+  });
+
+  router.get("/designs/:designId/erc", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    const projection = await store.getSchematicProjection(designId);
+    if (!projection) {
+      throw new NotFoundError(`Design '${designId}' not found`);
+    }
+    return success({ report: runErc(projection) });
   });
 
   router.post("/designs/:designId/commands", async ({ params, req }) => {

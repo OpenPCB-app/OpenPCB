@@ -19,11 +19,11 @@ const makePlacement = (
   mirrored: false,
   layer: "F.Cu",
   footprint: {
-      footprintId: "fp1",
-      name: "TEST",
-      mountType: null,
-      sourceHash: null,
-      preview: {
+    footprintId: "fp1",
+    name: "TEST",
+    mountType: null,
+    sourceHash: null,
+    preview: {
       kind: "footprint",
       units: "mm",
       name: "TEST",
@@ -32,7 +32,6 @@ const makePlacement = (
       pads: [],
       graphics: [],
       bounds: { minX: -5, maxX: 5, minY: -5, maxY: 5 },
-
     },
   },
   ...overrides,
@@ -63,6 +62,7 @@ const makeVia = (overrides: Partial<PcbVia> = {}): PcbVia => ({
   toLayer: "B.Cu",
   viaType: "through",
   protection: "tented",
+  provenance: "route",
   ...overrides,
 });
 
@@ -94,16 +94,16 @@ describe("snap", () => {
           id: "p1",
           positionMm: { x: 10, y: 10 },
           footprint: {
-      footprintId: "fp1",
-      name: "TEST",
-      mountType: null,
-      sourceHash: null,
-      preview: {
-      kind: "footprint",
-      units: "mm",
-      name: "TEST",
-      labels: [],
-      warnings: [],
+            footprintId: "fp1",
+            name: "TEST",
+            mountType: null,
+            sourceHash: null,
+            preview: {
+              kind: "footprint",
+              units: "mm",
+              name: "TEST",
+              labels: [],
+              warnings: [],
               pads: [
                 {
                   id: "pad1",
@@ -142,7 +142,6 @@ describe("snap", () => {
       expect(result!.kind).toBe("pad-center");
       expect(result!.pointMm.x).toBeCloseTo(10, 1);
       expect(result!.pointMm.y).toBeCloseTo(10, 1);
-
     });
 
     test("returns trace-endpoint when cursor is near trace start/end", () => {
@@ -231,16 +230,16 @@ describe("snap", () => {
           id: "p1",
           positionMm: { x: 10, y: 10 },
           footprint: {
-      footprintId: "fp1",
-      name: "TEST",
-      mountType: null,
-      sourceHash: null,
-      preview: {
-      kind: "footprint",
-      units: "mm",
-      name: "TEST",
-      labels: [],
-      warnings: [],
+            footprintId: "fp1",
+            name: "TEST",
+            mountType: null,
+            sourceHash: null,
+            preview: {
+              kind: "footprint",
+              units: "mm",
+              name: "TEST",
+              labels: [],
+              warnings: [],
               pads: [
                 {
                   id: "pad1",
@@ -285,7 +284,6 @@ describe("snap", () => {
 
       expect(result).not.toBeNull();
       expect(result!.kind).toBe("trace-endpoint");
-
     });
 
     test("respects options.snapTraceEndpoints = false", () => {
@@ -344,16 +342,16 @@ describe("snap", () => {
           id: "p1",
           positionMm: { x: 10, y: 10 },
           footprint: {
-      footprintId: "fp1",
-      name: "TEST",
-      mountType: null,
-      sourceHash: null,
-      preview: {
-      kind: "footprint",
-      units: "mm",
-      name: "TEST",
-      labels: [],
-      warnings: [],
+            footprintId: "fp1",
+            name: "TEST",
+            mountType: null,
+            sourceHash: null,
+            preview: {
+              kind: "footprint",
+              units: "mm",
+              name: "TEST",
+              labels: [],
+              warnings: [],
               pads: [
                 {
                   id: "pad1",
@@ -397,7 +395,6 @@ describe("snap", () => {
 
       expect(result).not.toBeNull();
       expect(result!.kind).toBe("pad-center");
-
     });
   });
 });

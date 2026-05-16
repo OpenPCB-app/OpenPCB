@@ -214,15 +214,39 @@ export function pcbViaNotFound(viaId: string): DesignerDispatchResult {
   return { ok: false, code: "PCB_VIA_NOT_FOUND", viaId };
 }
 
+export function invalidPcbFreeHole(detail: string): DesignerDispatchResult {
+  return { ok: false, code: "INVALID_PCB_FREE_HOLE", detail };
+}
+
+export function pcbFreeHoleNotFound(
+  freeHoleId: string,
+): DesignerDispatchResult {
+  return { ok: false, code: "PCB_FREE_HOLE_NOT_FOUND", freeHoleId };
+}
+
+export function invalidPcbFreePad(detail: string): DesignerDispatchResult {
+  return { ok: false, code: "INVALID_PCB_FREE_PAD", detail };
+}
+
+export function pcbFreePadNotFound(freePadId: string): DesignerDispatchResult {
+  return { ok: false, code: "PCB_FREE_PAD_NOT_FOUND", freePadId };
+}
+
+export function invalidPcbOverlay(detail: string): DesignerDispatchResult {
+  return { ok: false, code: "INVALID_PCB_OVERLAY", detail };
+}
+
+export function pcbOverlayNotFound(overlayId: string): DesignerDispatchResult {
+  return { ok: false, code: "PCB_OVERLAY_NOT_FOUND", overlayId };
+}
+
 export function pcbNetClassNotFound(
   netClassId: string,
 ): DesignerDispatchResult {
   return { ok: false, code: "PCB_NET_CLASS_NOT_FOUND", netClassId };
 }
 
-export function duplicateReference(
-  reference: string,
-): DesignerDispatchResult {
+export function duplicateReference(reference: string): DesignerDispatchResult {
   return { ok: false, code: "DUPLICATE_REFERENCE", reference };
 }
 

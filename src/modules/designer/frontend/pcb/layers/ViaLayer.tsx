@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, type ReactElement } from "react";
 import * as THREE from "three";
 import type { PcbVia } from "../../../../../sdks";
 import {
-  PCB_LAYER_COLORS,
   PCB_TRACE_COLORS,
   RENDER_ORDER,
 } from "../../../../../shared/frontend/canvas/layers";
@@ -23,11 +22,11 @@ interface ViaLayerProps {
 }
 
 /**
- * Renders vias as two stacked rings:
- *   - outer copper annular ring (trace color of `fromLayer`: red for F.Cu,
- *     blue for B.Cu — matches Flux.ai/KiCad convention; the trace coming into
- *     the via dictates the ring color)
- *   - inner drill hole (board-fill color so it appears as a punched hole)
+ * Renders vias as a single copper annular ring around the drill.
+ * The drill itself is a real cutout in the board substrate (`BoardFill`
+ * `ShapeGeometry.holes[]`); `DrillLayer` paints the lime outline on top.
+ * Ring color follows `fromLayer` trace color (red for F.Cu, blue for B.Cu —
+ * Flux.ai/KiCad convention).
  */
 export function ViaLayer({
   vias,
@@ -53,7 +52,6 @@ export function ViaLayer({
           <SingleVia
             key={via.id}
             via={via}
-            drillColor={PCB_LAYER_COLORS.Drill}
             dimmed={
               highlightedNetId !== null &&
               highlightedNetId !== undefined &&
@@ -77,65 +75,39 @@ export function ViaLayer({
 
 function SingleVia({
   via,
-  drillColor,
   dimmed,
   inactive,
   selected,
 }: {
   via: PcbVia;
-  drillColor: string;
   dimmed: boolean;
   inactive: boolean;
   selected: boolean;
 }): ReactElement {
-  const annularRing = (via.diameterMm - via.drillMm) / 2;
   const outerRadius = via.diameterMm / 2;
   const drillRadius = via.drillMm / 2;
   const ringGeom = useMemo(
     () => new THREE.RingGeometry(drillRadius, outerRadius, 32),
     [drillRadius, outerRadius],
   );
-  const drillGeom = useMemo(
-    () => new THREE.CircleGeometry(drillRadius, 24),
-    [drillRadius],
-  );
-  useEffect(
-    () => () => {
-      ringGeom.dispose();
-      drillGeom.dispose();
-    },
-    [ringGeom, drillGeom],
-  );
+  useEffect(() => () => ringGeom.dispose(), [ringGeom]);
   const ringRef = useRef<THREE.Mesh>(null);
-  const drillRef = useRef<THREE.Mesh>(null);
-  // annularRing not currently used for rendering width — kept for future DRC.
-  void annularRing;
 
   return (
-    <group position={[via.centerMm.x, via.centerMm.y, 0]}>
-      <mesh ref={ringRef} geometry={ringGeom} renderOrder={RENDER_ORDER.PINS}>
-        <meshBasicMaterial
-          color={selected ? "#22d3ee" : PCB_TRACE_COLORS[via.fromLayer]}
-          transparent={dimmed || inactive}
-          opacity={dimmed ? 0.3 : inactive ? 0.55 : 1}
-          depthTest={false}
-          depthWrite={false}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      <mesh
-        ref={drillRef}
-        geometry={drillGeom}
-        renderOrder={RENDER_ORDER.PINS + 1}
-      >
-        <meshBasicMaterial
-          color={drillColor}
-          depthTest={false}
-          depthWrite={false}
-          side={THREE.DoubleSide}
-          transparent={false}
-        />
-      </mesh>
-    </group>
+    <mesh
+      ref={ringRef}
+      geometry={ringGeom}
+      position={[via.centerMm.x, via.centerMm.y, 0]}
+      renderOrder={RENDER_ORDER.PINS}
+    >
+      <meshBasicMaterial
+        color={selected ? "#22d3ee" : PCB_TRACE_COLORS[via.fromLayer]}
+        transparent={dimmed || inactive}
+        opacity={dimmed ? 0.3 : inactive ? 0.55 : 1}
+        depthTest={false}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
   );
 }

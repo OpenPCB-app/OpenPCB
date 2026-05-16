@@ -518,6 +518,113 @@ export function usePcbWorkspace(params: {
     [dispatchCommand, refresh, refreshHistory],
   );
 
+  const addFreeHole = useCallback(
+    async (centerMm: PcbPointMm, drillMm: number) => {
+      setError(null);
+      try {
+        await dispatchCommand({
+          type: "pcb_add_free_hole",
+          centerMm,
+          drillMm,
+        });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Add hole failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  /** Drop a free pad at `centerMm`. v1 ships SMD rect 1.5×1.0 mm by default. */
+  const addFreePad = useCallback(
+    async (
+      centerMm: PcbPointMm,
+      options?: {
+        padType?: "smd" | "hole" | "std" | "conn";
+        shape?: "rect" | "circle" | "oval" | "roundrect";
+        widthMm?: number;
+        heightMm?: number;
+        drillMm?: number;
+        layer?: PcbCopperLayerId;
+      },
+    ) => {
+      setError(null);
+      try {
+        const padType = options?.padType ?? "smd";
+        const cmd = {
+          type: "pcb_add_free_pad" as const,
+          centerMm,
+          rotationDeg: 0,
+          padType,
+          shape: options?.shape ?? "rect",
+          widthMm: options?.widthMm ?? 1.5,
+          heightMm: options?.heightMm ?? 1.0,
+          layer: options?.layer ?? "F.Cu",
+          ...(padType === "hole" || padType === "std"
+            ? { drillMm: options?.drillMm ?? 0.8 }
+            : {}),
+        } satisfies DesignerCommand;
+        await dispatchCommand(cmd);
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Add pad failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  /** Drop an overlay text label at `positionMm`. */
+  const addOverlayText = useCallback(
+    async (
+      positionMm: PcbPointMm,
+      text: string,
+      options?: {
+        layer?:
+          | "F.SilkS"
+          | "B.SilkS"
+          | "F.Fab"
+          | "B.Fab"
+          | "F.CrtYd"
+          | "B.CrtYd"
+          | "Edge.Cuts";
+        fontSizeMm?: number;
+      },
+    ) => {
+      setError(null);
+      try {
+        await dispatchCommand({
+          type: "pcb_add_overlay_text",
+          layer: options?.layer ?? "F.SilkS",
+          positionMm,
+          text,
+          fontSizeMm: options?.fontSizeMm ?? 1.0,
+          rotationDeg: 0,
+        });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Add label failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const deleteFreeHole = useCallback(
+    async (freeHoleId: string) => {
+      setError(null);
+      try {
+        await dispatchCommand({ type: "pcb_delete_free_hole", freeHoleId });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Delete hole failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
   return {
     projection,
     loading,
@@ -560,5 +667,9 @@ export function usePcbWorkspace(params: {
     deleteTrace,
     deleteVia,
     updateTraceGeometry,
+    addFreeHole,
+    deleteFreeHole,
+    addFreePad,
+    addOverlayText,
   };
 }

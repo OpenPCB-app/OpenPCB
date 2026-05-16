@@ -39,11 +39,17 @@ import {
   entityNotFound,
   invalidLabel,
   invalidPcbBoardSettings,
+  invalidPcbFreeHole,
+  invalidPcbFreePad,
+  invalidPcbOverlay,
   invalidPcbTrace,
   invalidPcbVia,
   invalidPrimitive,
   invalidWirePath,
   okResult,
+  pcbFreeHoleNotFound,
+  pcbFreePadNotFound,
+  pcbOverlayNotFound,
   pcbNetClassNotFound,
   pcbPlacementNotFound,
   pcbTraceNotFound,
@@ -60,13 +66,25 @@ import {
   schematicWires,
 } from "./schema";
 import {
+  deletePcbFreeHole,
+  deletePcbFreePad,
+  deletePcbOverlayShape,
+  deletePcbOverlayText,
   deletePcbPlacement,
   deletePcbTrace,
   deletePcbVia,
   ensurePcbBoardSettings,
   flipPcbPlacement,
+  insertPcbFreeHole,
+  insertPcbFreePad,
+  insertPcbOverlayShape,
+  insertPcbOverlayText,
   insertPcbTrace,
   insertPcbVia,
+  loadPcbFreeHoleById,
+  loadPcbFreePadById,
+  loadPcbOverlayShapeById,
+  loadPcbOverlayTextById,
   loadPcbPlacementById,
   loadPcbTraceById,
   loadPcbViaById,
@@ -74,6 +92,10 @@ import {
   rotatePcbPlacement,
   updatePcbActiveLayer,
   updatePcbBoardSize,
+  updatePcbFreeHole,
+  updatePcbFreePad,
+  updatePcbOverlayShape,
+  updatePcbOverlayText,
   updatePcbTrace,
   updatePcbViewState,
   updatePcbVisibleLayers,
@@ -163,7 +185,9 @@ function bumpRevision(
 }
 
 type PcbTraceInput = Omit<DesignerPcbAddTraceCommand, "type">;
-type PcbViaInput = Omit<DesignerPcbAddViaCommand, "type">;
+type PcbViaInput = Omit<DesignerPcbAddViaCommand, "type"> & {
+  type?: "pcb_add_via" | "pcb_add_manual_via";
+};
 
 function buildPcbTraceForInsert(
   input: PcbTraceInput,
@@ -237,6 +261,7 @@ function buildPcbViaForInsert(
     toLayer: "B.Cu",
     viaType: "through",
     protection: netClass.defaultViaProtection,
+    provenance: "route",
   };
   const violations = validateViaAgainstFab(via, board.fabricator);
   if (violations.length > 0) {
@@ -559,6 +584,322 @@ export function executeDesignerCommand({
     const existing = loadPcbPlacementById(tx, designId, command.placementId);
     if (!existing) return pcbPlacementNotFound(command.placementId);
     deletePcbPlacement(tx, command.placementId);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_add_free_hole") {
+    if (!isFinitePoint({ x: command.centerMm.x, y: command.centerMm.y })) {
+      return invalidPcbFreeHole("centerMm must be finite numbers");
+    }
+    if (!(command.drillMm > 0) || !Number.isFinite(command.drillMm)) {
+      return invalidPcbFreeHole("drillMm must be a positive finite number");
+    }
+    const hole = {
+      id: crypto.randomUUID(),
+      centerMm: command.centerMm,
+      drillMm: command.drillMm,
+      lockedAt: null,
+    };
+    insertPcbFreeHole(tx, designId, hole, timestamp);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), hole.id);
+  }
+
+  if (command.type === "pcb_update_free_hole") {
+    const existing = loadPcbFreeHoleById(tx, designId, command.freeHoleId);
+    if (!existing) return pcbFreeHoleNotFound(command.freeHoleId);
+    if (existing.lockedAt && command.locked !== false) {
+      return invalidPcbFreeHole("free hole is locked — unlock before editing");
+    }
+    if (command.centerMm !== undefined) {
+      if (!isFinitePoint({ x: command.centerMm.x, y: command.centerMm.y })) {
+        return invalidPcbFreeHole("centerMm must be finite numbers");
+      }
+    }
+    if (command.drillMm !== undefined) {
+      if (!(command.drillMm > 0) || !Number.isFinite(command.drillMm)) {
+        return invalidPcbFreeHole("drillMm must be a positive finite number");
+      }
+    }
+    const next = {
+      ...existing,
+      ...(command.centerMm !== undefined ? { centerMm: command.centerMm } : {}),
+      ...(command.drillMm !== undefined ? { drillMm: command.drillMm } : {}),
+      ...(command.locked === undefined
+        ? {}
+        : { lockedAt: command.locked ? timestamp : null }),
+    };
+    updatePcbFreeHole(tx, next, timestamp);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_delete_free_hole") {
+    const existing = loadPcbFreeHoleById(tx, designId, command.freeHoleId);
+    if (!existing) return pcbFreeHoleNotFound(command.freeHoleId);
+    if (existing.lockedAt) {
+      return invalidPcbFreeHole("free hole is locked — unlock before deleting");
+    }
+    deletePcbFreeHole(tx, command.freeHoleId);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_add_free_pad") {
+    if (!isFinitePoint({ x: command.centerMm.x, y: command.centerMm.y })) {
+      return invalidPcbFreePad("centerMm must be finite numbers");
+    }
+    if (!(command.widthMm > 0) || !(command.heightMm > 0)) {
+      return invalidPcbFreePad("widthMm and heightMm must be positive");
+    }
+    const needsDrill = command.padType === "hole" || command.padType === "std";
+    if (needsDrill) {
+      if (
+        command.drillMm === undefined ||
+        !(command.drillMm > 0) ||
+        !Number.isFinite(command.drillMm)
+      ) {
+        return invalidPcbFreePad(
+          `drillMm is required for ${command.padType} pads`,
+        );
+      }
+      if (command.drillMm >= Math.min(command.widthMm, command.heightMm)) {
+        return invalidPcbFreePad("drillMm must be smaller than pad");
+      }
+    }
+    const pad = {
+      id: crypto.randomUUID(),
+      centerMm: command.centerMm,
+      rotationDeg: command.rotationDeg,
+      padType: command.padType,
+      shape: command.shape,
+      widthMm: command.widthMm,
+      heightMm: command.heightMm,
+      ...(command.roundrectRatio !== undefined
+        ? { roundrectRatio: command.roundrectRatio }
+        : {}),
+      drillMm: needsDrill ? (command.drillMm ?? null) : null,
+      layer: command.layer,
+      netId: command.netId ?? null,
+      solderMaskExpansionMm: command.solderMaskExpansionMm ?? null,
+      solderPasteExpansionMm: command.solderPasteExpansionMm ?? null,
+      lockedAt: null,
+    };
+    insertPcbFreePad(tx, designId, pad, timestamp);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), pad.id);
+  }
+
+  if (command.type === "pcb_update_free_pad") {
+    const existing = loadPcbFreePadById(tx, designId, command.freePadId);
+    if (!existing) return pcbFreePadNotFound(command.freePadId);
+    if (existing.lockedAt && command.locked !== false) {
+      return invalidPcbFreePad("free pad is locked — unlock before editing");
+    }
+    if (
+      command.centerMm !== undefined &&
+      !isFinitePoint({ x: command.centerMm.x, y: command.centerMm.y })
+    ) {
+      return invalidPcbFreePad("centerMm must be finite numbers");
+    }
+    if (command.widthMm !== undefined && !(command.widthMm > 0)) {
+      return invalidPcbFreePad("widthMm must be positive");
+    }
+    if (command.heightMm !== undefined && !(command.heightMm > 0)) {
+      return invalidPcbFreePad("heightMm must be positive");
+    }
+    const next = {
+      ...existing,
+      ...(command.centerMm !== undefined ? { centerMm: command.centerMm } : {}),
+      ...(command.rotationDeg !== undefined
+        ? { rotationDeg: command.rotationDeg }
+        : {}),
+      ...(command.padType !== undefined ? { padType: command.padType } : {}),
+      ...(command.shape !== undefined ? { shape: command.shape } : {}),
+      ...(command.widthMm !== undefined ? { widthMm: command.widthMm } : {}),
+      ...(command.heightMm !== undefined ? { heightMm: command.heightMm } : {}),
+      ...(command.roundrectRatio !== undefined
+        ? { roundrectRatio: command.roundrectRatio }
+        : {}),
+      ...(command.drillMm !== undefined ? { drillMm: command.drillMm } : {}),
+      ...(command.layer !== undefined ? { layer: command.layer } : {}),
+      ...(command.netId !== undefined ? { netId: command.netId } : {}),
+      ...(command.solderMaskExpansionMm !== undefined
+        ? { solderMaskExpansionMm: command.solderMaskExpansionMm }
+        : {}),
+      ...(command.solderPasteExpansionMm !== undefined
+        ? { solderPasteExpansionMm: command.solderPasteExpansionMm }
+        : {}),
+      ...(command.locked === undefined
+        ? {}
+        : { lockedAt: command.locked ? timestamp : null }),
+    };
+    updatePcbFreePad(tx, next, timestamp);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_delete_free_pad") {
+    const existing = loadPcbFreePadById(tx, designId, command.freePadId);
+    if (!existing) return pcbFreePadNotFound(command.freePadId);
+    if (existing.lockedAt) {
+      return invalidPcbFreePad("free pad is locked — unlock before deleting");
+    }
+    deletePcbFreePad(tx, command.freePadId);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_add_manual_via") {
+    const board = ensurePcbBoardSettings(tx, designId, timestamp);
+    const built = buildPcbViaForInsert(command, board);
+    if ("error" in built) return built.error;
+    const via = { ...built.via, provenance: "manual" as const };
+    insertPcbVia(tx, designId, via, timestamp);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), via.id);
+  }
+
+  if (command.type === "pcb_add_overlay_text") {
+    if (!isFinitePoint({ x: command.positionMm.x, y: command.positionMm.y })) {
+      return invalidPcbOverlay("positionMm must be finite numbers");
+    }
+    if (!(command.fontSizeMm > 0) || !Number.isFinite(command.fontSizeMm)) {
+      return invalidPcbOverlay("fontSizeMm must be positive");
+    }
+    if (command.text.length === 0) {
+      return invalidPcbOverlay("text must not be empty");
+    }
+    const overlay = {
+      id: crypto.randomUUID(),
+      layer: command.layer,
+      positionMm: command.positionMm,
+      text: command.text,
+      fontSizeMm: command.fontSizeMm,
+      rotationDeg: command.rotationDeg,
+      mirror: command.mirror ?? false,
+      justify: command.justify ?? ("center" as const),
+      lockedAt: null,
+    };
+    insertPcbOverlayText(tx, designId, overlay, timestamp);
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      overlay.id,
+    );
+  }
+
+  if (command.type === "pcb_update_overlay_text") {
+    const existing = loadPcbOverlayTextById(
+      tx,
+      designId,
+      command.overlayTextId,
+    );
+    if (!existing) return pcbOverlayNotFound(command.overlayTextId);
+    if (existing.lockedAt && command.locked !== false) {
+      return invalidPcbOverlay("overlay is locked — unlock before editing");
+    }
+    if (command.fontSizeMm !== undefined && !(command.fontSizeMm > 0)) {
+      return invalidPcbOverlay("fontSizeMm must be positive");
+    }
+    const next = {
+      ...existing,
+      ...(command.layer !== undefined ? { layer: command.layer } : {}),
+      ...(command.positionMm !== undefined
+        ? { positionMm: command.positionMm }
+        : {}),
+      ...(command.text !== undefined ? { text: command.text } : {}),
+      ...(command.fontSizeMm !== undefined
+        ? { fontSizeMm: command.fontSizeMm }
+        : {}),
+      ...(command.rotationDeg !== undefined
+        ? { rotationDeg: command.rotationDeg }
+        : {}),
+      ...(command.mirror !== undefined ? { mirror: command.mirror } : {}),
+      ...(command.justify !== undefined ? { justify: command.justify } : {}),
+      ...(command.locked === undefined
+        ? {}
+        : { lockedAt: command.locked ? timestamp : null }),
+    };
+    updatePcbOverlayText(tx, next, timestamp);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_delete_overlay_text") {
+    const existing = loadPcbOverlayTextById(
+      tx,
+      designId,
+      command.overlayTextId,
+    );
+    if (!existing) return pcbOverlayNotFound(command.overlayTextId);
+    if (existing.lockedAt) {
+      return invalidPcbOverlay("overlay is locked — unlock before deleting");
+    }
+    deletePcbOverlayText(tx, command.overlayTextId);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_add_overlay_shape") {
+    if (command.pointsMm.length < 2) {
+      return invalidPcbOverlay("at least 2 points required");
+    }
+    for (const p of command.pointsMm) {
+      if (!isFinitePoint({ x: p.x, y: p.y })) {
+        return invalidPcbOverlay("pointsMm contain non-finite coordinates");
+      }
+    }
+    if (!(command.strokeWidthMm > 0)) {
+      return invalidPcbOverlay("strokeWidthMm must be positive");
+    }
+    const shape = {
+      id: crypto.randomUUID(),
+      layer: command.layer,
+      kind: command.kind,
+      pointsMm: command.pointsMm,
+      strokeWidthMm: command.strokeWidthMm,
+      fill: command.fill ?? ("none" as const),
+      lockedAt: null,
+    };
+    insertPcbOverlayShape(tx, designId, shape, timestamp);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), shape.id);
+  }
+
+  if (command.type === "pcb_update_overlay_shape") {
+    const existing = loadPcbOverlayShapeById(
+      tx,
+      designId,
+      command.overlayShapeId,
+    );
+    if (!existing) return pcbOverlayNotFound(command.overlayShapeId);
+    if (existing.lockedAt && command.locked !== false) {
+      return invalidPcbOverlay("overlay is locked — unlock before editing");
+    }
+    if (command.pointsMm !== undefined && command.pointsMm.length < 2) {
+      return invalidPcbOverlay("at least 2 points required");
+    }
+    if (command.strokeWidthMm !== undefined && !(command.strokeWidthMm > 0)) {
+      return invalidPcbOverlay("strokeWidthMm must be positive");
+    }
+    const next = {
+      ...existing,
+      ...(command.layer !== undefined ? { layer: command.layer } : {}),
+      ...(command.kind !== undefined ? { kind: command.kind } : {}),
+      ...(command.pointsMm !== undefined ? { pointsMm: command.pointsMm } : {}),
+      ...(command.strokeWidthMm !== undefined
+        ? { strokeWidthMm: command.strokeWidthMm }
+        : {}),
+      ...(command.fill !== undefined ? { fill: command.fill } : {}),
+      ...(command.locked === undefined
+        ? {}
+        : { lockedAt: command.locked ? timestamp : null }),
+    };
+    updatePcbOverlayShape(tx, next, timestamp);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_delete_overlay_shape") {
+    const existing = loadPcbOverlayShapeById(
+      tx,
+      designId,
+      command.overlayShapeId,
+    );
+    if (!existing) return pcbOverlayNotFound(command.overlayShapeId);
+    if (existing.lockedAt) {
+      return invalidPcbOverlay("overlay is locked — unlock before deleting");
+    }
+    deletePcbOverlayShape(tx, command.overlayShapeId);
     return okResult(bumpRevision(tx, designId, revision, timestamp), null);
   }
 

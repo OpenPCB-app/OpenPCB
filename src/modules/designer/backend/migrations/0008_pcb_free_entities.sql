@@ -1,0 +1,12 @@
+-- 0008_pcb_free_entities.sql
+--
+-- Phase 4/F5: introduces free-standing PCB entities (free holes, free pads,
+-- manual smart vias, overlay primitives). All such entities live in the
+-- existing generic `designer_pcb_entities` table — kind columns identify them.
+-- This migration is a marker (no schema change required) so the per-module
+-- migrator records the version bump and downstream code can rely on
+-- `kind IN ('free_hole', 'free_pad', 'overlay_text', 'overlay_shape',
+-- 'overlay_svg')` being legal payloads.
+--
+-- No-op statement; SQLite migrator requires at least one valid statement.
+SELECT 1;

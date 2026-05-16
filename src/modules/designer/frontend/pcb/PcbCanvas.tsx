@@ -133,7 +133,11 @@ function keepTracePrefixForReroute(
   return keep;
 }
 
-type ToolMode = "select" | "route";
+type ToolMode = "select" | "route" | "hole" | "pad" | "text";
+
+/** Default drill size for the "drop mounting hole" tool. 3.2 mm matches an
+ * M3 plus-clearance hole, the most common mechanical mount. */
+const DEFAULT_FREE_HOLE_DRILL_MM = 3.2;
 
 interface DragSession {
   primaryPlacementId: string;
@@ -771,6 +775,41 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         if (event.button !== 0) return;
         const cursor = eventToMm(event);
 
+        // Hole mode — single click drops a free mounting hole at the snapped
+        // cursor and returns to select mode.
+        if (toolMode === "hole") {
+          const point = snapPoint(cursor);
+          void workspace
+            .addFreeHole(point, DEFAULT_FREE_HOLE_DRILL_MM)
+            .catch(() => undefined);
+          setToolMode("select");
+          return;
+        }
+
+        // Pad mode — click drops a free SMD pad on the current active copper
+        // layer at the snapped cursor.
+        if (toolMode === "pad") {
+          const point = snapPoint(cursor);
+          void workspace
+            .addFreePad(point, { layer: activeCopperLayer })
+            .catch(() => undefined);
+          setToolMode("select");
+          return;
+        }
+
+        // Text mode — prompt for label and drop it on F.SilkS at the cursor.
+        if (toolMode === "text") {
+          const point = snapPoint(cursor);
+          const label = window.prompt("Silkscreen text:", "");
+          if (label && label.length > 0) {
+            void workspace
+              .addOverlayText(point, label, { layer: "F.SilkS" })
+              .catch(() => undefined);
+          }
+          setToolMode("select");
+          return;
+        }
+
         // Route mode takes the click first.
         if (toolMode === "route") {
           if (!defaultNetClass) return;
@@ -1325,6 +1364,26 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       // placement when in Select mode without an active route session).
       // Group rotate is unsupported in v1 — R only rotates when exactly
       // one placement is selected.
+      if (event.key === "h" || event.key === "H") {
+        event.preventDefault();
+        setToolMode((prev) => (prev === "hole" ? "select" : "hole"));
+        dispatchRoute({ kind: "cancel" });
+        return;
+      }
+      if (event.key === "p" || event.key === "P") {
+        // Skip if a placement is selected — P is also "pad" shortcut, but
+        // currently no conflicting binding exists for select mode.
+        event.preventDefault();
+        setToolMode((prev) => (prev === "pad" ? "select" : "pad"));
+        dispatchRoute({ kind: "cancel" });
+        return;
+      }
+      if (event.key === "t" || event.key === "T") {
+        event.preventDefault();
+        setToolMode((prev) => (prev === "text" ? "select" : "text"));
+        dispatchRoute({ kind: "cancel" });
+        return;
+      }
       if (event.key === "r" || event.key === "R") {
         const sole =
           selection.placementIds.size === 1
@@ -1588,6 +1647,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         if (toolMode === "route") {
           setToolMode("select");
           dispatchRoute({ kind: "cancel" });
+        } else if (
+          toolMode === "hole" ||
+          toolMode === "pad" ||
+          toolMode === "text"
+        ) {
+          setToolMode("select");
         }
         return;
       }
@@ -1892,6 +1957,21 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               onToggleRouteMode={() => {
                 setToolMode((prev) => (prev === "route" ? "select" : "route"));
                 if (toolMode === "route") dispatchRoute({ kind: "cancel" });
+              }}
+              holeMode={toolMode === "hole"}
+              onToggleHoleMode={() => {
+                setToolMode((prev) => (prev === "hole" ? "select" : "hole"));
+                dispatchRoute({ kind: "cancel" });
+              }}
+              padMode={toolMode === "pad"}
+              onTogglePadMode={() => {
+                setToolMode((prev) => (prev === "pad" ? "select" : "pad"));
+                dispatchRoute({ kind: "cancel" });
+              }}
+              textMode={toolMode === "text"}
+              onToggleTextMode={() => {
+                setToolMode((prev) => (prev === "text" ? "select" : "text"));
+                dispatchRoute({ kind: "cancel" });
               }}
               segmentMode={
                 routeState.kind === "routing"

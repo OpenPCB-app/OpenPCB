@@ -4,6 +4,10 @@ import { loadSchematicProjection } from "../projection-read";
 import { correlateNetPads } from "./net-pad-correlation";
 import {
   ensurePcbBoardSettings,
+  loadPcbFreeHoles,
+  loadPcbFreePads,
+  loadPcbOverlayShapes,
+  loadPcbOverlayTexts,
   loadPcbTraces,
   loadPcbVias,
   syncPcbPlacementsFromSchematic,
@@ -56,6 +60,10 @@ export function loadPcbProjection(params: {
   }
   const traces = loadPcbTraces(params.db, params.designId);
   const vias = loadPcbVias(params.db, params.designId);
+  const freeHoles = loadPcbFreeHoles(params.db, params.designId);
+  const freePads = loadPcbFreePads(params.db, params.designId);
+  const overlayTexts = loadPcbOverlayTexts(params.db, params.designId);
+  const overlayShapes = loadPcbOverlayShapes(params.db, params.designId);
 
   const ratsnest = computeRatsnest(correlation, {
     netNames,
@@ -71,6 +79,10 @@ export function loadPcbProjection(params: {
     placements,
     traces,
     vias,
+    freeHoles,
+    freePads,
+    overlayTexts,
+    overlayShapes,
     ratsnest,
     netNames: Object.fromEntries(netNames),
     warnings: correlation.warnings,

@@ -20,6 +20,10 @@ import type {
   DesignerSchematicProjection,
   DesignerWire,
   PcbBoardSettings,
+  PcbFreeHole,
+  PcbFreePad,
+  PcbOverlayShape,
+  PcbOverlayText,
   PcbPlacedPart,
   PcbTrace,
   PcbVia,
@@ -57,6 +61,22 @@ export type DesignerWorldComponent =
     }
   | {
       type: "designer.pcb_via";
+      payload: Record<string, unknown>;
+    }
+  | {
+      type: "designer.pcb_free_hole";
+      payload: Record<string, unknown>;
+    }
+  | {
+      type: "designer.pcb_free_pad";
+      payload: Record<string, unknown>;
+    }
+  | {
+      type: "designer.pcb_overlay_text";
+      payload: Record<string, unknown>;
+    }
+  | {
+      type: "designer.pcb_overlay_shape";
       payload: Record<string, unknown>;
     };
 
@@ -197,7 +217,11 @@ function worldEntityComponents(
         snapshot.components.get("designer.pcb_settings") ??
         snapshot.components.get("designer.pcb_placement") ??
         snapshot.components.get("designer.pcb_trace") ??
-        snapshot.components.get("designer.pcb_via");
+        snapshot.components.get("designer.pcb_via") ??
+        snapshot.components.get("designer.pcb_free_hole") ??
+        snapshot.components.get("designer.pcb_free_pad") ??
+        snapshot.components.get("designer.pcb_overlay_text") ??
+        snapshot.components.get("designer.pcb_overlay_shape");
       return component ? { entityId: snapshot.id, component } : null;
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
@@ -259,6 +283,10 @@ const PCB_SETTINGS_ENTITY_ID = asEntityId("pcb:board_settings");
 const PCB_PLACEMENT_PREFIX = "pcb:placement:";
 const PCB_TRACE_PREFIX = "pcb:trace:";
 const PCB_VIA_PREFIX = "pcb:via:";
+const PCB_FREE_HOLE_PREFIX = "pcb:free_hole:";
+const PCB_FREE_PAD_PREFIX = "pcb:free_pad:";
+const PCB_OVERLAY_TEXT_PREFIX = "pcb:overlay_text:";
+const PCB_OVERLAY_SHAPE_PREFIX = "pcb:overlay_shape:";
 
 export interface DesignerCombinedState {
   schematic: DesignerSchematicProjection;
@@ -266,6 +294,10 @@ export interface DesignerCombinedState {
   placements: PcbPlacedPart[];
   traces: PcbTrace[];
   vias: PcbVia[];
+  freeHoles: PcbFreeHole[];
+  freePads: PcbFreePad[];
+  overlayTexts: PcbOverlayText[];
+  overlayShapes: PcbOverlayShape[];
 }
 
 export function combinedStateToWorld(
@@ -309,6 +341,38 @@ export function combinedStateToWorld(
       payload: toPayloadRecord(via),
     });
   }
+  for (const hole of state.freeHoles) {
+    const entityId = asEntityId(`${PCB_FREE_HOLE_PREFIX}${hole.id}`);
+    world.ensureEntity(entityId);
+    world.setComponent(entityId, {
+      type: "designer.pcb_free_hole",
+      payload: toPayloadRecord(hole),
+    });
+  }
+  for (const pad of state.freePads) {
+    const entityId = asEntityId(`${PCB_FREE_PAD_PREFIX}${pad.id}`);
+    world.ensureEntity(entityId);
+    world.setComponent(entityId, {
+      type: "designer.pcb_free_pad",
+      payload: toPayloadRecord(pad),
+    });
+  }
+  for (const overlay of state.overlayTexts) {
+    const entityId = asEntityId(`${PCB_OVERLAY_TEXT_PREFIX}${overlay.id}`);
+    world.ensureEntity(entityId);
+    world.setComponent(entityId, {
+      type: "designer.pcb_overlay_text",
+      payload: toPayloadRecord(overlay),
+    });
+  }
+  for (const overlay of state.overlayShapes) {
+    const entityId = asEntityId(`${PCB_OVERLAY_SHAPE_PREFIX}${overlay.id}`);
+    world.ensureEntity(entityId);
+    world.setComponent(entityId, {
+      type: "designer.pcb_overlay_shape",
+      payload: toPayloadRecord(overlay),
+    });
+  }
   return world;
 }
 
@@ -325,6 +389,10 @@ export function combinedStateFromWorld(
   const placements: PcbPlacedPart[] = [];
   const traces: PcbTrace[] = [];
   const vias: PcbVia[] = [];
+  const freeHoles: PcbFreeHole[] = [];
+  const freePads: PcbFreePad[] = [];
+  const overlayTexts: PcbOverlayText[] = [];
+  const overlayShapes: PcbOverlayShape[] = [];
   for (const snapshot of world.snapshots()) {
     const placementComp = snapshot.components.get("designer.pcb_placement");
     if (placementComp && placementComp.type === "designer.pcb_placement") {
@@ -339,12 +407,58 @@ export function combinedStateFromWorld(
     const viaComp = snapshot.components.get("designer.pcb_via");
     if (viaComp && viaComp.type === "designer.pcb_via") {
       vias.push(viaComp.payload as unknown as PcbVia);
+      continue;
+    }
+    const holeComp = snapshot.components.get("designer.pcb_free_hole");
+    if (holeComp && holeComp.type === "designer.pcb_free_hole") {
+      freeHoles.push(holeComp.payload as unknown as PcbFreeHole);
+      continue;
+    }
+    const padComp = snapshot.components.get("designer.pcb_free_pad");
+    if (padComp && padComp.type === "designer.pcb_free_pad") {
+      freePads.push(padComp.payload as unknown as PcbFreePad);
+      continue;
+    }
+    const overlayTextComp = snapshot.components.get(
+      "designer.pcb_overlay_text",
+    );
+    if (
+      overlayTextComp &&
+      overlayTextComp.type === "designer.pcb_overlay_text"
+    ) {
+      overlayTexts.push(overlayTextComp.payload as unknown as PcbOverlayText);
+      continue;
+    }
+    const overlayShapeComp = snapshot.components.get(
+      "designer.pcb_overlay_shape",
+    );
+    if (
+      overlayShapeComp &&
+      overlayShapeComp.type === "designer.pcb_overlay_shape"
+    ) {
+      overlayShapes.push(
+        overlayShapeComp.payload as unknown as PcbOverlayShape,
+      );
     }
   }
   placements.sort((a, b) => a.id.localeCompare(b.id));
   traces.sort((a, b) => a.id.localeCompare(b.id));
   vias.sort((a, b) => a.id.localeCompare(b.id));
-  return { schematic, pcb, placements, traces, vias };
+  freeHoles.sort((a, b) => a.id.localeCompare(b.id));
+  freePads.sort((a, b) => a.id.localeCompare(b.id));
+  overlayTexts.sort((a, b) => a.id.localeCompare(b.id));
+  overlayShapes.sort((a, b) => a.id.localeCompare(b.id));
+  return {
+    schematic,
+    pcb,
+    placements,
+    traces,
+    vias,
+    freeHoles,
+    freePads,
+    overlayTexts,
+    overlayShapes,
+  };
 }
 
 export function buildCombinedHistoryPatchSet(

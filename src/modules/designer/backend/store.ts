@@ -40,10 +40,18 @@ import {
 } from "./schema";
 import {
   ensurePcbBoardSettings,
+  loadPcbFreeHoles,
+  loadPcbFreePads,
+  loadPcbOverlayShapes,
+  loadPcbOverlayTexts,
   loadPcbPlacements,
   loadPcbTraces,
   loadPcbVias,
   replacePcbBoardSettings,
+  replacePcbFreeHoles,
+  replacePcbFreePads,
+  replacePcbOverlayShapes,
+  replacePcbOverlayTexts,
   replacePcbPlacements,
   replacePcbTraces,
   replacePcbVias,
@@ -181,6 +189,10 @@ export function createDesignerStore(
       const placements = loadPcbPlacements(tx, designId);
       const traces = loadPcbTraces(tx, designId);
       const vias = loadPcbVias(tx, designId);
+      const freeHoles = loadPcbFreeHoles(tx, designId);
+      const freePads = loadPcbFreePads(tx, designId);
+      const overlayTexts = loadPcbOverlayTexts(tx, designId);
+      const overlayShapes = loadPcbOverlayShapes(tx, designId);
       const nextRevision = current.revision + 1;
       const world = combinedStateToWorld({
         schematic: current,
@@ -188,6 +200,10 @@ export function createDesignerStore(
         placements,
         traces,
         vias,
+        freeHoles,
+        freePads,
+        overlayTexts,
+        overlayShapes,
       });
       applyPatches(world, patches);
       const next = combinedStateFromWorld(designId, nextRevision, world);
@@ -205,6 +221,10 @@ export function createDesignerStore(
       replacePcbPlacements(tx, designId, next.placements, timestamp);
       replacePcbTraces(tx, designId, next.traces, timestamp);
       replacePcbVias(tx, designId, next.vias, timestamp);
+      replacePcbFreeHoles(tx, designId, next.freeHoles, timestamp);
+      replacePcbFreePads(tx, designId, next.freePads, timestamp);
+      replacePcbOverlayTexts(tx, designId, next.overlayTexts, timestamp);
+      replacePcbOverlayShapes(tx, designId, next.overlayShapes, timestamp);
       return nextRevision;
     });
   }
@@ -485,6 +505,18 @@ export function createDesignerStore(
             ? loadPcbTraces(tx, designId)
             : null;
           const viasBefore = isPcbCommand ? loadPcbVias(tx, designId) : null;
+          const freeHolesBefore = isPcbCommand
+            ? loadPcbFreeHoles(tx, designId)
+            : null;
+          const freePadsBefore = isPcbCommand
+            ? loadPcbFreePads(tx, designId)
+            : null;
+          const overlayTextsBefore = isPcbCommand
+            ? loadPcbOverlayTexts(tx, designId)
+            : null;
+          const overlayShapesBefore = isPcbCommand
+            ? loadPcbOverlayShapes(tx, designId)
+            : null;
           const result = executeDesignerCommand({
             tx,
             designId,
@@ -513,6 +545,10 @@ export function createDesignerStore(
                 const placementsAfter = loadPcbPlacements(tx, designId);
                 const tracesAfter = loadPcbTraces(tx, designId);
                 const viasAfter = loadPcbVias(tx, designId);
+                const freeHolesAfter = loadPcbFreeHoles(tx, designId);
+                const freePadsAfter = loadPcbFreePads(tx, designId);
+                const overlayTextsAfter = loadPcbOverlayTexts(tx, designId);
+                const overlayShapesAfter = loadPcbOverlayShapes(tx, designId);
                 const patchSet = buildCombinedHistoryPatchSet(
                   {
                     schematic: projection,
@@ -520,6 +556,10 @@ export function createDesignerStore(
                     placements: placementsBefore ?? [],
                     traces: tracesBefore ?? [],
                     vias: viasBefore ?? [],
+                    freeHoles: freeHolesBefore ?? [],
+                    freePads: freePadsBefore ?? [],
+                    overlayTexts: overlayTextsBefore ?? [],
+                    overlayShapes: overlayShapesBefore ?? [],
                   },
                   {
                     schematic: nextProjection,
@@ -527,6 +567,10 @@ export function createDesignerStore(
                     placements: placementsAfter,
                     traces: tracesAfter,
                     vias: viasAfter,
+                    freeHoles: freeHolesAfter,
+                    freePads: freePadsAfter,
+                    overlayTexts: overlayTextsAfter,
+                    overlayShapes: overlayShapesAfter,
                   },
                 );
                 if (patchSet.forwardPatches.length > 0) {

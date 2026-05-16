@@ -290,6 +290,15 @@ export type PcbViaProtection =
  */
 export type PcbViaType = "through" | "blind" | "buried" | "micro";
 
+/**
+ * Origin of the via:
+ *  - `route`  : dropped by the routing tool as part of a trace path (default).
+ *  - `manual` : placed standalone by the user — stitching via, test point,
+ *               isolated drop. v1 ships data-only; full manual-via tooling
+ *               lives behind the F5 toolbar work-stream.
+ */
+export type PcbViaProvenance = "route" | "manual";
+
 export interface PcbVia {
   id: string;
   netId: string | null;
@@ -303,6 +312,123 @@ export interface PcbVia {
   toLayer: PcbCopperLayerId;
   viaType: PcbViaType;
   protection: PcbViaProtection;
+  /** Defaults to `"route"` for legacy / pre-F5 rows. */
+  provenance: PcbViaProvenance;
+}
+
+/**
+ * Free-standing mechanical hole — drilled non-electrical opening that is not
+ * part of any footprint. Used for mounting holes, tooling holes, alignment
+ * cutouts, etc. Renders as a real cutout in the board substrate plus a lime
+ * outline ring (shared rendering path with via / pad drills).
+ *
+ * Free holes are invisible to nets, ratsnest, and electrical DRC. Mechanical
+ * DRC (drill-to-trace clearance) is applied separately via the design rules.
+ */
+export interface PcbFreeHole {
+  id: string;
+  centerMm: PcbPointMm;
+  drillMm: number;
+  /** When true, the hole is read-only in the editor until unlocked. */
+  lockedAt: string | null;
+}
+
+/**
+ * Layer a free overlay primitive may live on. Restricts to non-copper layers
+ * so overlay graphics don't accidentally pollute electrical net extraction.
+ */
+export type PcbOverlayLayer =
+  | "F.SilkS"
+  | "B.SilkS"
+  | "F.Fab"
+  | "B.Fab"
+  | "F.CrtYd"
+  | "B.CrtYd"
+  | "Edge.Cuts";
+
+/**
+ * Free-standing silkscreen / fab text. Anchored at a position with a font
+ * size + rotation. The renderer falls back to the canvas EDA text primitive.
+ */
+export interface PcbOverlayText {
+  id: string;
+  layer: PcbOverlayLayer;
+  positionMm: PcbPointMm;
+  text: string;
+  fontSizeMm: number;
+  rotationDeg: number;
+  mirror: boolean;
+  /** Horizontal anchor. */
+  justify: "left" | "center" | "right";
+  lockedAt: string | null;
+}
+
+/**
+ * Free-standing overlay shape — rectangle, circle, line, polyline, polygon.
+ * Geometry lives in `points` (interpretation depends on `kind`):
+ *  - rect:     [bottomLeft, topRight]
+ *  - circle:   [center, edgePoint]  — radius = distance(center, edgePoint)
+ *  - line / polyline / polygon: ordered vertices
+ */
+export type PcbOverlayShapeKind =
+  | "rect"
+  | "circle"
+  | "line"
+  | "polyline"
+  | "polygon";
+
+export interface PcbOverlayShape {
+  id: string;
+  layer: PcbOverlayLayer;
+  kind: PcbOverlayShapeKind;
+  pointsMm: PcbPointMm[];
+  strokeWidthMm: number;
+  /** Fill applies only to closed shapes (rect, circle, polygon). */
+  fill: "none" | "solid";
+  lockedAt: string | null;
+}
+
+/**
+ * Free pad type. Drives which fields are valid + how the pad renders:
+ *  - `smd`  : surface-mount, single layer, no drill.
+ *  - `hole` : non-plated through-hole (NPTH) — drill only, no copper.
+ *  - `std`  : standard plated through-hole — drill + annular copper on both sides.
+ *  - `conn` : connector / large-area paddle pad (no drill, can be polygon).
+ */
+export type PcbFreePadType = "smd" | "hole" | "std" | "conn";
+
+/**
+ * Free pad shape. Matches the existing footprint pad shape enum so the
+ * renderer can route through `PadInstances` without special-casing.
+ */
+export type PcbFreePadShape = "rect" | "circle" | "oval" | "roundrect";
+
+/**
+ * Free-standing electrical pad — not part of any footprint. Test point,
+ * fiducial, paddle, manually placed pad. Optionally net-assigned so the
+ * ratsnest and DRC see it as part of a net.
+ */
+export interface PcbFreePad {
+  id: string;
+  centerMm: PcbPointMm;
+  rotationDeg: number;
+  padType: PcbFreePadType;
+  shape: PcbFreePadShape;
+  widthMm: number;
+  heightMm: number;
+  /** Corner radius ratio for roundrect (0..0.5). Ignored for other shapes. */
+  roundrectRatio?: number;
+  /** Required for `hole` and `std`. Ignored / undefined otherwise. */
+  drillMm: number | null;
+  /** Copper layer the pad lives on. `std` pads span F.Cu + B.Cu and only set this for fab-order purposes. */
+  layer: PcbCopperLayerId;
+  /** Net assignment. `null` = isolated pad. */
+  netId: string | null;
+  /** Optional mask expansion override (mm). `null` means use design rule. */
+  solderMaskExpansionMm: number | null;
+  /** Optional paste expansion override (mm). */
+  solderPasteExpansionMm: number | null;
+  lockedAt: string | null;
 }
 
 export interface RatsnestSegment {
@@ -324,6 +450,13 @@ export interface DesignerPcbProjection {
   placements: PcbPlacedPart[];
   traces: PcbTrace[];
   vias: PcbVia[];
+  /** Free-standing mechanical holes (mounting / tooling). Non-electrical. */
+  freeHoles: PcbFreeHole[];
+  /** Free-standing electrical pads (test points, paddles, fiducials). */
+  freePads: PcbFreePad[];
+  /** Silkscreen / fab text and shape primitives (F5 overlay layer). */
+  overlayTexts: PcbOverlayText[];
+  overlayShapes: PcbOverlayShape[];
   ratsnest: RatsnestSegment[];
   /**
    * Net id → display name map (e.g. `"net-7" → "VCC_3V3"`). Sourced from the
@@ -675,6 +808,137 @@ export interface DesignerPcbDeletePlacementCommand {
   placementId: string;
 }
 
+export interface DesignerPcbAddFreeHoleCommand {
+  type: "pcb_add_free_hole";
+  centerMm: PcbPointMm;
+  drillMm: number;
+}
+
+export interface DesignerPcbUpdateFreeHoleCommand {
+  type: "pcb_update_free_hole";
+  freeHoleId: string;
+  /** Optional patch — only provided fields are updated. */
+  centerMm?: PcbPointMm;
+  drillMm?: number;
+  /** Pass `true` to lock, `false` to unlock, omit to leave unchanged. */
+  locked?: boolean;
+}
+
+export interface DesignerPcbDeleteFreeHoleCommand {
+  type: "pcb_delete_free_hole";
+  freeHoleId: string;
+}
+
+export interface DesignerPcbAddFreePadCommand {
+  type: "pcb_add_free_pad";
+  centerMm: PcbPointMm;
+  rotationDeg: number;
+  padType: PcbFreePadType;
+  shape: PcbFreePadShape;
+  widthMm: number;
+  heightMm: number;
+  roundrectRatio?: number;
+  drillMm?: number;
+  layer: PcbCopperLayerId;
+  netId?: string | null;
+  solderMaskExpansionMm?: number;
+  solderPasteExpansionMm?: number;
+}
+
+export interface DesignerPcbUpdateFreePadCommand {
+  type: "pcb_update_free_pad";
+  freePadId: string;
+  centerMm?: PcbPointMm;
+  rotationDeg?: number;
+  padType?: PcbFreePadType;
+  shape?: PcbFreePadShape;
+  widthMm?: number;
+  heightMm?: number;
+  roundrectRatio?: number;
+  drillMm?: number | null;
+  layer?: PcbCopperLayerId;
+  netId?: string | null;
+  solderMaskExpansionMm?: number | null;
+  solderPasteExpansionMm?: number | null;
+  locked?: boolean;
+}
+
+export interface DesignerPcbDeleteFreePadCommand {
+  type: "pcb_delete_free_pad";
+  freePadId: string;
+}
+
+/**
+ * Drop a manually placed via (smart via) — not associated with any routed
+ * trace. Use cases: stitching vias to a copper pour, test-point vias, edge
+ * fiducials. Diameter / drill default to the net-class spec when omitted.
+ *
+ * The persisted via carries `provenance: "manual"` so future tooling can
+ * distinguish route-dropped vs hand-placed.
+ */
+export interface DesignerPcbAddManualViaCommand {
+  type: "pcb_add_manual_via";
+  centerMm: PcbPointMm;
+  netId: string | null;
+  netClassId: string;
+  diameterMmOverride?: number;
+  drillMmOverride?: number;
+}
+
+export interface DesignerPcbAddOverlayTextCommand {
+  type: "pcb_add_overlay_text";
+  layer: PcbOverlayLayer;
+  positionMm: PcbPointMm;
+  text: string;
+  fontSizeMm: number;
+  rotationDeg: number;
+  mirror?: boolean;
+  justify?: "left" | "center" | "right";
+}
+
+export interface DesignerPcbUpdateOverlayTextCommand {
+  type: "pcb_update_overlay_text";
+  overlayTextId: string;
+  layer?: PcbOverlayLayer;
+  positionMm?: PcbPointMm;
+  text?: string;
+  fontSizeMm?: number;
+  rotationDeg?: number;
+  mirror?: boolean;
+  justify?: "left" | "center" | "right";
+  locked?: boolean;
+}
+
+export interface DesignerPcbDeleteOverlayTextCommand {
+  type: "pcb_delete_overlay_text";
+  overlayTextId: string;
+}
+
+export interface DesignerPcbAddOverlayShapeCommand {
+  type: "pcb_add_overlay_shape";
+  layer: PcbOverlayLayer;
+  kind: PcbOverlayShapeKind;
+  pointsMm: PcbPointMm[];
+  strokeWidthMm: number;
+  fill?: "none" | "solid";
+}
+
+export interface DesignerPcbUpdateOverlayShapeCommand {
+  type: "pcb_update_overlay_shape";
+  overlayShapeId: string;
+  layer?: PcbOverlayLayer;
+  kind?: PcbOverlayShapeKind;
+  pointsMm?: PcbPointMm[];
+  strokeWidthMm?: number;
+  fill?: "none" | "solid";
+  locked?: boolean;
+}
+
+export interface DesignerPcbDeleteOverlayShapeCommand {
+  type: "pcb_delete_overlay_shape";
+  overlayShapeId: string;
+}
+
 export type DesignerCommand =
   | DesignerPlacePartCommand
   | DesignerCreateWireCommand
@@ -707,7 +971,20 @@ export type DesignerCommand =
   | DesignerPcbDeleteViaCommand
   | DesignerPcbUpdateTraceGeometryCommand
   | DesignerPcbSetViewStateCommand
-  | DesignerPcbDeletePlacementCommand;
+  | DesignerPcbDeletePlacementCommand
+  | DesignerPcbAddFreeHoleCommand
+  | DesignerPcbUpdateFreeHoleCommand
+  | DesignerPcbDeleteFreeHoleCommand
+  | DesignerPcbAddFreePadCommand
+  | DesignerPcbUpdateFreePadCommand
+  | DesignerPcbDeleteFreePadCommand
+  | DesignerPcbAddManualViaCommand
+  | DesignerPcbAddOverlayTextCommand
+  | DesignerPcbUpdateOverlayTextCommand
+  | DesignerPcbDeleteOverlayTextCommand
+  | DesignerPcbAddOverlayShapeCommand
+  | DesignerPcbUpdateOverlayShapeCommand
+  | DesignerPcbDeleteOverlayShapeCommand;
 
 export type DesignerCommandEnvelope = CommandEnvelope<DesignerCommand>;
 
@@ -831,7 +1108,62 @@ export type DesignerDispatchResult =
       ok: false;
       code: "PCB_NET_CLASS_NOT_FOUND";
       netClassId: string;
+    }
+  | {
+      ok: false;
+      code: "INVALID_PCB_FREE_HOLE";
+      detail: string;
+    }
+  | {
+      ok: false;
+      code: "PCB_FREE_HOLE_NOT_FOUND";
+      freeHoleId: string;
+    }
+  | {
+      ok: false;
+      code: "INVALID_PCB_FREE_PAD";
+      detail: string;
+    }
+  | {
+      ok: false;
+      code: "PCB_FREE_PAD_NOT_FOUND";
+      freePadId: string;
+    }
+  | {
+      ok: false;
+      code: "INVALID_PCB_OVERLAY";
+      detail: string;
+    }
+  | {
+      ok: false;
+      code: "PCB_OVERLAY_NOT_FOUND";
+      overlayId: string;
     };
+
+/**
+ * Pointer to a specific design entity an ERC violation hangs off of. The
+ * canvas uses these to jump-to-violation and to draw inline indicators.
+ */
+export type ErcAnchor =
+  | { kind: "pin"; pinId: string }
+  | { kind: "net"; netId: string }
+  | { kind: "part"; partId: string };
+
+export type ErcSeverity = "error" | "warning" | "info";
+
+export interface ErcViolation {
+  code: string;
+  severity: ErcSeverity;
+  message: string;
+  anchors: ErcAnchor[];
+}
+
+export interface ErcReport {
+  designId: string;
+  revision: number;
+  violations: ErcViolation[];
+  summary: { errors: number; warnings: number; infos: number };
+}
 
 export interface DesignerSearchLibraryParams {
   query?: string;

@@ -1,5 +1,6 @@
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
 import type { DesignerSDK } from "../../../sdks/designer";
+import { runErc } from "./erc/erc-engine";
 import { createDesignerStore } from "./store";
 
 export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
@@ -20,5 +21,10 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
     getHistory: (designId, sessionId) => store.getHistory(designId, sessionId),
     undo: (designId, sessionId) => store.undo(designId, sessionId),
     redo: (designId, sessionId) => store.redo(designId, sessionId),
+    runErc: async (designId) => {
+      const projection = await store.getSchematicProjection(designId);
+      if (!projection) return null;
+      return runErc(projection);
+    },
   };
 }

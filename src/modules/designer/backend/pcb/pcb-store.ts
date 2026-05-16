@@ -3,8 +3,16 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
   PcbBoardSettings,
   PcbCopperLayerId,
+  PcbFreeHole,
+  PcbFreePad,
+  PcbFreePadShape,
+  PcbFreePadType,
   PcbLayerId,
   PcbLayerPreset,
+  PcbOverlayLayer,
+  PcbOverlayShape,
+  PcbOverlayShapeKind,
+  PcbOverlayText,
   PcbPlacedPart,
   PcbPointMm,
   PcbTrace,
@@ -26,6 +34,41 @@ const BOARD_SETTINGS_KIND = "board_settings";
 const PLACEMENT_KIND = "placement";
 const TRACE_KIND = "trace";
 const VIA_KIND = "via";
+const FREE_HOLE_KIND = "free_hole";
+const FREE_PAD_KIND = "free_pad";
+const OVERLAY_TEXT_KIND = "overlay_text";
+const OVERLAY_SHAPE_KIND = "overlay_shape";
+
+const OVERLAY_LAYERS: ReadonlySet<PcbOverlayLayer> = new Set<PcbOverlayLayer>([
+  "F.SilkS",
+  "B.SilkS",
+  "F.Fab",
+  "B.Fab",
+  "F.CrtYd",
+  "B.CrtYd",
+  "Edge.Cuts",
+]);
+const OVERLAY_SHAPE_KINDS: ReadonlySet<PcbOverlayShapeKind> =
+  new Set<PcbOverlayShapeKind>([
+    "rect",
+    "circle",
+    "line",
+    "polyline",
+    "polygon",
+  ]);
+
+const FREE_PAD_TYPES: ReadonlySet<PcbFreePadType> = new Set<PcbFreePadType>([
+  "smd",
+  "hole",
+  "std",
+  "conn",
+]);
+const FREE_PAD_SHAPES: ReadonlySet<PcbFreePadShape> = new Set<PcbFreePadShape>([
+  "rect",
+  "circle",
+  "oval",
+  "roundrect",
+]);
 
 function isCopperLayer(value: string | null): value is PcbCopperLayerId {
   return (
@@ -1022,6 +1065,9 @@ function parseVia(value: unknown): PcbVia | null {
     protectionRaw === "capped"
       ? protectionRaw
       : "tented";
+  const provenanceRaw = asString(record.provenance);
+  const provenance: PcbVia["provenance"] =
+    provenanceRaw === "manual" ? "manual" : "route";
   return {
     id,
     netId: netId ?? null,
@@ -1033,6 +1079,7 @@ function parseVia(value: unknown): PcbVia | null {
     toLayer,
     viaType,
     protection,
+    provenance,
   };
 }
 
@@ -1107,5 +1154,562 @@ export function replacePcbVias(
     .run();
   for (const via of vias) {
     insertPcbVia(db, designId, via, timestamp);
+  }
+}
+
+// ─────────────────────── Free holes (F5) ───────────────────────
+
+function parseFreeHole(value: unknown): PcbFreeHole | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const id = asString(record.id);
+  const center = asRecord(record.centerMm);
+  const cx = asNumber(center?.x);
+  const cy = asNumber(center?.y);
+  const drillMm = asNumber(record.drillMm);
+  if (!id || cx === null || cy === null || drillMm === null || drillMm <= 0) {
+    return null;
+  }
+  const lockedAtRaw = asString(record.lockedAt);
+  return {
+    id,
+    centerMm: { x: cx, y: cy },
+    drillMm,
+    lockedAt: lockedAtRaw ?? null,
+  };
+}
+
+export function loadPcbFreeHoles(
+  db: DbClient,
+  designId: string,
+): PcbFreeHole[] {
+  const rows = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, FREE_HOLE_KIND),
+      ),
+    )
+    .all();
+  const out: PcbFreeHole[] = [];
+  for (const row of rows) {
+    const parsed = parseFreeHole(parsePayload(row.payloadJson));
+    if (parsed) out.push(parsed);
+  }
+  return out;
+}
+
+export function loadPcbFreeHoleById(
+  db: DbClient,
+  designId: string,
+  freeHoleId: string,
+): PcbFreeHole | null {
+  const row = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, FREE_HOLE_KIND),
+        eq(pcbEntities.id, freeHoleId),
+      ),
+    )
+    .get();
+  if (!row) return null;
+  return parseFreeHole(parsePayload(row.payloadJson));
+}
+
+export function insertPcbFreeHole(
+  db: DbClient,
+  designId: string,
+  hole: PcbFreeHole,
+  timestamp: string,
+): void {
+  db.insert(pcbEntities)
+    .values({
+      id: hole.id,
+      designId,
+      kind: FREE_HOLE_KIND,
+      payloadJson: JSON.stringify(hole),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .run();
+}
+
+export function updatePcbFreeHole(
+  db: DbClient,
+  hole: PcbFreeHole,
+  timestamp: string,
+): void {
+  db.update(pcbEntities)
+    .set({
+      payloadJson: JSON.stringify(hole),
+      updatedAt: timestamp,
+    })
+    .where(eq(pcbEntities.id, hole.id))
+    .run();
+}
+
+export function deletePcbFreeHole(db: DbClient, freeHoleId: string): void {
+  db.delete(pcbEntities).where(eq(pcbEntities.id, freeHoleId)).run();
+}
+
+// ─────────────────────── Free pads (F5) ───────────────────────
+
+function parseFreePad(value: unknown): PcbFreePad | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const id = asString(record.id);
+  const center = asRecord(record.centerMm);
+  const cx = asNumber(center?.x);
+  const cy = asNumber(center?.y);
+  const rotationDeg = asNumber(record.rotationDeg);
+  const padTypeRaw = asString(record.padType);
+  const shapeRaw = asString(record.shape);
+  const widthMm = asNumber(record.widthMm);
+  const heightMm = asNumber(record.heightMm);
+  if (
+    !id ||
+    cx === null ||
+    cy === null ||
+    rotationDeg === null ||
+    !padTypeRaw ||
+    !shapeRaw ||
+    widthMm === null ||
+    heightMm === null ||
+    widthMm <= 0 ||
+    heightMm <= 0 ||
+    !FREE_PAD_TYPES.has(padTypeRaw as PcbFreePadType) ||
+    !FREE_PAD_SHAPES.has(shapeRaw as PcbFreePadShape)
+  ) {
+    return null;
+  }
+  const padType = padTypeRaw as PcbFreePadType;
+  const shape = shapeRaw as PcbFreePadShape;
+  const roundrectRatio = asNumber(record.roundrectRatio);
+  const drillMm = asNumber(record.drillMm);
+  const layerRaw = asString(record.layer);
+  const layer = isCopperLayer(layerRaw) ? layerRaw : "F.Cu";
+  const netIdRaw = record.netId;
+  const netId =
+    netIdRaw === null || netIdRaw === undefined ? null : asString(netIdRaw);
+  const solderMaskExpansionMm = asNumber(record.solderMaskExpansionMm);
+  const solderPasteExpansionMm = asNumber(record.solderPasteExpansionMm);
+  const lockedAt = asString(record.lockedAt);
+  return {
+    id,
+    centerMm: { x: cx, y: cy },
+    rotationDeg,
+    padType,
+    shape,
+    widthMm,
+    heightMm,
+    ...(roundrectRatio !== null ? { roundrectRatio } : {}),
+    drillMm: drillMm !== null && drillMm > 0 ? drillMm : null,
+    layer,
+    netId: netId ?? null,
+    solderMaskExpansionMm,
+    solderPasteExpansionMm,
+    lockedAt: lockedAt ?? null,
+  };
+}
+
+export function loadPcbFreePads(db: DbClient, designId: string): PcbFreePad[] {
+  const rows = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, FREE_PAD_KIND),
+      ),
+    )
+    .all();
+  const out: PcbFreePad[] = [];
+  for (const row of rows) {
+    const parsed = parseFreePad(parsePayload(row.payloadJson));
+    if (parsed) out.push(parsed);
+  }
+  return out;
+}
+
+export function loadPcbFreePadById(
+  db: DbClient,
+  designId: string,
+  freePadId: string,
+): PcbFreePad | null {
+  const row = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, FREE_PAD_KIND),
+        eq(pcbEntities.id, freePadId),
+      ),
+    )
+    .get();
+  if (!row) return null;
+  return parseFreePad(parsePayload(row.payloadJson));
+}
+
+export function insertPcbFreePad(
+  db: DbClient,
+  designId: string,
+  pad: PcbFreePad,
+  timestamp: string,
+): void {
+  db.insert(pcbEntities)
+    .values({
+      id: pad.id,
+      designId,
+      kind: FREE_PAD_KIND,
+      payloadJson: JSON.stringify(pad),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .run();
+}
+
+export function updatePcbFreePad(
+  db: DbClient,
+  pad: PcbFreePad,
+  timestamp: string,
+): void {
+  db.update(pcbEntities)
+    .set({ payloadJson: JSON.stringify(pad), updatedAt: timestamp })
+    .where(eq(pcbEntities.id, pad.id))
+    .run();
+}
+
+export function deletePcbFreePad(db: DbClient, freePadId: string): void {
+  db.delete(pcbEntities).where(eq(pcbEntities.id, freePadId)).run();
+}
+
+// ───────────────────── Overlay text (F5) ─────────────────────
+
+function parseOverlayLayer(value: unknown): PcbOverlayLayer | null {
+  const s = asString(value);
+  return s && OVERLAY_LAYERS.has(s as PcbOverlayLayer)
+    ? (s as PcbOverlayLayer)
+    : null;
+}
+
+function parseOverlayText(value: unknown): PcbOverlayText | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const id = asString(record.id);
+  const layer = parseOverlayLayer(record.layer);
+  const pos = asRecord(record.positionMm);
+  const px = asNumber(pos?.x);
+  const py = asNumber(pos?.y);
+  const text = asString(record.text);
+  const fontSizeMm = asNumber(record.fontSizeMm);
+  const rotationDeg = asNumber(record.rotationDeg);
+  if (
+    !id ||
+    !layer ||
+    px === null ||
+    py === null ||
+    text === null ||
+    fontSizeMm === null ||
+    fontSizeMm <= 0 ||
+    rotationDeg === null
+  ) {
+    return null;
+  }
+  const justifyRaw = asString(record.justify);
+  const justify: PcbOverlayText["justify"] =
+    justifyRaw === "left" || justifyRaw === "right" ? justifyRaw : "center";
+  const mirror = record.mirror === true;
+  const lockedAt = asString(record.lockedAt);
+  return {
+    id,
+    layer,
+    positionMm: { x: px, y: py },
+    text,
+    fontSizeMm,
+    rotationDeg,
+    mirror,
+    justify,
+    lockedAt: lockedAt ?? null,
+  };
+}
+
+export function loadPcbOverlayTexts(
+  db: DbClient,
+  designId: string,
+): PcbOverlayText[] {
+  const rows = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, OVERLAY_TEXT_KIND),
+      ),
+    )
+    .all();
+  const out: PcbOverlayText[] = [];
+  for (const row of rows) {
+    const parsed = parseOverlayText(parsePayload(row.payloadJson));
+    if (parsed) out.push(parsed);
+  }
+  return out;
+}
+
+export function loadPcbOverlayTextById(
+  db: DbClient,
+  designId: string,
+  id: string,
+): PcbOverlayText | null {
+  const row = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, OVERLAY_TEXT_KIND),
+        eq(pcbEntities.id, id),
+      ),
+    )
+    .get();
+  if (!row) return null;
+  return parseOverlayText(parsePayload(row.payloadJson));
+}
+
+export function insertPcbOverlayText(
+  db: DbClient,
+  designId: string,
+  overlay: PcbOverlayText,
+  timestamp: string,
+): void {
+  db.insert(pcbEntities)
+    .values({
+      id: overlay.id,
+      designId,
+      kind: OVERLAY_TEXT_KIND,
+      payloadJson: JSON.stringify(overlay),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .run();
+}
+
+export function updatePcbOverlayText(
+  db: DbClient,
+  overlay: PcbOverlayText,
+  timestamp: string,
+): void {
+  db.update(pcbEntities)
+    .set({ payloadJson: JSON.stringify(overlay), updatedAt: timestamp })
+    .where(eq(pcbEntities.id, overlay.id))
+    .run();
+}
+
+export function deletePcbOverlayText(db: DbClient, id: string): void {
+  db.delete(pcbEntities).where(eq(pcbEntities.id, id)).run();
+}
+
+// ───────────────────── Overlay shape (F5) ────────────────────
+
+function parseOverlayShape(value: unknown): PcbOverlayShape | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const id = asString(record.id);
+  const layer = parseOverlayLayer(record.layer);
+  const kindRaw = asString(record.kind);
+  const kind =
+    kindRaw && OVERLAY_SHAPE_KINDS.has(kindRaw as PcbOverlayShapeKind)
+      ? (kindRaw as PcbOverlayShapeKind)
+      : null;
+  const strokeWidthMm = asNumber(record.strokeWidthMm);
+  const pointsRaw = Array.isArray(record.pointsMm) ? record.pointsMm : null;
+  if (
+    !id ||
+    !layer ||
+    !kind ||
+    strokeWidthMm === null ||
+    strokeWidthMm <= 0 ||
+    !pointsRaw ||
+    pointsRaw.length < 2
+  ) {
+    return null;
+  }
+  const pointsMm: { x: number; y: number }[] = [];
+  for (const raw of pointsRaw) {
+    const r = asRecord(raw);
+    const x = asNumber(r?.x);
+    const y = asNumber(r?.y);
+    if (x === null || y === null) return null;
+    pointsMm.push({ x, y });
+  }
+  const fill: PcbOverlayShape["fill"] =
+    record.fill === "solid" ? "solid" : "none";
+  const lockedAt = asString(record.lockedAt);
+  return {
+    id,
+    layer,
+    kind,
+    pointsMm,
+    strokeWidthMm,
+    fill,
+    lockedAt: lockedAt ?? null,
+  };
+}
+
+export function loadPcbOverlayShapes(
+  db: DbClient,
+  designId: string,
+): PcbOverlayShape[] {
+  const rows = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, OVERLAY_SHAPE_KIND),
+      ),
+    )
+    .all();
+  const out: PcbOverlayShape[] = [];
+  for (const row of rows) {
+    const parsed = parseOverlayShape(parsePayload(row.payloadJson));
+    if (parsed) out.push(parsed);
+  }
+  return out;
+}
+
+export function loadPcbOverlayShapeById(
+  db: DbClient,
+  designId: string,
+  id: string,
+): PcbOverlayShape | null {
+  const row = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, OVERLAY_SHAPE_KIND),
+        eq(pcbEntities.id, id),
+      ),
+    )
+    .get();
+  if (!row) return null;
+  return parseOverlayShape(parsePayload(row.payloadJson));
+}
+
+export function insertPcbOverlayShape(
+  db: DbClient,
+  designId: string,
+  shape: PcbOverlayShape,
+  timestamp: string,
+): void {
+  db.insert(pcbEntities)
+    .values({
+      id: shape.id,
+      designId,
+      kind: OVERLAY_SHAPE_KIND,
+      payloadJson: JSON.stringify(shape),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .run();
+}
+
+export function updatePcbOverlayShape(
+  db: DbClient,
+  shape: PcbOverlayShape,
+  timestamp: string,
+): void {
+  db.update(pcbEntities)
+    .set({ payloadJson: JSON.stringify(shape), updatedAt: timestamp })
+    .where(eq(pcbEntities.id, shape.id))
+    .run();
+}
+
+export function deletePcbOverlayShape(db: DbClient, id: string): void {
+  db.delete(pcbEntities).where(eq(pcbEntities.id, id)).run();
+}
+
+// ─────────── Replace-helpers used by undo/redo replay ───────────
+// Each `replacePcb*` wipes all rows of one kind for a design and re-inserts
+// the supplied list. The history reconstitution path
+// (`applyHistoryPatches`) snapshots before-state, applies patches in an ECS
+// world, then calls these to make the DB row set match the post-patch world.
+
+export function replacePcbFreeHoles(
+  db: DbClient,
+  designId: string,
+  holes: PcbFreeHole[],
+  timestamp: string,
+): void {
+  db.delete(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, FREE_HOLE_KIND),
+      ),
+    )
+    .run();
+  for (const hole of holes) insertPcbFreeHole(db, designId, hole, timestamp);
+}
+
+export function replacePcbFreePads(
+  db: DbClient,
+  designId: string,
+  pads: PcbFreePad[],
+  timestamp: string,
+): void {
+  db.delete(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, FREE_PAD_KIND),
+      ),
+    )
+    .run();
+  for (const pad of pads) insertPcbFreePad(db, designId, pad, timestamp);
+}
+
+export function replacePcbOverlayTexts(
+  db: DbClient,
+  designId: string,
+  overlays: PcbOverlayText[],
+  timestamp: string,
+): void {
+  db.delete(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, OVERLAY_TEXT_KIND),
+      ),
+    )
+    .run();
+  for (const overlay of overlays) {
+    insertPcbOverlayText(db, designId, overlay, timestamp);
+  }
+}
+
+export function replacePcbOverlayShapes(
+  db: DbClient,
+  designId: string,
+  shapes: PcbOverlayShape[],
+  timestamp: string,
+): void {
+  db.delete(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, OVERLAY_SHAPE_KIND),
+      ),
+    )
+    .run();
+  for (const shape of shapes) {
+    insertPcbOverlayShape(db, designId, shape, timestamp);
   }
 }

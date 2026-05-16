@@ -19,11 +19,11 @@ const makePlacement = (
   mirrored: false,
   layer: "F.Cu",
   footprint: {
-      footprintId: "fp1",
-      name: "TEST",
-      mountType: null,
-      sourceHash: null,
-      preview: {
+    footprintId: "fp1",
+    name: "TEST",
+    mountType: null,
+    sourceHash: null,
+    preview: {
       kind: "footprint",
       units: "mm",
       name: "R_0805",
@@ -62,6 +62,7 @@ const makeVia = (overrides: Partial<PcbVia> = {}): PcbVia => ({
   toLayer: "B.Cu",
   viaType: "through",
   protection: "tented",
+  provenance: "route",
   ...overrides,
 });
 
@@ -73,16 +74,16 @@ describe("pcb-hit", () => {
           id: "p1",
           positionMm: { x: 10, y: 10 },
           footprint: {
-      footprintId: "fp1",
-      name: "TEST",
-      mountType: null,
-      sourceHash: null,
-      preview: {
-      kind: "footprint",
-      units: "mm",
-      name: "TEST",
-      labels: [],
-      warnings: [],
+            footprintId: "fp1",
+            name: "TEST",
+            mountType: null,
+            sourceHash: null,
+            preview: {
+              kind: "footprint",
+              units: "mm",
+              name: "TEST",
+              labels: [],
+              warnings: [],
               pads: [
                 {
                   id: "pad1",
@@ -125,7 +126,6 @@ describe("pcb-hit", () => {
 
       expect(result.length).toBeGreaterThan(0);
       expect(result[0]!.kind).toBe("pad");
-
     });
 
     test("excludes traces on non-visible layers", () => {
@@ -172,16 +172,16 @@ describe("pcb-hit", () => {
           id: "p1",
           positionMm: { x: 10, y: 10 },
           footprint: {
-      footprintId: "fp1",
-      name: "TEST",
-      mountType: null,
-      sourceHash: null,
-      preview: {
-      kind: "footprint",
-      units: "mm",
-      name: "TEST",
-      labels: [],
-      warnings: [],
+            footprintId: "fp1",
+            name: "TEST",
+            mountType: null,
+            sourceHash: null,
+            preview: {
+              kind: "footprint",
+              units: "mm",
+              name: "TEST",
+              labels: [],
+              warnings: [],
               pads: [
                 {
                   id: "pad1",
@@ -229,7 +229,6 @@ describe("pcb-hit", () => {
       expect(traceIdx).toBeGreaterThan(0);
       expect(viaIdx).toBeGreaterThan(traceIdx);
       expect(placementIdx).toBeGreaterThan(viaIdx);
-
     });
   });
 
@@ -329,16 +328,16 @@ describe("pcb-hit", () => {
           id: "p1",
           positionMm: { x: 10, y: 10 },
           footprint: {
-      footprintId: "fp1",
-      name: "TEST",
-      mountType: null,
-      sourceHash: null,
-      preview: {
-      kind: "footprint",
-      units: "mm",
-      name: "TEST",
-      labels: [],
-      warnings: [],
+            footprintId: "fp1",
+            name: "TEST",
+            mountType: null,
+            sourceHash: null,
+            preview: {
+              kind: "footprint",
+              units: "mm",
+              name: "TEST",
+              labels: [],
+              warnings: [],
               pads: [],
               graphics: [],
               bounds: { minX: -5, maxX: 5, minY: -5, maxY: 5 },
@@ -352,7 +351,6 @@ describe("pcb-hit", () => {
 
       expect(result).not.toBeNull();
       expect(result!.id).toBe("p1");
-
     });
 
     test("returns null when cursor is outside bounding box", () => {
@@ -361,16 +359,16 @@ describe("pcb-hit", () => {
           id: "p1",
           positionMm: { x: 10, y: 10 },
           footprint: {
-      footprintId: "fp1",
-      name: "TEST",
-      mountType: null,
-      sourceHash: null,
-      preview: {
-      kind: "footprint",
-      units: "mm",
-      name: "TEST",
-      labels: [],
-      warnings: [],
+            footprintId: "fp1",
+            name: "TEST",
+            mountType: null,
+            sourceHash: null,
+            preview: {
+              kind: "footprint",
+              units: "mm",
+              name: "TEST",
+              labels: [],
+              warnings: [],
               pads: [],
               graphics: [],
               bounds: { minX: -5, maxX: 5, minY: -5, maxY: 5 },
@@ -383,7 +381,6 @@ describe("pcb-hit", () => {
       const result = hitPlacement(placements, cursorMm);
 
       expect(result).toBeNull();
-
     });
   });
 
@@ -394,16 +391,16 @@ describe("pcb-hit", () => {
           id: "p1",
           positionMm: { x: 10, y: 10 },
           footprint: {
-      footprintId: "fp1",
-      name: "TEST",
-      mountType: null,
-      sourceHash: null,
-      preview: {
-      kind: "footprint",
-      units: "mm",
-      name: "TEST",
-      labels: [],
-      warnings: [],
+            footprintId: "fp1",
+            name: "TEST",
+            mountType: null,
+            sourceHash: null,
+            preview: {
+              kind: "footprint",
+              units: "mm",
+              name: "TEST",
+              labels: [],
+              warnings: [],
               pads: [
                 {
                   id: "pad1",
@@ -430,7 +427,6 @@ describe("pcb-hit", () => {
       expect(result).not.toBeNull();
       expect(result!.placementId).toBe("p1");
       expect(result!.padNumber).toBe("1");
-
     });
 
     test("returns null when cursor is far from pad", () => {
@@ -439,16 +435,16 @@ describe("pcb-hit", () => {
           id: "p1",
           positionMm: { x: 10, y: 10 },
           footprint: {
-      footprintId: "fp1",
-      name: "TEST",
-      mountType: null,
-      sourceHash: null,
-      preview: {
-      kind: "footprint",
-      units: "mm",
-      name: "TEST",
-      labels: [],
-      warnings: [],
+            footprintId: "fp1",
+            name: "TEST",
+            mountType: null,
+            sourceHash: null,
+            preview: {
+              kind: "footprint",
+              units: "mm",
+              name: "TEST",
+              labels: [],
+              warnings: [],
               pads: [
                 {
                   id: "pad1",
@@ -473,7 +469,6 @@ describe("pcb-hit", () => {
       const result = hitPad(placements, cursorMm);
 
       expect(result).toBeNull();
-
     });
   });
 });
