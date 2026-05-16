@@ -165,6 +165,55 @@ jobs:
         with:
           path: release-artifacts
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Merge multi-arch mac update feeds
+        # Each mac matrix job emits its own latest-mac.yml with just that
+        # arch's files[] entry. electron-updater expects a single unified
+        # feed. Merge into one before upload to avoid a 422 on duplicate
+        # asset name.
+        run: |
+          npm install --no-save js-yaml@4
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const yaml = require('js-yaml');
+
+          function findAll(dir, name, acc = []) {
+            for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+              const p = path.join(dir, e.name);
+              if (e.isDirectory()) findAll(p, name, acc);
+              else if (e.name === name) acc.push(p);
+            }
+            return acc;
+          }
+
+          const feeds = findAll('release-artifacts', 'latest-mac.yml');
+          if (feeds.length <= 1) { console.log('No merge needed'); process.exit(0); }
+
+          // Prefer arm64's feed as the base (first by path sort).
+          feeds.sort();
+          const base = yaml.load(fs.readFileSync(feeds[0], 'utf8'));
+          const seen = new Set(base.files.map(f => f.url));
+
+          for (const feed of feeds.slice(1)) {
+            const data = yaml.load(fs.readFileSync(feed, 'utf8'));
+            for (const f of data.files) {
+              if (!seen.has(f.url)) {
+                base.files.push(f);
+                seen.add(f.url);
+              }
+            }
+          }
+
+          fs.writeFileSync(feeds[0], yaml.dump(base, { lineWidth: -1 }));
+          for (const feed of feeds.slice(1)) fs.unlinkSync(feed);
+          console.log(`Merged ${feeds.length} latest-mac.yml feeds; ${base.files.length} files listed`);
+          NODE
+
       - name: Publish complete prerelease
         run: |
           gh release delete "${GITHUB_REF_NAME}" --yes || true

@@ -1,6 +1,6 @@
 {
   "name": "openpcb-electron",
-  "version": "0.1.4-dev",
+  "version": "0.1.5-dev",
   "description": "OpenPCB desktop application",
   "author": "OpenPCB",
   "homepage": "https://github.com/andrejvysny/OpenPCB",
