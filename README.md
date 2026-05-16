@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="logo.svg" alt="OpenPCB" width="120" />
+  <img src="electron/icon.png" alt="OpenPCB" width="120" />
   <h1>OpenPCB</h1>
   <p><strong>Modular, open desktop PCB design suite — schematic capture, PCB layout, and a unified component library in one app.</strong></p>
 
