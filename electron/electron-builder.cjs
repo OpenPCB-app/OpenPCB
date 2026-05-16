@@ -5,10 +5,6 @@ const repoRoot = path.resolve(__dirname, "..");
 module.exports = {
   appId: "com.openpcb.electron",
   productName: "OpenPCB",
-  // executableName drives the Linux binary name and fpm pkg name (deb/rpm)
-  // so packages are `openpcb_*.deb` / `openpcb-*.rpm` rather than
-  // `openpcb-electron_*.deb` (derived from package.json#name).
-  executableName: "openpcb",
   copyright: "© OpenPCB",
 
   // electron is hoisted to the repo-root node_modules by npm workspaces, so
@@ -75,13 +71,13 @@ module.exports = {
   ],
 
   // -------- macOS --------
+  // Targets listed without arch so CLI `--arm64` / `--x64` filters per matrix
+  // job; otherwise electron-builder builds both archs in each job and the
+  // upload step collides on duplicate filenames.
   mac: {
     category: "public.app-category.developer-tools",
     icon: "icon.icns",
-    target: [
-      { target: "dmg", arch: ["arm64", "x64"] },
-      { target: "zip", arch: ["arm64", "x64"] },
-    ],
+    target: ["dmg", "zip"],
     identity: null,
     gatekeeperAssess: false,
     hardenedRuntime: false,
@@ -95,10 +91,7 @@ module.exports = {
   // -------- Windows --------
   win: {
     icon: "icon.ico",
-    target: [
-      { target: "nsis", arch: ["x64"] },
-      { target: "portable", arch: ["x64"] },
-    ],
+    target: ["nsis", "portable"],
     artifactName: "${productName}-${version}-${arch}.${ext}",
   },
   nsis: {
@@ -117,16 +110,15 @@ module.exports = {
   // -------- Linux --------
   linux: {
     icon: "icon.png",
+    // Drives the binary name in /usr/bin and the AppImage executable; keeps
+    // mac/win bundles named "OpenPCB" while linux gets lowercase "openpcb".
+    executableName: "openpcb",
     category: "Development",
     maintainer: "OpenPCB",
     vendor: "OpenPCB",
     synopsis: "PCB Design Suite",
     description: "OpenPCB desktop application",
-    target: [
-      { target: "AppImage", arch: ["x64"] },
-      { target: "deb", arch: ["x64"] },
-      { target: "rpm", arch: ["x64"] },
-    ],
+    target: ["AppImage", "deb", "rpm"],
     desktop: {
       entry: {
         Name: "OpenPCB",
@@ -134,10 +126,15 @@ module.exports = {
         Categories: "Development;Electronics;",
       },
     },
-    artifactName: "${name}_${version}_${arch}.${ext}",
+    // ${name} resolves to package.json#name ("openpcb-electron") — override
+    // here so linux packages are "openpcb_*.deb" / "openpcb-*.rpm".
+    artifactName: "openpcb_${version}_${arch}.${ext}",
   },
-  deb: { fpm: ["--deb-no-default-config-files"] },
-  rpm: { fpm: ["--rpm-rpmbuild-define=_build_id_links none"] },
+  deb: { fpm: ["--deb-no-default-config-files"], packageName: "openpcb" },
+  rpm: {
+    fpm: ["--rpm-rpmbuild-define=_build_id_links none"],
+    packageName: "openpcb",
+  },
   appImage: {
     artifactName: "${productName}-${version}-${arch}.AppImage",
   },
