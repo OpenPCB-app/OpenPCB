@@ -89,6 +89,10 @@ module.exports = {
         options: {
           name: "openpcb",
           productName: "OpenPCB",
+          // Match the packaged executable name from packagerConfig.executableName.
+          // Without `bin`, the maker uses `options.name` ("openpcb") and fails to
+          // locate the binary inside the packaged app (named "OpenPCB").
+          bin: "OpenPCB",
           genericName: "PCB Design Suite",
           categories: ["Development"],
           description: "OpenPCB desktop application",
