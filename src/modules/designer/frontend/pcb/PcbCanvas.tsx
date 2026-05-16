@@ -52,7 +52,7 @@ import {
   type PcbSelection,
 } from "./pcb-selection";
 import { useMarqueeSelection } from "../../../../shared/frontend/canvas/selection";
-import { PcbScene } from "./PcbScene";
+import { PcbScene, type PcbCameraControls } from "./PcbScene";
 import type { ViewportState } from "../types";
 import { PcbTopToolbar } from "./PcbTopToolbar";
 import { PcbBoardPanel } from "./PcbBoardPanel";
@@ -233,6 +233,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   );
   const [cursorMm, setCursorMmState] = useState<PcbPointMm | null>(null);
   const cursorMmRef = useRef<PcbPointMm | null>(null);
+  const cameraControlsRef = useRef<PcbCameraControls | null>(null);
+  const handleCameraReady = useCallback(
+    (controls: PcbCameraControls | null) => {
+      cameraControlsRef.current = controls;
+    },
+    [],
+  );
   const setCursorMm = useCallback((next: PcbPointMm | null): void => {
     cursorMmRef.current = next;
     setCursorMmState(next);
@@ -1533,6 +1540,33 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         workspace.cycleDisplayMode();
         return;
       }
+      // Undo / Redo — ⌘/Ctrl+Z, ⌘/Ctrl+Shift+Z, Ctrl+Y. Skipped during active
+      // routing (route owns its own backspace/escape semantics).
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        (event.key === "z" || event.key === "Z")
+      ) {
+        if (routeState.kind === "routing") return;
+        event.preventDefault();
+        if (event.shiftKey) {
+          if (workspace.canRedo) void workspace.redo();
+        } else {
+          if (workspace.canUndo) void workspace.undo();
+        }
+        return;
+      }
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (event.key === "y" || event.key === "Y")
+      ) {
+        if (routeState.kind === "routing") return;
+        event.preventDefault();
+        if (workspace.canRedo) void workspace.redo();
+        return;
+      }
       if (event.key === "`") {
         event.preventDefault();
         if (workspace.highlightedNetId) {
@@ -1766,6 +1800,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             snapTarget={snapTarget}
             initialViewport={props.initialViewport}
             onViewportChange={props.onViewportChange}
+            onCameraReady={handleCameraReady}
           />
         </EdaCanvas>
       ) : null}
@@ -1845,8 +1880,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               }}
               ratsnestVisible={workspace.ratsnestVisible}
               onToggleRatsnest={workspace.toggleRatsnestVisible}
-              viewSide={workspace.viewSide}
-              onToggleViewSide={handleToggleViewSide}
+              canUndo={workspace.canUndo}
+              canRedo={workspace.canRedo}
+              onUndo={() => void workspace.undo()}
+              onRedo={() => void workspace.redo()}
+              onZoomIn={() => cameraControlsRef.current?.zoomIn()}
+              onZoomOut={() => cameraControlsRef.current?.zoomOut()}
+              onFit={() => cameraControlsRef.current?.fit()}
               routeMode={toolMode === "route"}
               routeSessionActive={routeState.kind === "routing"}
               onToggleRouteMode={() => {

@@ -5,6 +5,7 @@ import type {
 } from "../hooks/useDesignerWorkspace";
 import type { DesignerView } from "../types";
 import { OutlinePanel } from "./OutlinePanel/OutlinePanel";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 export const COMPONENT_DND_MIME = "application/x-openpcb-component-id";
 
@@ -38,14 +39,13 @@ export function DesignerSidebar({
 }: DesignerSidebarProps): ReactElement {
   if (activeView === "pcb") {
     return (
-      <aside className="flex h-full min-h-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
-        <div ref={pcbLayersSlotRef} />
-        <div className="border-b border-slate-200 px-3 py-2 dark:border-slate-800">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Board
-          </p>
-        </div>
-        <div ref={pcbSlotRef} className="min-h-0 flex-1 overflow-y-auto" />
+      <aside className="flex h-full min-h-0 flex-col overflow-y-auto border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
+        <CollapsibleSection id="pcb.sidebar.board" title="Board" defaultOpen>
+          <div ref={pcbSlotRef} />
+        </CollapsibleSection>
+        <CollapsibleSection id="pcb.sidebar.layers" title="Layers" defaultOpen>
+          <div ref={pcbLayersSlotRef} />
+        </CollapsibleSection>
       </aside>
     );
   }

@@ -45,12 +45,9 @@ export function PcbBoardPanel({
   valid,
 }: PcbBoardPanelProps): ReactElement {
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto p-3">
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-100">PCB board</h3>
-          <p className="text-xs text-slate-500">Fixed rectangle, mm</p>
-        </div>
+    <div className="flex flex-col p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-[11px] text-slate-500">Fixed rectangle, mm</p>
         <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-300">
           2-layer
         </span>
@@ -76,25 +73,6 @@ export function PcbBoardPanel({
           className="h-8 rounded-md bg-violet-600 px-3 text-xs font-semibold text-white hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {workspace.saving ? "Saving" : "Apply"}
-        </button>
-      </div>
-
-      <div className="mt-2 flex gap-2">
-        <button
-          type="button"
-          disabled={!workspace.canUndo}
-          onClick={() => void workspace.undo()}
-          className="h-7 rounded-md border border-slate-700 bg-slate-900 px-2 text-[11px] font-medium text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Undo
-        </button>
-        <button
-          type="button"
-          disabled={!workspace.canRedo}
-          onClick={() => void workspace.redo()}
-          className="h-7 rounded-md border border-slate-700 bg-slate-900 px-2 text-[11px] font-medium text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Redo
         </button>
       </div>
 

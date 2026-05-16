@@ -16,7 +16,7 @@ export function PcbSideModeButton({
 }): ReactElement {
   const isTop = viewSide === "top";
   const Icon = isTop ? ArrowDownToLine : ArrowUpFromLine;
-  const label = isTop ? "Top" : "Bottom";
+  const label = isTop ? "Viewing Top" : "Viewing Bot";
   const aria = isTop ? "Switch to bottom view" : "Switch to top view";
   return (
     <button
@@ -24,6 +24,7 @@ export function PcbSideModeButton({
       onClick={onToggle}
       title={aria}
       aria-label={aria}
+      data-testid="pcb-flip-view-button"
       className="inline-flex h-7 items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-900/80 px-2 text-xs font-medium text-zinc-100 transition-colors hover:bg-zinc-800"
     >
       <Icon className="size-3.5" strokeWidth={2.25} />

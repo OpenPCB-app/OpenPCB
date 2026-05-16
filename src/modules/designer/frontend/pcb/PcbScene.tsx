@@ -59,6 +59,31 @@ import {
   type PcbVisualState,
 } from "./pcb-visual-state";
 
+export interface PcbCameraControls {
+  zoomIn(): void;
+  zoomOut(): void;
+  fit(): void;
+}
+
+function fitCameraToOutline(
+  camera: THREE.OrthographicCamera,
+  gl: THREE.WebGLRenderer,
+  outline: PcbBoardOutline,
+): void {
+  const { widthMm, heightMm, centerMm } = outline;
+  const canvasWidth = gl.domElement.clientWidth;
+  const canvasHeight = gl.domElement.clientHeight;
+  const paddedWidth = widthMm * 1.15;
+  const paddedHeight = heightMm * 1.15;
+  const zoom = Math.max(
+    1,
+    Math.min(canvasWidth / paddedWidth, canvasHeight / paddedHeight, 500),
+  );
+  camera.position.set(centerMm.x, centerMm.y, camera.position.z);
+  camera.zoom = zoom;
+  camera.updateProjectionMatrix();
+}
+
 function FitBoardOnMount({
   outline,
   initialViewport,
@@ -78,24 +103,51 @@ function FitBoardOnMount({
         camera.position.z,
       );
       camera.zoom = initialViewport.zoom;
+      camera.updateProjectionMatrix();
     } else {
-      const { widthMm, heightMm, centerMm } = outline;
-      const canvasWidth = gl.domElement.clientWidth;
-      const canvasHeight = gl.domElement.clientHeight;
-      const paddedWidth = widthMm * 1.15;
-      const paddedHeight = heightMm * 1.15;
-      const zoom = Math.max(
-        1,
-        Math.min(canvasWidth / paddedWidth, canvasHeight / paddedHeight, 500),
-      );
-      camera.position.set(centerMm.x, centerMm.y, camera.position.z);
-      camera.zoom = zoom;
+      fitCameraToOutline(camera, gl, outline);
     }
-    camera.updateProjectionMatrix();
     invalidate();
     // runs only on mount; PcbCanvas remounts (key=designId) on design switch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  return null;
+}
+
+function CameraControlsBridge({
+  outline,
+  onReady,
+}: {
+  outline: PcbBoardOutline;
+  onReady: (controls: PcbCameraControls | null) => void;
+}): null {
+  const camera = useThree((s) => s.camera) as THREE.OrthographicCamera;
+  const gl = useThree((s) => s.gl);
+  const invalidate = useThree((s) => s.invalidate);
+  const outlineRef = useRef(outline);
+  outlineRef.current = outline;
+
+  useEffect(() => {
+    const controls: PcbCameraControls = {
+      zoomIn() {
+        camera.zoom = Math.min(camera.zoom * 1.15, 500);
+        camera.updateProjectionMatrix();
+        invalidate();
+      },
+      zoomOut() {
+        camera.zoom = Math.max(camera.zoom / 1.15, 1);
+        camera.updateProjectionMatrix();
+        invalidate();
+      },
+      fit() {
+        fitCameraToOutline(camera, gl, outlineRef.current);
+        invalidate();
+      },
+    };
+    onReady(controls);
+    return () => onReady(null);
+  }, [camera, gl, invalidate, onReady]);
 
   return null;
 }
@@ -894,6 +946,8 @@ interface PcbSceneProps {
   } | null;
   initialViewport?: ViewportState | null;
   onViewportChange?: (zoom: number, posX: number, posY: number) => void;
+  /** Called once the R3F camera is ready; pass `null` on unmount. */
+  onCameraReady?: (controls: PcbCameraControls | null) => void;
 }
 
 export function PcbScene({
@@ -914,6 +968,7 @@ export function PcbScene({
   snapTarget = null,
   initialViewport,
   onViewportChange,
+  onCameraReady,
 }: PcbSceneProps): ReactElement {
   const invalidate = useThree((state) => state.invalidate);
 
@@ -1127,6 +1182,12 @@ export function PcbScene({
           outline={projection.board.outline}
           initialViewport={initialViewport}
         />
+        {onCameraReady && (
+          <CameraControlsBridge
+            outline={projection.board.outline}
+            onReady={onCameraReady}
+          />
+        )}
         {onViewportChange && (
           <ViewportReporter onViewportChange={onViewportChange} />
         )}

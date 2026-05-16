@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
-import { Cable, FlipHorizontal2, Network } from "lucide-react";
+import {
+  Cable,
+  FlipHorizontal2,
+  Minus,
+  Network,
+  Plus,
+  Redo2,
+  ScanSearch,
+  Undo2,
+} from "lucide-react";
 import type { PcbTraceSegmentMode } from "../../../../sdks";
 import type { RoutePosture } from "./tools/route-tool-state";
 import { VIA_PRESETS, type PcbViaPreset } from "../../backend/pcb/via-presets";
@@ -9,10 +18,13 @@ interface PcbTopToolbarProps {
   onFlipSelection: () => void;
   ratsnestVisible: boolean;
   onToggleRatsnest: () => void;
-  /** Current board view orientation. `"bottom"` mirrors the scene horizontally. */
-  viewSide: "top" | "bottom";
-  /** Toggle the board view between top and bottom (orthogonal to active layer). */
-  onToggleViewSide: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onFit: () => void;
   routeMode: boolean;
   routeSessionActive: boolean;
   onToggleRouteMode: () => void;
@@ -329,8 +341,13 @@ export function PcbTopToolbar({
   onFlipSelection,
   ratsnestVisible,
   onToggleRatsnest,
-  viewSide,
-  onToggleViewSide,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
+  onZoomIn,
+  onZoomOut,
+  onFit,
   routeMode,
   routeSessionActive,
   onToggleRouteMode,
@@ -355,23 +372,56 @@ export function PcbTopToolbar({
     <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200/90 bg-white/95 px-2 py-1 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/90">
       <button
         type="button"
-        onClick={onToggleViewSide}
-        title={
-          viewSide === "bottom"
-            ? "Viewing from bottom — click or Shift+F to flip back"
-            : "Flip board view (Shift+F)"
-        }
-        aria-pressed={viewSide === "bottom"}
-        data-testid="pcb-flip-view-button"
-        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
-          viewSide === "bottom"
-            ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-        }`}
+        onClick={onUndo}
+        disabled={!canUndo}
+        title="Undo (⌘/Ctrl+Z)"
+        aria-label="Undo"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
       >
-        <FlipHorizontal2 className="h-3.5 w-3.5" />
-        Flip view
+        <Undo2 className="h-3.5 w-3.5" />
       </button>
+      <button
+        type="button"
+        onClick={onRedo}
+        disabled={!canRedo}
+        title="Redo (⌘/Ctrl+Shift+Z)"
+        aria-label="Redo"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
+      >
+        <Redo2 className="h-3.5 w-3.5" />
+      </button>
+
+      <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
+
+      <button
+        type="button"
+        onClick={onZoomOut}
+        title="Zoom out"
+        aria-label="Zoom out"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+      >
+        <Minus className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onZoomIn}
+        title="Zoom in"
+        aria-label="Zoom in"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onFit}
+        title="Fit"
+        aria-label="Fit board"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+      >
+        <ScanSearch className="h-3.5 w-3.5" />
+      </button>
+
+      <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
 
       <button
         type="button"

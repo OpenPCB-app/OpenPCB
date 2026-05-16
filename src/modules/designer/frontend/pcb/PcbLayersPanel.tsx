@@ -218,15 +218,12 @@ export function PcbLayersPanel({
   );
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-800">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          Layers
-        </p>
-        {viewSide && onToggleViewSide ? (
+    <div className="flex flex-col">
+      {viewSide && onToggleViewSide ? (
+        <div className="flex justify-end px-2 py-1">
           <PcbSideModeButton viewSide={viewSide} onToggle={onToggleViewSide} />
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       {onSelectLayerPreset ? (
         <div className="flex flex-wrap gap-1 border-b border-slate-200 px-2 py-2 dark:border-slate-800">
           {PCB_LAYER_PRESETS.map((preset) => {
