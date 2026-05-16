@@ -1,8 +1,9 @@
-name: Release Electron
+name: Release
 
 on:
   push:
     tags:
+      - "dev-*"
       - "v*"
 
 permissions:
@@ -103,17 +104,21 @@ jobs:
 
           const rootPackage = JSON.parse(fs.readFileSync('package.json', 'utf8'));
           const electronPackage = JSON.parse(fs.readFileSync('electron/package.json', 'utf8'));
-          const tagVersion = (process.env.GITHUB_REF_NAME || '').replace(/^v/, '');
+          const refName = process.env.GITHUB_REF_NAME || '';
 
           if (rootPackage.version !== electronPackage.version) {
             throw new Error(`Root package version ${rootPackage.version} does not match electron package version ${electronPackage.version}`);
           }
 
-          if (tagVersion !== electronPackage.version) {
-            throw new Error(`Tag version ${tagVersion} does not match electron package version ${electronPackage.version}`);
+          if (refName.startsWith('dev-')) {
+            console.log(`Dev tag ${refName} — skipping strict version match (package version ${electronPackage.version})`);
+          } else {
+            const tagVersion = refName.replace(/^v/, '');
+            if (tagVersion !== electronPackage.version) {
+              throw new Error(`Tag version ${tagVersion} does not match electron package version ${electronPackage.version}`);
+            }
+            console.log(`Release version ${tagVersion} validated`);
           }
-
-          console.log(`Release version ${tagVersion} validated`);
           NODE
 
       - name: Typecheck
