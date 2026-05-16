@@ -1,6 +1,6 @@
 {
   "name": "openpcb-electron",
-  "version": "0.1.1-dev",
+  "version": "0.1.2-dev",
   "description": "OpenPCB desktop application",
   "author": "OpenPCB",
   "license": "PolyForm-Noncommercial-1.0.0",
