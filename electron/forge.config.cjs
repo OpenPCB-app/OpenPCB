@@ -82,6 +82,20 @@ module.exports = {
         },
       },
     },
+    {
+      name: "@reforged/maker-appimage",
+      platforms: ["linux"],
+      config: {
+        options: {
+          name: "openpcb",
+          productName: "OpenPCB",
+          genericName: "PCB Design Suite",
+          categories: ["Development"],
+          description: "OpenPCB desktop application",
+          icon: path.join(__dirname, "icon.png"),
+        },
+      },
+    },
   ],
   plugins: [
     {

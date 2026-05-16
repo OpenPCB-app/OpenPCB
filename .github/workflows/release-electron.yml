@@ -80,7 +80,7 @@ jobs:
 
       - name: Install Linux maker dependencies
         if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg rpm
+        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg rpm squashfs-tools
 
       - name: Repair optional native dependencies
         run: |
@@ -125,7 +125,7 @@ jobs:
       - name: Make Electron app
         run: |
           if [ "${{ matrix.platform }}" = "linux" ]; then
-            npm run make --workspace electron -- --platform=linux --arch=${{ matrix.arch }} --targets=@electron-forge/maker-deb,@electron-forge/maker-rpm
+            npm run make --workspace electron -- --platform=linux --arch=${{ matrix.arch }} --targets=@electron-forge/maker-deb,@electron-forge/maker-rpm,@reforged/maker-appimage
           else
             npm run make --workspace electron -- --platform=${{ matrix.platform }} --arch=${{ matrix.arch }}
           fi
