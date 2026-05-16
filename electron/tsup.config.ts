@@ -43,7 +43,9 @@ export default defineConfig([
     // (pure-JS deps from electron/package.json plus their transitive graph)
     // gets bundled here. This avoids npm-workspaces hoisting leaving deps
     // outside electron/node_modules where electron-forge cannot find them.
-    external: ["electron", "better-sqlite3"],
+    // electron-updater pulls in a chunk of CJS deps (lzma-native, builder-util-runtime, etc.)
+    // with dynamic require patterns that don't bundle cleanly — keep it external.
+    external: ["electron", "better-sqlite3", "electron-updater"],
     // Bundle simple pure-JS deps. Sentry + OTel stay out of the bundle
     // because they use require-in-the-middle / dynamic-require patterns
     // that bundlers can't reliably trace; they are loaded lazily via

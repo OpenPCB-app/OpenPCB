@@ -2,7 +2,6 @@
 // before any window opens or any child process spawns. electron-log is
 // initialized first so the rest of bootstrap is captured to disk.
 import { app, BrowserWindow, ipcMain } from "electron";
-import squirrelStartup from "electron-squirrel-startup";
 import { join } from "node:path";
 import { initLogger, log } from "./logger.js";
 import { initCrashReporter } from "./crash.js";
@@ -14,10 +13,7 @@ import {
   stopBackendServer,
   getBackendPayload,
 } from "./backend-server.js";
-
-if (squirrelStartup) {
-  app.quit();
-}
+import { initUpdater } from "./updater.js";
 
 initLogger();
 initCrashReporter();
@@ -37,6 +33,7 @@ log.info(
 );
 
 registerDiagnosticsIpc();
+initUpdater();
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -145,8 +142,6 @@ ipcMain.handle("get-backend-url", () => {
 });
 
 app.whenReady().then(async () => {
-  if (squirrelStartup) return;
-
   try {
     const result = await startBackendServer();
     log.info(`[electron] Backend ready: port=${result.port}`);

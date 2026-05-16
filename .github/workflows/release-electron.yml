@@ -23,21 +23,21 @@ jobs:
         include:
           - name: macOS arm64
             os: macos-15
-            platform: darwin
+            platform: mac
             arch: arm64
             rollup_package: darwin-arm64
             lightningcss_package: darwin-arm64
             tailwindcss_oxide_package: darwin-arm64
           - name: macOS x64
             os: macos-15-intel
-            platform: darwin
+            platform: mac
             arch: x64
             rollup_package: darwin-x64
             lightningcss_package: darwin-x64
             tailwindcss_oxide_package: darwin-x64
           - name: Windows x64
             os: windows-latest
-            platform: win32
+            platform: win
             arch: x64
             rollup_package: win32-x64-msvc
             lightningcss_package: win32-x64-msvc
@@ -54,6 +54,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
 
     steps:
       - name: Checkout
@@ -66,21 +67,24 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Cache Electron downloads
+      - name: Cache Electron + electron-builder downloads
         uses: actions/cache@v4
         with:
           path: |
             .cache/electron
-          key: ${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('package-lock.json') }}
+            .cache/electron-builder
+          key: ${{ runner.os }}-${{ runner.arch }}-eb-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-electron-
+            ${{ runner.os }}-${{ runner.arch }}-eb-
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Linux maker dependencies
+      - name: Install Linux build deps
         if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg rpm squashfs-tools
+        # electron-builder ships appimagetool itself, so squashfs-tools is not
+        # required. fakeroot+dpkg → .deb; rpm → .rpm via fpm.
+        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg rpm
 
       - name: Repair optional native dependencies
         run: |
@@ -118,27 +122,32 @@ jobs:
       - name: Build frontend
         run: npm run build:frontend
 
-      - name: Verify Linux Forge maker packages
-        if: matrix.platform == 'linux'
-        run: node -e "require('electron-installer-debian'); require('electron-installer-redhat'); console.log('Linux Forge maker packages installed')"
+      - name: Build electron main + preload (tsup)
+        run: npm run build --workspace electron
 
-      - name: Make Electron app
+      - name: Package with electron-builder
+        working-directory: electron
+        run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --config electron-builder.cjs --publish never
+
+      - name: List build artifacts
         run: |
-          if [ "${{ matrix.platform }}" = "linux" ]; then
-            npm run make --workspace electron -- --platform=linux --arch=${{ matrix.arch }} --targets=@electron-forge/maker-deb,@electron-forge/maker-rpm,@reforged/maker-appimage
-          else
-            npm run make --workspace electron -- --platform=${{ matrix.platform }} --arch=${{ matrix.arch }}
-          fi
-
-      - name: List Forge artifacts
-        run: find electron/out/make -type f -print | sort
+          find electron/out -maxdepth 3 -type f \
+            \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' \
+               -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \
+               -o -name 'latest*.yml' \) -print | sort
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: electron-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            electron/out/make/**/*
+            electron/out/*.exe
+            electron/out/*.dmg
+            electron/out/*.zip
+            electron/out/*.AppImage
+            electron/out/*.deb
+            electron/out/*.rpm
+            electron/out/latest*.yml
           if-no-files-found: error
 
   publish:
@@ -170,5 +179,5 @@ jobs:
             --verify-tag \
             --prerelease \
             --title "${GITHUB_REF_NAME}" \
-            --notes "Unsigned beta Electron Forge builds for macOS arm64, macOS x64, Windows x64, and Linux x64, including deb and rpm packages." \
+            --notes "Unsigned beta builds (electron-builder). macOS arm64/x64 dmg+zip, Windows x64 NSIS+portable, Linux x64 AppImage/deb/rpm. Auto-update via electron-updater consumes the attached latest*.yml feeds." \
             "${files[@]}"

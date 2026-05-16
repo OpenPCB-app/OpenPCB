@@ -42,3 +42,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return ipcRenderer.invoke("diagnostics:paths");
   },
 });
+
+contextBridge.exposeInMainWorld("updater", {
+  check: (): Promise<void> => ipcRenderer.invoke("updater:check"),
+  download: (): Promise<void> => ipcRenderer.invoke("updater:download"),
+  install: (): Promise<void> => ipcRenderer.invoke("updater:install"),
+  openReleases: (): Promise<void> =>
+    ipcRenderer.invoke("updater:open-releases"),
+  onStatus: (callback: (status: unknown) => void) => {
+    ipcRenderer.on("updater:status", (_event, status) => callback(status));
+  },
+  onProgress: (callback: (progress: unknown) => void) => {
+    ipcRenderer.on("updater:progress", (_event, progress) =>
+      callback(progress),
+    );
+  },
+});

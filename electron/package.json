@@ -2,16 +2,19 @@
   "name": "openpcb-electron",
   "version": "0.1.1-dev",
   "description": "OpenPCB desktop application",
+  "author": "OpenPCB",
   "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "main": "dist/main/index.js",
   "scripts": {
     "build": "tsup",
     "build:watch": "tsup --watch",
-    "start": "electron-forge start",
-    "package": "npm run build && electron-forge package",
-    "make": "npm run build && electron-forge make",
-    "publish": "npm run build && electron-forge publish"
+    "start": "electron .",
+    "package": "npm run build && electron-builder --dir --config electron-builder.cjs",
+    "make": "npm run build && electron-builder --config electron-builder.cjs --publish never",
+    "make:mac": "npm run build && electron-builder --mac --config electron-builder.cjs --publish never",
+    "make:win": "npm run build && electron-builder --win --config electron-builder.cjs --publish never",
+    "make:linux": "npm run build && electron-builder --linux --config electron-builder.cjs --publish never"
   },
   "dependencies": {
     "@sentry/electron": "^7.0.0",
@@ -19,26 +22,14 @@
     "better-sqlite3": "^12.10.0",
     "drizzle-orm": "^0.45.2",
     "electron-log": "^5.4.4",
-    "electron-squirrel-startup": "^1.0.1",
+    "electron-updater": "^6.8.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@electron-forge/cli": "^7.11.1",
-    "@electron-forge/maker-deb": "^7.11.1",
-    "@electron-forge/maker-dmg": "^7.11.1",
-    "@electron-forge/maker-rpm": "^7.11.1",
-    "@electron-forge/maker-squirrel": "^7.11.1",
-    "@electron-forge/maker-zip": "^7.11.1",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.11.1",
-    "@reforged/maker-appimage": "^5.2.0",
     "@types/better-sqlite3": "^7.6.13",
     "electron": "^41.0.0",
+    "electron-builder": "^26.8.1",
     "tsup": "^8.4.0",
-    "typescript": "~5.8.3",
-    "which": "^5.0.0"
-  },
-  "optionalDependencies": {
-    "electron-installer-debian": "^3.2.0",
-    "electron-installer-redhat": "^3.4.0"
+    "typescript": "~5.8.3"
   }
 }
