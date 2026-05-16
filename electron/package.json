@@ -3,6 +3,7 @@
   "version": "0.1.2-dev",
   "description": "OpenPCB desktop application",
   "author": "OpenPCB",
+  "homepage": "https://github.com/andrejvysny/OpenPCB",
   "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "main": "dist/main/index.js",

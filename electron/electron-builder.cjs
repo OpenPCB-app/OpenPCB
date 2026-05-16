@@ -5,6 +5,10 @@ const repoRoot = path.resolve(__dirname, "..");
 module.exports = {
   appId: "com.openpcb.electron",
   productName: "OpenPCB",
+  // executableName drives the Linux binary name and fpm pkg name (deb/rpm)
+  // so packages are `openpcb_*.deb` / `openpcb-*.rpm` rather than
+  // `openpcb-electron_*.deb` (derived from package.json#name).
+  executableName: "openpcb",
   copyright: "© OpenPCB",
 
   // electron is hoisted to the repo-root node_modules by npm workspaces, so
