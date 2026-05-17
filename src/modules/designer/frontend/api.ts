@@ -6,6 +6,8 @@ import type {
   DesignerHistorySnapshot,
   DesignerPcbProjection,
   DesignerSchematicProjection,
+  KicadProjectCommitResult,
+  KicadProjectInspectReport,
   LibraryComponent,
   LibraryComponentPlacementDetail,
   LibraryTagStat,
@@ -20,6 +22,16 @@ function buildModuleUrl(
     throw new Error("Backend URL unavailable");
   }
   return `${backendURL}/api/modules/${moduleId}${path}`;
+}
+
+/**
+ * Filesystem-safe export bundle name. Must stay byte-for-byte identical to
+ * `makeBundleName` in `src/modules/designer/backend/export/index.ts` so the
+ * client-saved filename matches the contents of the ZIP's internal paths.
+ */
+function clientBundleName(designId: string): string {
+  const safe = designId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 32);
+  return `openpcb-${safe}`;
 }
 
 interface ProblemDetails {
@@ -249,6 +261,70 @@ export function createDesignerApi(params: {
         },
       );
       return data.result;
+    },
+
+    async inspectKicadProject(file: File): Promise<KicadProjectInspectReport> {
+      const formData = new FormData();
+      formData.set("file", file, file.name);
+      const data = await fetchData<{ report: KicadProjectInspectReport }>(
+        buildModuleUrl(backendURL, moduleId, "/imports/kicad-project/inspect"),
+        { method: "POST", body: formData },
+      );
+      return data.report;
+    },
+
+    async commitKicadProject(
+      file: File,
+      designName?: string,
+    ): Promise<KicadProjectCommitResult> {
+      const formData = new FormData();
+      formData.set("file", file, file.name);
+      if (designName) formData.set("designName", designName);
+      const data = await fetchData<{ result: KicadProjectCommitResult }>(
+        buildModuleUrl(backendURL, moduleId, "/imports/kicad-project"),
+        { method: "POST", body: formData },
+      );
+      return data.result;
+    },
+
+    async downloadGerberZip(
+      designId: string,
+      options?: {
+        includeBom?: boolean;
+        includePickAndPlace?: boolean;
+        includeInnerLayers?: boolean;
+      },
+    ): Promise<{ bundleName: string; warnings: number; blob: Blob }> {
+      const url = `${buildModuleUrl(
+        backendURL,
+        moduleId,
+        `/designs/${encodeURIComponent(designId)}/exports/gerber`,
+      )}?format=zip`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(options ?? {}),
+      });
+      if (!res.ok) {
+        const contentType = res.headers.get("content-type") ?? "";
+        if (contentType.includes("application/problem+json")) {
+          const problem = (await res.json()) as ProblemDetails;
+          throw new Error(
+            problem.detail ?? problem.title ?? `HTTP ${res.status}`,
+          );
+        }
+        throw new Error(`HTTP ${res.status}`);
+      }
+      // The X-OpenPCB-* response headers are *not* exposed by default
+      // cross-origin (no `Access-Control-Expose-Headers`), so always derive
+      // the bundle name client-side mirroring the backend sanitizer.
+      const bundleName = clientBundleName(designId);
+      const warnings = Number.parseInt(
+        res.headers.get("X-OpenPCB-Warnings") ?? "0",
+        10,
+      );
+      const blob = await res.blob();
+      return { bundleName, warnings, blob };
     },
   };
 }

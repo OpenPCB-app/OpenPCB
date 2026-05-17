@@ -12,6 +12,7 @@ import { useNavigationStore } from "@/stores/navigation-store";
 import { DesignerFloatingToolbar } from "./components/DesignerFloatingToolbar";
 import { DesignerHeader } from "./components/DesignerHeader";
 import { DesignerEmptyState } from "./components/DesignerEmptyState";
+import { KicadProjectImportWizard } from "./components/KicadProjectImportWizard";
 import { DesignerPlaceholderView } from "./components/DesignerPlaceholderView";
 import { DesignerSidebar } from "./components/DesignerSidebar";
 import {
@@ -243,6 +244,7 @@ function DesignerSpaceInner({
     initialDesignId: designId,
     onNotify: addToast,
   });
+  const [kicadImportOpen, setKicadImportOpen] = useState(false);
 
   const { openDesignIds, activeDesignId } = useDesignerTabsStore(
     useShallow((s) => ({
@@ -584,6 +586,7 @@ function DesignerSpaceInner({
           creatingDesign={state.creatingDesign}
           onCreate={() => void handleCreateDesign()}
           onOpen={handleOpenFromEmptyState}
+          onImportKicad={() => setKicadImportOpen(true)}
         />
       );
     }
@@ -762,6 +765,20 @@ function DesignerSpaceInner({
         fetchPlacementDetail={actions.resolvePlacement}
         fetchAvailableTags={actions.fetchAvailableTags}
       />
+
+      {kicadImportOpen && (
+        <KicadProjectImportWizard
+          backendURL={backendURL ?? null}
+          moduleId={moduleId}
+          onClose={() => setKicadImportOpen(false)}
+          onImported={(result) => {
+            void actions.refreshDesigns();
+            openTab(result.designId);
+            navigateToModule("designer", result.designId);
+            setKicadImportOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

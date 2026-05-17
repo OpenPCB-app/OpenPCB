@@ -3,6 +3,9 @@ import type {
   ModuleRouterHandle,
 } from "../../../core/contracts/modules/backend-module";
 import { NotFoundError, ValidationError } from "../../../core/contracts/errors";
+import { buildExportBundle } from "./export";
+import { packZip } from "./export/zip";
+import type { GerberExportOptions } from "../../../sdks/designer/types";
 import type {
   DesignerCommandEnvelope,
   DesignerCreateWireCommand,
@@ -58,6 +61,7 @@ import type {
   PcbLayerId,
   PcbTraceSegmentMode,
 } from "../../../sdks/designer";
+import { buildDesignerSdk } from "./sdk";
 import { createDesignerStore } from "./store";
 import { runErc } from "./erc/erc-engine";
 import { asNumber, asRecord, asString } from "./value-guards";
@@ -72,6 +76,42 @@ async function parseJsonBody<T>(req: Request): Promise<T> {
   } catch {
     throw new ValidationError("Request body must be valid JSON");
   }
+}
+
+function parseExportOptions(raw: unknown): GerberExportOptions {
+  const rec = asRecord(raw);
+  if (!rec) return {};
+  const opts: GerberExportOptions = {};
+  if (typeof rec.includeBom === "boolean") opts.includeBom = rec.includeBom;
+  if (typeof rec.includePickAndPlace === "boolean") {
+    opts.includePickAndPlace = rec.includePickAndPlace;
+  }
+  if (typeof rec.includeInnerLayers === "boolean") {
+    opts.includeInnerLayers = rec.includeInnerLayers;
+  }
+  return opts;
+}
+
+async function parseZipUploadBody(req: Request): Promise<{
+  fileName: string;
+  bytes: Uint8Array;
+  formData: FormData;
+}> {
+  let formData: FormData;
+  try {
+    formData = await req.formData();
+  } catch {
+    throw new ValidationError("Request body must be multipart/form-data");
+  }
+  const file = formData.get("file");
+  if (!(file instanceof File)) {
+    throw new ValidationError("file must be a ZIP upload");
+  }
+  if (!file.name.toLowerCase().endsWith(".zip")) {
+    throw new ValidationError("file must have a .zip extension");
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return { fileName: file.name, bytes, formData };
 }
 
 function parsePointNm(value: unknown, field: string): { x: number; y: number } {
@@ -1548,6 +1588,7 @@ export function registerRoutes(
   ctx: CoreBackendModuleContext,
 ): void {
   const store = createDesignerStore(ctx);
+  const designerSdk = buildDesignerSdk(ctx);
 
   router.get("/status", async () => {
     const designs = await store.listDesigns();
@@ -1613,6 +1654,40 @@ export function registerRoutes(
     return success({ projection });
   });
 
+  router.post(
+    "/designs/:designId/exports/gerber",
+    async ({ params, req, query }) => {
+      const designId = params.getOrThrow("designId");
+      const pcb = await store.getPcbProjection(designId);
+      if (!pcb) throw new NotFoundError(`Design '${designId}' not found`);
+      const schematic = await store.getSchematicProjection(designId);
+
+      const rawBody = req.headers.get("content-length")
+        ? await parseJsonBody<unknown>(req).catch(() => ({}))
+        : {};
+      const options = parseExportOptions(rawBody);
+
+      const bundle = buildExportBundle(pcb, schematic, options);
+
+      // `?format=zip` returns ZIP bytes; default returns JSON manifest so
+      // E2E + frontend can inspect contents without re-parsing the archive.
+      const format = (query.get("format") ?? "json").toLowerCase();
+      if (format === "zip") {
+        const zip = packZip(bundle.artifacts);
+        return new Response(zip, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/zip",
+            "Content-Disposition": `attachment; filename="${bundle.bundleName}.zip"`,
+            "X-OpenPCB-Bundle-Name": bundle.bundleName,
+            "X-OpenPCB-Warnings": bundle.warnings.length.toString(),
+          },
+        });
+      }
+      return success({ bundle });
+    },
+  );
+
   router.get("/designs/:designId/erc", async ({ params }) => {
     const designId = params.getOrThrow("designId");
     const projection = await store.getSchematicProjection(designId);
@@ -1666,6 +1741,30 @@ export function registerRoutes(
     const { sessionId } = parseHistoryBody(await parseJsonBody<unknown>(req));
     const result = await store.redo(designId, sessionId);
     return success({ result });
+  });
+
+  router.post("/imports/kicad-project/inspect", async (routeCtx) => {
+    const body = await parseZipUploadBody(routeCtx.req);
+    const report = await designerSdk.inspectKicadProject(
+      body.fileName,
+      body.bytes,
+    );
+    return success({ report });
+  });
+
+  router.post("/imports/kicad-project", async (routeCtx) => {
+    const body = await parseZipUploadBody(routeCtx.req);
+    const formData = body.formData;
+    const overrideName =
+      typeof formData.get("designName") === "string"
+        ? (formData.get("designName") as string).trim() || undefined
+        : undefined;
+    const result = await designerSdk.commitKicadProject({
+      designName: overrideName,
+      archiveFileName: body.fileName,
+      archiveBytes: body.bytes,
+    });
+    return success({ result }, 201);
   });
 
   router.get("/library/components", async ({ query }) => {
