@@ -152,11 +152,27 @@ export interface PcbPointMm {
   y: number;
 }
 
-export interface PcbBoardOutline {
+export type PcbBoardOutline = PcbBoardOutlineRect | PcbBoardOutlinePolygon;
+
+export interface PcbBoardOutlineRect {
   kind: "rect";
   widthMm: number;
   heightMm: number;
   centerMm: PcbPointMm;
+}
+
+/**
+ * Closed polygon outline imported from KiCad's Edge.Cuts graphics. The
+ * `widthMm` / `heightMm` / `centerMm` fields are the polygon's bounding box
+ * — kept so consumers that only care about board footprint (3D, fab presets)
+ * keep working without polygon awareness.
+ */
+export interface PcbBoardOutlinePolygon {
+  kind: "polygon";
+  widthMm: number;
+  heightMm: number;
+  centerMm: PcbPointMm;
+  pointsMm: Array<{ x: number; y: number }>;
 }
 
 export interface PcbDesignRules {
@@ -268,6 +284,13 @@ export interface PcbTrace {
   /** Polyline in nm; >=2 points; segments are 90° or 45° depending on segmentMode. */
   pointsNm: Array<{ x: number; y: number }>;
   segmentMode: PcbTraceSegmentMode;
+  /**
+   * Optional hint emitted by importers (KiCad) carrying the source net name.
+   * The projection net-pad correlator uses this to bind `netId` when pad
+   * endpoint alignment is ambiguous (via-to-via, label-routed segments).
+   * Native traces created via the route tool leave this null.
+   */
+  netName?: string | null;
 }
 
 /**
@@ -314,6 +337,12 @@ export interface PcbVia {
   protection: PcbViaProtection;
   /** Defaults to `"route"` for legacy / pre-F5 rows. */
   provenance: PcbViaProvenance;
+  /**
+   * Optional importer hint — see PcbTrace.netName. Used by the projection
+   * correlator to resolve `netId` when via geometry doesn't directly
+   * intersect a pad.
+   */
+  netName?: string | null;
 }
 
 /**
@@ -331,6 +360,27 @@ export interface PcbFreeHole {
   drillMm: number;
   /** When true, the hole is read-only in the editor until unlocked. */
   lockedAt: string | null;
+}
+
+/**
+ * Copper-pour zone (mostly imported from KiCad). v1 stores the outline polygon
+ * + net name + layer; fill recomputation and DRC participation are deferred to
+ * a later iteration. Rendered as a faint outline + net-color ghost so the
+ * design intent stays visible after import.
+ */
+export interface PcbZone {
+  id: string;
+  /**
+   * Source net name (e.g. "GND"). Resolved to `netId` at projection time by
+   * the same name-binding pass that handles `PcbTrace.netName`.
+   */
+  netName: string | null;
+  layer: PcbCopperLayerId;
+  /** Closed polyline (last point implicitly connects back to first). */
+  polygonPointsMm: Array<{ x: number; y: number }>;
+  /** Hatch edge spacing for hatched fills; mm. */
+  hatchEdgeMm: number;
+  fillType: "solid" | "hatched";
 }
 
 /**
@@ -457,6 +507,8 @@ export interface DesignerPcbProjection {
   /** Silkscreen / fab text and shape primitives (F5 overlay layer). */
   overlayTexts: PcbOverlayText[];
   overlayShapes: PcbOverlayShape[];
+  /** Copper-pour zones imported from KiCad (v1: outline only, no fill). */
+  zones: PcbZone[];
   ratsnest: RatsnestSegment[];
   /**
    * Net id → display name map (e.g. `"net-7" → "VCC_3V3"`). Sourced from the
@@ -1179,4 +1231,187 @@ export interface DesignerDispatchContext {
 export interface DesignerLibraryLookup {
   component: LibraryComponent;
   placement: LibraryComponentPlacementDetail;
+}
+
+// ─────────────────────── KiCad project import ───────────────────────
+
+/**
+ * Severity-tagged warning shared by the inspect + commit responses. A code is a
+ * stable, machine-readable identifier (`zones_dropped`, `hierarchical_sheets_flattened`,
+ * `wire_diagonal`, `footprint_missing_lib_id`, …). The message is user-facing
+ * English suitable for the import wizard.
+ */
+export interface KicadProjectImportWarning {
+  code: string;
+  message: string;
+  severity: "info" | "warning";
+}
+
+export interface KicadProjectInspectReport {
+  /** Suggested OpenPCB design name (defaults to `.kicad_pro` basename). */
+  projectName: string;
+  /** Copper layer count derived from the .kicad_pcb (layers ...) block. */
+  copperLayerCount: number;
+  /** Schematic sheet count. v1 always reports 1 because hierarchical sheets are flattened. */
+  schematicSheetCount: number;
+  /** Number of net entries declared in the .kicad_pcb. */
+  netCount: number;
+  /** Bounding box of Edge.Cuts graphics in mm; `null` when no outline graphics found. */
+  boardOutlineMm: {
+    minXMm: number;
+    minYMm: number;
+    maxXMm: number;
+    maxYMm: number;
+  } | null;
+  /** Per-component reuse/ingest status, keyed by `lib_id`. */
+  components: KicadProjectImportComponentRow[];
+  /** Counts of schematic and PCB entities found. */
+  counts: KicadProjectImportCounts;
+  /** Net classes declared in the project, with unknown rules preserved. */
+  netClasses: KicadProjectImportNetClass[];
+  warnings: KicadProjectImportWarning[];
+}
+
+export interface KicadProjectImportComponentRow {
+  libId: string;
+  /** All refdes instances of this lib_id in the project. */
+  references: string[];
+  /** Where this component will come from on commit. */
+  status: "reuse" | "ingest" | "missing";
+  /** When `status === "reuse"`, the OpenPCB componentId we matched to. */
+  componentId: string | null;
+  /** Reason free-form, populated when status === "missing". */
+  reason?: string;
+}
+
+export interface KicadProjectImportCounts {
+  schematicSymbols: number;
+  schematicWires: number;
+  schematicLabels: number;
+  schematicGlobalLabels: number;
+  schematicPowerSymbols: number;
+  schematicJunctions: number;
+  schematicNoConnects: number;
+  hierarchicalSheets: number;
+  pcbFootprints: number;
+  pcbSegments: number;
+  pcbVias: number;
+  pcbZones: number;
+}
+
+export interface KicadProjectImportNetClass {
+  name: string;
+  clearanceMm: number | null;
+  trackWidthMm: number | null;
+  viaDiameterMm: number | null;
+  viaDrillMm: number | null;
+  /** Unknown / opaque rules (diff pair gap, microvia, uvia, …) preserved verbatim. */
+  unknownRules: Record<string, unknown>;
+}
+
+export interface KicadProjectCommitRequest {
+  /** Suggested design name; defaults to inspect report's projectName. */
+  designName?: string;
+  /** ZIP archive of the KiCad project bundle (bytes). Server resolves files internally. */
+  archiveBytes: Uint8Array;
+  archiveFileName: string;
+}
+
+export interface KicadProjectCommitResult {
+  designId: string;
+  designName: string;
+  /** Summary of what was actually inserted. */
+  applied: {
+    boardOutline: boolean;
+    copperLayerCount: number;
+    netClassesIngested: number;
+    /**
+     * v1 deliberately does NOT yet ingest schematic parts / wires / PCB
+     * placements (those require library-component ingestion of project-embedded
+     * symbols and footprints). The list of deferred entity kinds is surfaced
+     * here so the wizard can display "imported as empty design + N warnings"
+     * cleanly.
+     */
+    deferred: KicadProjectDeferredEntityKind[];
+  };
+  warnings: KicadProjectImportWarning[];
+}
+
+export type KicadProjectDeferredEntityKind =
+  | "schematic_symbols"
+  | "schematic_wires"
+  | "schematic_labels"
+  | "schematic_primitives"
+  | "pcb_placements"
+  | "pcb_segments"
+  | "pcb_vias"
+  | "library_ingestion";
+
+// =========================================================================
+// Manufacturing export (Gerber X2 + Excellon + BOM + pick-and-place)
+//
+// First fab-able beta: ship a 2-layer board to JLCPCB/PCBWay using only
+// OpenPCB output. RS-274X X2 only (no legacy mode).
+// =========================================================================
+
+export type GerberArtifactKind =
+  | "gerber.top_copper"
+  | "gerber.bottom_copper"
+  | "gerber.inner1_copper"
+  | "gerber.inner2_copper"
+  | "gerber.top_mask"
+  | "gerber.bottom_mask"
+  | "gerber.top_paste"
+  | "gerber.bottom_paste"
+  | "gerber.top_silk"
+  | "gerber.bottom_silk"
+  | "gerber.edge_cuts"
+  | "excellon.drills_pth"
+  | "excellon.drills_npth"
+  | "csv.bom"
+  | "csv.pnp";
+
+export interface GerberArtifact {
+  kind: GerberArtifactKind;
+  fileName: string;
+  /** UTF-8 textual contents. All v0 artifacts are text. */
+  text: string;
+}
+
+export interface GerberExportOptions {
+  includeBom?: boolean;
+  includePickAndPlace?: boolean;
+  includeInnerLayers?: boolean;
+}
+
+export interface GerberExportRequest {
+  designId: string;
+  options?: GerberExportOptions;
+}
+
+export interface GerberExportResult {
+  designId: string;
+  bundleName: string;
+  artifacts: GerberArtifact[];
+  warnings: string[];
+}
+
+export interface BomRow {
+  refdesList: string;
+  value: string;
+  footprint: string;
+  partNumber: string | null;
+  quantity: number;
+  manufacturer?: string | null;
+  manufacturerPartNumber?: string | null;
+}
+
+export interface CentroidRow {
+  refdes: string;
+  value: string;
+  footprint: string;
+  xMm: number;
+  yMm: number;
+  rotationDeg: number;
+  layer: "top" | "bottom";
 }

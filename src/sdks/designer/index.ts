@@ -10,6 +10,9 @@ import type {
   DesignerSchematicProjection,
   DesignerSearchLibraryParams,
   ErcReport,
+  KicadProjectCommitRequest,
+  KicadProjectCommitResult,
+  KicadProjectInspectReport,
   UpdateDesignerDesignInput,
 } from "./types";
 import type {
@@ -61,6 +64,7 @@ export type {
   PcbViaProtection,
   PcbViaType,
   PcbViaProvenance,
+  PcbZone,
   PcbFreeHole,
   PcbFreePad,
   PcbFreePadShape,
@@ -124,7 +128,22 @@ export type {
   DesignerUpdatePartsPropertiesCommand,
   DesignerUpsertLabelCommand,
   DesignerWire,
+  KicadProjectCommitRequest,
+  KicadProjectCommitResult,
+  KicadProjectDeferredEntityKind,
+  KicadProjectImportComponentRow,
+  KicadProjectImportCounts,
+  KicadProjectImportNetClass,
+  KicadProjectImportWarning,
+  KicadProjectInspectReport,
   UpdateDesignerDesignInput,
+  GerberArtifactKind,
+  GerberArtifact,
+  GerberExportOptions,
+  GerberExportRequest,
+  GerberExportResult,
+  BomRow,
+  CentroidRow,
 } from "./types";
 export type { DesignerInvalidatedEvent } from "./events";
 export { placementMirrorX } from "./pcb-helpers";
@@ -167,4 +186,20 @@ export interface DesignerSDK {
   ): Promise<DesignerHistoryActionResult>;
   /** Run the ERC engine over the current schematic projection. Returns `null` when the design has no schematic projection (e.g. brand new design). */
   runErc(designId: string): Promise<ErcReport | null>;
+  /**
+   * Parse a KiCad project ZIP and return an inspect report (no DB writes).
+   * The wizard renders this to the user before commit.
+   */
+  inspectKicadProject(
+    archiveFileName: string,
+    archiveBytes: Uint8Array,
+  ): Promise<KicadProjectInspectReport>;
+  /**
+   * Commit a KiCad project import. v1 creates the design + board settings +
+   * outline + net classes; full schematic/PCB entity ingestion is deferred
+   * (see `KicadProjectCommitResult.applied.deferred`).
+   */
+  commitKicadProject(
+    request: KicadProjectCommitRequest,
+  ): Promise<KicadProjectCommitResult>;
 }
