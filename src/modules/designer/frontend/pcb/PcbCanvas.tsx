@@ -24,6 +24,9 @@ import type {
 import { sceneMmToNm } from "../../../../shared/frontend/canvas/coords";
 import {
   hitAll,
+  hitFreeHole,
+  hitFreePad,
+  hitOverlayText,
   hitPad,
   hitPlacement,
   hitTrace,
@@ -49,12 +52,20 @@ import {
   toggleTrace,
   toggleVia,
   togglePlacement,
+  toggleFreeHole,
+  toggleFreePad,
+  toggleOverlayText,
   type PcbSelection,
 } from "./pcb-selection";
+import {
+  PcbSelectionInspector,
+  type PcbInspectorSelection,
+} from "./PcbSelectionInspector";
 import { useMarqueeSelection } from "../../../../shared/frontend/canvas/selection";
 import { PcbScene, type PcbCameraControls } from "./PcbScene";
 import type { ViewportState } from "../types";
 import { PcbTopToolbar } from "./PcbTopToolbar";
+import { PcbExportDialog } from "./PcbExportDialog";
 import { PcbBoardPanel } from "./PcbBoardPanel";
 import { PcbLayersPanel } from "./PcbLayersPanel";
 import { PcbActiveLayerPill } from "./PcbActiveLayerPill";
@@ -149,6 +160,15 @@ interface DragSession {
   moved: boolean;
 }
 
+interface FreePrimitiveDragSession {
+  kind: "freeHole" | "freePad" | "overlayText";
+  id: string;
+  pointerOffsetMm: PcbPointMm;
+  initialPositionMm: PcbPointMm;
+  currentPositionMm: PcbPointMm;
+  moved: boolean;
+}
+
 interface PcbCanvasProps {
   backendURL?: string | null;
   moduleId: string;
@@ -227,6 +247,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
   const [committedDragOverride, setCommittedDragOverride] =
     useState<ReadonlyMap<string, PcbPointMm> | null>(null);
+  const [freePrimitiveDragSession, setFreePrimitiveDragSession] =
+    useState<FreePrimitiveDragSession | null>(null);
+  const freePrimitiveDragSessionRef = useRef<FreePrimitiveDragSession | null>(
+    null,
+  );
+  freePrimitiveDragSessionRef.current = freePrimitiveDragSession;
   const [toolMode, setToolMode] = useState<ToolMode>("select");
   const [routeState, dispatchRoute] = useReducer(
     routeToolReducer,
@@ -236,6 +262,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     null,
   );
   const [cursorMm, setCursorMmState] = useState<PcbPointMm | null>(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const cursorMmRef = useRef<PcbPointMm | null>(null);
   const cameraControlsRef = useRef<PcbCameraControls | null>(null);
   const handleCameraReady = useCallback(
@@ -273,6 +300,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   tracesRef.current = workspace.projection?.traces ?? [];
   const viasRef = useRef(workspace.projection?.vias ?? []);
   viasRef.current = workspace.projection?.vias ?? [];
+  const freeHolesRef = useRef(workspace.projection?.freeHoles ?? []);
+  freeHolesRef.current = workspace.projection?.freeHoles ?? [];
+  const freePadsRef = useRef(workspace.projection?.freePads ?? []);
+  freePadsRef.current = workspace.projection?.freePads ?? [];
+  const overlayTextsRef = useRef(workspace.projection?.overlayTexts ?? []);
+  overlayTextsRef.current = workspace.projection?.overlayTexts ?? [];
 
   const visibleLayers = useMemo(
     () => visibleLayerSet(workspace.projection?.board.visibleLayers ?? []),
@@ -797,13 +830,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           return;
         }
 
-        // Text mode — prompt for label and drop it on F.SilkS at the cursor.
+        // Text mode — prompt for label and drop it on the active overlay layer.
         if (toolMode === "text") {
           const point = snapPoint(cursor);
-          const label = window.prompt("Silkscreen text:", "");
+          const label = window.prompt("Overlay text:", "");
           if (label && label.length > 0) {
+            const textLayer = mirrorActive ? "B.SilkS" : "F.SilkS";
             void workspace
-              .addOverlayText(point, label, { layer: "F.SilkS" })
+              .addOverlayText(point, label, { layer: textLayer })
               .catch(() => undefined);
           }
           setToolMode("select");
@@ -892,7 +926,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           }
         }
 
-        // Select mode: click trace/via first, then placement.
+        // Select mode: click trace/via/freeHole/freePad/overlayText first, then placement.
         const shift = event.modifiers.shift;
         const current = selectionRef.current;
         const sf = selectionFilterRef.current;
@@ -928,6 +962,105 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                   viaIds: new Set([viaHit.id]),
                 },
           );
+          return;
+        }
+        const freeHoleHit = hitFreeHole(freeHolesRef.current, cursor);
+        if (freeHoleHit) {
+          setCommittedDragOverride(null);
+          setDragSession(null);
+          setSelection(
+            shift
+              ? toggleFreeHole(current, freeHoleHit.id)
+              : {
+                  placementIds: new Set(),
+                  traceIds: new Set(),
+                  viaIds: new Set(),
+                  freeHoleIds: new Set([freeHoleHit.id]),
+                  freePadIds: new Set(),
+                  overlayTextIds: new Set(),
+                },
+          );
+          if (!shift) {
+            setFreePrimitiveDragSession({
+              kind: "freeHole",
+              id: freeHoleHit.id,
+              pointerOffsetMm: {
+                x: cursor.x - freeHoleHit.centerMm.x,
+                y: cursor.y - freeHoleHit.centerMm.y,
+              },
+              initialPositionMm: { ...freeHoleHit.centerMm },
+              currentPositionMm: { ...freeHoleHit.centerMm },
+              moved: false,
+            });
+          } else {
+            setFreePrimitiveDragSession(null);
+          }
+          return;
+        }
+        const freePadHit = hitFreePad(freePadsRef.current, cursor);
+        if (freePadHit) {
+          setCommittedDragOverride(null);
+          setDragSession(null);
+          setSelection(
+            shift
+              ? toggleFreePad(current, freePadHit.id)
+              : {
+                  placementIds: new Set(),
+                  traceIds: new Set(),
+                  viaIds: new Set(),
+                  freeHoleIds: new Set(),
+                  freePadIds: new Set([freePadHit.id]),
+                  overlayTextIds: new Set(),
+                },
+          );
+          if (!shift) {
+            setFreePrimitiveDragSession({
+              kind: "freePad",
+              id: freePadHit.id,
+              pointerOffsetMm: {
+                x: cursor.x - freePadHit.centerMm.x,
+                y: cursor.y - freePadHit.centerMm.y,
+              },
+              initialPositionMm: { ...freePadHit.centerMm },
+              currentPositionMm: { ...freePadHit.centerMm },
+              moved: false,
+            });
+          } else {
+            setFreePrimitiveDragSession(null);
+          }
+          return;
+        }
+        const overlayTextHit = hitOverlayText(overlayTextsRef.current, cursor);
+        if (overlayTextHit) {
+          setCommittedDragOverride(null);
+          setDragSession(null);
+          setSelection(
+            shift
+              ? toggleOverlayText(current, overlayTextHit.id)
+              : {
+                  placementIds: new Set(),
+                  traceIds: new Set(),
+                  viaIds: new Set(),
+                  freeHoleIds: new Set(),
+                  freePadIds: new Set(),
+                  overlayTextIds: new Set([overlayTextHit.id]),
+                },
+          );
+          if (!shift) {
+            setFreePrimitiveDragSession({
+              kind: "overlayText",
+              id: overlayTextHit.id,
+              pointerOffsetMm: {
+                x: cursor.x - overlayTextHit.positionMm.x,
+                y: cursor.y - overlayTextHit.positionMm.y,
+              },
+              initialPositionMm: { ...overlayTextHit.positionMm },
+              currentPositionMm: { ...overlayTextHit.positionMm },
+              moved: false,
+            });
+          } else {
+            setFreePrimitiveDragSession(null);
+          }
           return;
         }
         const hit = sf.placements
@@ -994,6 +1127,19 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             : null;
           workspace.hoverNet(netId);
         }
+        setFreePrimitiveDragSession((prev) => {
+          if (!prev) return prev;
+          const next = {
+            x: snap(cursor.x - prev.pointerOffsetMm.x),
+            y: snap(cursor.y - prev.pointerOffsetMm.y),
+          };
+          if (
+            next.x === prev.currentPositionMm.x &&
+            next.y === prev.currentPositionMm.y
+          )
+            return prev;
+          return { ...prev, currentPositionMm: next, moved: true };
+        });
         setDragSession((prev) => {
           if (!prev) return prev;
           const next = {
@@ -1012,6 +1158,27 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       onPointerUp() {
         if (marquee.marqueeSession) {
           marquee.finishMarquee();
+          return;
+        }
+        const fpSession = freePrimitiveDragSessionRef.current;
+        if (fpSession) {
+          setFreePrimitiveDragSession(null);
+          if (fpSession.moved) {
+            const pos = fpSession.currentPositionMm;
+            if (fpSession.kind === "freeHole") {
+              void workspace
+                .updateFreeHole(fpSession.id, { centerMm: pos })
+                .catch(() => undefined);
+            } else if (fpSession.kind === "freePad") {
+              void workspace
+                .updateFreePad(fpSession.id, { centerMm: pos })
+                .catch(() => undefined);
+            } else {
+              void workspace
+                .updateOverlayText(fpSession.id, { positionMm: pos })
+                .catch(() => undefined);
+            }
+          }
           return;
         }
         const session = dragSession;
@@ -1642,6 +1809,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         setSelection(emptyPcbSelection());
         setDragSession(null);
+        setFreePrimitiveDragSession(null);
         setCommittedDragOverride(null);
         workspace.clearHighlight();
         if (toolMode === "route") {
@@ -1656,15 +1824,21 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         return;
       }
-      // Delete all selected placements + traces + vias.
+      // Delete all selected primitives.
       if (event.key === "Delete" || event.key === "Backspace") {
         const placementIds = [...selection.placementIds];
         const traceIds = [...selection.traceIds];
         const viaIds = [...selection.viaIds];
+        const freeHoleIds = [...(selection.freeHoleIds ?? [])];
+        const freePadIds = [...(selection.freePadIds ?? [])];
+        const overlayTextIds = [...(selection.overlayTextIds ?? [])];
         if (
           placementIds.length === 0 &&
           traceIds.length === 0 &&
-          viaIds.length === 0
+          viaIds.length === 0 &&
+          freeHoleIds.length === 0 &&
+          freePadIds.length === 0 &&
+          overlayTextIds.length === 0
         ) {
           return;
         }
@@ -1674,6 +1848,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           tasks.push(workspace.deletePlacement(id));
         for (const id of traceIds) tasks.push(workspace.deleteTrace(id));
         for (const id of viaIds) tasks.push(workspace.deleteVia(id));
+        for (const id of freeHoleIds) tasks.push(workspace.deleteFreeHole(id));
+        for (const id of freePadIds) tasks.push(workspace.deleteFreePad(id));
+        for (const id of overlayTextIds)
+          tasks.push(workspace.deleteOverlayText(id));
         void Promise.allSettled(tasks).then(() => {
           setSelection(emptyPcbSelection());
         });
@@ -1713,6 +1891,18 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     }
     return map;
   }, [committedDragOverride, dragSession]);
+
+  const freePrimitiveDragOverrides = useMemo(() => {
+    if (!freePrimitiveDragSession?.moved) return null;
+    const pos = freePrimitiveDragSession.currentPositionMm;
+    if (freePrimitiveDragSession.kind === "freeHole") {
+      return { freeHoles: new Map([[freePrimitiveDragSession.id, pos]]) };
+    } else if (freePrimitiveDragSession.kind === "freePad") {
+      return { freePads: new Map([[freePrimitiveDragSession.id, pos]]) };
+    } else {
+      return { overlayTexts: new Map([[freePrimitiveDragSession.id, pos]]) };
+    }
+  }, [freePrimitiveDragSession]);
 
   // Live route preview: build path through committed anchors + cursor.
   const routePreview = useMemo(() => {
@@ -1806,6 +1996,28 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     ],
   );
 
+  // Derive inspector selection from the first selected item of each new type.
+  const inspectorSelection = useMemo((): PcbInspectorSelection => {
+    const proj = workspace.projection;
+    if (!proj) return null;
+    const holeId = [...(selection.freeHoleIds ?? [])][0];
+    if (holeId) {
+      const hole = proj.freeHoles.find((h) => h.id === holeId);
+      if (hole) return { kind: "freeHole", hole };
+    }
+    const padId = [...(selection.freePadIds ?? [])][0];
+    if (padId) {
+      const pad = proj.freePads.find((p) => p.id === padId);
+      if (pad) return { kind: "freePad", pad };
+    }
+    const textId = [...(selection.overlayTextIds ?? [])][0];
+    if (textId) {
+      const text = proj.overlayTexts.find((t) => t.id === textId);
+      if (text) return { kind: "overlayText", text };
+    }
+    return null;
+  }, [selection, workspace.projection]);
+
   // Mirror the X axis in bottom-view.
   // PcbScene mirrors board content whenever `viewSide === "bottom"`; pointer
   // hits come back in post-flip world space, so negate X here to recover
@@ -1847,6 +2059,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             projection={workspace.projection}
             selection={selection}
             dragOverride={dragOverride}
+            freePrimitiveDragOverrides={freePrimitiveDragOverrides}
             highlightedNetId={workspace.highlightedNetId}
             ratsnestVisible={workspace.ratsnestVisible}
             viewSide={workspace.viewSide}
@@ -1882,6 +2095,32 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           }
           onClose={() =>
             usePcbViewStore.getState().toggleSelectionFilterPanel()
+          }
+        />
+      ) : null}
+      {inspectorSelection ? (
+        <PcbSelectionInspector
+          selection={inspectorSelection}
+          onClose={() => setSelection(emptyPcbSelection())}
+          onUpdateFreeHole={(id, patch) => workspace.updateFreeHole(id, patch)}
+          onDeleteFreeHole={(id) =>
+            workspace
+              .deleteFreeHole(id)
+              .then(() => setSelection(emptyPcbSelection()))
+          }
+          onUpdateFreePad={(id, patch) => workspace.updateFreePad(id, patch)}
+          onDeleteFreePad={(id) =>
+            workspace
+              .deleteFreePad(id)
+              .then(() => setSelection(emptyPcbSelection()))
+          }
+          onUpdateOverlayText={(id, patch) =>
+            workspace.updateOverlayText(id, patch)
+          }
+          onDeleteOverlayText={(id) =>
+            workspace
+              .deleteOverlayText(id)
+              .then(() => setSelection(emptyPcbSelection()))
           }
         />
       ) : null}
@@ -2048,6 +2287,27 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         <div className="flex h-full items-center justify-center text-sm text-slate-500">
           {workspace.loading ? "Loading PCB..." : "PCB projection unavailable"}
         </div>
+      ) : null}
+
+      {workspace.projection && props.designId ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setExportDialogOpen(true)}
+            title="Export manufacturing files (Gerber + Drill + BOM + PnP)"
+            data-testid="pcb-export-button"
+            className="absolute right-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white/95 px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm backdrop-blur hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            Export…
+          </button>
+          <PcbExportDialog
+            backendURL={props.backendURL}
+            moduleId={props.moduleId}
+            designId={props.designId}
+            open={exportDialogOpen}
+            onClose={() => setExportDialogOpen(false)}
+          />
+        </>
       ) : null}
 
       {toolMode === "route" && cursorClientPx ? (
