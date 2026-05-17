@@ -625,6 +625,121 @@ export function usePcbWorkspace(params: {
     [dispatchCommand, refresh, refreshHistory],
   );
 
+  const updateFreeHole = useCallback(
+    async (
+      freeHoleId: string,
+      patch: { drillMm?: number; centerMm?: PcbPointMm },
+    ) => {
+      setError(null);
+      try {
+        await dispatchCommand({
+          type: "pcb_update_free_hole",
+          freeHoleId,
+          ...patch,
+        });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Update hole failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const deleteFreePad = useCallback(
+    async (freePadId: string) => {
+      setError(null);
+      try {
+        await dispatchCommand({ type: "pcb_delete_free_pad", freePadId });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Delete pad failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const updateFreePad = useCallback(
+    async (
+      freePadId: string,
+      patch: {
+        centerMm?: PcbPointMm;
+        widthMm?: number;
+        heightMm?: number;
+        shape?: "rect" | "circle" | "oval" | "roundrect";
+        layer?: PcbCopperLayerId;
+        drillMm?: number | null;
+        rotationDeg?: number;
+      },
+    ) => {
+      setError(null);
+      try {
+        await dispatchCommand({
+          type: "pcb_update_free_pad",
+          freePadId,
+          ...patch,
+        });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Update pad failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const deleteOverlayText = useCallback(
+    async (overlayTextId: string) => {
+      setError(null);
+      try {
+        await dispatchCommand({
+          type: "pcb_delete_overlay_text",
+          overlayTextId,
+        });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Delete text failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const updateOverlayText = useCallback(
+    async (
+      overlayTextId: string,
+      patch: {
+        positionMm?: PcbPointMm;
+        text?: string;
+        fontSizeMm?: number;
+        layer?:
+          | "F.SilkS"
+          | "B.SilkS"
+          | "F.Fab"
+          | "B.Fab"
+          | "F.CrtYd"
+          | "B.CrtYd"
+          | "Edge.Cuts";
+        rotationDeg?: number;
+      },
+    ) => {
+      setError(null);
+      try {
+        await dispatchCommand({
+          type: "pcb_update_overlay_text",
+          overlayTextId,
+          ...patch,
+        });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Update text failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
   return {
     projection,
     loading,
@@ -669,7 +784,12 @@ export function usePcbWorkspace(params: {
     updateTraceGeometry,
     addFreeHole,
     deleteFreeHole,
+    updateFreeHole,
     addFreePad,
+    deleteFreePad,
+    updateFreePad,
     addOverlayText,
+    deleteOverlayText,
+    updateOverlayText,
   };
 }

@@ -21,6 +21,7 @@ interface DrillLayerProps {
   placements: ReadonlyArray<PcbPlacedPart>;
   freeHoles?: ReadonlyArray<PcbFreeHole>;
   freePads?: ReadonlyArray<PcbFreePad>;
+  selectedFreeHoleIds?: ReadonlySet<string>;
   /**
    * When true, draw a magenta annular ring on the silkscreen render order
    * around any drill larger than `MOUNTING_HOLE_THRESHOLD_MM`. Matches Flux's
@@ -43,6 +44,7 @@ export function DrillLayer({
   placements,
   freeHoles,
   freePads,
+  selectedFreeHoleIds,
   showMountingHoleRing = true,
 }: DrillLayerProps): ReactElement | null {
   const drills = useMemo(
@@ -58,6 +60,14 @@ export function DrillLayer({
     [drills, showMountingHoleRing],
   );
 
+  const selectedHoles = useMemo(
+    () =>
+      selectedFreeHoleIds && selectedFreeHoleIds.size > 0
+        ? (freeHoles ?? []).filter((h) => selectedFreeHoleIds.has(h.id))
+        : [],
+    [freeHoles, selectedFreeHoleIds],
+  );
+
   if (drills.length === 0) return null;
   return (
     <>
@@ -65,6 +75,9 @@ export function DrillLayer({
       {mountingHoles.length > 0 ? (
         <MountingHoleRings holes={mountingHoles} />
       ) : null}
+      {selectedHoles.map((hole) => (
+        <SelectedHoleRing key={hole.id} hole={hole} />
+      ))}
     </>
   );
 }
@@ -131,6 +144,32 @@ function MountingHoleRings({
 }
 
 const MOUNTING_HOLE_RING_COLOR = "#ec4899";
+const SELECTED_HOLE_COLOR = "#facc15";
+
+function SelectedHoleRing({ hole }: { hole: PcbFreeHole }): ReactElement {
+  const r = hole.drillMm / 2;
+  const geom = useMemo(
+    () => new THREE.RingGeometry(r + 0.05, r + 0.35, 32),
+    [r],
+  );
+  useEffect(() => () => geom.dispose(), [geom]);
+  return (
+    <mesh
+      geometry={geom}
+      position={[hole.centerMm.x, hole.centerMm.y, 0]}
+      renderOrder={RENDER_ORDER.ANNULAR + 1}
+    >
+      <meshBasicMaterial
+        color={SELECTED_HOLE_COLOR}
+        transparent
+        opacity={0.9}
+        depthTest={false}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  );
+}
 
 function MountingHoleRing({ hole }: { hole: DrillInstance }): ReactElement {
   const geom = useMemo(
