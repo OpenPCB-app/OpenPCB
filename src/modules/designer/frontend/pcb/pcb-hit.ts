@@ -1,5 +1,8 @@
 import type {
   PcbCopperLayerId,
+  PcbFreeHole,
+  PcbFreePad,
+  PcbOverlayText,
   PcbPlacedPart,
   PcbPointMm,
   PcbTrace,
@@ -158,6 +161,60 @@ export function hitTrace(
     }
   }
   return best;
+}
+
+/** Hit-test free standalone holes. Uses drill radius + small padding. */
+export function hitFreeHole(
+  freeHoles: readonly PcbFreeHole[],
+  cursorMm: PcbPointMm,
+): PcbFreeHole | null {
+  for (const hole of freeHoles) {
+    const r = hole.drillMm / 2 + 0.3;
+    const dx = cursorMm.x - hole.centerMm.x;
+    const dy = cursorMm.y - hole.centerMm.y;
+    if (dx * dx + dy * dy <= r * r) return hole;
+  }
+  return null;
+}
+
+/** Hit-test free standalone pads. Bounding-box test with rotation support. */
+export function hitFreePad(
+  freePads: readonly PcbFreePad[],
+  cursorMm: PcbPointMm,
+): PcbFreePad | null {
+  for (const pad of freePads) {
+    const delta = {
+      x: cursorMm.x - pad.centerMm.x,
+      y: cursorMm.y - pad.centerMm.y,
+    };
+    const local = transformLocal(
+      { x: delta.x, y: delta.y },
+      -pad.rotationDeg,
+      false,
+    );
+    const halfW = pad.widthMm / 2 + 0.1;
+    const halfH = pad.heightMm / 2 + 0.1;
+    if (Math.abs(local.x) <= halfW && Math.abs(local.y) <= halfH) return pad;
+  }
+  return null;
+}
+
+/** Hit-test overlay text objects. Uses a fixed bounding box approximation. */
+export function hitOverlayText(
+  texts: readonly PcbOverlayText[],
+  cursorMm: PcbPointMm,
+): PcbOverlayText | null {
+  for (const text of texts) {
+    const halfW = (text.fontSizeMm * text.text.length * 0.6) / 2 + 0.5;
+    const halfH = text.fontSizeMm / 2 + 0.3;
+    if (
+      Math.abs(cursorMm.x - text.positionMm.x) <= halfW &&
+      Math.abs(cursorMm.y - text.positionMm.y) <= halfH
+    ) {
+      return text;
+    }
+  }
+  return null;
 }
 
 /** Hit-test through-vias. Bounds-check against via outer diameter. */

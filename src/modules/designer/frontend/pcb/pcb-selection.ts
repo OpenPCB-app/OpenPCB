@@ -1,8 +1,8 @@
 /**
  * Selected PCB primitives. The three original buckets are mandatory; new
- * F5-era buckets (free holes, free pads) are optional so existing call sites
- * that construct `{ placementIds, traceIds, viaIds }` continue to compile.
- * Helpers below default missing buckets to empty sets when reading.
+ * F5-era buckets (free holes, free pads, overlay texts) are optional so
+ * existing call sites that construct `{ placementIds, traceIds, viaIds }`
+ * continue to compile. Helpers below default missing buckets to empty sets.
  */
 export interface PcbSelection {
   readonly placementIds: ReadonlySet<string>;
@@ -10,6 +10,7 @@ export interface PcbSelection {
   readonly viaIds: ReadonlySet<string>;
   readonly freeHoleIds?: ReadonlySet<string>;
   readonly freePadIds?: ReadonlySet<string>;
+  readonly overlayTextIds?: ReadonlySet<string>;
 }
 
 const EMPTY_SET: ReadonlySet<string> = new Set<string>();
@@ -22,6 +23,10 @@ function padIds(s: PcbSelection): ReadonlySet<string> {
   return s.freePadIds ?? EMPTY_SET;
 }
 
+function textIds(s: PcbSelection): ReadonlySet<string> {
+  return s.overlayTextIds ?? EMPTY_SET;
+}
+
 export function emptyPcbSelection(): PcbSelection {
   return {
     placementIds: new Set<string>(),
@@ -29,6 +34,7 @@ export function emptyPcbSelection(): PcbSelection {
     viaIds: new Set<string>(),
     freeHoleIds: new Set<string>(),
     freePadIds: new Set<string>(),
+    overlayTextIds: new Set<string>(),
   };
 }
 
@@ -39,6 +45,7 @@ export function clonePcbSelection(s: PcbSelection): PcbSelection {
     viaIds: new Set(s.viaIds),
     freeHoleIds: new Set(holeIds(s)),
     freePadIds: new Set(padIds(s)),
+    overlayTextIds: new Set(textIds(s)),
   };
 }
 
@@ -48,7 +55,8 @@ export function isPcbSelectionEmpty(s: PcbSelection): boolean {
     s.traceIds.size === 0 &&
     s.viaIds.size === 0 &&
     holeIds(s).size === 0 &&
-    padIds(s).size === 0
+    padIds(s).size === 0 &&
+    textIds(s).size === 0
   );
 }
 
@@ -62,6 +70,7 @@ export function pcbSelectionUnion(
     viaIds: new Set([...a.viaIds, ...b.viaIds]),
     freeHoleIds: new Set([...holeIds(a), ...holeIds(b)]),
     freePadIds: new Set([...padIds(a), ...padIds(b)]),
+    overlayTextIds: new Set([...textIds(a), ...textIds(b)]),
   };
 }
 
@@ -98,4 +107,11 @@ export function toggleFreePad(s: PcbSelection, id: string): PcbSelection {
   if (next.has(id)) next.delete(id);
   else next.add(id);
   return { ...s, freePadIds: next };
+}
+
+export function toggleOverlayText(s: PcbSelection, id: string): PcbSelection {
+  const next = new Set(textIds(s));
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  return { ...s, overlayTextIds: next };
 }
