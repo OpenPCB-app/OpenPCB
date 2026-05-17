@@ -11,7 +11,9 @@
 ## Current Status
 
 - Branch `aggresive-cleanup` merged to `master`. Phases 1–3 complete; Phase 4 partially shipped (trace routing, vias, layer switching, live DRC, ratsnest).
-- Backend: 124 tests passing (19 files). Frontend: 11 tests passing. Typecheck clean.
+- F4 drill cutouts + lime outline + unified drill selector: **shipped** (`pcb-drills.ts:collectDrills`, `BoardFill` ShapeGeometry holes, `DrillLayer` RingGeometry).
+- F5 Part B free entities (free hole / free pad / manual smart via): **shipped** (commands `pcb_add_free_hole/pad`, `pcb_add_manual_via`, migration `0008_pcb_free_entities.sql`, `FreePadLayer`, toolbar tools, `PcbCanvas.placeSmartVia`).
+- Manufacturing export (Gerber X2 + Excellon + BOM + PnP + ZIP + Export dialog): **shipped 2026-05-17** — see "Manufacturing Export (v0)" section below. **First fab-able beta is unblocked.**
 - Active sprint: post-merge cleanup + dead-code removal (see plan in `.claude/plans/act-as-senior-software-resilient-meadow.md`).
 
 ## Active PCB Canvas UX Optimization
@@ -117,6 +119,18 @@
 - [x] PCB placement selection + drag-to-move + R rotate, with combined-world undo/redo
 - [~] Schematic wire → PCB trace auto-sync — **wontfix**, replaced by ratsnest + manual routing. Bridge between schematic and PCB is the netlist.
 
+## Manufacturing Export (v0, shipped 2026-05-17)
+
+- [x] Gerber X2 writer (`src/modules/designer/backend/export/gerber/writer.ts`) — copper / mask / paste / silk / Edge.Cuts per Ucamco spec with `.FileFunction`, `.FilePolarity`, `.AperFunction`, `.TO.N` attributes; rect / circle / obround / roundrect (aperture-macro) apertures.
+- [x] Excellon drill writer (`export/excellon/writer.ts`) — Metric LZ, FMAT,2; PTH/NPTH grouped by diameter with annotation comments.
+- [x] BOM CSV writer (`export/bom/writer.ts`) — JLCPCB-compatible columns; refdes grouping; alphanumeric refdes sort (R1 < R2 < R10).
+- [x] Pick-and-place CSV writer (`export/pnp/writer.ts`) — Designator, Val, Package, Mid X/Y mm, Rotation, Layer.
+- [x] ZIP packager (`export/zip.ts`) — STORE method, hand-rolled CRC-32; no external deps.
+- [x] Orchestrator (`export/index.ts`) — produces 12 artifacts for 2-layer board, 14 for 4-layer.
+- [x] Backend route `POST /api/modules/designer/designs/:designId/exports/gerber` (`?format=zip` for binary download, default JSON manifest).
+- [x] Frontend export dialog (`pcb/PcbExportDialog.tsx`) + toolbar button on PcbCanvas.
+- [x] 23 Bun unit tests covering Ucamco X2 compliance, Excellon spec, BOM grouping, PnP rows, ZIP signature + CRC-32 reference vector.
+
 ## Phase 4 — PCB routing + DRC (partially shipped)
 
 Shipped:
@@ -145,7 +159,10 @@ Backlog:
 ## Backlog (post-Phase 4)
 
 - [ ] ESLint + `eslint-plugin-boundaries` for compile-time `core ← shared ← sdks ← modules` enforcement
-- [ ] Manufacturing export — Gerber, drill, BOM
+- [x] Manufacturing export — Gerber X2, Excellon drill, BOM CSV, pick-and-place CSV (writers + route + ZIP packager + Export dialog; 23 Bun tests)
+  - [ ] E2E with 555-blinker fixture + manual JLCPCB DFM check (deferred to first real fab attempt)
+  - [ ] Silkscreen text rasterization (overlay text → polylines on silk Gerber)
+  - [ ] Per-pad net-attribute (.TO.N) emission via projection net-pad correlation
 - [ ] Library variants / families / presets / provenance
 - [ ] Differential pair rules + length tuning
 - [ ] Copper pours / zones / keepouts

@@ -12,14 +12,14 @@ src/modules/designer/
 ├── backend/
 │   ├── index.ts               # ModuleDefinition
 │   ├── schema.ts              # Drizzle tables
-│   ├── routes.ts              # HTTP routes + parse helpers (~944 lines)
-│   ├── store.ts               # Design CRUD + command dispatch (~600 lines)
-│   ├── command-executor.ts    # All 25+ command handlers (~982 lines)
-│   ├── projection-world.ts    # ECS bridge, net derivation (~696 lines)
+│   ├── routes.ts              # HTTP routes + parse helpers (~1713 lines)
+│   ├── store.ts               # Design CRUD + command dispatch (~701 lines)
+│   ├── command-executor.ts    # All 25+ command handlers (~1464 lines)
+│   ├── projection-world.ts    # ECS bridge, net derivation (~818 lines)
 │   ├── wire-geometry.ts       # Wire point parsing, vertex insertion
 │   ├── history-*.ts           # Persistence, state, patches
 │   ├── pcb/
-│   │   ├── pcb-store.ts       # PCB entity persistence (~784 lines)
+│   │   ├── pcb-store.ts       # PCB entity persistence (~1715 lines)
 │   │   ├── pcb-projection.ts  # PCB read-only snapshot
 │   │   ├── pcb-trace-geometry.ts  # Trace validation (~437 lines)
 │   │   ├── ratsnest.ts        # MST net segments (~239 lines)
@@ -27,10 +27,10 @@ src/modules/designer/
 │   └── migrations/            # Designer schema migrations
 └── frontend/
     ├── components/
-    │   ├── SchematicCanvas.tsx    # Main schematic canvas (~2385 lines)
+    │   ├── SchematicCanvas.tsx    # Main schematic canvas (~2806 lines)
     │   └── LibrarySymbolPalette.tsx
     └── pcb/
-        ├── PcbCanvas.tsx          # PCB canvas (~918 lines)
+        ├── PcbCanvas.tsx          # PCB canvas (~2194 lines)
         ├── layers/                # Layer visibility, rendering
         └── tools/                 # PCB-specific tools
 ```
@@ -63,7 +63,7 @@ src/modules/designer/
 - Never put business logic in `core/backend/*`
 - Never import `core/backend/*` or `core/frontend/*` from here
 - Never invent manufacturing constants — use `/eda-standards`
-- Schematic canvas is 2385 lines — split interactions into hooks, don't grow further
+- Schematic canvas is 2806 lines — split interactions into hooks, don't grow further
 
 ## NOTES
 

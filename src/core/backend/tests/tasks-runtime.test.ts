@@ -1,8 +1,18 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { resetTaskRuntimeForTesting } from "../../../modules/tasks/backend/runtime-singleton";
+import { resetSharedSqliteForTesting } from "../db/sqlite-client";
 import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
+
+// Pin DB path at module-load time; the tasks singleton caches storage bound
+// to one sqlite, so all tests in this file must share one DB path.
+const TASKS_DB_PATH = path.join(
+  os.tmpdir(),
+  `openpcb-tasks-${Date.now()}-${crypto.randomUUID()}.sqlite`,
+);
+process.env.OPENPCB_DB_PATH = TASKS_DB_PATH;
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
@@ -34,6 +44,15 @@ async function writeModule(
     backendEntrySource,
     "utf8",
   );
+  const realMigrations = path.resolve(
+    import.meta.dir,
+    "../../../modules",
+    moduleId,
+    "backend/migrations",
+  );
+  await cp(realMigrations, path.join(moduleDir, "backend", "migrations"), {
+    recursive: true,
+  });
 }
 
 function baseManifest(moduleId: string): Record<string, unknown> {
@@ -62,12 +81,21 @@ async function bootTasksWorkspace(): Promise<{
   server: ReturnType<typeof createHttpServer>;
   moduleRuntime: ModuleRuntime;
 }> {
+  process.env.OPENPCB_DB_PATH = TASKS_DB_PATH;
+  resetSharedSqliteForTesting();
+  resetTaskRuntimeForTesting();
   const workspace = await createWorkspace();
 
   const tasksManifest = {
     ...baseManifest("tasks"),
     kind: "tool",
-    sidebar: { label: "Tasks", icon: "ListChecks", order: 90, group: "system", hidden: true },
+    sidebar: {
+      label: "Tasks",
+      icon: "ListChecks",
+      order: 90,
+      group: "system",
+      hidden: true,
+    },
   };
 
   const tasksBackend = `
@@ -91,7 +119,10 @@ async function bootTasksWorkspace(): Promise<{
   await writeModule(workspace, "tasks", tasksManifest, tasksBackend);
 
   const moduleRegistry = new ModuleRouterRegistry();
-  const moduleRuntime = new ModuleRuntime({ moduleRegistry, workspaceRoot: workspace });
+  const moduleRuntime = new ModuleRuntime({
+    moduleRegistry,
+    workspaceRoot: workspace,
+  });
   await moduleRuntime.bootstrap();
 
   const server = createHttpServer({
@@ -111,12 +142,22 @@ describe("tasks runtime", () => {
       new Request("http://localhost/api/modules/tasks/tasks", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "tasks.echo", payload: { message: "hello" } }),
+        body: JSON.stringify({
+          type: "tasks.echo",
+          payload: { message: "hello" },
+        }),
       }),
     );
     expect(createResponse.status).toBe(201);
-    const body = (await createResponse.json()) as { task: { id: string; status: string } };
-    expect(body.task.status).toBeOneOf(["pending", "queued", "running", "completed"]);
+    const body = (await createResponse.json()) as {
+      task: { id: string; status: string };
+    };
+    expect(body.task.status).toBeOneOf([
+      "pending",
+      "queued",
+      "running",
+      "completed",
+    ]);
   });
 
   test("lists tasks", async () => {
@@ -145,13 +186,19 @@ describe("tasks runtime", () => {
       new Request("http://localhost/api/modules/tasks/tasks", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "tasks.echo", payload: { message: "x", delayMs: 5000 } }),
+        body: JSON.stringify({
+          type: "tasks.echo",
+          payload: { message: "x", delayMs: 5000 },
+        }),
       }),
     );
     const { task } = (await createResponse.json()) as { task: { id: string } };
 
     const cancelResponse = await server.fetch(
-      new Request(`http://localhost/api/modules/tasks/tasks/${task.id}/cancel`, { method: "POST" }),
+      new Request(
+        `http://localhost/api/modules/tasks/tasks/${task.id}/cancel`,
+        { method: "POST" },
+      ),
     );
     expect(cancelResponse.status).toBe(200);
 
@@ -178,14 +225,19 @@ describe("tasks runtime", () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     const retryResponse = await server.fetch(
-      new Request(`http://localhost/api/modules/tasks/tasks/${task.id}/retry`, { method: "POST" }),
+      new Request(`http://localhost/api/modules/tasks/tasks/${task.id}/retry`, {
+        method: "POST",
+      }),
     );
     expect(retryResponse.status).toBe(200);
 
     const getResponse = await server.fetch(
       new Request(`http://localhost/api/modules/tasks/tasks/${task.id}`),
     );
-    const fetched = (await getResponse.json()) as { status: string; retryCount: number };
+    const fetched = (await getResponse.json()) as {
+      status: string;
+      retryCount: number;
+    };
     expect(fetched.status).toBe("queued");
     expect(fetched.retryCount).toBe(1);
   });
@@ -197,7 +249,10 @@ describe("tasks runtime", () => {
       new Request("http://localhost/api/modules/tasks/tasks", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ type: "tasks.echo", payload: { message: "chunky" } }),
+        body: JSON.stringify({
+          type: "tasks.echo",
+          payload: { message: "chunky" },
+        }),
       }),
     );
     const { task } = (await createResponse.json()) as { task: { id: string } };

@@ -35,5 +35,5 @@ src/core/backend/
 
 ## ANTI-PATTERNS
 
-- **WorkspaceRoot bug**: module-loader resolves to src/core/ not repo root. Override with OPENPCB_WORKSPACE_ROOT env var.
+- **WorkspaceRoot resolution**: module-loader uses a 3-candidate fallback (`MODULE_DIR/../../..`, `process.cwd()/src`, `process.cwd()`). Override with `OPENPCB_WORKSPACE_ROOT` env var if running from an unusual cwd.
 - No business logic here — pure infrastructure only.

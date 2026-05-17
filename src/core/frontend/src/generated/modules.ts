@@ -68,24 +68,6 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
         loadOrder: 0
     },
     {
-        id: "library",
-        label: "Library",
-        sidebarLabel: "Library",
-        namespace: "space.library",
-        version: "0.1.0",
-        moduleEntry: "src/modules/library/module.frontend.ts",
-        kind: "space",
-        apiVersion: 2,
-        tags: [],
-        coreCapabilities: ["projects","contentEditor","toolRegistry"],
-        dependsOn: [],
-        exports: {"services":[],"widgets":[]},
-        registerAsSpaceInTopBar: true,
-        defaultPinned: false,
-        resolvedDependencies: [],
-        loadOrder: 1
-    },
-    {
         id: "assistant",
         label: "Assistant",
         sidebarLabel: "Assistant",
@@ -101,6 +83,24 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
         registerAsSpaceInTopBar: true,
         defaultPinned: false,
         resolvedDependencies: [{"id":"tasks","minVersion":"0.1.0","optional":false,"version":"0.1.0","missing":false,"satisfied":true}],
+        loadOrder: 1
+    },
+    {
+        id: "library",
+        label: "Library",
+        sidebarLabel: "Library",
+        namespace: "space.library",
+        version: "0.1.0",
+        moduleEntry: "src/modules/library/module.frontend.ts",
+        kind: "space",
+        apiVersion: 2,
+        tags: [],
+        coreCapabilities: ["projects","contentEditor","toolRegistry"],
+        dependsOn: [],
+        exports: {"services":[],"widgets":[]},
+        registerAsSpaceInTopBar: true,
+        defaultPinned: false,
+        resolvedDependencies: [],
         loadOrder: 2
     },
     {

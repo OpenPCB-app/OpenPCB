@@ -1,6 +1,6 @@
 # OpenPCB agent notes
 
-**Generated:** 2026-05-08 · **Commit:** 9a287f7 · **Branch:** master
+**Generated:** 2026-05-16 · **Commit:** 96716d2 · **Branch:** master
 
 Compact repo facts only. If this conflicts with executable config, trust config.
 
@@ -29,7 +29,7 @@ npm run dev:backend      # cd src/core/backend && PORT=3000 NODE_ENV=development
 npm run dev:frontend     # Vite only
 
 npm run typecheck        # root composite tsc -b; excludes electron
-npm run build            # frontend build + Electron Forge make
+npm run build            # frontend build + electron-builder make
 
 npm run test:backend     # workspace bun test
 npm run test:react       # frontend vitest
@@ -71,14 +71,14 @@ npm run gen:check        # fails if generated modules/sdk differ from git
 
 | File                                                           | Lines | Role                                                 |
 | -------------------------------------------------------------- | ----- | ---------------------------------------------------- |
-| `src/modules/designer/frontend/components/SchematicCanvas.tsx` | 2385  | Schematic canvas — hit-test, wire routing, selection |
-| `src/modules/designer/backend/command-executor.ts`             | 982   | All 25+ command handlers                             |
-| `src/modules/designer/backend/routes.ts`                       | 944   | HTTP router + command parse helpers                  |
-| `src/modules/designer/frontend/pcb/PcbCanvas.tsx`              | 918   | PCB canvas — route mode, DRC, trace preview          |
-| `src/modules/designer/backend/pcb/pcb-store.ts`                | 784   | PCB entity persistence                               |
-| `src/modules/designer/backend/projection-world.ts`             | 696   | ECS world bridge, net derivation                     |
-| `src/modules/designer/backend/store.ts`                        | 600   | Design CRUD, command dispatch, history               |
-| `src/modules/library/backend/import/build-preview-models.ts`   | 594   | Symbol/footprint preview builder                     |
+| `src/modules/designer/frontend/components/SchematicCanvas.tsx` | 2806  | Schematic canvas — hit-test, wire routing, selection |
+| `src/modules/designer/backend/command-executor.ts`             | 1464  | All 25+ command handlers                             |
+| `src/modules/designer/backend/routes.ts`                       | 1713  | HTTP router + command parse helpers                  |
+| `src/modules/designer/frontend/pcb/PcbCanvas.tsx`              | 2194  | PCB canvas — route mode, DRC, trace preview          |
+| `src/modules/designer/backend/pcb/pcb-store.ts`                | 1715  | PCB entity persistence                               |
+| `src/modules/designer/backend/projection-world.ts`             | 818   | ECS world bridge, net derivation                     |
+| `src/modules/designer/backend/store.ts`                        | 701   | Design CRUD, command dispatch, history               |
+| `src/modules/library/backend/import/build-preview-models.ts`   | 630   | Symbol/footprint preview builder                     |
 | `src/modules/designer/backend/pcb/pcb-trace-geometry.ts`       | 437   | Trace geometry validation                            |
 
 ## UNIQUE STYLES
@@ -87,7 +87,7 @@ npm run gen:check        # fails if generated modules/sdk differ from git
 - **Token-based SDKs**: `MODULE_SDK_TOKENS` + `RuntimeSdkRegistry`, no direct module imports
 - **Demand rendering**: R3F `invalidate()` only, never `frameloop="always"`
 - **Coordinate pipeline**: nanometers (store) → mm (scene) → px (screen)
-- **No CI configured**: no `.github/workflows/`, no Makefile
+- **CI**: `.github/workflows/release.yml` builds macOS (arm64/x64), Windows, Linux on `v*` tags
 
 ## Security model
 
@@ -105,4 +105,4 @@ OpenPCB is a single-user desktop app. There is no auth layer.
 - Older nested `AGENTS.md` files may still say module routes are `/api/v1/{module}` or module discovery is broken; current code uses `/api/modules/{moduleId}` and the loader has fallback discovery.
 - `bun.lock` is stale relative to root `package.json`; use `package-lock.json`/npm workspaces for dependency truth.
 - Do not auto commit/push/pull; only when explicitly asked.
-- Older reports may mention electron-builder or Bun sidecars; current desktop packaging uses Electron Forge and an Electron-owned backend.
+- Older reports may mention Electron Forge or Bun sidecars; current desktop packaging uses electron-builder and an Electron-owned backend.
