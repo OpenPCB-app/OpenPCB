@@ -9,6 +9,7 @@ import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
 import type { LibrarySDK } from "../../../sdks";
 import { MODULE_SDK_TOKENS } from "../../../sdks";
+import { getKicadFixtureDir } from "./helpers/kicad-fixtures";
 
 interface LibraryHarness {
   server: ReturnType<typeof createHttpServer>;
@@ -46,7 +47,9 @@ function concatBytes(parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-function createStoredZip(entries: Array<{ name: string; bytes: Uint8Array }>): Uint8Array {
+function createStoredZip(
+  entries: Array<{ name: string; bytes: Uint8Array }>,
+): Uint8Array {
   const encoder = new TextEncoder();
   const localParts: Uint8Array[] = [];
   const centralParts: Uint8Array[] = [];
@@ -110,11 +113,16 @@ function createStoredZip(entries: Array<{ name: string; bytes: Uint8Array }>): U
   return concatBytes([local, central, end]);
 }
 
-async function createLibraryHarness(testLabel: string): Promise<LibraryHarness> {
+async function createLibraryHarness(
+  testLabel: string,
+): Promise<LibraryHarness> {
   isolateTestDb(testLabel);
   const repoRoot = path.resolve(import.meta.dir, "../../..");
   const moduleRegistry = new ModuleRouterRegistry();
-  const moduleRuntime = new ModuleRuntime({ moduleRegistry, workspaceRoot: repoRoot });
+  const moduleRuntime = new ModuleRuntime({
+    moduleRegistry,
+    workspaceRoot: repoRoot,
+  });
   await moduleRuntime.bootstrap();
   const sdkRegistry = moduleRuntime.getSdkRegistry();
   const librarySdk = sdkRegistry.resolve<LibrarySDK>(MODULE_SDK_TOKENS.LIBRARY);
@@ -134,10 +142,7 @@ async function readKicadFixtures(): Promise<{
   symbolContent: string;
   footprintContent: string;
 }> {
-  const fixtureDir = path.resolve(
-    import.meta.dir,
-    "../../../modules/library/backend/infrastructure/parsers/kicad/__fixtures__",
-  );
+  const fixtureDir = getKicadFixtureDir();
   const symbolContent = await Bun.file(
     path.resolve(fixtureDir, "simple_capacitor.kicad_sym"),
   ).text();
@@ -260,14 +265,17 @@ async function footprintIdForComponent(
   componentId: string,
 ): Promise<string> {
   const detailResponse = await server.fetch(
-    new Request(`http://localhost/api/modules/library/components/${componentId}/detail`),
+    new Request(
+      `http://localhost/api/modules/library/components/${componentId}/detail`,
+    ),
   );
   expect(detailResponse.status).toBe(200);
   const detailBody = (await detailResponse.json()) as {
     data?: { detail?: { component?: { footprintId?: string } } };
   };
   const footprintId = detailBody.data?.detail?.component?.footprintId;
-  if (!footprintId) throw new Error("ZIP import detail did not include footprint id");
+  if (!footprintId)
+    throw new Error("ZIP import detail did not include footprint id");
   return footprintId;
 }
 
@@ -276,19 +284,29 @@ describe("library KiCad ZIP STEP import", () => {
     const server = await createLibraryServer("library-zip-step-import");
     const { symbolContent, footprintContent } = await readKicadFixtures();
     const encoder = new TextEncoder();
-    const stepBytes = encoder.encode("ISO-10303-21;ZIP-STEP-FIXTURE;END-ISO-10303-21;");
+    const stepBytes = encoder.encode(
+      "ISO-10303-21;ZIP-STEP-FIXTURE;END-ISO-10303-21;",
+    );
     const stepSha256 = createHash("sha256").update(stepBytes).digest("hex");
 
     const inspectResponse = await server.fetch(
-      new Request("http://localhost/api/modules/library/imports/kicad/inspect", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          symbolLibrary: { fileName: "C.kicad_sym", content: symbolContent },
-          footprints: [{ fileName: "C_0603_1608Metric.kicad_mod", content: footprintContent }],
-          model3dFiles: [{ fileName: "C.step" }],
-        }),
-      }),
+      new Request(
+        "http://localhost/api/modules/library/imports/kicad/inspect",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            symbolLibrary: { fileName: "C.kicad_sym", content: symbolContent },
+            footprints: [
+              {
+                fileName: "C_0603_1608Metric.kicad_mod",
+                content: footprintContent,
+              },
+            ],
+            model3dFiles: [{ fileName: "C.step" }],
+          }),
+        },
+      ),
     );
     expect(inspectResponse.status).toBe(200);
     const inspectBody = (await inspectResponse.json()) as {
@@ -308,7 +326,10 @@ describe("library KiCad ZIP STEP import", () => {
 
     const zipBytes = createStoredZip([
       { name: "C.kicad_sym", bytes: encoder.encode(symbolContent) },
-      { name: "C_0603_1608Metric.kicad_mod", bytes: encoder.encode(footprintContent) },
+      {
+        name: "C_0603_1608Metric.kicad_mod",
+        bytes: encoder.encode(footprintContent),
+      },
       { name: "C.step", bytes: stepBytes },
     ]);
     const importResponse = await importZip(server, zipBytes);
@@ -321,7 +342,11 @@ describe("library KiCad ZIP STEP import", () => {
           sourceStepSha256: string;
           sourceStepUrl: string;
           sourceFilename: string;
-          selectedModel: { fileName: string; extension: string; association: string };
+          selectedModel: {
+            fileName: string;
+            extension: string;
+            association: string;
+          };
           modelRef: unknown | null;
           status: string;
         } | null;
@@ -336,13 +361,19 @@ describe("library KiCad ZIP STEP import", () => {
       sourceStepSha256: stepSha256,
       sourceStepUrl: `/footprints/${footprintId}/model/source`,
       sourceFilename: "C.step",
-      selectedModel: { fileName: "C.step", extension: ".step", association: "symbol-name" },
+      selectedModel: {
+        fileName: "C.step",
+        extension: ".step",
+        association: "symbol-name",
+      },
       modelRef: null,
       status: "pending_client_conversion",
     });
 
     const metaResponse = await server.fetch(
-      new Request(`http://localhost/api/modules/library/footprints/${footprintId}/model/meta`),
+      new Request(
+        `http://localhost/api/modules/library/footprints/${footprintId}/model/meta`,
+      ),
     );
     expect(metaResponse.status).toBe(200);
     const metaBody = (await metaResponse.json()) as {
@@ -353,12 +384,14 @@ describe("library KiCad ZIP STEP import", () => {
     expect(metaBody.data?.sourceStepSha256).toBe(stepSha256);
 
     const sourceResponse = await server.fetch(
-      new Request(`http://localhost/api/modules/library/footprints/${footprintId}/model/source`),
+      new Request(
+        `http://localhost/api/modules/library/footprints/${footprintId}/model/source`,
+      ),
     );
     expect(sourceResponse.status).toBe(200);
-    expect(Array.from(new Uint8Array(await sourceResponse.arrayBuffer()))).toEqual(
-      Array.from(stepBytes),
-    );
+    expect(
+      Array.from(new Uint8Array(await sourceResponse.arrayBuffer())),
+    ).toEqual(Array.from(stepBytes));
   });
 
   test("reports WRL candidates without creating a model row", async () => {
@@ -367,7 +400,10 @@ describe("library KiCad ZIP STEP import", () => {
     const encoder = new TextEncoder();
     const zipBytes = createStoredZip([
       { name: "C.kicad_sym", bytes: encoder.encode(symbolContent) },
-      { name: "C_0603_1608Metric.kicad_mod", bytes: encoder.encode(footprintContent) },
+      {
+        name: "C_0603_1608Metric.kicad_mod",
+        bytes: encoder.encode(footprintContent),
+      },
       { name: "C.wrl", bytes: encoder.encode("#VRML V2.0 utf8") },
     ]);
     const importResponse = await importZip(server, zipBytes);
@@ -391,12 +427,18 @@ describe("library KiCad ZIP STEP import", () => {
       extension: ".wrl",
       association: "unsupported_format",
     });
-    expect(importBody.data?.warnings?.some((item) => item.code === "unsupported_wrl_model")).toBe(true);
+    expect(
+      importBody.data?.warnings?.some(
+        (item) => item.code === "unsupported_wrl_model",
+      ),
+    ).toBe(true);
     expect(importBody.data?.modelConversion).toBeNull();
 
     const footprintId = await footprintIdForComponent(server, componentId);
     const metaResponse = await server.fetch(
-      new Request(`http://localhost/api/modules/library/footprints/${footprintId}/model/meta`),
+      new Request(
+        `http://localhost/api/modules/library/footprints/${footprintId}/model/meta`,
+      ),
     );
     expect(metaResponse.status).toBe(200);
     const metaBody = (await metaResponse.json()) as {
@@ -430,7 +472,8 @@ describe("library KiCad ZIP STEP import", () => {
     const componentId = importBody.data?.componentId;
     if (!componentId) throw new Error("ZIP import did not return component id");
 
-    const placement = await librarySdk.resolveComponentForPlacement(componentId);
+    const placement =
+      await librarySdk.resolveComponentForPlacement(componentId);
     expect(placement).not.toBeNull();
     expect(placement?.symbol.pins.length).toBe(4);
     expect(placement?.symbol.preview.pins.length).toBe(3);
@@ -449,13 +492,25 @@ describe("library KiCad ZIP STEP import", () => {
   test("imports ATTINY ZIP and queues its orphan STEP by symbol name", async () => {
     const server = await createLibraryServer("library-zip-attiny-step-import");
     const encoder = new TextEncoder();
-    const stepBytes = encoder.encode("ISO-10303-21;ATTINY13A-SU;END-ISO-10303-21;");
+    const stepBytes = encoder.encode(
+      "ISO-10303-21;ATTINY13A-SU;END-ISO-10303-21;",
+    );
     const zipBytes = createStoredZip([
-      { name: "ATTINY13A-SU.kicad_sym", bytes: encoder.encode(createAttinySymbolFixture()) },
-      { name: "SOIC127P798X216-8N.kicad_mod", bytes: encoder.encode(createAttinyFootprintFixture()) },
+      {
+        name: "ATTINY13A-SU.kicad_sym",
+        bytes: encoder.encode(createAttinySymbolFixture()),
+      },
+      {
+        name: "SOIC127P798X216-8N.kicad_mod",
+        bytes: encoder.encode(createAttinyFootprintFixture()),
+      },
       { name: "ATTINY13A-SU.step", bytes: stepBytes },
     ]);
-    const importResponse = await importZip(server, zipBytes, "ATTINY13A-SU.zip");
+    const importResponse = await importZip(
+      server,
+      zipBytes,
+      "ATTINY13A-SU.zip",
+    );
 
     expect(importResponse.status).toBe(201);
     const importBody = (await importResponse.json()) as {
@@ -471,7 +526,11 @@ describe("library KiCad ZIP STEP import", () => {
           footprintId: string;
           sourceStepUrl: string;
           sourceFilename: string;
-          selectedModel: { fileName: string; extension: string; association: string };
+          selectedModel: {
+            fileName: string;
+            extension: string;
+            association: string;
+          };
           status: string;
         } | null;
         selected?: {

@@ -39,7 +39,10 @@
     "test:react": "npm run test --workspace src/core/frontend",
     "test:react:watch": "npm run test:watch --workspace src/core/frontend",
     "test:e2e": "playwright test",
-    "release:sourcemaps": "node scripts/upload-sourcemaps.mjs"
+    "release:sourcemaps": "node scripts/upload-sourcemaps.mjs",
+    "shared:link": "bash scripts/shared-link.sh",
+    "shared:unlink": "bash scripts/shared-unlink.sh",
+    "shared:status": "bash scripts/shared-status.sh"
   },
   "devDependencies": {
     "@inquirer/prompts": "^8.0.2",
@@ -57,7 +60,15 @@
   "packageManager": "npm@10.9.2",
   "dependencies": {
     "drizzle-orm": "^0.45.1",
-    "zod": "^4.1.13"
+    "zod": "^4.1.13",
+    "@openpcb/kicad-parsers": "github:OpenPCB-app/shared#kicad-parsers-v0.1.2",
+    "@openpcb/rendering-core": "github:OpenPCB-app/shared#rendering-core-v0.1.2",
+    "@openpcb/kicad-import": "github:OpenPCB-app/shared#kicad-import-v0.1.0",
+    "@openpcb/step-to-glb": "github:OpenPCB-app/shared#step-to-glb-v0.1.3",
+    "@openpcb/r3f-eda-canvas": "github:OpenPCB-app/shared#r3f-eda-canvas-v0.1.3",
+    "@openpcb/opclib-pack": "github:OpenPCB-app/shared#opclib-pack-v0.1.0",
+    "@openpcb/command-pattern": "github:OpenPCB-app/shared#command-pattern-v0.1.0",
+    "@openpcb/contracts": "github:OpenPCB-app/shared#contracts-v0.1.0"
   },
   "overrides": {
     "react": "19.2.0",

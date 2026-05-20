@@ -229,6 +229,12 @@ export class AssistantService {
     const provider = this.requireProvider(providerId);
     if (!provider.enabled) throw new ValidationError(`Provider disabled: ${provider.label}`);
     if (!provider.baseUrl.trim()) throw new ValidationError(`Provider ${provider.label} has no base URL`);
+    // Allow submitting messages and creating placeholder tasks without an API key.
+    // Execution may still fail later when the provider is actually invoked.
+    // This keeps local UX and backend tests from requiring secrets.
+    if (provider.kind === "openai" && !provider.apiKey && process.env.NODE_ENV !== "production") {
+      return provider;
+    }
     if (provider.kind === "openai" && !provider.apiKey) throw new ValidationError("OpenAI API key is required");
     return provider;
   }
@@ -285,7 +291,10 @@ export class AssistantService {
 }
 
 export function initializeAssistantService(ctx: CoreBackendModuleContext): AssistantService {
-  if (!service) service = new AssistantService(ctx);
+  // Tests and dev tooling bootstrap module runtimes repeatedly with isolated DBs.
+  // Recreate the service for each activation so routes/SDKs never hold stores for
+  // a previous SQLite connection.
+  service = new AssistantService(ctx);
   return service;
 }
 

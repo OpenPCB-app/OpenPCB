@@ -115,7 +115,7 @@ describe("library tags & component edit", () => {
 
   test("PATCH updates tags, name, description on user component", async () => {
     const { librarySdk, server } = await bootHarness("library-tags-patch-ok");
-    const cloneId = await cloneBuiltin(server, "builtin:resistor");
+    const cloneId = await cloneBuiltin(server, "openpcb.core.passive.resistor");
 
     const response = await server.fetch(
       new Request(
@@ -157,7 +157,7 @@ describe("library tags & component edit", () => {
     const { librarySdk, server } = await bootHarness(
       "library-tags-patch-partial",
     );
-    const cloneId = await cloneBuiltin(server, "builtin:capacitor");
+    const cloneId = await cloneBuiltin(server, "openpcb.core.passive.capacitor");
     const before = await librarySdk.resolveComponent(cloneId);
     expect(before).not.toBeNull();
 
@@ -183,7 +183,7 @@ describe("library tags & component edit", () => {
     const response = await server.fetch(
       new Request(
         `http://localhost/api/modules/library/components/${encodeURIComponent(
-          "builtin:resistor",
+          "openpcb.core.passive.resistor",
         )}`,
         {
           method: "PATCH",
@@ -215,7 +215,7 @@ describe("library tags & component edit", () => {
 
   test("PATCH rejects empty name and oversize fields", async () => {
     const { server } = await bootHarness("library-tags-patch-validate");
-    const cloneId = await cloneBuiltin(server, "builtin:resistor");
+    const cloneId = await cloneBuiltin(server, "openpcb.core.passive.resistor");
 
     const emptyName = await server.fetch(
       new Request(
@@ -274,7 +274,7 @@ describe("library tags & component edit", () => {
 
   test("listTags reflects newly added tags after PATCH", async () => {
     const { librarySdk, server } = await bootHarness("library-tags-fresh");
-    const cloneId = await cloneBuiltin(server, "builtin:resistor");
+    const cloneId = await cloneBuiltin(server, "openpcb.core.passive.resistor");
 
     const before = await librarySdk.listTags();
     expect(findTag(before, "high-power")).toBeUndefined();

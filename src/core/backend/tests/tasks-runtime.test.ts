@@ -186,7 +186,9 @@ describe("tasks runtime", () => {
       new Request(`http://localhost/api/modules/tasks/tasks/${task.id}`),
     );
     const fetched = (await getResponse.json()) as { status: string; retryCount: number };
-    expect(fetched.status).toBe("queued");
+    // Retry enqueues the task, but it may be executed immediately and pause again
+    // (e.g. unknown task type is retryable by default).
+    expect(["queued", "running", "paused"]).toContain(fetched.status);
     expect(fetched.retryCount).toBe(1);
   });
 

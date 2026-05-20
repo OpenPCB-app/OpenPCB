@@ -6,11 +6,11 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 const BACKEND = "http://127.0.0.1:3000";
 const SYMBOL_FIXTURE = path.resolve(
   process.cwd(),
-  "src/modules/library/backend/infrastructure/parsers/kicad/__fixtures__/simple_capacitor.kicad_sym",
+  "node_modules/@openpcb/kicad-parsers/tests/__fixtures__/simple_capacitor.kicad_sym",
 );
 const FOOTPRINT_FIXTURE = path.resolve(
   process.cwd(),
-  "src/modules/library/backend/infrastructure/parsers/kicad/__fixtures__/C_0603_1608Metric.kicad_mod",
+  "node_modules/@openpcb/kicad-parsers/tests/__fixtures__/C_0603_1608Metric.kicad_mod",
 );
 const STEP_FIXTURE = path.resolve(
   process.cwd(),
@@ -38,7 +38,9 @@ function writeUInt32(value: number): Buffer {
   return buffer;
 }
 
-function createStoredZip(entries: Array<{ name: string; bytes: Buffer }>): Buffer {
+function createStoredZip(
+  entries: Array<{ name: string; bytes: Buffer }>,
+): Buffer {
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let offset = 0;
@@ -106,8 +108,14 @@ async function createKicadZipFixture(): Promise<Buffer> {
     Buffer.from(`\n/* e2e ${crypto.randomUUID()} */\n`, "utf8"),
   ]);
   return createStoredZip([
-    { name: "simple_capacitor.kicad_sym", bytes: await readFile(SYMBOL_FIXTURE) },
-    { name: "C_0603_1608Metric.kicad_mod", bytes: await readFile(FOOTPRINT_FIXTURE) },
+    {
+      name: "simple_capacitor.kicad_sym",
+      bytes: await readFile(SYMBOL_FIXTURE),
+    },
+    {
+      name: "C_0603_1608Metric.kicad_mod",
+      bytes: await readFile(FOOTPRINT_FIXTURE),
+    },
     { name: "minimal.step", bytes: uniqueStep },
   ]);
 }
@@ -172,7 +180,10 @@ async function importComponentWithReadyModel(
   const importBody = (await importResponse.json()) as {
     data?: {
       componentId?: string;
-      modelConversion?: { footprintId?: string; sourceStepSha256?: string } | null;
+      modelConversion?: {
+        footprintId?: string;
+        sourceStepSha256?: string;
+      } | null;
     };
   };
   const componentId = importBody.data?.componentId;
@@ -278,9 +289,11 @@ test("Designer PCB 3D view renders imported component board geometry", async ({
   });
   await placePart({ request, designId, componentId });
   await page.getByRole("tab", { name: "PCB" }).click();
-  await expect(page.locator('[data-testid="designer-pcb-canvas"]')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(page.locator('[data-testid="designer-pcb-canvas"]')).toBeVisible(
+    {
+      timeout: 15_000,
+    },
+  );
   await page.locator('[data-testid="designer-view-3d"]').click();
   await expect(page.locator('[data-testid="designer-3d-canvas"]')).toBeVisible({
     timeout: 20_000,

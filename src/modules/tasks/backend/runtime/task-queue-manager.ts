@@ -15,6 +15,11 @@ export class TaskQueueManager {
     this.onReady = handler;
   }
 
+  shutdown(): void {
+    this.onReady = undefined;
+    this.queues.clear();
+  }
+
   enqueue(task: Task): void {
     const state = this.state(task.queueKey);
     if (state.active.has(task.id) || state.queued.some((entry) => entry.id === task.id)) return;

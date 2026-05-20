@@ -42,5 +42,5 @@ src/shared/
 ## NOTES
 
 - ECS engine lives in `domain/ecs/` (Component, Entity, World, System, Query)
-- Command pattern lives here (see docs/COMMAND_PATTERN.md)
+- Command pattern lives here (see docs/designer/command-pattern.md)
 - Coordinate contract: world=nm, scene=mm, screen=px; `NM_TO_SCENE = 1_000_000`

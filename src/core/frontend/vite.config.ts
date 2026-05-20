@@ -21,6 +21,14 @@ export default defineConfig({
     plugins: () => [wasm()],
   },
   resolve: {
+    dedupe: [
+      "react",
+      "react-dom",
+      "three",
+      "@react-three/fiber",
+      "@react-three/drei",
+      "troika-three-text",
+    ],
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@modules": path.resolve(__dirname, "../../../src/modules"),
@@ -49,7 +57,7 @@ export default defineConfig({
     },
   },
   build: {
-    target: "safari13",
+    target: "es2022",
     minify: "esbuild",
     // Hidden source maps: emitted to disk so Sentry can upload them, but the
     // bundle does not advertise //# sourceMappingURL so end users don't fetch.

@@ -6,11 +6,11 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 const BACKEND = "http://127.0.0.1:3000";
 const SYMBOL_FIXTURE = path.resolve(
   process.cwd(),
-  "src/modules/library/backend/infrastructure/parsers/kicad/__fixtures__/simple_capacitor.kicad_sym",
+  "node_modules/@openpcb/kicad-parsers/tests/__fixtures__/simple_capacitor.kicad_sym",
 );
 const FOOTPRINT_FIXTURE = path.resolve(
   process.cwd(),
-  "src/modules/library/backend/infrastructure/parsers/kicad/__fixtures__/C_0603_1608Metric.kicad_mod",
+  "node_modules/@openpcb/kicad-parsers/tests/__fixtures__/C_0603_1608Metric.kicad_mod",
 );
 const STEP_FIXTURE = path.resolve(
   process.cwd(),

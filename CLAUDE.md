@@ -29,7 +29,7 @@ Run from repo root unless noted.
 
 - Backend (Bun): `npm run test:backend` → `npm run test --workspace src/core/backend` → `bun test`
 - Frontend (Vitest): `npm run test:react` → `npm run test --workspace src/core/frontend` → `vitest run`
-- Single backend test: `cd src/core/backend && bun test tests/<file>.test.ts`
+- Single backend test: `cd src/core/backend && bun test tests/<file>.test.ts` (`bunfig.toml` sets test timeout to 30 s)
 - Single frontend test: `cd src/core/frontend && npx vitest run path/to/file.test.tsx`
 - E2E: `npm run test:e2e` — Playwright (Chrome). `npm run dev:browser` opens Playwright UI against the dev backend.
 
@@ -44,7 +44,7 @@ Run from repo root unless noted.
 
 ## Architecture
 
-Layered architecture per `docs/PROPOSED_ARCHITECTURE.md`. Import direction:
+Layered architecture per `docs/architecture/module-boundaries.md`. Import direction:
 
 ```
 electron/  →  core/backend (spawned as child)
@@ -54,9 +54,24 @@ modules/*  →  sdks/ + shared/  →  core/
 Layer rules (ESLint not yet wired):
 
 - `core/` — pure infrastructure: HTTP, router, module-loader, app shell, DB factory, error contracts. **Zero business logic.**
-- `shared/` — canvas engine, ECS world, command/patch infrastructure, shared types. Used by modules.
+- `shared/` — canvas engine, ECS world, command/patch infrastructure, shared types. Used by modules. Several subtrees (`shared/rendering/`, `shared/frontend/canvas/defaults.ts`) and selected files under `modules/library/backend/import/` + `infrastructure/parsers/kicad/` are now **re-export shims** around the published `@openpcb/*` packages — see "Shared npm packages" below.
 - `sdks/` — pure interfaces + public types between modules (`@sdks/library`, `@sdks/designer`). No implementations.
 - `modules/*` — self-contained vertical slices (backend + frontend + DB schema + domain logic).
+
+### Shared npm packages (`@openpcb/*`)
+
+Five (six with `opclib-pack`) shared packages live at [github.com/OpenPCB-app/shared](https://github.com/OpenPCB-app/shared) and are installed via per-package GitHub tags (see `package.json` dependencies). OpenPCB consumes them through thin re-export shims so existing relative imports continue to work:
+
+| Package                   | Re-export shim path in OpenPCB                                                                                                                                                                   | What it owns                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `@openpcb/kicad-parsers`  | imported directly (no shim) at `src/modules/library/backend/{builtins/footprint-seeds,import/inspect-kicad,import/build-preview-models}.ts`                                                      | KiCad s-expression + symbol + footprint parsers                                       |
+| `@openpcb/rendering-core` | `src/shared/rendering/{index,types,geometry,*-preview-builder,*-bounds,ipc7351b/index,parametric/index}.ts`; `src/shared/frontend/canvas/defaults.ts`                                            | Pure render-model builders, IPC-7351B generator, parametric footprints, KLC constants |
+| `@openpcb/kicad-import`   | `src/modules/library/backend/import/{inspect-kicad,build-preview-models,validate-pads,pinmap}.ts`; `src/modules/library/backend/infrastructure/parsers/kicad/{heuristics,kicad-model-linker}.ts` | KiCad → normalized library shape, validation, heuristics, 3D link classification      |
+| `@openpcb/step-to-glb`    | `src/modules/library/frontend/three-d/{step-to-glb,category-materials,apply-category-material}.ts`                                                                                               | STEP→GLB conversion in a Web Worker via `occt-import-js` (Vite-only)                  |
+| `@openpcb/r3f-eda-canvas` | installed but **not yet integrated** — `src/shared/frontend/canvas/` remains in-tree pending visual regression baseline                                                                          | R3F canvas engine, primitives, scene renderers                                        |
+| `@openpcb/opclib-pack`    | `src/modules/library/backend/sync/{opclib-reader,canonical-json,types}.ts`; `src/modules/library/backend/import/archive/extract-zip.ts`                                                          | `.opclib` pack/unpack, canonical JSON, ZIP extraction, manifest validation            |
+
+**Local development against the packages**: run `npm run shared:link` to point OpenPCB at a sibling `../shared/` checkout (symlinks each `node_modules/@openpcb/*`); `npm run shared:status` shows the current state; `npm run shared:unlink` restores github-tag installs. See `shared/DEVELOPING.md` for the full workflow.
 
 ### Layout
 
@@ -82,8 +97,8 @@ src/
 │   ├── library/        component library: symbols, footprints, KiCad import, seeding
 │   ├── designer/       schematic + PCB editor (commands, history, projection, ECS world, store, wire-geometry, pcb/)
 │   │   └── backend/migrations/0000…0007_*.sql
-│   ├── tasks/          task tracking module
-│   └── assistant/      AI assistant module
+│   ├── tasks/          task tracking + SSE (scaffolding; hidden sidebar)
+│   └── assistant/      AI assistant — OpenAI/Ollama/LM Studio (dev-only)
 ├── sdks/               public inter-module contracts
 │   ├── index.ts        MODULE_SDK_TOKENS = { LIBRARY, DESIGNER, TASKS, ASSISTANT }
 │   ├── library/        types.ts, index.ts
@@ -97,7 +112,8 @@ src/
 
 electron/               Electron main + preload + embedded backend manager (separate workspace)
 scripts/                module-cli.ts, gen-modules.ts, gen-sdk.ts, diagnose-pcb-correlation.ts, upload-sourcemaps.mjs, lib/
-docs/                   PROPOSED_ARCHITECTURE.md, COMMAND_PATTERN.md, DATA_MODEL.md
+docs/                   architecture/module-boundaries.md, designer/command-pattern.md, designer/data-model.md (code lives under src/modules/, not src/core/backend/designer/)
+3D_PLAN.md              Active plan for STEP→GLB 3D model pipeline (occt-import-js WASM → GLB cache → R3F preview)
 tests/e2e/              Playwright E2E tests
 ```
 
@@ -158,7 +174,7 @@ Path resolution: `OPENPCB_DB_PATH` env → dev: `dev-data/openpcb.sqlite` → pr
 
 ### Designer command pattern
 
-See `docs/COMMAND_PATTERN.md`, `docs/DATA_MODEL.md`. Designer backend (`src/modules/designer/backend/`) implements:
+See `docs/designer/command-pattern.md`, `docs/designer/data-model.md`. Designer backend (`src/modules/designer/backend/`) implements:
 
 - ECS world (entities/components) persisted as JSON blobs (decision locked in `TODO.md`)
 - Command flow: `CommandEnvelope` → idempotency check (command log) → load `DesignWorld` → validate `baseRevision` → command-bus dispatch → handler plans patches → apply → persist → publish invalidation → return `CommandResult`

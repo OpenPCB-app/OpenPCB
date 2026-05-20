@@ -1,9 +1,1 @@
-export { GridShader } from "./GridShader";
-export { PinDots, type PinData } from "./PinDots";
-export {
-  PadInstances,
-  type PadData,
-  type PadInstancesProps,
-} from "./PadInstances";
-export { EDAText, type EDATextProps } from "./EDAText";
-export { ThickLineBucket, type ThickLineBucketProps } from "./ThickLineBucket";
+export * from "@openpcb/r3f-eda-canvas/primitives/index";

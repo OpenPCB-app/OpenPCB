@@ -64,6 +64,14 @@ module.exports = {
       to: "dist",
     },
     {
+      from: path.relative(
+        __dirname,
+        path.join(repoRoot, ".build", "core-library"),
+      ),
+      to: "core-library",
+      filter: ["*.opclib"],
+    },
+    {
       from: path.relative(__dirname, path.join(repoRoot, "src")),
       to: "src",
       filter: [

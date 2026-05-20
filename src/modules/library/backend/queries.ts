@@ -23,11 +23,12 @@ import type {
   LibraryUpdateComponentInput,
 } from "../../../sdks/library";
 import type {
+  BoundsMm,
   FootprintRenderModel,
   SymbolRenderModel,
 } from "../../../shared/rendering";
-import { boundsFromPadsAndGraphics } from "../../../shared/rendering";
 import {
+  boundsFromGraphics,
   isFiniteBoundsMm,
   normalizeBounds,
 } from "../../../shared/rendering/geometry";
@@ -425,9 +426,74 @@ function parseFootprintPlacementSnapshot(
 function rederivedFootprintPreview(
   preview: FootprintRenderModel,
 ): FootprintRenderModel {
-  const raw = boundsFromPadsAndGraphics(preview);
+  const raw = boundsFromPadsAndGraphicsOnce(preview);
   const bounds = isFiniteBoundsMm(raw) ? normalizeBounds(raw, 2.0) : null;
   return { ...preview, bounds };
+}
+
+function boundsFromPadsAndGraphicsOnce(
+  preview: FootprintRenderModel,
+): BoundsMm {
+  let bounds: BoundsMm = {
+    minX: Number.POSITIVE_INFINITY,
+    minY: Number.POSITIVE_INFINITY,
+    maxX: Number.NEGATIVE_INFINITY,
+    maxY: Number.NEGATIVE_INFINITY,
+  };
+
+  for (const graphic of preview.graphics) {
+    const graphicBounds = boundsFromGraphics([graphic]);
+    if (graphicBounds) bounds = includeBounds(bounds, graphicBounds);
+  }
+
+  for (const pad of preview.pads) {
+    const half = rotatedPadHalfExtents(
+      pad.widthMm,
+      pad.heightMm,
+      pad.rotationDeg,
+    );
+    bounds = includePointBounds(
+      bounds,
+      pad.centerMm.x - half.x,
+      pad.centerMm.y - half.y,
+    );
+    bounds = includePointBounds(
+      bounds,
+      pad.centerMm.x + half.x,
+      pad.centerMm.y + half.y,
+    );
+  }
+
+  return bounds;
+}
+
+function rotatedPadHalfExtents(
+  widthMm: number,
+  heightMm: number,
+  rotationDeg: number,
+): { x: number; y: number } {
+  const halfWidth = Math.abs(widthMm) / 2;
+  const halfHeight = Math.abs(heightMm) / 2;
+  const radians = (rotationDeg * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(radians));
+  const sin = Math.abs(Math.sin(radians));
+  return {
+    x: cos * halfWidth + sin * halfHeight,
+    y: sin * halfWidth + cos * halfHeight,
+  };
+}
+
+function includeBounds(bounds: BoundsMm, next: BoundsMm): BoundsMm {
+  return {
+    minX: Math.min(bounds.minX, next.minX),
+    minY: Math.min(bounds.minY, next.minY),
+    maxX: Math.max(bounds.maxX, next.maxX),
+    maxY: Math.max(bounds.maxY, next.maxY),
+  };
+}
+
+function includePointBounds(bounds: BoundsMm, x: number, y: number): BoundsMm {
+  return includeBounds(bounds, { minX: x, minY: y, maxX: x, maxY: y });
 }
 
 function mapFootprintModelDescriptor(
@@ -555,7 +621,12 @@ export function mapFootprintDetail(row: FootprintRow): LibraryFootprintDetail {
   const normalizedPads =
     normalized && Array.isArray(normalized.pads) ? normalized.pads : null;
   const previewCandidate = normalized?.preview ?? data.preview;
-  const preview = asRecord(previewCandidate);
+  const preview = isFootprintRenderModel(previewCandidate)
+    ? (rederivedFootprintPreview(previewCandidate) as unknown as Record<
+        string,
+        unknown
+      >)
+    : asRecord(previewCandidate);
 
   const padCountFromNormalized = asNumber(normalized?.padCount);
   const mountType = asString(normalized?.mountType) ?? asString(data.mountType);
@@ -735,6 +806,7 @@ async function loadDefaultFootprintPinMap(
   return parsePinMapJson(row?.pinMapJson ?? null);
 }
 
+// Component symbolId/footprintId store canonical IDs from the package.
 export async function getComponentDetail(
   ctx: CoreBackendModuleContext,
   componentId: string,
@@ -745,9 +817,7 @@ export async function getComponentDetail(
     .from(components)
     .where(eq(components.id, componentId))
     .get();
-  if (!componentRow) {
-    return null;
-  }
+  if (!componentRow) return null;
 
   const symbolRow = await db
     .select()
@@ -786,9 +856,7 @@ export async function resolveComponentForPlacement(
     .from(components)
     .where(eq(components.id, componentId))
     .get();
-  if (!componentRow) {
-    return null;
-  }
+  if (!componentRow) return null;
 
   const symbolRow = await db
     .select()
@@ -855,6 +923,7 @@ export async function getFootprint(
     .get();
   return row ? mapFootprint(row) : null;
 }
+
 
 function mapFootprintModelRecord(row: FootprintModelRow): FootprintModelRecord {
   return {
@@ -1030,9 +1099,8 @@ export interface DeleteComponentsResult {
 /**
  * Read-only invariant for built-in components: any PATCH/PUT/DELETE on a row
  * with `is_builtin = 1` MUST be rejected. Clients clone via the dedicated
- * clone path before mutating. See `builtins/seed.ts` for the seeding side of
- * the contract. Call this from every library route that mutates an existing
- * `library_components` row by id.
+ * clone path before mutating. Call this from every library route that mutates
+ * an existing `library_components` row by id.
  */
 export function assertNotBuiltinComponents(
   ctx: CoreBackendModuleContext,
@@ -1122,6 +1190,14 @@ export function cloneComponent(
   const now = new Date().toISOString();
   const newComponentId = crypto.randomUUID();
   const newComponentName = `${source.name} (Copy)`;
+  const originJson =
+    source.sourceId && source.version
+      ? JSON.stringify({
+          libraryId: source.sourceId,
+          componentId: source.id,
+          componentVersion: source.version,
+        })
+      : null;
 
   db.insert(components)
     .values({
@@ -1133,6 +1209,11 @@ export function cloneComponent(
       tagsJson: JSON.stringify(cleanedTags),
       createdAt: now,
       isBuiltin: 0,
+      sourceId: "user.local",
+      version: "1.0.0",
+      uuid: newComponentId,
+      contentSha256: null,
+      originJson,
     })
     .run();
 

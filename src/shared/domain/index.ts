@@ -1,4 +1,1 @@
-export * from "./commands";
-export * from "./ecs";
-export * from "./events/invalidation-event";
-export * from "./revision/revision";
+export * from "@openpcb/command-pattern/index";

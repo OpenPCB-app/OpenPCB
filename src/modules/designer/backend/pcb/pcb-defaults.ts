@@ -1,7 +1,8 @@
 import type { PcbBoardSettings, PcbViewState } from "../../../../sdks/designer";
 
-export const DEFAULT_PCB_WIDTH_MM = 50;
-export const DEFAULT_PCB_HEIGHT_MM = 30;
+// Keep in sync with backend expectations/tests for fresh designs.
+export const DEFAULT_PCB_WIDTH_MM = 100;
+export const DEFAULT_PCB_HEIGHT_MM = 80;
 
 /**
  * Industry-standard trace width presets (mm). 0.15 = JLCPCB/PCBWay safe min;

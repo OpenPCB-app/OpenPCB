@@ -15,6 +15,7 @@ import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
+import { getKicadFixtureDir } from "./helpers/kicad-fixtures";
 
 const SESSION = "designer-pcb-session";
 
@@ -61,10 +62,7 @@ function envelope(
 async function importFixtureComponent(
   server: ReturnType<typeof createHttpServer>,
 ): Promise<string> {
-  const fixtureDir = path.resolve(
-    import.meta.dir,
-    "../../../modules/library/backend/infrastructure/parsers/kicad/__fixtures__",
-  );
+  const fixtureDir = getKicadFixtureDir();
   const symbolPath = path.resolve(fixtureDir, "simple_capacitor.kicad_sym");
   const footprintPath = path.resolve(fixtureDir, "C_0603_1608Metric.kicad_mod");
   const symbolContent = await Bun.file(symbolPath).text();
@@ -77,14 +75,20 @@ async function importFixtureComponent(
       body: JSON.stringify({
         symbolLibrary: { fileName: "C.kicad_sym", content: symbolContent },
         footprints: [
-          { fileName: "C_0603_1608Metric.kicad_mod", content: footprintContent },
+          {
+            fileName: "C_0603_1608Metric.kicad_mod",
+            content: footprintContent,
+          },
         ],
       }),
     }),
   );
   expect(inspectResponse.status).toBe(200);
   const inspectBody = (await inspectResponse.json()) as {
-    data?: { symbols?: Array<{ id: string }>; footprints?: Array<{ id: string }> };
+    data?: {
+      symbols?: Array<{ id: string }>;
+      footprints?: Array<{ id: string }>;
+    };
   };
   const symbolId = inspectBody.data?.symbols?.[0]?.id;
   const footprintId = inspectBody.data?.footprints?.[0]?.id;
@@ -99,7 +103,10 @@ async function importFixtureComponent(
       body: JSON.stringify({
         symbolLibrary: { fileName: "C.kicad_sym", content: symbolContent },
         footprints: [
-          { fileName: "C_0603_1608Metric.kicad_mod", content: footprintContent },
+          {
+            fileName: "C_0603_1608Metric.kicad_mod",
+            content: footprintContent,
+          },
         ],
         selection: { symbolId, footprintId },
         component: {
@@ -168,9 +175,8 @@ async function setupPcbWithPlacements(label: string): Promise<{
 
 describe("designer PCB batch operations — one-undo invariant", () => {
   test("pcb_move_placements with 3+ placements restores all placements with one undo", async () => {
-    const { sdk, designId, projection, revision } = await setupPcbWithPlacements(
-      "pcb-txn-move-placements",
-    );
+    const { sdk, designId, projection, revision } =
+      await setupPcbWithPlacements("pcb-txn-move-placements");
     const before = placementSnapshot(projection.placements);
     const targets = projection.placements.slice(0, 3);
 
@@ -193,9 +199,8 @@ describe("designer PCB batch operations — one-undo invariant", () => {
   });
 
   test("pcb_flip_placements with 3+ placements restores all layers with one undo", async () => {
-    const { sdk, designId, projection, revision } = await setupPcbWithPlacements(
-      "pcb-txn-flip-placements",
-    );
+    const { sdk, designId, projection, revision } =
+      await setupPcbWithPlacements("pcb-txn-flip-placements");
     const before = placementSnapshot(projection.placements);
     const placementIds = projection.placements.slice(0, 3).map((p) => p.id);
 
@@ -252,9 +257,8 @@ describe("designer PCB batch operations — one-undo invariant", () => {
   });
 
   test("pcb_delete_placement restores the same placement with one undo", async () => {
-    const { sdk, designId, projection, revision } = await setupPcbWithPlacements(
-      "pcb-txn-delete-placement",
-    );
+    const { sdk, designId, projection, revision } =
+      await setupPcbWithPlacements("pcb-txn-delete-placement");
     const before = placementSnapshot(projection.placements);
     const deletedPlacementId = projection.placements[0]!.id;
 

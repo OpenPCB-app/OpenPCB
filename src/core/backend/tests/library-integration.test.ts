@@ -8,6 +8,7 @@ import { createHttpServer } from "../http/create-http-server";
 import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
+import { getKicadFixtureDir } from "./helpers/kicad-fixtures";
 
 function isolateTestDb(testLabel: string): void {
   resetSharedSqliteForTesting();
@@ -41,7 +42,9 @@ function concatBytes(parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-function createStoredZip(entries: Array<{ name: string; bytes: Uint8Array }>): Uint8Array {
+function createStoredZip(
+  entries: Array<{ name: string; bytes: Uint8Array }>,
+): Uint8Array {
   const encoder = new TextEncoder();
   const localParts: Uint8Array[] = [];
   const centralParts: Uint8Array[] = [];
@@ -218,10 +221,7 @@ describe("library module integration", () => {
       moduleRuntime,
     });
 
-    const fixtureDir = path.resolve(
-      import.meta.dir,
-      "../../../modules/library/backend/infrastructure/parsers/kicad/__fixtures__",
-    );
+    const fixtureDir = getKicadFixtureDir();
     const symbolPath = path.resolve(fixtureDir, "simple_capacitor.kicad_sym");
     const footprintPath = path.resolve(
       fixtureDir,
@@ -663,10 +663,7 @@ describe("library module integration", () => {
       moduleRuntime,
     });
 
-    const fixtureDir = path.resolve(
-      import.meta.dir,
-      "../../../modules/library/backend/infrastructure/parsers/kicad/__fixtures__",
-    );
+    const fixtureDir = getKicadFixtureDir();
     const symbolContent = await Bun.file(
       path.resolve(fixtureDir, "simple_capacitor.kicad_sym"),
     ).text();
@@ -680,12 +677,18 @@ describe("library module integration", () => {
         name: "C_0603_1608Metric.kicad_mod",
         bytes: encoder.encode(footprintContent),
       },
-      { name: "C.step", bytes: encoder.encode("ISO-10303-21;END-ISO-10303-21;") },
+      {
+        name: "C.step",
+        bytes: encoder.encode("ISO-10303-21;END-ISO-10303-21;"),
+      },
       { name: "how-to-import.htm", bytes: encoder.encode("snapeda") },
     ]);
 
     const form = new FormData();
-    form.set("file", new File([zipBytes], "C.zip", { type: "application/zip" }));
+    form.set(
+      "file",
+      new File([zipBytes], "C.zip", { type: "application/zip" }),
+    );
     const importResponse = await server.fetch(
       new Request("http://localhost/api/modules/library/imports/kicad/zip", {
         method: "POST",
@@ -708,7 +711,9 @@ describe("library module integration", () => {
     if (!componentId) throw new Error("ZIP import did not return component id");
 
     const detailResponse = await server.fetch(
-      new Request(`http://localhost/api/modules/library/components/${componentId}/detail`),
+      new Request(
+        `http://localhost/api/modules/library/components/${componentId}/detail`,
+      ),
     );
     expect(detailResponse.status).toBe(200);
     const detailBody = (await detailResponse.json()) as {
@@ -716,10 +721,13 @@ describe("library module integration", () => {
     };
     const footprintId = detailBody.data?.detail?.component?.footprintId;
     expect(footprintId).toBeDefined();
-    if (!footprintId) throw new Error("ZIP import detail did not include footprint id");
+    if (!footprintId)
+      throw new Error("ZIP import detail did not include footprint id");
 
     const footprintResponse = await server.fetch(
-      new Request(`http://localhost/api/modules/library/footprints/${footprintId}`),
+      new Request(
+        `http://localhost/api/modules/library/footprints/${footprintId}`,
+      ),
     );
     expect(footprintResponse.status).toBe(200);
     const footprintBody = (await footprintResponse.json()) as {
@@ -732,7 +740,10 @@ describe("library module integration", () => {
     expect(archiveImport?.provider).toBe("snapeda");
 
     const repeatForm = new FormData();
-    repeatForm.set("file", new File([zipBytes], "C.zip", { type: "application/zip" }));
+    repeatForm.set(
+      "file",
+      new File([zipBytes], "C.zip", { type: "application/zip" }),
+    );
     const repeatResponse = await server.fetch(
       new Request("http://localhost/api/modules/library/imports/kicad/zip", {
         method: "POST",

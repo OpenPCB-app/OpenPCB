@@ -5,7 +5,10 @@ import { OpenPcbTaskStorage } from "./storage/openpcb-task-storage";
 let runtime: TaskRuntime | null = null;
 
 export async function initializeTaskRuntime(ctx: CoreBackendModuleContext): Promise<TaskRuntime> {
-  if (runtime) return runtime;
+  // Tests and dev tooling bootstrap module runtimes repeatedly with isolated DBs.
+  // Recreate the module singleton for each activation so routes/SDKs never hold
+  // storage for a previous SQLite connection.
+  runtime?.shutdown();
   runtime = new TaskRuntime(new OpenPcbTaskStorage(ctx), ctx.logger);
   runtime.registerExecutor("tasks.echo", {
     async execute(taskCtx) {
@@ -13,6 +16,7 @@ export async function initializeTaskRuntime(ctx: CoreBackendModuleContext): Prom
       if (payload.delayMs && payload.delayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, payload.delayMs));
       }
+      if (taskCtx.signal.aborted) return { cancelled: true };
       const message = payload.message ?? "ok";
       await taskCtx.emitChunk({ content: message, kind: "text" });
       return { message };

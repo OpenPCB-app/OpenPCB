@@ -48,7 +48,8 @@ export function matchPath(
   compiled.paramNames.forEach((name, index) => {
     const raw = matched[index + 1] ?? "";
     // Path params are URL-encoded by clients (e.g. `:` → `%3A`). Decode here
-    // so handlers see the natural id (`builtin:resistor` not `builtin%3Aresistor`).
+    // so handlers see the natural id (`openpcb.core.passive.resistor` not
+    // `openpcb.core.passive.resistor%3A...`).
     //
     // On malformed percent-escapes (e.g. `%ZZ`) we deliberately fall back to
     // the raw segment rather than 500ing the request. Handlers still apply

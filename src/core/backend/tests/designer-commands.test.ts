@@ -8,6 +8,7 @@ import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
+import { getKicadFixtureDir } from "./helpers/kicad-fixtures";
 
 function isolateTestDb(testLabel: string): void {
   resetSharedSqliteForTesting();
@@ -39,10 +40,7 @@ async function createRuntimeAndServer() {
 async function importFixtureComponent(
   server: ReturnType<typeof createHttpServer>,
 ): Promise<string> {
-  const fixtureDir = path.resolve(
-    import.meta.dir,
-    "../../../modules/library/backend/infrastructure/parsers/kicad/__fixtures__",
-  );
+  const fixtureDir = getKicadFixtureDir();
   const symbolPath = path.resolve(fixtureDir, "simple_capacitor.kicad_sym");
   const footprintPath = path.resolve(fixtureDir, "C_0603_1608Metric.kicad_mod");
   const symbolContent = await Bun.file(symbolPath).text();

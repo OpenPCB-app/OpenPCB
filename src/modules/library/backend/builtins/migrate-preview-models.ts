@@ -155,7 +155,6 @@ function rebuildSourceFromPreview(
 interface RebuildResult {
   rebuiltSymbols: number;
   skippedFresh: number;
-  skippedBuiltin: number;
   skippedMalformed: number;
   ms: number;
 }
@@ -165,9 +164,7 @@ interface RebuildResult {
  * pre-KLC font sizes (< 1 mm). Detects stale rows, reconstructs a
  * `SymbolRenderSource` from the stored preview pins/graphics, runs it through
  * `buildSymbolRenderModel` (which now applies KLC text), and writes back the
- * refreshed preview. Built-ins are skipped because `seedBuiltinComponents`
- * already handles them via sourceHash UPSERT. Sentinel in `openpcb_migrations`
- * prevents repeat runs.
+ * refreshed preview. Sentinel in `openpcb_migrations` prevents repeat runs.
  */
 export function rebuildPreviewModelsIfStale(
   ctx: CoreBackendModuleContext,
@@ -176,7 +173,6 @@ export function rebuildPreviewModelsIfStale(
   const result: RebuildResult = {
     rebuiltSymbols: 0,
     skippedFresh: 0,
-    skippedBuiltin: 0,
     skippedMalformed: 0,
     ms: 0,
   };
@@ -221,11 +217,7 @@ export function rebuildPreviewModelsIfStale(
         continue;
       }
 
-      const provenance = asRecord(parsed.provenance);
-      if (asString(provenance?.sourceKind) === "builtin") {
-        result.skippedBuiltin += 1;
-        continue;
-      }
+    const provenance = asRecord(parsed.provenance);
 
       const normalized = asRecord(parsed.normalized);
       const previewRaw = normalized?.preview;

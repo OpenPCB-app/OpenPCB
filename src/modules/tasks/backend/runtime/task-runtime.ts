@@ -35,6 +35,14 @@ export class TaskRuntime {
     this.executors.register(type, executor);
   }
 
+  shutdown(): void {
+    for (const controller of this.abortControllers.values()) {
+      controller.abort();
+    }
+    this.abortControllers.clear();
+    this.queue.shutdown();
+  }
+
   async createTask<TPayload>(input: CreateTaskInput<TPayload>): Promise<CreateTaskResult<TPayload>> {
     const status = input.dependsOn ? "waiting" : "pending";
     const task = await this.storage.createTask({ ...input, status });
@@ -116,11 +124,19 @@ export class TaskRuntime {
         signal: controller.signal,
         logger: this.logger,
         emitProgress: async (progress) => {
+          if (controller.signal.aborted) return;
+          const latest = await this.storage.getTask(current.id);
+          if (!latest || isTerminalStatus(latest.status)) return;
+          current = latest;
           const metadata = { ...(current.metadata ?? {}), progress: progress.progress, progressStage: progress.stage, custom: progress.metadata };
           await this.storage.updateTask(current.id, { metadata });
           await this.emit({ type: "task.progress", taskId: current.id, status: current.status, data: progress, timestamp: new Date().toISOString() });
         },
         emitChunk: async (chunk) => {
+          if (controller.signal.aborted) return;
+          const latest = await this.storage.getTask(current.id);
+          if (!latest || isTerminalStatus(latest.status)) return;
+          current = latest;
           if (current.status === "running") current = await this.transition(current, "streaming");
           const [created] = await this.storage.appendChunks(current.id, [chunk]);
           await this.emit({ type: "task.chunk", taskId: current.id, status: "streaming", data: created ?? chunk, timestamp: new Date().toISOString() });
@@ -129,14 +145,23 @@ export class TaskRuntime {
           await this.emit({ ...event, taskId: current.id, timestamp: new Date().toISOString() });
         },
       });
+      const latest = await this.getTask(current.id);
+      if (controller.signal.aborted || isTerminalStatus(latest.status)) return;
       const result: TaskResult = { success: true, data, duration: Date.now() - startMs, finishReason: "stop" };
-      await this.transition(await this.getTask(current.id), "completed", { result, completedAt: new Date().toISOString() });
+      await this.transition(latest, "completed", { result, completedAt: new Date().toISOString() });
       await this.resolveDependency(current.id, result);
     } catch (error) {
       const taskError = this.toTaskError(error, controller.signal.aborted);
       const status: TaskStatus = controller.signal.aborted ? "cancelled" : taskError.retryable && current.retryCount < current.maxRetries ? "paused" : "failed";
-      await this.transition(await this.getTask(current.id), status, { error: taskError, completedAt: status === "paused" ? null : new Date().toISOString() });
-      await this.pauseDependents(current.id, taskError);
+      try {
+        await this.transition(await this.getTask(current.id), status, { error: taskError, completedAt: status === "paused" ? null : new Date().toISOString() });
+        await this.pauseDependents(current.id, taskError);
+      } catch (persistError) {
+        this.logger.error("Failed to persist task failure", {
+          taskId: current.id,
+          error: persistError instanceof Error ? persistError.message : String(persistError),
+        });
+      }
     } finally {
       this.abortControllers.delete(current.id);
       this.queue.releaseSlot(current.queueKey, current.id);

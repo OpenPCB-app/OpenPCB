@@ -81,6 +81,52 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Download CoreLibrary bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p .build/core-library
+          tag="$(gh release view --repo OpenPCB-app/CoreLibrary --json tagName --jq .tagName)"
+          if [ -z "$tag" ]; then
+            echo "No CoreLibrary release tag found" >&2
+            exit 1
+          fi
+          echo "Using CoreLibrary release $tag"
+          gh release download "$tag" \
+            --repo OpenPCB-app/CoreLibrary \
+            --pattern 'openpcb-core-library-*.opclib' \
+            --dir .build/core-library
+          count=$(ls -1 .build/core-library/*.opclib 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$count" -ne 1 ]; then
+            echo "Expected exactly one .opclib, found $count" >&2
+            ls -la .build/core-library || true
+            exit 1
+          fi
+
+      - name: Validate CoreLibrary bundle
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const { readOpclibFromPath } = require('./src/modules/library/backend/sync/opclib-reader');
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const dir = path.resolve('.build/core-library');
+          const files = fs.readdirSync(dir).filter((f) => f.endsWith('.opclib'));
+          if (files.length !== 1) throw new Error(`expected 1 .opclib, got ${files.length}`);
+          const full = path.join(dir, files[0]);
+          (async () => {
+            const pkg = await readOpclibFromPath(full);
+            if (pkg.manifest.library.id !== 'openpcb.core') {
+              throw new Error(`invalid library id: ${pkg.manifest.library.id}`);
+            }
+            console.log(`validated ${pkg.manifest.library.id}@${pkg.manifest.library.version}`);
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
       - name: Install Linux build deps
         if: matrix.platform == 'linux'
         # electron-builder ships appimagetool itself, so squashfs-tools is not

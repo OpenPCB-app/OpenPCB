@@ -6,6 +6,7 @@ import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
+import { getKicadFixtureDir } from "./helpers/kicad-fixtures";
 
 function isolateTestDb(testLabel: string): void {
   resetSharedSqliteForTesting();
@@ -31,22 +32,64 @@ async function createServer(label: string) {
   });
 }
 
-async function importRealZip(
+async function importFixture(
   server: ReturnType<typeof createHttpServer>,
-  zipPath: string,
-) {
-  const bytes = await Bun.file(zipPath).bytes();
-  const form = new FormData();
-  form.set(
-    "file",
-    new File([bytes], path.basename(zipPath), { type: "application/zip" }),
-  );
-  return server.fetch(
-    new Request("http://localhost/api/modules/library/imports/kicad/zip", {
+  input: { symbolFileName: string; footprintFileName: string; componentName: string },
+): Promise<string> {
+  const fixtureDir = getKicadFixtureDir();
+  const symbolPath = path.resolve(fixtureDir, input.symbolFileName);
+  const footprintPath = path.resolve(fixtureDir, input.footprintFileName);
+  const symbolContent = await Bun.file(symbolPath).text();
+  const footprintContent = await Bun.file(footprintPath).text();
+
+  const inspect = await server.fetch(
+    new Request("http://localhost/api/modules/library/imports/kicad/inspect", {
       method: "POST",
-      body: form,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        symbolLibrary: { fileName: input.symbolFileName, content: symbolContent },
+        footprints: [
+          {
+            fileName: input.footprintFileName,
+            content: footprintContent,
+          },
+        ],
+      }),
     }),
   );
+  expect(inspect.status).toBe(200);
+  const inspectBody = (await inspect.json()) as {
+    data?: {
+      symbols?: Array<{ id: string }>;
+      footprints?: Array<{ id: string }>;
+    };
+  };
+  const symbolId = inspectBody.data?.symbols?.[0]?.id;
+  const footprintId = inspectBody.data?.footprints?.[0]?.id;
+  if (!symbolId || !footprintId) throw new Error("inspect missing ids");
+
+  const commit = await server.fetch(
+    new Request("http://localhost/api/modules/library/imports/kicad", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        symbolLibrary: { fileName: input.symbolFileName, content: symbolContent },
+        footprints: [
+          {
+            fileName: input.footprintFileName,
+            content: footprintContent,
+          },
+        ],
+        selection: { symbolId, footprintId },
+        component: { name: input.componentName, description: "" },
+      }),
+    }),
+  );
+  expect(commit.status).toBe(201);
+  const commitBody = (await commit.json()) as { data?: { componentId?: string } };
+  const componentId = commitBody.data?.componentId;
+  if (!componentId) throw new Error("commit missing componentId");
+  return componentId;
 }
 
 interface ImportPreview {
@@ -91,11 +134,11 @@ function padHalfExtents(pad: ImportPreview["pads"][number]) {
   };
 }
 
-const REPO_ROOT = path.resolve(import.meta.dir, "../../../..");
-
 interface Fixture {
-  zip: string;
-  fpNameHint: string;
+  symbolFileName: string;
+  footprintFileName: string;
+  componentName: string;
+  nameHint: string;
   // Expected real geometry max (mm). Pads cluster + some silk slack.
   expectedMaxAbsXMm: number;
   expectedMaxAbsYMm: number;
@@ -103,43 +146,52 @@ interface Fixture {
 
 const FIXTURES: Fixture[] = [
   {
-    zip: "data/SC0914_13_.zip",
-    fpNameHint: "QFN40P700X700X90-57N",
-    // Pads at ±3.435 mm, courtyard at ±4.105 mm, body at ±3.5 mm.
-    // Pin-1 silkscreen dot at (-4.475, -2.6) extends slightly further.
-    // Without the fix this would be ~13.5 mm right (fp_text value).
-    expectedMaxAbsXMm: 5.0,
-    expectedMaxAbsYMm: 5.0,
+    symbolFileName: "simple_capacitor.kicad_sym",
+    footprintFileName: "C_0603_1608Metric.kicad_mod",
+    componentName: "BBox: C_0603_1608Metric",
+    nameHint: "C_0603_1608Metric",
+    expectedMaxAbsXMm: 2.0,
+    expectedMaxAbsYMm: 1.1,
   },
   {
-    zip: "data/OP07CD.zip",
-    fpNameHint: "SOIC127P599X175-8N",
-    // SOIC8 ~6mm pad span × ~6mm body
-    expectedMaxAbsXMm: 4.5,
-    expectedMaxAbsYMm: 4.5,
+    symbolFileName: "simple_capacitor.kicad_sym",
+    footprintFileName: "C_0603_1608Metric_Pad1.08x0.95mm_HandSolder.kicad_mod",
+    componentName: "BBox: C_0603_HandSolder",
+    nameHint: "C_0603_1608Metric_Pad1.08x0.95mm_HandSolder",
+    expectedMaxAbsXMm: 2.2,
+    expectedMaxAbsYMm: 1.1,
   },
   {
-    zip: "data/LM324N.zip",
-    fpNameHint: "DIP794W45P254L1969H508Q14",
-    // DIP14, 7.94mm row span, 19.69mm body length
-    expectedMaxAbsXMm: 6.0,
-    expectedMaxAbsYMm: 11.0,
+    symbolFileName: "simple_capacitor.kicad_sym",
+    footprintFileName: "CP_Elec_6.3x5.4_Nichicon.kicad_mod",
+    componentName: "BBox: CP_Elec_6.3x5.4_Nichicon",
+    nameHint: "CP_Elec_6.3x5.4_Nichicon",
+    // Courtyard reaches ±4.7mm X and ±3.55mm Y. Keep Y below the
+    // Reference/Value text anchors at ±4.35mm so text anchors cannot inflate bounds.
+    expectedMaxAbsXMm: 4.8,
+    expectedMaxAbsYMm: 3.65,
+  },
+  {
+    symbolFileName: "simple_capacitor.kicad_sym",
+    footprintFileName: "missing_3d_footprint.kicad_mod",
+    componentName: "BBox: missing_3d_footprint",
+    nameHint: "C_Missing3D",
+    expectedMaxAbsXMm: 1.5,
+    expectedMaxAbsYMm: 1.0,
   },
 ];
 
 describe("library KiCad import — bounds tightness", () => {
   for (const fix of FIXTURES) {
-    test(`bounds tight for ${fix.fpNameHint}`, async () => {
-      const server = await createServer(`bbox-${fix.fpNameHint}`);
-      const zipAbs = path.resolve(REPO_ROOT, fix.zip);
+    test(`bounds tight for ${fix.nameHint}`, async () => {
+      const server = await createServer(`bbox-${fix.nameHint}`);
+      const componentId = await importFixture(server, {
+        symbolFileName: fix.symbolFileName,
+        footprintFileName: fix.footprintFileName,
+        componentName: fix.componentName,
+      });
 
-      const importRes = await importRealZip(server, zipAbs);
-      expect(importRes.status).toBe(201);
-      const importBody = (await importRes.json()) as {
-        data: { componentId: string };
-      };
-
-      const preview = await fetchPreview(server, importBody.data.componentId);
+      const preview = await fetchPreview(server, componentId);
       expect(preview.bounds).not.toBeNull();
       const b = preview.bounds!;
 

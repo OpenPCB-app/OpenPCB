@@ -69,7 +69,7 @@ export function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
             height="18"
             rx="3"
             stroke="currentColor"
-            stroke-width="2"
+            strokeWidth="2"
           ></rect>
           <line
             x1="8"
@@ -77,7 +77,7 @@ export function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
             x2="16"
             y2="16"
             stroke="currentColor"
-            stroke-width="1.5"
+            strokeWidth="1.5"
           ></line>
           <circle cx="8" cy="8" r="1.5" fill="currentColor"></circle>
           <circle cx="16" cy="8" r="1.5" fill="currentColor"></circle>

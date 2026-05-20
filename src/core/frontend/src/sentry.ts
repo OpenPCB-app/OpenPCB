@@ -8,6 +8,7 @@ let initialized = false;
 
 export function initRendererSentry(): void {
   if (initialized) return;
+  if (typeof window !== "undefined" && !window.electronAPI) return;
   initialized = true;
 
   Sentry.init(

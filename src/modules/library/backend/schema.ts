@@ -12,19 +12,67 @@ import {
  * with other modules without collisions.
  */
 
-export const symbols = sqliteTable("library_symbols", {
+export const sources = sqliteTable("library_sources", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  dataJson: text("data_json").notNull(),
+  kind: text("kind").notNull(),
+  license: text("license"),
+  homepage: text("homepage"),
+  isReadOnly: integer("is_read_only").notNull().default(0),
   createdAt: text("created_at").notNull(),
 });
 
-export const footprints = sqliteTable("library_footprints", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  dataJson: text("data_json").notNull(),
-  createdAt: text("created_at").notNull(),
-});
+export const releases = sqliteTable(
+  "library_releases",
+  {
+    sourceId: text("source_id").notNull(),
+    version: text("version").notNull(),
+    channel: text("channel").notNull(),
+    installOrigin: text("install_origin").notNull(),
+    packageSha256: text("package_sha256").notNull(),
+    signatureValid: integer("signature_valid").notNull().default(0),
+    installedAt: text("installed_at").notNull(),
+    manifestJson: text("manifest_json").notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.sourceId, table.version] }),
+    sourceIdx: index("library_releases_source_idx").on(table.sourceId),
+  }),
+);
+
+export const symbols = sqliteTable(
+  "library_symbols",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    dataJson: text("data_json").notNull(),
+    createdAt: text("created_at").notNull(),
+    sourceId: text("source_id"),
+    version: text("version"),
+    uuid: text("uuid"),
+    contentSha256: text("content_sha256"),
+  },
+  (table) => ({
+    sourceIdx: index("library_symbols_source_idx").on(table.sourceId),
+  }),
+);
+
+export const footprints = sqliteTable(
+  "library_footprints",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    dataJson: text("data_json").notNull(),
+    createdAt: text("created_at").notNull(),
+    sourceId: text("source_id"),
+    version: text("version"),
+    uuid: text("uuid"),
+    contentSha256: text("content_sha256"),
+  },
+  (table) => ({
+    sourceIdx: index("library_footprints_source_idx").on(table.sourceId),
+  }),
+);
 
 export const footprintModels = sqliteTable("library_footprint_models", {
   footprintId: text("footprint_id")
@@ -62,18 +110,23 @@ export const components = sqliteTable(
     tagsJson: text("tags_json").notNull(),
     createdAt: text("created_at").notNull(),
     isBuiltin: integer("is_builtin").notNull().default(0),
+    sourceId: text("source_id"),
+    version: text("version"),
+    uuid: text("uuid"),
+    contentSha256: text("content_sha256"),
+    originJson: text("origin_json"),
   },
   (table) => ({
     nameIdx: index("library_components_name_idx").on(table.name),
     isBuiltinIdx: index("library_components_is_builtin_idx").on(
       table.isBuiltin,
     ),
+    sourceIdx: index("library_components_source_idx").on(table.sourceId),
   }),
 );
 
 /**
- * 1:N component → footprint variants. A component (e.g. `builtin:resistor`)
- * lists every footprint it can accept (e.g. R_0402, R_0603, R_THT_axial,...).
+ * 1:N component → footprint variants.  * lists every footprint it can accept (e.g. R_0402, R_0603, R_THT_axial,...).
  * Exactly one row per component has `isDefault = 1` and matches the cached
  * `library_components.footprintId` for that component.
  */
