@@ -32,84 +32,64 @@ interface MirrorOptions {
   ctx: CloudSyncContext;
 }
 
-// Desktop uses nanometers everywhere; Cloud's schematic projection is in mm.
-function nmToMm(p: { x: number; y: number }): { x: number; y: number } {
-  return { x: p.x / 1_000_000, y: p.y / 1_000_000 };
-}
+// Cloud accepts desktop's exact command shape (positionNm in nanometers,
+// rotationDeg, entityKind, etc.). The translation layer collapses to:
+//   - forward command verbatim
+//   - enrich place_part with resolved.pins from the library detail (desktop's
+//     command schema lacks pins; cloud's handler accepts them as an optional
+//     adapter-injected field)
+// See feedback_source_of_truth memory for the architectural rationale.
+
+const SCHEMATIC_COMMAND_TYPES = new Set([
+  "place_part",
+  "move_part",
+  "rotate_part",
+  "mirror_part",
+  "update_part_properties",
+  "update_parts_properties",
+  "upsert_label",
+  "create_wire",
+  "create_wire_junction",
+  "delete_entity",
+  "place_gnd_port",
+  "place_pwr_port",
+  "place_net_portal",
+  "move_primitive",
+  "rotate_primitive",
+  "update_primitive_text",
+]);
 
 interface CloudCommand {
   type: string;
   [k: string]: unknown;
 }
 
-// Map a desktop-shaped command to the Cloud handler shape. Returns null when
-// the command is not (yet) sync-supported — caller skips mirror in that case.
-function translateCommand(
+function enrichCommand(
   desktopCmd: { type: string; [k: string]: unknown },
-  newRevision: number,
-  createdEntityId: string | null,
   placeComponentDetail: LibraryComponentPlacementDetail | null,
 ): CloudCommand | null {
-  switch (desktopCmd.type) {
-    case "place_part": {
-      const partId = createdEntityId;
-      if (!partId) return null;
-      const positionNm = desktopCmd.positionNm as { x: number; y: number };
-      const componentId = String(desktopCmd.componentId);
-      if (!placeComponentDetail) return null;
-      const pins = placeComponentDetail.symbol.pins.map((p, i) => ({
-        id: p.number ?? p.name ?? `pin-${i}`,
-        name: p.name ?? p.number ?? `pin-${i}`,
-        localPosition: nmToMm({
-          x: p.localPositionMm.x * 1_000_000,
-          y: p.localPositionMm.y * 1_000_000,
-        }),
-      }));
-      return {
-        type: "place_part",
-        partId,
-        componentId,
-        componentVersionId: componentId,
-        position: nmToMm(positionNm),
-        rotation: (desktopCmd.rotationDeg as number) ?? 0,
-        mirrored: desktopCmd.mirrored === true,
-        resolved: { pins },
-      };
-    }
-    case "move_part": {
-      const positionNm = desktopCmd.positionNm as { x: number; y: number };
-      return {
-        type: "move_part",
-        partId: String(desktopCmd.partId),
-        position: nmToMm(positionNm),
-      };
-    }
-    case "upsert_label": {
-      const labelId =
-        (desktopCmd.labelId as string | undefined) ?? createdEntityId;
-      if (!labelId) return null;
-      const positionNm = desktopCmd.positionNm as { x: number; y: number };
-      return {
-        type: "create_label",
-        labelId,
-        text: String(desktopCmd.text),
-        position: nmToMm(positionNm),
-      };
-    }
-    case "delete_entity": {
-      // Desktop entityKind = "part" | "wire" | "label" | …
-      const kind = String(desktopCmd.entityKind);
-      const id = String(desktopCmd.entityId);
-      if (kind === "part") {
-        return { type: "delete_part", partId: id };
-      }
-      // wire/label deletes not yet wired on Cloud — skip cleanly.
-      return null;
-    }
-    default:
-      return null;
+  // PCB and other non-schematic commands not synced this phase.
+  if (!SCHEMATIC_COMMAND_TYPES.has(desktopCmd.type)) return null;
+
+  if (desktopCmd.type === "place_part" && placeComponentDetail) {
+    return {
+      ...desktopCmd,
+      resolved: {
+        pins: placeComponentDetail.symbol.pins.map((p, i) => ({
+          id: p.number ?? p.name ?? `pin-${i}`,
+          number: p.number ?? String(i + 1),
+          name: p.name ?? p.number ?? `pin-${i}`,
+          // Desktop's symbol pins use mm; convert to nm to match Cloud's
+          // (desktop's) projection shape.
+          localPositionNm: {
+            x: Math.round(p.localPositionMm.x * 1_000_000),
+            y: Math.round(p.localPositionMm.y * 1_000_000),
+          },
+        })),
+      },
+    };
   }
-  void newRevision;
+  return desktopCmd as CloudCommand;
 }
 
 interface LinkRow {
@@ -180,14 +160,12 @@ export async function mirrorCommand(
     return;
   }
 
-  const cloudCommand = translateCommand(
+  const cloudCommand = enrichCommand(
     opts.envelope.command as unknown as { type: string; [k: string]: unknown },
-    opts.newRevision,
-    opts.createdEntityId,
     opts.placeComponentDetail,
   );
   if (!cloudCommand) {
-    logger.info("cloud-sync: skipping unsupported command", {
+    logger.info("cloud-sync: skipping non-schematic command", {
       type: opts.envelope.command.type,
     });
     return;
