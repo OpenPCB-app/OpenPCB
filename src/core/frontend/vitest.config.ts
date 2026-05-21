@@ -26,5 +26,9 @@ export default defineConfig({
       "@modules": path.resolve(repoRoot, "src/modules"),
       "@shared": path.resolve(repoRoot, "src/shared"),
     },
+    // Symlinked `@openpcb/*` shared packages (npm run shared:link) ship their
+    // own node_modules/react. Force a single instance so hooks (useMemo, etc.)
+    // work inside r3f-eda-canvas.
+    dedupe: ["react", "react-dom"],
   },
 });
