@@ -254,6 +254,10 @@ export interface LinkParams {
   designName: string;
   bearer: string;
   apiUrl: string;
+  // If provided, link to this existing cloud design instead of creating one.
+  // Used by the import-from-cloud flow.
+  existingCloudDesignId?: string;
+  lastSyncedRevision?: number;
 }
 
 export async function linkDesignToCloud(
@@ -291,24 +295,30 @@ export async function linkDesignToCloud(
   }
   const meBody = (await meRes.json()) as { id: string };
 
-  // 3) Create the cloud design.
-  const designRes = await fetch(
-    `${params.apiUrl}/v1/designs/workspaces/${wsBody.id}`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${params.bearer}`,
+  // 3) Create the cloud design — unless we're linking to an existing one.
+  let cloudDesignId: string;
+  if (params.existingCloudDesignId) {
+    cloudDesignId = params.existingCloudDesignId;
+  } else {
+    const designRes = await fetch(
+      `${params.apiUrl}/v1/designs/workspaces/${wsBody.id}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${params.bearer}`,
+        },
+        body: JSON.stringify({ name: params.designName }),
       },
-      body: JSON.stringify({ name: params.designName }),
-    },
-  );
-  if (!designRes.ok) {
-    throw new Error(
-      `cloud-link: create-design failed: ${designRes.status} ${await designRes.text()}`,
     );
+    if (!designRes.ok) {
+      throw new Error(
+        `cloud-link: create-design failed: ${designRes.status} ${await designRes.text()}`,
+      );
+    }
+    cloudDesignId = ((await designRes.json()) as { id: string }).id;
   }
-  const designBody = (await designRes.json()) as { id: string };
+  const designBody = { id: cloudDesignId };
 
   // 4) Persist the link.
   db.insert(cloudLink)
@@ -317,7 +327,7 @@ export async function linkDesignToCloud(
       cloudDesignId: designBody.id,
       cloudWorkspaceId: wsBody.id,
       cloudUserId: meBody.id,
-      lastSyncedRevision: -1,
+      lastSyncedRevision: params.lastSyncedRevision ?? -1,
       linkedAt: nowIso(),
       failedAttempts: 0,
       lastError: null,

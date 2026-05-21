@@ -216,7 +216,13 @@ export function createDesignerApi(params: {
       return data.result;
     },
 
-    async linkDesignToCloud(designId: string): Promise<{
+    async linkDesignToCloud(
+      designId: string,
+      options?: {
+        existingCloudDesignId?: string;
+        lastSyncedRevision?: number;
+      },
+    ): Promise<{
       link: { cloudDesignId: string; workspaceId: string; userId: string };
     }> {
       return fetchData<{
@@ -230,8 +236,31 @@ export function createDesignerApi(params: {
         {
           method: "POST",
           headers: applyCloudHeaders({ "content-type": "application/json" }),
+          body: JSON.stringify(options ?? {}),
         },
       );
+    },
+
+    // Bypass cloud headers — used during import-from-cloud to seed local
+    // SQLite without triggering outbound mirror (the data already exists in
+    // the cloud, so re-mirroring would create duplicate entities).
+    async dispatchLocalOnly(
+      designId: string,
+      envelope: DesignerCommandEnvelope,
+    ): Promise<DesignerDispatchResult> {
+      const data = await fetchData<{ result: DesignerDispatchResult }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/commands`,
+        ),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(envelope),
+        },
+      );
+      return data.result;
     },
 
     async getCloudLink(designId: string): Promise<{

@@ -131,7 +131,12 @@ export interface DesignerStore {
   ): Promise<DesignerDispatchResult>;
   linkDesignToCloud(
     designId: string,
-    cloud: { bearer: string; apiUrl: string },
+    cloud: {
+      bearer: string;
+      apiUrl: string;
+      existingCloudDesignId?: string;
+      lastSyncedRevision?: number;
+    },
   ): Promise<{ cloudDesignId: string; workspaceId: string; userId: string }>;
   getCloudLink(designId: string): Promise<{
     cloudDesignId: string;
@@ -743,6 +748,8 @@ export function createDesignerStore(
         designName: head.name,
         bearer: cloud.bearer,
         apiUrl: cloud.apiUrl,
+        existingCloudDesignId: cloud.existingCloudDesignId,
+        lastSyncedRevision: cloud.lastSyncedRevision,
       });
     },
 

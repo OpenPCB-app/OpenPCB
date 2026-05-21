@@ -6,10 +6,22 @@ import {
   type CloudDesignSummary,
   type CloudProjection,
 } from "@/cloud/queries";
+import { useDesignerTabsStore } from "../stores/designer-tabs-store";
+import type { createDesignerApi } from "../api";
+
+type DesignerApi = ReturnType<typeof createDesignerApi>;
 
 interface CloudDesignBrowserProps {
   open: boolean;
   onClose: () => void;
+  api: Pick<
+    DesignerApi,
+    "createDesign" | "linkDesignToCloud" | "dispatchLocalOnly"
+  >;
+  onNotify: (
+    message: string,
+    variant?: "info" | "success" | "warning" | "error",
+  ) => void;
 }
 
 interface ProjectionView {
@@ -19,15 +31,29 @@ interface ProjectionView {
   projection: CloudProjection;
 }
 
+function newId(): string {
+  // crypto.randomUUID is available in modern browsers + Electron.
+  return crypto.randomUUID();
+}
+
+function mmToNm(mm: { x: number; y: number }): { x: number; y: number } {
+  return { x: Math.round(mm.x * 1_000_000), y: Math.round(mm.y * 1_000_000) };
+}
+
 export function CloudDesignBrowser({
   open,
   onClose,
+  api,
+  onNotify,
 }: CloudDesignBrowserProps): ReactElement | null {
   const { enabled, session } = useAuth();
   const [designs, setDesigns] = useState<CloudDesignSummary[]>([]);
   const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<ProjectionView | null>(null);
+
+  const openTab = useDesignerTabsStore((s) => s.openTab);
 
   const refresh = useCallback(async () => {
     if (!enabled || !session) return;
@@ -47,7 +73,7 @@ export function CloudDesignBrowser({
     if (open) void refresh();
   }, [open, refresh]);
 
-  const onOpenDesign = useCallback(async (d: CloudDesignSummary) => {
+  const onPreview = useCallback(async (d: CloudDesignSummary) => {
     setLoading(true);
     setError(null);
     try {
@@ -64,6 +90,67 @@ export function CloudDesignBrowser({
       setLoading(false);
     }
   }, []);
+
+  const onImportToLocal = useCallback(
+    async (cloudDesign: ProjectionView) => {
+      setImporting(true);
+      setError(null);
+      try {
+        // 1. Create new local design with the cloud's name.
+        const local = await api.createDesign(cloudDesign.name);
+
+        // 2. Link the new local to the existing cloud design (skip the
+        //    "create-design-on-cloud" step inside the backend).
+        await api.linkDesignToCloud(local.id, {
+          existingCloudDesignId: cloudDesign.designId,
+          lastSyncedRevision: cloudDesign.revision,
+        });
+
+        // 3. For each label in the cloud projection, dispatch a synthetic
+        //    `upsert_label` LOCALLY (no cloud mirror — already there).
+        // Labels: omit labelId so local creates fresh IDs (upsert_label
+        // with a labelId requires the label to already exist locally).
+        const labels = Object.values(cloudDesign.projection.labels ?? {});
+        let baseRev = 0;
+        for (const label of labels) {
+          const result = await api.dispatchLocalOnly(local.id, {
+            commandId: newId(),
+            sessionId: "cloud-import",
+            aggregateId: local.id,
+            baseRevision: baseRev,
+            issuedAt: Date.now(),
+            command: {
+              type: "upsert_label",
+              text: label.text,
+              positionNm: mmToNm(label.position),
+            },
+          });
+          if (!result.ok) {
+            throw new Error(
+              `Import dispatch failed at label "${label.text}" (rev ${baseRev})`,
+            );
+          }
+          baseRev += 1;
+        }
+
+        onNotify(
+          `Imported ${cloudDesign.name} (${labels.length} labels) to local`,
+          "success",
+        );
+        openTab(local.id);
+        onClose();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        onNotify(
+          `Import failed: ${err instanceof Error ? err.message : String(err)}`,
+          "error",
+        );
+      } finally {
+        setImporting(false);
+      }
+    },
+    [api, onClose, onNotify, openTab],
+  );
 
   if (!open) return null;
 
@@ -119,10 +206,10 @@ export function CloudDesignBrowser({
                   </div>
                   <button
                     type="button"
-                    onClick={() => void onOpenDesign(d)}
+                    onClick={() => void onPreview(d)}
                     className="rounded-sm border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-800"
                   >
-                    Open
+                    Preview
                   </button>
                 </li>
               ))}
@@ -130,7 +217,17 @@ export function CloudDesignBrowser({
           )}
 
           {!loading && view && (
-            <ProjectionSummary projection={view.projection} />
+            <div className="space-y-4">
+              <ProjectionSummary projection={view.projection} />
+              <button
+                type="button"
+                onClick={() => void onImportToLocal(view)}
+                disabled={importing}
+                className="rounded-sm border border-slate-300 bg-slate-100 px-3 py-1 text-xs hover:bg-slate-200 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700"
+              >
+                {importing ? "Importing…" : "Import to local & open"}
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -165,9 +262,6 @@ function ProjectionSummary({
           </ul>
         </div>
       )}
-      <p className="text-slate-500">
-        Read-only view (Phase A.2). Local-replay integration is Phase B.
-      </p>
     </div>
   );
 }

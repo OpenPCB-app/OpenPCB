@@ -1646,7 +1646,24 @@ export function registerRoutes(
         "x-cloud-bearer and x-cloud-api-url headers required",
       );
     }
-    const link = await store.linkDesignToCloud(designId, { bearer, apiUrl });
+    const bodyRaw = (await parseJsonBody<unknown>(req).catch(() => null)) as {
+      existingCloudDesignId?: unknown;
+      lastSyncedRevision?: unknown;
+    } | null;
+    const existing =
+      bodyRaw && typeof bodyRaw.existingCloudDesignId === "string"
+        ? bodyRaw.existingCloudDesignId
+        : undefined;
+    const lastRev =
+      bodyRaw && typeof bodyRaw.lastSyncedRevision === "number"
+        ? bodyRaw.lastSyncedRevision
+        : undefined;
+    const link = await store.linkDesignToCloud(designId, {
+      bearer,
+      apiUrl,
+      existingCloudDesignId: existing,
+      lastSyncedRevision: lastRev,
+    });
     return success({ link });
   });
 

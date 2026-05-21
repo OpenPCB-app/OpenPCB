@@ -684,6 +684,8 @@ function DesignerSpaceInner({
       <CloudDesignBrowser
         open={cloudBrowserOpen}
         onClose={() => setCloudBrowserOpen(false)}
+        api={cloudBadgeApi}
+        onNotify={addToast}
       />
 
       {state.error ? (
