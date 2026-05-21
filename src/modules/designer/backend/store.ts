@@ -29,6 +29,11 @@ import {
 import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { executeDesignerCommand } from "./command-executor";
 import {
+  linkDesignToCloud as linkToCloud,
+  mirrorCommand,
+  readLinkPublic,
+} from "./cloud-sync";
+import {
   commandLog,
   designHeads,
   schematicLabels,
@@ -122,7 +127,21 @@ export interface DesignerStore {
   dispatchCommand(
     designId: string,
     envelope: DesignerCommandEnvelope,
+    cloud?: { bearer?: string; apiUrl?: string },
   ): Promise<DesignerDispatchResult>;
+  linkDesignToCloud(
+    designId: string,
+    cloud: { bearer: string; apiUrl: string },
+  ): Promise<{ cloudDesignId: string; workspaceId: string; userId: string }>;
+  getCloudLink(designId: string): Promise<{
+    cloudDesignId: string;
+    workspaceId: string;
+    userId: string;
+    lastSyncedRevision: number;
+    linkedAt: string;
+    failedAttempts: number;
+    lastError: string | null;
+  } | null>;
   getHistory(
     designId: string,
     sessionId: string,
@@ -374,7 +393,7 @@ export function createDesignerStore(
       return library.listTags(options);
     },
 
-    async dispatchCommand(designId, envelope) {
+    async dispatchCommand(designId, envelope, cloud) {
       const existingLog = db
         .select()
         .from(commandLog)
@@ -629,6 +648,18 @@ export function createDesignerStore(
           persistSessionHistory(designId, envelope.sessionId);
         }
 
+        // Cloud mirror — fire-and-forget; never blocks local writes.
+        if (result.ok && cloud?.bearer && cloud?.apiUrl) {
+          void mirrorCommand(db, ctx.logger, {
+            designId,
+            envelope,
+            newRevision: result.revision,
+            createdEntityId: result.createdEntityId ?? null,
+            placeComponentDetail,
+            ctx: { cloudBearer: cloud.bearer, cloudApiUrl: cloud.apiUrl },
+          });
+        }
+
         return result;
       } catch {
         const racedLog = db
@@ -696,6 +727,27 @@ export function createDesignerStore(
         revision,
         history: summarizeHistory(history),
       };
+    },
+
+    async linkDesignToCloud(designId, cloud) {
+      const head = db
+        .select()
+        .from(designHeads)
+        .where(eq(designHeads.id, designId))
+        .get();
+      if (!head) {
+        throw new Error(`design ${designId} not found`);
+      }
+      return linkToCloud(db, {
+        designId,
+        designName: head.name,
+        bearer: cloud.bearer,
+        apiUrl: cloud.apiUrl,
+      });
+    },
+
+    async getCloudLink(designId) {
+      return readLinkPublic(db, designId);
     },
   };
 }

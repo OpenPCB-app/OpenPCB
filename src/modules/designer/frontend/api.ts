@@ -50,11 +50,28 @@ async function fetchData<T>(url: string, init?: RequestInit): Promise<T> {
   return payload.data;
 }
 
+export interface CloudHeadersProvider {
+  (): { "x-cloud-bearer"?: string; "x-cloud-api-url"?: string };
+}
+
 export function createDesignerApi(params: {
   backendURL?: string | null;
   moduleId: string;
+  cloudHeaders?: CloudHeadersProvider;
 }) {
-  const { backendURL, moduleId } = params;
+  const { backendURL, moduleId, cloudHeaders } = params;
+
+  function applyCloudHeaders(init: HeadersInit | undefined): HeadersInit {
+    const headers = new Headers(init);
+    const ch = cloudHeaders?.();
+    if (ch?.["x-cloud-bearer"]) {
+      headers.set("x-cloud-bearer", ch["x-cloud-bearer"]);
+    }
+    if (ch?.["x-cloud-api-url"]) {
+      headers.set("x-cloud-api-url", ch["x-cloud-api-url"]);
+    }
+    return headers;
+  }
 
   return {
     async listDesigns(): Promise<DesignerDesignSummary[]> {
@@ -192,11 +209,49 @@ export function createDesignerApi(params: {
         ),
         {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: applyCloudHeaders({ "content-type": "application/json" }),
           body: JSON.stringify(envelope),
         },
       );
       return data.result;
+    },
+
+    async linkDesignToCloud(designId: string): Promise<{
+      link: { cloudDesignId: string; workspaceId: string; userId: string };
+    }> {
+      return fetchData<{
+        link: { cloudDesignId: string; workspaceId: string; userId: string };
+      }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/cloud-link`,
+        ),
+        {
+          method: "POST",
+          headers: applyCloudHeaders({ "content-type": "application/json" }),
+        },
+      );
+    },
+
+    async getCloudLink(designId: string): Promise<{
+      link: {
+        cloudDesignId: string;
+        workspaceId: string;
+        userId: string;
+        lastSyncedRevision: number;
+        linkedAt: string;
+        failedAttempts: number;
+        lastError: string | null;
+      } | null;
+    }> {
+      return fetchData(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/cloud-link`,
+        ),
+      );
     },
 
     async getHistory(

@@ -202,3 +202,14 @@ export const sessionHistories = sqliteTable(
     ),
   }),
 );
+
+export const cloudLink = sqliteTable("designer_cloud_link", {
+  designId: text("design_id").primaryKey(),
+  cloudDesignId: text("cloud_design_id").notNull(),
+  cloudWorkspaceId: text("cloud_workspace_id").notNull(),
+  cloudUserId: text("cloud_user_id").notNull(),
+  lastSyncedRevision: integer("last_synced_revision").notNull().default(-1),
+  linkedAt: text("linked_at").notNull(),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  lastError: text("last_error"),
+});

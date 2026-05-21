@@ -125,6 +125,10 @@ export function useDesignerWorkspace(params: {
   backendURL?: string | null;
   moduleId: string;
   initialDesignId?: string;
+  cloudHeaders?: () => {
+    "x-cloud-bearer"?: string;
+    "x-cloud-api-url"?: string;
+  };
   onNotify?: (
     message: string,
     variant?: "info" | "success" | "warning" | "error",
@@ -139,8 +143,9 @@ export function useDesignerWorkspace(params: {
       createDesignerApi({
         backendURL: params.backendURL,
         moduleId: params.moduleId,
+        cloudHeaders: params.cloudHeaders,
       }),
-    [params.backendURL, params.moduleId],
+    [params.backendURL, params.moduleId, params.cloudHeaders],
   );
 
   const notify = params.onNotify;

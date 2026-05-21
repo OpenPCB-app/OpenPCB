@@ -1,5 +1,5 @@
 import { Tabs, TabsList, TabsTrigger } from "@shared/frontend/ui/tabs";
-import { type ReactElement } from "react";
+import { type ReactElement, type ReactNode } from "react";
 import type { DesignerDesignSummary } from "../../../../sdks/designer";
 import type { DesignerView } from "../types";
 import { DesignTabs } from "./DesignTabs";
@@ -18,6 +18,7 @@ interface DesignerHeaderProps {
   onRenameTab: (designId: string, name: string) => Promise<void> | void;
   onReorderTabs: (fromIndex: number, toIndex: number) => void;
   onCreateDesign: () => void;
+  trailing?: ReactNode;
 }
 
 export function DesignerHeader({
@@ -34,6 +35,7 @@ export function DesignerHeader({
   onRenameTab,
   onReorderTabs,
   onCreateDesign,
+  trailing,
 }: DesignerHeaderProps): ReactElement {
   return (
     <header className="grid h-11 grid-cols-[1fr_auto_1fr] items-center border-b border-slate-200 bg-slate-50 px-3 dark:border-slate-800 dark:bg-slate-950">
@@ -86,7 +88,7 @@ export function DesignerHeader({
         </TabsList>
       </Tabs>
 
-      <div className="flex justify-end" />
+      <div className="flex items-center justify-end gap-2 pr-1">{trailing}</div>
     </header>
   );
 }

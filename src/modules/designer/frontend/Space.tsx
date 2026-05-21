@@ -9,8 +9,12 @@ import {
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useNavigationStore } from "@/stores/navigation-store";
+import { useAuth } from "@/cloud/AuthProvider";
+import { readCloudConfig } from "@/cloud/config";
 import { DesignerFloatingToolbar } from "./components/DesignerFloatingToolbar";
 import { DesignerHeader } from "./components/DesignerHeader";
+import { CloudSyncBadge } from "./components/CloudSyncBadge";
+import { createDesignerApi } from "./api";
 import { DesignerEmptyState } from "./components/DesignerEmptyState";
 import { DesignerPlaceholderView } from "./components/DesignerPlaceholderView";
 import { DesignerSidebar } from "./components/DesignerSidebar";
@@ -237,12 +241,30 @@ function DesignerSpaceInner({
   designId,
 }: ModuleSpaceProps): ReactElement {
   const { addToast } = useToast();
+  const { session, enabled: cloudEnabled } = useAuth();
+  const cloudHeaders = useMemo(() => {
+    if (!cloudEnabled) return undefined;
+    return () => {
+      const token = session?.access_token;
+      const apiUrl = readCloudConfig().apiUrl;
+      return {
+        ...(token ? { "x-cloud-bearer": token } : {}),
+        ...(apiUrl ? { "x-cloud-api-url": apiUrl } : {}),
+      };
+    };
+  }, [cloudEnabled, session?.access_token]);
   const { state, actions } = useDesignerWorkspace({
     backendURL,
     moduleId,
     initialDesignId: designId,
+    cloudHeaders,
     onNotify: addToast,
   });
+
+  const cloudBadgeApi = useMemo(
+    () => createDesignerApi({ backendURL, moduleId, cloudHeaders }),
+    [backendURL, moduleId, cloudHeaders],
+  );
 
   const { openDesignIds, activeDesignId } = useDesignerTabsStore(
     useShallow((s) => ({
@@ -636,6 +658,13 @@ function DesignerSpaceInner({
         onRenameTab={handleRenameTab}
         onReorderTabs={reorderTabs}
         onCreateDesign={() => void handleCreateDesign()}
+        trailing={
+          <CloudSyncBadge
+            designId={activeDesignId}
+            api={cloudBadgeApi}
+            onNotify={addToast}
+          />
+        }
       />
 
       {state.error ? (

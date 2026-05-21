@@ -1,6 +1,20 @@
 import type { SupportedStorage } from "@supabase/supabase-js";
 
-// Warn once if falling back to localStorage (browser/dev mode only).
+interface ElectronSecureStorageBridge {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+  remove(key: string): Promise<void>;
+}
+
+interface ElectronAPIShape {
+  secureStorage?: ElectronSecureStorageBridge;
+}
+
+function getElectronAPI(): ElectronAPIShape | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as unknown as { electronAPI?: ElectronAPIShape }).electronAPI;
+}
+
 let warnedAboutFallback = false;
 
 function warnFallback(): void {
@@ -12,12 +26,12 @@ function warnFallback(): void {
 }
 
 function makeElectronAdapter(
-  api: NonNullable<Window["electronAPI"]>["secureStorage"],
+  api: ElectronSecureStorageBridge,
 ): SupportedStorage {
   return {
-    getItem: (key: string) => api!.get(key),
-    setItem: (key: string, value: string) => api!.set(key, value),
-    removeItem: (key: string) => api!.remove(key),
+    getItem: (key: string) => api.get(key),
+    setItem: (key: string, value: string) => api.set(key, value),
+    removeItem: (key: string) => api.remove(key),
   };
 }
 
@@ -38,7 +52,7 @@ function makeLocalStorageAdapter(): SupportedStorage {
 export function createCloudStorage(): SupportedStorage | undefined {
   if (typeof window === "undefined") return undefined;
 
-  const api = window.electronAPI?.secureStorage;
+  const api = getElectronAPI()?.secureStorage;
   if (api) {
     return makeElectronAdapter(api);
   }

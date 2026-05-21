@@ -1628,8 +1628,32 @@ export function registerRoutes(
     if (envelope.aggregateId !== designId) {
       throw new ValidationError("aggregateId must match :designId route param");
     }
-    const result = await store.dispatchCommand(designId, envelope);
+    const bearer = req.headers.get("x-cloud-bearer") ?? undefined;
+    const apiUrl = req.headers.get("x-cloud-api-url") ?? undefined;
+    const result = await store.dispatchCommand(designId, envelope, {
+      bearer,
+      apiUrl,
+    });
     return success({ result });
+  });
+
+  router.post("/designs/:designId/cloud-link", async ({ params, req }) => {
+    const designId = params.getOrThrow("designId");
+    const bearer = req.headers.get("x-cloud-bearer");
+    const apiUrl = req.headers.get("x-cloud-api-url");
+    if (!bearer || !apiUrl) {
+      throw new ValidationError(
+        "x-cloud-bearer and x-cloud-api-url headers required",
+      );
+    }
+    const link = await store.linkDesignToCloud(designId, { bearer, apiUrl });
+    return success({ link });
+  });
+
+  router.get("/designs/:designId/cloud-link", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    const link = await store.getCloudLink(designId);
+    return success({ link });
   });
 
   router.get("/designs/:designId/history", async ({ params, query }) => {
