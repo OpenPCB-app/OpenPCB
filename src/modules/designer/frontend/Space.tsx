@@ -14,6 +14,7 @@ import { readCloudConfig } from "@/cloud/config";
 import { DesignerFloatingToolbar } from "./components/DesignerFloatingToolbar";
 import { DesignerHeader } from "./components/DesignerHeader";
 import { CloudSyncBadge } from "./components/CloudSyncBadge";
+import { CloudDesignBrowser } from "./components/CloudDesignBrowser";
 import { createDesignerApi } from "./api";
 import { DesignerEmptyState } from "./components/DesignerEmptyState";
 import { DesignerPlaceholderView } from "./components/DesignerPlaceholderView";
@@ -265,6 +266,7 @@ function DesignerSpaceInner({
     () => createDesignerApi({ backendURL, moduleId, cloudHeaders }),
     [backendURL, moduleId, cloudHeaders],
   );
+  const [cloudBrowserOpen, setCloudBrowserOpen] = useState(false);
 
   const { openDesignIds, activeDesignId } = useDesignerTabsStore(
     useShallow((s) => ({
@@ -659,12 +661,29 @@ function DesignerSpaceInner({
         onReorderTabs={reorderTabs}
         onCreateDesign={() => void handleCreateDesign()}
         trailing={
-          <CloudSyncBadge
-            designId={activeDesignId}
-            api={cloudBadgeApi}
-            onNotify={addToast}
-          />
+          <>
+            {cloudEnabled && session && (
+              <button
+                type="button"
+                onClick={() => setCloudBrowserOpen(true)}
+                className="rounded-sm border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                title="Browse designs from cloud"
+              >
+                Open from Cloud
+              </button>
+            )}
+            <CloudSyncBadge
+              designId={activeDesignId}
+              api={cloudBadgeApi}
+              onNotify={addToast}
+            />
+          </>
         }
+      />
+
+      <CloudDesignBrowser
+        open={cloudBrowserOpen}
+        onClose={() => setCloudBrowserOpen(false)}
       />
 
       {state.error ? (

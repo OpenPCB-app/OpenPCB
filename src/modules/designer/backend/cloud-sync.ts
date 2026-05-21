@@ -181,7 +181,7 @@ export async function mirrorCommand(
   }
 
   const cloudCommand = translateCommand(
-    opts.envelope.command as { type: string; [k: string]: unknown },
+    opts.envelope.command as unknown as { type: string; [k: string]: unknown },
     opts.newRevision,
     opts.createdEntityId,
     opts.placeComponentDetail,
