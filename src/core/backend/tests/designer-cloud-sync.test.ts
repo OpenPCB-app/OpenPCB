@@ -29,7 +29,7 @@ function makeDb(): { db: DbClient; close: () => void } {
       last_error text
     );
   `);
-  const db = drizzle(sqlite) as DbClient;
+  const db = drizzle(sqlite) as unknown as DbClient;
   return { db, close: () => sqlite.close() };
 }
 
@@ -76,7 +76,7 @@ function makeEnvelope(command: {
     sessionId: "sess-1",
     aggregateId: "local-1",
     baseRevision: 0,
-    issuedAt: "2026-05-21T12:00:00Z",
+    issuedAt: 1716292800000,
     command: command as unknown as DesignerCommandEnvelope["command"],
   };
 }

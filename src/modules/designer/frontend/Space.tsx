@@ -14,6 +14,7 @@ import { readCloudConfig } from "@/cloud/config";
 import { DesignerFloatingToolbar } from "./components/DesignerFloatingToolbar";
 import { DesignerHeader } from "./components/DesignerHeader";
 import { CloudSyncBadge } from "./components/CloudSyncBadge";
+import { CloudPresenceIndicator } from "./components/CloudPresenceIndicator";
 import { CloudDesignBrowser } from "./components/CloudDesignBrowser";
 import { createDesignerApi } from "./api";
 import { DesignerEmptyState } from "./components/DesignerEmptyState";
@@ -679,6 +680,10 @@ function DesignerSpaceInner({
               designId={activeDesignId}
               api={cloudBadgeApi}
               onNotify={addToast}
+            />
+            <CloudPresenceIndicator
+              designId={activeDesignId}
+              api={cloudBadgeApi}
             />
           </>
         }
