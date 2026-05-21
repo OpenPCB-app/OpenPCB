@@ -1,0 +1,15 @@
+-- 0009_pcb_zones_and_outline.sql
+--
+-- Tier 2 of F3 KiCad hardening adds two new kinds of PCB data to the existing
+-- `designer_pcb_entities` JSON-blob table:
+--   * `zone`  — copper-pour outline imported from KiCad (PcbZone).
+--   * polygon outline — stored under the existing `board_settings` kind in
+--                       the JSON `outline` field (no new kind).
+--
+-- All payload schemas live in the JSON column, so the only operational change
+-- here is an index on (designId, kind) where kind='zone' for fast loads. We
+-- already have `designer_pcb_entities_design_kind_idx` covering this, so the
+-- migration is intentionally a no-op DDL: it registers a marker row in
+-- `openpcb_migrations` so downstream tooling can branch on "v2 import schema
+-- present" without inspecting JSON payloads.
+SELECT 1;

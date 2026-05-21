@@ -1,11 +1,25 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { resetAssistantServiceForTesting } from "../../../modules/assistant/backend/assistant-service";
+import { resetTaskRuntimeForTesting } from "../../../modules/tasks/backend/runtime-singleton";
+import { resetSharedSqliteForTesting } from "../db/sqlite-client";
 import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
+
+process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
+// Pin DB path at module-load time so the assistant singleton (cached per
+// process) stays bound to a single sqlite for the whole file. Other test
+// files using isolateTestDb mutate this env mid-run, so re-pin in
+// bootAssistantWorkspace as well and reset the shared client.
+const ASSISTANT_DB_PATH = path.join(
+  os.tmpdir(),
+  `openpcb-assistant-${Date.now()}-${crypto.randomUUID()}.sqlite`,
+);
+process.env.OPENPCB_DB_PATH = ASSISTANT_DB_PATH;
 
 const tempDirs: string[] = [];
 
@@ -34,6 +48,15 @@ async function writeModule(
     backendEntrySource,
     "utf8",
   );
+  const realMigrations = path.resolve(
+    import.meta.dir,
+    "../../../modules",
+    moduleId,
+    "backend/migrations",
+  );
+  await cp(realMigrations, path.join(moduleDir, "backend", "migrations"), {
+    recursive: true,
+  });
 }
 
 function baseManifest(moduleId: string): Record<string, unknown> {
@@ -62,12 +85,22 @@ async function bootAssistantWorkspace(): Promise<{
   server: ReturnType<typeof createHttpServer>;
   moduleRuntime: ModuleRuntime;
 }> {
+  process.env.OPENPCB_DB_PATH = ASSISTANT_DB_PATH;
+  resetSharedSqliteForTesting();
+  resetTaskRuntimeForTesting();
+  resetAssistantServiceForTesting();
   const workspace = await createWorkspace();
 
   const tasksManifest = {
     ...baseManifest("tasks"),
     kind: "tool",
-    sidebar: { label: "Tasks", icon: "ListChecks", order: 90, group: "system", hidden: true },
+    sidebar: {
+      label: "Tasks",
+      icon: "ListChecks",
+      order: 90,
+      group: "system",
+      hidden: true,
+    },
   };
   const tasksBackend = `
     import { initializeTaskRuntime } from "../../../../../src/modules/tasks/backend/runtime-singleton";
@@ -109,10 +142,18 @@ async function bootAssistantWorkspace(): Promise<{
       },
     };
   `;
-  await writeModule(workspace, "assistant", assistantManifest, assistantBackend);
+  await writeModule(
+    workspace,
+    "assistant",
+    assistantManifest,
+    assistantBackend,
+  );
 
   const moduleRegistry = new ModuleRouterRegistry();
-  const moduleRuntime = new ModuleRuntime({ moduleRegistry, workspaceRoot: workspace });
+  const moduleRuntime = new ModuleRuntime({
+    moduleRegistry,
+    workspaceRoot: workspace,
+  });
   await moduleRuntime.bootstrap();
 
   const server = createHttpServer({
@@ -173,11 +214,14 @@ describe("assistant module", () => {
     const chat = (await chatResponse.json()) as { id: string };
 
     const submitResponse = await server.fetch(
-      new Request(`http://localhost/api/modules/assistant/chats/${chat.id}/messages`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content: "hello" }),
-      }),
+      new Request(
+        `http://localhost/api/modules/assistant/chats/${chat.id}/messages`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content: "hello" }),
+        },
+      ),
     );
     expect(submitResponse.status).toBe(201);
     const result = (await submitResponse.json()) as {
@@ -194,11 +238,14 @@ describe("assistant module", () => {
     const { server } = await bootAssistantWorkspace();
 
     const response = await server.fetch(
-      new Request("http://localhost/api/modules/assistant/chats/undefined/messages", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content: "hello" }),
-      }),
+      new Request(
+        "http://localhost/api/modules/assistant/chats/undefined/messages",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content: "hello" }),
+        },
+      ),
     );
 
     expect(response.status).toBe(400);
@@ -211,7 +258,9 @@ describe("assistant module", () => {
     const missingChatId = crypto.randomUUID();
 
     const response = await server.fetch(
-      new Request(`http://localhost/api/modules/assistant/chats/${missingChatId}/messages`),
+      new Request(
+        `http://localhost/api/modules/assistant/chats/${missingChatId}/messages`,
+      ),
     );
 
     expect(response.status).toBe(404);
@@ -224,7 +273,10 @@ describe("assistant module", () => {
       new Request("http://localhost/api/modules/assistant/tools"),
     );
     expect(response.status).toBe(200);
-    const tools = (await response.json()) as Array<{ name: string; effect: string }>;
+    const tools = (await response.json()) as Array<{
+      name: string;
+      effect: string;
+    }>;
     expect(Array.isArray(tools)).toBe(true);
   });
 
@@ -235,7 +287,12 @@ describe("assistant module", () => {
       new Request("http://localhost/api/modules/assistant/providers"),
     );
     expect(response.status).toBe(200);
-    const providers = (await response.json()) as Array<{ id: string; defaultModel: string; isBuiltin: boolean; hasApiKey: boolean }>;
+    const providers = (await response.json()) as Array<{
+      id: string;
+      defaultModel: string;
+      isBuiltin: boolean;
+      hasApiKey: boolean;
+    }>;
     expect(providers.length).toBeGreaterThanOrEqual(1);
     const openai = providers.find((p) => p.id === "openai");
     expect(openai?.defaultModel).toBe("gpt-4o-mini");
@@ -249,7 +306,10 @@ describe("assistant module", () => {
       new Request("http://localhost/api/modules/assistant/settings"),
     );
     expect(response.status).toBe(200);
-    const settings = (await response.json()) as { defaultProviderId: string; toolExecutionPolicy: string };
+    const settings = (await response.json()) as {
+      defaultProviderId: string;
+      toolExecutionPolicy: string;
+    };
     expect(settings.defaultProviderId).toBe("openai");
     expect(settings.toolExecutionPolicy).toBe("auto_readonly_confirm_writes");
   });

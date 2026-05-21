@@ -48,8 +48,8 @@ describe("designer PCB phase 1", () => {
     const design = await designerSdk.createDesign({ name: "PCB Default" });
     const projection = await designerSdk.getPcbProjection(design.id);
 
-    expect(projection?.board.outline.widthMm).toBe(100);
-    expect(projection?.board.outline.heightMm).toBe(80);
+    expect(projection?.board.outline.widthMm).toBe(50);
+    expect(projection?.board.outline.heightMm).toBe(30);
     expect(projection?.board.activeLayer).toBe("F.Cu");
   });
 
@@ -67,8 +67,8 @@ describe("designer PCB phase 1", () => {
 
     const projection = await designerSdk.getPcbProjection(design.id);
 
-    expect(projection?.board.outline.widthMm).toBe(100);
-    expect(projection?.board.outline.heightMm).toBe(80);
+    expect(projection?.board.outline.widthMm).toBe(50);
+    expect(projection?.board.outline.heightMm).toBe(30);
   });
 
   test("updates PCB board size through command pipeline", async () => {
@@ -143,7 +143,7 @@ describe("designer PCB phase 1", () => {
     };
 
     expect(response.status).toBe(200);
-    expect(body.data?.projection?.board?.outline?.widthMm).toBe(100);
+    expect(body.data?.projection?.board?.outline?.widthMm).toBe(50);
   });
 
   test("PCB board size undo/redo via separate session", async () => {
@@ -180,8 +180,8 @@ describe("designer PCB phase 1", () => {
     expect(undoResult.ok).toBe(true);
 
     const afterUndo = await designerSdk.getPcbProjection(design.id);
-    expect(afterUndo?.board.outline.widthMm).toBe(100);
-    expect(afterUndo?.board.outline.heightMm).toBe(80);
+    expect(afterUndo?.board.outline.widthMm).toBe(50);
+    expect(afterUndo?.board.outline.heightMm).toBe(30);
 
     // Redo
     const redoResult = await designerSdk.redo(design.id, pcbSession);

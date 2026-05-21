@@ -13,7 +13,14 @@ export interface CorsConfig {
 
 export const BASE_CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-OpenPCB-Token, If-Unmodified-Since, X-Request-Id",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, X-OpenPCB-Token, If-Unmodified-Since, X-Request-Id",
+  // Without this, the browser hides non-CORS-safelisted response headers from
+  // fetch().headers.get(...). Required so the manufacturing-export route's
+  // bundle-name and warning-count metadata are readable from packaged
+  // Electron (cross-origin to backend localhost).
+  "Access-Control-Expose-Headers":
+    "Content-Disposition, X-OpenPCB-Bundle-Name, X-OpenPCB-Warnings, X-Request-Id",
   Vary: "Origin",
 };
 
@@ -37,24 +44,36 @@ export function resolveAllowedOrigins(config?: CorsConfig): Set<string> {
   return new Set(parseEnvAllowedOrigins());
 }
 
-export function isTrustedOrigin(origin: string | null, allowedOrigins: Set<string>): boolean {
+export function isTrustedOrigin(
+  origin: string | null,
+  allowedOrigins: Set<string>,
+): boolean {
   if (!origin || origin.trim().length === 0) {
     return true;
   }
   // Allow null origin (file:// or opaque origins) for packaged Electron
   // when the unauthenticated API flag is set.
-  if (origin === "null" && process.env.OPENPCB_ALLOW_UNAUTHENTICATED_API === "true") {
+  if (
+    origin === "null" &&
+    process.env.OPENPCB_ALLOW_UNAUTHENTICATED_API === "true"
+  ) {
     return true;
   }
   if (process.env.OPENPCB_ALLOW_UNAUTHENTICATED_API === "true") {
-    if (origin.startsWith("http://127.0.0.1:") || origin.startsWith("http://localhost:")) {
+    if (
+      origin.startsWith("http://127.0.0.1:") ||
+      origin.startsWith("http://localhost:")
+    ) {
       return true;
     }
   }
   return allowedOrigins.has(origin);
 }
 
-export function buildCorsHeaders(origin: string | null, allowedOrigins: Set<string>): Record<string, string> {
+export function buildCorsHeaders(
+  origin: string | null,
+  allowedOrigins: Set<string>,
+): Record<string, string> {
   if (!origin || !isTrustedOrigin(origin, allowedOrigins)) {
     return { ...BASE_CORS_HEADERS };
   }
@@ -64,7 +83,10 @@ export function buildCorsHeaders(origin: string | null, allowedOrigins: Set<stri
   };
 }
 
-export function withCorsHeaders(response: Response, headers: Record<string, string>): Response {
+export function withCorsHeaders(
+  response: Response,
+  headers: Record<string, string>,
+): Response {
   const merged = new Headers(response.headers);
   for (const [key, value] of Object.entries(headers)) {
     merged.set(key, value);

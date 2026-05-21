@@ -17,6 +17,7 @@ interface OverlayLayerProps {
   shapes: ReadonlyArray<PcbOverlayShape>;
   viewSide: "top" | "bottom";
   opacity?: number;
+  selectedOverlayTextIds?: ReadonlySet<string>;
 }
 
 const SUPPORTED_LAYERS: ReadonlyArray<PcbOverlayLayer> = [
@@ -40,6 +41,7 @@ export function OverlayLayer({
   shapes,
   viewSide,
   opacity = 1,
+  selectedOverlayTextIds,
 }: OverlayLayerProps): ReactElement | null {
   if (texts.length === 0 && shapes.length === 0) return null;
   return (
@@ -58,6 +60,7 @@ export function OverlayLayer({
           overlay={text}
           viewSide={viewSide}
           opacity={opacity}
+          selected={selectedOverlayTextIds?.has(text.id) ?? false}
         />
       ))}
     </>
@@ -74,13 +77,15 @@ function OverlayTextMesh({
   overlay,
   viewSide,
   opacity,
+  selected,
 }: {
   overlay: PcbOverlayText;
   viewSide: "top" | "bottom";
   opacity: number;
+  selected: boolean;
 }): ReactElement | null {
   if (!SUPPORTED_LAYERS.includes(overlay.layer)) return null;
-  const color = PCB_LAYER_COLORS[overlay.layer];
+  const color = selected ? "#facc15" : PCB_LAYER_COLORS[overlay.layer];
   const renderOrder =
     overlay.layer === "Edge.Cuts"
       ? RENDER_ORDER.EDGE_CUTS

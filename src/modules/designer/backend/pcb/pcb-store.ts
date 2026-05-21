@@ -20,6 +20,7 @@ import type {
   PcbVia,
   PcbViewSide,
   PcbViewState,
+  PcbZone,
 } from "../../../../sdks/designer";
 import { pcbEntities } from "../schema";
 import { asNumber, asRecord, asString } from "../value-guards";
@@ -38,6 +39,7 @@ const FREE_HOLE_KIND = "free_hole";
 const FREE_PAD_KIND = "free_pad";
 const OVERLAY_TEXT_KIND = "overlay_text";
 const OVERLAY_SHAPE_KIND = "overlay_shape";
+const ZONE_KIND = "zone";
 
 const OVERLAY_LAYERS: ReadonlySet<PcbOverlayLayer> = new Set<PcbOverlayLayer>([
   "F.SilkS",
@@ -266,9 +268,10 @@ function parseBoardSettings(value: unknown): PcbBoardSettings | null {
   const updatedAt = asString(record?.updatedAt);
   const activeLayer = asString(record?.activeLayer);
 
+  const outlineKind = outline?.kind === "polygon" ? "polygon" : "rect";
   if (
     !record ||
-    outline?.kind !== "rect" ||
+    (outline?.kind !== "rect" && outline?.kind !== "polygon") ||
     widthMm === null ||
     heightMm === null ||
     widthMm <= 0 ||
@@ -279,6 +282,17 @@ function parseBoardSettings(value: unknown): PcbBoardSettings | null {
     !isPcbLayerId(activeLayer)
   ) {
     return null;
+  }
+
+  // Polygon outlines round-trip an extra `pointsMm` field.
+  const polygonPoints: Array<{ x: number; y: number }> = [];
+  if (outlineKind === "polygon" && Array.isArray(outline?.pointsMm)) {
+    for (const raw of outline.pointsMm as unknown[]) {
+      const r = asRecord(raw);
+      const x = asNumber(r?.x);
+      const y = asNumber(r?.y);
+      if (x !== null && y !== null) polygonPoints.push({ x, y });
+    }
   }
 
   const defaults = createDefaultPcbBoardSettings(updatedAt);
@@ -293,14 +307,24 @@ function parseBoardSettings(value: unknown): PcbBoardSettings | null {
       : tracePresetsRaw
           .map((value) => asNumber(value))
           .filter((value): value is number => value !== null && value > 0);
+  const outlineParsed =
+    outlineKind === "polygon" && polygonPoints.length >= 3
+      ? {
+          kind: "polygon" as const,
+          widthMm,
+          heightMm,
+          centerMm: { x: centerX, y: centerY },
+          pointsMm: polygonPoints,
+        }
+      : {
+          kind: "rect" as const,
+          widthMm,
+          heightMm,
+          centerMm: { x: centerX, y: centerY },
+        };
   return {
     ...defaults,
-    outline: {
-      kind: "rect",
-      widthMm,
-      heightMm,
-      centerMm: { x: centerX, y: centerY },
-    },
+    outline: outlineParsed,
     activeLayer,
     visibleLayers: parseVisibleLayers(record.visibleLayers),
     tracePresets:
@@ -924,6 +948,8 @@ function parseTrace(value: unknown): PcbTrace | null {
     if (x === null || y === null) return null;
     pointsNm.push({ x, y });
   }
+  const netName =
+    record.netName === undefined ? undefined : asString(record.netName);
   return {
     id,
     netId: netId ?? null,
@@ -932,6 +958,7 @@ function parseTrace(value: unknown): PcbTrace | null {
     widthMm,
     pointsNm,
     segmentMode,
+    ...(netName !== undefined ? { netName: netName ?? null } : {}),
   };
 }
 
@@ -1068,6 +1095,8 @@ function parseVia(value: unknown): PcbVia | null {
   const provenanceRaw = asString(record.provenance);
   const provenance: PcbVia["provenance"] =
     provenanceRaw === "manual" ? "manual" : "route";
+  const netName =
+    record.netName === undefined ? undefined : asString(record.netName);
   return {
     id,
     netId: netId ?? null,
@@ -1080,6 +1109,7 @@ function parseVia(value: unknown): PcbVia | null {
     viaType,
     protection,
     provenance,
+    ...(netName !== undefined ? { netName: netName ?? null } : {}),
   };
 }
 
@@ -1711,5 +1741,96 @@ export function replacePcbOverlayShapes(
     .run();
   for (const shape of shapes) {
     insertPcbOverlayShape(db, designId, shape, timestamp);
+  }
+}
+
+// ───────────────────────── Zones (KiCad import) ─────────────────────────
+
+function parseZone(value: unknown): PcbZone | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const id = asString(record.id);
+  const layerRaw = asString(record.layer);
+  if (!id || !isCopperLayer(layerRaw)) return null;
+  const netName =
+    record.netName === undefined
+      ? null
+      : record.netName === null
+        ? null
+        : asString(record.netName);
+  const fillTypeRaw = asString(record.fillType);
+  const fillType: PcbZone["fillType"] =
+    fillTypeRaw === "hatched" ? "hatched" : "solid";
+  const hatchEdgeMm = asNumber(record.hatchEdgeMm) ?? 0.5;
+  const pointsRaw = Array.isArray(record.polygonPointsMm)
+    ? record.polygonPointsMm
+    : null;
+  if (!pointsRaw) return null;
+  const polygonPointsMm: Array<{ x: number; y: number }> = [];
+  for (const raw of pointsRaw) {
+    const r = asRecord(raw);
+    const x = asNumber(r?.x);
+    const y = asNumber(r?.y);
+    if (x === null || y === null) return null;
+    polygonPointsMm.push({ x, y });
+  }
+  if (polygonPointsMm.length < 3) return null;
+  return {
+    id,
+    netName: netName ?? null,
+    layer: layerRaw,
+    polygonPointsMm,
+    hatchEdgeMm,
+    fillType,
+  };
+}
+
+export function loadPcbZones(db: DbClient, designId: string): PcbZone[] {
+  const rows = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(eq(pcbEntities.designId, designId), eq(pcbEntities.kind, ZONE_KIND)),
+    )
+    .all();
+  const out: PcbZone[] = [];
+  for (const row of rows) {
+    const parsed = parseZone(parsePayload(row.payloadJson));
+    if (parsed) out.push(parsed);
+  }
+  return out;
+}
+
+export function insertPcbZone(
+  db: DbClient,
+  designId: string,
+  zone: PcbZone,
+  timestamp: string,
+): void {
+  db.insert(pcbEntities)
+    .values({
+      id: zone.id,
+      designId,
+      kind: ZONE_KIND,
+      payloadJson: JSON.stringify(zone),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .run();
+}
+
+export function replacePcbZones(
+  db: DbClient,
+  designId: string,
+  zones: PcbZone[],
+  timestamp: string,
+): void {
+  db.delete(pcbEntities)
+    .where(
+      and(eq(pcbEntities.designId, designId), eq(pcbEntities.kind, ZONE_KIND)),
+    )
+    .run();
+  for (const zone of zones) {
+    insertPcbZone(db, designId, zone, timestamp);
   }
 }

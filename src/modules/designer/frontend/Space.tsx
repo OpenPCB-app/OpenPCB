@@ -17,6 +17,7 @@ import { CloudSyncBadge } from "./components/CloudSyncBadge";
 import { CloudDesignBrowser } from "./components/CloudDesignBrowser";
 import { createDesignerApi } from "./api";
 import { DesignerEmptyState } from "./components/DesignerEmptyState";
+import { KicadProjectImportWizard } from "./components/KicadProjectImportWizard";
 import { DesignerPlaceholderView } from "./components/DesignerPlaceholderView";
 import { DesignerSidebar } from "./components/DesignerSidebar";
 import {
@@ -261,6 +262,7 @@ function DesignerSpaceInner({
     cloudHeaders,
     onNotify: addToast,
   });
+  const [kicadImportOpen, setKicadImportOpen] = useState(false);
 
   const cloudBadgeApi = useMemo(
     () => createDesignerApi({ backendURL, moduleId, cloudHeaders }),
@@ -608,6 +610,7 @@ function DesignerSpaceInner({
           creatingDesign={state.creatingDesign}
           onCreate={() => void handleCreateDesign()}
           onOpen={handleOpenFromEmptyState}
+          onImportKicad={() => setKicadImportOpen(true)}
         />
       );
     }
@@ -812,6 +815,20 @@ function DesignerSpaceInner({
         fetchPlacementDetail={actions.resolvePlacement}
         fetchAvailableTags={actions.fetchAvailableTags}
       />
+
+      {kicadImportOpen && (
+        <KicadProjectImportWizard
+          backendURL={backendURL ?? null}
+          moduleId={moduleId}
+          onClose={() => setKicadImportOpen(false)}
+          onImported={(result) => {
+            void actions.refreshDesigns();
+            openTab(result.designId);
+            navigateToModule("designer", result.designId);
+            setKicadImportOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

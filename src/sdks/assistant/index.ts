@@ -1,1 +1,1 @@
-export * from "@openpcb/contracts/sdks/assistant/index";
+export type * from "./types";

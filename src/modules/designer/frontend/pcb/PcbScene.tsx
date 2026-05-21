@@ -11,7 +11,10 @@ import type {
   DesignerPcbProjection,
   PcbBoardOutline,
   PcbCopperLayerId,
+  PcbFreeHole,
+  PcbFreePad,
   PcbLayerId,
+  PcbOverlayText,
   PcbPlacedPart,
   PcbPointMm,
   PcbTrace,
@@ -773,6 +776,134 @@ function SelectionOutline({
   );
 }
 
+function FreeHoleSelectionOutline({
+  hole,
+  positionOverrideMm,
+}: {
+  hole: PcbFreeHole;
+  positionOverrideMm?: PcbPointMm;
+}): ReactElement {
+  const position = positionOverrideMm ?? hole.centerMm;
+  const r = hole.drillMm / 2 + 0.5;
+  const geometry = useMemo(() => {
+    const pts = [
+      new THREE.Vector3(-r, -r, 0),
+      new THREE.Vector3(r, -r, 0),
+      new THREE.Vector3(r, -r, 0),
+      new THREE.Vector3(r, r, 0),
+      new THREE.Vector3(r, r, 0),
+      new THREE.Vector3(-r, r, 0),
+      new THREE.Vector3(-r, r, 0),
+      new THREE.Vector3(-r, -r, 0),
+    ];
+    return new THREE.BufferGeometry().setFromPoints(pts);
+  }, [r]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  const handles: ReadonlyArray<readonly [number, number]> = [
+    [-r, -r],
+    [r, -r],
+    [r, r],
+    [-r, r],
+  ];
+  return (
+    <group position={[position.x, position.y, 0]}>
+      <lineSegments geometry={geometry} renderOrder={RENDER_ORDER.SELECTION}>
+        <SelectionOutlineMaterial />
+      </lineSegments>
+      {handles.map(([x, y], i) => (
+        <SelectionHandle key={i} x={x} y={y} />
+      ))}
+    </group>
+  );
+}
+
+function FreePadSelectionOutline({
+  pad,
+  positionOverrideMm,
+}: {
+  pad: PcbFreePad;
+  positionOverrideMm?: PcbPointMm;
+}): ReactElement {
+  const position = positionOverrideMm ?? pad.centerMm;
+  const padMm = 0.3;
+  const hw = pad.widthMm / 2 + padMm;
+  const hh = pad.heightMm / 2 + padMm;
+  const rotRad = (pad.rotationDeg * Math.PI) / 180;
+  const geometry = useMemo(() => {
+    const pts = [
+      new THREE.Vector3(-hw, -hh, 0),
+      new THREE.Vector3(hw, -hh, 0),
+      new THREE.Vector3(hw, -hh, 0),
+      new THREE.Vector3(hw, hh, 0),
+      new THREE.Vector3(hw, hh, 0),
+      new THREE.Vector3(-hw, hh, 0),
+      new THREE.Vector3(-hw, hh, 0),
+      new THREE.Vector3(-hw, -hh, 0),
+    ];
+    return new THREE.BufferGeometry().setFromPoints(pts);
+  }, [hw, hh]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  const handles: ReadonlyArray<readonly [number, number]> = [
+    [-hw, -hh],
+    [hw, -hh],
+    [hw, hh],
+    [-hw, hh],
+  ];
+  return (
+    <group position={[position.x, position.y, 0]} rotation={[0, 0, rotRad]}>
+      <lineSegments geometry={geometry} renderOrder={RENDER_ORDER.SELECTION}>
+        <SelectionOutlineMaterial />
+      </lineSegments>
+      {handles.map(([x, y], i) => (
+        <SelectionHandle key={i} x={x} y={y} />
+      ))}
+    </group>
+  );
+}
+
+function OverlayTextSelectionOutline({
+  text,
+  positionOverrideMm,
+}: {
+  text: PcbOverlayText;
+  positionOverrideMm?: PcbPointMm;
+}): ReactElement {
+  const position = positionOverrideMm ?? text.positionMm;
+  const rotRad = (text.rotationDeg * Math.PI) / 180;
+  const hw = (text.fontSizeMm * text.text.length * 0.6) / 2 + 0.4;
+  const hh = text.fontSizeMm / 2 + 0.3;
+  const geometry = useMemo(() => {
+    const pts = [
+      new THREE.Vector3(-hw, -hh, 0),
+      new THREE.Vector3(hw, -hh, 0),
+      new THREE.Vector3(hw, -hh, 0),
+      new THREE.Vector3(hw, hh, 0),
+      new THREE.Vector3(hw, hh, 0),
+      new THREE.Vector3(-hw, hh, 0),
+      new THREE.Vector3(-hw, hh, 0),
+      new THREE.Vector3(-hw, -hh, 0),
+    ];
+    return new THREE.BufferGeometry().setFromPoints(pts);
+  }, [hw, hh]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  const handles: ReadonlyArray<readonly [number, number]> = [
+    [-hw, -hh],
+    [hw, -hh],
+    [hw, hh],
+    [-hw, hh],
+  ];
+  return (
+    <group position={[position.x, position.y, 0]} rotation={[0, 0, rotRad]}>
+      <lineSegments geometry={geometry} renderOrder={RENDER_ORDER.SELECTION}>
+        <SelectionOutlineMaterial />
+      </lineSegments>
+      {handles.map(([x, y], i) => (
+        <SelectionHandle key={i} x={x} y={y} />
+      ))}
+    </group>
+  );
+}
+
 type PcbLayerSide = "top" | "bottom";
 
 function focusedLayerSide(layer: PcbCopperLayerId | null): PcbLayerSide | null {
@@ -943,6 +1074,12 @@ interface PcbSceneProps {
   selection?: PcbSelection;
   /** Per-placement live drag preview positions (group drag). */
   dragOverride?: ReadonlyMap<string, PcbPointMm> | null;
+  /** Live drag preview positions for free primitives (hole/pad/text). */
+  freePrimitiveDragOverrides?: {
+    freeHoles?: ReadonlyMap<string, PcbPointMm>;
+    freePads?: ReadonlyMap<string, PcbPointMm>;
+    overlayTexts?: ReadonlyMap<string, PcbPointMm>;
+  } | null;
   highlightedNetId?: string | null;
   ratsnestVisible?: boolean;
   /** Board view orientation. `"bottom"` mirrors the scene horizontally. */
@@ -1008,6 +1145,7 @@ export function PcbScene({
   projection,
   selection,
   dragOverride,
+  freePrimitiveDragOverrides,
   highlightedNetId,
   ratsnestVisible = true,
   viewSide = "top",
@@ -1032,6 +1170,7 @@ export function PcbScene({
     projection,
     selection,
     dragOverride,
+    freePrimitiveDragOverrides,
     highlightedNetId,
     ratsnestVisible,
     viewSide,
@@ -1068,6 +1207,51 @@ export function PcbScene({
         selectedPlacementIds.has(p.id) && isPlacementVisible(visibleLayers, p),
     );
   }, [renderPlacements, selectedPlacementIds, visibleLayers]);
+
+  const selectedFreeHoles = useMemo(() => {
+    const ids = selection?.freeHoleIds;
+    if (!ids || ids.size === 0) return [];
+    return projection.freeHoles.filter((h) => ids.has(h.id));
+  }, [projection.freeHoles, selection?.freeHoleIds]);
+
+  const selectedFreePads = useMemo(() => {
+    const ids = selection?.freePadIds;
+    if (!ids || ids.size === 0) return [];
+    return projection.freePads.filter((p) => ids.has(p.id));
+  }, [projection.freePads, selection?.freePadIds]);
+
+  const selectedOverlayTexts = useMemo(() => {
+    const ids = selection?.overlayTextIds;
+    if (!ids || ids.size === 0) return [];
+    return projection.overlayTexts.filter((t) => ids.has(t.id));
+  }, [projection.overlayTexts, selection?.overlayTextIds]);
+
+  const renderFreeHoles = useMemo(() => {
+    const overrides = freePrimitiveDragOverrides?.freeHoles;
+    if (!overrides || overrides.size === 0) return projection.freeHoles;
+    return projection.freeHoles.map((h) => {
+      const override = overrides.get(h.id);
+      return override ? { ...h, centerMm: override } : h;
+    });
+  }, [projection.freeHoles, freePrimitiveDragOverrides?.freeHoles]);
+
+  const renderFreePads = useMemo(() => {
+    const overrides = freePrimitiveDragOverrides?.freePads;
+    if (!overrides || overrides.size === 0) return projection.freePads;
+    return projection.freePads.map((p) => {
+      const override = overrides.get(p.id);
+      return override ? { ...p, centerMm: override } : p;
+    });
+  }, [projection.freePads, freePrimitiveDragOverrides?.freePads]);
+
+  const renderOverlayTexts = useMemo(() => {
+    const overrides = freePrimitiveDragOverrides?.overlayTexts;
+    if (!overrides || overrides.size === 0) return projection.overlayTexts;
+    return projection.overlayTexts.map((t) => {
+      const override = overrides.get(t.id);
+      return override ? { ...t, positionMm: override } : t;
+    });
+  }, [projection.overlayTexts, freePrimitiveDragOverrides?.overlayTexts]);
 
   // Bottom-view mirror: driven by the canvas's Top/Bottom layer switch.
   // Pointer events compensate via `interactionCoordinateTransform`.
@@ -1300,8 +1484,9 @@ export function PcbScene({
           <DrillLayer
             vias={projection.vias}
             placements={renderPlacements}
-            freeHoles={projection.freeHoles}
-            freePads={projection.freePads}
+            freeHoles={renderFreeHoles}
+            freePads={renderFreePads}
+            selectedFreeHoleIds={selection?.freeHoleIds}
             showMountingHoleRing={isPcbLayerVisible(visibleLayers, "F.SilkS")}
           />
         ) : null}
@@ -1310,7 +1495,7 @@ export function PcbScene({
           shouldRenderCopperLayer(visualState, layer) ? (
             <FreePadLayer
               key={`free-pad:${layer}`}
-              freePads={projection.freePads}
+              freePads={renderFreePads}
               layer={layer}
               viewSide={viewSide}
               selectedFreePadIds={selection?.freePadIds}
@@ -1321,9 +1506,10 @@ export function PcbScene({
           ) : null,
         )}
         <OverlayLayer
-          texts={projection.overlayTexts}
+          texts={renderOverlayTexts}
           shapes={projection.overlayShapes}
           viewSide={viewSide}
+          selectedOverlayTextIds={selection?.overlayTextIds}
         />
         {isPcbLayerVisible(visibleLayers, "B.Mask") ? (
           <SolderMaskLayer
@@ -1410,6 +1596,33 @@ export function PcbScene({
         ) : null}
         {selectedPlacements.map((placement) => (
           <SelectionOutline key={placement.id} placement={placement} />
+        ))}
+        {selectedFreeHoles.map((hole) => (
+          <FreeHoleSelectionOutline
+            key={hole.id}
+            hole={hole}
+            positionOverrideMm={freePrimitiveDragOverrides?.freeHoles?.get(
+              hole.id,
+            )}
+          />
+        ))}
+        {selectedFreePads.map((pad) => (
+          <FreePadSelectionOutline
+            key={pad.id}
+            pad={pad}
+            positionOverrideMm={freePrimitiveDragOverrides?.freePads?.get(
+              pad.id,
+            )}
+          />
+        ))}
+        {selectedOverlayTexts.map((text) => (
+          <OverlayTextSelectionOutline
+            key={text.id}
+            text={text}
+            positionOverrideMm={freePrimitiveDragOverrides?.overlayTexts?.get(
+              text.id,
+            )}
+          />
         ))}
         <SelectionRectOverlay
           a={marqueeOverlay?.a ?? null}

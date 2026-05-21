@@ -10,6 +10,7 @@ import {
   loadPcbOverlayTexts,
   loadPcbTraces,
   loadPcbVias,
+  loadPcbZones,
   syncPcbPlacementsFromSchematic,
 } from "./pcb-store";
 import { computeRatsnest } from "./ratsnest";
@@ -58,12 +59,36 @@ export function loadPcbProjection(params: {
       netNames.set(net.id, net.name);
     }
   }
-  const traces = loadPcbTraces(params.db, params.designId);
-  const vias = loadPcbVias(params.db, params.designId);
+  const rawTraces = loadPcbTraces(params.db, params.designId);
+  const rawVias = loadPcbVias(params.db, params.designId);
+
+  // Bind importer-supplied netName hints (KiCad project import) to schematic
+  // net ids. Built once per projection; native traces / vias with no netName
+  // hint are unaffected. When a hint exists but no schematic net matches,
+  // leave netId null — pad-alignment heuristics elsewhere remain the fallback.
+  const netIdByName = new Map<string, string>();
+  if (schematic) {
+    for (const net of schematic.nets) {
+      if (net.name) netIdByName.set(net.name, net.id);
+    }
+  }
+  const bindNetName = <
+    T extends { netId: string | null; netName?: string | null },
+  >(
+    entity: T,
+  ): T => {
+    if (entity.netId || !entity.netName) return entity;
+    const resolved = netIdByName.get(entity.netName);
+    if (!resolved) return entity;
+    return { ...entity, netId: resolved };
+  };
+  const traces = rawTraces.map(bindNetName);
+  const vias = rawVias.map(bindNetName);
   const freeHoles = loadPcbFreeHoles(params.db, params.designId);
   const freePads = loadPcbFreePads(params.db, params.designId);
   const overlayTexts = loadPcbOverlayTexts(params.db, params.designId);
   const overlayShapes = loadPcbOverlayShapes(params.db, params.designId);
+  const zones = loadPcbZones(params.db, params.designId);
 
   const ratsnest = computeRatsnest(correlation, {
     netNames,
@@ -83,6 +108,7 @@ export function loadPcbProjection(params: {
     freePads,
     overlayTexts,
     overlayShapes,
+    zones,
     ratsnest,
     netNames: Object.fromEntries(netNames),
     warnings: correlation.warnings,

@@ -274,7 +274,7 @@ function buildPcbViaForInsert(
   return { via };
 }
 
-function insertPart(
+export function insertPart(
   tx: DbClient,
   designId: string,
   payload: PersistedPartPayload,
@@ -321,7 +321,7 @@ function insertPart(
   }
 }
 
-function insertWire(
+export function insertWire(
   tx: DbClient,
   designId: string,
   payload: PersistedWirePayload,
