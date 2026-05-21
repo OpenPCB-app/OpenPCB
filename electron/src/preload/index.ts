@@ -41,6 +41,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getDiagnosticsPaths: (): Promise<DiagnosticsPaths> => {
     return ipcRenderer.invoke("diagnostics:paths");
   },
+  onDeepLink: (callback: (url: string) => void) => {
+    ipcRenderer.on("deep-link", (_event, url: string) => callback(url));
+  },
+  flushPendingDeepLink: (): Promise<string | null> => {
+    return ipcRenderer.invoke("deep-link:pending");
+  },
+  secureStorage: {
+    get: (key: string): Promise<string | null> =>
+      ipcRenderer.invoke("secure-storage:get", key),
+    set: (key: string, value: string): Promise<void> =>
+      ipcRenderer.invoke("secure-storage:set", key, value),
+    remove: (key: string): Promise<void> =>
+      ipcRenderer.invoke("secure-storage:remove", key),
+  },
 });
 
 contextBridge.exposeInMainWorld("updater", {

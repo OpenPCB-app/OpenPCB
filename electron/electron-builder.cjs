@@ -13,6 +13,13 @@ module.exports = {
   productName: "OpenPCB",
   copyright: "© OpenPCB",
 
+  protocols: [
+    {
+      name: "OpenPCB",
+      schemes: ["openpcb"],
+    },
+  ],
+
   // electron is hoisted to the repo-root node_modules by npm workspaces, so
   // electron-builder can't infer the version from electron/node_modules.
   // Read it from the hoisted install at config-load time.
@@ -138,6 +145,7 @@ module.exports = {
         Name: "OpenPCB",
         GenericName: "PCB Design Suite",
         Categories: "Development;Electronics;",
+        MimeType: "x-scheme-handler/openpcb;",
       },
     },
     // ${name} resolves to package.json#name ("openpcb-electron") — override

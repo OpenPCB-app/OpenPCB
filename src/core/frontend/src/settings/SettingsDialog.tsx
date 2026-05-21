@@ -12,6 +12,8 @@ import { settingsNavItems, type SettingsNavItem } from "./nav";
 import { GeneralPanel } from "./panels/GeneralPanel";
 import { AboutPanel } from "./panels/AboutPanel";
 import { AssistantPanel } from "./panels/AssistantPanel";
+import { AccountPanel } from "./panels/AccountPanel";
+import { useAuth } from "@/cloud/AuthProvider";
 
 type SettingsPanelId = SettingsNavItem["id"];
 
@@ -23,11 +25,13 @@ type SettingsDialogProps = {
   initialTab?: SettingsPanelId;
 };
 
-const panelComponents: Record<SettingsPanelId, () => React.JSX.Element> = {
-  general: GeneralPanel,
-  assistant: AssistantPanel,
-  about: AboutPanel,
-};
+const panelComponents: Record<SettingsPanelId, () => React.JSX.Element | null> =
+  {
+    general: GeneralPanel,
+    account: AccountPanel,
+    assistant: AssistantPanel,
+    about: AboutPanel,
+  };
 
 export function SettingsDialog({
   open,
@@ -36,9 +40,13 @@ export function SettingsDialog({
   trigger,
   initialTab,
 }: SettingsDialogProps) {
+  const { enabled: cloudEnabled } = useAuth();
   const items = React.useMemo(
-    () => [...settingsNavItems].sort((a, b) => a.order - b.order),
-    [],
+    () =>
+      [...settingsNavItems]
+        .filter((item) => !item.requiresCloud || cloudEnabled)
+        .sort((a, b) => a.order - b.order),
+    [cloudEnabled],
   );
 
   const defaultTab = (initialTab ??

@@ -14,6 +14,12 @@ import {
   getBackendPayload,
 } from "./backend-server.js";
 import { initUpdater } from "./updater.js";
+import { initDeepLink, flushPending } from "./deep-link.js";
+import {
+  getSecureItem,
+  setSecureItem,
+  removeSecureItem,
+} from "./secure-storage.js";
 
 initLogger();
 initCrashReporter();
@@ -34,6 +40,7 @@ log.info(
 
 registerDiagnosticsIpc();
 initUpdater();
+initDeepLink(() => mainWindow);
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -140,6 +147,16 @@ function loadStartupError(window: BrowserWindow, err: unknown): void {
 ipcMain.handle("get-backend-url", () => {
   return getBackendPayload();
 });
+
+ipcMain.handle("deep-link:pending", () => flushPending());
+
+ipcMain.handle("secure-storage:get", (_e, key: string) => getSecureItem(key));
+ipcMain.handle("secure-storage:set", (_e, key: string, value: string) =>
+  setSecureItem(key, value),
+);
+ipcMain.handle("secure-storage:remove", (_e, key: string) =>
+  removeSecureItem(key),
+);
 
 app.whenReady().then(async () => {
   try {

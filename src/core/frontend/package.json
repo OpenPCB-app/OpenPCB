@@ -20,6 +20,7 @@
     "@react-three/fiber": "^9.5.0",
     "@sentry/electron": "^7.0.0",
     "@sentry/react": "^10.21.0",
+    "@supabase/supabase-js": "^2.106.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.462.0",
     "occt-import-js": "^0.0.23",
