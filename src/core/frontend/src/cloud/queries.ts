@@ -17,13 +17,49 @@ export interface CloudDesignDetail {
   workspaceId: string;
 }
 
+// Cloud's projection_json mirrors desktop's DesignerSchematicProjection shape
+// verbatim (nm units, arrays of entities). Keep this interface minimal — only
+// the fields the importer reads.
+export interface CloudProjectionPart {
+  id: string;
+  componentId: string;
+  reference: string;
+  value: string;
+  positionNm: { x: number; y: number };
+  rotationDeg: 0 | 90 | 180 | 270;
+  mirrored: boolean;
+}
+export interface CloudProjectionWire {
+  id: string;
+  sourcePinId: string;
+  targetPinId: string;
+  pointsNm?: Array<{ x: number; y: number }>;
+}
+export interface CloudProjectionLabel {
+  id: string;
+  text: string;
+  positionNm: { x: number; y: number };
+}
 export interface CloudProjection {
-  parts: Record<string, { id: string; position: { x: number; y: number } }>;
-  wires: Record<string, unknown>;
-  labels: Record<
-    string,
-    { id: string; text: string; position: { x: number; y: number } }
-  >;
+  parts: CloudProjectionPart[];
+  wires: CloudProjectionWire[];
+  labels: CloudProjectionLabel[];
+}
+
+export interface CloudPubComponentRow {
+  id: string;
+  slug: string;
+  name: string;
+  category: string | null;
+  tags: string[];
+}
+
+export interface CloudPubComponentVersionRow {
+  id: string;
+  componentId: string;
+  channel: string;
+  version: string;
+  manifest: Record<string, unknown>;
 }
 
 export interface CloudCommandLogEntry {
@@ -96,10 +132,31 @@ export async function getCloudProjection(
     projection_json: CloudProjection;
   };
   return {
-    projection: row.projection_json ?? { parts: {}, wires: {}, labels: {} },
+    projection: row.projection_json ?? { parts: [], wires: [], labels: [] },
     revision: row.revision,
     name: row.name,
   };
+}
+
+// Fetch a single cloud library component-version by component id. Used by the
+// import-from-cloud flow to auto-pull missing components into the local
+// library before placing them.
+export async function fetchCloudComponentVersion(
+  componentId: string,
+  channel = "stable",
+  version = "1.0.0",
+): Promise<CloudPubComponentVersionRow | null> {
+  const sb = getSupabase();
+  if (!sb) throw new Error("Cloud not configured");
+  const { data, error } = await sb
+    .from("pub_component_version")
+    .select("id, componentId:component_id, channel, version, manifest")
+    .eq("component_id", componentId)
+    .eq("channel", channel)
+    .eq("version", version)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as unknown as CloudPubComponentVersionRow) ?? null;
 }
 
 export async function getCloudCommandLog(

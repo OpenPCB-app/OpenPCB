@@ -36,8 +36,12 @@ function newId(): string {
   return crypto.randomUUID();
 }
 
-function mmToNm(mm: { x: number; y: number }): { x: number; y: number } {
-  return { x: Math.round(mm.x * 1_000_000), y: Math.round(mm.y * 1_000_000) };
+interface ImportSummary {
+  parts: number;
+  wires: number;
+  labels: number;
+  partsSkipped: string[]; // component IDs missing locally
+  wiresSkipped: number;
 }
 
 export function CloudDesignBrowser({
@@ -106,36 +110,104 @@ export function CloudDesignBrowser({
           lastSyncedRevision: cloudDesign.revision,
         });
 
-        // 3. For each label in the cloud projection, dispatch a synthetic
-        //    `upsert_label` LOCALLY (no cloud mirror — already there).
-        // Labels: omit labelId so local creates fresh IDs (upsert_label
-        // with a labelId requires the label to already exist locally).
-        const labels = Object.values(cloudDesign.projection.labels ?? {});
+        // 3. Rehydrate cloud projection into local SQLite via synthetic
+        //    desktop commands. Cloud uses desktop's exact shape (positionNm,
+        //    rotationDeg, sourcePinId, …), so we forward fields verbatim.
+        //    dispatchLocalOnly skips outbound mirror — cloud already has them.
+        const projection = cloudDesign.projection;
+        const summary: ImportSummary = {
+          parts: 0,
+          wires: 0,
+          labels: 0,
+          partsSkipped: [],
+          wiresSkipped: 0,
+        };
         let baseRev = 0;
-        for (const label of labels) {
+
+        const dispatchOrSkip = async (
+          command: { type: string; [k: string]: unknown },
+          skippableCodes: string[] = [],
+        ): Promise<{ ok: boolean; code?: string }> => {
           const result = await api.dispatchLocalOnly(local.id, {
             commandId: newId(),
             sessionId: "cloud-import",
             aggregateId: local.id,
             baseRevision: baseRev,
             issuedAt: Date.now(),
-            command: {
-              type: "upsert_label",
-              text: label.text,
-              positionNm: mmToNm(label.position),
-            },
+            // DesignerCommand is a strict union; the import flow synthesizes
+            // commands from runtime cloud data so we need a one-shot cast.
+            command: command as unknown as Parameters<
+              typeof api.dispatchLocalOnly
+            >[1]["command"],
           });
-          if (!result.ok) {
-            throw new Error(
-              `Import dispatch failed at label "${label.text}" (rev ${baseRev})`,
-            );
+          if (result.ok) {
+            baseRev += 1;
+            return { ok: true };
           }
-          baseRev += 1;
+          const code = (result as { code?: string }).code;
+          if (code && skippableCodes.includes(code)) {
+            return { ok: false, code };
+          }
+          throw new Error(
+            `Import dispatch failed for ${command.type} (rev ${baseRev}, code=${code ?? "unknown"})`,
+          );
+        };
+
+        // 3a. Parts first (wires depend on parts existing for pin lookup).
+        for (const part of projection.parts ?? []) {
+          const res = await dispatchOrSkip(
+            {
+              type: "place_part",
+              componentId: part.componentId,
+              positionNm: part.positionNm,
+              rotationDeg: part.rotationDeg,
+              mirrored: part.mirrored,
+            },
+            ["COMPONENT_NOT_FOUND"],
+          );
+          if (res.ok) summary.parts += 1;
+          else summary.partsSkipped.push(part.componentId);
         }
 
+        // 3b. Wires (only those whose pin endpoints survived the part skip).
+        for (const wire of projection.wires ?? []) {
+          const res = await dispatchOrSkip(
+            {
+              type: "create_wire",
+              sourcePinId: wire.sourcePinId,
+              targetPinId: wire.targetPinId,
+              ...(wire.pointsNm ? { pointsNm: wire.pointsNm } : {}),
+            },
+            ["PIN_NOT_FOUND", "INVALID_WIRE_PATH"],
+          );
+          if (res.ok) summary.wires += 1;
+          else summary.wiresSkipped += 1;
+        }
+
+        // 3c. Labels (no labelId → local creates fresh).
+        for (const label of projection.labels ?? []) {
+          const res = await dispatchOrSkip(
+            {
+              type: "upsert_label",
+              text: label.text,
+              positionNm: label.positionNm,
+            },
+            ["INVALID_LABEL"],
+          );
+          if (res.ok) summary.labels += 1;
+        }
+
+        const skippedMsg = summary.partsSkipped.length
+          ? ` — ${summary.partsSkipped.length} parts skipped (missing components: ${[...new Set(summary.partsSkipped)].slice(0, 3).join(", ")}${summary.partsSkipped.length > 3 ? "…" : ""})`
+          : "";
+        const wiresMsg = summary.wiresSkipped
+          ? ` — ${summary.wiresSkipped} wires skipped`
+          : "";
         onNotify(
-          `Imported ${cloudDesign.name} (${labels.length} labels) to local`,
-          "success",
+          `Imported ${cloudDesign.name}: ${summary.parts} parts, ${summary.wires} wires, ${summary.labels} labels${skippedMsg}${wiresMsg}`,
+          summary.partsSkipped.length || summary.wiresSkipped
+            ? "warning"
+            : "success",
         );
         openTab(local.id);
         onClose();
@@ -240,9 +312,9 @@ function ProjectionSummary({
 }: {
   projection: CloudProjection;
 }): ReactElement {
-  const partCount = Object.keys(projection.parts ?? {}).length;
-  const wireCount = Object.keys(projection.wires ?? {}).length;
-  const labels = Object.values(projection.labels ?? {});
+  const partCount = (projection.parts ?? []).length;
+  const wireCount = (projection.wires ?? []).length;
+  const labels = projection.labels ?? [];
   return (
     <div className="space-y-3 text-xs">
       <div className="rounded-sm bg-slate-50 px-3 py-2 dark:bg-slate-800">
@@ -255,8 +327,9 @@ function ProjectionSummary({
           <ul className="space-y-1">
             {labels.map((l) => (
               <li key={l.id} className="text-slate-600 dark:text-slate-300">
-                <code>{l.text}</code> at ({l.position.x.toFixed(2)} mm,{" "}
-                {l.position.y.toFixed(2)} mm)
+                <code>{l.text}</code> at (
+                {(l.positionNm.x / 1_000_000).toFixed(2)} mm,{" "}
+                {(l.positionNm.y / 1_000_000).toFixed(2)} mm)
               </li>
             ))}
           </ul>
