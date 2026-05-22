@@ -27,6 +27,7 @@ target/
 scripts/.dist
 .env
 .env.local
+.env.e2e
 
 # Desktop packaging outputs
 bin/
