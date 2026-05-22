@@ -1513,7 +1513,12 @@ export const SchematicCanvas = forwardRef<
           x: Math.round(event.worldPoint.x),
           y: Math.round(event.worldPoint.y),
         };
-        setCursorNm(worldNm);
+        setCursorNm((prev) => {
+          if (prev?.x === worldNm.x && prev.y === worldNm.y) {
+            return prev;
+          }
+          return worldNm;
+        });
 
         if (dragSession) {
           const rawDelta = {
@@ -1537,7 +1542,7 @@ export const SchematicCanvas = forwardRef<
         }
       },
       onPointerLeave() {
-        setCursorNm(null);
+        setCursorNm((prev) => (prev === null ? prev : null));
       },
       onPointerDown(event) {
         if (!projection) {

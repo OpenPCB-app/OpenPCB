@@ -2,10 +2,6 @@
 // `__electronLog` symbol so renderer code calling electron-log/renderer routes
 // to the main process logger (and disk).
 import "electron-log/preload";
-// @sentry/electron/preload sets up the IPC channel + native crash listener so
-// renderer-side Sentry.init() can communicate with the main-process SDK.
-import "@sentry/electron/preload";
-
 import { contextBridge, ipcRenderer } from "electron";
 
 interface BackendReadyPayload {

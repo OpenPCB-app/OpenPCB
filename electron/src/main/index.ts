@@ -25,6 +25,13 @@ initLogger();
 initCrashReporter();
 const sentryEnabled = initSentry();
 
+if (!app.isPackaged) {
+  // Vite dev mode needs inline/eval/blob script allowances for React Refresh
+  // and worker hot-loading. Keep Electron's security warning disabled only for
+  // this dev-only renderer; packaged builds keep the strict production CSP.
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
+}
+
 if (process.env.OPENPCB_DEBUG === "1" || !app.isPackaged) {
   app.commandLine.appendSwitch("enable-logging");
   app.commandLine.appendSwitch(
@@ -51,19 +58,36 @@ function installSecurityPolicy(): void {
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = details.responseHeaders ?? {};
-    responseHeaders["Content-Security-Policy"] = [
+    const devCsp = [
       "default-src 'self' http://127.0.0.1:*",
-      "script-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: http://127.0.0.1:*",
+      "style-src 'self' 'unsafe-inline' http://127.0.0.1:*",
+      "img-src 'self' data: blob: http://127.0.0.1:*",
+      "font-src 'self' data: http://127.0.0.1:* https://cdn.jsdelivr.net",
+      "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://cdn.jsdelivr.net",
+      "worker-src 'self' blob: http://127.0.0.1:*",
+      "media-src 'self' blob:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+    ].join("; ");
+    const prodCsp = [
+      "default-src 'self' http://127.0.0.1:*",
+      "script-src 'self' blob:",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
-      "font-src 'self' data:",
-      "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*",
+      "font-src 'self' data: https://cdn.jsdelivr.net",
+      "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://cdn.jsdelivr.net",
       "worker-src 'self' blob:",
       "media-src 'self' blob:",
       "object-src 'none'",
       "base-uri 'self'",
       "frame-ancestors 'none'",
     ].join("; ");
+
+    responseHeaders["Content-Security-Policy"] = [
+      app.isPackaged ? prodCsp : devCsp,
+    ];
     callback({ responseHeaders });
   });
 }

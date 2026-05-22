@@ -11,7 +11,7 @@
     "setup": "npm install",
     "dev": "concurrently --kill-others-on-fail --names backend,frontend --prefix-colors blue,green \"npm run dev:backend\" \"npx wait-on tcp:127.0.0.1:3000 && npm run dev:frontend\"",
     "dev:desktop": "npm run dev:electron",
-    "dev:electron": "node scripts/ensure-electron-native-deps.mjs && concurrently --kill-others-on-fail --names frontend,electron-build,electron --prefix-colors green,yellow,magenta \"npm run dev:frontend\" \"npm run build:watch --workspace electron\" \"npx wait-on http-get://127.0.0.1:1420 && npm run start --workspace electron\"",
+    "dev:electron": "node scripts/ensure-electron-native-deps.mjs && concurrently --kill-others-on-fail --names frontend,electron-build,electron --prefix-colors green,yellow,magenta \"npm run dev:frontend\" \"npm run build:watch --workspace electron\" \"npx wait-on http-get://127.0.0.1:1420 file:electron/dist/main/index.js file:electron/dist/preload/index.js && npm run start --workspace electron\"",
     "dev:browser": "concurrently --kill-others-on-fail --names backend,frontend --prefix-colors blue,green \"npm run dev:backend\" \"npx wait-on tcp:127.0.0.1:3000 && npx playwright test --ui\"",
     "dev:backend": "cd src/core/backend && PORT=3000 NODE_ENV=development bun --watch main.ts",
     "dev:frontend": "npm run dev --workspace src/core/frontend",
