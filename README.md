@@ -145,6 +145,22 @@ npm run dev
 npm run dev:electron     # alias: dev:desktop
 ```
 
+### Run with sibling CoreLibrary sources
+
+Place `CoreLibrary` beside this checkout, install its Bun deps once, then use
+the dev CoreLibrary scripts:
+
+```bash
+cd ../CoreLibrary && bun install && bun run validate
+cd ../OpenPCB
+npm run dev:corelib          # browser dev, packs ../CoreLibrary first
+npm run dev:electron:corelib # desktop dev, packs ../CoreLibrary first
+```
+
+The local package is built as `999.0.0-dev` in `../CoreLibrary/dist` and is
+preferred only in development. Release/package builds still use fetched/bundled
+`.opclib` resources.
+
 ### Build installers
 
 ```bash
@@ -163,6 +179,8 @@ CI builds and publishes artifacts (dmg/zip, Setup.exe/nupkg/RELEASES, deb/rpm/Ap
 | ---------------------------- | ------------------------------------------------------------- |
 | `npm run dev`                | Backend + Vite (browser mode)                                 |
 | `npm run dev:electron`       | Vite + Electron shell with embedded backend                   |
+| `npm run dev:corelib`        | Pack `../CoreLibrary`, then run browser dev                   |
+| `npm run dev:electron:corelib` | Pack `../CoreLibrary`, then run Electron dev                |
 | `npm run dev:backend`        | Bun backend only (`--watch`, port 3000)                       |
 | `npm run dev:frontend`       | Vite dev server only (port 1420)                              |
 | `npm run dev:browser`        | Backend + Playwright UI runner                                |

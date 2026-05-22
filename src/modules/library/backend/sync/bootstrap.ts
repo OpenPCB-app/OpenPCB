@@ -166,6 +166,10 @@ function shouldImportBundledRelease(
     return sameVersion.packageSha256 !== bundledSha;
   }
 
+  if (isDevCoreLibraryVersion(installed.map((row) => row.version))) {
+    return !isDevCoreLibraryVersion([bundledVersion]);
+  }
+
   const bundledParsed = parseSemver(bundledVersion);
   const latestInstalled = pickLatestSemver(installed.map((row) => row.version));
   if (bundledParsed && latestInstalled) {
@@ -173,6 +177,10 @@ function shouldImportBundledRelease(
   }
 
   return true;
+}
+
+function isDevCoreLibraryVersion(versions: string[]): boolean {
+  return versions.some((version) => /(?:^|[-.])dev(?:$|[-.+])/.test(version));
 }
 
 function ensureUserLocalSource(ctx: CoreBackendModuleContext): boolean {

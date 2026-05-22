@@ -8,16 +8,24 @@ const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
  * Resolution order:
  *   1. OPENPCB_BUNDLED_LIBRARY_PATH (absolute file or dir)
  *   2. Electron resources path: $resourcesPath/core-library/*.opclib
- *   3. Dev fallback A: <OpenPCB-repo>/resources/core-library/*.opclib
- *   4. Dev fallback B: <OpenPCB-parent>/OpenPCB_CoreLibrary/dist/*.opclib
- *      (lets contributors iterate on the external repo and have OpenPCB pick
- *      up the freshly-built `.opclib` without manually copying)
+ *   3. Dev fallback A: <OpenPCB-parent>/CoreLibrary/dist/*.opclib
+ *      (lets contributors iterate on the external repo via
+ *      `npm run dev:corelib` without manually copying)
+ *   4. Dev fallback B: <OpenPCB-repo>/resources/core-library/*.opclib
  *
  * When multiple `.opclib` files exist in a directory, the highest semver
  * version (parsed from the filename suffix) wins. `1.10.0` correctly beats
  * `1.9.0` and `1.0.0`; lexicographic sort doesn't.
  */
-export async function locateBundledOpclib(): Promise<string | null> {
+interface LocateBundledOpclibOptions {
+  repoRoot?: string;
+  electronResources?: string | null;
+  nodeEnv?: string;
+}
+
+export async function locateBundledOpclib(
+  options: LocateBundledOpclibOptions = {},
+): Promise<string | null> {
   const fromEnv = process.env.OPENPCB_BUNDLED_LIBRARY_PATH;
   if (fromEnv) {
     const stats = await statSafe(fromEnv);
@@ -28,30 +36,34 @@ export async function locateBundledOpclib(): Promise<string | null> {
     }
   }
 
-  const electronResources = (process as { resourcesPath?: string })
-    .resourcesPath;
+  const electronResources =
+    "electronResources" in options
+      ? (options.electronResources ?? undefined)
+      : (process as { resourcesPath?: string }).resourcesPath;
   if (electronResources) {
     const dir = path.join(electronResources, "core-library");
     const hit = await latestOpclibIn(dir);
     if (hit) return hit;
   }
 
-  // Dev fallbacks A + B: derive both from the OpenPCB repo root.
-  // workspaceRoot is the OpenPCB checkout root; its parent contains sibling
-  // workspaces (notably OpenPCB_CoreLibrary/).
-  const repoRoot = process.env.OPENPCB_WORKSPACE_ROOT
-    ? path.resolve(process.env.OPENPCB_WORKSPACE_ROOT, "..")
-    : path.resolve(MODULE_DIR, "..", "..", "..", "..", "..");
+  const repoRoot = options.repoRoot
+    ? path.resolve(options.repoRoot)
+    : process.env.OPENPCB_WORKSPACE_ROOT
+      ? path.resolve(process.env.OPENPCB_WORKSPACE_ROOT, "..")
+      : path.resolve(MODULE_DIR, "..", "..", "..", "..", "..");
+  const nodeEnv = options.nodeEnv ?? process.env.NODE_ENV;
 
-  const devA = await latestOpclibIn(
+  if (nodeEnv !== "production") {
+    const devCoreLibrary = await latestOpclibIn(
+      path.join(repoRoot, "..", "CoreLibrary", "dist"),
+    );
+    if (devCoreLibrary) return devCoreLibrary;
+  }
+
+  const repoBundled = await latestOpclibIn(
     path.join(repoRoot, "resources", "core-library"),
   );
-  if (devA) return devA;
-
-  const devB = await latestOpclibIn(
-    path.join(repoRoot, "..", "OpenPCB_CoreLibrary", "dist"),
-  );
-  if (devB) return devB;
+  if (repoBundled) return repoBundled;
 
   return null;
 }
