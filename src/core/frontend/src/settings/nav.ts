@@ -3,12 +3,13 @@ import {
   Bot,
   Info,
   Library,
+  Lock,
   Settings as SettingsIcon,
   User,
 } from "lucide-react";
 
 export type SettingsNavItem = {
-  id: "general" | "account" | "libraries" | "assistant" | "about";
+  id: "general" | "account" | "libraries" | "assistant" | "privacy" | "about";
   label: string;
   icon: LucideIcon;
   order: number;
@@ -39,5 +40,6 @@ export const settingsNavItems: SettingsNavItem[] = [
     order: 4,
     requiresModule: "assistant",
   },
-  { id: "about", label: "About", icon: Info, order: 5 },
+  { id: "privacy", label: "Privacy", icon: Lock, order: 5 },
+  { id: "about", label: "About", icon: Info, order: 6 },
 ];

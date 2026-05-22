@@ -14,6 +14,7 @@ import { AboutPanel } from "./panels/AboutPanel";
 import { AssistantPanel } from "./panels/AssistantPanel";
 import { AccountPanel } from "./panels/AccountPanel";
 import { LibrariesPanel } from "./panels/LibrariesPanel";
+import { PrivacyPanel } from "./panels/PrivacyPanel";
 import { useAuth } from "@/cloud/AuthProvider";
 import { useBootstrap } from "@/providers/BootstrapProvider";
 
@@ -33,6 +34,7 @@ const panelComponents: Record<SettingsPanelId, () => React.JSX.Element | null> =
     account: AccountPanel,
     libraries: LibrariesPanel,
     assistant: AssistantPanel,
+    privacy: PrivacyPanel,
     about: AboutPanel,
   };
 

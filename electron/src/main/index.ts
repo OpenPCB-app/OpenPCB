@@ -20,6 +20,7 @@ import {
   setSecureItem,
   removeSecureItem,
 } from "./secure-storage.js";
+import { getTelemetryOptIn, setTelemetryOptIn } from "./preferences.js";
 
 initLogger();
 initCrashReporter();
@@ -52,9 +53,11 @@ initDeepLink(() => mainWindow);
 let mainWindow: BrowserWindow | null = null;
 
 function installSecurityPolicy(): void {
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
-    callback(false);
-  });
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => {
+      callback(false);
+    },
+  );
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = details.responseHeaders ?? {};
@@ -239,6 +242,11 @@ ipcMain.handle("secure-storage:set", (_e, key: string, value: string) =>
 );
 ipcMain.handle("secure-storage:remove", (_e, key: string) =>
   removeSecureItem(key),
+);
+
+ipcMain.handle("prefs:get-telemetry-opt-in", () => getTelemetryOptIn());
+ipcMain.handle("prefs:set-telemetry-opt-in", (_e, value: boolean) =>
+  setTelemetryOptIn(value),
 );
 
 app.whenReady().then(async () => {

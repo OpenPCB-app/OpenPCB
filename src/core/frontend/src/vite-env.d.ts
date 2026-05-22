@@ -14,10 +14,16 @@ interface ElectronSecureStorage {
   remove(key: string): Promise<void>;
 }
 
+interface ElectronPreferences {
+  getTelemetryOptIn(): Promise<boolean>;
+  setTelemetryOptIn(value: boolean): Promise<void>;
+}
+
 interface ElectronAPI {
   onBackendReady: (callback: (payload: ElectronBackendPayload) => void) => void;
   getBackendUrl: () => Promise<ElectronBackendPayload | null>;
   secureStorage?: ElectronSecureStorage;
+  preferences?: ElectronPreferences;
 }
 
 declare global {

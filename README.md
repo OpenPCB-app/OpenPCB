@@ -4,8 +4,8 @@
   <p><strong>Modular, open desktop PCB design suite — schematic capture, PCB layout, and a unified component library in one app.</strong></p>
 
   <p>
-    <img alt="version" src="https://img.shields.io/badge/version-0.1.5--dev-blue" />
-    <img alt="license" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-lightgrey" />
+    <img alt="version" src="https://img.shields.io/badge/version-0.1.0--beta-blue" />
+    <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue" />
     <img alt="electron" src="https://img.shields.io/badge/Electron-41-47848F?logo=electron&logoColor=white" />
     <img alt="bun" src="https://img.shields.io/badge/Bun-runtime-black?logo=bun&logoColor=white" />
     <img alt="react" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" />
@@ -175,29 +175,29 @@ CI builds and publishes artifacts (dmg/zip, Setup.exe/nupkg/RELEASES, deb/rpm/Ap
 
 ## Commands reference
 
-| Command                      | What it does                                                  |
-| ---------------------------- | ------------------------------------------------------------- |
-| `npm run dev`                | Backend + Vite (browser mode)                                 |
-| `npm run dev:electron`       | Vite + Electron shell with embedded backend                   |
-| `npm run dev:corelib`        | Pack `../CoreLibrary`, then run browser dev                   |
-| `npm run dev:electron:corelib` | Pack `../CoreLibrary`, then run Electron dev                |
-| `npm run dev:backend`        | Bun backend only (`--watch`, port 3000)                       |
-| `npm run dev:frontend`       | Vite dev server only (port 1420)                              |
-| `npm run dev:browser`        | Backend + Playwright UI runner                                |
-| `npm run build`              | Frontend bundle + electron-builder make                       |
-| `npm run typecheck`          | Composite `tsc -b` over backend/frontend/modules              |
-| `npm run test:backend`       | Bun test suite (`src/core/backend`)                           |
-| `npm run test:react`         | Vitest (`src/core/frontend`)                                  |
-| `npm run test:e2e`           | Playwright e2e                                                |
-| `npm run module`             | Interactive module CLI                                        |
-| `npm run module:create`      | Scaffold a new module                                         |
-| `npm run module:validate`    | Validate all module manifests                                 |
-| `npm run modules:generate`   | Codegen module registry → `frontend/src/generated/modules.ts` |
-| `npm run sdk:generate`       | Codegen SDK barrels → `frontend/src/generated/sdk/`           |
-| `npm run gen` / `gen:check`  | Run codegen / fail if generated files are dirty               |
-| `npm run db:generate`        | `drizzle-kit generate`                                        |
-| `npm run db:studio`          | `drizzle-kit studio`                                          |
-| `npm run release:sourcemaps` | Upload sourcemaps post-release                                |
+| Command                        | What it does                                                  |
+| ------------------------------ | ------------------------------------------------------------- |
+| `npm run dev`                  | Backend + Vite (browser mode)                                 |
+| `npm run dev:electron`         | Vite + Electron shell with embedded backend                   |
+| `npm run dev:corelib`          | Pack `../CoreLibrary`, then run browser dev                   |
+| `npm run dev:electron:corelib` | Pack `../CoreLibrary`, then run Electron dev                  |
+| `npm run dev:backend`          | Bun backend only (`--watch`, port 3000)                       |
+| `npm run dev:frontend`         | Vite dev server only (port 1420)                              |
+| `npm run dev:browser`          | Backend + Playwright UI runner                                |
+| `npm run build`                | Frontend bundle + electron-builder make                       |
+| `npm run typecheck`            | Composite `tsc -b` over backend/frontend/modules              |
+| `npm run test:backend`         | Bun test suite (`src/core/backend`)                           |
+| `npm run test:react`           | Vitest (`src/core/frontend`)                                  |
+| `npm run test:e2e`             | Playwright e2e                                                |
+| `npm run module`               | Interactive module CLI                                        |
+| `npm run module:create`        | Scaffold a new module                                         |
+| `npm run module:validate`      | Validate all module manifests                                 |
+| `npm run modules:generate`     | Codegen module registry → `frontend/src/generated/modules.ts` |
+| `npm run sdk:generate`         | Codegen SDK barrels → `frontend/src/generated/sdk/`           |
+| `npm run gen` / `gen:check`    | Run codegen / fail if generated files are dirty               |
+| `npm run db:generate`          | `drizzle-kit generate`                                        |
+| `npm run db:studio`            | `drizzle-kit studio`                                          |
+| `npm run release:sourcemaps`   | Upload sourcemaps post-release                                |
 
 Single-file test runs:
 
@@ -257,15 +257,19 @@ Module routes are mounted under `/api/modules/{id}/...`. SDKs are registered aga
 
 ## License
 
-Released under the **PolyForm Noncommercial License 1.0.0**. Use, modification, and distribution are permitted for noncommercial purposes only. See [`LICENSE`](LICENSE) for the full text.
+OpenPCB is **dual-licensed**:
+
+- **AGPL-3.0-or-later** for community / open-source use. See [`LICENSE`](LICENSE) for the full text.
+- **Commercial license** available for organizations that cannot meet AGPL's source-disclosure obligations or who want a license without copyleft requirements. See [`LICENSE-COMMERCIAL.md`](LICENSE-COMMERCIAL.md) — contact `licensing@openpcb.app`.
+
+## Known issues on first launch
+
+- Binaries in `v0.1.x-beta` are **unsigned**. macOS Gatekeeper and Windows SmartScreen will warn — see [`electron/README-BETA-INSTALL.md`](electron/README-BETA-INSTALL.md).
+- Linux AppImage needs `chmod +x` after download.
+- `electron-updater` is wired but the update feed is not live yet; install new versions manually.
 
 ## Contributing
 
-Contributions are welcome while OpenPCB matures. Before opening a PR:
-
-1. `npm run typecheck && npm run test:backend && npm run test:react`
-2. `npm run gen:check` (no uncommitted codegen drift)
-3. Respect layer rules: `modules → sdks + shared → core`. Never import across module internals.
-4. Follow existing module structure; add SQL migrations rather than ad-hoc schema patches.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, conventions, and the pre-PR checklist. By contributing you agree to license your contributions under AGPL-3.0-or-later.
 
 For architecture-shaping changes, open an issue first.

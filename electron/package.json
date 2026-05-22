@@ -1,10 +1,10 @@
 {
   "name": "openpcb-electron",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.0",
   "description": "OpenPCB desktop application",
   "author": "OpenPCB",
   "homepage": "https://github.com/andrejvysny/OpenPCB",
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "AGPL-3.0-or-later",
   "private": true,
   "main": "dist/main/index.js",
   "scripts": {

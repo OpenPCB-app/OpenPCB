@@ -51,6 +51,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     remove: (key: string): Promise<void> =>
       ipcRenderer.invoke("secure-storage:remove", key),
   },
+  preferences: {
+    getTelemetryOptIn: (): Promise<boolean> =>
+      ipcRenderer.invoke("prefs:get-telemetry-opt-in"),
+    setTelemetryOptIn: (value: boolean): Promise<void> =>
+      ipcRenderer.invoke("prefs:set-telemetry-opt-in", value),
+  },
 });
 
 contextBridge.exposeInMainWorld("updater", {
