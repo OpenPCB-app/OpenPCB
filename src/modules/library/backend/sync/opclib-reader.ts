@@ -9,4 +9,8 @@ export {
   readOpclibFromBytes,
   readAssetJson,
   readAssetBytes,
+  verifyManifest,
+  type OpclibSignature,
+  type TrustedKeyResolver,
+  type VerifyManifestResult,
 } from "@openpcb/opclib-pack";

@@ -1,5 +1,11 @@
 const path = require("node:path");
+const fs = require("node:fs");
 const repoRoot = path.resolve(__dirname, "..");
+const downloadedCoreLibrary = path.join(repoRoot, ".build", "core-library");
+const localCoreLibrary = path.join(repoRoot, "resources", "core-library");
+const bundledCoreLibrary = fs.existsSync(downloadedCoreLibrary)
+  ? downloadedCoreLibrary
+  : localCoreLibrary;
 
 // When publishing from CI, override artifact version token with the git tag
 // (RELEASE_NAME=${GITHUB_REF_NAME}) so filenames reflect the release, not the
@@ -71,12 +77,14 @@ module.exports = {
       to: "dist",
     },
     {
-      from: path.relative(
-        __dirname,
-        path.join(repoRoot, ".build", "core-library"),
-      ),
+      from: path.relative(__dirname, bundledCoreLibrary),
       to: "core-library",
       filter: ["*.opclib"],
+    },
+    {
+      from: path.relative(__dirname, path.join(repoRoot, "resources", "keys")),
+      to: "keys",
+      filter: ["*.pub"],
     },
     {
       from: path.relative(__dirname, path.join(repoRoot, "src")),

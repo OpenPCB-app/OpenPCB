@@ -1,5 +1,8 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Resolution order:
@@ -38,7 +41,7 @@ export async function locateBundledOpclib(): Promise<string | null> {
   // workspaces (notably OpenPCB_CoreLibrary/).
   const repoRoot = process.env.OPENPCB_WORKSPACE_ROOT
     ? path.resolve(process.env.OPENPCB_WORKSPACE_ROOT, "..")
-    : path.resolve(import.meta.dir, "..", "..", "..", "..", "..");
+    : path.resolve(MODULE_DIR, "..", "..", "..", "..", "..");
 
   const devA = await latestOpclibIn(
     path.join(repoRoot, "resources", "core-library"),

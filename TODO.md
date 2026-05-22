@@ -16,6 +16,15 @@
 - Manufacturing export (Gerber X2 + Excellon + BOM + PnP + ZIP + Export dialog): **shipped 2026-05-17** — see "Manufacturing Export (v0)" section below. **First fab-able beta is unblocked.**
 - Active sprint: post-merge cleanup + dead-code removal (see plan in `.claude/plans/act-as-senior-software-resilient-meadow.md`).
 
+## Active Electron Desktop Stabilization
+
+- [x] Diagnose module 404s in Desktop: Electron backend loaded `better-sqlite3` with Node ABI instead of Electron ABI.
+- [x] Add native dependency ABI check/rebuild before Electron dev/package flows.
+- [x] Fail fast when required Desktop modules (`library`, `designer`) do not load.
+- [x] Hide settings panels backed by unavailable modules.
+- [x] Harden Electron window policy, CSP, and release resources.
+- [x] Validate with typecheck, Electron build, frontend build, module validation, focused migration test, and packaged Desktop smoke.
+
 ## Active PCB Canvas UX Optimization
 
 - [x] Add centralized PCB visual-state resolver for layer/net focus.

@@ -38,6 +38,8 @@ import {
   components,
   footprintModels,
   footprints,
+  releases,
+  sources,
   symbols,
 } from "./schema";
 
@@ -924,7 +926,6 @@ export async function getFootprint(
   return row ? mapFootprint(row) : null;
 }
 
-
 function mapFootprintModelRecord(row: FootprintModelRow): FootprintModelRecord {
   return {
     footprintId: row.footprintId,
@@ -1415,6 +1416,115 @@ export async function updateComponent(
     .where(eq(components.id, componentId))
     .get();
   return refreshed ? mapComponent(refreshed) : null;
+}
+
+export interface LibrarySourceSummary {
+  id: string;
+  name: string;
+  kind: string;
+  isReadOnly: boolean;
+  license: string | null;
+  homepage: string | null;
+  createdAt: string;
+  latestVersion: string | null;
+  latestChannel: string | null;
+  latestInstalledAt: string | null;
+  latestSignatureValid: boolean;
+  latestInstallOrigin: string | null;
+  componentCount: number;
+}
+
+export function listSourcesWithReleases(
+  ctx: CoreBackendModuleContext,
+): LibrarySourceSummary[] {
+  const db = getDb(ctx);
+  const sourceRows = db.select().from(sources).all();
+  const releaseRows = db.select().from(releases).all();
+  const counts = db
+    .select({
+      sourceId: components.sourceId,
+      count: sql<number>`count(*)`,
+    })
+    .from(components)
+    .groupBy(components.sourceId)
+    .all();
+  const countBySource = new Map(counts.map((r) => [r.sourceId ?? "", r.count]));
+
+  const releasesBySource = new Map<string, typeof releaseRows>();
+  for (const r of releaseRows) {
+    const list = releasesBySource.get(r.sourceId) ?? [];
+    list.push(r);
+    releasesBySource.set(r.sourceId, list);
+  }
+
+  return sourceRows.map((s) => {
+    const list = releasesBySource.get(s.id) ?? [];
+    list.sort((a, b) => b.installedAt.localeCompare(a.installedAt));
+    const latest = list[0];
+    return {
+      id: s.id,
+      name: s.name,
+      kind: s.kind,
+      isReadOnly: s.isReadOnly === 1,
+      license: s.license,
+      homepage: s.homepage,
+      createdAt: s.createdAt,
+      latestVersion: latest?.version ?? null,
+      latestChannel: latest?.channel ?? null,
+      latestInstalledAt: latest?.installedAt ?? null,
+      latestSignatureValid: latest?.signatureValid === 1,
+      latestInstallOrigin: latest?.installOrigin ?? null,
+      componentCount: countBySource.get(s.id) ?? 0,
+    };
+  });
+}
+
+export function deleteSource(
+  ctx: CoreBackendModuleContext,
+  sourceId: string,
+): { removed: number } {
+  const db = getDb(ctx);
+  const source = db
+    .select()
+    .from(sources)
+    .where(eq(sources.id, sourceId))
+    .get();
+  if (!source) {
+    throw new ValidationError(`source not found: ${sourceId}`);
+  }
+  if (source.kind === "core") {
+    throw new ValidationError(
+      `cannot delete core source ${sourceId}; ship a new bundled package to replace it`,
+    );
+  }
+
+  let removed = 0;
+  db.transaction((tx) => {
+    const txDb = tx as typeof db;
+    const componentIds = txDb
+      .select({ id: components.id })
+      .from(components)
+      .where(eq(components.sourceId, sourceId))
+      .all()
+      .map((r) => r.id);
+    if (componentIds.length > 0) {
+      txDb
+        .delete(componentFootprints)
+        .where(inArray(componentFootprints.componentId, componentIds))
+        .run();
+      const del = txDb
+        .delete(components)
+        .where(inArray(components.id, componentIds))
+        .run();
+      removed =
+        (del as unknown as { changes?: number }).changes ?? componentIds.length;
+    }
+    txDb.delete(symbols).where(eq(symbols.sourceId, sourceId)).run();
+    txDb.delete(footprints).where(eq(footprints.sourceId, sourceId)).run();
+    txDb.delete(releases).where(eq(releases.sourceId, sourceId)).run();
+    txDb.delete(sources).where(eq(sources.id, sourceId)).run();
+  });
+  return { removed };
 }
 
 export function buildSdk(ctx: CoreBackendModuleContext): LibrarySDK {

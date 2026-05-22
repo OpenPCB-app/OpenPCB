@@ -1,0 +1,320 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ShieldCheck, ShieldAlert, Trash2, Upload, Link2 } from "lucide-react";
+import { useRuntime } from "../../providers/RuntimeProvider";
+
+interface LibrarySourceSummary {
+  id: string;
+  name: string;
+  kind: string;
+  isReadOnly: boolean;
+  license: string | null;
+  homepage: string | null;
+  createdAt: string;
+  latestVersion: string | null;
+  latestChannel: string | null;
+  latestInstalledAt: string | null;
+  latestSignatureValid: boolean;
+  latestInstallOrigin: string | null;
+  componentCount: number;
+}
+
+async function readErrorDetail(
+  res: Response,
+  fallback: string,
+): Promise<string> {
+  const body = (await res.json().catch(() => ({}))) as {
+    detail?: string;
+    error?: string;
+    title?: string;
+  };
+  return body.detail ?? body.error ?? body.title ?? fallback;
+}
+
+async function fetchSources(base: string): Promise<LibrarySourceSummary[]> {
+  const res = await fetch(`${base}/sources`);
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, `HTTP ${res.status}`));
+  }
+  const body = (await res.json()) as {
+    data: { sources: LibrarySourceSummary[] };
+  };
+  return body.data.sources;
+}
+
+async function installFromFile(base: string, file: File): Promise<void> {
+  const buf = await file.arrayBuffer();
+  const res = await fetch(`${base}/sources/install`, {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body: buf,
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, `HTTP ${res.status}`));
+  }
+}
+
+async function installFromUrl(base: string, url: string): Promise<void> {
+  const res = await fetch(`${base}/sources/install`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, `HTTP ${res.status}`));
+  }
+}
+
+async function deleteSource(base: string, id: string): Promise<void> {
+  const res = await fetch(`${base}/sources/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorDetail(res, `HTTP ${res.status}`));
+  }
+}
+
+export function LibrariesPanel() {
+  const { backendURL } = useRuntime();
+  const base = useMemo(
+    () => (backendURL ? `${backendURL}/api/modules/library` : null),
+    [backendURL],
+  );
+  const [sources, setSources] = useState<LibrarySourceSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [urlPrompt, setUrlPrompt] = useState(false);
+  const [urlValue, setUrlValue] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refresh = useCallback(async () => {
+    if (!base) return;
+    try {
+      setSources(await fetchSources(base));
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }, [base]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const handleFile = async (file: File) => {
+    if (!base) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await installFromFile(base, file);
+      await refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUrl = async () => {
+    if (!base || !urlValue.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await installFromUrl(base, urlValue.trim());
+      setUrlValue("");
+      setUrlPrompt(false);
+      await refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!base) return;
+    if (
+      !window.confirm(
+        `Remove library "${id}" and all its components? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteSource(base, id);
+      await refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 pb-24 text-slate-900 dark:text-slate-100">
+      <div>
+        <h2 className="text-lg font-semibold">Libraries</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Component libraries installed in this workspace. The core library
+          ships with OpenPCB; install additional <code>.opclib</code> packages
+          from file or URL.
+        </p>
+      </div>
+
+      {error ? (
+        <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".opclib"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void handleFile(file);
+            if (e.target) e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => fileInputRef.current?.click()}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+        >
+          <Upload className="h-4 w-4" />
+          Install from file…
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setUrlPrompt((s) => !s)}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+        >
+          <Link2 className="h-4 w-4" />
+          Install from URL…
+        </button>
+      </div>
+
+      {urlPrompt ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
+          <input
+            type="url"
+            placeholder="https://github.com/.../release.opclib"
+            value={urlValue}
+            onChange={(e) => setUrlValue(e.target.value)}
+            className="min-w-[20rem] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950"
+          />
+          <button
+            type="button"
+            disabled={busy || !urlValue.trim()}
+            onClick={() => void handleUrl()}
+            className="rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+          >
+            Install
+          </button>
+        </div>
+      ) : null}
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+            <tr>
+              <th className="px-4 py-2">Source</th>
+              <th className="px-4 py-2">Version</th>
+              <th className="px-4 py-2">Components</th>
+              <th className="px-4 py-2">Signed</th>
+              <th className="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {sources === null ? (
+              <tr>
+                <td
+                  colSpan={5}
+                  className="px-4 py-6 text-center text-slate-500"
+                >
+                  Loading…
+                </td>
+              </tr>
+            ) : sources.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={5}
+                  className="px-4 py-6 text-center text-slate-500"
+                >
+                  No libraries installed.
+                </td>
+              </tr>
+            ) : (
+              sources.map((s) => (
+                <tr
+                  key={s.id}
+                  className="border-t border-slate-100 dark:border-slate-800"
+                >
+                  <td className="px-4 py-2">
+                    <div className="font-medium">{s.name}</div>
+                    <div className="text-xs text-slate-500">{s.id}</div>
+                    <div className="mt-0.5 text-xs">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        {s.kind}
+                      </span>
+                      {s.isReadOnly ? (
+                        <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
+                          read-only
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2 align-top">
+                    {s.latestVersion ? (
+                      <div>
+                        <div>{s.latestVersion}</div>
+                        <div className="text-xs text-slate-500">
+                          {s.latestChannel ?? ""}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 align-top">{s.componentCount}</td>
+                  <td className="px-4 py-2 align-top">
+                    {s.latestVersion === null ? (
+                      <span className="text-slate-400">—</span>
+                    ) : s.latestSignatureValid ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                        <ShieldCheck className="h-4 w-4" /> verified
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+                        <ShieldAlert className="h-4 w-4" /> unsigned
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-right align-top">
+                    {s.kind === "core" ? null : (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleDelete(s.id)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-red-950/40"
+                        title="Remove this library"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Remove
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

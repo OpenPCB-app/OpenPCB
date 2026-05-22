@@ -14,6 +14,8 @@ import {
   getComponentDetail,
   cloneComponent,
   deleteComponents,
+  deleteSource,
+  listSourcesWithReleases,
   listTags,
   resolveComponent,
   assertFootprintNotBuiltinComponent,
@@ -28,6 +30,10 @@ import {
   updateComponent,
   upsertFootprintModelRecord,
 } from "./queries";
+import {
+  installOpclibFromBytes,
+  installOpclibFromUrl,
+} from "./sync/install-source";
 import {
   deleteModel,
   modelAssetRelativePath,
@@ -1120,6 +1126,37 @@ export function registerRoutes(
   router: ModuleRouterHandle,
   ctx: CoreBackendModuleContext,
 ): void {
+  router.get("/sources", async () => {
+    const sources = listSourcesWithReleases(ctx);
+    return success({ sources });
+  });
+
+  router.post("/sources/install", async (routeCtx) => {
+    const req = routeCtx.req;
+    const contentType = (req.headers.get("content-type") ?? "").toLowerCase();
+
+    if (contentType.startsWith("application/json")) {
+      const body = (await parseJsonBody<unknown>(req)) as { url?: unknown };
+      const url = typeof body?.url === "string" ? body.url : "";
+      if (!url) {
+        throw new ValidationError("body.url is required for URL install");
+      }
+      const result = await installOpclibFromUrl(ctx, url);
+      return success({ result }, 201);
+    }
+
+    // Treat anything else as raw .opclib bytes.
+    const bytes = new Uint8Array(await req.arrayBuffer());
+    const result = await installOpclibFromBytes(ctx, { bytes });
+    return success({ result }, 201);
+  });
+
+  router.delete("/sources/:sourceId", async (routeCtx) => {
+    const sourceId = routeCtx.params.getOrThrow("sourceId");
+    const result = deleteSource(ctx, sourceId);
+    return success(result);
+  });
+
   router.get("/status", async () => {
     const db = getDb(ctx);
     const row = await db
