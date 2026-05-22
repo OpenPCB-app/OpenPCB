@@ -5,6 +5,12 @@ on:
     tags:
       - "dev-*"
       - "v*"
+  workflow_dispatch:
+    inputs:
+      artifact_suffix:
+        description: "Suffix for build artifact names (e.g. smoke, dryrun)"
+        required: false
+        default: "smoke"
 
 permissions:
   contents: write

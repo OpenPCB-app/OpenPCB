@@ -6,6 +6,7 @@
 // skip when absent (e.g. trimmed prod bundle).
 import { app } from "electron";
 import { createRequire } from "node:module";
+import { getTelemetryOptIn } from "./preferences.js";
 
 const requireFromHere = createRequire(import.meta.url);
 
@@ -18,6 +19,10 @@ const DEFAULT_DSN =
 export function initSentry(): boolean {
   if (initialized) return SentryAPI !== null;
   initialized = true;
+
+  // Telemetry is opt-in. Users enable in Settings → Privacy; takes effect on
+  // next launch (Sentry init is one-shot per process).
+  if (!getTelemetryOptIn()) return false;
 
   const dsn = process.env.OPENPCB_SENTRY_DSN ?? DEFAULT_DSN;
   if (!dsn) return false;

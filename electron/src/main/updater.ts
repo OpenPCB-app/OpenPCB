@@ -111,6 +111,10 @@ export function initUpdater(): void {
   });
 
   ipcMain.handle("updater:check", async () => {
+    if (!app.isPackaged) {
+      send("updater:status", { state: "current" } satisfies UpdaterState);
+      return;
+    }
     if (canAutoUpdate()) {
       try {
         await autoUpdater.checkForUpdates();
@@ -138,6 +142,7 @@ export function initUpdater(): void {
 
   // Initial check: 10s after startup so the app settles first.
   setTimeout(() => {
+    if (!app.isPackaged) return;
     if (canAutoUpdate()) {
       autoUpdater
         .checkForUpdates()

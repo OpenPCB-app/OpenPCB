@@ -16,6 +16,23 @@
 - Manufacturing export (Gerber X2 + Excellon + BOM + PnP + ZIP + Export dialog): **shipped 2026-05-17** — see "Manufacturing Export (v0)" section below. **First fab-able beta is unblocked.**
 - Active sprint: post-merge cleanup + dead-code removal (see plan in `.claude/plans/act-as-senior-software-resilient-meadow.md`).
 
+## Active Dev CoreLibrary Integration
+
+- [x] Add OpenPCB dev script to pack sibling `../CoreLibrary` as fixed `999.0.0-dev` package.
+- [x] Prefer `../CoreLibrary/dist` only in development runtime; keep release/package builds using bundled resources.
+- [x] Allow normal dev DB to switch back from dev core package to bundled release package.
+- [x] Reconcile stale core rows when a reimported `.opclib` removes components/symbols/footprints.
+- [x] Cover locator precedence, bootstrap switching, and stale cleanup with focused backend tests.
+
+## Active Electron Desktop Stabilization
+
+- [x] Diagnose module 404s in Desktop: Electron backend loaded `better-sqlite3` with Node ABI instead of Electron ABI.
+- [x] Add native dependency ABI check/rebuild before Electron dev/package flows.
+- [x] Fail fast when required Desktop modules (`library`, `designer`) do not load.
+- [x] Hide settings panels backed by unavailable modules.
+- [x] Harden Electron window policy, CSP, and release resources.
+- [x] Validate with typecheck, Electron build, frontend build, module validation, focused migration test, and packaged Desktop smoke.
+
 ## Active PCB Canvas UX Optimization
 
 - [x] Add centralized PCB visual-state resolver for layer/net focus.

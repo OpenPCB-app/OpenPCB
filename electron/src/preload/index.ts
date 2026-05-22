@@ -2,10 +2,6 @@
 // `__electronLog` symbol so renderer code calling electron-log/renderer routes
 // to the main process logger (and disk).
 import "electron-log/preload";
-// @sentry/electron/preload sets up the IPC channel + native crash listener so
-// renderer-side Sentry.init() can communicate with the main-process SDK.
-import "@sentry/electron/preload";
-
 import { contextBridge, ipcRenderer } from "electron";
 
 interface BackendReadyPayload {
@@ -54,6 +50,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("secure-storage:set", key, value),
     remove: (key: string): Promise<void> =>
       ipcRenderer.invoke("secure-storage:remove", key),
+  },
+  preferences: {
+    getTelemetryOptIn: (): Promise<boolean> =>
+      ipcRenderer.invoke("prefs:get-telemetry-opt-in"),
+    setTelemetryOptIn: (value: boolean): Promise<void> =>
+      ipcRenderer.invoke("prefs:set-telemetry-opt-in", value),
   },
 });
 

@@ -13,7 +13,10 @@ import { GeneralPanel } from "./panels/GeneralPanel";
 import { AboutPanel } from "./panels/AboutPanel";
 import { AssistantPanel } from "./panels/AssistantPanel";
 import { AccountPanel } from "./panels/AccountPanel";
+import { LibrariesPanel } from "./panels/LibrariesPanel";
+import { PrivacyPanel } from "./panels/PrivacyPanel";
 import { useAuth } from "@/cloud/AuthProvider";
+import { useBootstrap } from "@/providers/BootstrapProvider";
 
 type SettingsPanelId = SettingsNavItem["id"];
 
@@ -29,7 +32,9 @@ const panelComponents: Record<SettingsPanelId, () => React.JSX.Element | null> =
   {
     general: GeneralPanel,
     account: AccountPanel,
+    libraries: LibrariesPanel,
     assistant: AssistantPanel,
+    privacy: PrivacyPanel,
     about: AboutPanel,
   };
 
@@ -41,12 +46,18 @@ export function SettingsDialog({
   initialTab,
 }: SettingsDialogProps) {
   const { enabled: cloudEnabled } = useAuth();
+  const { moduleRegistry } = useBootstrap();
   const items = React.useMemo(
     () =>
       [...settingsNavItems]
         .filter((item) => !item.requiresCloud || cloudEnabled)
+        .filter(
+          (item) =>
+            !item.requiresModule ||
+            moduleRegistry?.loadedModules.includes(item.requiresModule),
+        )
         .sort((a, b) => a.order - b.order),
-    [cloudEnabled],
+    [cloudEnabled, moduleRegistry?.loadedModules],
   );
 
   const defaultTab = (initialTab ??
@@ -55,10 +66,16 @@ export function SettingsDialog({
   const [activeTab, setActiveTab] = React.useState<SettingsPanelId>(defaultTab);
 
   React.useEffect(() => {
-    if (initialTab) {
+    if (initialTab && items.some((item) => item.id === initialTab)) {
       setActiveTab(initialTab);
     }
-  }, [initialTab]);
+  }, [initialTab, items]);
+
+  React.useEffect(() => {
+    if (!items.some((item) => item.id === activeTab)) {
+      setActiveTab((items[0]?.id ?? "general") as SettingsPanelId);
+    }
+  }, [activeTab, items]);
 
   return (
     <Dialog open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>

@@ -1,7 +1,7 @@
 // Boot order is intentional: crashReporter and Sentry MUST be initialized
 // before any window opens or any child process spawns. electron-log is
 // initialized first so the rest of bootstrap is captured to disk.
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, session, shell } from "electron";
 import { join } from "node:path";
 import { initLogger, log } from "./logger.js";
 import { initCrashReporter } from "./crash.js";
@@ -20,10 +20,18 @@ import {
   setSecureItem,
   removeSecureItem,
 } from "./secure-storage.js";
+import { getTelemetryOptIn, setTelemetryOptIn } from "./preferences.js";
 
 initLogger();
 initCrashReporter();
 const sentryEnabled = initSentry();
+
+if (!app.isPackaged) {
+  // Vite dev mode needs inline/eval/blob script allowances for React Refresh
+  // and worker hot-loading. Keep Electron's security warning disabled only for
+  // this dev-only renderer; packaged builds keep the strict production CSP.
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
+}
 
 if (process.env.OPENPCB_DEBUG === "1" || !app.isPackaged) {
   app.commandLine.appendSwitch("enable-logging");
@@ -44,17 +52,95 @@ initDeepLink(() => mainWindow);
 
 let mainWindow: BrowserWindow | null = null;
 
+function installSecurityPolicy(): void {
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => {
+      callback(false);
+    },
+  );
+
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = details.responseHeaders ?? {};
+    const devCsp = [
+      "default-src 'self' http://127.0.0.1:*",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: http://127.0.0.1:*",
+      "style-src 'self' 'unsafe-inline' http://127.0.0.1:*",
+      "img-src 'self' data: blob: http://127.0.0.1:*",
+      "font-src 'self' data: http://127.0.0.1:* https://cdn.jsdelivr.net",
+      "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://cdn.jsdelivr.net",
+      "worker-src 'self' blob: http://127.0.0.1:*",
+      "media-src 'self' blob:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+    ].join("; ");
+    const prodCsp = [
+      "default-src 'self' http://127.0.0.1:*",
+      "script-src 'self' blob:",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "font-src 'self' data: https://cdn.jsdelivr.net",
+      "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://cdn.jsdelivr.net",
+      "worker-src 'self' blob:",
+      "media-src 'self' blob:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+    ].join("; ");
+
+    responseHeaders["Content-Security-Policy"] = [
+      app.isPackaged ? prodCsp : devCsp,
+    ];
+    callback({ responseHeaders });
+  });
+}
+
+function isAllowedAppUrl(url: string): boolean {
+  const payload = getBackendPayload();
+  const allowed = new Set<string>();
+  if (payload) allowed.add(payload.url);
+  if (!app.isPackaged) allowed.add("http://127.0.0.1:1420");
+
+  try {
+    const parsed = new URL(url);
+    return allowed.has(parsed.origin);
+  } catch {
+    return false;
+  }
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 600,
-    title: "OpenPCB (Electron)",
+    width: 1440,
+    height: 900,
+    minWidth: 1100,
+    minHeight: 720,
+    title: "OpenPCB",
+    backgroundColor: "#f8fafc",
+    show: false,
     webPreferences: {
       preload: join(__dirname, "..", "preload", "index.js"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      webSecurity: true,
     },
+  });
+
+  mainWindow.once("ready-to-show", () => {
+    mainWindow?.show();
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!isAllowedAppUrl(url)) {
+      event.preventDefault();
+      void shell.openExternal(url);
+    }
   });
 
   mainWindow.on("closed", () => {
@@ -158,7 +244,14 @@ ipcMain.handle("secure-storage:remove", (_e, key: string) =>
   removeSecureItem(key),
 );
 
+ipcMain.handle("prefs:get-telemetry-opt-in", () => getTelemetryOptIn());
+ipcMain.handle("prefs:set-telemetry-opt-in", (_e, value: boolean) =>
+  setTelemetryOptIn(value),
+);
+
 app.whenReady().then(async () => {
+  installSecurityPolicy();
+
   try {
     const result = await startBackendServer();
     log.info(`[electron] Backend ready: port=${result.port}`);

@@ -1,5 +1,9 @@
 -- 0006_legacy_builtin_id_migration.sql
 -- Rewrite legacy builtin:* identifiers to canonical openpcb.core.* ids.
+-- Existing desktop databases may already have FK-backed variant/model rows.
+-- Defer checks until all parent and child identifiers are rewritten together.
+
+PRAGMA defer_foreign_keys = ON;
 
 UPDATE library_components
 SET id = 'openpcb.core.passive.resistor'
@@ -158,6 +162,74 @@ SET footprint_id = 'openpcb.core.footprint.passive.c-disc-d5-p5'
 WHERE footprint_id = 'builtin:fp:c-disc-d5-p5';
 
 UPDATE library_component_footprints
+SET footprint_id = 'openpcb.core.footprint.passive.c-disc-d7-5-p5'
+WHERE footprint_id = 'builtin:fp:c-disc-d7.5-p5';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.r-0402'
+WHERE footprint_id = 'builtin:fp:r-0402-1005m';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.r-0603'
+WHERE footprint_id = 'builtin:fp:r-0603-1608m';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.r-0805'
+WHERE footprint_id = 'builtin:fp:r-0805-2012m';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.r-1206'
+WHERE footprint_id = 'builtin:fp:r-1206-3216m';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.r-1210'
+WHERE footprint_id = 'builtin:fp:r-1210-3225m';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.r-2512'
+WHERE footprint_id = 'builtin:fp:r-2512-6332m';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.r-axial-din0207-p7-62'
+WHERE footprint_id = 'builtin:fp:r-axial-din0207-p7.62';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.r-axial-din0207-p10-16'
+WHERE footprint_id = 'builtin:fp:r-axial-din0207-p10.16';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.r-axial-din0309-p12-70'
+WHERE footprint_id = 'builtin:fp:r-axial-din0309-p12.70';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.c-0402'
+WHERE footprint_id = 'builtin:fp:c-0402-1005m';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.c-0603'
+WHERE footprint_id = 'builtin:fp:c-0603-1608m';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.c-0805'
+WHERE footprint_id = 'builtin:fp:c-0805-2012m';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.c-1206'
+WHERE footprint_id = 'builtin:fp:c-1206-3216m';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.c-1210'
+WHERE footprint_id = 'builtin:fp:c-1210-3225m';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.c-disc-d3-p2-5'
+WHERE footprint_id = 'builtin:fp:c-disc-d3-p2.5';
+
+UPDATE library_footprint_models
+SET footprint_id = 'openpcb.core.footprint.passive.c-disc-d5-p5'
+WHERE footprint_id = 'builtin:fp:c-disc-d5-p5';
+
+UPDATE library_footprint_models
 SET footprint_id = 'openpcb.core.footprint.passive.c-disc-d7-5-p5'
 WHERE footprint_id = 'builtin:fp:c-disc-d7.5-p5';
 

@@ -14,7 +14,7 @@ export interface CorsConfig {
 export const BASE_CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-OpenPCB-Token, If-Unmodified-Since, X-Request-Id",
+    "Content-Type, Authorization, X-OpenPCB-Token, If-Unmodified-Since, X-Request-Id, X-Cloud-Bearer, X-Cloud-Api-Url",
   // Without this, the browser hides non-CORS-safelisted response headers from
   // fetch().headers.get(...). Required so the manufacturing-export route's
   // bundle-name and warning-count metadata are readable from packaged

@@ -124,10 +124,14 @@ export function getSharedDb(): BetterSQLite3Database<Record<string, unknown>> {
  * Test-only: close and reset the shared handles so a subsequent call
  * re-opens against a fresh database path (e.g. after setting OPENPCB_DB_PATH).
  */
-export function resetSharedSqliteForTesting(): void {
+export function resetSharedSqlite(): void {
   if (sqlite) {
     sqlite.close();
   }
   sqlite = null;
   drizzleInstance = null;
+}
+
+export function resetSharedSqliteForTesting(): void {
+  resetSharedSqlite();
 }

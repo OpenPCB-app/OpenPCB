@@ -11,7 +11,8 @@ import {
   symbols,
 } from "../schema";
 import { writeGlb } from "../services/footprint-model-store";
-import { readAssetBytes, readAssetJson } from "./opclib-reader";
+import { readAssetBytes, readAssetJson, verifyManifest } from "./opclib-reader";
+import { makeResolver } from "./trusted-keys";
 import type {
   ImportResult,
   InstallOrigin,
@@ -22,6 +23,10 @@ import type {
 
 interface ImporterOptions {
   installOrigin: InstallOrigin;
+  /** When true (default in production), reject if the manifest signature is
+   * missing or invalid. When false, log a warning and continue with
+   * signature_valid = 0. */
+  requireSignature?: boolean;
 }
 
 const PASSIVE_PIN_MAP_FALLBACK = JSON.stringify([
@@ -44,6 +49,24 @@ export async function importOpclib(
   const now = new Date().toISOString();
   const lib = pkg.manifest.library;
   const isReadOnly = (lib.kind ?? "core") === "core" ? 1 : 0;
+
+  const requireSignature =
+    opts.requireSignature ?? process.env.OPENPCB_REQUIRE_SIGNED_OPCLIB === "1";
+  const verdict = verifyManifest(pkg.manifest, { resolveKey: makeResolver() });
+  const signatureValid = verdict.valid ? 1 : 0;
+  if (verdict.valid) {
+    ctx.logger.info(
+      `core-library: signature verified (keyId=${verdict.keyId}, source=${lib.id}@${lib.version})`,
+    );
+  } else if (requireSignature) {
+    throw new Error(
+      `opclib signature verification failed: ${verdict.reason ?? "unknown"} (source=${lib.id}@${lib.version})`,
+    );
+  } else {
+    ctx.logger.warn(
+      `core-library: importing without valid signature (reason=${verdict.reason}, source=${lib.id}@${lib.version}); set OPENPCB_REQUIRE_SIGNED_OPCLIB=1 to enforce`,
+    );
+  }
 
   const result: ImportResult = {
     sourceId: lib.id,
@@ -143,7 +166,7 @@ export async function importOpclib(
         channel: lib.channel,
         installOrigin: opts.installOrigin,
         packageSha256: pkg.manifest.integrity.packageSha256,
-        signatureValid: 0,
+        signatureValid,
         installedAt: now,
         manifestJson: JSON.stringify(pkg.manifest),
       })
@@ -153,6 +176,7 @@ export async function importOpclib(
           channel: lib.channel,
           installOrigin: opts.installOrigin,
           packageSha256: pkg.manifest.integrity.packageSha256,
+          signatureValid,
           installedAt: now,
           manifestJson: JSON.stringify(pkg.manifest),
         },
@@ -249,15 +273,92 @@ export async function importOpclib(
         model3dBySha,
         now,
       );
+      if ((entry.models3d ?? []).length === 0) {
+        transactionalDb
+          .delete(footprintModels)
+          .where(eq(footprintModels.footprintId, entry.id))
+          .run();
+      }
     }
 
     // 5. components + variant join rows
     for (const entry of pkg.manifest.components) {
       upsertComponent(transactionalDb, entry, lib.id, now, result);
     }
+
+    reconcileSourceRows(transactionalDb, pkg);
   });
 
   return result;
+}
+
+function reconcileSourceRows(
+  tx: ReturnType<typeof getDb>,
+  pkg: OpclibPackage,
+): void {
+  const sourceId = pkg.manifest.library.id;
+  const componentIds = new Set(pkg.manifest.components.map((entry) => entry.id));
+  const symbolIds = new Set(pkg.manifest.symbols.map((entry) => entry.id));
+  const footprintIds = new Set(pkg.manifest.footprints.map((entry) => entry.id));
+
+  const staleComponentIds = tx
+    .select({ id: components.id })
+    .from(components)
+    .where(eq(components.sourceId, sourceId))
+    .all()
+    .map((row) => row.id)
+    .filter((id) => !componentIds.has(id));
+
+  if (staleComponentIds.length > 0) {
+    tx.delete(componentFootprints)
+      .where(inArray(componentFootprints.componentId, staleComponentIds))
+      .run();
+    tx.delete(components).where(inArray(components.id, staleComponentIds)).run();
+  }
+
+  const referencedSymbolIds = new Set(
+    tx.select({ id: components.symbolId })
+      .from(components)
+      .all()
+      .map((row) => row.id),
+  );
+  const staleSymbolIds = tx
+    .select({ id: symbols.id })
+    .from(symbols)
+    .where(eq(symbols.sourceId, sourceId))
+    .all()
+    .map((row) => row.id)
+    .filter((id) => !symbolIds.has(id) && !referencedSymbolIds.has(id));
+
+  if (staleSymbolIds.length > 0) {
+    tx.delete(symbols).where(inArray(symbols.id, staleSymbolIds)).run();
+  }
+
+  const referencedFootprintIds = new Set<string>();
+  for (const row of tx.select({ id: components.footprintId }).from(components).all()) {
+    referencedFootprintIds.add(row.id);
+  }
+  for (const row of tx
+    .select({ id: componentFootprints.footprintId })
+    .from(componentFootprints)
+    .all()) {
+    referencedFootprintIds.add(row.id);
+  }
+
+  const staleFootprintIds = tx
+    .select({ id: footprints.id })
+    .from(footprints)
+    .where(eq(footprints.sourceId, sourceId))
+    .all()
+    .map((row) => row.id)
+    .filter((id) => !footprintIds.has(id) && !referencedFootprintIds.has(id));
+
+  if (staleFootprintIds.length > 0) {
+    tx.delete(footprintModels)
+      .where(inArray(footprintModels.footprintId, staleFootprintIds))
+      .run();
+    tx.delete(footprints).where(inArray(footprints.id, staleFootprintIds)).run();
+  }
 }
 
 async function migrateLegacyAliases(

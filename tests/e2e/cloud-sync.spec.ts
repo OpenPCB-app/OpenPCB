@@ -1,18 +1,19 @@
-// T-N3.2: Automated multi-machine sync E2E
+// T-N3.2 / T-N2.4: Multi-machine cloud-sync E2E (scaffold).
 //
-// Boots two Electron instances with isolated userData dirs, signs both into the
-// same Supabase project, and verifies that a command applied on instance A
-// appears in instance B's "Open from Cloud" import.
+// Status: best-effort smoke. The label-placement step still depends on UI
+// selectors that may drift; if it goes red, fall back to the manual checklist
+// at `Cloud/docs/e2e-manual-checklist.md` which mirrors the same flow.
 //
-// Skipped unless the following env are present (set in shell or .env.e2e):
-//   E2E_CLOUD_API_URL        — e.g. https://api.openpcb.app
-//   E2E_CLOUD_SUPABASE_URL   — e.g. https://supabase.openpcb.app
-//   E2E_CLOUD_ANON_KEY       — Supabase anon JWT
-//   E2E_CLOUD_TEST_EMAIL     — pre-provisioned Pro test account
+// Run:
+//   set -a && source .env.e2e && set +a
+//   OPENPCB_E2E_NO_WEBSERVER=1 npx playwright test --project=electron
+//
+// Required env (see .env.e2e.example):
+//   E2E_CLOUD_API_URL          https://api.openpcb.app
+//   E2E_CLOUD_SUPABASE_URL     https://supabase.openpcb.app
+//   E2E_CLOUD_ANON_KEY         Supabase anon JWT
+//   E2E_CLOUD_TEST_EMAIL       pre-provisioned Pro test account
 //   E2E_CLOUD_TEST_PASSWORD
-//
-// To run: npx playwright test tests/e2e/cloud-sync.spec.ts --project=electron
-// (Requires a second project entry in playwright.config.ts for _electron.)
 
 import {
   _electron as electron,
