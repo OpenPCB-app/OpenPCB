@@ -100,6 +100,10 @@ jobs:
             ls -la "$dir/dist" 2>&1 | head -20 || echo "no dist/"
             grep -l signManifest "$dir/dist/"*.d.ts 2>/dev/null || true
           done
+          echo "== nested opclib-pack copies =="
+          find node_modules -name 'opclib-pack' -type d 2>&1
+          echo "== nested package.json versions =="
+          find node_modules -path '*/opclib-pack/package.json' -exec grep -H '"version"' {} \;
 
       - name: Force-refresh @openpcb/* deps
         run: |
@@ -118,8 +122,14 @@ jobs:
             github:OpenPCB-app/shared#command-pattern-v0.1.0 \
             github:OpenPCB-app/shared#contracts-v0.1.0 \
             --no-save --foreground-scripts
+          echo "== nested opclib-pack copies after force-refresh =="
+          find node_modules -name 'opclib-pack' -type d 2>&1
+          echo "== nested package.json versions =="
+          find node_modules -path '*/opclib-pack/package.json' -exec grep -H '"version"' {} \;
           ls node_modules/@openpcb/opclib-pack/dist/
           grep -l signManifest node_modules/@openpcb/opclib-pack/dist/*.d.ts
+          # Resolve where tsc will pick up @openpcb/opclib-pack
+          node -e "console.log('resolved:', require.resolve('@openpcb/opclib-pack/package.json'))"
 
       - name: Download CoreLibrary bundle
         env:
