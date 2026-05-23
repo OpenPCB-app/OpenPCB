@@ -11,7 +11,13 @@ import type { ErrorObject, ValidateFunction } from "ajv";
 // Type Definitions (matching src-react/src/types/module.ts)
 // =============================================================================
 
-type ModuleKind = "space" | "tool" | "service" | "integration" | "widget" | "system";
+type ModuleKind =
+  | "space"
+  | "tool"
+  | "service"
+  | "integration"
+  | "widget"
+  | "system";
 type ServiceExportKind = "http" | "bridge" | "local";
 type ModuleCoreCapability = "projects" | "contentEditor" | "toolRegistry";
 
@@ -210,7 +216,8 @@ async function loadValidator(): Promise<ValidateFunction<ModuleManifestFile>> {
     logWarn(
       `Manifest schema not found at ${path.relative(repoRoot, schemaPath)}; running structural validation only.`,
     );
-    const fallback = ((_: unknown): _ is ModuleManifestFile => true) as ValidateFunction<ModuleManifestFile>;
+    const fallback = ((_: unknown): _ is ModuleManifestFile =>
+      true) as ValidateFunction<ModuleManifestFile>;
     fallback.errors = null;
     return fallback;
   }
@@ -270,7 +277,9 @@ function normalizeToV2(
   const isV2 = apiVersion === 2;
 
   const frontendEntry =
-    parsed.runtime?.frontendEntry ?? parsed.ui?.moduleEntry ?? "module.frontend.ts";
+    parsed.runtime?.frontendEntry ??
+    parsed.ui?.moduleEntry ??
+    "module.frontend.ts";
   const sidebarLabel = parsed.sidebar?.label ?? parsed.ui?.sidebarLabel;
 
   // Normalize dependsOn from V1 dependencies or V2 dependsOn
@@ -303,7 +312,8 @@ function normalizeToV2(
     registerAsSpaceInTopBar:
       parsed.sidebar?.hidden === true
         ? false
-        : parsed.ui?.registerAsSpaceInTopBar ?? (parsed.kind ?? "space") === "space",
+        : (parsed.ui?.registerAsSpaceInTopBar ??
+          (parsed.kind ?? "space") === "space"),
     defaultPinned: Boolean(parsed.defaultPinned),
   };
 }
@@ -337,7 +347,9 @@ async function readManifest(
     }
 
     const frontendEntry =
-      parsed.runtime?.frontendEntry ?? parsed.ui?.moduleEntry ?? "module.frontend.ts";
+      parsed.runtime?.frontendEntry ??
+      parsed.ui?.moduleEntry ??
+      "module.frontend.ts";
     await ensureModuleEntryExists(manifestPath, moduleName, frontendEntry);
 
     const normalized = normalizeToV2(parsed, moduleName);
@@ -576,15 +588,16 @@ function resolveDependencies(
 async function collectManifests(
   validate: ValidateFunction<ModuleManifestFile>,
 ): Promise<ResolvedManifest[]> {
-  const entries = await fs
-    .readdir(modulesDir, { withFileTypes: true })
-    .catch((error) => {
+  // Sort for deterministic codegen across platforms (APFS vs ext4 differ).
+  const entries = (
+    await fs.readdir(modulesDir, { withFileTypes: true }).catch((error) => {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         log("No modules directory found – skipping generation.");
         return [];
       }
       throw error;
-    });
+    })
+  ).sort((a, b) => a.name.localeCompare(b.name));
 
   const manifests: ResolvedManifest[] = [];
   for (const entry of entries) {

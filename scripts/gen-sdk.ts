@@ -59,7 +59,11 @@ interface ModuleManifest {
 async function loadModuleManifests(): Promise<ModuleManifest[]> {
   const manifests: ModuleManifest[] = [];
 
-  const entries = await fs.readdir(MODULES_DIR, { withFileTypes: true });
+  // Sort to make codegen output deterministic across platforms — readdir
+  // ordering differs between macOS APFS, Linux ext4, etc.
+  const entries = (await fs.readdir(MODULES_DIR, { withFileTypes: true })).sort(
+    (a, b) => a.name.localeCompare(b.name),
+  );
 
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name.startsWith("_")) {
@@ -105,9 +109,7 @@ function toPascalCase(str: string): string {
     .join("");
 }
 
-function generateModuleSDK(
-  manifest: ModuleManifest,
-): string {
+function generateModuleSDK(manifest: ModuleManifest): string {
   const sdkName = `${toPascalCase(manifest.id)}SDK`;
   const lines: string[] = [];
 
@@ -117,30 +119,44 @@ function generateModuleSDK(
   lines.push(``);
 
   // Module info
-  lines.push(`// =============================================================================`);
+  lines.push(
+    `// =============================================================================`,
+  );
   lines.push(`// Module Info`);
-  lines.push(`// =============================================================================`);
+  lines.push(
+    `// =============================================================================`,
+  );
   lines.push(``);
   lines.push(`export const MODULE_ID = "${manifest.id}" as const;`);
-  lines.push(`export const MODULE_NAMESPACE = "${manifest.namespace}" as const;`);
+  lines.push(
+    `export const MODULE_NAMESPACE = "${manifest.namespace}" as const;`,
+  );
   lines.push(`export const MODULE_VERSION = "${manifest.version}" as const;`);
   lines.push(`export const MODULE_KIND = "${manifest.kind}" as const;`);
   lines.push(``);
 
   // Service interface (if module exports services)
   if (manifest.exports.services.length > 0) {
-    lines.push(`// =============================================================================`);
+    lines.push(
+      `// =============================================================================`,
+    );
     lines.push(`// Service Interface`);
-    lines.push(`// =============================================================================`);
+    lines.push(
+      `// =============================================================================`,
+    );
     lines.push(``);
     lines.push(`/**`);
     lines.push(` * Service interface for ${manifest.label}`);
-    lines.push(` * These services are exported by this module and can be used by other modules.`);
+    lines.push(
+      ` * These services are exported by this module and can be used by other modules.`,
+    );
     lines.push(` */`);
     lines.push(`export interface ${sdkName}Services {`);
 
     for (const service of manifest.exports.services) {
-      const methodName = sanitizeIdentifier(service.id.split(".").pop() ?? service.id);
+      const methodName = sanitizeIdentifier(
+        service.id.split(".").pop() ?? service.id,
+      );
       const description = service.description ?? `Service: ${service.id}`;
       lines.push(`  /** ${description} (${service.kind}) */`);
       lines.push(`  ${methodName}: unknown;`);
@@ -151,15 +167,23 @@ function generateModuleSDK(
   }
 
   // HTTP SDK interface (for modules that expose HTTP endpoints)
-  lines.push(`// =============================================================================`);
+  lines.push(
+    `// =============================================================================`,
+  );
   lines.push(`// HTTP SDK Interface`);
-  lines.push(`// =============================================================================`);
+  lines.push(
+    `// =============================================================================`,
+  );
   lines.push(``);
   lines.push(`/** HTTP base path for this module */`);
-  lines.push(`export const HTTP_BASE_PATH = "/api/modules/${manifest.id}" as const;`);
+  lines.push(
+    `export const HTTP_BASE_PATH = "/api/modules/${manifest.id}" as const;`,
+  );
   lines.push(``);
   lines.push(`/** WebSocket base path for this module */`);
-  lines.push(`export const WS_BASE_PATH = "/ws/modules/${manifest.id}" as const;`);
+  lines.push(
+    `export const WS_BASE_PATH = "/ws/modules/${manifest.id}" as const;`,
+  );
   lines.push(``);
   lines.push(`/**`);
   lines.push(` * HTTP SDK for ${manifest.label}`);
@@ -169,9 +193,13 @@ function generateModuleSDK(
   lines.push(`  /** Make a GET request to this module's API */`);
   lines.push(`  get<T>(path: string, options?: RequestInit): Promise<T>;`);
   lines.push(`  /** Make a POST request to this module's API */`);
-  lines.push(`  post<T>(path: string, body?: unknown, options?: RequestInit): Promise<T>;`);
+  lines.push(
+    `  post<T>(path: string, body?: unknown, options?: RequestInit): Promise<T>;`,
+  );
   lines.push(`  /** Make a PUT request to this module's API */`);
-  lines.push(`  put<T>(path: string, body?: unknown, options?: RequestInit): Promise<T>;`);
+  lines.push(
+    `  put<T>(path: string, body?: unknown, options?: RequestInit): Promise<T>;`,
+  );
   lines.push(`  /** Make a DELETE request to this module's API */`);
   lines.push(`  delete<T>(path: string, options?: RequestInit): Promise<T>;`);
   lines.push(`}`);
@@ -181,14 +209,20 @@ function generateModuleSDK(
   lines.push(`/**`);
   lines.push(` * Create an HTTP client for this module`);
   lines.push(` */`);
-  lines.push(`export function createHttpClient(baseUrl?: string): ${sdkName}HttpClient {`);
+  lines.push(
+    `export function createHttpClient(baseUrl?: string): ${sdkName}HttpClient {`,
+  );
   lines.push(`  const base = baseUrl ?? HTTP_BASE_PATH;`);
   lines.push(``);
-  lines.push(`  async function request<T>(method: string, path: string, body?: unknown, options?: RequestInit): Promise<T> {`);
+  lines.push(
+    `  async function request<T>(method: string, path: string, body?: unknown, options?: RequestInit): Promise<T> {`,
+  );
   lines.push(`    const url = \`\${base}\${path}\`;`);
   lines.push(`    const init: RequestInit = {`);
   lines.push(`      method,`);
-  lines.push(`      headers: { "Content-Type": "application/json", ...options?.headers },`);
+  lines.push(
+    `      headers: { "Content-Type": "application/json", ...options?.headers },`,
+  );
   lines.push(`      ...options,`);
   lines.push(`    };`);
   lines.push(`    if (body !== undefined) {`);
@@ -196,24 +230,38 @@ function generateModuleSDK(
   lines.push(`    }`);
   lines.push(`    const response = await fetch(url, init);`);
   lines.push(`    if (!response.ok) {`);
-  lines.push(`      throw new Error(\`HTTP \${response.status}: \${response.statusText}\`);`);
+  lines.push(
+    `      throw new Error(\`HTTP \${response.status}: \${response.statusText}\`);`,
+  );
   lines.push(`    }`);
   lines.push(`    return response.json();`);
   lines.push(`  }`);
   lines.push(``);
   lines.push(`  return {`);
-  lines.push(`    get: (path, options) => request("GET", path, undefined, options),`);
-  lines.push(`    post: (path, body, options) => request("POST", path, body, options),`);
-  lines.push(`    put: (path, body, options) => request("PUT", path, body, options),`);
-  lines.push(`    delete: (path, options) => request("DELETE", path, undefined, options),`);
+  lines.push(
+    `    get: (path, options) => request("GET", path, undefined, options),`,
+  );
+  lines.push(
+    `    post: (path, body, options) => request("POST", path, body, options),`,
+  );
+  lines.push(
+    `    put: (path, body, options) => request("PUT", path, body, options),`,
+  );
+  lines.push(
+    `    delete: (path, options) => request("DELETE", path, undefined, options),`,
+  );
   lines.push(`  };`);
   lines.push(`}`);
   lines.push(``);
 
   // Combined SDK
-  lines.push(`// =============================================================================`);
+  lines.push(
+    `// =============================================================================`,
+  );
   lines.push(`// Combined SDK`);
-  lines.push(`// =============================================================================`);
+  lines.push(
+    `// =============================================================================`,
+  );
   lines.push(``);
   lines.push(`/**`);
   lines.push(` * Full SDK for ${manifest.label}`);
@@ -257,7 +305,9 @@ function generateIndexFile(manifests: ModuleManifest[]): string {
 
   for (const manifest of manifests) {
     const fileName = manifest.id.replace(/[^a-zA-Z0-9]/g, "-");
-    lines.push(`export * as ${sanitizeIdentifier(manifest.id)} from "./${fileName}";`);
+    lines.push(
+      `export * as ${sanitizeIdentifier(manifest.id)} from "./${fileName}";`,
+    );
   }
 
   lines.push(``);
