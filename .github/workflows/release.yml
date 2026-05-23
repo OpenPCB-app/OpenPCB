@@ -11,6 +11,10 @@ on:
         description: "Suffix for build artifact names (e.g. smoke, dryrun)"
         required: false
         default: "smoke"
+      corelib_tag:
+        description: "Override CoreLibrary tag to bundle (default: latest stable). Example: v0.1.0-beta.0"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -24,6 +28,16 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    # Surface the resolved CoreLibrary metadata to the publish job. Each
+    # matrix job sets the same values (same upstream release); GitHub Actions
+    # uses the value from the last job to finish — fine for our use.
+    outputs:
+      corelib_tag: ${{ steps.corelib.outputs.tag }}
+      corelib_version: ${{ steps.corelib.outputs.version }}
+      corelib_components: ${{ steps.corelib.outputs.components }}
+      corelib_footprints: ${{ steps.corelib.outputs.footprints }}
+      corelib_symbols: ${{ steps.corelib.outputs.symbols }}
+      corelib_models3d: ${{ steps.corelib.outputs.models3d }}
     strategy:
       fail-fast: false
       matrix:
@@ -129,62 +143,33 @@ jobs:
           echo "== signManifest export check =="
           grep -l signManifest node_modules/@openpcb/opclib-pack/dist/*.d.ts
 
-      - name: Download CoreLibrary bundle
+      - name: Setup Bun (for CoreLibrary fetch script)
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.0
+
+      - name: Fetch + verify CoreLibrary release
+        id: corelib
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          mkdir -p .build/core-library
-          tag="$(gh release view --repo OpenPCB-app/CoreLibrary --json tagName --jq .tagName)"
-          if [ -z "$tag" ]; then
-            echo "No CoreLibrary release tag found" >&2
-            exit 1
+          # On tag-triggered builds: latest stable. On workflow_dispatch:
+          # honour corelib_tag input if provided.
+          args=""
+          if [ -n "${{ github.event.inputs.corelib_tag }}" ]; then
+            args="--tag=${{ github.event.inputs.corelib_tag }}"
           fi
-          echo "Using CoreLibrary release $tag"
-          gh release download "$tag" \
-            --repo OpenPCB-app/CoreLibrary \
-            --pattern 'openpcb-core-library-*.opclib' \
-            --dir .build/core-library
-          count=$(ls -1 .build/core-library/*.opclib 2>/dev/null | wc -l | tr -d ' ')
-          if [ "$count" -ne 1 ]; then
-            echo "Expected exactly one .opclib, found $count" >&2
-            ls -la .build/core-library || true
-            exit 1
-          fi
-
-      - name: Validate CoreLibrary bundle
-        # Sanity-check the downloaded .opclib: confirm it's a valid ZIP and
-        # the embedded manifest.json declares library.id === "openpcb.core".
-        # Full validation runs at app import time; this is just a CI integrity
-        # check before we waste 15+ min on electron-builder.
-        run: |
-          set -euo pipefail
-          node --input-type=module <<'NODE'
-          import { readdirSync, readFileSync } from "node:fs";
-          import { resolve, join } from "node:path";
-          import { unzipSync, strFromU8 } from "fflate";
-
-          const dir = resolve(".build/core-library");
-          const files = readdirSync(dir).filter((f) => f.endsWith(".opclib"));
-          if (files.length !== 1) {
-            throw new Error(`expected 1 .opclib, got ${files.length}`);
-          }
-          const bytes = new Uint8Array(readFileSync(join(dir, files[0])));
-          const entries = unzipSync(bytes, {
-            filter: (f) => f.name === "library.json",
-          });
-          const manifestBytes = entries["library.json"];
-          if (!manifestBytes) {
-            throw new Error("library.json missing from .opclib");
-          }
-          const manifest = JSON.parse(strFromU8(manifestBytes));
-          if (manifest.library.id !== "openpcb.core") {
-            throw new Error(`invalid library id: ${manifest.library.id}`);
-          }
-          console.log(
-            `validated ${manifest.library.id}@${manifest.library.version}`,
-          );
-          NODE
+          summary="$(bun scripts/fetch-core-library.ts $args)"
+          echo "$summary"
+          {
+            echo "tag=$(echo "$summary" | jq -r .tag)"
+            echo "version=$(echo "$summary" | jq -r .version)"
+            echo "components=$(echo "$summary" | jq -r .components)"
+            echo "footprints=$(echo "$summary" | jq -r .footprints)"
+            echo "symbols=$(echo "$summary" | jq -r .symbols)"
+            echo "models3d=$(echo "$summary" | jq -r .models3d)"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Install Linux build deps
         if: matrix.platform == 'linux'
@@ -240,6 +225,12 @@ jobs:
         env:
           RELEASE_NAME: ${{ github.ref_name }}
         run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --config electron-builder.cjs --publish never
+
+      - name: Verify packaged .opclib
+        # Re-validates the embedded library in the produced installer.
+        # Catches any regression where electron-builder ships a stub/empty
+        # bundle without breaking other checks.
+        run: bun scripts/verify-packaged-opclib.ts electron/out
 
       - name: List build artifacts
         run: |
@@ -327,6 +318,12 @@ jobs:
           NODE
 
       - name: Publish complete prerelease
+        env:
+          COREL_TAG: ${{ needs.build.outputs.corelib_tag }}
+          COREL_VERSION: ${{ needs.build.outputs.corelib_version }}
+          COREL_COMPONENTS: ${{ needs.build.outputs.corelib_components }}
+          COREL_FOOTPRINTS: ${{ needs.build.outputs.corelib_footprints }}
+          COREL_SYMBOLS: ${{ needs.build.outputs.corelib_symbols }}
         run: |
           gh release delete "${GITHUB_REF_NAME}" --yes || true
           mapfile -d '' files < <(find release-artifacts -type f -print0)
@@ -336,9 +333,14 @@ jobs:
           fi
           printf 'Publishing artifacts:\n'
           printf '  %s\n' "${files[@]}"
+          # Auto-append CoreLibrary bundle info so the release notes are
+          # auditable without digging into workflow logs.
+          notes="Unsigned beta builds (electron-builder). macOS arm64/x64 dmg+zip, Windows x64 NSIS+portable, Linux x64 AppImage/deb/rpm. Auto-update via electron-updater consumes the attached latest*.yml feeds.
+
+          **Bundled CoreLibrary:** [${COREL_TAG}](https://github.com/OpenPCB-app/CoreLibrary/releases/tag/${COREL_TAG}) — v${COREL_VERSION} (${COREL_SYMBOLS} symbols, ${COREL_FOOTPRINTS} footprints, ${COREL_COMPONENTS} components)"
           gh release create "${GITHUB_REF_NAME}" \
             --verify-tag \
             --prerelease \
             --title "${GITHUB_REF_NAME}" \
-            --notes "Unsigned beta builds (electron-builder). macOS arm64/x64 dmg+zip, Windows x64 NSIS+portable, Linux x64 AppImage/deb/rpm. Auto-update via electron-updater consumes the attached latest*.yml feeds." \
+            --notes "$notes" \
             "${files[@]}"
