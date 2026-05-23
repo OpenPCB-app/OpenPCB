@@ -88,19 +88,27 @@ function ghAvailable(): boolean {
 }
 
 function resolveLatestStableTag(): string {
-  const r = run("gh", [
-    "api",
-    `repos/${REPO}/releases`,
-    "--jq",
-    "[.[] | select(.prerelease == false) | .tag_name] | .[0] // empty",
-  ]);
-  const tag = r.stdout.trim();
-  if (!tag) {
+  // Avoid passing a `--jq` filter through spawnSync (Windows cmd.exe mangles
+  // the brackets). Fetch full JSON and filter in JS.
+  const r = run("gh", ["api", `repos/${REPO}/releases`]);
+  let releases: Array<{ tag_name: string; prerelease: boolean }>;
+  try {
+    releases = JSON.parse(r.stdout) as Array<{
+      tag_name: string;
+      prerelease: boolean;
+    }>;
+  } catch (err) {
+    throw new Error(
+      `failed to parse gh releases response: ${(err as Error).message}`,
+    );
+  }
+  const stable = releases.find((r) => r.prerelease === false);
+  if (!stable) {
     throw new Error(
       `no stable (non-prerelease) releases found on ${REPO}. Use --tag to pin or publish a stable release first.`,
     );
   }
-  return tag;
+  return stable.tag_name;
 }
 
 if (!ghAvailable()) {
