@@ -1,4 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
+import path from "node:path";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { getDb } from "../queries";
 import {
@@ -10,7 +11,7 @@ import {
   sources,
   symbols,
 } from "../schema";
-import { writeGlb } from "../services/footprint-model-store";
+import { writeGlb, writeSourceStep } from "../services/footprint-model-store";
 import { readAssetBytes, readAssetJson, verifyManifest } from "./opclib-reader";
 import { makeResolver } from "./trusted-keys";
 import type {
@@ -29,10 +30,46 @@ interface ImporterOptions {
   requireSignature?: boolean;
 }
 
+interface StoredAssetInfo {
+  relativePath: string;
+  byteSize: number;
+  deduped: boolean;
+}
+
 const PASSIVE_PIN_MAP_FALLBACK = JSON.stringify([
   { pinNumber: "1", padNumber: "1", pinName: "1" },
   { pinNumber: "2", padNumber: "2", pinName: "2" },
 ]);
+
+function requiresRenderable3d(libraryId: string): boolean {
+  return libraryId === "openpcb.core";
+}
+
+function validateReferencedModels(pkg: OpclibPackage): void {
+  if (!requiresRenderable3d(pkg.manifest.library.id)) return;
+  const modelsById = new Map(pkg.manifest.models3d.map((m) => [m.id, m]));
+  for (const fp of pkg.manifest.footprints) {
+    const modelIds = fp.models3d ?? [];
+    if (modelIds.length > 1) {
+      throw new Error(
+        `opclib ${pkg.manifest.library.id}: footprint ${fp.id} references ${modelIds.length} 3D models; exactly one renderable GLB model is supported`,
+      );
+    }
+    for (const modelId of modelIds) {
+      const model = modelsById.get(modelId);
+      if (!model) {
+        throw new Error(
+          `opclib ${pkg.manifest.library.id}: footprint ${fp.id} references missing 3D model ${modelId}`,
+        );
+      }
+      if (!model.formats.glb) {
+        throw new Error(
+          `opclib ${pkg.manifest.library.id}: footprint ${fp.id} references 3D model ${modelId} without GLB format`,
+        );
+      }
+    }
+  }
+}
 
 /**
  * Transactionally import a parsed .opclib package into SQLite. Re-importing
@@ -82,7 +119,9 @@ export async function importOpclib(
     await migrateLegacyAliases(ctx, pkg);
   }
 
-  // GLB writes are content-addressed (sha256 → <userData>/models/glb/<sha>.glb)
+  validateReferencedModels(pkg);
+
+  // Model writes are content-addressed (sha256 → <userData>/models/{glb,source})
   // and run BEFORE the DB transaction because better-sqlite3 is sync. If a
   // later DB step throws, GLBs already written remain on disk; the store dedupes
   // on the next successful import so they are not duplicated. Acceptable for
@@ -93,15 +132,24 @@ export async function importOpclib(
     bytes: Uint8Array;
     modelId: string;
   }> = [];
-  const model3dBySha = new Map<
-    string,
-    { byteSize: number; deduped: boolean }
-  >();
+  const pendingSteps: Array<{
+    sha256: string;
+    bytes: Uint8Array;
+    modelId: string;
+  }> = [];
+  const glbBySha = new Map<string, StoredAssetInfo>();
+  const stepBySha = new Map<string, StoredAssetInfo>();
   for (const model of pkg.manifest.models3d) {
     const glb = model.formats.glb;
-    if (!glb) continue;
-    const bytes = readAssetBytes(pkg, glb.path);
-    pendingGlbs.push({ sha256: glb.sha256, bytes, modelId: model.id });
+    if (glb) {
+      const bytes = readAssetBytes(pkg, glb.path);
+      pendingGlbs.push({ sha256: glb.sha256, bytes, modelId: model.id });
+    }
+    const step = model.formats.step;
+    if (step) {
+      const bytes = readAssetBytes(pkg, step.path);
+      pendingSteps.push({ sha256: step.sha256, bytes, modelId: model.id });
+    }
   }
 
   // Run GLB writes before the DB transaction. They are content-addressed and
@@ -109,7 +157,8 @@ export async function importOpclib(
   // NOTE: writeGlb is async; we accumulate promises then resolve serially.
   const glbWritePromises = pendingGlbs.map(async (p) => {
     const stored = await writeGlb(p.bytes, p.sha256);
-    model3dBySha.set(p.sha256, {
+    glbBySha.set(p.sha256, {
+      relativePath: stored.relativePath,
       byteSize: stored.byteSize,
       deduped: stored.deduped,
     });
@@ -118,7 +167,17 @@ export async function importOpclib(
     return { ...p, relativePath: stored.relativePath };
   });
 
-  await Promise.all(glbWritePromises);
+  const stepWritePromises = pendingSteps.map(async (p) => {
+    const stored = await writeSourceStep(p.bytes, p.sha256);
+    stepBySha.set(p.sha256, {
+      relativePath: stored.relativePath,
+      byteSize: stored.byteSize,
+      deduped: stored.deduped,
+    });
+    return { ...p, relativePath: stored.relativePath };
+  });
+
+  await Promise.all([...glbWritePromises, ...stepWritePromises]);
 
   db.transaction((tx) => {
     const transactionalDb = tx as typeof db;
@@ -270,7 +329,8 @@ export async function importOpclib(
         transactionalDb,
         entry,
         pkg,
-        model3dBySha,
+        glbBySha,
+        stepBySha,
         now,
       );
       if ((entry.models3d ?? []).length === 0) {
@@ -529,7 +589,8 @@ function upsertFootprintModelMetadata(
   tx: ReturnType<typeof getDb>,
   fp: OpclibFootprintEntry,
   pkg: OpclibPackage,
-  model3dBySha: Map<string, { byteSize: number; deduped: boolean }>,
+  glbBySha: Map<string, StoredAssetInfo>,
+  stepBySha: Map<string, StoredAssetInfo>,
   now: string,
 ): void {
   const modelIds = fp.models3d ?? [];
@@ -540,19 +601,22 @@ function upsertFootprintModelMetadata(
   if (!primary) return;
   const glb = primary.formats.glb;
   if (!glb) return;
-  const stats = model3dBySha.get(glb.sha256);
-  const byteSize = stats?.byteSize ?? null;
+  const glbStored = glbBySha.get(glb.sha256);
+  const step = primary.formats.step;
+  const stepStored = step ? stepBySha.get(step.sha256) : undefined;
+  const byteSize = glbStored?.byteSize ?? null;
+  const sourceFilename = step?.path ? path.posix.basename(step.path) : null;
 
   tx.insert(footprintModels)
     .values({
       footprintId: fp.id,
       status: "ready",
-      glbPath: `models/glb/${glb.sha256}.glb`,
+      glbPath: glbStored?.relativePath ?? `models/glb/${glb.sha256}.glb`,
       glbSha256: glb.sha256,
-      sourceStepPath: null,
-      sourceStepSha256: primary.formats.step?.sha256 ?? null,
-      sourceFilename: null,
-      sourceByteSize: null,
+      sourceStepPath: stepStored?.relativePath ?? null,
+      sourceStepSha256: step?.sha256 ?? null,
+      sourceFilename,
+      sourceByteSize: stepStored?.byteSize ?? null,
       modelRefJson: null,
       tessellationParamsJson: null,
       converterVersion: null,
@@ -565,9 +629,17 @@ function upsertFootprintModelMetadata(
       target: footprintModels.footprintId,
       set: {
         status: "ready",
-        glbPath: `models/glb/${glb.sha256}.glb`,
+        glbPath: glbStored?.relativePath ?? `models/glb/${glb.sha256}.glb`,
         glbSha256: glb.sha256,
+        sourceStepPath: stepStored?.relativePath ?? null,
+        sourceStepSha256: step?.sha256 ?? null,
+        sourceFilename,
+        sourceByteSize: stepStored?.byteSize ?? null,
+        modelRefJson: null,
+        tessellationParamsJson: null,
+        converterVersion: null,
         byteSize,
+        errorMessage: null,
         updatedAt: now,
       },
     })

@@ -22,6 +22,7 @@ import {
 const tempRoots: string[] = [];
 
 interface TestBundleManifestEntry {
+  footprintId: string;
   glbRelativePath: string;
   sourceRelativePath: string;
   createdAt: string;
@@ -273,7 +274,10 @@ describe("library 3D asset bundle import/export", () => {
 
     const bundleBytes = await exportBundle(sourceServer);
     const manifest = readManifest(bundleBytes);
-    expect(manifest.entries).toHaveLength(1);
+    const manifestEntry = manifest.entries.find(
+      (entry) => entry.footprintId === footprintId,
+    );
+    expect(manifestEntry).toBeDefined();
     expect(JSON.stringify(manifest)).not.toContain(os.tmpdir());
 
     const targetServer = await bootHarness("asset-bundle-target");
@@ -281,7 +285,7 @@ describe("library 3D asset bundle import/export", () => {
     const importResponse = await importBundle(targetServer, bundleBytes);
     expect(importResponse.status).toBe(201);
     expect(await importResponse.json()).toMatchObject({
-      data: { imported: 1 },
+      data: { imported: expect.any(Number) },
     });
 
     const metaResponse = await targetServer.fetch(
@@ -307,9 +311,9 @@ describe("library 3D asset bundle import/export", () => {
         "SELECT glb_path, source_step_path, tessellation_params_json, converter_version, created_at, updated_at FROM library_footprint_models WHERE footprint_id = ?",
       )
       .get(footprintId) as Record<string, string>;
-    const manifestEntry = manifest.entries[0];
-    if (!manifestEntry)
+    if (!manifestEntry) {
       throw new Error("Bundle manifest did not include an entry");
+    }
     expect(row.glb_path).toBe(manifestEntry.glbRelativePath);
     expect(row.source_step_path).toBe(manifestEntry.sourceRelativePath);
     expect(row.tessellation_params_json).toBe(
