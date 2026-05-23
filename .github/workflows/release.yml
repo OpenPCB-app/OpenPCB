@@ -111,26 +111,36 @@ jobs:
           fi
 
       - name: Validate CoreLibrary bundle
-        # Reach into the installed @openpcb/opclib-pack package's compiled dist
-        # rather than the .ts source — Node can't require() TypeScript directly.
+        # Sanity-check the downloaded .opclib: confirm it's a valid ZIP and
+        # the embedded manifest.json declares library.id === "openpcb.core".
+        # Full validation runs at app import time; this is just a CI integrity
+        # check before we waste 15+ min on electron-builder.
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
-          import { readOpclibFromPath } from "@openpcb/opclib-pack";
-          import { readdirSync } from "node:fs";
+          import { readdirSync, readFileSync } from "node:fs";
           import { resolve, join } from "node:path";
+          import { unzipSync, strFromU8 } from "fflate";
 
           const dir = resolve(".build/core-library");
           const files = readdirSync(dir).filter((f) => f.endsWith(".opclib"));
           if (files.length !== 1) {
             throw new Error(`expected 1 .opclib, got ${files.length}`);
           }
-          const pkg = await readOpclibFromPath(join(dir, files[0]));
-          if (pkg.manifest.library.id !== "openpcb.core") {
-            throw new Error(`invalid library id: ${pkg.manifest.library.id}`);
+          const bytes = new Uint8Array(readFileSync(join(dir, files[0])));
+          const entries = unzipSync(bytes, {
+            filter: (f) => f.name === "manifest.json",
+          });
+          const manifestBytes = entries["manifest.json"];
+          if (!manifestBytes) {
+            throw new Error("manifest.json missing from .opclib");
+          }
+          const manifest = JSON.parse(strFromU8(manifestBytes));
+          if (manifest.library.id !== "openpcb.core") {
+            throw new Error(`invalid library id: ${manifest.library.id}`);
           }
           console.log(
-            `validated ${pkg.manifest.library.id}@${pkg.manifest.library.version}`,
+            `validated ${manifest.library.id}@${manifest.library.version}`,
           );
           NODE
 
