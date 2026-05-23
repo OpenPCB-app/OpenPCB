@@ -3,7 +3,7 @@ import type { CoreBackendModuleContext } from "../../../../core/contracts/module
 import { getDb } from "../queries";
 import { releases, sources } from "../schema";
 import { readOpclibFromPath } from "./opclib-reader";
-import { importOpclib } from "./opclib-importer";
+import { backfillModelRefOverrides, importOpclib } from "./opclib-importer";
 import { locateBundledOpclib } from "./package-locator";
 import type { ImportResult, OpclibPackage } from "./types";
 
@@ -26,6 +26,15 @@ export async function bootstrapCoreLibrary(
   ctx: CoreBackendModuleContext,
 ): Promise<BootstrapResult> {
   const userLocalSeeded = ensureUserLocalSource(ctx);
+  // Idempotent: corrects 3D model orientation for KiCad-derived STEPs whose
+  // author-time axes deviate from the PCB Z-up + footprint-aligned
+  // convention. Runs every boot so existing user DBs pick up new entries.
+  const backfilled = backfillModelRefOverrides(ctx);
+  if (backfilled.updated > 0) {
+    ctx.logger.info(
+      `core-library: refreshed model orientation for ${backfilled.updated} footprint(s)`,
+    );
+  }
 
   const installed = listCoreReleases(ctx);
   const alreadyInstalled = installed.length > 0;

@@ -41,6 +41,171 @@ const PASSIVE_PIN_MAP_FALLBACK = JSON.stringify([
   { pinNumber: "2", padNumber: "2", pinName: "2" },
 ]);
 
+/**
+ * Runtime shape consumed by `applyPlacementTransform` in
+ * `src/modules/designer/frontend/three-d/transform-helpers.ts`. The keys
+ * match the renderer's parser (`parseModelRef`): `offset` / `rotation` /
+ * `scale`, each `{x,y,z}` in mm / degrees / dimensionless.
+ *
+ * We accept the manifest's `offsetMm` / `rotationDeg` / `scaleMm` names from
+ * the opclib (and from CoreLibrary `.model.json` sidecars) and translate
+ * into this shape at import time.
+ */
+type ModelRefOverride = {
+  offset?: { x: number; y: number; z: number };
+  rotation?: { x: number; y: number; z: number };
+  scale?: { x: number; y: number; z: number };
+};
+
+interface OpclibModel3dTransformFields {
+  offsetMm?: { x: number; y: number; z: number };
+  rotationDeg?: { x: number; y: number; z: number };
+  scaleMm?: { x: number; y: number; z: number };
+  transformBaked?: boolean;
+}
+
+function vectorIsZero(v: { x: number; y: number; z: number }): boolean {
+  return v.x === 0 && v.y === 0 && v.z === 0;
+}
+function scaleIsIdentity(v: { x: number; y: number; z: number }): boolean {
+  return v.x === 1 && v.y === 1 && v.z === 1;
+}
+
+/**
+ * Translate the manifest's `Model3dTransform` fields into the runtime
+ * `modelRef` shape consumed by `applyPlacementTransform`. Returns `null`
+ * when every component is identity, so the DB column stays null and we
+ * don't pay a no-op matrix multiply per render.
+ */
+function modelRefFromManifest(
+  entry: OpclibModel3dTransformFields,
+): ModelRefOverride | null {
+  if (entry.transformBaked) return null;
+  const offset = entry.offsetMm;
+  const rotation = entry.rotationDeg;
+  const scale = entry.scaleMm;
+  const out: ModelRefOverride = {};
+  if (offset && !vectorIsZero(offset)) out.offset = offset;
+  if (rotation && !vectorIsZero(rotation)) out.rotation = rotation;
+  if (scale && !scaleIsIdentity(scale)) out.scale = scale;
+  if (!out.offset && !out.rotation && !out.scale) return null;
+  return out;
+}
+
+/**
+ * Fallback overrides for `.opclib` versions that pre-date the manifest's
+ * `offsetMm` / `rotationDeg` / `scaleMm` propagation. Forward-compatibility
+ * shim: when the manifest entry already carries the values, the fallback
+ * is ignored. Keyed by footprint id (the PK on `library_footprint_models`).
+ *
+ * Values derived empirically from inspecting the loaded GLB scenes:
+ *
+ * - KiCad LED_SMD STEPs render with body extending in the GLB's −Y direction
+ *   (chip height is along Y, not Z). A −90° rotation about X tips the
+ *   height into world +Y after the canvas Rx(−π/2) tilt is applied.
+ *
+ * - KiCad PinHeader/PinSocket vertical STEPs render with pin direction
+ *   along GLB −X (not +Z as the raw position-accessor max suggested), pin
+ *   column along GLB −Y, and pin row (1→4) along GLB +Z. A +90° rotation
+ *   about Y maps the pin direction to world +Y (vertical), and a
+ *   `scale.y = -1` mirror swaps the pin column direction so pin 2/3 lands
+ *   at footprint +Y instead of −Y.
+ */
+const MODEL_REF_OVERRIDES_BY_FOOTPRINT: Readonly<
+  Record<string, ModelRefOverride>
+> = {
+  "openpcb.core.footprint.opto.led-0603-1608metric": {
+    rotation: { x: -90, y: 0, z: 0 },
+  },
+  "openpcb.core.footprint.opto.led-0805-2012metric": {
+    rotation: { x: -90, y: 0, z: 0 },
+  },
+  "openpcb.core.footprint.opto.led-1206-3216metric": {
+    rotation: { x: -90, y: 0, z: 0 },
+  },
+  "openpcb.core.footprint.connector.pin-header-1x02-p2-54mm-vertical": {
+    rotation: { x: 0, y: 90, z: 0 },
+    scale: { x: 1, y: -1, z: 1 },
+  },
+  "openpcb.core.footprint.connector.pin-header-2x03-p2-54mm-vertical": {
+    rotation: { x: 0, y: 90, z: 0 },
+    scale: { x: 1, y: -1, z: 1 },
+  },
+  "openpcb.core.footprint.connector.pin-socket-1x02-p2-54mm-vertical": {
+    rotation: { x: 0, y: 90, z: 0 },
+    scale: { x: 1, y: -1, z: 1 },
+  },
+  "openpcb.core.footprint.connector.pin-socket-2x03-p2-54mm-vertical": {
+    rotation: { x: 0, y: 90, z: 0 },
+    scale: { x: 1, y: -1, z: 1 },
+  },
+};
+
+/** Footprints that historically had a now-stale override — left here so
+ * `backfillModelRefOverrides` can null-out rows on existing DBs. Empty
+ * once all the iteration history has cycled through. */
+const STALE_OVERRIDE_FOOTPRINT_IDS: readonly string[] = [];
+
+function resolveModelRefOverride(footprintId: string): string | null {
+  const override = MODEL_REF_OVERRIDES_BY_FOOTPRINT[footprintId];
+  return override ? JSON.stringify(override) : null;
+}
+
+/**
+ * Idempotent backfill of `model_ref_json`. Runs every boot:
+ *   1. writes the override JSON for any footprint in the fallback map whose
+ *      row exists in `library_footprint_models` (covers existing DBs whose
+ *      manifest pre-dates the new fields);
+ *   2. clears `modelRefJson` for footprints in `STALE_OVERRIDE_FOOTPRINT_IDS`
+ *      so removing an entry from the override map actually takes effect on
+ *      existing DBs.
+ *
+ * A no-op for rows that already carry the same JSON.
+ */
+export function backfillModelRefOverrides(ctx: CoreBackendModuleContext): {
+  updated: number;
+} {
+  const db = getDb(ctx);
+  const now = new Date().toISOString();
+  let updated = 0;
+  for (const [footprintId, override] of Object.entries(
+    MODEL_REF_OVERRIDES_BY_FOOTPRINT,
+  )) {
+    const json = JSON.stringify(override);
+    const existing = db
+      .select({
+        footprintId: footprintModels.footprintId,
+        modelRefJson: footprintModels.modelRefJson,
+      })
+      .from(footprintModels)
+      .where(eq(footprintModels.footprintId, footprintId))
+      .get();
+    if (!existing) continue;
+    if (existing.modelRefJson === json) continue;
+    db.update(footprintModels)
+      .set({ modelRefJson: json, updatedAt: now })
+      .where(eq(footprintModels.footprintId, footprintId))
+      .run();
+    updated += 1;
+  }
+  for (const footprintId of STALE_OVERRIDE_FOOTPRINT_IDS) {
+    if (footprintId in MODEL_REF_OVERRIDES_BY_FOOTPRINT) continue;
+    const existing = db
+      .select({ modelRefJson: footprintModels.modelRefJson })
+      .from(footprintModels)
+      .where(eq(footprintModels.footprintId, footprintId))
+      .get();
+    if (!existing) continue;
+    if (existing.modelRefJson === null) continue;
+    db.update(footprintModels)
+      .set({ modelRefJson: null, updatedAt: now })
+      .where(eq(footprintModels.footprintId, footprintId))
+      .run();
+    updated += 1;
+  }
+  return { updated };
+}
+
 function requiresRenderable3d(libraryId: string): boolean {
   return libraryId === "openpcb.core";
 }
@@ -357,9 +522,13 @@ function reconcileSourceRows(
   pkg: OpclibPackage,
 ): void {
   const sourceId = pkg.manifest.library.id;
-  const componentIds = new Set(pkg.manifest.components.map((entry) => entry.id));
+  const componentIds = new Set(
+    pkg.manifest.components.map((entry) => entry.id),
+  );
   const symbolIds = new Set(pkg.manifest.symbols.map((entry) => entry.id));
-  const footprintIds = new Set(pkg.manifest.footprints.map((entry) => entry.id));
+  const footprintIds = new Set(
+    pkg.manifest.footprints.map((entry) => entry.id),
+  );
 
   const staleComponentIds = tx
     .select({ id: components.id })
@@ -373,11 +542,14 @@ function reconcileSourceRows(
     tx.delete(componentFootprints)
       .where(inArray(componentFootprints.componentId, staleComponentIds))
       .run();
-    tx.delete(components).where(inArray(components.id, staleComponentIds)).run();
+    tx.delete(components)
+      .where(inArray(components.id, staleComponentIds))
+      .run();
   }
 
   const referencedSymbolIds = new Set(
-    tx.select({ id: components.symbolId })
+    tx
+      .select({ id: components.symbolId })
       .from(components)
       .all()
       .map((row) => row.id),
@@ -395,7 +567,10 @@ function reconcileSourceRows(
   }
 
   const referencedFootprintIds = new Set<string>();
-  for (const row of tx.select({ id: components.footprintId }).from(components).all()) {
+  for (const row of tx
+    .select({ id: components.footprintId })
+    .from(components)
+    .all()) {
     referencedFootprintIds.add(row.id);
   }
   for (const row of tx
@@ -417,7 +592,9 @@ function reconcileSourceRows(
     tx.delete(footprintModels)
       .where(inArray(footprintModels.footprintId, staleFootprintIds))
       .run();
-    tx.delete(footprints).where(inArray(footprints.id, staleFootprintIds)).run();
+    tx.delete(footprints)
+      .where(inArray(footprints.id, staleFootprintIds))
+      .run();
   }
 }
 
@@ -606,6 +783,21 @@ function upsertFootprintModelMetadata(
   const stepStored = step ? stepBySha.get(step.sha256) : undefined;
   const byteSize = glbStored?.byteSize ?? null;
   const sourceFilename = step?.path ? path.posix.basename(step.path) : null;
+  // Manifest entries from `.opclib` v0.3+ carry the model transform fields
+  // directly. Older packages don't, so we fall back to the OpenPCB-side
+  // override map.
+  // Cast through `unknown`: the installed `@openpcb/opclib-pack` v0.2 type
+  // doesn't declare the optional transform fields yet (they were added in a
+  // local edit and are read structurally here).
+  const primaryTransform = primary as unknown as OpclibModel3dTransformFields;
+  const manifestModelRef = modelRefFromManifest(
+    primaryTransform,
+  );
+  const modelRefJson = primaryTransform.transformBaked
+    ? null
+    : manifestModelRef
+      ? JSON.stringify(manifestModelRef)
+      : resolveModelRefOverride(fp.id);
 
   tx.insert(footprintModels)
     .values({
@@ -617,7 +809,7 @@ function upsertFootprintModelMetadata(
       sourceStepSha256: step?.sha256 ?? null,
       sourceFilename,
       sourceByteSize: stepStored?.byteSize ?? null,
-      modelRefJson: null,
+      modelRefJson,
       tessellationParamsJson: null,
       converterVersion: null,
       byteSize,
@@ -635,7 +827,7 @@ function upsertFootprintModelMetadata(
         sourceStepSha256: step?.sha256 ?? null,
         sourceFilename,
         sourceByteSize: stepStored?.byteSize ?? null,
-        modelRefJson: null,
+        modelRefJson,
         tessellationParamsJson: null,
         converterVersion: null,
         byteSize,

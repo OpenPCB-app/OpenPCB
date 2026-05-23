@@ -13,6 +13,45 @@ export interface PlacementTransformProps {
   scale: [number, number, number];
 }
 
+/**
+ * The author-time orientation/translation correction declared next to a
+ * library footprint's STEP source. Lives in the DB as
+ * `library_footprint_models.model_ref_json` and is forwarded into the
+ * placement payload as `placement.footprint.model3d.modelRef`.
+ *
+ * Distinct from the *placement* transform: this is per-model (the GLB
+ * may be authored Y-up and need a 90° tip to lay flat on the PCB),
+ * whereas placement is per-instance (where the part sits on the board).
+ */
+interface ModelRefCorrection {
+  offset?: { x?: number; y?: number; z?: number };
+  rotation?: { x?: number; y?: number; z?: number };
+  scale?: { x?: number; y?: number; z?: number };
+}
+
+function parseModelRef(raw: unknown): ModelRefCorrection | null {
+  if (!raw || typeof raw !== "object") return null;
+  return raw as ModelRefCorrection;
+}
+
+function buildModelRefMatrix(ref: ModelRefCorrection): THREE.Matrix4 {
+  const offset = ref.offset ?? {};
+  const rotation = ref.rotation ?? {};
+  const scale = ref.scale ?? {};
+  return new THREE.Matrix4().compose(
+    new THREE.Vector3(offset.x ?? 0, offset.y ?? 0, offset.z ?? 0),
+    new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(
+        THREE.MathUtils.degToRad(rotation.x ?? 0),
+        THREE.MathUtils.degToRad(rotation.y ?? 0),
+        THREE.MathUtils.degToRad(rotation.z ?? 0),
+        "XYZ",
+      ),
+    ),
+    new THREE.Vector3(scale.x ?? 1, scale.y ?? 1, scale.z ?? 1),
+  );
+}
+
 function multiplyGroupTransform(
   group: THREE.Group,
   transform: THREE.Matrix4,
@@ -44,6 +83,13 @@ export function applyPlacementTransform(
   placement: PcbPlacedPart,
   boardThicknessMm: number,
 ): void {
+  // Per-model author-time correction (offset + rotation + scale) is applied
+  // first in model-space, then the per-instance placement transform on top.
+  const modelRef = parseModelRef(placement.footprint.model3d?.modelRef);
+  if (modelRef) {
+    multiplyGroupTransform(group, buildModelRefMatrix(modelRef));
+  }
+
   const transform = getPlacementTransformProps(placement, boardThicknessMm);
   const matrix = new THREE.Matrix4().compose(
     new THREE.Vector3(...transform.position),

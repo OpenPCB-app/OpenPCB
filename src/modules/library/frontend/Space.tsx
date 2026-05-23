@@ -9,7 +9,6 @@ import {
 } from "react";
 import {
   ArrowDownAZ,
-  Filter,
   Plus,
   Search,
   Trash2,
@@ -19,9 +18,9 @@ import {
 } from "lucide-react";
 import type { LibraryComponent } from "../../../sdks/library";
 import { ComponentDetailPage } from "./ComponentDetailPage";
-import { TagFilterChips } from "./components/TagFilterChips";
-import { useLibraryTags } from "./hooks/useLibraryTags";
-import { groupTags } from "./tag-grouping";
+import { ActiveFilterChips } from "./components/ActiveFilterChips";
+import { FacetSidebar } from "./components/FacetSidebar";
+import { useLibraryFacets } from "./hooks/useLibraryFacets";
 import { commitKicadZipImportRequest } from "./import-wizard/import-api";
 import {
   convertPendingModelConversion,
@@ -195,18 +194,6 @@ export function LibrarySpace({
   const [notice, setNotice] = useState<LibraryNotice | null>(null);
   const [sortKey, setSortKey] = useState<LibrarySortKey>("name");
   const zipInputRef = useRef<HTMLInputElement | null>(null);
-
-  const { tags: allTags } = useLibraryTags({
-    backendURL,
-    moduleId,
-    excludeSystem: true,
-    refreshToken: refreshTick,
-  });
-
-  const tagGroups = useMemo(
-    () => groupTags(allTags, { excludeSystem: true, dropEmpty: true }),
-    [allTags],
-  );
 
   const selectionMode = selectedIds.size > 0;
 
@@ -397,6 +384,13 @@ export function LibrarySpace({
     [backendURL, moduleId, debouncedQuery, tagsKey],
   );
 
+  const { facets } = useLibraryFacets({
+    backendURL,
+    moduleId,
+    query: debouncedQuery,
+    tagsKey,
+  });
+
   const toggleTag = useCallback((tag: string) => {
     setActiveTags((prev) => {
       const next = new Set(prev);
@@ -404,6 +398,10 @@ export function LibrarySpace({
       else next.add(tag);
       return next;
     });
+  }, []);
+
+  const clearAllFilters = useCallback(() => {
+    setActiveTags(new Set());
   }, []);
 
   useEffect(() => {
@@ -543,121 +541,128 @@ export function LibrarySpace({
         </div>
       </header>
 
-      <div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/80 px-6 py-2.5 dark:border-slate-800 dark:bg-slate-900/50">
-        <div className="flex items-start gap-2">
-          <Filter className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
-          <div className="min-w-0 flex-1">
-            <TagFilterChips
-              groups={tagGroups}
-              active={activeTags}
-              onToggle={toggleTag}
-              onClear={() => setActiveTags(new Set())}
-            />
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[11px] text-slate-500 dark:text-slate-400">
-            {components.length} component{components.length === 1 ? "" : "s"}
-            {activeTags.size > 0
-              ? ` · filtered by ${activeTags.size} tag${activeTags.size === 1 ? "" : "s"}`
-              : ""}
-          </span>
-          <div className="flex items-center gap-3">
-            <label className="flex select-none items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
-              <ArrowDownAZ className="h-3.5 w-3.5 text-slate-400" />
-              <span>Sort</span>
-              <select
-                value={sortKey}
-                onChange={(event) =>
-                  setSortKey(event.target.value as LibrarySortKey)
-                }
-                className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-700 outline-none focus:border-violet-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-              >
-                <option value="name">Name</option>
-                <option value="recent">As loaded</option>
-              </select>
-            </label>
-            <label className="flex select-none items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={
-                  selectableCount > 0 && selectedIds.size === selectableCount
-                }
-                onChange={toggleSelectAll}
-                disabled={selectableCount === 0}
-                className="h-4 w-4 cursor-pointer rounded border-slate-300 text-violet-600 focus:ring-violet-600 dark:border-slate-600"
+      <div className="flex min-h-0 flex-1">
+        <FacetSidebar
+          facets={facets}
+          activeFilters={activeTags}
+          onToggle={toggleTag}
+          onClearAll={clearAllFilters}
+        />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-6 py-2.5 dark:border-slate-800 dark:bg-slate-900/50">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <span className="text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
+                {components.length} component
+                {components.length === 1 ? "" : "s"}
+              </span>
+              <ActiveFilterChips
+                activeFilters={activeTags}
+                facets={facets}
+                onRemove={toggleTag}
+                onClearAll={clearAllFilters}
               />
-              <span>Select All</span>
-            </label>
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="flex select-none items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                <ArrowDownAZ className="h-3.5 w-3.5 text-slate-400" />
+                <span>Sort</span>
+                <select
+                  value={sortKey}
+                  onChange={(event) =>
+                    setSortKey(event.target.value as LibrarySortKey)
+                  }
+                  className="h-7 rounded-md border border-slate-300 bg-white px-2 text-[11px] text-slate-700 outline-none focus:border-violet-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  <option value="name">Name</option>
+                  <option value="recent">As loaded</option>
+                </select>
+              </label>
+              <label className="flex cursor-pointer select-none items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={
+                    selectableCount > 0 && selectedIds.size === selectableCount
+                  }
+                  onChange={toggleSelectAll}
+                  disabled={selectableCount === 0}
+                  className="h-4 w-4 cursor-pointer rounded border-slate-300 text-violet-600 focus:ring-violet-600 dark:border-slate-600"
+                />
+                <span>Select All</span>
+              </label>
+            </div>
           </div>
+
+          {selectionMode && (
+            <div className="flex items-center gap-3 border-b border-violet-200 bg-violet-50 px-6 py-2 dark:border-violet-900 dark:bg-violet-950/50">
+              <span className="text-sm font-medium text-violet-700 dark:text-violet-300">
+                {selectedIds.size} selected
+              </span>
+              <button
+                type="button"
+                onClick={() => void handleBulkDelete()}
+                disabled={deleting}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-red-300 bg-white px-3 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                <X className="h-3.5 w-3.5" />
+                Clear
+              </button>
+            </div>
+          )}
+
+          <main className="flex-1 overflow-auto p-6">
+            <section className="space-y-4">
+              {loading && (
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                  <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" />
+                  Loading components...
+                </div>
+              )}
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+                  {error}
+                </div>
+              )}
+
+              {!loading && !error && components.length === 0 && (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-12 text-center dark:border-slate-700 dark:bg-slate-900">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    No components match the current filters.
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                    {activeTags.size > 0
+                      ? "Try clearing some filters."
+                      : "Import a component to get started."}
+                  </p>
+                </div>
+              )}
+
+              {!loading && !error && components.length > 0 && (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-5">
+                  {sortComponents(components, sortKey).map((component) => (
+                    <LibraryCard
+                      key={component.id}
+                      component={component}
+                      moduleId={moduleId}
+                      backendURL={backendURL}
+                      selected={selectedIds.has(component.id)}
+                      onOpen={setDetailComponentId}
+                      onToggleSelect={toggleSelect}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          </main>
         </div>
       </div>
-
-      {selectionMode && (
-        <div className="flex items-center gap-3 border-b border-violet-200 bg-violet-50 px-6 py-2 dark:border-violet-900 dark:bg-violet-950/50">
-          <span className="text-sm font-medium text-violet-700 dark:text-violet-300">
-            {selectedIds.size} selected
-          </span>
-          <button
-            type="button"
-            onClick={() => void handleBulkDelete()}
-            disabled={deleting}
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-red-300 bg-white px-3 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            {deleting ? "Deleting..." : "Delete"}
-          </button>
-          <button
-            type="button"
-            onClick={clearSelection}
-            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-          >
-            <X className="h-3.5 w-3.5" />
-            Clear
-          </button>
-        </div>
-      )}
-
-      <main className="flex-1 overflow-auto p-6">
-        <section className="space-y-4">
-          {loading && (
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" />
-              Loading components...
-            </div>
-          )}
-          {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-              {error}
-            </div>
-          )}
-
-          {!loading && !error && components.length === 0 && (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-12 text-center dark:border-slate-700 dark:bg-slate-900">
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                No components found.
-              </p>
-              <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-                Import a component to get started.
-              </p>
-            </div>
-          )}
-
-          {!loading && !error && components.length > 0 && (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-5">
-              {sortComponents(components, sortKey).map((component) => (
-                <LibraryCard
-                  key={component.id}
-                  component={component}
-                  selected={selectedIds.has(component.id)}
-                  onOpen={setDetailComponentId}
-                  onToggleSelect={toggleSelect}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-      </main>
       <NoticeViewport notice={notice} onDismiss={() => setNotice(null)} />
     </div>
   );

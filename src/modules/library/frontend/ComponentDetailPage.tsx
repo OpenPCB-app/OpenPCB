@@ -15,6 +15,7 @@ import type {
   FootprintRenderModel,
   SymbolRenderModel,
 } from "../../../shared/rendering";
+import { useTheme } from "../../../core/frontend/src/providers/ThemeProvider";
 import { TagChip } from "./components/TagChip";
 import { TagTokenInput } from "./components/TagTokenInput";
 import { useLibraryTags } from "./hooks/useLibraryTags";
@@ -63,6 +64,7 @@ export function ComponentDetailPage({
   onUpdated?: (component: LibraryComponent) => void;
   modelRefreshToken?: number;
 }): ReactElement {
+  const { mode: themeMode } = useTheme();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<ComponentDetailPayload | null>(null);
@@ -400,11 +402,12 @@ export function ComponentDetailPage({
         {!loading && !error && detail && (
           <section className="space-y-4">
             {isBuiltin && (
-              <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200">
-                <strong className="font-semibold">Built-in component.</strong>{" "}
-                Read-only. Click Duplicate to create an editable copy in your
-                library.
-              </div>
+              <p className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <Lock className="h-3 w-3" />
+                Read-only built-in. Click{" "}
+                <span className="font-medium">Duplicate</span> to make an
+                editable copy.
+              </p>
             )}
             <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
               {editing ? (
@@ -512,12 +515,16 @@ export function ComponentDetailPage({
                   <dd className="text-slate-800 dark:text-slate-200">
                     {detail.symbol.pinCount}
                   </dd>
-                  <dt className="text-slate-500 dark:text-slate-400">
-                    Warnings
-                  </dt>
-                  <dd className="text-slate-800 dark:text-slate-200">
-                    {detail.symbol.warnings.length}
-                  </dd>
+                  {detail.symbol.warnings.length > 0 && (
+                    <>
+                      <dt className="text-amber-600 dark:text-amber-400">
+                        Warnings
+                      </dt>
+                      <dd className="font-medium text-amber-600 dark:text-amber-400">
+                        {detail.symbol.warnings.length}
+                      </dd>
+                    </>
+                  )}
                 </dl>
               </article>
 
@@ -566,12 +573,16 @@ export function ComponentDetailPage({
                       detail.footprint.packageCode.imperial ??
                       "—"}
                   </dd>
-                  <dt className="text-slate-500 dark:text-slate-400">
-                    Warnings
-                  </dt>
-                  <dd className="text-slate-800 dark:text-slate-200">
-                    {detail.footprint.warnings.length}
-                  </dd>
+                  {detail.footprint.warnings.length > 0 && (
+                    <>
+                      <dt className="text-amber-600 dark:text-amber-400">
+                        Warnings
+                      </dt>
+                      <dd className="font-medium text-amber-600 dark:text-amber-400">
+                        {detail.footprint.warnings.length}
+                      </dd>
+                    </>
+                  )}
                 </dl>
               </article>
 
@@ -667,19 +678,32 @@ export function ComponentDetailPage({
                         className="flex items-center justify-between gap-4 py-2"
                         data-testid={`component-footprint-variant-${variant.footprintId}`}
                       >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-xs font-medium text-slate-800 dark:text-slate-200">
-                              {variant.variantLabel}
-                            </span>
-                            {variant.isDefault ? (
-                              <span className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wider text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300">
-                                Default
-                              </span>
-                            ) : null}
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+                            {backendURL && (
+                              <img
+                                src={`${backendURL}/api/modules/${moduleId}/footprints/${encodeURIComponent(variant.footprintId)}/preview.svg?theme=${themeMode}`}
+                                alt=""
+                                loading="lazy"
+                                decoding="async"
+                                className="h-full w-full object-contain p-1"
+                              />
+                            )}
                           </div>
-                          <div className="mt-0.5 truncate text-[0.6875rem] text-slate-500 dark:text-slate-400">
-                            {variant.name}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="truncate text-xs font-medium text-slate-800 dark:text-slate-200">
+                                {variant.variantLabel}
+                              </span>
+                              {variant.isDefault ? (
+                                <span className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wider text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300">
+                                  Default
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="mt-0.5 truncate text-[0.6875rem] text-slate-500 dark:text-slate-400">
+                              {variant.name}
+                            </div>
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2 text-[0.6875rem] text-slate-500 dark:text-slate-400">

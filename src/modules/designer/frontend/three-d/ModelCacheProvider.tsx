@@ -71,34 +71,6 @@ function forceDoubleSidedMaterials(scene: THREE.Object3D): void {
   });
 }
 
-/**
- * Many third-party STEP sources (SnapEDA, Ultra Librarian, SolidWorks exports)
- * ship Y-up bodies. The OpenPCB scene is Z-up. The new conversion worker
- * auto-corrects this at conversion time, but existing GLBs stored in the DB
- * may have been baked with the wrong orientation. Re-apply the same heuristic
- * at load time so old assets render correctly without forcing re-conversion.
- *
- * Heuristic: for typical flat SMD packages (QFN/SOIC/BGA/SOT), the body's
- * height is the smallest bbox extent — that axis is treated as the up-axis.
- * Vertical cylinders (radial caps, TO-220) violate this; getting QFN/SOIC
- * right is the higher-value default.
- */
-function correctSceneUpAxis(scene: THREE.Object3D): void {
-  const box = new THREE.Box3().setFromObject(scene);
-  if (!isFinite(box.min.x) || !isFinite(box.max.x)) return;
-  const size = new THREE.Vector3();
-  box.getSize(size);
-  if (size.x === 0 || size.y === 0 || size.z === 0) return;
-  if (size.z <= size.x && size.z <= size.y) return;
-  if (size.y <= size.x && size.y <= size.z) {
-    // Y-up source → rotate +90° about X so +Y maps to +Z (body sits on +Z).
-    scene.rotation.x += Math.PI / 2;
-  } else {
-    // X-up source (rare) → rotate -90° about Y so +X maps to +Z.
-    scene.rotation.y -= Math.PI / 2;
-  }
-}
-
 async function parseGlb(arrayBuffer: ArrayBuffer): Promise<THREE.Group | null> {
   const loader = new GLTFLoader();
   return new Promise((resolve, reject) => {
@@ -113,9 +85,6 @@ async function parseGlb(arrayBuffer: ArrayBuffer): Promise<THREE.Group | null> {
         // winding-order parity. Existing GLBs may have been baked with single-sided
         // materials; force DoubleSide on load so old assets don't need re-conversion.
         forceDoubleSidedMaterials(group);
-        // Older GLBs may have been baked from Y-up STEPs without compensation.
-        // Auto-correct so they render Z-up alongside the board.
-        correctSceneUpAxis(gltf.scene);
         resolve(group);
       },
       (error) => reject(error),

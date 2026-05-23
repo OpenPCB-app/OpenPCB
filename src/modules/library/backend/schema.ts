@@ -126,6 +126,17 @@ export const components = sqliteTable(
 );
 
 /**
+ * Content-addressed cache of rendered preview SVGs. Populated lazily by the
+ * `/preview.svg` endpoints; identical symbol/footprint payloads share a row.
+ */
+export const previewSvgs = sqliteTable("library_preview_svgs", {
+  contentSha256: text("content_sha256").primaryKey(),
+  kind: text("kind").notNull(),
+  svg: text("svg").notNull(),
+  generatedAt: text("generated_at").notNull(),
+});
+
+/**
  * 1:N component → footprint variants.  * lists every footprint it can accept (e.g. R_0402, R_0603, R_THT_axial,...).
  * Exactly one row per component has `isDefault = 1` and matches the cached
  * `library_components.footprintId` for that component.

@@ -1,97 +1,60 @@
-import type { ReactElement } from "react";
+import { useState, type DragEvent, type ReactElement } from "react";
 import type { LibraryComponent } from "../../../sdks/library";
-import { classifyTag, type TagGroupId } from "./tag-grouping";
+import { useTheme } from "../../../core/frontend/src/providers/ThemeProvider";
 
-const SYMBOL_GLYPHS: Array<[RegExp, string]> = [
-  [/(^|[-_/])ground($|[-_/])/, "GND"],
-  [/(^|[-_/])vcc($|[-_/])/, "VCC"],
-  [/(^|[-_/])resistor($|[-_/])/, "R"],
-  [/(^|[-_/])capacitor($|[-_/])/, "C"],
-  [/(^|[-_/])inductor($|[-_/])/, "L"],
-];
+export const DRAG_MIME_TYPE = "application/x-openpcb-library-component";
 
-const CHIP_LIMIT = 4;
-const CHIP_PRIORITY: TagGroupId[] = ["family", "package", "mount", "other"];
-
-function previewGlyph(component: LibraryComponent): string {
-  const symbol = component.symbolId.toLowerCase();
-  for (const [pattern, glyph] of SYMBOL_GLYPHS) {
-    if (pattern.test(symbol)) {
-      return glyph;
-    }
-  }
-
-  const fallback = component.name.trim().charAt(0).toUpperCase();
-  return fallback.length > 0 ? fallback : "U";
-}
-
-interface CardChipsResult {
-  visible: string[];
-  hidden: number;
-  hasPlaceholderFootprint: boolean;
-}
-
-function cardChips(component: LibraryComponent): CardChipsResult {
-  const buckets = new Map<TagGroupId, string[]>();
-  let hasPlaceholderFootprint = false;
-  for (const raw of component.tags) {
-    const normalized = raw.trim().toLowerCase();
-    if (!normalized) continue;
-    if (normalized === "placeholder-footprint") {
-      hasPlaceholderFootprint = true;
-      continue;
-    }
-    const group = classifyTag(normalized);
-    if (group === "system") continue;
-    if (!buckets.has(group)) buckets.set(group, []);
-    buckets.get(group)!.push(normalized);
-  }
-
-  const visible: string[] = [];
-  for (const group of CHIP_PRIORITY) {
-    const list = buckets.get(group);
-    if (!list) continue;
-    for (const tag of list) {
-      if (visible.length >= CHIP_LIMIT) break;
-      visible.push(tag);
-    }
-    if (visible.length >= CHIP_LIMIT) break;
-  }
-
-  const allCount = Array.from(buckets.values()).reduce(
-    (sum, list) => sum + list.length,
-    0,
-  );
-  const hidden = Math.max(0, allCount - visible.length);
-  return { visible, hidden, hasPlaceholderFootprint };
+interface LibraryCardProps {
+  component: LibraryComponent;
+  moduleId: string;
+  backendURL?: string | null;
+  selected?: boolean;
+  onOpen: (componentId: string) => void;
+  onToggleSelect?: (componentId: string) => void;
+  onPlace?: (componentId: string) => void;
 }
 
 export function LibraryCard({
   component,
+  moduleId,
+  backendURL,
   selected,
   onOpen,
   onToggleSelect,
-}: {
-  component: LibraryComponent;
-  selected?: boolean;
-  onOpen: (componentId: string) => void;
-  onToggleSelect?: (componentId: string) => void;
-}): ReactElement {
-  const glyph = previewGlyph(component);
-  const {
-    visible: chips,
-    hidden,
-    hasPlaceholderFootprint,
-  } = cardChips(component);
+  onPlace,
+}: LibraryCardProps): ReactElement {
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const { mode } = useTheme();
+  const hasPlaceholderFootprint = component.tags.some(
+    (t) => t.trim().toLowerCase() === "placeholder-footprint",
+  );
   const isBuiltin = component.isBuiltin;
+  const previewUrl = backendURL
+    ? `${backendURL}/api/modules/${moduleId}/symbols/${encodeURIComponent(component.symbolId)}/preview.svg?theme=${mode}`
+    : null;
 
   const borderClass = selected
     ? "border-violet-500 dark:border-violet-500"
     : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700";
 
+  const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
+    const payload = JSON.stringify({
+      componentId: component.id,
+      symbolId: component.symbolId,
+      footprintId: component.footprintId,
+      name: component.name,
+    });
+    event.dataTransfer.setData(DRAG_MIME_TYPE, payload);
+    event.dataTransfer.setData("text/plain", component.name);
+    event.dataTransfer.effectAllowed = "copy";
+  };
+
   return (
     <div
+      draggable
+      onDragStart={handleDragStart}
       className={`group relative flex h-56 w-full flex-col overflow-hidden rounded-xl border bg-white text-left transition-all hover:shadow-sm dark:bg-slate-900 ${borderClass}`}
+      data-testid={`library-component-card-${component.id}`}
     >
       {!isBuiltin && (
         <label className="absolute left-2 top-2 z-10 inline-flex items-center rounded-sm bg-white/90 p-0.5 dark:bg-slate-900/90">
@@ -117,12 +80,34 @@ export function LibraryCard({
         type="button"
         onClick={() => onOpen(component.id)}
         className="flex h-full w-full flex-col text-left focus:outline-none focus:ring-2 focus:ring-violet-500"
-        data-testid={`library-component-card-${component.id}`}
       >
-        <div className="relative flex h-22 items-center justify-center border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/40">
-          <span className="text-3xl font-semibold tracking-tight text-slate-400 dark:text-slate-500">
-            {glyph}
-          </span>
+        <div className="relative flex h-28 items-center justify-center border-b border-slate-200 bg-slate-50 px-4 dark:border-slate-800 dark:bg-slate-800/40">
+          {previewUrl && !previewFailed ? (
+            <img
+              src={previewUrl}
+              alt=""
+              draggable={false}
+              loading="lazy"
+              decoding="async"
+              onError={() => setPreviewFailed(true)}
+              className="h-full w-full object-contain text-slate-700 dark:text-slate-200"
+            />
+          ) : (
+            <PreviewFallback name={component.name} />
+          )}
+          {onPlace && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onPlace(component.id);
+              }}
+              className="absolute bottom-1.5 right-1.5 hidden items-center gap-1 rounded-md bg-violet-600 px-2 py-1 text-[0.6875rem] font-medium text-white shadow-sm transition-opacity hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 group-hover:inline-flex"
+              aria-label={`Place ${component.name}`}
+            >
+              Place
+            </button>
+          )}
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col p-3">
@@ -132,35 +117,30 @@ export function LibraryCard({
           <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-500 dark:text-slate-400">
             {component.description || "No description"}
           </p>
-
-          <div className="mt-auto flex flex-wrap items-center gap-1 pt-2">
-            {hasPlaceholderFootprint && (
+          {hasPlaceholderFootprint && (
+            <div className="mt-auto flex flex-wrap items-center gap-1 pt-2">
               <span
                 className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[0.6875rem] font-medium text-violet-700 dark:border-violet-900 dark:bg-violet-950/60 dark:text-violet-300"
                 title="Component imported without a footprint"
               >
                 No footprint
               </span>
-            )}
-            {chips.map((chip) => (
-              <span
-                key={`${component.id}-${chip}`}
-                className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[0.6875rem] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-              >
-                {chip}
-              </span>
-            ))}
-            {hidden > 0 && (
-              <span
-                className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[0.6875rem] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-500"
-                title={`${hidden} more tag${hidden === 1 ? "" : "s"}`}
-              >
-                +{hidden}
-              </span>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </button>
     </div>
+  );
+}
+
+function PreviewFallback({ name }: { name: string }): ReactElement {
+  const glyph = name.trim().charAt(0).toUpperCase() || "?";
+  return (
+    <span
+      aria-hidden
+      className="text-3xl font-semibold tracking-tight text-slate-300 dark:text-slate-600"
+    >
+      {glyph}
+    </span>
   );
 }

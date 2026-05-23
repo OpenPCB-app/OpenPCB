@@ -11,7 +11,9 @@ vi.mock("@react-three/fiber", () => ({
     selector({ invalidate: vi.fn() }),
 }));
 
-function fixturePlacement(overrides: Partial<PcbPlacedPart> = {}): PcbPlacedPart {
+function fixturePlacement(
+  overrides: Partial<PcbPlacedPart> = {},
+): PcbPlacedPart {
   return {
     id: "placement-1",
     partId: "part-1",
@@ -114,12 +116,15 @@ describe("ComponentModelLayer", () => {
     expect(markup).not.toContain("designer-3d-component-model");
   });
 
-  test("does not apply stored KiCad modelRef a second time", () => {
+  test("applies stored KiCad modelRef at render time without mutating the cache source", () => {
+    // The cache source group stays at identity; peekModel is expected to
+    // return a clone (mirrored by the real ModelCacheProvider) so that
+    // mutations from applyPlacementTransform don't pollute the cache.
     const cached = new THREE.Group();
     const cache: ModelCache = {
       getModel: vi.fn(async () => cached.clone(true) as THREE.Group),
       getStatus: vi.fn(() => "ready"),
-      peekModel: vi.fn(() => cached),
+      peekModel: vi.fn(() => cached.clone(true) as THREE.Group),
       dispose: vi.fn(),
     };
 
@@ -134,8 +139,15 @@ describe("ComponentModelLayer", () => {
       cache,
     );
 
-    expect(cached.position.toArray().map((value) => Math.abs(value))).toEqual([0, 0, 0]);
-    expect(cached.rotation.toArray().slice(0, 3).map((value) => Math.abs(value))).toEqual([0, 0, 0]);
+    expect(cached.position.toArray().map((value) => Math.abs(value))).toEqual([
+      0, 0, 0,
+    ]);
+    expect(
+      cached.rotation
+        .toArray()
+        .slice(0, 3)
+        .map((value) => Math.abs(value)),
+    ).toEqual([0, 0, 0]);
     expect(cached.scale.toArray()).toEqual([1, 1, 1]);
   });
 });

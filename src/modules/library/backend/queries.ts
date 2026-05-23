@@ -6,6 +6,10 @@ import type {
   LibraryComponentFootprintVariant,
   LibraryComponentPlacementDetail,
   LibraryComponentDetail,
+  LibraryFacetBucket,
+  LibraryFacetOption,
+  LibraryFacetParams,
+  LibraryFacets,
   LibraryFootprint,
   LibraryFootprintDetail,
   LibraryFootprintModelDescriptor,
@@ -22,6 +26,7 @@ import type {
   LibraryTagStat,
   LibraryUpdateComponentInput,
 } from "../../../sdks/library";
+import { bucketTag } from "./tag-bucketing";
 import type {
   BoundsMm,
   FootprintRenderModel,
@@ -653,10 +658,21 @@ export async function searchComponents(
   const db = getDb(ctx);
   const query = params.query?.trim().toLowerCase() ?? "";
   const limit = Math.max(1, Math.min(100, params.limit ?? 25));
-  const requestedTags = (params.tags ?? [])
+  const allTags = (params.tags ?? [])
     .map((tag) => tag.trim().toLowerCase())
     .filter((tag, index, all) => tag.length > 0 && all.indexOf(tag) === index);
-  const hasTagFilter = requestedTags.length > 0;
+  // Source filters (`source:<id>`) match component.sourceId / isBuiltin; the
+  // rest are matched against the freeform component.tags array.
+  const sourceFilters = new Set<string>();
+  const expectedTags = new Set<string>();
+  for (const t of allTags) {
+    if (t.startsWith(SOURCE_TAG_PREFIX)) {
+      sourceFilters.add(t.slice(SOURCE_TAG_PREFIX.length));
+    } else {
+      expectedTags.add(t);
+    }
+  }
+  const hasFilter = sourceFilters.size > 0 || expectedTags.size > 0;
 
   let rows: ComponentRow[];
   if (query.length > 0) {
@@ -671,27 +687,31 @@ export async function searchComponents(
         ),
       )
       .orderBy(components.name);
-    rows = hasTagFilter ? await baseQuery.all() : await baseQuery.limit(limit);
+    rows = hasFilter ? await baseQuery.all() : await baseQuery.limit(limit);
   } else {
     const baseQuery = db.select().from(components).orderBy(components.name);
-    rows = hasTagFilter ? await baseQuery.all() : await baseQuery.limit(limit);
+    rows = hasFilter ? await baseQuery.all() : await baseQuery.limit(limit);
   }
 
-  const mapped = rows.map(mapComponent);
-  if (!hasTagFilter) {
-    return mapped;
+  if (!hasFilter) {
+    return rows.map(mapComponent);
   }
-  const expected = new Set(requestedTags);
-  const filtered = mapped.filter((component) => {
-    const have = new Set(component.tags.map((tag) => tag.toLowerCase()));
-    for (const tag of expected) {
-      if (!have.has(tag)) {
-        return false;
+  const filteredRows = rows.filter((row) => {
+    if (sourceFilters.size > 0) {
+      const sourceKey = row.sourceId ?? (row.isBuiltin === 1 ? "core" : "user");
+      if (!sourceFilters.has(sourceKey)) return false;
+    }
+    if (expectedTags.size > 0) {
+      const tagSet = new Set(
+        parseJsonStringArray(row.tagsJson).map((t) => t.toLowerCase()),
+      );
+      for (const tag of expectedTags) {
+        if (!tagSet.has(tag)) return false;
       }
     }
     return true;
   });
-  return filtered.slice(0, limit);
+  return filteredRows.slice(0, limit).map(mapComponent);
 }
 
 export async function resolveComponent(
@@ -911,6 +931,68 @@ export async function getSymbol(
     .where(eq(symbols.id, symbolId))
     .get();
   return row ? mapSymbol(row) : null;
+}
+
+/**
+ * Load just the data needed to render a symbol preview: the parsed
+ * {@link SymbolRenderModel} and the row's content_sha256 (for caching).
+ * Returns null when the symbol doesn't exist or lacks a renderable preview.
+ */
+export async function loadSymbolPreviewModel(
+  ctx: CoreBackendModuleContext,
+  symbolId: string,
+): Promise<{
+  model: SymbolRenderModel;
+  contentSha256: string | null;
+  name: string;
+} | null> {
+  const db = getDb(ctx);
+  const row = await db
+    .select()
+    .from(symbols)
+    .where(eq(symbols.id, symbolId))
+    .get();
+  if (!row) return null;
+  const data = parseJsonObject(row.dataJson);
+  const normalized = asRecord(data.normalized);
+  const previewRaw = normalized?.preview;
+  if (!isSymbolRenderModel(previewRaw)) return null;
+  return {
+    model: previewRaw,
+    contentSha256: row.contentSha256 ?? null,
+    name: row.name,
+  };
+}
+
+/**
+ * Load the {@link FootprintRenderModel} for a footprint by id. Returns null
+ * when the footprint doesn't exist or lacks a renderable preview (symbol-only
+ * components have placeholder footprints without geometry).
+ */
+export async function loadFootprintPreviewModel(
+  ctx: CoreBackendModuleContext,
+  footprintId: string,
+): Promise<{
+  model: FootprintRenderModel;
+  contentSha256: string | null;
+  name: string;
+} | null> {
+  const db = getDb(ctx);
+  const row = await db
+    .select()
+    .from(footprints)
+    .where(eq(footprints.id, footprintId))
+    .get();
+  if (!row) return null;
+  const data = parseJsonObject(row.dataJson);
+  const normalized = asRecord(data.normalized);
+  const previewRaw = normalized?.preview;
+  if (!isFootprintRenderModel(previewRaw)) return null;
+  return {
+    model: previewRaw,
+    contentSha256: row.contentSha256 ?? null,
+    name: row.name,
+  };
 }
 
 export async function getFootprint(
@@ -1354,6 +1436,264 @@ export async function listTags(
     return a.tag.localeCompare(b.tag);
   });
   return out;
+}
+
+/**
+ * Tag filters prefixed with `source:` target the Source facet (e.g.
+ * `source:openpcb.core`). This keeps the wire format a single `tags` list
+ * without proliferating bucket-specific query params.
+ */
+const SOURCE_TAG_PREFIX = "source:";
+
+interface NormalizedComponentForFacets {
+  id: string;
+  nameLc: string;
+  descriptionLc: string;
+  family: Set<string>;
+  package: Set<string>;
+  mount: Set<string>;
+  other: Set<string>;
+  sourceKey: string;
+  sourceLabel: string;
+}
+
+/**
+ * Extract `mountType` from a footprint's `dataJson` blob. The canonical
+ * location is `normalized.mountType`; the legacy fallback is the top-level
+ * `mountType` field. Returns null if neither path resolves to a recognised
+ * mount value.
+ */
+function extractMountType(footprintDataJson: string | null): string | null {
+  if (!footprintDataJson) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(footprintDataJson);
+  } catch {
+    return null;
+  }
+  const root = asRecord(parsed);
+  if (!root) return null;
+  const normalized = asRecord(root.normalized);
+  const mount =
+    asString(normalized?.mountType) ?? asString(root.mountType) ?? null;
+  if (!mount) return null;
+  const lc = mount.trim().toLowerCase();
+  return lc.length > 0 ? lc : null;
+}
+
+function normalizeForFacets(
+  row: {
+    tagsJson: string;
+    name: string;
+    description: string;
+    isBuiltin: number;
+    sourceId: string | null;
+    id: string;
+  },
+  sourceName: string | null,
+  footprintMountType: string | null,
+): NormalizedComponentForFacets {
+  const family = new Set<string>();
+  const pkg = new Set<string>();
+  const mount = new Set<string>();
+  const other = new Set<string>();
+  for (const raw of parseJsonStringArray(row.tagsJson)) {
+    const tag = raw.trim().toLowerCase();
+    if (!tag) continue;
+    switch (bucketTag(tag)) {
+      case "family":
+        family.add(tag);
+        break;
+      case "package":
+        pkg.add(tag);
+        break;
+      case "mount":
+        mount.add(tag);
+        break;
+      case "other":
+        other.add(tag);
+        break;
+      // "system" tags ignored — they don't appear in facets.
+    }
+  }
+  // Default-footprint mountType is the canonical signal even when the
+  // component carries no explicit "smd"/"tht" tag.
+  if (footprintMountType) {
+    mount.add(footprintMountType);
+  }
+  const isBuiltin = row.isBuiltin === 1;
+  const sourceKey = row.sourceId ?? (isBuiltin ? "core" : "user");
+  const sourceLabel =
+    sourceName ?? (isBuiltin ? "Core" : (row.sourceId ?? "User"));
+  return {
+    id: row.id,
+    nameLc: row.name.toLowerCase(),
+    descriptionLc: row.description.toLowerCase(),
+    family,
+    package: pkg,
+    mount,
+    other,
+    sourceKey,
+    sourceLabel,
+  };
+}
+
+export async function computeFacets(
+  ctx: CoreBackendModuleContext,
+  params: LibraryFacetParams = {},
+): Promise<LibraryFacets> {
+  const db = getDb(ctx);
+  const rows = await db
+    .select({
+      id: components.id,
+      name: components.name,
+      description: components.description,
+      tagsJson: components.tagsJson,
+      isBuiltin: components.isBuiltin,
+      sourceId: components.sourceId,
+      footprintId: components.footprintId,
+      sourceName: sources.name,
+      footprintDataJson: footprints.dataJson,
+    })
+    .from(components)
+    .leftJoin(sources, eq(components.sourceId, sources.id))
+    .leftJoin(footprints, eq(components.footprintId, footprints.id))
+    .all();
+
+  const normalized = rows.map((row) =>
+    normalizeForFacets(
+      row,
+      row.sourceName,
+      extractMountType(row.footprintDataJson),
+    ),
+  );
+
+  const query = params.query?.trim().toLowerCase() ?? "";
+  const activeBySource = new Set<string>();
+  const activeByFamily = new Set<string>();
+  const activeByPackage = new Set<string>();
+  const activeByMount = new Set<string>();
+  const activeByOther = new Set<string>();
+  for (const raw of params.tags ?? []) {
+    const t = raw.trim().toLowerCase();
+    if (!t) continue;
+    if (t.startsWith(SOURCE_TAG_PREFIX)) {
+      activeBySource.add(t.slice(SOURCE_TAG_PREFIX.length));
+      continue;
+    }
+    switch (bucketTag(t)) {
+      case "family":
+        activeByFamily.add(t);
+        break;
+      case "package":
+        activeByPackage.add(t);
+        break;
+      case "mount":
+        activeByMount.add(t);
+        break;
+      case "other":
+        activeByOther.add(t);
+        break;
+    }
+  }
+
+  const matchesQuery = (c: NormalizedComponentForFacets): boolean =>
+    !query || c.nameLc.includes(query) || c.descriptionLc.includes(query);
+
+  // Intersection-aware: counts within bucket B are computed against the
+  // candidate set filtered by every OTHER bucket's selections.
+  const matchesOtherFacets = (
+    c: NormalizedComponentForFacets,
+    skip: LibraryFacetBucket | null,
+  ): boolean => {
+    if (
+      skip !== "source" &&
+      activeBySource.size > 0 &&
+      !activeBySource.has(c.sourceKey)
+    ) {
+      return false;
+    }
+    if (skip !== "family") {
+      for (const t of activeByFamily) if (!c.family.has(t)) return false;
+    }
+    if (skip !== "package") {
+      for (const t of activeByPackage) if (!c.package.has(t)) return false;
+    }
+    if (skip !== "mount") {
+      for (const t of activeByMount) if (!c.mount.has(t)) return false;
+    }
+    if (skip !== "other") {
+      for (const t of activeByOther) if (!c.other.has(t)) return false;
+    }
+    return true;
+  };
+
+  const toSortedList = (
+    m: Map<string, { label: string; count: number }>,
+  ): LibraryFacetOption[] =>
+    Array.from(m.entries())
+      .map(([key, v]) => ({ key, label: v.label, count: v.count }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+
+  const bucketSource = new Map<string, { label: string; count: number }>();
+  const bucketFamily = new Map<string, { label: string; count: number }>();
+  const bucketPackage = new Map<string, { label: string; count: number }>();
+  const bucketMount = new Map<string, { label: string; count: number }>();
+  const bucketOther = new Map<string, { label: string; count: number }>();
+  let total = 0;
+
+  for (const c of normalized) {
+    if (!matchesQuery(c)) continue;
+
+    if (matchesOtherFacets(c, "source")) {
+      const cur = bucketSource.get(c.sourceKey) ?? {
+        label: c.sourceLabel,
+        count: 0,
+      };
+      cur.count++;
+      bucketSource.set(c.sourceKey, cur);
+    }
+    if (matchesOtherFacets(c, "family")) {
+      for (const t of c.family) {
+        const cur = bucketFamily.get(t) ?? { label: t, count: 0 };
+        cur.count++;
+        bucketFamily.set(t, cur);
+      }
+    }
+    if (matchesOtherFacets(c, "package")) {
+      for (const t of c.package) {
+        const cur = bucketPackage.get(t) ?? { label: t, count: 0 };
+        cur.count++;
+        bucketPackage.set(t, cur);
+      }
+    }
+    if (matchesOtherFacets(c, "mount")) {
+      for (const t of c.mount) {
+        const cur = bucketMount.get(t) ?? { label: t, count: 0 };
+        cur.count++;
+        bucketMount.set(t, cur);
+      }
+    }
+    if (matchesOtherFacets(c, "other")) {
+      for (const t of c.other) {
+        const cur = bucketOther.get(t) ?? { label: t, count: 0 };
+        cur.count++;
+        bucketOther.set(t, cur);
+      }
+    }
+    if (matchesOtherFacets(c, null)) {
+      total++;
+    }
+  }
+
+  return {
+    source: toSortedList(bucketSource),
+    family: toSortedList(bucketFamily),
+    package: toSortedList(bucketPackage),
+    mount: toSortedList(bucketMount),
+    other: toSortedList(bucketOther),
+    total,
+  };
 }
 
 export async function updateComponent(

@@ -22,6 +22,9 @@ import {
   deleteFootprintModelRecord,
   getSymbol,
   getFootprint,
+  loadSymbolPreviewModel,
+  loadFootprintPreviewModel,
+  computeFacets,
   getFootprintModelMetadata,
   getFootprintModelRecord,
   markFootprintModelConversionFailed,
@@ -66,10 +69,39 @@ import {
 } from "./import/commit-drawn";
 import { buildInspectResponse } from "./import/inspect-kicad";
 import type { CommitKicadRequest, InspectKicadRequest } from "./import/types";
+import {
+  getOrRenderSymbolPreview,
+  getOrRenderFootprintPreview,
+  type PreviewTheme,
+} from "./preview/cache";
+
+function parseTheme(value: string | null): PreviewTheme {
+  if (value === "light" || value === "dark") return value;
+  return "auto";
+}
 
 function success<T>(data: T, status = 200): Response {
   return Response.json({ ok: true, data }, { status });
 }
+
+function svgResponse(svg: string, etag: string, req: Request): Response {
+  if (req.headers.get("if-none-match") === etag) {
+    return new Response(null, {
+      status: 304,
+      headers: { etag, "cache-control": SVG_CACHE_CONTROL },
+    });
+  }
+  return new Response(svg, {
+    status: 200,
+    headers: {
+      "content-type": "image/svg+xml; charset=utf-8",
+      etag,
+      "cache-control": SVG_CACHE_CONTROL,
+    },
+  });
+}
+
+const SVG_CACHE_CONTROL = "private, max-age=31536000, immutable";
 
 async function parseJsonBody<T>(req: Request): Promise<T> {
   try {
@@ -1253,6 +1285,17 @@ export function registerRoutes(
     return success({ tags });
   });
 
+  router.get("/facets", async (routeCtx) => {
+    const q = routeCtx.query.get("q") ?? "";
+    const tagsCsv = routeCtx.query.get("tags") ?? "";
+    const tags = tagsCsv
+      .split(",")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+    const facets = await computeFacets(ctx, { query: q, tags });
+    return success({ facets });
+  });
+
   router.patch("/components/:componentId", async (routeCtx) => {
     const componentId = routeCtx.params.getOrThrow("componentId");
     const body = await parseJsonBody<unknown>(routeCtx.req);
@@ -1399,6 +1442,22 @@ export function registerRoutes(
     return success({ symbol });
   });
 
+  router.get("/symbols/:symbolId/preview.svg", async (routeCtx) => {
+    const symbolId = routeCtx.params.getOrThrow("symbolId");
+    const loaded = await loadSymbolPreviewModel(ctx, symbolId);
+    if (!loaded) {
+      throw new NotFoundError("Symbol preview not available");
+    }
+    const theme = parseTheme(routeCtx.query.get("theme"));
+    const result = await getOrRenderSymbolPreview(
+      ctx,
+      loaded.contentSha256,
+      loaded.model,
+      theme,
+    );
+    return svgResponse(result.svg, result.etag, routeCtx.req);
+  });
+
   router.get("/footprints/:footprintId", async (routeCtx) => {
     const footprint = await getFootprint(
       ctx,
@@ -1408,6 +1467,22 @@ export function registerRoutes(
       throw new NotFoundError("Footprint not found");
     }
     return success({ footprint });
+  });
+
+  router.get("/footprints/:footprintId/preview.svg", async (routeCtx) => {
+    const footprintId = routeCtx.params.getOrThrow("footprintId");
+    const loaded = await loadFootprintPreviewModel(ctx, footprintId);
+    if (!loaded) {
+      throw new NotFoundError("Footprint preview not available");
+    }
+    const theme = parseTheme(routeCtx.query.get("theme"));
+    const result = await getOrRenderFootprintPreview(
+      ctx,
+      loaded.contentSha256,
+      loaded.model,
+      theme,
+    );
+    return svgResponse(result.svg, result.etag, routeCtx.req);
   });
 
   router.get("/footprints/:footprintId/model/meta", async (routeCtx) => {

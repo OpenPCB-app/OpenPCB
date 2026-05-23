@@ -171,6 +171,37 @@ export interface LibraryTagStat {
   count: number;
 }
 
+export type LibraryFacetBucket =
+  | "source"
+  | "family"
+  | "package"
+  | "mount"
+  | "other";
+
+export interface LibraryFacetOption {
+  /** Tag value to send back as a filter (lower-case, kebab). */
+  key: string;
+  /** Display label. Same as `key` for tag-based facets; humanised for source. */
+  label: string;
+  count: number;
+}
+
+export interface LibraryFacets {
+  source: LibraryFacetOption[];
+  family: LibraryFacetOption[];
+  package: LibraryFacetOption[];
+  mount: LibraryFacetOption[];
+  other: LibraryFacetOption[];
+  /** Components matching the full active filter set (query + every facet). */
+  total: number;
+}
+
+export interface LibraryFacetParams {
+  query?: string;
+  /** Flat list of currently-active tag filters; bucketed server-side. */
+  tags?: string[];
+}
+
 export interface LibraryListTagsOptions {
   excludeSystem?: boolean;
 }

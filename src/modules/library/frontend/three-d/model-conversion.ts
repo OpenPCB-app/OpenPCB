@@ -144,9 +144,8 @@ async function uploadConvertedModel({
   formData.set("sourceFilename", sourceFilename);
   formData.set("tessellationParamsJson", JSON.stringify(STEP_UPLOAD_PARAMS));
   formData.set("converterVersion", "client-step-to-glb");
-  if (modelRef) {
-    formData.set("modelRefJson", JSON.stringify(modelRef));
-  }
+  // modelRef is baked into the uploaded GLB. Do not persist it for ready
+  // models, otherwise the designer applies the same transform a second time.
 
   const response = await fetch(
     `${backendURL}/api/modules/${encodePathSegment(moduleId)}/footprints/${encodePathSegment(footprintId)}/model`,
