@@ -101,47 +101,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # @openpcb/* packages ship source-only via github: tags. npm ci runs
-      # their prepare scripts but the cache can serve a stale-prepared tarball
-      # when the same tag has been force-pushed (subtree-split re-points the
-      # tag at a different SHA). Wipe and reinstall those packages to force
-      # fresh prepare runs.
-      - name: Inspect @openpcb/* dists (debug)
-        run: |
-          for pkg in kicad-parsers rendering-core kicad-import step-to-glb r3f-eda-canvas opclib-pack command-pattern contracts; do
-            dir="node_modules/@openpcb/$pkg"
-            echo "== $pkg =="
-            ls -la "$dir/dist" 2>&1 | head -20 || echo "no dist/"
-            grep -l signManifest "$dir/dist/"*.d.ts 2>/dev/null || true
-          done
-          echo "== nested opclib-pack copies =="
-          find node_modules -name 'opclib-pack' -type d 2>&1
-          echo "== nested package.json versions =="
-          find node_modules -path '*/opclib-pack/package.json' -exec grep -H '"version"' {} \;
-
-      - name: Force-refresh @openpcb/* deps
+      # Verify the @openpcb/* packages installed correctly. The lockfile pins
+      # each to a specific tag SHA, so npm ci should produce a consistent tree;
+      # this is just a defensive sanity check before electron-builder.
+      - name: Verify @openpcb/opclib-pack version
         run: |
           set -euo pipefail
-          # Clear npm cache + remove + reinstall to bypass any cached
-          # github-tag tarball whose prepare ran against older source.
-          rm -rf node_modules/@openpcb
-          npm cache clean --force
-          npm install \
-            github:OpenPCB-app/shared#kicad-parsers-v0.1.2 \
-            github:OpenPCB-app/shared#rendering-core-v0.1.2 \
-            github:OpenPCB-app/shared#kicad-import-v0.1.0 \
-            github:OpenPCB-app/shared#step-to-glb-v0.1.3 \
-            github:OpenPCB-app/shared#r3f-eda-canvas-v0.1.3 \
-            github:OpenPCB-app/shared#opclib-pack-v0.2.0 \
-            github:OpenPCB-app/shared#command-pattern-v0.1.0 \
-            github:OpenPCB-app/shared#contracts-v0.1.0 \
-            --no-save --foreground-scripts
-          echo "== opclib-pack version after force-refresh =="
-          grep '"version"' node_modules/@openpcb/opclib-pack/package.json
-          echo "== dist files =="
-          ls node_modules/@openpcb/opclib-pack/dist/
-          echo "== signManifest export check =="
-          grep -l signManifest node_modules/@openpcb/opclib-pack/dist/*.d.ts
+          v=$(node -p "require('./node_modules/@openpcb/opclib-pack/package.json').version")
+          echo "installed @openpcb/opclib-pack version: $v"
+          if ! grep -q 'signManifest' node_modules/@openpcb/opclib-pack/dist/index.d.ts; then
+            echo "FATAL: opclib-pack dist missing signManifest export" >&2
+            exit 1
+          fi
 
       - name: Setup Bun (for CoreLibrary fetch script)
         uses: oven-sh/setup-bun@v2
