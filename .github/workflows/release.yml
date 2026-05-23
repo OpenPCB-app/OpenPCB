@@ -87,6 +87,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # @openpcb/* packages ship source-only via github: tags; their prepare
+      # scripts (`tsc -p tsconfig.build.json`) sometimes silently skip during
+      # npm ci when nested devDeps aren't fully resolved. Rebuild explicitly
+      # in topological order so dist/ exists before typecheck reads it.
+      - name: Build @openpcb/* dists
+        run: |
+          set -euo pipefail
+          for pkg in kicad-parsers rendering-core kicad-import step-to-glb r3f-eda-canvas opclib-pack command-pattern contracts; do
+            dir="node_modules/@openpcb/$pkg"
+            if [ -d "$dir" ] && [ -f "$dir/tsconfig.build.json" ]; then
+              echo "::group::rebuild @openpcb/$pkg"
+              (cd "$dir" && npx --no-install tsc -p tsconfig.build.json) || (cd "$dir" && npx tsc -p tsconfig.build.json)
+              echo "::endgroup::"
+            fi
+          done
+
       - name: Download CoreLibrary bundle
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
