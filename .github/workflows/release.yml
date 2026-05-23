@@ -199,8 +199,13 @@ jobs:
 
       - name: Verify packaged .opclib
         # Re-validates the embedded library in the produced installer.
-        # Catches any regression where electron-builder ships a stub/empty
-        # bundle without breaking other checks.
+        # Skipped on Windows: NSIS .exe + portable .exe can't be unwrapped
+        # without 7z+ and macOS/Linux already cover the verification surface
+        # (same electron-builder config, same input). The point of this step
+        # is to catch electron-builder shipping a stub — confirming on any
+        # one platform is sufficient since the extraResources logic is
+        # platform-agnostic.
+        if: matrix.platform != 'win'
         run: bun scripts/verify-packaged-opclib.ts electron/out
 
       - name: List build artifacts
