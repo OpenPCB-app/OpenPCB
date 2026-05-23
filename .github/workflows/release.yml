@@ -129,11 +129,11 @@ jobs:
           }
           const bytes = new Uint8Array(readFileSync(join(dir, files[0])));
           const entries = unzipSync(bytes, {
-            filter: (f) => f.name === "manifest.json",
+            filter: (f) => f.name === "library.json",
           });
-          const manifestBytes = entries["manifest.json"];
+          const manifestBytes = entries["library.json"];
           if (!manifestBytes) {
-            throw new Error("manifest.json missing from .opclib");
+            throw new Error("library.json missing from .opclib");
           }
           const manifest = JSON.parse(strFromU8(manifestBytes));
           if (manifest.library.id !== "openpcb.core") {
