@@ -48,27 +48,23 @@ const outDir = process.argv[2];
 if (!outDir) fail("usage: bun scripts/verify-packaged-opclib.ts <outDir>");
 if (!existsSync(outDir)) fail(`outDir does not exist: ${outDir}`);
 
-function findArtifact(): { path: string; kind: "zip" | "appimage" } {
+function findArtifact(): { path: string; kind: "zip" | "deb" } {
   const entries = readdirSync(outDir, { withFileTypes: true });
-  // Prefer zip/AppImage — they're trivially unwrappable in any environment.
+  // Prefer zip (macOS) — stdlib-unwrappable. Otherwise .deb (Linux) — dpkg-deb
+  // is pre-installed on Ubuntu runners. AppImage is intentionally not handled
+  // here: extraction requires FUSE which isn't available on GH-hosted runners.
   const zip = entries.find(
     (e) => e.isFile() && e.name.toLowerCase().endsWith(".zip"),
   );
   if (zip) return { path: path.join(outDir, zip.name), kind: "zip" };
-  const appimage = entries.find(
-    (e) => e.isFile() && e.name.toLowerCase().endsWith(".appimage"),
+  const deb = entries.find(
+    (e) => e.isFile() && e.name.toLowerCase().endsWith(".deb"),
   );
-  if (appimage)
-    return { path: path.join(outDir, appimage.name), kind: "appimage" };
-  fail(
-    `no .zip or .AppImage found in ${outDir} (per-platform artifact mandatory)`,
-  );
+  if (deb) return { path: path.join(outDir, deb.name), kind: "deb" };
+  fail(`no .zip or .deb found in ${outDir} (per-platform artifact mandatory)`);
 }
 
-function extractOpclibBytes(
-  artifact: string,
-  kind: "zip" | "appimage",
-): Uint8Array {
+function extractOpclibBytes(artifact: string, kind: "zip" | "deb"): Uint8Array {
   if (kind === "zip") {
     const zipBytes = new Uint8Array(readFileSync(artifact));
     const entries = unzipSync(zipBytes, {
@@ -86,19 +82,19 @@ function extractOpclibBytes(
     }
     return found[0]![1];
   }
-  // AppImage: it's a squashfs-based ELF; use `--appimage-extract` flag to
-  // produce a squashfs-root/ dir. Requires `chmod +x` first.
+  // .deb: unwrap via `dpkg-deb -x` into a temp dir, then walk for the
+  // core-library/*.opclib. Pre-installed on Ubuntu runners (and used by
+  // electron-builder itself).
   const tmp = mkdtempSync(path.join(os.tmpdir(), "openpcb-verify-"));
-  spawnSync("chmod", ["+x", artifact]);
-  const r = spawnSync(artifact, ["--appimage-extract"], {
-    cwd: tmp,
-    stdio: ["ignore", "ignore", "inherit"],
+  const r = spawnSync("dpkg-deb", ["-x", artifact, tmp], {
+    stdio: ["ignore", "inherit", "inherit"],
   });
   if (r.status !== 0) {
     rmSync(tmp, { recursive: true, force: true });
-    fail(`AppImage extraction failed: exit ${r.status}`);
+    fail(`dpkg-deb extraction failed: exit ${r.status}`);
   }
-  // Walk squashfs-root/ for core-library/*.opclib
+  // Walk dpkg-extracted tree for core-library/*.opclib (typically lives at
+  // /opt/OpenPCB/resources/core-library/ inside the .deb).
   function* walk(dir: string): Generator<string> {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, e.name);
@@ -106,9 +102,8 @@ function extractOpclibBytes(
       else yield p;
     }
   }
-  const root = path.join(tmp, "squashfs-root");
   let opclibPath: string | null = null;
-  for (const p of walk(root)) {
+  for (const p of walk(tmp)) {
     if (p.includes("core-library") && p.endsWith(".opclib")) {
       opclibPath = p;
       break;
@@ -116,7 +111,7 @@ function extractOpclibBytes(
   }
   if (!opclibPath) {
     rmSync(tmp, { recursive: true, force: true });
-    fail(`no core-library/*.opclib found inside AppImage`);
+    fail(`no core-library/*.opclib found inside .deb`);
   }
   const bytes = new Uint8Array(readFileSync(opclibPath));
   rmSync(tmp, { recursive: true, force: true });
