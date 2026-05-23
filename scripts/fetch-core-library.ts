@@ -178,14 +178,21 @@ try {
       trustedKeys.set(keyId, readFileSync(path.join(KEYS_DIR, f)));
     }
   }
-  // If release publishes openpcb-core.pub, accept only if it byte-matches a
-  // committed key — defeats a malicious release flipping the bundled key.
+  // If release publishes openpcb-core.pub, accept only if its PEM contents
+  // match a committed key. Normalize line endings (Windows checkouts can
+  // convert LF → CRLF on the committed file, breaking byte comparison).
   const releasedPub = files.find((f) => f === "openpcb-core.pub");
   if (releasedPub) {
-    const releasedKeyBytes = readFileSync(path.join(tmp, releasedPub));
+    const releasedKeyText = readFileSync(path.join(tmp, releasedPub), "utf8")
+      .replace(/\r\n/g, "\n")
+      .trim();
     let matched = false;
     for (const [, committed] of trustedKeys) {
-      if (Buffer.compare(committed, releasedKeyBytes) === 0) {
+      const committedText = committed
+        .toString("utf8")
+        .replace(/\r\n/g, "\n")
+        .trim();
+      if (committedText === releasedKeyText) {
         matched = true;
         break;
       }
