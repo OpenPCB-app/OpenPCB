@@ -47,6 +47,11 @@ jobs:
             fi
           done
 
+      - name: Fetch CoreLibrary (for backend tests that boot the library module)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun scripts/fetch-core-library.ts
+
       - name: Typecheck
         run: npm run typecheck
 

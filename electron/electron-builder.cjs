@@ -3,9 +3,38 @@ const fs = require("node:fs");
 const repoRoot = path.resolve(__dirname, "..");
 const downloadedCoreLibrary = path.join(repoRoot, ".build", "core-library");
 const localCoreLibrary = path.join(repoRoot, "resources", "core-library");
-const bundledCoreLibrary = fs.existsSync(downloadedCoreLibrary)
-  ? downloadedCoreLibrary
-  : localCoreLibrary;
+
+function listOpclibs(dir) {
+  try {
+    return fs.readdirSync(dir).filter((f) => f.endsWith(".opclib"));
+  } catch {
+    return [];
+  }
+}
+
+// Pick whichever source has a .opclib; .build/ wins over resources/ when both
+// exist (CI release path). Throw loudly if neither has one — silently shipping
+// no library, or a stale stub, is the failure mode this guards against.
+const downloaded = listOpclibs(downloadedCoreLibrary);
+const local = listOpclibs(localCoreLibrary);
+const bundledCoreLibrary =
+  downloaded.length > 0
+    ? downloadedCoreLibrary
+    : local.length > 0
+      ? localCoreLibrary
+      : null;
+
+if (!bundledCoreLibrary) {
+  throw new Error(
+    "electron-builder.cjs: no .opclib found in .build/core-library/ or resources/core-library/. " +
+      "Run `npm run corelib:fetch` locally, or rely on release.yml's Fetch CoreLibrary step in CI. " +
+      "Refusing to package without a bundled CoreLibrary.",
+  );
+}
+
+console.error(
+  `[electron-builder] bundling CoreLibrary from ${path.relative(repoRoot, bundledCoreLibrary)} (${(downloaded.length > 0 ? downloaded : local).join(", ")})`,
+);
 
 // When publishing from CI, override artifact version token with the git tag
 // (RELEASE_NAME=${GITHUB_REF_NAME}) so filenames reflect the release, not the

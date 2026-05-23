@@ -2,6 +2,6 @@
 // SDK index - re-exports all module SDKs
 
 export * as assistant from "./assistant";
-export * as tasks from "./tasks";
-export * as library from "./library";
 export * as designer from "./designer";
+export * as library from "./library";
+export * as tasks from "./tasks";
