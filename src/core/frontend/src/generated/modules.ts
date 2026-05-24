@@ -72,7 +72,7 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
         label: "Assistant",
         sidebarLabel: "Assistant",
         namespace: "space.assistant",
-        version: "0.1.0",
+        version: "0.2.0",
         moduleEntry: "src/modules/assistant/module.frontend.ts",
         kind: "space",
         apiVersion: 2,

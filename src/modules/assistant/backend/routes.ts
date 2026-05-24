@@ -1,10 +1,21 @@
 import { NotFoundError, ValidationError } from "../../../core/contracts/errors";
-import type { CoreBackendModuleContext, ModuleRouterHandle } from "../../../core/contracts/modules/backend-module";
-import type { AssistantProviderConfigInput, AssistantSettings, CreateAssistantChatInput, SubmitAssistantMessageInput } from "../../../sdks/assistant";
+import type {
+  CoreBackendModuleContext,
+  ModuleRouterHandle,
+} from "../../../core/contracts/modules/backend-module";
+import type {
+  AssistantProviderConfigInput,
+  AssistantSettings,
+  CreateAssistantChatInput,
+  SubmitAssistantMessageInput,
+} from "../../../sdks/assistant";
 import { getAssistantService } from "./assistant-service";
 
 function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 async function body<T>(req: Request): Promise<T> {
@@ -13,57 +24,178 @@ async function body<T>(req: Request): Promise<T> {
 
 function chatId(ctx: { params: { getOrThrow(name: string): string } }): string {
   const id = ctx.params.getOrThrow("id");
-  if (id === "undefined" || id === "null") throw new ValidationError("A valid chat id is required");
+  if (id === "undefined" || id === "null")
+    throw new ValidationError("A valid chat id is required");
   return id;
 }
 
 function requireChat(id: string): void {
-  if (!getAssistantService().store.getChat(id)) throw new NotFoundError(`Chat not found: ${id}`);
+  if (!getAssistantService().conversation.getChat(id))
+    throw new NotFoundError(`Chat not found: ${id}`);
 }
 
-export function registerRoutes(router: ModuleRouterHandle, _ctx: CoreBackendModuleContext): void {
-  router.get("/chats", () => json(getAssistantService().store.listChats()));
-  router.post("/chats", async (ctx) => json(getAssistantService().createChat(await body<CreateAssistantChatInput>(ctx.req)), 201));
+export function registerRoutes(
+  router: ModuleRouterHandle,
+  _ctx: CoreBackendModuleContext,
+): void {
+  // Chats
+  router.get("/chats", () =>
+    json(getAssistantService().conversation.listChats()),
+  );
+  router.post("/chats", async (ctx) =>
+    json(
+      getAssistantService().createChat(
+        await body<CreateAssistantChatInput>(ctx.req),
+      ),
+      201,
+    ),
+  );
   router.get("/chats/:id", (ctx) => {
-    const chat = getAssistantService().store.getChat(chatId(ctx));
+    const chat = getAssistantService().conversation.getChat(chatId(ctx));
     if (!chat) throw new NotFoundError("Chat not found");
     return json(chat);
   });
   router.delete("/chats/:id", (ctx) => {
-    getAssistantService().store.deleteChat(chatId(ctx));
+    getAssistantService().conversation.deleteChat(chatId(ctx));
     return json({ ok: true });
   });
   router.get("/chats/:id/messages", (ctx) => {
     const id = chatId(ctx);
     requireChat(id);
-    return json(getAssistantService().store.listMessages(id));
+    return json(getAssistantService().conversation.listMessages(id));
   });
-  router.post("/chats/:id/messages", async (ctx) => json(await getAssistantService().submitMessage(chatId(ctx), await body<SubmitAssistantMessageInput>(ctx.req)), 201));
+  router.post("/chats/:id/messages", async (ctx) =>
+    json(
+      await getAssistantService().submitMessage(
+        chatId(ctx),
+        await body<SubmitAssistantMessageInput>(ctx.req),
+      ),
+      201,
+    ),
+  );
+
+  // Tool events
+  router.get("/chats/:id/tool-events", (ctx) => {
+    const id = chatId(ctx);
+    requireChat(id);
+    const url = new URL(ctx.req.url);
+    const messageId = url.searchParams.get("messageId") ?? undefined;
+    return json(
+      getAssistantService().listToolEvents(id, messageId ? { messageId } : {}),
+    );
+  });
+
+  // Context bindings
+  router.get("/chats/:id/context-bindings", (ctx) => {
+    const id = chatId(ctx);
+    requireChat(id);
+    return json(getAssistantService().listContextBindings(id));
+  });
+  router.delete("/chats/:id/context-bindings/:bindingId", (ctx) => {
+    const id = chatId(ctx);
+    const bindingId = ctx.params.getOrThrow("bindingId");
+    getAssistantService().deleteContextBinding(id, bindingId);
+    return json({ ok: true });
+  });
+
+  // Prompt presets
+  router.get("/prompt-presets", () =>
+    json(getAssistantService().listPromptPresets()),
+  );
+
+  // Providers
   router.get("/providers", () => json(getAssistantService().listProviders()));
-  router.post("/providers", async (ctx) => json(getAssistantService().createProviderConfig(await body<AssistantProviderConfigInput>(ctx.req)), 201));
+  router.post("/providers", async (ctx) =>
+    json(
+      getAssistantService().createProvider(
+        await body<AssistantProviderConfigInput>(ctx.req),
+      ),
+      201,
+    ),
+  );
   router.get("/providers/:id", (ctx) => {
-    const provider = getAssistantService().settings.getProvider(ctx.params.getOrThrow("id"));
+    const provider = getAssistantService().providers.getProvider(
+      ctx.params.getOrThrow("id"),
+    );
     if (!provider) throw new NotFoundError("Provider not found");
     return json(provider);
   });
-  router.put("/providers/:id", async (ctx) => json(getAssistantService().updateProviderConfig(ctx.params.getOrThrow("id"), await body<AssistantProviderConfigInput>(ctx.req))));
+  router.put("/providers/:id", async (ctx) =>
+    json(
+      getAssistantService().updateProvider(
+        ctx.params.getOrThrow("id"),
+        await body<AssistantProviderConfigInput>(ctx.req),
+      ),
+    ),
+  );
   router.delete("/providers/:id", (ctx) => {
-    getAssistantService().deleteProviderConfig(ctx.params.getOrThrow("id"));
+    getAssistantService().deleteProvider(ctx.params.getOrThrow("id"));
     return json({ ok: true });
   });
-  router.get("/providers/:id/models", (ctx) => json(getAssistantService().listProviderModels(ctx.params.getOrThrow("id"))));
-  router.post("/providers/:id/models/refresh", async (ctx) => json(await getAssistantService().refreshProviderModels(ctx.params.getOrThrow("id"))));
-  router.post("/providers/:id/test", async (ctx) => json(await getAssistantService().testProvider(ctx.params.getOrThrow("id"), await body<{ includeCompletion?: boolean }>(ctx.req).catch(() => ({})))));
-  router.get("/tools", () => json(getAssistantService().tools.list().map((tool) => ({ name: tool.definition.function.name, effect: tool.effect, description: tool.definition.function.description }))));
-  router.get("/tasks/:taskId/tool-events", (ctx) => json(getAssistantService().store.listToolEvents(ctx.params.getOrThrow("taskId"))));
-  router.post("/tool-events/:id/approve", async (ctx) => {
-    const result = await getAssistantService().approveToolEvent(ctx.params.getOrThrow("id"));
-    return json(result);
+  router.get("/providers/:id/models", (ctx) =>
+    json(getAssistantService().listProviderModels(ctx.params.getOrThrow("id"))),
+  );
+  router.post("/providers/:id/models/refresh", async (ctx) =>
+    json(
+      await getAssistantService().refreshProviderModels(
+        ctx.params.getOrThrow("id"),
+      ),
+    ),
+  );
+  router.post("/providers/:id/test", async (ctx) =>
+    json(
+      await getAssistantService().testProvider(
+        ctx.params.getOrThrow("id"),
+        await body<{ includeCompletion?: boolean }>(ctx.req).catch(() => ({})),
+      ),
+    ),
+  );
+  router.get("/providers/:id/capabilities", (ctx) =>
+    json(
+      getAssistantService().getProviderCapabilities(
+        ctx.params.getOrThrow("id"),
+      ),
+    ),
+  );
+  router.post("/providers/:id/capabilities/refresh", async (ctx) =>
+    json(
+      await getAssistantService().refreshProviderCapabilities(
+        ctx.params.getOrThrow("id"),
+      ),
+    ),
+  );
+
+  // Tools (read-only list for UI)
+  router.get("/tools", () => {
+    const registry = (
+      getAssistantService().runService as unknown as {
+        options: {
+          buildRegistry: (allow: boolean) => {
+            listDefinitions(): Array<{
+              name: string;
+              description: string;
+              effect: string;
+            }>;
+          };
+        };
+      }
+    ).options.buildRegistry(false);
+    return json(
+      registry.listDefinitions().map((def) => ({
+        name: def.name,
+        effect: def.effect,
+        description: def.description,
+      })),
+    );
   });
-  router.post("/tool-events/:id/reject", (ctx) => {
-    getAssistantService().rejectToolEvent(ctx.params.getOrThrow("id"));
-    return json({ ok: true });
-  });
+
+  // Settings
   router.get("/settings", () => json(getAssistantService().getSettings()));
-  router.put("/settings", async (ctx) => json(getAssistantService().updateSettings(await body<Partial<AssistantSettings>>(ctx.req))));
+  router.put("/settings", async (ctx) =>
+    json(
+      getAssistantService().updateSettings(
+        await body<Partial<AssistantSettings>>(ctx.req),
+      ),
+    ),
+  );
 }

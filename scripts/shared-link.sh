@@ -31,6 +31,7 @@ PACKAGES=(
   opclib-pack
   command-pattern
   contracts
+  ai-core
 )
 
 cd "$OPENPCB_ROOT"
@@ -50,7 +51,7 @@ echo "==> Linking all @openpcb/* packages into OpenPCB"
 npm link --no-audit "${LINK_NAMES[@]}"
 
 echo ""
-echo "✔ All 8 @openpcb/* packages now point at $SHARED_DIR/packages/*"
+echo "✔ All 9 @openpcb/* packages now point at $SHARED_DIR/packages/*"
 echo ""
 echo "Tip: run \`cd $SHARED_DIR && npm run dev\` to keep dist/ rebuilt on source edits."
 echo "Tip: run \`npm run shared:unlink\` to restore github-tag installs."

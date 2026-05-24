@@ -3,19 +3,53 @@ import { getAssistantService } from "./assistant-service";
 
 export function buildAssistantSdk(): AssistantSDK {
   return {
-    createChat: (input) => Promise.resolve(getAssistantService().createChat(input)),
-    listChats: () => Promise.resolve(getAssistantService().store.listChats()),
-    getChat: (chatId) => Promise.resolve(getAssistantService().store.getChat(chatId)),
-    listMessages: (chatId) => Promise.resolve(getAssistantService().store.listMessages(chatId)),
-    submitMessage: (chatId, input) => getAssistantService().submitMessage(chatId, input),
+    createChat: (input) =>
+      Promise.resolve(getAssistantService().createChat(input)),
+    listChats: () =>
+      Promise.resolve(getAssistantService().conversation.listChats()),
+    getChat: (chatId) =>
+      Promise.resolve(getAssistantService().conversation.getChat(chatId)),
+    deleteChat: (chatId) => {
+      getAssistantService().conversation.deleteChat(chatId);
+      return Promise.resolve();
+    },
+    listMessages: (chatId) =>
+      Promise.resolve(getAssistantService().conversation.listMessages(chatId)),
+    submitMessage: (chatId, input) =>
+      getAssistantService().submitMessage(chatId, input),
+
+    listPromptPresets: () =>
+      Promise.resolve(getAssistantService().listPromptPresets()),
+
+    listContextBindings: (chatId) =>
+      Promise.resolve(getAssistantService().listContextBindings(chatId)),
+    deleteContextBinding: (chatId, bindingId) => {
+      getAssistantService().deleteContextBinding(chatId, bindingId);
+      return Promise.resolve();
+    },
+
+    listToolEvents: (chatId, options) =>
+      Promise.resolve(getAssistantService().listToolEvents(chatId, options)),
+
     getSettings: () => Promise.resolve(getAssistantService().getSettings()),
-    updateSettings: (input) => Promise.resolve(getAssistantService().updateSettings(input)),
+    updateSettings: (input) =>
+      Promise.resolve(getAssistantService().updateSettings(input)),
+
     listProviders: () => Promise.resolve(getAssistantService().listProviders()),
-    createProvider: (input) => Promise.resolve(getAssistantService().createProviderConfig(input)),
-    updateProvider: (id, input) => Promise.resolve(getAssistantService().updateProviderConfig(id, input)),
-    deleteProvider: (id) => Promise.resolve(getAssistantService().deleteProviderConfig(id)),
-    listProviderModels: (id) => Promise.resolve(getAssistantService().listProviderModels(id)),
-    refreshProviderModels: (id) => getAssistantService().refreshProviderModels(id),
+    createProvider: (input) =>
+      Promise.resolve(getAssistantService().createProvider(input)),
+    updateProvider: (id, input) =>
+      Promise.resolve(getAssistantService().updateProvider(id, input)),
+    deleteProvider: (id) =>
+      Promise.resolve(getAssistantService().deleteProvider(id)),
+    listProviderModels: (id) =>
+      Promise.resolve(getAssistantService().listProviderModels(id)),
+    refreshProviderModels: (id) =>
+      getAssistantService().refreshProviderModels(id),
     testProvider: (id, input) => getAssistantService().testProvider(id, input),
+    getProviderCapabilities: (id) =>
+      Promise.resolve(getAssistantService().getProviderCapabilities(id)),
+    refreshProviderCapabilities: (id) =>
+      getAssistantService().refreshProviderCapabilities(id),
   };
 }

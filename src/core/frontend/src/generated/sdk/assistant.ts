@@ -7,7 +7,7 @@
 
 export const MODULE_ID = "assistant" as const;
 export const MODULE_NAMESPACE = "space.assistant" as const;
-export const MODULE_VERSION = "0.1.0" as const;
+export const MODULE_VERSION = "0.2.0" as const;
 export const MODULE_KIND = "space" as const;
 
 // =============================================================================

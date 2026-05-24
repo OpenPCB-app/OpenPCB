@@ -1,11 +1,10 @@
 {
   "id": "assistant",
   "label": "Assistant",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "apiVersion": 2,
   "namespace": "space.assistant",
   "kind": "space",
-  "availability": "dev",
   "sidebar": {
     "label": "Assistant",
     "icon": "Bot",

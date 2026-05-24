@@ -27,11 +27,14 @@
     "polygon-clipping": "^0.15.7",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^2.6.0",
     "three": "0.183.0",
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^20.19.24",
     "@types/react": "^19.1.8",

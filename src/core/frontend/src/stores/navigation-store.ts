@@ -4,7 +4,11 @@ import type { AppRoute } from "../../../contracts/app/routes";
 interface NavigationState {
   currentRoute: AppRoute;
   navigateHome: () => void;
-  navigateToModule: (moduleId: string, designId?: string) => void;
+  navigateToModule: (
+    moduleId: string,
+    designId?: string,
+    params?: Record<string, string>,
+  ) => void;
 }
 
 export const useNavigationStore = create<NavigationState>((set, get) => ({
@@ -13,15 +17,17 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     if (get().currentRoute.kind === "home") return;
     set({ currentRoute: { kind: "home" } });
   },
-  navigateToModule: (moduleId, designId) => {
+  navigateToModule: (moduleId, designId, params) => {
     const current = get().currentRoute;
+    // Always re-set when params change so consumers re-react even if module/design unchanged.
     if (
       current.kind === "module" &&
       current.moduleId === moduleId &&
-      current.designId === designId
+      current.designId === designId &&
+      !params
     ) {
       return;
     }
-    set({ currentRoute: { kind: "module", moduleId, designId } });
+    set({ currentRoute: { kind: "module", moduleId, designId, params } });
   },
 }));

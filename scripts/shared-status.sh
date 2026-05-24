@@ -17,6 +17,7 @@ PACKAGES=(
   opclib-pack
   command-pattern
   contracts
+  ai-core
 )
 
 printf "%-28s  %s\n" "package" "source"

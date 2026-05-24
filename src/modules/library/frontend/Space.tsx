@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { LibraryComponent } from "../../../sdks/library";
+import { useNavigationStore } from "../../../core/frontend/src/stores/navigation-store";
 import { ComponentDetailPage } from "./ComponentDetailPage";
 import { ActiveFilterChips } from "./components/ActiveFilterChips";
 import { FacetSidebar } from "./components/FacetSidebar";
@@ -187,6 +188,17 @@ export function LibrarySpace({
   const [detailComponentId, setDetailComponentId] = useState<string | null>(
     null,
   );
+  const navRoute = useNavigationStore((state) => state.currentRoute);
+  useEffect(() => {
+    if (navRoute.kind !== "module") return;
+    if (navRoute.moduleId !== moduleId) return;
+    const requested = navRoute.params?.componentId;
+    if (requested && requested !== detailComponentId) {
+      setDetailComponentId(requested);
+    }
+    // Only react to route changes that target this module.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navRoute, moduleId]);
   const [detailModelRefreshToken, setDetailModelRefreshToken] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
