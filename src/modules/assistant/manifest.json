@@ -5,16 +5,19 @@
   "apiVersion": 2,
   "namespace": "space.assistant",
   "kind": "space",
+  "enabled": true,
+  "availability": "all",
   "sidebar": {
     "label": "Assistant",
     "icon": "Bot",
     "order": 30,
-    "group": "ai"
+    "group": "ai",
+    "hidden": false
   },
   "runtime": {
     "backendEntry": "module.backend.ts",
     "frontendEntry": "module.frontend.ts"
   },
   "dependsOn": [{ "id": "tasks", "minVersion": "0.1.0", "optional": false }],
-  "defaultPinned": false
+  "defaultPinned": true
 }

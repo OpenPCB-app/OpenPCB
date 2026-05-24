@@ -5,12 +5,19 @@ import remarkGfm from "remark-gfm";
 import type {
   AssistantMessage,
   AssistantToolEventDto,
+  AssistantWriteProposalDto,
 } from "../../../../sdks/assistant";
 import { ToolCard } from "./ToolCard";
+import {
+  PlacementProposalCard,
+  parsePlacementProposal,
+} from "./PlacementProposalCard";
+import { AssistantRunStatusCard, type ActiveRunState } from "./AssistantRunStatusCard";
 import {
   ComponentResultsBlock,
   type ComponentResultsPayload,
 } from "./ComponentResultCard";
+import { BomResultCard, type BomResultPayload } from "./BomResultCard";
 
 const PROSE_CLASSES = [
   "prose",
@@ -81,14 +88,50 @@ function extractComponentResults(
   return out;
 }
 
+function extractBomResults(events: AssistantToolEventDto[]): BomResultPayload[] {
+  const out: BomResultPayload[] = [];
+  for (const event of events) {
+    if (event.toolName !== "library_resolve_bom") continue;
+    if (event.status !== "succeeded" || !event.resultJson) continue;
+    try {
+      const parsed = JSON.parse(event.resultJson) as BomResultPayload;
+      if (Array.isArray(parsed.items)) out.push(parsed);
+    } catch {
+      // ignore malformed tool payloads
+    }
+  }
+  return out;
+}
+
+function extractPlacementProposals(
+  events: AssistantToolEventDto[],
+): Array<{ event: AssistantToolEventDto; proposal: NonNullable<ReturnType<typeof parsePlacementProposal>> }> {
+  return events.flatMap((event) => {
+    const proposal = parsePlacementProposal(event);
+    return proposal ? [{ event, proposal }] : [];
+  });
+}
+
 export function MessageCard({
   message,
   toolEvents = [],
   loading = false,
+  runState,
+  assistantBaseUrl,
+  writeProposals = [],
+  onProposalChanged,
+  onStopRun,
+  onRetryRun,
 }: {
   message: AssistantMessage;
   toolEvents?: AssistantToolEventDto[];
   loading?: boolean;
+  runState?: ActiveRunState | null;
+  assistantBaseUrl?: string | null;
+  writeProposals?: AssistantWriteProposalDto[];
+  onProposalChanged?: () => void;
+  onStopRun?: (run: ActiveRunState) => void;
+  onRetryRun?: (run: ActiveRunState) => void;
 }): ReactElement {
   const isUser = message.role === "user";
   const cleanedContent = isUser
@@ -96,8 +139,10 @@ export function MessageCard({
     : stripResponseWrapper(message.content);
   const hasContent = cleanedContent.length > 0;
   const componentBlocks = isUser ? [] : extractComponentResults(toolEvents);
+  const bomBlocks = isUser ? [] : extractBomResults(toolEvents);
+  const placementBlocks = isUser ? [] : extractPlacementProposals(toolEvents);
   const showWaitingDots = loading && !hasContent && toolEvents.length === 0;
-  const showStreamingPulse = loading && (hasContent || toolEvents.length > 0);
+  const showStreamingPulse = Boolean(runState) || (loading && (hasContent || toolEvents.length > 0));
   return (
     <div
       className={`flex gap-4 border-b border-slate-800/50 px-4 py-6 ${isUser ? "" : "bg-slate-900/40"}`}
@@ -148,12 +193,43 @@ export function MessageCard({
             ))}
           </div>
         ) : null}
+        {bomBlocks.length > 0 ? (
+          <div className="space-y-3">
+            {bomBlocks.map((data, idx) => (
+              <BomResultCard key={idx} data={data} />
+            ))}
+          </div>
+        ) : null}
+        {placementBlocks.length > 0 ? (
+          <div className="space-y-3">
+            {placementBlocks.map(({ event, proposal }) => (
+              <PlacementProposalCard
+                key={proposal.proposalId}
+                event={event}
+                proposal={proposal}
+                assistantBaseUrl={assistantBaseUrl}
+                statusRecord={
+                  writeProposals.find((record) => record.id === proposal.proposalId) ??
+                  null
+                }
+                onProposalChanged={onProposalChanged}
+              />
+            ))}
+          </div>
+        ) : null}
         {toolEvents.length > 0 ? (
           <div className="space-y-1.5">
             {toolEvents.map((event) => (
               <ToolCard key={event.id} event={event} />
             ))}
           </div>
+        ) : null}
+        {runState ? (
+          <AssistantRunStatusCard
+            run={runState}
+            onStop={() => onStopRun?.(runState)}
+            onRetry={() => onRetryRun?.(runState)}
+          />
         ) : null}
         {showWaitingDots ? (
           <span className="flex items-center gap-0.5 text-xs text-violet-400">

@@ -4,6 +4,7 @@ import type {
   AssistantContextBindingDto,
   AssistantMessage,
   AssistantMessageMetadata,
+  AssistantMessagesPage,
   AssistantPromptPresetId,
   AssistantRole,
   AssistantToolEventDto,
@@ -13,6 +14,9 @@ import type {
   AiContextBindingStatus,
   AiToolStatus,
   AiSourceRef,
+  AssistantWriteProposalDto,
+  AssistantWriteProposalKind,
+  AssistantWriteProposalStatus,
 } from "../../../sdks/assistant";
 
 type RawSqlFn = (
@@ -114,6 +118,27 @@ function rowToToolEvent(row: Record<string, unknown>): AssistantToolEventDto {
   };
 }
 
+function rowToWriteProposal(
+  row: Record<string, unknown>,
+): AssistantWriteProposalDto {
+  return {
+    id: String(row.id),
+    chatId: String(row.chat_id),
+    toolEventId: row.tool_event_id ? String(row.tool_event_id) : null,
+    kind: String(row.kind) as AssistantWriteProposalKind,
+    status: String(row.status) as AssistantWriteProposalStatus,
+    designId: String(row.design_id),
+    baseRevision:
+      row.base_revision === null || row.base_revision === undefined
+        ? null
+        : Number(row.base_revision),
+    proposal: decodeJson(row.proposal_json, null),
+    applyResult: decodeJson(row.apply_result_json, null),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+}
+
 export interface CreateChatRecord {
   title: string;
   providerConfigId: string;
@@ -144,6 +169,40 @@ export interface UpsertToolEventInput {
   resultJson?: string | null;
   errorJson?: string | null;
   sources?: AiSourceRef[];
+}
+
+export interface CreateWriteProposalInput {
+  id?: string;
+  chatId: string;
+  toolEventId?: string | null;
+  kind: AssistantWriteProposalKind;
+  designId: string;
+  baseRevision: number | null;
+  proposal: unknown;
+}
+
+export interface ListMessagesOptions {
+  limit?: number;
+  before?: string | null;
+}
+
+function clampLimit(limit: number | undefined, fallback = 50): number {
+  if (!Number.isFinite(limit ?? NaN)) return fallback;
+  return Math.max(1, Math.min(200, Math.floor(limit!)));
+}
+
+function parseMessageCursor(cursor: string | null | undefined): {
+  createdAt: string;
+  id: string;
+} | null {
+  if (!cursor) return null;
+  const idx = cursor.lastIndexOf("|");
+  if (idx <= 0 || idx >= cursor.length - 1) return null;
+  return { createdAt: cursor.slice(0, idx), id: cursor.slice(idx + 1) };
+}
+
+function messageCursor(message: AssistantMessage): string {
+  return `${message.createdAt}|${message.id}`;
 }
 
 export class ConversationStore {
@@ -228,11 +287,29 @@ export class ConversationStore {
   }
 
   // ---------- messages ----------
-  listMessages(chatId: string): AssistantMessage[] {
-    return this.rawSql(
-      "SELECT * FROM assistant_message WHERE chat_id=? ORDER BY created_at ASC",
-      [chatId],
-    ).map(rowToMessage);
+  listMessages(
+    chatId: string,
+    options: ListMessagesOptions = {},
+  ): AssistantMessagesPage {
+    const limit = clampLimit(options.limit);
+    const cursor = parseMessageCursor(options.before);
+    const rows = cursor
+      ? this.rawSql(
+          "SELECT * FROM assistant_message WHERE chat_id=? AND (created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT ?",
+          [chatId, cursor.createdAt, cursor.createdAt, cursor.id, limit + 1],
+        )
+      : this.rawSql(
+          "SELECT * FROM assistant_message WHERE chat_id=? ORDER BY created_at DESC, id DESC LIMIT ?",
+          [chatId, limit + 1],
+        );
+    const hasMore = rows.length > limit;
+    const pageRows = rows.slice(0, limit).reverse();
+    const items = pageRows.map(rowToMessage);
+    return {
+      items,
+      hasMore,
+      nextCursor: items.length > 0 && hasMore ? messageCursor(items[0]!) : null,
+    };
   }
 
   getMessage(messageId: string): AssistantMessage | null {
@@ -351,8 +428,9 @@ export class ConversationStore {
     );
   }
 
-  deleteBinding(bindingId: string): void {
-    this.rawSql("DELETE FROM assistant_context_binding WHERE id=?", [
+  deleteBinding(chatId: string, bindingId: string): void {
+    this.rawSql("DELETE FROM assistant_context_binding WHERE chat_id=? AND id=?", [
+      chatId,
       bindingId,
     ]);
   }
@@ -360,8 +438,17 @@ export class ConversationStore {
   // ---------- tool events ----------
   listToolEvents(
     chatId: string,
-    options: { messageId?: string } = {},
+    options: { messageId?: string; messageIds?: string[] } = {},
   ): AssistantToolEventDto[] {
+    if (options.messageIds && options.messageIds.length > 0) {
+      const ids = [...new Set(options.messageIds.filter(Boolean))];
+      if (ids.length === 0) return [];
+      const placeholders = ids.map(() => "?").join(",");
+      return this.rawSql(
+        `SELECT * FROM assistant_tool_event WHERE chat_id=? AND message_id IN (${placeholders}) ORDER BY created_at ASC`,
+        [chatId, ...ids],
+      ).map(rowToToolEvent);
+    }
     if (options.messageId) {
       return this.rawSql(
         "SELECT * FROM assistant_tool_event WHERE chat_id=? AND message_id=? ORDER BY created_at ASC",
@@ -380,10 +467,7 @@ export class ConversationStore {
       ? this.rawSql("SELECT id FROM assistant_tool_event WHERE id=?", [
           input.id,
         ])[0]
-      : this.rawSql(
-          "SELECT id FROM assistant_tool_event WHERE chat_id=? AND tool_call_id=?",
-          [input.chatId, input.toolCallId],
-        )[0];
+      : undefined;
     const eventId = (existing?.id as string | undefined) ?? input.id ?? id();
     const sourcesJson = JSON.stringify(input.sources ?? []);
     if (existing) {
@@ -424,5 +508,61 @@ export class ConversationStore {
       eventId,
     ])[0]!;
     return rowToToolEvent(row);
+  }
+
+  // ---------- write proposals ----------
+  createWriteProposal(input: CreateWriteProposalInput): AssistantWriteProposalDto {
+    const timestamp = now();
+    const proposalId = input.id ?? id();
+    this.rawSql(
+      "INSERT INTO assistant_write_proposal (id,chat_id,tool_event_id,kind,status,design_id,base_revision,proposal_json,apply_result_json,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        proposalId,
+        input.chatId,
+        input.toolEventId ?? null,
+        input.kind,
+        "pending",
+        input.designId,
+        input.baseRevision,
+        encode(input.proposal),
+        null,
+        timestamp,
+        timestamp,
+      ],
+    );
+    return this.getWriteProposal(input.chatId, proposalId)!;
+  }
+
+  getWriteProposal(
+    chatId: string,
+    proposalId: string,
+  ): AssistantWriteProposalDto | null {
+    const row = this.rawSql(
+      "SELECT * FROM assistant_write_proposal WHERE chat_id=? AND id=?",
+      [chatId, proposalId],
+    )[0];
+    return row ? rowToWriteProposal(row) : null;
+  }
+
+  listWriteProposals(chatId: string): AssistantWriteProposalDto[] {
+    return this.rawSql(
+      "SELECT * FROM assistant_write_proposal WHERE chat_id=? ORDER BY created_at ASC",
+      [chatId],
+    ).map(rowToWriteProposal);
+  }
+
+  updateWriteProposalStatus(
+    chatId: string,
+    proposalId: string,
+    status: AssistantWriteProposalStatus,
+    applyResult: unknown | null = null,
+  ): AssistantWriteProposalDto {
+    this.rawSql(
+      "UPDATE assistant_write_proposal SET status=?, apply_result_json=?, updated_at=? WHERE chat_id=? AND id=?",
+      [status, applyResult === null ? null : encode(applyResult), now(), chatId, proposalId],
+    );
+    const next = this.getWriteProposal(chatId, proposalId);
+    if (!next) throw new Error(`Write proposal not found: ${proposalId}`);
+    return next;
   }
 }

@@ -34,6 +34,12 @@ function requireChat(id: string): void {
     throw new NotFoundError(`Chat not found: ${id}`);
 }
 
+function parseLimit(raw: string | null, fallback = 50): number {
+  const n = raw ? Number(raw) : fallback;
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(1, Math.min(200, Math.floor(n)));
+}
+
 export function registerRoutes(
   router: ModuleRouterHandle,
   _ctx: CoreBackendModuleContext,
@@ -62,7 +68,13 @@ export function registerRoutes(
   router.get("/chats/:id/messages", (ctx) => {
     const id = chatId(ctx);
     requireChat(id);
-    return json(getAssistantService().conversation.listMessages(id));
+    const url = new URL(ctx.req.url);
+    return json(
+      getAssistantService().conversation.listMessages(id, {
+        limit: parseLimit(url.searchParams.get("limit")),
+        before: url.searchParams.get("before"),
+      }),
+    );
   });
   router.post("/chats/:id/messages", async (ctx) =>
     json(
@@ -80,8 +92,49 @@ export function registerRoutes(
     requireChat(id);
     const url = new URL(ctx.req.url);
     const messageId = url.searchParams.get("messageId") ?? undefined;
+    const messageIds =
+      url.searchParams
+        .get("messageIds")
+        ?.split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean) ?? undefined;
     return json(
-      getAssistantService().listToolEvents(id, messageId ? { messageId } : {}),
+      getAssistantService().listToolEvents(
+        id,
+        messageIds?.length
+          ? { messageIds }
+          : messageId
+            ? { messageId }
+            : {},
+      ),
+    );
+  });
+
+  // Write proposals
+  router.get("/chats/:id/write-proposals", (ctx) => {
+    const id = chatId(ctx);
+    requireChat(id);
+    return json(getAssistantService().listWriteProposals(id));
+  });
+  router.post("/chats/:id/write-proposals/:proposalId/apply", async (ctx) => {
+    const id = chatId(ctx);
+    requireChat(id);
+    return json(
+      await getAssistantService().applyWriteProposal(
+        id,
+        ctx.params.getOrThrow("proposalId"),
+        await body<{ allowPartial?: boolean }>(ctx.req).catch(() => ({})),
+      ),
+    );
+  });
+  router.post("/chats/:id/write-proposals/:proposalId/reject", (ctx) => {
+    const id = chatId(ctx);
+    requireChat(id);
+    return json(
+      getAssistantService().rejectWriteProposal(
+        id,
+        ctx.params.getOrThrow("proposalId"),
+      ),
     );
   });
 

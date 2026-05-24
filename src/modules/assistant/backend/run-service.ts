@@ -1,6 +1,7 @@
 import {
   runChat,
   resolveToolLimits,
+  AiToolRegistry,
   type AiChatMessage,
   type AiRunEvent,
   type AiToolCall,
@@ -11,6 +12,7 @@ import {
   type AssistantToolCallSummary,
   type AssistantToolEventDto,
   type AssistantMessageMetadata,
+  type AssistantMessage,
   type TasksSDK,
   type TaskExecutionContext,
 } from "../../../sdks";
@@ -19,7 +21,6 @@ import type { ProviderStore } from "./provider-store";
 import type { SettingsStore } from "./settings-store";
 import type { PromptService } from "./prompt-service";
 import type { ContextResolver } from "./context-resolver";
-import type { AiToolRegistry } from "@openpcb/ai-core";
 import { buildAiProviderClient } from "./providers/openpcb-provider-factory";
 
 export interface SubmitPayload {
@@ -67,9 +68,12 @@ export class RunService {
     const settings = this.options.settings.getSettings();
     const chat = this.options.conversation.getChat(payload.chatId);
     if (!chat) throw new Error(`Chat not found: ${payload.chatId}`);
+    await this.options.contextResolver.refreshBindingHealth(payload.chatId);
     const bindings = this.options.contextResolver.listBindings(payload.chatId);
 
-    const registry = this.options.buildRegistry(settings.allowRawToolData);
+    const configuredRegistry = this.options.buildRegistry(settings.allowRawToolData);
+    const providerAllowsTools = provider.capabilities?.toolCalling !== false;
+    const registry = providerAllowsTools ? configuredRegistry : new AiToolRegistry();
     const client = buildAiProviderClient(provider);
     const limits = resolveToolLimits({
       preference: settings.contextSizePreference,
@@ -89,7 +93,9 @@ export class RunService {
       systemBlocks,
     );
 
-    const history = this.options.conversation.listMessages(payload.chatId);
+    const history = orderMessagesForProvider(
+      this.options.conversation.listMessages(payload.chatId, { limit: 200 }).items,
+    );
     const messages: AiChatMessage[] = [
       { role: "system", content: systemPrompt },
     ];
@@ -120,6 +126,7 @@ export class RunService {
     const toolEventsByCall = new Map<string, AssistantToolEventDto>();
 
     try {
+      let failedEvent: AiRunEvent | null = null;
       for await (const event of runChat({
         client,
         registry,
@@ -131,6 +138,7 @@ export class RunService {
         maxToolIterations: 4,
         signal: taskCtx.signal,
       })) {
+        if (event.type === "run.failed") failedEvent = event;
         await this.handleEvent(
           event,
           payload,
@@ -138,6 +146,37 @@ export class RunService {
           callSummaries,
           toolEventsByCall,
         );
+      }
+      if (failedEvent && registry.listDefinitions().length > 0) {
+        const warning =
+          "Provider failed while tools were enabled. Retrying this answer in chat-only mode.";
+        this.options.conversation.setMessageContent(payload.assistantMessageId, "");
+        this.options.conversation.appendMessageContent(
+          payload.assistantMessageId,
+          `_${warning}_\n\n`,
+        );
+        await taskCtx.emitChunk({ kind: "text", content: `_${warning}_\n\n` });
+        callSummaries.clear();
+        toolEventsByCall.clear();
+        for await (const event of runChat({
+          client,
+          registry: new AiToolRegistry(),
+          model: payload.model,
+          messages: messages.filter((m) => m.role !== "tool" && !m.toolCalls),
+          bindings,
+          limits,
+          chatId: payload.chatId,
+          maxToolIterations: 1,
+          signal: taskCtx.signal,
+        })) {
+          await this.handleEvent(
+            event,
+            payload,
+            taskCtx,
+            callSummaries,
+            toolEventsByCall,
+          );
+        }
       }
       // Persist final summaries onto the assistant message metadata.
       const summaries = Array.from(callSummaries.values());
@@ -182,6 +221,16 @@ export class RunService {
         await taskCtx.emitChunk({ kind: "text", content: event.data.delta });
         break;
       case "run.message.completed":
+        if (event.data.toolCallCount > 0) {
+          this.options.conversation.createMessage({
+            chatId: payload.chatId,
+            role: "assistant",
+            content: event.data.content,
+            toolCallsJson: JSON.stringify(event.data.toolCalls ?? []),
+            taskId: taskCtx.task.id,
+            metadata: { ai: { internal: true } },
+          });
+        }
         await taskCtx.emitChunk({
           kind: "json",
           content: JSON.stringify({ _aiEvent: event }),
@@ -215,7 +264,8 @@ export class RunService {
       case "run.tool.running": {
         const summary = callSummaries.get(event.data.toolCallId);
         if (summary) summary.status = "running";
-        this.options.conversation.upsertToolEvent({
+        const dto = this.options.conversation.upsertToolEvent({
+          id: toolEventsByCall.get(event.data.toolCallId)?.id,
           chatId: payload.chatId,
           taskId: taskCtx.task.id,
           messageId: payload.assistantMessageId,
@@ -225,6 +275,7 @@ export class RunService {
           argumentsJson:
             toolEventsByCall.get(event.data.toolCallId)?.argumentsJson ?? "{}",
         });
+        toolEventsByCall.set(event.data.toolCallId, dto);
         await taskCtx.emitChunk({
           kind: "json",
           content: JSON.stringify({ _aiEvent: event }),
@@ -241,7 +292,8 @@ export class RunService {
         }
         const argsJson =
           toolEventsByCall.get(event.data.toolCallId)?.argumentsJson ?? "{}";
-        this.options.conversation.upsertToolEvent({
+        const dto = this.options.conversation.upsertToolEvent({
+          id: toolEventsByCall.get(event.data.toolCallId)?.id,
           chatId: payload.chatId,
           taskId: taskCtx.task.id,
           messageId: payload.assistantMessageId,
@@ -251,6 +303,16 @@ export class RunService {
           argumentsJson: argsJson,
           resultJson: event.data.resultJson,
           sources: event.data.sources,
+        });
+        toolEventsByCall.set(event.data.toolCallId, dto);
+        this.options.conversation.createMessage({
+          chatId: payload.chatId,
+          role: "tool",
+          content: event.data.resultJson,
+          toolCallId: event.data.toolCallId,
+          toolName: event.data.toolName,
+          taskId: taskCtx.task.id,
+          metadata: { ai: { internal: true } },
         });
         await taskCtx.emitChunk({
           kind: "json",
@@ -266,7 +328,8 @@ export class RunService {
         }
         const argsJson =
           toolEventsByCall.get(event.data.toolCallId)?.argumentsJson ?? "{}";
-        this.options.conversation.upsertToolEvent({
+        const dto = this.options.conversation.upsertToolEvent({
+          id: toolEventsByCall.get(event.data.toolCallId)?.id,
           chatId: payload.chatId,
           taskId: taskCtx.task.id,
           messageId: payload.assistantMessageId,
@@ -278,6 +341,16 @@ export class RunService {
             message: event.data.errorMessage,
             code: event.data.errorCode,
           }),
+        });
+        toolEventsByCall.set(event.data.toolCallId, dto);
+        this.options.conversation.createMessage({
+          chatId: payload.chatId,
+          role: "tool",
+          content: JSON.stringify({ ok: false, error: event.data.errorMessage }),
+          toolCallId: event.data.toolCallId,
+          toolName: event.data.toolName,
+          taskId: taskCtx.task.id,
+          metadata: { ai: { internal: true } },
         });
         await taskCtx.emitChunk({
           kind: "json",
@@ -306,4 +379,24 @@ function safeParseArray<T>(json: string): T[] | null {
   } catch {
     return null;
   }
+}
+
+function orderMessagesForProvider(messages: AssistantMessage[]): AssistantMessage[] {
+  return [...messages].sort((a, b) => {
+    if (a.taskId && a.taskId === b.taskId) {
+      const delta = providerTurnOrder(a) - providerTurnOrder(b);
+      if (delta !== 0) return delta;
+    }
+    return a.createdAt.localeCompare(b.createdAt);
+  });
+}
+
+function providerTurnOrder(message: {
+  role: string;
+  metadata: AssistantMessageMetadata | null;
+}): number {
+  const internal = message.metadata?.ai?.internal === true;
+  if (internal && message.role === "assistant") return 0;
+  if (internal && message.role === "tool") return 1;
+  return 2;
 }

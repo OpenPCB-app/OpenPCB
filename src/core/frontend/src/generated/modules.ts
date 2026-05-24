@@ -81,7 +81,7 @@ export const ALL_MODULE_MANIFESTS: GeneratedModuleManifest[] = [
         dependsOn: [{"id":"tasks","minVersion":"0.1.0","optional":false}],
         exports: {"services":[],"widgets":[]},
         registerAsSpaceInTopBar: true,
-        defaultPinned: false,
+        defaultPinned: true,
         resolvedDependencies: [{"id":"tasks","minVersion":"0.1.0","optional":false,"version":"0.1.0","missing":false,"satisfied":true}],
         loadOrder: 1
     },

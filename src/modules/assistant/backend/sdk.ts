@@ -13,8 +13,10 @@ export function buildAssistantSdk(): AssistantSDK {
       getAssistantService().conversation.deleteChat(chatId);
       return Promise.resolve();
     },
-    listMessages: (chatId) =>
-      Promise.resolve(getAssistantService().conversation.listMessages(chatId)),
+    listMessages: (chatId, options) =>
+      Promise.resolve(
+        getAssistantService().conversation.listMessages(chatId, options),
+      ),
     submitMessage: (chatId, input) =>
       getAssistantService().submitMessage(chatId, input),
 
@@ -30,6 +32,15 @@ export function buildAssistantSdk(): AssistantSDK {
 
     listToolEvents: (chatId, options) =>
       Promise.resolve(getAssistantService().listToolEvents(chatId, options)),
+
+    listWriteProposals: (chatId) =>
+      Promise.resolve(getAssistantService().listWriteProposals(chatId)),
+    applyWriteProposal: (chatId, proposalId, input) =>
+      getAssistantService().applyWriteProposal(chatId, proposalId, input),
+    rejectWriteProposal: (chatId, proposalId) =>
+      Promise.resolve(
+        getAssistantService().rejectWriteProposal(chatId, proposalId),
+      ),
 
     getSettings: () => Promise.resolve(getAssistantService().getSettings()),
     updateSettings: (input) =>

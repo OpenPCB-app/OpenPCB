@@ -50,11 +50,15 @@ export function ToolCard({
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const isLibrarySearch = event.toolName === "library_search_components";
+  const contentId = `tool-card-${event.id}`;
+
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900/60">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={contentId}
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs"
       >
         <Wrench className="h-3.5 w-3.5 text-violet-400" />
@@ -75,7 +79,7 @@ export function ToolCard({
         </span>
       </button>
       {open ? (
-        <div className="space-y-2 border-t border-slate-800 px-3 py-2 text-xs text-slate-300">
+        <div id={contentId} className="space-y-2 border-t border-slate-800 px-3 py-2 text-xs text-slate-300">
           {isLibrarySearch && event.status === "succeeded" ? (
             <p className="text-[11px] italic text-slate-500">
               Component cards rendered above.

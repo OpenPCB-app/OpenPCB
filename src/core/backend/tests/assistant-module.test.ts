@@ -3,8 +3,9 @@ import { cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { resetAssistantServiceForTesting } from "../../../modules/assistant/backend/assistant-service";
+import { getAssistantService } from "../../../modules/assistant/backend/assistant-service";
 import { resetTaskRuntimeForTesting } from "../../../modules/tasks/backend/runtime-singleton";
-import { resetSharedSqliteForTesting } from "../db/sqlite-client";
+import { getSharedSqlite, resetSharedSqliteForTesting } from "../db/sqlite-client";
 import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
@@ -266,6 +267,50 @@ describe("assistant module", () => {
     expect(response.status).toBe(404);
   });
 
+  test("messages endpoint returns latest page with cursor", async () => {
+    const { server } = await bootAssistantWorkspace();
+    const chatResponse = await server.fetch(
+      new Request("http://localhost/api/modules/assistant/chats", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Paged" }),
+      }),
+    );
+    const chat = (await chatResponse.json()) as { id: string };
+    const store = getAssistantService().conversation;
+    for (let i = 0; i < 6; i++) {
+      store.createMessage({ chatId: chat.id, role: "user", content: `m${i}` });
+      await Bun.sleep(2);
+    }
+
+    const firstResponse = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/assistant/chats/${chat.id}/messages?limit=3`,
+      ),
+    );
+    expect(firstResponse.status).toBe(200);
+    const first = (await firstResponse.json()) as {
+      items: Array<{ id: string; content: string }>;
+      hasMore: boolean;
+      nextCursor: string | null;
+    };
+    expect(first.items.map((m) => m.content)).toEqual(["m3", "m4", "m5"]);
+    expect(first.hasMore).toBe(true);
+    expect(first.nextCursor).not.toBeNull();
+
+    const olderResponse = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/assistant/chats/${chat.id}/messages?limit=3&before=${encodeURIComponent(first.nextCursor!)}`,
+      ),
+    );
+    const older = (await olderResponse.json()) as {
+      items: Array<{ content: string }>;
+      hasMore: boolean;
+    };
+    expect(older.items.map((m) => m.content)).toEqual(["m0", "m1", "m2"]);
+    expect(older.hasMore).toBe(false);
+  });
+
   test("exposes tools list", async () => {
     const { server } = await bootAssistantWorkspace();
 
@@ -278,6 +323,13 @@ describe("assistant module", () => {
       effect: string;
     }>;
     expect(Array.isArray(tools)).toBe(true);
+    expect(tools.some((tool) => tool.name === "designer_place_components")).toBe(
+      true,
+    );
+    expect(tools.some((tool) => tool.name === "designer_create_design")).toBe(
+      true,
+    );
+    expect(tools.some((tool) => tool.name === "library_resolve_bom")).toBe(true);
   });
 
   test("providers endpoint returns defaults", async () => {
@@ -312,5 +364,52 @@ describe("assistant module", () => {
     };
     expect(settings.defaultProviderId).toBe("openai");
     expect(settings.toolExecutionPolicy).toBe("auto_readonly_confirm_writes");
+    expect("enableWriteToolsBeta" in settings).toBe(false);
+  });
+
+  test("settings schema excludes historical write beta flag", async () => {
+    await bootAssistantWorkspace();
+
+    const columns = getSharedSqlite()
+      .query<{ name: string }, []>("PRAGMA table_info(assistant_settings)")
+      .all()
+      .map((column) => column.name);
+
+    expect(columns).toContain("allow_raw_tool_data");
+    expect(columns).not.toContain("enable_write_tools_beta");
+  });
+
+  test("context binding deletion is scoped to chat", async () => {
+    const { server } = await bootAssistantWorkspace();
+    const service = getAssistantService();
+    const chatA = service.createChat({ title: "A" });
+    const chatB = service.createChat({ title: "B" });
+    const bindingA = service.conversation.createBinding(chatA.id, {
+      id: crypto.randomUUID(),
+      kind: "design",
+      refId: "design-a",
+      label: "Design A",
+      role: "primary",
+      status: "active",
+    });
+    service.conversation.createBinding(chatB.id, {
+      id: crypto.randomUUID(),
+      kind: "design",
+      refId: "design-b",
+      label: "Design B",
+      role: "primary",
+      status: "active",
+    });
+
+    const response = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/assistant/chats/${chatB.id}/context-bindings/${bindingA.id}`,
+        { method: "DELETE" },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(service.listContextBindings(chatA.id)).toHaveLength(1);
+    expect(service.listContextBindings(chatB.id)).toHaveLength(1);
   });
 });

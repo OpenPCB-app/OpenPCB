@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -21,18 +22,23 @@ import type { ModuleSpaceProps } from "../../../core/contracts/modules/frontend-
 import type {
   AssistantChat,
   AssistantMessage,
+  AssistantMessagesPage,
   AssistantPromptPreset,
   AssistantPromptPresetId,
   AssistantProviderConfig,
   AssistantProviderModel,
   AssistantSettings,
   AssistantToolEventDto,
+  AssistantWriteProposalDto,
   SubmitAssistantMessageResult,
 } from "../../../sdks/assistant";
+import type { Task, TaskEvent } from "../../../sdks/tasks";
 import { MessageCard } from "./components/MessageCard";
 import { ProviderCapabilityBadge } from "./components/ProviderCapabilityBadge";
 import { PromptPresetPicker } from "./components/PromptPresetPicker";
 import { useAssistantStream } from "./hooks/useAssistantStream";
+import { useScrollAnchor, isNearBottom } from "./hooks/useScrollAnchor";
+import type { ActiveRunState, ActiveRunStatus } from "./components/AssistantRunStatusCard";
 
 function headers(): HeadersInit {
   return { "content-type": "application/json" };
@@ -72,10 +78,15 @@ export function AssistantSpace({
     () => (backendURL ? `${backendURL}/api/modules/${moduleId}` : null),
     [backendURL, moduleId],
   );
+  const tasksBase = useMemo(
+    () => (backendURL ? `${backendURL}/api/modules/tasks` : null),
+    [backendURL],
+  );
 
   const [chats, setChats] = useState<AssistantChat[]>([]);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [toolEvents, setToolEvents] = useState<AssistantToolEventDto[]>([]);
+  const [writeProposals, setWriteProposals] = useState<AssistantWriteProposalDto[]>([]);
   const [providers, setProviders] = useState<AssistantProviderConfig[]>([]);
   const [models, setModels] = useState<AssistantProviderModel[]>([]);
   const [settings, setSettings] = useState<AssistantSettings | null>(null);
@@ -88,6 +99,14 @@ export function AssistantSpace({
   const [input, setInput] = useState("");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [activeRunsByChat, setActiveRunsByChat] = useState<Record<string, ActiveRunState>>({});
+  const [messagesPage, setMessagesPage] = useState({
+    oldestCursor: null as string | null,
+    hasMore: false,
+    loadingOlder: false,
+    initialLoadedChatId: null as string | null,
+  });
+  const [showNewMessagesPill, setShowNewMessagesPill] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     chatId: string;
@@ -95,6 +114,8 @@ export function AssistantSpace({
     y: number;
   } | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
+  const topSentinelRef = useRef<HTMLDivElement | null>(null);
+  const scroll = useScrollAnchor();
 
   const selectedProvider =
     providers.find((provider) => provider.id === providerId) ?? null;
@@ -105,6 +126,7 @@ export function AssistantSpace({
     (message) =>
       message.role === "assistant" && message.content.trim().length === 0,
   );
+  const selectedRun = selectedChatId ? activeRunsByChat[selectedChatId] : undefined;
 
   const toolEventsByMessage = useMemo(() => {
     const map = new Map<string, AssistantToolEventDto[]>();
@@ -117,31 +139,102 @@ export function AssistantSpace({
     return map;
   }, [toolEvents]);
 
+  const mergeToolEvents = useCallback((incoming: AssistantToolEventDto[]) => {
+    setToolEvents((prev) => {
+      const map = new Map(prev.map((event) => [event.id, event]));
+      for (const event of incoming) map.set(event.id, event);
+      return [...map.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    });
+  }, []);
+
+  const updateRun = useCallback(
+    (chatId: string, patch: Partial<ActiveRunState>) => {
+      setActiveRunsByChat((prev) => {
+        const current = prev[chatId];
+        if (!current) return prev;
+        return {
+          ...prev,
+          [chatId]: {
+            ...current,
+            ...patch,
+            lastEventAt: new Date().toISOString(),
+          },
+        };
+      });
+    },
+    [],
+  );
+
   const refreshChats = useCallback(async () => {
     if (!base) return;
     const data = await api<AssistantChat[]>(`${base}/chats`);
     setChats(data);
     setSelectedChatId((current) => {
-      const next = isUsableChatId(current) ? current : (data[0]?.id ?? null);
+      const next = isUsableChatId(current) && data.some((chat) => chat.id === current)
+        ? current
+        : (data[0]?.id ?? null);
       activeChatIdRef.current = next;
       return next;
     });
   }, [base]);
 
   const refreshMessages = useCallback(
-    async (chatId: string) => {
-      if (!base) return;
-      const [msgs, events] = await Promise.all([
-        api<AssistantMessage[]>(`${base}/chats/${chatId}/messages`),
-        api<AssistantToolEventDto[]>(
-          `${base}/chats/${chatId}/tool-events`,
-        ).catch(() => [] as AssistantToolEventDto[]),
+    async (chatId: string): Promise<AssistantMessage[]> => {
+      if (!base) return [];
+      const [page, proposals] = await Promise.all([
+        api<AssistantMessagesPage>(`${base}/chats/${chatId}/messages?limit=50`),
+        api<AssistantWriteProposalDto[]>(
+          `${base}/chats/${chatId}/write-proposals`,
+        ).catch(() => [] as AssistantWriteProposalDto[]),
       ]);
-      setMessages(msgs);
+      const messageIds = page.items.map((message) => message.id);
+      const events = messageIds.length
+        ? await api<AssistantToolEventDto[]>(
+            `${base}/chats/${chatId}/tool-events?messageIds=${encodeURIComponent(messageIds.join(","))}`,
+          ).catch(() => [] as AssistantToolEventDto[])
+        : [];
+      setMessages(page.items);
       setToolEvents(events);
+      setWriteProposals(proposals);
+      setMessagesPage({
+        oldestCursor: page.nextCursor,
+        hasMore: page.hasMore,
+        loadingOlder: false,
+        initialLoadedChatId: chatId,
+      });
+      requestAnimationFrame(scroll.scrollToBottom);
+      return page.items;
     },
-    [base],
+    [base, scroll.scrollToBottom],
   );
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!base || !selectedChatId || !messagesPage.hasMore || messagesPage.loadingOlder || !messagesPage.oldestCursor) return;
+    setMessagesPage((prev) => ({ ...prev, loadingOlder: true }));
+    scroll.captureBeforePrepend();
+    try {
+      const page = await api<AssistantMessagesPage>(
+        `${base}/chats/${selectedChatId}/messages?limit=50&before=${encodeURIComponent(messagesPage.oldestCursor)}`,
+      );
+      const messageIds = page.items.map((message) => message.id);
+      if (messageIds.length > 0) {
+        const events = await api<AssistantToolEventDto[]>(
+          `${base}/chats/${selectedChatId}/tool-events?messageIds=${encodeURIComponent(messageIds.join(","))}`,
+        ).catch(() => [] as AssistantToolEventDto[]);
+        mergeToolEvents(events);
+      }
+      setMessages((prev) => [...page.items, ...prev]);
+      setMessagesPage({
+        oldestCursor: page.nextCursor,
+        hasMore: page.hasMore,
+        loadingOlder: false,
+        initialLoadedChatId: selectedChatId,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setMessagesPage((prev) => ({ ...prev, loadingOlder: false }));
+    }
+  }, [base, mergeToolEvents, messagesPage.hasMore, messagesPage.loadingOlder, messagesPage.oldestCursor, scroll, selectedChatId]);
 
   const refreshConfig = useCallback(async () => {
     if (!base) return;
@@ -166,38 +259,146 @@ export function AssistantSpace({
     }
   }, [base]);
 
+  const taskStage = useCallback((task: Task | TaskEvent): { status: ActiveRunStatus; stage: string; error: string | null } => {
+    const status = "status" in task ? task.status : undefined;
+    switch (status) {
+      case "queued":
+      case "pending":
+        return { status: "queued", stage: "Assistant is queued…", error: null };
+      case "running":
+        return { status: "running", stage: "Assistant is working…", error: null };
+      case "streaming":
+        return { status: "streaming", stage: "Writing response…", error: null };
+      case "completed":
+        return { status: "completed", stage: "Completed", error: null };
+      case "failed":
+        return { status: "failed", stage: "Assistant stopped before completing.", error: "error" in task ? task.error?.message ?? null : null };
+      case "cancelled":
+        return { status: "cancelled", stage: "Assistant task cancelled.", error: null };
+      case "paused":
+        return { status: "paused", stage: "Assistant paused before completing.", error: "error" in task ? task.error?.message ?? null : null };
+      default:
+        return { status: "running", stage: "Assistant is working…", error: null };
+    }
+  }, []);
+
   // Typed SSE consumer
   const stream = useAssistantStream({
     backendUrl: backendURL,
-    onChunkText: (delta) => {
-      // Optimistic append to last assistant placeholder
+    onChunkText: (ctx, delta) => {
+      const near = scroll.scrollRef.current ? isNearBottom(scroll.scrollRef.current) : true;
       setMessages((prev) => {
-        if (prev.length === 0) return prev;
-        const next = [...prev];
-        for (let i = next.length - 1; i >= 0; i--) {
-          if (next[i]!.role === "assistant") {
-            next[i] = { ...next[i]!, content: next[i]!.content + delta };
-            break;
-          }
-        }
+        const next = prev.map((message) =>
+          message.id === ctx.assistantMessageId
+            ? { ...message, content: message.content + delta }
+            : message,
+        );
         return next;
       });
+      updateRun(ctx.chatId, { status: "streaming", currentStage: "Writing response…" });
+      if (near) requestAnimationFrame(scroll.scrollToBottom);
+      else setShowNewMessagesPill(true);
     },
-    onAiEvent: () => {
+    onTaskEvent: (ctx, event: TaskEvent) => {
+      const mapped = taskStage(event);
+      updateRun(ctx.chatId, {
+        status: mapped.status,
+        currentStage: mapped.stage,
+        lastError: mapped.error,
+      });
+    },
+    onAiEvent: (ctx, event) => {
       // Re-fetch tool events for the active chat so cards update live.
-      const chatId = activeChatIdRef.current;
-      if (!chatId || !base) return;
-      void api<AssistantToolEventDto[]>(`${base}/chats/${chatId}/tool-events`)
-        .then(setToolEvents)
+      if (!base) return;
+      if (event.type === "run.tool.requested") {
+        updateRun(ctx.chatId, {
+          status: "tooling",
+          currentStage: "Using OpenPCB tools…",
+          activeTools: [
+            ...(activeRunsByChat[ctx.chatId]?.activeTools ?? []).filter(
+              (tool) => tool.callId !== event.data.toolCallId,
+            ),
+            { callId: event.data.toolCallId, name: event.data.toolName, status: "requested" },
+          ],
+        });
+      } else if (event.type === "run.tool.running" || event.type === "run.tool.succeeded" || event.type === "run.tool.failed") {
+        updateRun(ctx.chatId, {
+          status: "tooling",
+          currentStage: "Using OpenPCB tools…",
+          activeTools: (activeRunsByChat[ctx.chatId]?.activeTools ?? []).map((tool) =>
+            tool.callId === event.data.toolCallId
+              ? { ...tool, status: event.type.replace("run.tool.", "") }
+              : tool,
+          ),
+        });
+      } else if (event.type === "run.completed") {
+        updateRun(ctx.chatId, { status: "finalizing", currentStage: "Finalizing answer…" });
+      } else if (event.type === "run.failed") {
+        updateRun(ctx.chatId, { status: "failed", currentStage: "Assistant stopped before completing.", lastError: event.data.errorMessage });
+      }
+      void api<AssistantToolEventDto[]>(`${base}/chats/${ctx.chatId}/tool-events`)
+        .then(mergeToolEvents)
+        .catch(() => undefined);
+      void api<AssistantWriteProposalDto[]>(
+        `${base}/chats/${ctx.chatId}/write-proposals`,
+      )
+        .then(setWriteProposals)
         .catch(() => undefined);
     },
-    onTerminal: () => {
+    onTerminal: (ctx, status, message) => {
       setLoading(false);
-      const chatId = activeChatIdRef.current;
-      if (chatId) void refreshMessages(chatId);
+      if (status === "completed") {
+        setActiveRunsByChat((prev) => {
+          const next = { ...prev };
+          delete next[ctx.chatId];
+          return next;
+        });
+      } else {
+        updateRun(ctx.chatId, {
+          status: status === "cancelled" ? "cancelled" : "failed",
+          currentStage: status === "cancelled" ? "Assistant task cancelled." : "Assistant stopped before completing.",
+          lastError: message ?? null,
+        });
+      }
+      if (activeChatIdRef.current === ctx.chatId) void refreshMessages(ctx.chatId);
       void refreshChats();
     },
   });
+  const openStream = stream.open;
+
+  const restoreActiveTask = useCallback(
+    async (chatId: string, pageItems: AssistantMessage[]) => {
+      if (!tasksBase) return;
+      const latestAssistant = [...pageItems]
+        .reverse()
+        .find((message) => message.role === "assistant" && message.taskId);
+      if (!latestAssistant?.taskId) return;
+      const task = await api<Task>(`${tasksBase}/tasks/${latestAssistant.taskId}`).catch(
+        () => null,
+      );
+      if (!task || task.status === "completed") return;
+      const mapped = taskStage(task);
+      setActiveRunsByChat((prev) => ({
+        ...prev,
+        [chatId]: {
+          chatId,
+          taskId: task.id,
+          assistantMessageId: latestAssistant.id,
+          status: mapped.status,
+          currentStage: mapped.stage,
+          activeTools: [],
+          lastError: mapped.error,
+          userMessageContent: "",
+          startedAt: task.startedAt ?? task.createdAt,
+          lastEventAt: new Date().toISOString(),
+        },
+      }));
+      if (!["failed", "cancelled", "paused"].includes(task.status)) {
+        openStream({ chatId, taskId: task.id, assistantMessageId: latestAssistant.id });
+      }
+    },
+    [openStream, taskStage, tasksBase],
+  );
 
   useEffect(() => {
     void Promise.all([refreshConfig(), refreshChats()]).catch((err: unknown) =>
@@ -212,9 +413,9 @@ export function AssistantSpace({
       setProviderId(chat.providerConfigId);
       setModel(chat.model);
       setPromptPresetId(chat.promptPresetId);
-      void refreshMessages(chat.id);
+      void refreshMessages(chat.id).then((items) => restoreActiveTask(chat.id, items));
     }
-  }, [chats, refreshMessages, selectedChatId]);
+  }, [chats, refreshMessages, restoreActiveTask, selectedChatId]);
 
   useEffect(() => {
     if (!base || !providerId) return;
@@ -237,6 +438,36 @@ export function AssistantSpace({
     return () => document.removeEventListener("click", close);
   }, [contextMenu]);
 
+  useEffect(() => {
+    const root = scroll.scrollRef.current;
+    const target = topSentinelRef.current;
+    if (!root || !target) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void loadOlderMessages();
+      },
+      { root, threshold: 1 },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [loadOlderMessages, scroll.scrollRef]);
+
+  useEffect(() => {
+    const root = scroll.scrollRef.current;
+    if (!root) return;
+    const onScroll = () => {
+      if (isNearBottom(root)) setShowNewMessagesPill(false);
+    };
+    root.addEventListener("scroll", onScroll, { passive: true });
+    return () => root.removeEventListener("scroll", onScroll);
+  }, [scroll.scrollRef]);
+
+  useLayoutEffect(() => {
+    if (messagesPage.initialLoadedChatId === selectedChatId) {
+      scroll.restoreAfterPrepend();
+    }
+  }, [messages.length, messagesPage.initialLoadedChatId, scroll, selectedChatId]);
+
   const createChat = useCallback(async (): Promise<AssistantChat | null> => {
     if (!base) return null;
     const chat = await api<AssistantChat>(`${base}/chats`, {
@@ -253,6 +484,7 @@ export function AssistantSpace({
     setSelectedChatId(chat.id);
     setMessages([]);
     setToolEvents([]);
+    setWriteProposals([]);
     return chat;
   }, [base, model, promptPresetId, providerId, settings?.defaultProviderId]);
 
@@ -265,6 +497,7 @@ export function AssistantSpace({
       if (selectedChatId === chatId) {
         setMessages([]);
         setToolEvents([]);
+        setWriteProposals([]);
       }
     },
     [base, refreshChats, selectedChatId],
@@ -278,9 +511,10 @@ export function AssistantSpace({
     return chat.id;
   }, [createChat]);
 
-  const submit = async (event?: FormEvent) => {
+  const submit = async (event?: FormEvent, contentOverride?: string) => {
     event?.preventDefault();
-    if (!base || !input.trim()) return;
+    const submittedContent = (contentOverride ?? input).trim();
+    if (!base || !submittedContent) return;
     setLoading(true);
     setError(null);
     try {
@@ -291,7 +525,7 @@ export function AssistantSpace({
           method: "POST",
           headers: headers(),
           body: JSON.stringify({
-            content: input,
+            content: submittedContent,
             providerConfigId: providerId,
             model,
             promptPresetId,
@@ -301,8 +535,28 @@ export function AssistantSpace({
       setSelectedChatId(result.chat.id);
       activeChatIdRef.current = result.chat.id;
       setInput("");
+      setActiveRunsByChat((prev) => ({
+        ...prev,
+        [result.chat.id]: {
+          chatId: result.chat.id,
+          taskId: result.taskId,
+          assistantMessageId: result.assistantMessage.id,
+          status: "queued",
+          currentStage: "Assistant is queued…",
+          activeTools: [],
+          lastError: null,
+          userMessageContent: submittedContent,
+          startedAt: new Date().toISOString(),
+          lastEventAt: new Date().toISOString(),
+        },
+      }));
       await refreshMessages(result.chat.id);
-      stream.open(result.taskId);
+      requestAnimationFrame(scroll.scrollToBottom);
+      openStream({
+        chatId: result.chat.id,
+        taskId: result.taskId,
+        assistantMessageId: result.assistantMessage.id,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setLoading(false);
@@ -315,6 +569,30 @@ export function AssistantSpace({
       void submit();
     }
   };
+
+  const stopRun = useCallback(
+    async (run: ActiveRunState) => {
+      if (!tasksBase) return;
+      await api<{ ok: true }>(`${tasksBase}/tasks/${run.taskId}/cancel`, {
+        method: "POST",
+      });
+      updateRun(run.chatId, {
+        status: "cancelled",
+        currentStage: "Assistant task cancelled.",
+      });
+    },
+    [tasksBase, updateRun],
+  );
+
+  const retryRunAsNew = useCallback(
+    async (run: ActiveRunState) => {
+      if (!run.userMessageContent.trim()) return;
+      setSelectedChatId(run.chatId);
+      activeChatIdRef.current = run.chatId;
+      await submit(undefined, run.userMessageContent);
+    },
+    [submit],
+  );
 
   const chatOnly = Boolean(
     selectedProvider?.capabilities &&
@@ -376,7 +654,12 @@ export function AssistantSpace({
               }`}
             >
               <div className="flex w-full items-center justify-between gap-2">
-                <div className="truncate text-sm font-medium">{chat.title}</div>
+                <div className="flex min-w-0 items-center gap-2">
+                  {activeRunsByChat[chat.id] ? (
+                    <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-violet-400" />
+                  ) : null}
+                  <div className="truncate text-sm font-medium">{chat.title}</div>
+                </div>
                 <MoreHorizontal className="h-4 w-4 shrink-0 text-slate-600 opacity-0 transition-opacity group-hover:opacity-100" />
               </div>
               <div className="truncate text-xs opacity-60">{chat.model}</div>
@@ -459,8 +742,12 @@ export function AssistantSpace({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div ref={scroll.scrollRef} className="relative min-h-0 flex-1 overflow-auto">
           <div className="mx-auto max-w-4xl pb-8 pt-4">
+            <div ref={topSentinelRef} className="h-px" />
+            {messagesPage.loadingOlder ? (
+              <div className="py-2 text-center text-xs text-slate-500">Loading older messages…</div>
+            ) : null}
             {chatOnly ? (
               <div className="mx-4 mb-3 rounded-xl border border-amber-900/60 bg-amber-950/20 p-3 text-xs text-amber-200">
                 This provider is running without grounded OpenPCB tools. Answers
@@ -479,7 +766,9 @@ export function AssistantSpace({
             ) : (
               (() => {
                 const visible = messages.filter(
-                  (message) => message.role !== "tool",
+                  (message) =>
+                    message.role !== "tool" &&
+                    message.metadata?.ai?.internal !== true,
                 );
                 const lastAssistantIdx = (() => {
                   for (let i = visible.length - 1; i >= 0; i--) {
@@ -492,6 +781,18 @@ export function AssistantSpace({
                     key={message.id}
                     message={message}
                     toolEvents={toolEventsByMessage.get(message.id) ?? []}
+                    assistantBaseUrl={base}
+                    writeProposals={writeProposals}
+                    onProposalChanged={() => {
+                      if (selectedChatId) void refreshMessages(selectedChatId);
+                    }}
+                    runState={
+                      selectedRun?.assistantMessageId === message.id
+                        ? selectedRun
+                        : null
+                    }
+                    onStopRun={(run) => void stopRun(run).catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))}
+                    onRetryRun={(run) => void retryRunAsNew(run).catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))}
                     loading={
                       loading &&
                       idx === lastAssistantIdx &&
@@ -517,9 +818,22 @@ export function AssistantSpace({
                   updatedAt: "",
                 }}
                 loading
+                assistantBaseUrl={base}
               />
             ) : null}
           </div>
+          {showNewMessagesPill ? (
+            <button
+              type="button"
+              onClick={() => {
+                scroll.scrollToBottom();
+                setShowNewMessagesPill(false);
+              }}
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-violet-800 bg-violet-950 px-3 py-1 text-xs text-violet-100 shadow-lg"
+            >
+              ↓ New messages
+            </button>
+          ) : null}
         </div>
 
         <div className="border-t border-slate-800/50 bg-slate-950 p-4">

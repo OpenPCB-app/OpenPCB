@@ -80,6 +80,7 @@ export class ContextResolver {
   async resolveDesign(
     chatId: string,
     query: string,
+    options: { allowAlreadyBound?: boolean } = {},
   ): Promise<ResolveDesignResult> {
     const designer = this.getDesignerSdk();
     if (!designer) {
@@ -122,7 +123,7 @@ export class ContextResolver {
       hits.length === 1 || (hits[1] && top.score - hits[1].score >= 0.2);
     const isUnique = isUniqueExact || isUniqueByScore;
 
-    if (primary) {
+    if (primary && options.allowAlreadyBound !== true) {
       if (primary.refId === top.id) {
         return {
           status: "resolved",

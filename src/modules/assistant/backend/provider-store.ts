@@ -88,8 +88,7 @@ export class ProviderStore {
         preset.kind === "openai"
           ? (process.env.OPENAI_MODEL ?? preset.defaultModel)
           : preset.defaultModel;
-      // Enable openai by default if it has a base URL; others require user config.
-      const enabled = baseUrl.trim().length > 0 ? 1 : 0;
+      const enabled = preset.kind === "openai" ? (apiKey ? 1 : 0) : 0;
       this.rawSql(
         "INSERT INTO assistant_provider_config (id,label,kind,base_url,api_key,default_model,enabled,is_builtin,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [

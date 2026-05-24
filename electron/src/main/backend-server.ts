@@ -20,7 +20,7 @@ interface BackendReadyPayload {
 
 let runtime: StartedBackendRuntime | null = null;
 let backendPayload: BackendReadyPayload | null = null;
-const REQUIRED_DESKTOP_MODULES = ["library", "designer"] as const;
+const REQUIRED_DESKTOP_MODULES = ["library", "designer", "assistant"] as const;
 
 function getAppDataDir(): string {
   const base = app.getPath("userData");

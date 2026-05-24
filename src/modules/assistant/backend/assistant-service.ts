@@ -10,12 +10,16 @@ import {
   type AssistantProviderModel,
   type AssistantSettings,
   type AssistantToolEventDto,
+  type AssistantWriteProposalDto,
+  type AssistantPlacementApplyResult,
+  type AssistantPlacementProposal,
   type AiProviderCapabilities,
   type CreateAssistantChatInput,
   type ProviderTestResult,
   type SubmitAssistantMessageInput,
   type SubmitAssistantMessageResult,
   type TasksSDK,
+  type DesignerSDK,
 } from "../../../sdks";
 import { ConversationStore } from "./conversation-store";
 import { ProviderStore, type InternalProviderConfig } from "./provider-store";
@@ -24,6 +28,7 @@ import { PromptService } from "./prompt-service";
 import { ContextResolver } from "./context-resolver";
 import { RunService } from "./run-service";
 import { buildOpenpcbToolRegistry } from "./tools/openpcb-tool-registry";
+import { applyDesignerPlaceComponentsProposal } from "./tools/designer-tools";
 import {
   buildAiProviderClient,
   providerRequiresApiKey,
@@ -61,7 +66,7 @@ export class AssistantService {
       prompts: this.prompts,
       contextResolver: this.contextResolver,
       buildRegistry: (allowRawToolData) =>
-        buildOpenpcbToolRegistry(ctx, this.contextResolver, {
+        buildOpenpcbToolRegistry(ctx, this.contextResolver, this.conversation, {
           allowRawToolData,
         }),
     });
@@ -147,16 +152,82 @@ export class AssistantService {
 
   deleteContextBinding(chatId: string, bindingId: string): void {
     this.assertValidChatId(chatId);
-    this.conversation.deleteBinding(bindingId);
+    this.conversation.deleteBinding(chatId, bindingId);
   }
 
   // ─── tool events ──────────────────────────────────────────────────────
   listToolEvents(
     chatId: string,
-    options: { messageId?: string } = {},
+    options: { messageId?: string; messageIds?: string[] } = {},
   ): AssistantToolEventDto[] {
     this.assertValidChatId(chatId);
     return this.conversation.listToolEvents(chatId, options);
+  }
+
+  // ─── write proposals ─────────────────────────────────────────────────
+  listWriteProposals(chatId: string): AssistantWriteProposalDto[] {
+    this.assertValidChatId(chatId);
+    return this.conversation.listWriteProposals(chatId);
+  }
+
+  async applyWriteProposal(
+    chatId: string,
+    proposalId: string,
+    input: { allowPartial?: boolean } = {},
+  ): Promise<AssistantPlacementApplyResult> {
+    this.assertValidChatId(chatId);
+    const record = this.conversation.getWriteProposal(chatId, proposalId);
+    if (!record) throw new NotFoundError(`Write proposal not found: ${proposalId}`);
+    if (record.status !== "pending") {
+      throw new ValidationError(`Write proposal is already ${record.status}`);
+    }
+    if (record.kind !== "designer_place_components") {
+      throw new ValidationError(`Unsupported proposal kind: ${record.kind}`);
+    }
+    const designer = this.ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    if (!designer) throw new ValidationError("Designer module not available");
+    try {
+      const result = await applyDesignerPlaceComponentsProposal({
+        designer,
+        proposal: record.proposal as AssistantPlacementProposal,
+        designId: record.designId,
+        baseRevision: record.baseRevision,
+        allowPartial: input.allowPartial === true,
+      });
+      this.conversation.updateWriteProposalStatus(
+        chatId,
+        proposalId,
+        "applied",
+        result,
+      );
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("Confirm partial apply")) {
+        throw new ValidationError(message);
+      }
+      this.conversation.updateWriteProposalStatus(chatId, proposalId, "failed", {
+        message,
+      });
+      throw new ValidationError(message);
+    }
+  }
+
+  rejectWriteProposal(
+    chatId: string,
+    proposalId: string,
+  ): AssistantWriteProposalDto {
+    this.assertValidChatId(chatId);
+    const record = this.conversation.getWriteProposal(chatId, proposalId);
+    if (!record) throw new NotFoundError(`Write proposal not found: ${proposalId}`);
+    if (record.status !== "pending") {
+      throw new ValidationError(`Write proposal is already ${record.status}`);
+    }
+    return this.conversation.updateWriteProposalStatus(
+      chatId,
+      proposalId,
+      "rejected",
+    );
   }
 
   // ─── settings ─────────────────────────────────────────────────────────
@@ -218,7 +289,7 @@ export class AssistantService {
       message = `List models failed: ${err instanceof Error ? err.message : String(err)}`;
     }
     if (input.includeCompletion) {
-      const caps = await client.capabilities();
+      const caps = await client.capabilities(undefined, provider.defaultModel);
       this.providers.saveCapabilities(provider.id, caps);
       toolCallSupported = caps.toolCalling;
       message += caps.toolCalling
@@ -242,7 +313,7 @@ export class AssistantService {
   ): Promise<AiProviderCapabilities> {
     const provider = this.requireUsableProvider(id);
     const client = buildAiProviderClient(provider);
-    const caps = await client.capabilities();
+    const caps = await client.capabilities(undefined, provider.defaultModel);
     this.providers.saveCapabilities(provider.id, caps);
     return caps;
   }
@@ -268,9 +339,6 @@ export class AssistantService {
     if (!provider.baseUrl.trim())
       throw new ValidationError(`Provider ${provider.label} has no base URL`);
     if (providerRequiresApiKey(provider) && !provider.apiKey) {
-      // Dev-mode bypass for OpenAI without API key.
-      if (provider.kind === "openai" && process.env.NODE_ENV !== "production")
-        return provider;
       throw new ValidationError(
         `API key required for provider: ${provider.label}`,
       );

@@ -657,6 +657,7 @@ export async function searchComponents(
 ): Promise<LibraryComponent[]> {
   const db = getDb(ctx);
   const query = params.query?.trim().toLowerCase() ?? "";
+  const queryTokens = tokenizeSearchQuery(query);
   const limit = Math.max(1, Math.min(100, params.limit ?? 25));
   const allTags = (params.tags ?? [])
     .map((tag) => tag.trim().toLowerCase())
@@ -676,14 +677,21 @@ export async function searchComponents(
 
   let rows: ComponentRow[];
   if (query.length > 0) {
-    const needle = `%${query}%`;
+    const phraseNeedle = `%${escapeLikeNeedle(query)}%`;
+    const tokenNeedles = queryTokens.map((token) => `%${escapeLikeNeedle(token)}%`);
+    const searchableText = sql<string>`lower(${components.name} || ' ' || ${components.description} || ' ' || ${components.tagsJson} || ' ' || coalesce(${components.sourceId}, ''))`;
+    const tokenPredicate = tokenNeedles.length > 0
+      ? and(...tokenNeedles.map((needle) => like(searchableText, needle)))
+      : undefined;
     const baseQuery = db
       .select()
       .from(components)
       .where(
         or(
-          like(sql`lower(${components.name})`, needle),
-          like(sql`lower(${components.description})`, needle),
+          like(sql`lower(${components.name})`, phraseNeedle),
+          like(sql`lower(${components.description})`, phraseNeedle),
+          like(sql`lower(${components.tagsJson})`, phraseNeedle),
+          tokenPredicate,
         ),
       )
       .orderBy(components.name);
@@ -712,6 +720,19 @@ export async function searchComponents(
     return true;
   });
   return filteredRows.slice(0, limit).map(mapComponent);
+}
+
+function tokenizeSearchQuery(query: string): string[] {
+  return query
+    .toLowerCase()
+    .replace(/[^a-z0-9.+-]+/g, " ")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token, index, all) => token.length > 0 && all.indexOf(token) === index);
+}
+
+function escapeLikeNeedle(value: string): string {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
 export async function resolveComponent(
