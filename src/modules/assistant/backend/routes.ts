@@ -5,6 +5,7 @@ import type {
 } from "../../../core/contracts/modules/backend-module";
 import type {
   AssistantProviderConfigInput,
+  AssistantPromptPresetId,
   AssistantSettings,
   CreateAssistantChatInput,
   SubmitAssistantMessageInput,
@@ -44,6 +45,27 @@ export function registerRoutes(
   router: ModuleRouterHandle,
   _ctx: CoreBackendModuleContext,
 ): void {
+  // Designer-scoped chats
+  router.get("/design-chats", async (ctx) => {
+    const url = new URL(ctx.req.url);
+    const designId = url.searchParams.get("designId") ?? "";
+    return json(await getAssistantService().listDesignChats(designId));
+  });
+  router.post("/design-chats", async (ctx) => {
+    const input = await body<{
+      designId: string;
+      title?: string;
+      providerConfigId?: string;
+      model?: string;
+      promptPresetId?: AssistantPromptPresetId;
+    }>(ctx.req);
+    return json(await getAssistantService().createDesignChat(input), 201);
+  });
+  router.post("/design-chats/ensure", async (ctx) => {
+    const input = await body<{ designId: string }>(ctx.req);
+    return json(await getAssistantService().ensureDesignChat(input.designId));
+  });
+
   // Chats
   router.get("/chats", () =>
     json(getAssistantService().conversation.listChats()),

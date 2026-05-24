@@ -16,6 +16,7 @@ type ModuleHostProps = {
   module: ModuleRegistryItem;
   backendURL: string | null;
   designId?: string;
+  params?: Record<string, string>;
 };
 
 /**
@@ -74,12 +75,14 @@ function resolveModuleComponent(
     module,
     backendURL,
     designId,
+    params,
   }) => (
     <Space
       moduleId={module.id}
       namespace={module.namespace}
       backendURL={backendURL}
       designId={designId}
+      params={params}
     />
   );
   return Host;
@@ -88,9 +91,11 @@ function resolveModuleComponent(
 export function ModuleSpaceHost({
   module,
   designId,
+  params,
 }: {
   module: ModuleRegistryItem;
   designId?: string;
+  params?: Record<string, string>;
 }) {
   const { backendURL } = useBootstrap();
   const [loadedEntry, setLoadedEntry] = useState<{
@@ -148,6 +153,11 @@ export function ModuleSpaceHost({
   }
 
   return (
-    <Component module={module} backendURL={backendURL} designId={designId} />
+    <Component
+      module={module}
+      backendURL={backendURL}
+      designId={designId}
+      params={params}
+    />
   );
 }

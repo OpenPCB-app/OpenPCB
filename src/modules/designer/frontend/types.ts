@@ -7,6 +7,7 @@ export interface ModuleSpaceProps {
   namespace?: string;
   backendURL?: string | null;
   designId?: string;
+  params?: Record<string, string>;
 }
 
 // Re-exported from the shared canvas-defaults module so all canvases share

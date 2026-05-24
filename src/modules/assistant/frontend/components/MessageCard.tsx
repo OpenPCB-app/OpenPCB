@@ -58,6 +58,27 @@ const PROSE_CLASSES = [
   "prose-blockquote:text-slate-300",
 ].join(" ");
 
+const COMPACT_PROSE_CLASSES = [
+  "prose",
+  "prose-sm",
+  "dark:prose-invert",
+  "max-w-none",
+  "break-words",
+  "prose-p:my-2",
+  "prose-headings:mt-3",
+  "prose-headings:mb-1.5",
+  "prose-pre:max-w-full",
+  "prose-pre:overflow-x-auto",
+  "prose-pre:bg-slate-100",
+  "dark:prose-pre:bg-slate-950/80",
+  "prose-code:break-words",
+  "prose-code:before:content-none",
+  "prose-code:after:content-none",
+  "prose-table:text-xs",
+  "prose-a:text-violet-600",
+  "dark:prose-a:text-violet-400",
+].join(" ");
+
 /**
  * Defensive: strip <response>…</response> envelopes and stray `--->` artifacts
  * some local models emit when chat templates leak. Keeps real markdown intact.
@@ -122,6 +143,7 @@ export function MessageCard({
   onProposalChanged,
   onStopRun,
   onRetryRun,
+  compact = false,
 }: {
   message: AssistantMessage;
   toolEvents?: AssistantToolEventDto[];
@@ -129,9 +151,14 @@ export function MessageCard({
   runState?: ActiveRunState | null;
   assistantBaseUrl?: string | null;
   writeProposals?: AssistantWriteProposalDto[];
-  onProposalChanged?: () => void;
+  onProposalChanged?: (change: {
+    kind: "applied" | "rejected";
+    designId: string;
+    revision?: number;
+  }) => void;
   onStopRun?: (run: ActiveRunState) => void;
   onRetryRun?: (run: ActiveRunState) => void;
+  compact?: boolean;
 }): ReactElement {
   const isUser = message.role === "user";
   const cleanedContent = isUser
@@ -145,12 +172,18 @@ export function MessageCard({
   const showStreamingPulse = Boolean(runState) || (loading && (hasContent || toolEvents.length > 0));
   return (
     <div
-      className={`flex gap-4 border-b border-slate-800/50 px-4 py-6 ${isUser ? "" : "bg-slate-900/40"}`}
+      className={`flex min-w-0 border-b ${
+        compact
+          ? `gap-3 border-slate-200 px-3 py-4 dark:border-slate-800/70 ${isUser ? "bg-white dark:bg-slate-950" : "bg-slate-50 dark:bg-slate-900/40"}`
+          : `gap-4 border-slate-800/50 px-4 py-6 ${isUser ? "" : "bg-slate-900/40"}`
+      }`}
     >
       <div
-        className={`mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+        className={`mt-1 flex shrink-0 items-center justify-center rounded-lg ${compact ? "h-7 w-7" : "h-7 w-7"} ${
           isUser
-            ? "bg-slate-800 text-slate-300"
+            ? compact
+              ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+              : "bg-slate-800 text-slate-300"
             : "bg-violet-600 text-white shadow-sm shadow-violet-900/50"
         }`}
       >
@@ -163,18 +196,18 @@ export function MessageCard({
           </span>
           {showStreamingPulse ? (
             <span
-              className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400 shadow-[0_0_6px_rgba(167,139,250,0.7)]"
+              className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-violet-400 shadow-[0_0_6px_rgba(167,139,250,0.7)]"
               title="Streaming…"
             />
           ) : null}
         </div>
         {hasContent ? (
           isUser ? (
-            <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-100">
+            <div className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${compact ? "text-slate-800 dark:text-slate-100" : "text-slate-100"}`}>
               {cleanedContent}
             </div>
           ) : (
-            <div className={PROSE_CLASSES}>
+            <div className={compact ? COMPACT_PROSE_CLASSES : PROSE_CLASSES}>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {cleanedContent}
               </ReactMarkdown>
@@ -188,7 +221,7 @@ export function MessageCard({
                 <div className="text-[10px] uppercase tracking-wider text-violet-400">
                   Components from library
                 </div>
-                <ComponentResultsBlock data={data} />
+                <ComponentResultsBlock data={data} compact={compact} />
               </div>
             ))}
           </div>
@@ -196,7 +229,7 @@ export function MessageCard({
         {bomBlocks.length > 0 ? (
           <div className="space-y-3">
             {bomBlocks.map((data, idx) => (
-              <BomResultCard key={idx} data={data} />
+              <BomResultCard key={idx} data={data} compact={compact} />
             ))}
           </div>
         ) : null}
@@ -213,6 +246,7 @@ export function MessageCard({
                   null
                 }
                 onProposalChanged={onProposalChanged}
+                compact={compact}
               />
             ))}
           </div>
@@ -220,7 +254,7 @@ export function MessageCard({
         {toolEvents.length > 0 ? (
           <div className="space-y-1.5">
             {toolEvents.map((event) => (
-              <ToolCard key={event.id} event={event} />
+              <ToolCard key={event.id} event={event} compact={compact} />
             ))}
           </div>
         ) : null}

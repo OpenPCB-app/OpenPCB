@@ -27,12 +27,18 @@ export function PlacementProposalCard({
   assistantBaseUrl,
   statusRecord,
   onProposalChanged,
+  compact = false,
 }: {
   event: AssistantToolEventDto;
   proposal: AssistantPlacementProposal;
   assistantBaseUrl?: string | null;
   statusRecord?: AssistantWriteProposalDto | null;
-  onProposalChanged?: () => void;
+  onProposalChanged?: (change: {
+    kind: "applied" | "rejected";
+    designId: string;
+    revision?: number;
+  }) => void;
+  compact?: boolean;
 }): ReactElement {
   const [busy, setBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -64,7 +70,16 @@ export function PlacementProposalCard({
       const result = (await response.json()) as AssistantPlacementApplyResult;
       setFinished(true);
       setActionMessage(`Applied ${result.applied.length} component(s).`);
-      onProposalChanged?.();
+      const revision = result.applied.reduce<number | undefined>(
+        (max, item) =>
+          max === undefined ? item.revision : Math.max(max, item.revision),
+        undefined,
+      );
+      onProposalChanged?.({
+        kind: "applied",
+        designId: result.designId,
+        revision,
+      });
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -84,7 +99,7 @@ export function PlacementProposalCard({
       if (!response.ok) throw new Error("Reject failed");
       setFinished(true);
       setActionMessage("Proposal rejected.");
-      onProposalChanged?.();
+      onProposalChanged?.({ kind: "rejected", designId: proposal.design.id });
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -93,16 +108,16 @@ export function PlacementProposalCard({
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-violet-800/70 bg-violet-950/25 p-3 text-xs text-slate-200">
-      <div className="font-semibold text-violet-100">
+    <div className="max-w-full space-y-2 overflow-hidden rounded-lg border border-violet-300 bg-violet-50/80 p-3 text-xs text-slate-800 dark:border-violet-800/70 dark:bg-violet-950/25 dark:text-slate-200">
+      <div className="break-words font-semibold text-violet-950 dark:text-violet-100">
         Placement proposal for {proposal.design.name}
       </div>
-      <div className="text-[11px] text-slate-400">
+      <div className="text-[11px] text-slate-500 dark:text-slate-400">
         {proposal.placements.length} component(s) ready
         {proposal.skipped.length > 0 ? ` · ${proposal.skipped.length} skipped` : ""}
         {status !== "pending" ? ` · ${status}` : ""}
       </div>
-      <ul className="space-y-1 text-[11px] text-slate-300">
+      <ul className="space-y-1 text-[11px] text-slate-700 dark:text-slate-300">
         {proposal.placements.slice(0, 8).map((placement) => (
           <li key={`${placement.componentId}:${placement.positionNm.x}:${placement.positionNm.y}`}>
             {placement.componentName} at {placement.positionNm.x},{" "}
@@ -124,11 +139,11 @@ export function PlacementProposalCard({
           ))}
         </div>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className={`flex flex-wrap gap-2 ${compact ? "[&>button]:flex-1 [&>button]:whitespace-nowrap" : ""}`}>
         <button
           type="button"
           onClick={() => navigateToModule("designer", proposal.design.id)}
-          className="rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-700"
+          className="rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-100 hover:bg-slate-700"
         >
           View in Designer
         </button>

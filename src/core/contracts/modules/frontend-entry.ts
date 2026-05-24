@@ -11,6 +11,7 @@ export interface ModuleSpaceProps {
   namespace: string;
   backendURL: string | null;
   designId?: string;
+  params?: Record<string, string>;
 }
 
 /**

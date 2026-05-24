@@ -5,6 +5,7 @@ import {
   type AssistantChat,
   type AssistantContextBindingDto,
   type AssistantPromptPreset,
+  type AssistantPromptPresetId,
   type AssistantProviderConfig,
   type AssistantProviderConfigInput,
   type AssistantProviderModel,
@@ -84,6 +85,46 @@ export class AssistantService {
       model: input.model ?? provider.defaultModel,
       promptPresetId: input.promptPresetId ?? settings.defaultPromptPresetId,
     });
+  }
+
+  async listDesignChats(designId: string): Promise<AssistantChat[]> {
+    await this.requireDesign(designId);
+    return this.conversation.listChatsForDesign(designId);
+  }
+
+  async createDesignChat(input: {
+    designId: string;
+    title?: string;
+    providerConfigId?: string;
+    model?: string;
+    promptPresetId?: AssistantPromptPresetId;
+  }): Promise<AssistantChat> {
+    const design = await this.requireDesign(input.designId);
+    const settings = this.settings.getSettings();
+    const providerConfigId = input.providerConfigId ?? settings.defaultProviderId;
+    const provider = this.requireProvider(providerConfigId);
+    const chat = this.conversation.createChat({
+      title: input.title ?? `${design.name} chat`,
+      providerConfigId: provider.id,
+      model: input.model ?? provider.defaultModel,
+      promptPresetId: input.promptPresetId ?? settings.defaultPromptPresetId,
+      metadata: {
+        scope: "designer",
+        designId: design.id,
+        designName: design.name,
+      },
+    });
+    await this.contextResolver.bindDesign(chat.id, {
+      id: design.id,
+      name: design.name,
+    });
+    return chat;
+  }
+
+  async ensureDesignChat(designId: string): Promise<AssistantChat> {
+    const existing = await this.listDesignChats(designId);
+    if (existing[0]) return existing[0];
+    return this.createDesignChat({ designId });
   }
 
   async submitMessage(
@@ -344,6 +385,19 @@ export class AssistantService {
       );
     }
     return provider;
+  }
+
+  private async requireDesign(
+    designId: string,
+  ): Promise<{ id: string; name: string }> {
+    if (!designId || designId === "undefined" || designId === "null") {
+      throw new ValidationError("A valid design id is required");
+    }
+    const designer = this.ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    if (!designer) throw new ValidationError("Designer module not available");
+    const design = await designer.getDesign(designId);
+    if (!design) throw new NotFoundError(`Design not found: ${designId}`);
+    return { id: design.head.id, name: design.head.name };
   }
 }
 

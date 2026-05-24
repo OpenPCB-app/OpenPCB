@@ -144,6 +144,7 @@ export interface CreateChatRecord {
   providerConfigId: string;
   model: string;
   promptPresetId: AssistantPromptPresetId;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface CreateMessageRecord {
@@ -227,7 +228,7 @@ export class ConversationStore {
         input.providerConfigId,
         input.model,
         input.promptPresetId,
-        encode(null),
+        encode(input.metadata ?? null),
         timestamp,
         timestamp,
         null,
@@ -258,6 +259,7 @@ export class ConversationStore {
       model: string;
       promptPresetId: AssistantPromptPresetId;
       title: string;
+      metadata: Record<string, unknown> | null;
     }>,
   ): AssistantChat {
     const current = this.getChat(chatId);
@@ -267,19 +269,33 @@ export class ConversationStore {
       model: patch.model ?? current.model,
       promptPresetId: patch.promptPresetId ?? current.promptPresetId,
       title: patch.title ?? current.title,
+      metadata: patch.metadata === undefined ? current.metadata : patch.metadata,
     };
     this.rawSql(
-      "UPDATE assistant_chat SET provider_config_id=?, model=?, prompt_preset_id=?, title=?, updated_at=? WHERE id=?",
+      "UPDATE assistant_chat SET provider_config_id=?, model=?, prompt_preset_id=?, title=?, metadata=?, updated_at=? WHERE id=?",
       [
         next.providerConfigId,
         next.model,
         next.promptPresetId,
         next.title,
+        encode(next.metadata),
         now(),
         chatId,
       ],
     );
     return this.getChat(chatId)!;
+  }
+
+  listChatsForDesign(designId: string): AssistantChat[] {
+    return this.listChats().filter((chat) => {
+      const metadata = chat.metadata;
+      return (
+        metadata !== null &&
+        typeof metadata === "object" &&
+        metadata.designId === designId &&
+        metadata.scope === "designer"
+      );
+    });
   }
 
   deleteChat(chatId: string): void {

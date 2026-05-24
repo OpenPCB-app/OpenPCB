@@ -73,6 +73,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 export function AssistantSpace({
   backendURL,
   moduleId,
+  params,
 }: ModuleSpaceProps): ReactElement {
   const base = useMemo(
     () => (backendURL ? `${backendURL}/api/modules/${moduleId}` : null),
@@ -114,6 +115,7 @@ export function AssistantSpace({
     y: number;
   } | null>(null);
   const activeChatIdRef = useRef<string | null>(null);
+  const routeChatId = params?.chatId ?? null;
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const scroll = useScrollAnchor();
 
@@ -170,13 +172,16 @@ export function AssistantSpace({
     const data = await api<AssistantChat[]>(`${base}/chats`);
     setChats(data);
     setSelectedChatId((current) => {
-      const next = isUsableChatId(current) && data.some((chat) => chat.id === current)
+      const routeChat = routeChatId && data.some((chat) => chat.id === routeChatId)
+        ? routeChatId
+        : null;
+      const next = routeChat ?? (isUsableChatId(current) && data.some((chat) => chat.id === current)
         ? current
-        : (data[0]?.id ?? null);
+        : (data[0]?.id ?? null));
       activeChatIdRef.current = next;
       return next;
     });
-  }, [base]);
+  }, [base, routeChatId]);
 
   const refreshMessages = useCallback(
     async (chatId: string): Promise<AssistantMessage[]> => {

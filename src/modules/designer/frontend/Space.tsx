@@ -8,6 +8,7 @@ import {
   type ReactElement,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { Bot } from "lucide-react";
 import { useNavigationStore } from "@/stores/navigation-store";
 import { useAuth } from "@/cloud/AuthProvider";
 import { readCloudConfig } from "@/cloud/config";
@@ -34,6 +35,7 @@ import { ToastProvider, useToast } from "./hooks/use-toast";
 import { useDesignerWorkspace } from "./hooks/useDesignerWorkspace";
 import { PcbCanvas } from "./pcb/PcbCanvas";
 import { Board3DCanvas } from "./three-d/Board3DCanvas";
+import { DesignerChatDock } from "../../assistant/frontend";
 import { useDesignerTabsStore } from "./stores/designer-tabs-store";
 import type {
   LibraryComponent,
@@ -46,6 +48,10 @@ import { isEditableShortcutTarget } from "../../../shared/frontend/canvas/utils/
 
 const MIN_LEFT = 240;
 const MAX_LEFT = 520;
+const MIN_CHAT = 320;
+const MAX_CHAT = 560;
+const CHAT_OPEN_KEY = "openpcb:designer:chat-open";
+const CHAT_WIDTH_KEY = "openpcb:designer:chat-width";
 const DEFAULT_COMPONENT_LIMIT = 8;
 const RECENT_PLACEMENTS_KEY = "openpcb:designer:recents";
 const RECENT_PLACEMENTS_CAP = 20;
@@ -75,6 +81,20 @@ function writePersistedRecents(componentId: string): void {
   } catch {
     // localStorage unavailable / quota — recents are best-effort, fall through.
   }
+}
+
+function readPersistedBoolean(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  const raw = window.localStorage.getItem(key);
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  return fallback;
+}
+
+function readPersistedNumber(key: string, fallback: number): number {
+  if (typeof window === "undefined") return fallback;
+  const value = Number(window.localStorage.getItem(key));
+  return Number.isFinite(value) ? value : fallback;
 }
 
 function commonComponentRank(component: LibraryComponent): number {
@@ -287,6 +307,12 @@ function DesignerSpaceInner({
   const navigateToModule = useNavigationStore((s) => s.navigateToModule);
 
   const [leftWidth, setLeftWidth] = useState(300);
+  const [chatOpen, setChatOpen] = useState(() =>
+    readPersistedBoolean(CHAT_OPEN_KEY, false),
+  );
+  const [chatWidth, setChatWidth] = useState(() =>
+    clamp(readPersistedNumber(CHAT_WIDTH_KEY, 380), MIN_CHAT, MAX_CHAT),
+  );
   const [zoomPercent, setZoomPercent] = useState(20);
   const [gridVisible, setGridVisible] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -602,6 +628,71 @@ function DesignerSpaceInner({
   };
 
   const noTabsOpen = openDesignIds.length === 0;
+  const activeDesign = useMemo(
+    () => state.designs.find((design) => design.id === state.selectedDesignId) ?? null,
+    [state.designs, state.selectedDesignId],
+  );
+
+  useEffect(() => {
+    window.localStorage.setItem(CHAT_OPEN_KEY, String(chatOpen));
+  }, [chatOpen]);
+
+  useEffect(() => {
+    window.localStorage.setItem(CHAT_WIDTH_KEY, String(chatWidth));
+  }, [chatWidth]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isEditableShortcutTarget(event.target)) return;
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key.toLowerCase() !== "i") return;
+      event.preventDefault();
+      setChatOpen((value) => !value);
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, []);
+
+  const startChatResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = chatWidth;
+    const onMove = (moveEvent: PointerEvent) => {
+      const delta = startX - moveEvent.clientX;
+      setChatWidth(clamp(startWidth + delta, MIN_CHAT, MAX_CHAT));
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  };
+
+  const handleAssistantDesignChanged = useCallback(
+    (change?: {
+      kind: "applied" | "rejected" | "tool";
+      designId?: string;
+      revision?: number;
+    }) => {
+      if (change?.revision !== undefined) {
+        actions.notifyExternalRevisionBump(change.revision);
+      }
+
+      void (async () => {
+        await actions.refreshDesigns();
+        if (!change?.designId || change.designId === state.selectedDesignId) {
+          await Promise.all([
+            actions.refreshProjection(),
+            actions.refreshHistory(),
+          ]);
+        }
+      })();
+    },
+    [actions, state.selectedDesignId],
+  );
 
   const canvasContent = () => {
     if (noTabsOpen) {
@@ -685,6 +776,20 @@ function DesignerSpaceInner({
               designId={activeDesignId}
               api={cloudBadgeApi}
             />
+            <button
+              type="button"
+              aria-pressed={chatOpen}
+              onClick={() => setChatOpen((value) => !value)}
+              className={`flex shrink-0 items-center gap-1 rounded-sm border px-2 py-0.5 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 ${
+                chatOpen
+                  ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-200"
+                  : "border-slate-300 dark:text-slate-200"
+              }`}
+              title="Toggle Designer Chat (Cmd/Ctrl+I)"
+            >
+              <Bot className="h-3.5 w-3.5" />
+              Chat
+            </button>
           </>
         }
       />
@@ -727,7 +832,7 @@ function DesignerSpaceInner({
           <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-slate-700 group-hover:bg-violet-400" />
         </div>
 
-        <div className="relative min-h-0 min-w-0 flex-1">
+        <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
           {noTabsOpen ? (
             <DesignerEmptyState
               designs={state.designs}
@@ -809,6 +914,31 @@ function DesignerSpaceInner({
             </div>
           ) : null}
         </div>
+
+        {chatOpen ? (
+          <>
+            <div
+              className="group relative w-1 shrink-0 cursor-col-resize bg-slate-800/20 hover:bg-violet-600/60"
+              onPointerDown={startChatResize}
+            >
+              <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
+              <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-slate-300 group-hover:bg-violet-400 dark:bg-slate-700" />
+            </div>
+            <div style={{ width: chatWidth }} className="min-h-0 shrink-0">
+              <DesignerChatDock
+                backendURL={backendURL}
+                designId={state.selectedDesignId}
+                designName={activeDesign?.name ?? null}
+                designRevision={activeDesign?.revision ?? null}
+                onClose={() => setChatOpen(false)}
+                onOpenFull={(chatId) =>
+                  navigateToModule("assistant", undefined, { chatId })
+                }
+                onDesignChanged={handleAssistantDesignChanged}
+              />
+            </div>
+          </>
+        ) : null}
       </div>
 
       <ComponentCommandPalette

@@ -29,8 +29,10 @@ export interface ComponentResultsPayload {
 
 export function ComponentResultsBlock({
   data,
+  compact = false,
 }: {
   data: ComponentResultsPayload;
+  compact?: boolean;
 }): ReactElement {
   const navigateToModule = useNavigationStore(
     (state) => state.navigateToModule,
@@ -41,16 +43,16 @@ export function ComponentResultsBlock({
   return (
     <div className="space-y-2">
       {data.results.length > 0 ? (
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+        <div className={`grid grid-cols-1 gap-2 ${compact ? "" : "md:grid-cols-2"}`}>
           {data.results.map((hit) => (
             <article
               key={hit.componentId}
-              className="rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm"
+              className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-900"
             >
               <header className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 truncate">
+                <div className="flex min-w-0 items-center gap-2 truncate">
                   <Box className="h-4 w-4 text-violet-300" />
-                  <span className="truncate font-medium text-slate-100">
+                  <span className="truncate font-medium text-slate-900 dark:text-slate-100">
                     {hit.name}
                   </span>
                   {hit.isBuiltin ? (
@@ -59,11 +61,11 @@ export function ComponentResultsBlock({
                     </span>
                   ) : null}
                 </div>
-                <span className="text-[10px] text-slate-500">
+                <span className="shrink-0 text-[10px] text-slate-500">
                   score {hit.score.toFixed(2)}
                 </span>
               </header>
-              <p className="mt-1 text-xs text-slate-400 line-clamp-2">
+              <p className="mt-1 line-clamp-2 text-xs text-slate-600 dark:text-slate-400">
                 {hit.description}
               </p>
               {hit.tags.length > 0 ? (
@@ -71,7 +73,7 @@ export function ComponentResultsBlock({
                   {hit.tags.slice(0, 6).map((tag) => (
                     <span
                       key={tag}
-                      className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400"
+                      className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-400"
                     >
                       {tag}
                     </span>
