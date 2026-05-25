@@ -2,7 +2,7 @@
   "name": "@openpcb/core-backend",
   "private": true,
   "type": "module",
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.4",
   "scripts": {
     "dev": "PORT=3000 NODE_ENV=development bun main.ts",
     "start": "bun main.ts",
