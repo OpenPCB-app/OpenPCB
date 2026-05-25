@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { buildExportBundle } from "../../../modules/designer/backend/export";
 import { buildGerberLayer } from "../../../modules/designer/backend/export/gerber/writer";
 import { buildExcellonDrill } from "../../../modules/designer/backend/export/excellon/writer";
-import { buildBomCsv } from "../../../modules/designer/backend/export/bom/writer";
+import {
+  buildBomCsv,
+  buildBomProjection,
+  buildJlcBomCsv,
+  buildKicadBomCsv,
+} from "../../../modules/designer/backend/export/bom/writer";
 import { buildPnpCsv } from "../../../modules/designer/backend/export/pnp/writer";
 import { packZip, crc32 } from "../../../modules/designer/backend/export/zip";
 import type {
@@ -434,7 +439,7 @@ describe("BOM CSV writer", () => {
   test("emits JLCPCB-compatible header", () => {
     const out = buildBomCsv(fixtureProjection(), null);
     expect(out.split("\r\n")[0]).toBe(
-      "Comment,Designator,Footprint,LCSC Part #,Manufacturer,MPN,Quantity",
+      "Comment,Designator,Footprint,LCSC Part #,Manufacturer,MPN,Quantity,DNP,Assembly Side,Unit Price,Currency,Notes",
     );
   });
 
@@ -482,6 +487,39 @@ describe("BOM CSV writer", () => {
     const out = buildBomCsv(fixtureProjection(), sch);
     expect(out).toContain("NE555,U1,DIP-8");
     expect(out).toContain("10k,R1,R_0603_1608Metric");
+  });
+
+  test("applies BOM overrides and groups by LCSC/JLC", () => {
+    const projection = buildBomProjection(fixtureProjection(), null, [
+      {
+        designId: "blink",
+        refdes: "R1",
+        manufacturer: "Yageo",
+        manufacturerPartNumber: "RC0603FR-0710KL",
+        lcscPartNumber: "C25804",
+        supplier: "LCSC",
+        unitPrice: 0.001,
+        currency: "USD",
+        dnp: false,
+        assemblySide: "top",
+        notes: "static estimate",
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+    const row = projection.rows.find((candidate) => candidate.refdesList === "R1");
+    expect(row?.manufacturer).toBe("Yageo");
+    expect(row?.lcscPartNumber).toBe("C25804");
+    expect(projection.summary.estimatedCost).toBeNull();
+  });
+
+  test("emits JLC and KiCad-style BOM CSV variants", () => {
+    const rows = buildBomProjection(fixtureProjection(), null).rows;
+    expect(buildJlcBomCsv(rows).split("\r\n")[0]).toBe(
+      "Comment,Designator,Footprint,LCSC Part #,Quantity",
+    );
+    expect(buildKicadBomCsv(rows).split("\r\n")[0]).toBe(
+      "References,Value,Footprint,Quantity,Manufacturer,MPN,LCSC,DNP,Notes",
+    );
   });
 });
 

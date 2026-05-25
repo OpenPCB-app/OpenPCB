@@ -21,6 +21,7 @@ import { createDesignerApi } from "./api";
 import { DesignerEmptyState } from "./components/DesignerEmptyState";
 import { KicadProjectImportWizard } from "./components/KicadProjectImportWizard";
 import { DesignerPlaceholderView } from "./components/DesignerPlaceholderView";
+import { DesignerBomView } from "./components/DesignerBomView";
 import { DesignerSidebar } from "./components/DesignerSidebar";
 import {
   SchematicCanvas,
@@ -317,6 +318,14 @@ function DesignerSpaceInner({
   const [gridVisible, setGridVisible] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [pcbDrcCount, setPcbDrcCount] = useState(0);
+  const [schematicSelectionRequest, setSchematicSelectionRequest] = useState<{
+    partIds: string[];
+    nonce: number;
+  } | null>(null);
+  const [pcbSelectionRequest, setPcbSelectionRequest] = useState<{
+    placementIds: string[];
+    nonce: number;
+  } | null>(null);
   const [pcbBoardSlot, setPcbBoardSlot] = useState<HTMLDivElement | null>(null);
   const [pcbLayersSlot, setPcbLayersSlot] = useState<HTMLDivElement | null>(
     null,
@@ -627,6 +636,46 @@ function DesignerSpaceInner({
     window.addEventListener("pointercancel", stop);
   };
 
+  const handleBomShowSchematic = useCallback(
+    (partIds: string[]) => {
+      if (partIds.length === 0) return;
+      setSchematicSelectionRequest((current) => ({
+        partIds,
+        nonce: (current?.nonce ?? 0) + 1,
+      }));
+      actions.setActiveView("schem");
+      const parts = state.projection?.parts.filter((part) => partIds.includes(part.id)) ?? [];
+      if (parts.length > 0) {
+        const xs = parts.map((part) => part.positionNm.x / 1_000_000);
+        const ys = parts.map((part) => part.positionNm.y / 1_000_000);
+        window.requestAnimationFrame(() => {
+          canvasRef.current?.frameToBoundsMm({
+            minX: Math.min(...xs) - 5,
+            minY: Math.min(...ys) - 5,
+            maxX: Math.max(...xs) + 5,
+            maxY: Math.max(...ys) + 5,
+          });
+        });
+      }
+    },
+    [actions, state.projection?.parts],
+  );
+
+  const handleBomShowPcb = useCallback(
+    (placementIds: string[]) => {
+      if (placementIds.length === 0) {
+        addToast("No PCB placement found for this BOM line.", "warning");
+        return;
+      }
+      setPcbSelectionRequest((current) => ({
+        placementIds,
+        nonce: (current?.nonce ?? 0) + 1,
+      }));
+      actions.setActiveView("pcb");
+    },
+    [actions, addToast],
+  );
+
   const noTabsOpen = openDesignIds.length === 0;
   const activeDesign = useMemo(
     () => state.designs.find((design) => design.id === state.selectedDesignId) ?? null,
@@ -719,6 +768,7 @@ function DesignerSpaceInner({
         selectedPartId={state.selectedPartId}
         selectedPinId={state.selectedPinId}
         selectedLabelId={state.selectedLabelId}
+        selectionRequest={schematicSelectionRequest}
         wireSourcePinId={state.wireSourcePinId}
         labelDraftText={state.labelDraftText}
         gridVisible={gridVisible}
@@ -808,29 +858,33 @@ function DesignerSpaceInner({
       ) : null}
 
       <div className="relative flex min-h-0 flex-1">
-        <div style={{ width: leftWidth }} className="shrink-0">
-          <DesignerSidebar
-            state={state}
-            actions={actions}
-            activeView={state.activeView}
-            pcbSlotRef={setPcbBoardSlot}
-            pcbLayersSlotRef={setPcbLayersSlot}
-            onPlaceComponent={openComponentPalette}
-            onAddNetLabel={() => canvasRef.current?.armPrimitive("net_portal")}
-            onBrowseLibrary={() => navigateToModule("library")}
-            onFrameBoundsMm={(bounds) =>
-              canvasRef.current?.frameToBoundsMm(bounds)
-            }
-          />
-        </div>
+        {state.activeView !== "bom" ? (
+          <>
+            <div style={{ width: leftWidth }} className="shrink-0">
+              <DesignerSidebar
+                state={state}
+                actions={actions}
+                activeView={state.activeView}
+                pcbSlotRef={setPcbBoardSlot}
+                pcbLayersSlotRef={setPcbLayersSlot}
+                onPlaceComponent={openComponentPalette}
+                onAddNetLabel={() => canvasRef.current?.armPrimitive("net_portal")}
+                onBrowseLibrary={() => navigateToModule("library")}
+                onFrameBoundsMm={(bounds) =>
+                  canvasRef.current?.frameToBoundsMm(bounds)
+                }
+              />
+            </div>
 
-        <div
-          className="group relative w-1 shrink-0 cursor-col-resize bg-slate-800/40 hover:bg-violet-600/60"
-          onPointerDown={startResize}
-        >
-          <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
-          <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-slate-700 group-hover:bg-violet-400" />
-        </div>
+            <div
+              className="group relative w-1 shrink-0 cursor-col-resize bg-slate-800/40 hover:bg-violet-600/60"
+              onPointerDown={startResize}
+            >
+              <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
+              <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-slate-700 group-hover:bg-violet-400" />
+            </div>
+          </>
+        ) : null}
 
         <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
           {noTabsOpen ? (
@@ -853,6 +907,7 @@ function DesignerSpaceInner({
               onDrcCountChange={setPcbDrcCount}
               boardPanelTarget={pcbBoardSlot}
               layersPanelTarget={pcbLayersSlot}
+              selectionRequest={pcbSelectionRequest}
               initialViewport={
                 state.selectedDesignId
                   ? (viewportRef.current.get(`pcb:${state.selectedDesignId}`) ??
@@ -867,6 +922,15 @@ function DesignerSpaceInner({
               moduleId={moduleId}
               selectedDesignId={state.selectedDesignId}
               error={state.error}
+            />
+          ) : state.activeView === "bom" ? (
+            <DesignerBomView
+              backendURL={backendURL}
+              moduleId={moduleId}
+              designId={state.selectedDesignId}
+              revision={state.projection?.revision ?? null}
+              onShowSchematic={handleBomShowSchematic}
+              onShowPcb={handleBomShowPcb}
             />
           ) : (
             <DesignerPlaceholderView view={state.activeView} />

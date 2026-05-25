@@ -5,6 +5,7 @@ import type {
   GerberArtifactKind,
   GerberExportOptions,
   GerberExportResult,
+  BomOverride,
 } from "../../../../sdks/designer/types";
 import { buildBomCsv } from "./bom/writer";
 import { buildExcellonDrill } from "./excellon/writer";
@@ -34,6 +35,7 @@ export function buildExportBundle(
   pcb: DesignerPcbProjection,
   schematic: DesignerSchematicProjection | null,
   options: GerberExportOptions = {},
+  bomOverrides: readonly BomOverride[] = [],
 ): GerberExportResult {
   const warnings: string[] = [];
   const artifacts: GerberArtifact[] = [];
@@ -128,7 +130,7 @@ export function buildExportBundle(
     artifacts.push({
       kind: "csv.bom",
       fileName: `${bundleName}-BOM.csv`,
-      text: buildBomCsv(pcb, schematic),
+      text: buildBomCsv(pcb, schematic, bomOverrides),
     });
   }
   if (includePnp) {

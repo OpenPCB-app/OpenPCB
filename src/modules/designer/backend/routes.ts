@@ -4,8 +4,18 @@ import type {
 } from "../../../core/contracts/modules/backend-module";
 import { NotFoundError, ValidationError } from "../../../core/contracts/errors";
 import { buildExportBundle } from "./export";
+import {
+  buildBomCsv,
+  buildBomTsv,
+  buildJlcBomCsv,
+  buildKicadBomCsv,
+} from "./export/bom/writer";
+import { buildPnpCsv } from "./export/pnp/writer";
 import { packZip } from "./export/zip";
-import type { GerberExportOptions } from "../../../sdks/designer/types";
+import type {
+  BomOverridePatch,
+  GerberExportOptions,
+} from "../../../sdks/designer/types";
 import type {
   DesignerCommandEnvelope,
   DesignerCreateWireCommand,
@@ -90,6 +100,74 @@ function parseExportOptions(raw: unknown): GerberExportOptions {
     opts.includeInnerLayers = rec.includeInnerLayers;
   }
   return opts;
+}
+
+function parseBomOverridePatch(raw: unknown): BomOverridePatch {
+  const rec = asRecord(raw);
+  if (!rec) throw new ValidationError("Request body must be an object");
+  const patch: BomOverridePatch = {};
+  parseOptionalString(rec, "manufacturer", (v) => (patch.manufacturer = v));
+  parseOptionalString(rec, "manufacturerPartNumber", (v) => {
+    patch.manufacturerPartNumber = v;
+  });
+  parseOptionalString(rec, "lcscPartNumber", (v) => (patch.lcscPartNumber = v));
+  parseOptionalString(rec, "supplier", (v) => (patch.supplier = v));
+  parseOptionalString(rec, "currency", (v) => (patch.currency = v));
+  parseOptionalString(rec, "notes", (v) => (patch.notes = v));
+
+  if ("unitPrice" in rec) {
+    const rawPrice = rec.unitPrice;
+    if (rawPrice === null) patch.unitPrice = null;
+    else {
+      const price = asNumber(rawPrice);
+      if (price === null || price < 0) {
+        throw new ValidationError("unitPrice must be a non-negative number or null");
+      }
+      patch.unitPrice = price;
+    }
+  }
+  if ("dnp" in rec) {
+    if (typeof rec.dnp !== "boolean") {
+      throw new ValidationError("dnp must be a boolean");
+    }
+    patch.dnp = rec.dnp;
+  }
+  if ("assemblySide" in rec) {
+    if (rec.assemblySide === null) patch.assemblySide = null;
+    else if (rec.assemblySide === "top" || rec.assemblySide === "bottom") {
+      patch.assemblySide = rec.assemblySide;
+    } else {
+      throw new ValidationError("assemblySide must be top, bottom, or null");
+    }
+  }
+  return patch;
+}
+
+function parseOptionalString(
+  rec: Record<string, unknown>,
+  key: string,
+  set: (value: string | null) => void,
+): void {
+  if (!(key in rec)) return;
+  const value = rec[key];
+  if (value === null) {
+    set(null);
+    return;
+  }
+  if (typeof value !== "string") {
+    throw new ValidationError(`${key} must be a string or null`);
+  }
+  set(value);
+}
+
+function textResponse(text: string, contentType: string, fileName: string): Response {
+  return new Response(text, {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      "Content-Disposition": `attachment; filename="${fileName}"`,
+    },
+  });
 }
 
 async function parseZipUploadBody(req: Request): Promise<{
@@ -1654,6 +1732,85 @@ export function registerRoutes(
     return success({ projection });
   });
 
+  router.get("/designs/:designId/bom", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    const bom = await store.getBomProjection(designId);
+    if (!bom) {
+      throw new NotFoundError(`Design '${designId}' not found`);
+    }
+    return success({ bom });
+  });
+
+  router.patch("/designs/:designId/bom/refs/:refdes", async ({ params, req }) => {
+    const designId = params.getOrThrow("designId");
+    const refdes = params.getOrThrow("refdes");
+    const patch = parseBomOverridePatch(await parseJsonBody<unknown>(req));
+    const override = await store.updateBomOverride(designId, refdes, patch);
+    if (!override) {
+      throw new NotFoundError(`Design '${designId}' not found`);
+    }
+    const bom = await store.getBomProjection(designId);
+    return success({ override, bom });
+  });
+
+  router.get("/designs/:designId/exports/bom.csv", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    const pcb = await store.getPcbProjection(designId);
+    if (!pcb) throw new NotFoundError(`Design '${designId}' not found`);
+    const schematic = await store.getSchematicProjection(designId);
+    const overrides = await store.listBomOverrides(designId);
+    return textResponse(
+      buildBomCsv(pcb, schematic, overrides),
+      "text/csv; charset=utf-8",
+      `openpcb-${designId}-BOM.csv`,
+    );
+  });
+
+  router.get("/designs/:designId/exports/bom.tsv", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    const bom = await store.getBomProjection(designId);
+    if (!bom) throw new NotFoundError(`Design '${designId}' not found`);
+    return textResponse(
+      buildBomTsv(bom.rows),
+      "text/tab-separated-values; charset=utf-8",
+      `openpcb-${designId}-BOM.tsv`,
+    );
+  });
+
+  router.get("/designs/:designId/exports/bom-jlc.csv", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    const bom = await store.getBomProjection(designId);
+    if (!bom) throw new NotFoundError(`Design '${designId}' not found`);
+    return textResponse(
+      buildJlcBomCsv(bom.rows),
+      "text/csv; charset=utf-8",
+      `openpcb-${designId}-JLC-BOM.csv`,
+    );
+  });
+
+  router.get("/designs/:designId/exports/kicad-bom.csv", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    const bom = await store.getBomProjection(designId);
+    if (!bom) throw new NotFoundError(`Design '${designId}' not found`);
+    return textResponse(
+      buildKicadBomCsv(bom.rows),
+      "text/csv; charset=utf-8",
+      `openpcb-${designId}-KiCad-BOM.csv`,
+    );
+  });
+
+  router.get("/designs/:designId/exports/pnp.csv", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    const pcb = await store.getPcbProjection(designId);
+    if (!pcb) throw new NotFoundError(`Design '${designId}' not found`);
+    const schematic = await store.getSchematicProjection(designId);
+    return textResponse(
+      buildPnpCsv(pcb, schematic),
+      "text/csv; charset=utf-8",
+      `openpcb-${designId}-PnP.csv`,
+    );
+  });
+
   router.post(
     "/designs/:designId/exports/gerber",
     async ({ params, req, query }) => {
@@ -1661,13 +1818,14 @@ export function registerRoutes(
       const pcb = await store.getPcbProjection(designId);
       if (!pcb) throw new NotFoundError(`Design '${designId}' not found`);
       const schematic = await store.getSchematicProjection(designId);
+      const overrides = await store.listBomOverrides(designId);
 
       const rawBody = req.headers.get("content-length")
         ? await parseJsonBody<unknown>(req).catch(() => ({}))
         : {};
       const options = parseExportOptions(rawBody);
 
-      const bundle = buildExportBundle(pcb, schematic, options);
+      const bundle = buildExportBundle(pcb, schematic, options, overrides);
 
       // `?format=zip` returns ZIP bytes; default returns JSON manifest so
       // E2E + frontend can inspect contents without re-parsing the archive.

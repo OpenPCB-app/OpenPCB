@@ -1,5 +1,8 @@
 import type {
   DesignerCommandEnvelope,
+  BomOverride,
+  BomOverridePatch,
+  BomProjection,
   DesignerDesignSummary,
   DesignerDispatchResult,
   DesignerHistoryActionResult,
@@ -32,6 +35,17 @@ function buildModuleUrl(
 function clientBundleName(designId: string): string {
   const safe = designId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 32);
   return `openpcb-${safe}`;
+}
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 interface ProblemDetails {
@@ -158,6 +172,36 @@ export function createDesignerApi(params: {
         ),
       );
       return data.projection;
+    },
+
+    async getBom(designId: string): Promise<BomProjection> {
+      const data = await fetchData<{ bom: BomProjection }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/bom`,
+        ),
+      );
+      return data.bom;
+    },
+
+    async updateBomOverride(
+      designId: string,
+      refdes: string,
+      patch: BomOverridePatch,
+    ): Promise<{ override: BomOverride; bom: BomProjection | null }> {
+      return fetchData<{ override: BomOverride; bom: BomProjection | null }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/bom/refs/${encodeURIComponent(refdes)}`,
+        ),
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(patch),
+        },
+      );
     },
 
     async searchComponents(
@@ -409,6 +453,29 @@ export function createDesignerApi(params: {
       );
       const blob = await res.blob();
       return { bundleName, warnings, blob };
+    },
+
+    async downloadBomArtifact(
+      designId: string,
+      kind: "csv" | "tsv" | "jlc" | "kicad" | "pnp",
+    ): Promise<void> {
+      const pathByKind = {
+        csv: "bom.csv",
+        tsv: "bom.tsv",
+        jlc: "bom-jlc.csv",
+        kicad: "kicad-bom.csv",
+        pnp: "pnp.csv",
+      } satisfies Record<typeof kind, string>;
+      const extension = kind === "tsv" ? "tsv" : "csv";
+      const res = await fetch(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/exports/${pathByKind[kind]}`,
+        ),
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      downloadBlob(await res.blob(), `${clientBundleName(designId)}-${kind}.${extension}`);
     },
   };
 }

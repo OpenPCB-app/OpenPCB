@@ -181,6 +181,10 @@ interface PcbCanvasProps {
   onDrcCountChange?: (count: number) => void;
   boardPanelTarget?: HTMLElement | null;
   layersPanelTarget?: HTMLElement | null;
+  selectionRequest?: {
+    placementIds: readonly string[];
+    nonce: number;
+  } | null;
   initialViewport?: ViewportState | null;
   onViewportChange?: (zoom: number, posX: number, posY: number) => void;
 }
@@ -300,6 +304,16 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   tracesRef.current = workspace.projection?.traces ?? [];
   const viasRef = useRef(workspace.projection?.vias ?? []);
   viasRef.current = workspace.projection?.vias ?? [];
+
+  useEffect(() => {
+    const request = props.selectionRequest;
+    if (!request) return;
+    setToolMode("select");
+    setSelection({
+      ...emptyPcbSelection(),
+      placementIds: new Set(request.placementIds),
+    });
+  }, [props.selectionRequest]);
   const freeHolesRef = useRef(workspace.projection?.freeHoles ?? []);
   freeHolesRef.current = workspace.projection?.freeHoles ?? [];
   const freePadsRef = useRef(workspace.projection?.freePads ?? []);

@@ -51,9 +51,7 @@ export function DesignerSidebar({
   }
 
   if (activeView !== "schem") {
-    return (
-      <aside className="flex h-full min-h-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950" />
-    );
+    return <aside className="flex h-full min-h-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950" />;
   }
 
   return (

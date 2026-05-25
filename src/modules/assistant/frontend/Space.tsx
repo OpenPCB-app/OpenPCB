@@ -99,6 +99,9 @@ export function AssistantSpace({
     useState<AssistantPromptPresetId>("strict-grounded");
   const [input, setInput] = useState("");
   const [query, setQuery] = useState("");
+  const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [loading, setLoading] = useState(false);
   const [activeRunsByChat, setActiveRunsByChat] = useState<Record<string, ActiveRunState>>({});
   const [messagesPage, setMessagesPage] = useState({
@@ -496,6 +499,8 @@ export function AssistantSpace({
   const deleteChat = useCallback(
     async (chatId: string) => {
       if (!base) return;
+      const chat = chats.find((entry) => entry.id === chatId);
+      if (!window.confirm(`Delete "${chat?.title ?? "chat"}"?`)) return;
       await api<{ ok: true }>(`${base}/chats/${chatId}`, { method: "DELETE" });
       setContextMenu(null);
       await refreshChats();
@@ -505,7 +510,47 @@ export function AssistantSpace({
         setWriteProposals([]);
       }
     },
-    [base, refreshChats, selectedChatId],
+    [base, chats, refreshChats, selectedChatId],
+  );
+
+  const deleteSelectedChats = useCallback(async () => {
+    if (!base || selectedChatIds.size === 0) return;
+    const chatIds = [...selectedChatIds];
+    if (!window.confirm(`Delete ${chatIds.length} selected chat${chatIds.length === 1 ? "" : "s"}?`)) return;
+    await api<{ ok: true; deleted: number }>(`${base}/chats/bulk-delete`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ chatIds }),
+    });
+    setContextMenu(null);
+    setSelectedChatIds(new Set());
+    await refreshChats();
+    if (selectedChatId && selectedChatIds.has(selectedChatId)) {
+      setMessages([]);
+      setToolEvents([]);
+      setWriteProposals([]);
+    }
+  }, [base, refreshChats, selectedChatId, selectedChatIds]);
+
+  const renameChat = useCallback(
+    async (chatId: string) => {
+      if (!base) return;
+      const chat = chats.find((entry) => entry.id === chatId);
+      const title = window.prompt("Rename chat", chat?.title ?? "");
+      if (title === null) return;
+      const normalized = title.trim();
+      if (!normalized) return;
+      const updated = await api<AssistantChat>(`${base}/chats/${chatId}`, {
+        method: "PATCH",
+        headers: headers(),
+        body: JSON.stringify({ title: normalized }),
+      });
+      setContextMenu(null);
+      setChats((prev) =>
+        prev.map((entry) => (entry.id === updated.id ? updated : entry)),
+      );
+    },
+    [base, chats],
   );
 
   const ensureActiveChat = useCallback(async (): Promise<string> => {
@@ -637,14 +682,37 @@ export function AssistantSpace({
               className="min-w-0 flex-1 bg-transparent outline-none"
             />
           </div>
+          {selectedChatIds.size > 0 ? (
+            <div className="mt-3 flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300">
+              <span>{selectedChatIds.size} selected</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedChatIds(new Set())}
+                  className="text-slate-400 hover:text-slate-100"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void deleteSelectedChats().catch((err: unknown) =>
+                      setError(err instanceof Error ? err.message : String(err)),
+                    )
+                  }
+                  className="rounded bg-red-950/60 px-2 py-1 font-semibold text-red-200 hover:bg-red-900/70"
+                >
+                  Delete selected
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="min-h-0 flex-1 space-y-1 overflow-auto p-3">
           {filteredChats.map((chat) => (
-            <button
+            <div
               key={chat.id}
-              type="button"
-              onClick={() => setSelectedChatId(chat.id)}
-              onContextMenu={(event: MouseEvent<HTMLButtonElement>) => {
+              onContextMenu={(event: MouseEvent<HTMLDivElement>) => {
                 event.preventDefault();
                 setContextMenu({
                   chatId: chat.id,
@@ -659,16 +727,52 @@ export function AssistantSpace({
               }`}
             >
               <div className="flex w-full items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selectedChatIds.has(chat.id)}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setSelectedChatIds((current) => {
+                      const next = new Set(current);
+                      if (checked) next.add(chat.id);
+                      else next.delete(chat.id);
+                      return next;
+                    });
+                  }}
+                  onClick={(event) => event.stopPropagation()}
+                  className="h-3.5 w-3.5 shrink-0 rounded border-slate-600 bg-slate-950"
+                  aria-label={`Select ${chat.title}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setSelectedChatId(chat.id)}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                >
                   {activeRunsByChat[chat.id] ? (
                     <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-violet-400" />
                   ) : null}
                   <div className="truncate text-sm font-medium">{chat.title}</div>
-                </div>
-                <MoreHorizontal className="h-4 w-4 shrink-0 text-slate-600 opacity-0 transition-opacity group-hover:opacity-100" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setContextMenu({ chatId: chat.id, x: event.clientX, y: event.clientY });
+                  }}
+                  className="rounded p-1 text-slate-600 opacity-0 transition-opacity hover:bg-slate-700 hover:text-slate-200 group-hover:opacity-100"
+                  aria-label={`Chat actions for ${chat.title}`}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
               </div>
-              <div className="truncate text-xs opacity-60">{chat.model}</div>
-            </button>
+              <button
+                type="button"
+                onClick={() => setSelectedChatId(chat.id)}
+                className="truncate text-left text-xs opacity-60"
+              >
+                {chat.model}
+              </button>
+            </div>
           ))}
           {filteredChats.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-800 p-4 text-center text-sm text-slate-500">
@@ -874,6 +978,17 @@ export function AssistantSpace({
           className="fixed z-50 rounded-xl border border-slate-700 bg-slate-900 p-1 shadow-xl"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
+          <button
+            type="button"
+            onClick={() =>
+              void renameChat(contextMenu.chatId).catch((err: unknown) =>
+                setError(err instanceof Error ? err.message : String(err)),
+              )
+            }
+            className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-800"
+          >
+            Rename chat
+          </button>
           <button
             type="button"
             onClick={() =>

@@ -367,6 +367,36 @@ export function DesignerChatDock({
     updateRun(run.chatId, { status: "cancelled", currentStage: "Assistant task cancelled." });
   }, [tasksBase, updateRun]);
 
+  const renameChat = useCallback(async (chatId: string) => {
+    if (!assistantBase) return;
+    const chat = chats.find((entry) => entry.id === chatId);
+    const title = window.prompt("Rename chat", chat?.title ?? "");
+    if (title === null) return;
+    const normalized = title.trim();
+    if (!normalized) return;
+    const updated = await api<AssistantChat>(`${assistantBase}/chats/${chatId}`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify({ title: normalized }),
+    });
+    setChats((prev) => prev.map((entry) => entry.id === updated.id ? updated : entry));
+  }, [assistantBase, chats]);
+
+  const deleteChat = useCallback(async (chatId: string) => {
+    if (!assistantBase) return;
+    const chat = chats.find((entry) => entry.id === chatId);
+    if (!window.confirm(`Delete "${chat?.title ?? "chat"}"?`)) return;
+    await api<{ ok: true }>(`${assistantBase}/chats/${chatId}`, { method: "DELETE" });
+    if (selectedChatId === chatId) {
+      setMessages([]);
+      setToolEvents([]);
+      setWriteProposals([]);
+      setSelectedChatId(null);
+      activeChatIdRef.current = null;
+    }
+    await refreshDesignChats();
+  }, [assistantBase, chats, refreshDesignChats, selectedChatId]);
+
   if (!designId) {
     return <EmptyDock onClose={onClose} message="Open or create a design to use Designer Chat." />;
   }
@@ -390,7 +420,7 @@ export function DesignerChatDock({
               <span className="truncate">{chats.find((chat) => chat.id === selectedChatId)?.title ?? "No chat yet"}</span>
               <MoreHorizontal className="h-3.5 w-3.5 shrink-0" />
             </button>
-            {menuOpen ? <ThreadMenu chats={chats} selectedChatId={selectedChatId} onSelect={(id) => { setSelectedChatId(id); setMenuOpen(false); }} onNew={() => void createDesignChat().finally(() => setMenuOpen(false))} /> : null}
+            {menuOpen ? <ThreadMenu chats={chats} selectedChatId={selectedChatId} onSelect={(id) => { setSelectedChatId(id); setMenuOpen(false); }} onNew={() => void createDesignChat().finally(() => setMenuOpen(false))} onRename={(id) => void renameChat(id).catch((err: unknown) => setError(err instanceof Error ? err.message : String(err))).finally(() => setMenuOpen(false))} onDelete={(id) => void deleteChat(id).catch((err: unknown) => setError(err instanceof Error ? err.message : String(err))).finally(() => setMenuOpen(false))} /> : null}
           </div>
           <button type="button" onClick={() => void createDesignChat()} className="rounded border border-slate-200 p-1.5 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900" title="New design chat"><MessageSquarePlus className="h-4 w-4" /></button>
         </div>
@@ -441,11 +471,11 @@ function EmptyDock({ onClose, message }: { onClose(): void; message: string }): 
   );
 }
 
-function ThreadMenu({ chats, selectedChatId, onSelect, onNew }: { chats: AssistantChat[]; selectedChatId: string | null; onSelect(id: string): void; onNew(): void; }): ReactElement {
+function ThreadMenu({ chats, selectedChatId, onSelect, onNew, onRename, onDelete }: { chats: AssistantChat[]; selectedChatId: string | null; onSelect(id: string): void; onNew(): void; onRename(id: string): void; onDelete(id: string): void; }): ReactElement {
   return (
     <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-auto rounded border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-800 dark:bg-slate-950">
       <button type="button" onClick={onNew} className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-900">New chat for this design</button>
-      {chats.map((chat) => <button key={chat.id} type="button" onClick={() => onSelect(chat.id)} className={`w-full rounded px-2 py-1.5 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-900 ${chat.id === selectedChatId ? "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-200" : ""}`}><div className="truncate">{chat.title}</div><div className="truncate text-[10px] text-slate-500">{chat.model}</div></button>)}
+      {chats.map((chat) => <div key={chat.id} className={`rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-900 ${chat.id === selectedChatId ? "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-200" : ""}`}><button type="button" onClick={() => onSelect(chat.id)} className="w-full text-left"><div className="truncate">{chat.title}</div><div className="truncate text-[10px] text-slate-500">{chat.model}</div></button><div className="mt-1 flex gap-2 text-[10px]"><button type="button" onClick={() => onRename(chat.id)} className="text-slate-500 hover:text-violet-600">Rename</button><button type="button" onClick={() => onDelete(chat.id)} className="text-red-500 hover:text-red-600">Delete</button></div></div>)}
     </div>
   );
 }

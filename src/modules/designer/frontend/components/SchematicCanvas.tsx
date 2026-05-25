@@ -158,6 +158,10 @@ interface SchematicCanvasProps {
   selectedPartId: string | null;
   selectedPinId: string | null;
   selectedLabelId: string | null;
+  selectionRequest?: {
+    partIds: readonly string[];
+    nonce: number;
+  } | null;
   wireSourcePinId: string | null;
   labelDraftText: string;
   gridVisible: boolean;
@@ -449,6 +453,14 @@ function firstSelectedId(set: Set<string>): string | null {
   return null;
 }
 
+function sameStringSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const value of a) {
+    if (!b.has(value)) return false;
+  }
+  return true;
+}
+
 /**
  * Schematic wire stroke width in mm. Rendered with LineSegments2 +
  * LineMaterial in world-units mode so it stays a true 0.05 mm at every zoom
@@ -732,6 +744,7 @@ export const SchematicCanvas = forwardRef<
   const cameraRef = useRef<OrthographicCamera | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const lastAutoFittedDesignIdRef = useRef<string | null>(null);
+  const markCameraReady = useCallback(() => setCameraReady(true), []);
 
   useEffect(() => {
     actions.setSelectedPartId(firstSelectedId(selection.partIds));
@@ -741,6 +754,29 @@ export const SchematicCanvas = forwardRef<
     actions.setSelectedPinId(pinId);
     actions.setWireSourcePinId(pinId);
   }, [actions, selection, wireSession]);
+
+  useEffect(() => {
+    const request = props.selectionRequest;
+    if (!request) return;
+    setSelection((current) => {
+      const nextPartIds = new Set(request.partIds);
+      if (
+        sameStringSet(current.partIds, nextPartIds) &&
+        current.wireIds.size === 0 &&
+        current.labelIds.size === 0 &&
+        current.primitiveIds.size === 0
+      ) {
+        return current;
+      }
+      return {
+        partIds: nextPartIds,
+        wireIds: new Set<string>(),
+        labelIds: new Set<string>(),
+        primitiveIds: new Set<string>(),
+      };
+    });
+    setWireSession(null);
+  }, [props.selectionRequest]);
 
   useEffect(() => {
     if (!projection) {
@@ -2441,7 +2477,7 @@ export const SchematicCanvas = forwardRef<
         <CameraRefBridge
           cameraRef={cameraRef}
           onZoomChange={onZoomChange}
-          onReady={() => setCameraReady(true)}
+          onReady={markCameraReady}
         />
         <ZoomReporter onZoomChange={onZoomChange} />
         {onViewportChange && (

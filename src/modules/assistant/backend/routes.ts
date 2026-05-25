@@ -35,6 +35,28 @@ function requireChat(id: string): void {
     throw new NotFoundError(`Chat not found: ${id}`);
 }
 
+function normalizeChatTitle(title: unknown): string {
+  if (typeof title !== "string") throw new ValidationError("Chat title is required");
+  const normalized = title.trim();
+  if (!normalized) throw new ValidationError("Chat title is required");
+  if (normalized.length > 160)
+    throw new ValidationError("Chat title must be 160 characters or fewer");
+  return normalized;
+}
+
+function normalizeChatIds(chatIds: unknown): string[] {
+  if (!Array.isArray(chatIds)) throw new ValidationError("Chat ids are required");
+  const ids = chatIds
+    .filter((id): id is string => typeof id === "string")
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0 && id !== "undefined" && id !== "null");
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) throw new ValidationError("At least one chat id is required");
+  if (unique.length > 100)
+    throw new ValidationError("Cannot delete more than 100 chats at once");
+  return unique;
+}
+
 function parseLimit(raw: string | null, fallback = 50): number {
   const n = raw ? Number(raw) : fallback;
   if (!Number.isFinite(n)) return fallback;
@@ -78,13 +100,32 @@ export function registerRoutes(
       201,
     ),
   );
+  router.post("/chats/bulk-delete", async (ctx) => {
+    const input = await body<{ chatIds?: unknown }>(ctx.req);
+    const ids = normalizeChatIds(input.chatIds);
+    for (const id of ids) requireChat(id);
+    for (const id of ids) getAssistantService().conversation.deleteChat(id);
+    return json({ ok: true, deleted: ids.length });
+  });
   router.get("/chats/:id", (ctx) => {
     const chat = getAssistantService().conversation.getChat(chatId(ctx));
     if (!chat) throw new NotFoundError("Chat not found");
     return json(chat);
   });
+  router.patch("/chats/:id", async (ctx) => {
+    const id = chatId(ctx);
+    requireChat(id);
+    const input = await body<{ title?: unknown }>(ctx.req);
+    return json(
+      getAssistantService().conversation.updateChat(id, {
+        title: normalizeChatTitle(input.title),
+      }),
+    );
+  });
   router.delete("/chats/:id", (ctx) => {
-    getAssistantService().conversation.deleteChat(chatId(ctx));
+    const id = chatId(ctx);
+    requireChat(id);
+    getAssistantService().conversation.deleteChat(id);
     return json({ ok: true });
   });
   router.get("/chats/:id/messages", (ctx) => {

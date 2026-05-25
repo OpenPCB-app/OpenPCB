@@ -143,6 +143,12 @@ export type {
   GerberExportRequest,
   GerberExportResult,
   BomRow,
+  BomLine,
+  BomLineRef,
+  BomOverride,
+  BomOverridePatch,
+  BomProjection,
+  BomSummary,
   CentroidRow,
 } from "./types";
 export type { DesignerInvalidatedEvent } from "./events";

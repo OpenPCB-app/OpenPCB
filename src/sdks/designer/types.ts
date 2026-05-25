@@ -1406,6 +1406,78 @@ export interface BomRow {
   manufacturerPartNumber?: string | null;
 }
 
+export interface BomOverride {
+  designId: string;
+  refdes: string;
+  manufacturer: string | null;
+  manufacturerPartNumber: string | null;
+  lcscPartNumber: string | null;
+  supplier: string | null;
+  unitPrice: number | null;
+  currency: string | null;
+  dnp: boolean;
+  assemblySide: "top" | "bottom" | null;
+  notes: string | null;
+  updatedAt: string;
+}
+
+export interface BomLineRef {
+  refdes: string;
+  partId: string | null;
+  placementId: string | null;
+  pcbLayer: "top" | "bottom" | null;
+  dnp: boolean;
+}
+
+export interface BomLine {
+  id: string;
+  refs: BomLineRef[];
+  refdesList: string;
+  value: string;
+  footprint: string;
+  quantity: number;
+  manufacturer: string | null;
+  manufacturerPartNumber: string | null;
+  lcscPartNumber: string | null;
+  supplier: string | null;
+  unitPrice: number | null;
+  currency: string | null;
+  dnp: boolean;
+  assemblySide: "top" | "bottom" | "mixed" | null;
+  notes: string | null;
+  warnings: string[];
+}
+
+export interface BomSummary {
+  lineCount: number;
+  partCount: number;
+  activePartCount: number;
+  dnpPartCount: number;
+  missingRequiredCount: number;
+  estimatedCost: number | null;
+  currency: string | null;
+}
+
+export interface BomProjection {
+  designId: string;
+  revision: number;
+  rows: BomLine[];
+  summary: BomSummary;
+  warnings: string[];
+}
+
+export interface BomOverridePatch {
+  manufacturer?: string | null;
+  manufacturerPartNumber?: string | null;
+  lcscPartNumber?: string | null;
+  supplier?: string | null;
+  unitPrice?: number | null;
+  currency?: string | null;
+  dnp?: boolean;
+  assemblySide?: "top" | "bottom" | null;
+  notes?: string | null;
+}
+
 export interface CentroidRow {
   refdes: string;
   value: string;

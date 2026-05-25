@@ -202,6 +202,90 @@ describe("assistant module", () => {
     expect(chats.length).toBeGreaterThanOrEqual(1);
   });
 
+  test("renames chat", async () => {
+    const { server } = await bootAssistantWorkspace();
+    const chatResponse = await server.fetch(
+      new Request("http://localhost/api/modules/assistant/chats", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Before" }),
+      }),
+    );
+    const chat = (await chatResponse.json()) as { id: string };
+
+    const response = await server.fetch(
+      new Request(`http://localhost/api/modules/assistant/chats/${chat.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "After" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const updated = (await response.json()) as { title: string };
+    expect(updated.title).toBe("After");
+  });
+
+  test("deletes chat", async () => {
+    const { server } = await bootAssistantWorkspace();
+    const chatResponse = await server.fetch(
+      new Request("http://localhost/api/modules/assistant/chats", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Delete me" }),
+      }),
+    );
+    const chat = (await chatResponse.json()) as { id: string };
+
+    const response = await server.fetch(
+      new Request(`http://localhost/api/modules/assistant/chats/${chat.id}`, {
+        method: "DELETE",
+      }),
+    );
+    const fetchDeleted = await server.fetch(
+      new Request(`http://localhost/api/modules/assistant/chats/${chat.id}`),
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchDeleted.status).toBe(404);
+  });
+
+  test("bulk deletes chats", async () => {
+    const { server } = await bootAssistantWorkspace();
+    const create = async (title: string): Promise<{ id: string }> => {
+      const response = await server.fetch(
+        new Request("http://localhost/api/modules/assistant/chats", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title }),
+        }),
+      );
+      return (await response.json()) as { id: string };
+    };
+    const first = await create("Bulk A");
+    const second = await create("Bulk B");
+
+    const response = await server.fetch(
+      new Request("http://localhost/api/modules/assistant/chats/bulk-delete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chatIds: [first.id, second.id] }),
+      }),
+    );
+    const result = (await response.json()) as { deleted: number };
+    const firstDeleted = await server.fetch(
+      new Request(`http://localhost/api/modules/assistant/chats/${first.id}`),
+    );
+    const secondDeleted = await server.fetch(
+      new Request(`http://localhost/api/modules/assistant/chats/${second.id}`),
+    );
+
+    expect(response.status).toBe(200);
+    expect(result.deleted).toBe(2);
+    expect(firstDeleted.status).toBe(404);
+    expect(secondDeleted.status).toBe(404);
+  });
+
   test("submit message creates user message and assistant placeholder", async () => {
     const { server } = await bootAssistantWorkspace();
 

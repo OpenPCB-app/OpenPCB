@@ -11,6 +11,9 @@ import {
 } from "../../../shared/domain/commands";
 import {
   type DesignerCommand,
+  type BomOverride,
+  type BomOverridePatch,
+  type BomProjection,
   type DesignerCommandEnvelope,
   type DesignerDesignRecord,
   type DesignerDesignSummary,
@@ -36,6 +39,7 @@ import {
 import {
   commandLog,
   designHeads,
+  bomOverrides,
   schematicLabels,
   schematicParts,
   schematicPins,
@@ -85,6 +89,8 @@ import {
   toDesignRecordFromProjection,
 } from "./projection-read";
 import { conflict, parseDispatchResultJson } from "./results";
+import { listBomOverrides, upsertBomOverride } from "./bom-overrides";
+import { buildBomProjection } from "./export/bom/writer";
 
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
@@ -117,6 +123,13 @@ export interface DesignerStore {
     designId: string,
   ): Promise<DesignerSchematicProjection | null>;
   getPcbProjection(designId: string): Promise<DesignerPcbProjection | null>;
+  getBomProjection(designId: string): Promise<BomProjection | null>;
+  listBomOverrides(designId: string): Promise<BomOverride[]>;
+  updateBomOverride(
+    designId: string,
+    refdes: string,
+    patch: BomOverridePatch,
+  ): Promise<BomOverride | null>;
   searchLibraryComponents(
     params: DesignerSearchLibraryParams,
   ): Promise<LibraryComponent[]>;
@@ -357,6 +370,7 @@ export function createDesignerStore(
       db.delete(sessionHistoryRows)
         .where(eq(sessionHistoryRows.designId, designId))
         .run();
+      db.delete(bomOverrides).where(eq(bomOverrides.designId, designId)).run();
       db.delete(designHeads).where(eq(designHeads.id, designId)).run();
     },
 
@@ -377,6 +391,37 @@ export function createDesignerStore(
         revision: head.revision,
         timestamp: nowIso(),
       });
+    },
+
+    async getBomProjection(designId) {
+      const schematic = loadSchematicProjection(db, designId);
+      const head = db
+        .select()
+        .from(designHeads)
+        .where(eq(designHeads.id, designId))
+        .get();
+      if (!head) return null;
+      const pcb = loadPcbProjection({
+        db,
+        designId,
+        revision: head.revision,
+        timestamp: nowIso(),
+      });
+      return buildBomProjection(pcb, schematic, listBomOverrides(db, designId));
+    },
+
+    async listBomOverrides(designId) {
+      return listBomOverrides(db, designId);
+    },
+
+    async updateBomOverride(designId, refdes, patch) {
+      const head = db
+        .select()
+        .from(designHeads)
+        .where(eq(designHeads.id, designId))
+        .get();
+      if (!head) return null;
+      return upsertBomOverride(db, designId, refdes, patch, nowIso());
     },
 
     async searchLibraryComponents(params) {

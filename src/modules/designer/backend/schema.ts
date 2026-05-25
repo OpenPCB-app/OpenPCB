@@ -213,3 +213,32 @@ export const cloudLink = sqliteTable("designer_cloud_link", {
   failedAttempts: integer("failed_attempts").notNull().default(0),
   lastError: text("last_error"),
 });
+
+export const bomOverrides = sqliteTable(
+  "designer_bom_overrides",
+  {
+    id: text("id").primaryKey(),
+    designId: text("design_id").notNull(),
+    refdes: text("refdes").notNull(),
+    manufacturer: text("manufacturer"),
+    manufacturerPartNumber: text("manufacturer_part_number"),
+    lcscPartNumber: text("lcsc_part_number"),
+    supplier: text("supplier"),
+    unitPriceMicros: integer("unit_price_micros"),
+    currency: text("currency"),
+    dnp: integer("dnp").notNull().default(0),
+    assemblySide: text("assembly_side"),
+    notes: text("notes"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => ({
+    designRefUq: uniqueIndex("designer_bom_overrides_design_ref_uq").on(
+      table.designId,
+      table.refdes,
+    ),
+    designIdIdx: index("designer_bom_overrides_design_id_idx").on(
+      table.designId,
+    ),
+  }),
+);
