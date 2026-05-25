@@ -199,6 +199,14 @@ export function LibrarySpace({
     // Only react to route changes that target this module.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navRoute, moduleId]);
+
+  useEffect(() => {
+    const onLibraryUpdated = () => setRefreshTick((value) => value + 1);
+    window.addEventListener("openpcb:library-updated", onLibraryUpdated);
+    return () =>
+      window.removeEventListener("openpcb:library-updated", onLibraryUpdated);
+  }, []);
+
   const [detailModelRefreshToken, setDetailModelRefreshToken] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);

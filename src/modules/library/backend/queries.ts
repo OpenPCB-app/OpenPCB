@@ -1804,12 +1804,18 @@ export function listSourcesWithReleases(
   const counts = db
     .select({
       sourceId: components.sourceId,
+      isBuiltin: components.isBuiltin,
       count: sql<number>`count(*)`,
     })
     .from(components)
-    .groupBy(components.sourceId)
+    .groupBy(components.sourceId, components.isBuiltin)
     .all();
-  const countBySource = new Map(counts.map((r) => [r.sourceId ?? "", r.count]));
+  const countBySource = new Map<string, number>();
+  for (const row of counts) {
+    const sourceId =
+      row.sourceId ?? (row.isBuiltin === 1 ? "openpcb.core" : "user.local");
+    countBySource.set(sourceId, (countBySource.get(sourceId) ?? 0) + row.count);
+  }
 
   const releasesBySource = new Map<string, typeof releaseRows>();
   for (const r of releaseRows) {

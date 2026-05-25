@@ -303,6 +303,7 @@ export function commitDrawnImport(
         name: symbolSource.name,
         dataJson: symbolDataJson,
         createdAt: now,
+        sourceId: "user.local",
       })
       .run();
 
@@ -313,6 +314,7 @@ export function commitDrawnImport(
         name: footprintName,
         dataJson: footprintDataJson,
         createdAt: now,
+        sourceId: "user.local",
       })
       .run();
 
@@ -329,6 +331,7 @@ export function commitDrawnImport(
         footprintId,
         tagsJson: JSON.stringify(tags),
         createdAt: now,
+        sourceId: "user.local",
       })
       .run();
 

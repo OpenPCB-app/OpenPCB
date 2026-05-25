@@ -183,6 +183,7 @@ export function commitGeneratedImport(
         name: selectedSymbol.name,
         dataJson: symbolDataJson,
         createdAt: now,
+        sourceId: "user.local",
       })
       .run();
 
@@ -193,6 +194,7 @@ export function commitGeneratedImport(
         name: fpMeta.name,
         dataJson: footprintDataJson,
         createdAt: now,
+        sourceId: "user.local",
       })
       .run();
 
@@ -209,6 +211,7 @@ export function commitGeneratedImport(
         footprintId,
         tagsJson: JSON.stringify(tags),
         createdAt: now,
+        sourceId: "user.local",
       })
       .run();
 

@@ -14,10 +14,19 @@ import {
 } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
+import { getDb } from "../../../modules/library/backend/queries";
+import { components } from "../../../modules/library/backend/schema";
 
 const tempRoots: string[] = [];
 
 async function bootHarness(label: string): Promise<RuntimeServer> {
+  const { server } = await bootHarnessWithRuntime(label);
+  return server;
+}
+
+async function bootHarnessWithRuntime(
+  label: string,
+): Promise<{ server: RuntimeServer; runtime: ModuleRuntime }> {
   resetSharedSqliteForTesting();
   const root = mkdtempSync(path.join(os.tmpdir(), `openpcb-${label}-`));
   tempRoots.push(root);
@@ -29,11 +38,14 @@ async function bootHarness(label: string): Promise<RuntimeServer> {
     workspaceRoot: path.resolve(import.meta.dir, "../../.."),
   });
   await moduleRuntime.bootstrap();
-  return createHttpServer({
+  return {
+    server: createHttpServer({
     diagnosticsStore: new DiagnosticsStore(),
     moduleRegistry,
     moduleRuntime,
-  });
+    }),
+    runtime: moduleRuntime,
+  };
 }
 
 afterEach(async () => {
@@ -158,6 +170,36 @@ describe("library sources routes", () => {
     const entry = body.data.sources.find((s) => s.id === "test.userlib");
     expect(entry).toBeDefined();
     expect(entry!.latestVersion).toBe("0.1.0");
+  });
+
+  test("GET /sources counts legacy local components with null source as user.local", async () => {
+    const { server, runtime } = await bootHarnessWithRuntime(
+      "sources-local-legacy-count",
+    );
+    const ctx = (runtime as unknown as { loaded: Map<string, { context: unknown }> })
+      .loaded.get("library")!.context as Parameters<typeof getDb>[0];
+    getDb(ctx)
+      .insert(components)
+      .values({
+        id: "legacy.local.component",
+        name: "Legacy Local Component",
+        description: "Legacy imported component without source id",
+        symbolId: "legacy.symbol",
+        footprintId: "legacy.footprint",
+        tagsJson: JSON.stringify(["user"]),
+        createdAt: new Date().toISOString(),
+        isBuiltin: 0,
+        sourceId: null,
+      })
+      .run();
+
+    const list = await server.fetch(new Request(`${URL_BASE}/sources`));
+    const body = (await list.json()) as {
+      data: { sources: Array<{ id: string; componentCount: number }> };
+    };
+    const local = body.data.sources.find((s) => s.id === "user.local");
+    expect(local).toBeDefined();
+    expect(local!.componentCount).toBe(1);
   });
 
   test("POST /sources/install rejects URL with disallowed host", async () => {

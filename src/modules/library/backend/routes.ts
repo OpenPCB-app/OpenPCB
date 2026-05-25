@@ -38,6 +38,11 @@ import {
   installOpclibFromUrl,
 } from "./sync/install-source";
 import {
+  checkCoreLibraryUpdates,
+  getCoreLibraryStatus,
+  updateCoreLibrary,
+} from "./sync/core-library-updates";
+import {
   deleteModel,
   modelAssetRelativePath,
   readGlb,
@@ -1201,6 +1206,21 @@ export function registerRoutes(
       status: "ready",
       componentCount: row?.count ?? 0,
     });
+  });
+
+  router.get("/core-library/status", async () => {
+    const status = await getCoreLibraryStatus(ctx);
+    return success({ status });
+  });
+
+  router.post("/core-library/check", async () => {
+    const result = await checkCoreLibraryUpdates(ctx);
+    return success({ result });
+  });
+
+  router.post("/core-library/update", async () => {
+    const result = await updateCoreLibrary(ctx);
+    return success({ result }, result.imported ? 201 : 200);
   });
 
   router.get("/components", async (routeCtx) => {

@@ -289,6 +289,7 @@ export function commitKicadImport(
           name: selectedSymbol.name,
           dataJson: symbolDataJson,
           createdAt: now,
+          sourceId: "user.local",
         })
         .run();
     }
@@ -301,6 +302,7 @@ export function commitKicadImport(
           name: selectedFootprint?.name ?? PLACEHOLDER_FOOTPRINT_NAME,
           dataJson: footprintDataJson,
           createdAt: now,
+          sourceId: "user.local",
         })
         .run();
     }
@@ -320,6 +322,7 @@ export function commitKicadImport(
         footprintId,
         tagsJson: JSON.stringify(tags),
         createdAt: now,
+        sourceId: "user.local",
       })
       .run();
 

@@ -24,6 +24,63 @@
 - [x] Reconcile stale core rows when a reimported `.opclib` removes components/symbols/footprints.
 - [x] Cover locator precedence, bootstrap switching, and stale cleanup with focused backend tests.
 
+## Active CoreLibrary Runtime Update Hardening
+
+Decisions:
+
+- Runtime update source: GitHub Releases for `OpenPCB-app/CoreLibrary`.
+- Default channel: stable releases only.
+- Signature policy: require trusted Ed25519 signatures in production/package builds; warn in dev/test.
+- UI surface: Settings → Libraries.
+- Stale core rows: remove only unreferenced stale rows; keep rows referenced by user data/designs.
+
+### Phase A — backend update/status service
+
+- [x] Add `src/modules/library/backend/sync/core-library-updates.ts`.
+- [x] Expose installed core release summary: version, channel, package SHA, signature status, component count, installedAt.
+- [x] Expose bundled package summary from `locateBundledOpclib()` without importing it.
+- [x] Add GitHub Releases client using `fetch` directly; do not depend on `gh` CLI at runtime.
+- [x] Filter default remote candidates to non-prerelease stable releases only.
+- [x] Download selected `.opclib` plus `SHA256SUMS`; verify SHA before import.
+- [~] Verify `.opclib` manifest integrity, `library.id === "openpcb.core"`, minimum component threshold, and trusted signature (signature required in production; compatibility gate pending).
+- [ ] Enforce `manifest.library.minOpenPcbVersion` when present.
+- [ ] Add routes:
+  - [x] `GET /api/modules/library/core-library/status`
+  - [x] `POST /api/modules/library/core-library/check`
+  - [x] `POST /api/modules/library/core-library/update`
+- [x] Return structured update state: `missing | up_to_date | bundled_update_available | remote_update_available | blocked | error` (implemented states currently exclude explicit `blocked`; update failures return problem details).
+
+### Phase B — import/security hardening
+
+- [ ] Replace ad-hoc semver compare in `sync/bootstrap.ts` and `sync/package-locator.ts` with prerelease-aware comparison.
+- [ ] Fix URL install redirect policy in `sync/install-source.ts`: use manual redirects or validate final redirected host against allowlist.
+- [ ] Prevent generic `/sources/install` from replacing `openpcb.core` unless package is trusted and caller opts into core replacement path.
+- [ ] Enforce stricter signature behavior: production official core update must be signed by committed trusted key; dev/test may warn.
+- [ ] Add source collision guard: reject packages that attempt to overwrite rows owned by another source unless it is an allowed core legacy alias migration.
+- [ ] Rework `reconcileSourceRows()` so stale core rows are deleted only when unreferenced by components/design placements; otherwise mark/retain.
+- [ ] Add preview SVG/model-store cleanup follow-up for unreferenced cache/files after safe source reconciliation.
+
+### Phase C — Settings UI
+
+- [x] Add Core Library card at top of `src/core/frontend/src/settings/panels/LibrariesPanel.tsx`.
+- [x] Show installed version, bundled/latest version, latest remote version after check, signature state, component count, and last check error.
+- [x] Add `Check for updates` button.
+- [x] Add `Download update` button when `remote_update_available`.
+- [x] Disable update button with clear reason when no remote update is available; backend surfaces unsigned/incompatible/untrusted failures.
+- [x] Refresh `/sources` after successful update.
+- [x] Dispatch/listen to a lightweight library-updated event so open Library space refreshes component list.
+
+### Phase D — tests / validation
+
+- [~] Backend: status route with no installed core, installed-only, bundled-only, bundled newer, remote newer (covered installed+bundled and bundled-newer; remaining cases pending).
+- [x] Backend: prerelease semver ordering and stable-only filtering.
+- [x] Backend: reject unsigned/untrusted prod core update; warn/allow in dev.
+- [ ] Backend: reject incompatible `minOpenPcbVersion`.
+- [ ] Backend: URL redirect allowlist regression.
+- [ ] Backend: stale core rows retained when referenced and removed when unreferenced.
+- [ ] Frontend: Libraries panel update states and button enable/disable behavior.
+- [ ] Run focused backend tests, frontend tests for panel, `npm run typecheck`, `npm run gen:check` if SDK/routes generated code changes.
+
 ## Active Electron Desktop Stabilization
 
 - [x] Diagnose module 404s in Desktop: Electron backend loaded `better-sqlite3` with Node ABI instead of Electron ABI.
