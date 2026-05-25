@@ -314,6 +314,12 @@ export function DesignerChatDock({
       scroll.captureBeforePrepend();
       void api<AssistantMessagesPage>(`${assistantBase}/chats/${selectedChatId}/messages?limit=50&before=${encodeURIComponent(messagesPage.oldestCursor)}`)
         .then((page) => {
+          const ids = page.items.map((message) => message.id);
+          if (ids.length > 0) {
+            void api<AssistantToolEventDto[]>(`${assistantBase}/chats/${selectedChatId}/tool-events?messageIds=${encodeURIComponent(ids.join(","))}`)
+              .then(mergeToolEvents)
+              .catch(() => undefined);
+          }
           setMessages((prev) => [...page.items, ...prev]);
           setMessagesPage({ oldestCursor: page.nextCursor, hasMore: page.hasMore, loadingOlder: false, initialLoadedChatId: selectedChatId });
         })
@@ -321,7 +327,7 @@ export function DesignerChatDock({
     }, { root, threshold: 1 });
     observer.observe(target);
     return () => observer.disconnect();
-  }, [assistantBase, messagesPage.hasMore, messagesPage.loadingOlder, messagesPage.oldestCursor, scroll, selectedChatId]);
+  }, [assistantBase, mergeToolEvents, messagesPage.hasMore, messagesPage.loadingOlder, messagesPage.oldestCursor, scroll, selectedChatId]);
 
   useLayoutEffect(() => {
     if (messagesPage.initialLoadedChatId === selectedChatId) scroll.restoreAfterPrepend();
@@ -399,9 +405,18 @@ export function DesignerChatDock({
         <div ref={topSentinelRef} className="h-px" />
         {messagesPage.loadingOlder ? <div className="p-2 text-center text-xs text-slate-500">Loading older messages…</div> : null}
         {error ? <div className="m-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">{error}</div> : null}
-        {messages.length === 0 ? <div className="p-4 text-sm text-slate-500">Ask about the active design, components, nets, ERC, or PCB layout.</div> : messages.filter((message) => message.role !== "tool" && message.metadata?.ai?.internal !== true).map((message) => (
-          <MessageCard key={message.id} message={message} toolEvents={toolEventsByMessage.get(message.id) ?? []} assistantBaseUrl={assistantBase} writeProposals={writeProposals} onProposalChanged={(change) => { if (selectedChatId) void refreshMessages(selectedChatId); onDesignChanged(change); }} runState={selectedRun?.assistantMessageId === message.id ? selectedRun : null} onStopRun={(run) => void stopRun(run).catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))} loading={loading && message.role === "assistant"} compact />
-        ))}
+        {messages.length === 0 ? <div className="p-4 text-sm text-slate-500">Ask about the active design, components, nets, ERC, or PCB layout.</div> : (() => {
+          const visible = messages.filter((message) => message.role !== "tool" && message.metadata?.ai?.internal !== true);
+          const lastAssistantIdx = (() => {
+            for (let i = visible.length - 1; i >= 0; i--) {
+              if (visible[i]!.role === "assistant") return i;
+            }
+            return -1;
+          })();
+          return visible.map((message, idx) => (
+            <MessageCard key={message.id} message={message} toolEvents={toolEventsByMessage.get(message.id) ?? []} assistantBaseUrl={assistantBase} writeProposals={writeProposals} onProposalChanged={(change) => { if (selectedChatId) void refreshMessages(selectedChatId); onDesignChanged(change); }} runState={selectedRun?.assistantMessageId === message.id ? selectedRun : null} onStopRun={(run) => void stopRun(run).catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))} loading={loading && idx === lastAssistantIdx && message.role === "assistant"} compact />
+          ));
+        })()}
       </div>
       <form onSubmit={(event) => void submit(event)} className="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800">
         <div className="relative rounded-xl border border-slate-300 bg-white focus-within:border-violet-500 dark:border-slate-700 dark:bg-slate-900">

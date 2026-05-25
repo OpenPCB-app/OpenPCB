@@ -235,6 +235,54 @@ describe("assistant module", () => {
     expect(result.assistantMessage.taskId).not.toBeNull();
   });
 
+  test("submit message keeps user before assistant when timestamps tie", async () => {
+    const { server } = await bootAssistantWorkspace();
+
+    const chatResponse = await server.fetch(
+      new Request("http://localhost/api/modules/assistant/chats", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+    const chat = (await chatResponse.json()) as { id: string };
+
+    const submitResponse = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/assistant/chats/${chat.id}/messages`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content: "same millisecond" }),
+        },
+      ),
+    );
+    const result = (await submitResponse.json()) as {
+      userMessage: { id: string };
+      assistantMessage: { id: string };
+    };
+
+    const tiedTimestamp = "2026-01-01T00:00:00.000Z";
+    getSharedSqlite()
+      .query("UPDATE assistant_message SET created_at=? WHERE id IN (?, ?)")
+      .run(tiedTimestamp, result.userMessage.id, result.assistantMessage.id);
+
+    const messagesResponse = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/assistant/chats/${chat.id}/messages`,
+      ),
+    );
+    const page = (await messagesResponse.json()) as {
+      items: Array<{ role: string; content: string }>;
+    };
+
+    expect(page.items.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(page.items[0]?.content).toBe("same millisecond");
+  });
+
   test("submit message rejects undefined chat id without 500", async () => {
     const { server } = await bootAssistantWorkspace();
 
@@ -280,8 +328,10 @@ describe("assistant module", () => {
     const store = getAssistantService().conversation;
     for (let i = 0; i < 6; i++) {
       store.createMessage({ chatId: chat.id, role: "user", content: `m${i}` });
-      await Bun.sleep(2);
     }
+    getSharedSqlite()
+      .query("UPDATE assistant_message SET created_at=? WHERE chat_id=?")
+      .run("2026-01-01T00:00:00.000Z", chat.id);
 
     const firstResponse = await server.fetch(
       new Request(

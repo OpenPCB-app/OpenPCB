@@ -19,6 +19,11 @@ const TOOL_INSTRUCTIONS = `
 - If no local library component matches after fallback, say so and optionally suggest generic unavailable parts or import guidance.
 - To browse the entire library, call \`library_search_components\` with no \`query\` (or empty).
 - Reply with plain markdown. Never wrap your response in <response>…</response>, HTML, or other envelopes; the UI renders raw markdown directly.
+- For diagrams, flows, quick references, state machines, or architecture sketches, prefer fenced Mermaid blocks (start the fence with \`\`\`mermaid) over ASCII art.
+- Mermaid must work with strict security: no HTML tags, <br/>, click directives, links, embedded CSS/JS, or custom scripts. Avoid comments and complex style lines.
+- For Mermaid flowcharts, prefer \`flowchart LR\`; use simple IDs like \`VCC\`, \`GND\`, \`R1\`, \`Q1_B\`; put display text in quoted labels like \`R1["R1 10k resistor"]\`; quote edge labels with punctuation.
+- For circuit wiring diagrams, represent power rails and shared nets as explicit nodes, keep labels short, and add a wiring table after the diagram when precise pin-to-pin detail matters.
+- Ensure every Mermaid block is syntactically complete. If unsure, use a simple wiring table instead of a fragile diagram.
 - When a tool returns component results, do NOT repeat them as a markdown table — the UI renders structured cards automatically. Reference items by name in prose.
 `.trim();
 

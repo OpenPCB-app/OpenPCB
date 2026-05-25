@@ -1,7 +1,6 @@
 import type { ReactElement } from "react";
 import { Bot, User } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownContent } from "../../../../shared/frontend/markdown";
 import type {
   AssistantMessage,
   AssistantToolEventDto,
@@ -170,6 +169,7 @@ export function MessageCard({
   const placementBlocks = isUser ? [] : extractPlacementProposals(toolEvents);
   const showWaitingDots = loading && !hasContent && toolEvents.length === 0;
   const showStreamingPulse = Boolean(runState) || (loading && (hasContent || toolEvents.length > 0));
+  const isStreaming = !isUser && (loading || Boolean(runState));
   return (
     <div
       className={`flex min-w-0 border-b ${
@@ -207,11 +207,12 @@ export function MessageCard({
               {cleanedContent}
             </div>
           ) : (
-            <div className={compact ? COMPACT_PROSE_CLASSES : PROSE_CLASSES}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {cleanedContent}
-              </ReactMarkdown>
-            </div>
+            <MarkdownContent
+              className={compact ? COMPACT_PROSE_CLASSES : PROSE_CLASSES}
+              streaming={isStreaming}
+            >
+              {cleanedContent}
+            </MarkdownContent>
           )
         ) : null}
         {componentBlocks.length > 0 ? (

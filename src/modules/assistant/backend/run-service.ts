@@ -382,13 +382,18 @@ function safeParseArray<T>(json: string): T[] | null {
 }
 
 function orderMessagesForProvider(messages: AssistantMessage[]): AssistantMessage[] {
-  return [...messages].sort((a, b) => {
-    if (a.taskId && a.taskId === b.taskId) {
-      const delta = providerTurnOrder(a) - providerTurnOrder(b);
-      if (delta !== 0) return delta;
-    }
-    return a.createdAt.localeCompare(b.createdAt);
-  });
+  return messages
+    .map((message, index) => ({ message, index }))
+    .sort((a, b) => {
+      const messageA = a.message;
+      const messageB = b.message;
+      if (messageA.taskId && messageA.taskId === messageB.taskId) {
+        const delta = providerTurnOrder(messageA) - providerTurnOrder(messageB);
+        if (delta !== 0) return delta;
+      }
+      return a.index - b.index;
+    })
+    .map(({ message }) => message);
 }
 
 function providerTurnOrder(message: {

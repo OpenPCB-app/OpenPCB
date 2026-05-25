@@ -193,17 +193,24 @@ function clampLimit(limit: number | undefined, fallback = 50): number {
 }
 
 function parseMessageCursor(cursor: string | null | undefined): {
-  createdAt: string;
+  messageIndex: number;
   id: string;
 } | null {
   if (!cursor) return null;
   const idx = cursor.lastIndexOf("|");
   if (idx <= 0 || idx >= cursor.length - 1) return null;
-  return { createdAt: cursor.slice(0, idx), id: cursor.slice(idx + 1) };
+  const messageIndex = Number(cursor.slice(0, idx));
+  if (!Number.isSafeInteger(messageIndex) || messageIndex < 0) return null;
+  return { messageIndex, id: cursor.slice(idx + 1) };
 }
 
-function messageCursor(message: AssistantMessage): string {
-  return `${message.createdAt}|${message.id}`;
+function messageIndex(row: Record<string, unknown>): number {
+  const value = Number(row.message_index);
+  return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+function messageCursor(row: Record<string, unknown>): string {
+  return `${messageIndex(row)}|${String(row.id)}`;
 }
 
 export class ConversationStore {
@@ -311,11 +318,11 @@ export class ConversationStore {
     const cursor = parseMessageCursor(options.before);
     const rows = cursor
       ? this.rawSql(
-          "SELECT * FROM assistant_message WHERE chat_id=? AND (created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT ?",
-          [chatId, cursor.createdAt, cursor.createdAt, cursor.id, limit + 1],
+          "SELECT * FROM assistant_message WHERE chat_id=? AND (message_index < ? OR (message_index = ? AND id < ?)) ORDER BY message_index DESC, id DESC LIMIT ?",
+          [chatId, cursor.messageIndex, cursor.messageIndex, cursor.id, limit + 1],
         )
       : this.rawSql(
-          "SELECT * FROM assistant_message WHERE chat_id=? ORDER BY created_at DESC, id DESC LIMIT ?",
+          "SELECT * FROM assistant_message WHERE chat_id=? ORDER BY message_index DESC, id DESC LIMIT ?",
           [chatId, limit + 1],
         );
     const hasMore = rows.length > limit;
@@ -324,7 +331,8 @@ export class ConversationStore {
     return {
       items,
       hasMore,
-      nextCursor: items.length > 0 && hasMore ? messageCursor(items[0]!) : null,
+      nextCursor:
+        pageRows.length > 0 && hasMore ? messageCursor(pageRows[0]!) : null,
     };
   }
 
@@ -339,7 +347,7 @@ export class ConversationStore {
     const timestamp = now();
     const messageId = id();
     this.rawSql(
-      "INSERT INTO assistant_message (id,chat_id,role,content,tool_call_id,tool_calls_json,tool_name,task_id,metadata,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO assistant_message (id,chat_id,role,content,tool_call_id,tool_calls_json,tool_name,task_id,metadata,created_at,updated_at,message_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(message_index), -1) + 1 FROM assistant_message WHERE chat_id=?))",
       [
         messageId,
         input.chatId,
@@ -352,6 +360,7 @@ export class ConversationStore {
         encode(input.metadata ?? null),
         timestamp,
         timestamp,
+        input.chatId,
       ],
     );
     this.rawSql(
