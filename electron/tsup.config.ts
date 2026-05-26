@@ -30,7 +30,7 @@ export default defineConfig([
     // bundled OTel/Sentry/electron-log CJS code run unchanged.
     format: "cjs",
     platform: "node",
-    target: "node22",
+    target: "node24",
     outDir: "dist",
     sourcemap: true,
     clean: true,
@@ -63,7 +63,7 @@ export default defineConfig([
     entry: { "preload/index": "src/preload/index.ts" },
     format: "cjs",
     platform: "node",
-    target: "node22",
+    target: "node24",
     outDir: "dist",
     sourcemap: true,
     clean: false,

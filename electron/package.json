@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsup",
     "build:watch": "tsup --watch",
+    "prestart": "node ../scripts/ensure-electron-native-deps.mjs",
     "start": "electron .",
     "package": "node ../scripts/ensure-electron-native-deps.mjs && npm run build && electron-builder --dir --config electron-builder.cjs",
     "make": "node ../scripts/ensure-electron-native-deps.mjs && npm run build && electron-builder --config electron-builder.cjs --publish never",

@@ -69,14 +69,13 @@ module.exports = {
     output: "out",
   },
 
-  // npm workspace hoisting: better-sqlite3 + transitive native deps live in
-  // the repo-root node_modules. Pull them into the package explicitly via
-  // `files` from/to entries. The native .node binary is asarUnpacked below.
+  // Native better-sqlite3 is rebuilt into electron/node_modules for Electron's
+  // Node ABI. Keep host/Bun's hoisted root build separate.
   files: [
     "dist/**/*",
     "package.json",
     {
-      from: "../node_modules/better-sqlite3",
+      from: "node_modules/better-sqlite3",
       to: "node_modules/better-sqlite3",
       filter: ["**/*"],
     },
