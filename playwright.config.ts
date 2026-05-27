@@ -31,7 +31,9 @@ function loadEnvFile(file: string): void {
 loadEnvFile(".env.e2e");
 loadEnvFile(".env");
 
-const ELECTRON_SPEC = /cloud-sync\.spec\.ts$/;
+const CLOUD_SYNC_ELECTRON_SPEC = /cloud-sync\.spec\.ts$/;
+const DESKTOP_ELECTRON_SPEC = /electron-desktop-smoke\.spec\.ts$/;
+const ELECTRON_SPECS = /(?:cloud-sync|electron-desktop-smoke)\.spec\.ts$/;
 
 export default defineConfig({
   testDir: "tests/e2e",
@@ -66,7 +68,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testIgnore: ELECTRON_SPEC,
+      testIgnore: ELECTRON_SPECS,
       use: { ...devices["Desktop Chrome"] },
     },
     {
@@ -75,7 +77,15 @@ export default defineConfig({
       // is incompatible with the chromium webServer. Run via:
       //   OPENPCB_E2E_NO_WEBSERVER=1 npx playwright test --project=electron
       name: "electron",
-      testMatch: ELECTRON_SPEC,
+      testMatch: CLOUD_SYNC_ELECTRON_SPEC,
+    },
+    {
+      // Packaged desktop app release smoke. Launches its own Electron-owned
+      // backend and is intended to run after electron-builder packaging via:
+      //   OPENPCB_E2E_NO_WEBSERVER=1 OPENPCB_ELECTRON_EXECUTABLE=/path/to/OpenPCB npm run test:e2e:electron
+      name: "electron-desktop",
+      testMatch: DESKTOP_ELECTRON_SPEC,
+      timeout: 180_000,
     },
   ],
 });

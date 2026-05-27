@@ -22,6 +22,12 @@ interface ElectronPreferences {
 interface ElectronAPI {
   onBackendReady: (callback: (payload: ElectronBackendPayload) => void) => void;
   getBackendUrl: () => Promise<ElectronBackendPayload | null>;
+  getDiagnosticsPaths?: () => Promise<{
+    logs: string;
+    crashDumps: string;
+    userData: string;
+    appVersion: string;
+  }>;
   secureStorage?: ElectronSecureStorage;
   preferences?: ElectronPreferences;
 }

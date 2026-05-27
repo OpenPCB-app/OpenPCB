@@ -45,6 +45,7 @@
     "test:react": "npm run test --workspace src/core/frontend",
     "test:react:watch": "npm run test:watch --workspace src/core/frontend",
     "test:e2e": "playwright test",
+    "test:e2e:electron": "playwright test --project=electron-desktop",
     "release:sourcemaps": "node scripts/upload-sourcemaps.mjs",
     "shared:link": "bash scripts/shared-link.sh",
     "shared:unlink": "bash scripts/shared-unlink.sh",

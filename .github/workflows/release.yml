@@ -146,7 +146,11 @@ jobs:
         if: matrix.platform == 'linux'
         # electron-builder ships appimagetool itself, so squashfs-tools is not
         # required. fakeroot+dpkg → .deb; rpm → .rpm via fpm.
-        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg rpm
+        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg rpm xvfb
+
+      - name: Install Linux Playwright/Electron runtime deps
+        if: matrix.platform == 'linux'
+        run: npx playwright install --with-deps chromium
 
       - name: Repair optional native dependencies
         run: |
@@ -171,7 +175,9 @@ jobs:
             throw new Error(`Root package version ${rootPackage.version} does not match electron package version ${electronPackage.version}`);
           }
 
-          if (refName.startsWith('dev-')) {
+          if (process.env.GITHUB_EVENT_NAME === 'workflow_dispatch') {
+            console.log(`Manual release smoke for ${refName} — skipping strict tag/package version match (package version ${electronPackage.version})`);
+          } else if (refName.startsWith('dev-')) {
             console.log(`Dev tag ${refName} — skipping strict version match (package version ${electronPackage.version})`);
           } else {
             const tagVersion = refName.replace(/^v/, '');
@@ -208,6 +214,76 @@ jobs:
         if: matrix.platform != 'win'
         run: bun scripts/verify-packaged-opclib.ts electron/out
 
+      - name: Resolve packaged desktop executable
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const platform = process.env.PLATFORM;
+          const out = path.resolve('electron', 'out');
+
+          function assertFile(candidate) {
+            if (!fs.existsSync(candidate)) {
+              throw new Error(`Packaged executable not found: ${candidate}`);
+            }
+            return candidate;
+          }
+
+          let executable;
+          if (platform === 'mac') {
+            const dirs = fs.readdirSync(out)
+              .filter((name) => name.startsWith('mac'))
+              .sort();
+            for (const dir of dirs) {
+              const candidate = path.join(out, dir, 'OpenPCB.app', 'Contents', 'MacOS', 'OpenPCB');
+              if (fs.existsSync(candidate)) {
+                executable = candidate;
+                break;
+              }
+            }
+            if (!executable) throw new Error(`No macOS OpenPCB.app executable under ${out}`);
+          } else if (platform === 'win') {
+            executable = assertFile(path.join(out, 'win-unpacked', 'OpenPCB.exe'));
+          } else if (platform === 'linux') {
+            executable = assertFile(path.join(out, 'linux-unpacked', 'openpcb'));
+            fs.chmodSync(executable, 0o755);
+          } else {
+            throw new Error(`Unsupported platform: ${platform}`);
+          }
+
+          console.log(`OPENPCB_ELECTRON_EXECUTABLE=${executable}`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `OPENPCB_ELECTRON_EXECUTABLE=${executable}${require('node:os').EOL}`);
+          NODE
+
+      - name: Run packaged desktop E2E smoke
+        if: matrix.platform != 'linux'
+        env:
+          OPENPCB_E2E_NO_WEBSERVER: "1"
+          OPENPCB_ELECTRON_EXPECT_PACKAGED: "1"
+          ELECTRON_ENABLE_LOGGING: "1"
+        run: npm run test:e2e:electron
+
+      - name: Run packaged desktop E2E smoke (Linux/Xvfb)
+        if: matrix.platform == 'linux'
+        env:
+          OPENPCB_E2E_NO_WEBSERVER: "1"
+          OPENPCB_ELECTRON_EXPECT_PACKAGED: "1"
+          ELECTRON_ENABLE_LOGGING: "1"
+        run: xvfb-run -a npm run test:e2e:electron
+
+      - name: Upload desktop E2E artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-e2e-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+
       - name: List build artifacts
         run: |
           find electron/out -maxdepth 3 -type f \
@@ -234,6 +310,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: build
+    if: github.event_name != 'workflow_dispatch'
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}

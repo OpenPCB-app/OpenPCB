@@ -90,6 +90,14 @@ Decisions:
 - [x] Harden Electron window policy, CSP, and release resources.
 - [x] Validate with typecheck, Electron build, frontend build, module validation, focused migration test, and packaged Desktop smoke.
 
+## Active Electron Desktop Release E2E Gate
+
+- [x] Add packaged Electron Playwright smoke that launches the desktop binary, validates backend/bootstrap/security, creates a design, and verifies persistence after relaunch.
+- [x] Add `electron-desktop` Playwright project and npm script.
+- [x] Gate `release.yml` matrix with packaged desktop E2E on macOS, Windows, and Linux/Xvfb before publishing.
+- [x] Validate locally with typecheck, packaged macOS build, and packaged Electron smoke.
+- [ ] Run updated release workflow via GitHub Actions after commit/push approval.
+
 ## Active PCB Canvas UX Optimization
 
 - [x] Add centralized PCB visual-state resolver for layer/net focus.
