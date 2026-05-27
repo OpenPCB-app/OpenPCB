@@ -80,6 +80,12 @@ import {
   type RouteSession,
 } from "./tools/route-tool-state";
 import { buildPreviewPath } from "./tools/route-preview-geometry";
+import {
+  initialMeasureToolState,
+  measureToolReducer,
+  type MeasureAnchor,
+} from "./tools/measure-tool-state";
+import { findMeasureSnapTarget } from "./measure-snap";
 import { usePcbWorkspace } from "./usePcbWorkspace";
 import { usePcbViewStore } from "./pcb-view-store";
 import {
@@ -144,7 +150,7 @@ function keepTracePrefixForReroute(
   return keep;
 }
 
-type ToolMode = "select" | "route" | "hole" | "pad" | "text";
+type ToolMode = "select" | "route" | "measure" | "hole" | "pad" | "text";
 
 /** Default drill size for the "drop mounting hole" tool. 3.2 mm matches an
  * M3 plus-clearance hole, the most common mechanical mount. */
@@ -220,6 +226,23 @@ function RouteHintStrip({ active }: { active: boolean }): ReactElement {
   );
 }
 
+function MeasureHintStrip({ active }: { active: boolean }): ReactElement {
+  return (
+    <div className="flex items-center gap-2 rounded-full border border-slate-700/80 bg-slate-950/90 px-3 py-1 text-[11px] text-slate-300 shadow-xl backdrop-blur">
+      <span>{active ? "Click endpoint to lock" : "Click start point"}</span>
+      <span>·</span>
+      <span>
+        Hold{" "}
+        <kbd className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-100 shadow-inner">
+          Shift
+        </kbd>{" "}
+        for ΔX/ΔY
+      </span>
+      <span>· Esc clear</span>
+    </div>
+  );
+}
+
 export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const gridEnabled = props.gridVisible ?? false;
   const snap = (v: number) => snapMm(v, gridEnabled);
@@ -262,6 +285,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     routeToolReducer,
     initialRouteToolState,
   );
+  const [measureState, dispatchMeasure] = useReducer(
+    measureToolReducer,
+    initialMeasureToolState,
+  );
+  const [measureShowDeltas, setMeasureShowDeltas] = useState(false);
   const [focusedLayer, setFocusedLayer] = useState<PcbCopperLayerId | null>(
     null,
   );
@@ -309,6 +337,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     const request = props.selectionRequest;
     if (!request) return;
     setToolMode("select");
+    dispatchMeasure({ kind: "clear" });
     setSelection({
       ...emptyPcbSelection(),
       placementIds: new Set(request.placementIds),
@@ -438,6 +467,39 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       activeLayer: activeCopperLayer,
     });
   }, [cursorMm, workspace.projection, activeCopperLayer]);
+
+  const resolveMeasureAnchor = useCallback(
+    (cursor: PcbPointMm): MeasureAnchor => {
+      if (workspace.projection) {
+        const target = findMeasureSnapTarget({
+          cursorMm: cursor,
+          toleranceMm: 0.5,
+          placements: visiblePlacements,
+          traces: tracesRef.current,
+          vias: viasRef.current,
+          freePads: freePadsRef.current,
+          activeLayer: activeCopperLayer,
+        });
+        if (target) {
+          const { kind, pointMm, sourceId } = target;
+          return sourceId !== undefined
+            ? { kind, pointMm, sourceId }
+            : { kind, pointMm };
+        }
+      }
+      const pointMm = snapPoint(cursor);
+      return gridEnabled
+        ? { kind: "grid", pointMm }
+        : { kind: "cursor", pointMm };
+    },
+    [
+      activeCopperLayer,
+      gridEnabled,
+      snapPoint,
+      visiblePlacements,
+      workspace.projection,
+    ],
+  );
 
   // Marquee/rubber-band selection. Uses the shared canvas hook so PCB and
   // schematic behave identically (KiCad direction-based window/crossing modes,
@@ -822,6 +884,17 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         if (event.button !== 0) return;
         const cursor = eventToMm(event);
 
+        if (toolMode === "measure") {
+          dispatchMeasure({
+            kind: "click",
+            anchor: resolveMeasureAnchor(cursor),
+          });
+          setSelection(emptyPcbSelection());
+          setDragSession(null);
+          setFreePrimitiveDragSession(null);
+          return;
+        }
+
         // Hole mode — single click drops a free mounting hole at the snapped
         // cursor and returns to select mode.
         if (toolMode === "hole") {
@@ -1128,6 +1201,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         const cursor = eventToMm(event);
         setCursorMm(cursor);
         setCursorClientPx({ x: event.screenPoint.x, y: event.screenPoint.y });
+        setMeasureShowDeltas(event.modifiers.shift);
+        if (toolMode === "measure") {
+          workspace.hoverNet(null);
+          return;
+        }
         // Marquee in flight: update rect, suppress hover-net & drag updates.
         if (marquee.marqueeSession) {
           marquee.updateMarqueeCursor(cursor);
@@ -1230,7 +1308,15 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       onPointerLeave() {
         // Keep the last board cursor during active routing so toolbar/context
         // layer switches can still drop a smart via at the last route point.
-        if (routeState.kind !== "routing") setCursorMm(null);
+        if (toolMode === "measure") {
+          dispatchMeasure({ kind: "clear" });
+          setCursorMm(null);
+          setCursorClientPx(null);
+          return;
+        }
+        if (routeState.kind !== "routing") {
+          setCursorMm(null);
+        }
         setCursorClientPx(null);
       },
       onContextMenu(event) {
@@ -1438,6 +1524,25 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                   },
                   {
                     kind: "action",
+                    id: "measure-distance",
+                    label:
+                      toolMode === "measure"
+                        ? "Exit measure mode"
+                        : "Measure distance",
+                    shortcut: "M",
+                    onSelect: () => {
+                      setToolMode((prev) => {
+                        if (prev === "measure") {
+                          dispatchMeasure({ kind: "clear" });
+                          return "select";
+                        }
+                        return "measure";
+                      });
+                      dispatchRoute({ kind: "cancel" });
+                    },
+                  },
+                  {
+                    kind: "action",
                     id: "toggle-ratsnest",
                     label: workspace.ratsnestVisible
                       ? "Hide ratsnest"
@@ -1500,6 +1605,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     eventToMm,
     marquee,
     padToNet,
+    resolveMeasureAnchor,
     resolveAnchor,
     routeState,
     selection,
@@ -1512,6 +1618,18 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     visiblePlacements,
     workspace,
   ]);
+
+  useEffect(() => {
+    const onShiftKey = (event: KeyboardEvent): void => {
+      if (event.key === "Shift") setMeasureShowDeltas(event.type === "keydown");
+    };
+    window.addEventListener("keydown", onShiftKey);
+    window.addEventListener("keyup", onShiftKey);
+    return () => {
+      window.removeEventListener("keydown", onShiftKey);
+      window.removeEventListener("keyup", onShiftKey);
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -1549,6 +1667,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         event.preventDefault();
         setToolMode((prev) => (prev === "hole" ? "select" : "hole"));
         dispatchRoute({ kind: "cancel" });
+        dispatchMeasure({ kind: "clear" });
         return;
       }
       if (event.key === "p" || event.key === "P") {
@@ -1557,11 +1676,25 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         event.preventDefault();
         setToolMode((prev) => (prev === "pad" ? "select" : "pad"));
         dispatchRoute({ kind: "cancel" });
+        dispatchMeasure({ kind: "clear" });
         return;
       }
       if (event.key === "t" || event.key === "T") {
         event.preventDefault();
         setToolMode((prev) => (prev === "text" ? "select" : "text"));
+        dispatchRoute({ kind: "cancel" });
+        dispatchMeasure({ kind: "clear" });
+        return;
+      }
+      if (event.key === "m" || event.key === "M") {
+        event.preventDefault();
+        setToolMode((prev) => {
+          if (prev === "measure") {
+            dispatchMeasure({ kind: "clear" });
+            return "select";
+          }
+          return "measure";
+        });
         dispatchRoute({ kind: "cancel" });
         return;
       }
@@ -1585,6 +1718,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         event.preventDefault();
         setToolMode((prev) => (prev === "route" ? "select" : "route"));
         if (toolMode === "route") dispatchRoute({ kind: "cancel" });
+        dispatchMeasure({ kind: "clear" });
         return;
       }
 
@@ -1829,6 +1963,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         if (toolMode === "route") {
           setToolMode("select");
           dispatchRoute({ kind: "cancel" });
+        } else if (toolMode === "measure") {
+          dispatchMeasure({ kind: "clear" });
+          setToolMode("select");
         } else if (
           toolMode === "hole" ||
           toolMode === "pad" ||
@@ -2010,6 +2147,24 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     ],
   );
 
+  const sceneMeasurement = useMemo(() => {
+    if (measureState.kind === "locked") {
+      return {
+        start: measureState.start.pointMm,
+        end: measureState.end.pointMm,
+        showDeltas: measureShowDeltas,
+      };
+    }
+    if (measureState.kind === "measuring" && cursorMm) {
+      return {
+        start: measureState.start.pointMm,
+        end: resolveMeasureAnchor(cursorMm).pointMm,
+        showDeltas: measureShowDeltas,
+      };
+    }
+    return null;
+  }, [cursorMm, measureShowDeltas, measureState, resolveMeasureAnchor]);
+
   // Derive inspector selection from the first selected item of each new type.
   const inspectorSelection = useMemo((): PcbInspectorSelection => {
     const proj = workspace.projection;
@@ -2089,6 +2244,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             focusedLayer={focusedLayer}
             copperFillLayers={workspace.copperFillLayers}
             marqueeOverlay={sceneMarqueeOverlay}
+            measurement={sceneMeasurement}
             snapTarget={snapTarget}
             initialViewport={props.initialViewport}
             onViewportChange={props.onViewportChange}
@@ -2210,21 +2366,36 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               onToggleRouteMode={() => {
                 setToolMode((prev) => (prev === "route" ? "select" : "route"));
                 if (toolMode === "route") dispatchRoute({ kind: "cancel" });
+                dispatchMeasure({ kind: "clear" });
+              }}
+              measureMode={toolMode === "measure"}
+              onToggleMeasureMode={() => {
+                setToolMode((prev) => {
+                  if (prev === "measure") {
+                    dispatchMeasure({ kind: "clear" });
+                    return "select";
+                  }
+                  return "measure";
+                });
+                dispatchRoute({ kind: "cancel" });
               }}
               holeMode={toolMode === "hole"}
               onToggleHoleMode={() => {
                 setToolMode((prev) => (prev === "hole" ? "select" : "hole"));
                 dispatchRoute({ kind: "cancel" });
+                dispatchMeasure({ kind: "clear" });
               }}
               padMode={toolMode === "pad"}
               onTogglePadMode={() => {
                 setToolMode((prev) => (prev === "pad" ? "select" : "pad"));
                 dispatchRoute({ kind: "cancel" });
+                dispatchMeasure({ kind: "clear" });
               }}
               textMode={toolMode === "text"}
               onToggleTextMode={() => {
                 setToolMode((prev) => (prev === "text" ? "select" : "text"));
                 dispatchRoute({ kind: "cancel" });
+                dispatchMeasure({ kind: "clear" });
               }}
               segmentMode={
                 routeState.kind === "routing"
@@ -2350,6 +2521,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       {toolMode === "route" ? (
         <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
           <RouteHintStrip active={routeState.kind === "routing"} />
+        </div>
+      ) : null}
+      {toolMode === "measure" ? (
+        <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
+          <MeasureHintStrip active={measureState.kind === "measuring"} />
         </div>
       ) : null}
 

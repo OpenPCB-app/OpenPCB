@@ -7,6 +7,7 @@ import {
   Network,
   Plus,
   Redo2,
+  Ruler,
   ScanSearch,
   Square,
   Type,
@@ -31,6 +32,8 @@ interface PcbTopToolbarProps {
   routeMode: boolean;
   routeSessionActive: boolean;
   onToggleRouteMode: () => void;
+  measureMode: boolean;
+  onToggleMeasureMode: () => void;
   segmentMode: PcbTraceSegmentMode;
   onToggleSegmentMode: () => void;
   activeWidthMm: number;
@@ -363,6 +366,8 @@ export function PcbTopToolbar({
   routeMode,
   routeSessionActive,
   onToggleRouteMode,
+  measureMode,
+  onToggleMeasureMode,
   segmentMode,
   onToggleSegmentMode,
   activeWidthMm,
@@ -471,6 +476,21 @@ export function PcbTopToolbar({
       >
         <Cable className="h-3.5 w-3.5" />
         Route (R)
+      </button>
+
+      <button
+        type="button"
+        onClick={onToggleMeasureMode}
+        title="Measure distance (M)"
+        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+          measureMode
+            ? "border-sky-500 bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
+            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        }`}
+        aria-pressed={measureMode}
+      >
+        <Ruler className="h-3.5 w-3.5" />
+        Measure (M)
       </button>
 
       {routeMode ? (

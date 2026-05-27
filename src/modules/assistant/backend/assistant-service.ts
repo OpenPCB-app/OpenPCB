@@ -13,7 +13,6 @@ import {
   type AssistantToolEventDto,
   type AssistantWriteProposalDto,
   type AssistantPlacementApplyResult,
-  type AssistantPlacementProposal,
   type AiProviderCapabilities,
   type CreateAssistantChatInput,
   type ProviderTestResult,
@@ -29,7 +28,15 @@ import { PromptService } from "./prompt-service";
 import { ContextResolver } from "./context-resolver";
 import { RunService } from "./run-service";
 import { buildOpenpcbToolRegistry } from "./tools/openpcb-tool-registry";
-import { applyDesignerPlaceComponentsProposal } from "./tools/designer-tools";
+import {
+  applyAssistantWriteProposal,
+  applyFailureResult,
+} from "./proposals/proposal-apply-service";
+import type { SchematicApplyResult } from "./tools/designer-tools";
+import {
+  AssistantWriteSessionPolicy,
+  type AssistantSessionWriteAllowance,
+} from "./write-session-policy";
 import {
   buildAiProviderClient,
   providerRequiresApiKey,
@@ -44,6 +51,7 @@ export class AssistantService {
   readonly prompts: PromptService;
   readonly contextResolver: ContextResolver;
   readonly runService: RunService;
+  readonly writeSessionPolicy = new AssistantWriteSessionPolicy();
   private readonly tasks: TasksSDK;
 
   constructor(private readonly ctx: CoreBackendModuleContext) {
@@ -69,6 +77,10 @@ export class AssistantService {
       buildRegistry: (allowRawToolData) =>
         buildOpenpcbToolRegistry(ctx, this.contextResolver, this.conversation, {
           allowRawToolData,
+          designerTools: {
+            isSessionAutoApplyAllowed: (input) =>
+              this.writeSessionPolicy.isAllowed(input),
+          },
         }),
     });
   }
@@ -215,30 +227,26 @@ export class AssistantService {
     chatId: string,
     proposalId: string,
     input: { allowPartial?: boolean } = {},
-  ): Promise<AssistantPlacementApplyResult> {
+  ): Promise<AssistantPlacementApplyResult | SchematicApplyResult> {
     this.assertValidChatId(chatId);
     const record = this.conversation.getWriteProposal(chatId, proposalId);
     if (!record) throw new NotFoundError(`Write proposal not found: ${proposalId}`);
     if (record.status !== "pending") {
       throw new ValidationError(`Write proposal is already ${record.status}`);
     }
-    if (record.kind !== "designer_place_components") {
-      throw new ValidationError(`Unsupported proposal kind: ${record.kind}`);
-    }
     const designer = this.ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
     if (!designer) throw new ValidationError("Designer module not available");
     try {
-      const result = await applyDesignerPlaceComponentsProposal({
+      const result = await applyAssistantWriteProposal({
         designer,
-        proposal: record.proposal as AssistantPlacementProposal,
-        designId: record.designId,
-        baseRevision: record.baseRevision,
+        record,
         allowPartial: input.allowPartial === true,
       });
+      const proposalStatus = writeProposalStatusFromApplyResult(result);
       this.conversation.updateWriteProposalStatus(
         chatId,
         proposalId,
-        "applied",
+        proposalStatus,
         result,
       );
       return result;
@@ -247,9 +255,16 @@ export class AssistantService {
       if (message.includes("Confirm partial apply")) {
         throw new ValidationError(message);
       }
-      this.conversation.updateWriteProposalStatus(chatId, proposalId, "failed", {
-        message,
-      });
+      const failureResult = applyFailureResult(err);
+      this.conversation.updateWriteProposalStatus(
+        chatId,
+        proposalId,
+        writeProposalStatusFromApplyResult(failureResult),
+        failureResult ?? { message },
+      );
+      if (failureResult) {
+        return failureResult as AssistantPlacementApplyResult | SchematicApplyResult;
+      }
       throw new ValidationError(message);
     }
   }
@@ -269,6 +284,34 @@ export class AssistantService {
       proposalId,
       "rejected",
     );
+  }
+
+  listSessionWriteAllowances(chatId: string): AssistantSessionWriteAllowance[] {
+    this.assertValidChatId(chatId);
+    return this.writeSessionPolicy.list(chatId);
+  }
+
+  allowSessionWriteTool(
+    chatId: string,
+    input: { toolName?: unknown; proposalKind?: unknown; riskLevel?: unknown },
+  ): AssistantSessionWriteAllowance {
+    this.assertValidChatId(chatId);
+    const toolName = typeof input.toolName === "string" ? input.toolName.trim() : "";
+    const proposalKind =
+      typeof input.proposalKind === "string" ? input.proposalKind.trim() : "";
+    if (!toolName) throw new ValidationError("Tool name is required");
+    if (!proposalKind) throw new ValidationError("Proposal kind is required");
+    return this.writeSessionPolicy.allow({
+      chatId,
+      toolName,
+      proposalKind,
+      riskLevel: typeof input.riskLevel === "string" ? input.riskLevel : null,
+    });
+  }
+
+  revokeSessionWriteAllowance(chatId: string, key: string): void {
+    this.assertValidChatId(chatId);
+    this.writeSessionPolicy.revoke(chatId, key);
   }
 
   // ─── settings ─────────────────────────────────────────────────────────
@@ -399,6 +442,16 @@ export class AssistantService {
     if (!design) throw new NotFoundError(`Design not found: ${designId}`);
     return { id: design.head.id, name: design.head.name };
   }
+}
+
+function writeProposalStatusFromApplyResult(
+  result: unknown,
+): "applied" | "partial" | "failed" {
+  if (result && typeof result === "object" && "status" in result) {
+    const status = (result as { status?: unknown }).status;
+    if (status === "applied" || status === "partial") return status;
+  }
+  return "failed";
 }
 
 export function initializeAssistantService(

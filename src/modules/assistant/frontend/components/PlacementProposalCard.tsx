@@ -67,19 +67,26 @@ export function PlacementProposalCard({
         };
         throw new Error(problem.detail ?? problem.title ?? "Apply failed");
       }
-      const result = (await response.json()) as AssistantPlacementApplyResult;
+      const result = (await response.json()) as Omit<AssistantPlacementApplyResult, "status"> & {
+        status?: "applied" | "partial" | "failed";
+        message?: string;
+      };
       setFinished(true);
-      setActionMessage(`Applied ${result.applied.length} component(s).`);
+      setActionMessage(
+        result.message ?? `Applied ${result.applied.length} component(s).`,
+      );
       const revision = result.applied.reduce<number | undefined>(
         (max, item) =>
           max === undefined ? item.revision : Math.max(max, item.revision),
         undefined,
       );
-      onProposalChanged?.({
-        kind: "applied",
-        designId: result.designId,
-        revision,
-      });
+      if (revision !== undefined || result.status !== "failed") {
+        onProposalChanged?.({
+          kind: "applied",
+          designId: result.designId,
+          revision,
+        });
+      }
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -100,6 +107,34 @@ export function PlacementProposalCard({
       setFinished(true);
       setActionMessage("Proposal rejected.");
       onProposalChanged?.({ kind: "rejected", designId: proposal.design.id });
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function allowPlacementToolForSession(): Promise<void> {
+    if (!assistantBaseUrl) return;
+    setBusy(true);
+    setActionMessage(null);
+    try {
+      const response = await fetch(
+        `${assistantBaseUrl}/chats/${event.chatId}/write-policy/session-allow`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            toolName: "designer_place_components",
+            proposalKind: "designer_place_components",
+            riskLevel: "medium",
+          }),
+        },
+      );
+      if (!response.ok) throw new Error("Session allow failed");
+      setActionMessage(
+        "Future placement proposals in this session will auto-apply.",
+      );
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -172,6 +207,14 @@ export function PlacementProposalCard({
           className="rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-700 disabled:opacity-50"
         >
           Reject
+        </button>
+        <button
+          type="button"
+          disabled={busy || !isActionable}
+          onClick={() => void allowPlacementToolForSession()}
+          className="rounded border border-violet-500/50 px-2 py-1 text-[11px] text-violet-800 hover:bg-violet-100 disabled:opacity-50 dark:text-violet-200 dark:hover:bg-violet-950/50"
+        >
+          Allow this tool this session
         </button>
       </div>
       {actionMessage ? (

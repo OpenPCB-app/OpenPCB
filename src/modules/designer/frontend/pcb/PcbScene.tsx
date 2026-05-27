@@ -46,6 +46,7 @@ import { SolderMaskLayer } from "./layers/SolderMaskLayer";
 import { SolderPasteLayer } from "./layers/SolderPasteLayer";
 import { NetTraceLabels } from "./layers/NetTraceLabels";
 import { SnapTargetIndicator } from "./layers/SnapTargetIndicator";
+import { MeasureOverlayLayer } from "./layers/MeasureOverlayLayer";
 import { usePcbViewStore } from "./pcb-view-store";
 import { SelectionRectOverlay } from "../../../../shared/frontend/canvas/selection";
 import {
@@ -1125,6 +1126,11 @@ interface PcbSceneProps {
     b: { x: number; y: number } | null;
     color: string;
   } | null;
+  measurement?: {
+    start: PcbPointMm;
+    end: PcbPointMm;
+    showDeltas: boolean;
+  } | null;
   /**
    * Active snap target. Rendered as a color-coded ring at the resolved
    * point so the user can see where a click would land. The snap engine
@@ -1157,6 +1163,7 @@ export function PcbScene({
   focusedLayer = null,
   copperFillLayers = [],
   marqueeOverlay = null,
+  measurement = null,
   snapTarget = null,
   initialViewport,
   onViewportChange,
@@ -1181,6 +1188,7 @@ export function PcbScene({
     focusedLayer,
     copperFillLayers,
     marqueeOverlay,
+    measurement,
     invalidate,
   ]);
 
@@ -1629,6 +1637,14 @@ export function PcbScene({
           b={marqueeOverlay?.b ?? null}
           color={marqueeOverlay?.color ?? "#60a5fa"}
         />
+        {measurement ? (
+          <MeasureOverlayLayer
+            start={measurement.start}
+            end={measurement.end}
+            showDeltas={measurement.showDeltas}
+            counterMirror={mirror}
+          />
+        ) : null}
         {snapTarget ? (
           <SnapTargetIndicator
             pointMm={snapTarget.pointMm}

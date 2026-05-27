@@ -36,7 +36,9 @@ export function buildAssistantSdk(): AssistantSDK {
     listWriteProposals: (chatId) =>
       Promise.resolve(getAssistantService().listWriteProposals(chatId)),
     applyWriteProposal: (chatId, proposalId, input) =>
-      getAssistantService().applyWriteProposal(chatId, proposalId, input),
+      getAssistantService().applyWriteProposal(chatId, proposalId, input) as ReturnType<
+        AssistantSDK["applyWriteProposal"]
+      >,
     rejectWriteProposal: (chatId, proposalId) =>
       Promise.resolve(
         getAssistantService().rejectWriteProposal(chatId, proposalId),

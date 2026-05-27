@@ -17,6 +17,7 @@ import {
   type ComponentResultsPayload,
 } from "./ComponentResultCard";
 import { BomResultCard, type BomResultPayload } from "./BomResultCard";
+import { GenericProposalCard } from "./GenericProposalCard";
 
 const PROSE_CLASSES = [
   "prose",
@@ -132,6 +133,57 @@ function extractPlacementProposals(
   });
 }
 
+function extractGenericToolProposals(
+  events: AssistantToolEventDto[],
+  writeProposals: AssistantWriteProposalDto[],
+): AssistantWriteProposalDto[] {
+  const recordsById = new Map(writeProposals.map((record) => [record.id, record]));
+  const out: AssistantWriteProposalDto[] = [];
+  for (const event of events) {
+    if (event.status !== "succeeded" || !event.resultJson) continue;
+    try {
+      const parsed = JSON.parse(event.resultJson) as {
+        id?: string;
+        kind?: string;
+        designId?: string;
+        baseRevision?: number | null;
+      };
+      if (!parsed.id || !parsed.kind || parsed.kind === "designer_place_components") {
+        continue;
+      }
+      const record = recordsById.get(parsed.id);
+      out.push(
+        record
+          ? { ...record, toolEventId: record.toolEventId ?? event.id }
+          : ({
+            id: parsed.id,
+            chatId: event.chatId,
+            toolEventId: event.id,
+            kind: parsed.kind,
+            status: "pending",
+            designId: parsed.designId ?? "",
+            baseRevision: parsed.baseRevision ?? null,
+            toolName: event.toolName,
+            title: null,
+            summary: null,
+            riskLevel: null,
+            operations: [],
+            sources: event.sources,
+            warnings: [],
+            proposal: parsed,
+            envelope: parsed,
+            applyResult: null,
+            createdAt: event.createdAt,
+            updatedAt: event.updatedAt,
+          } as AssistantWriteProposalDto),
+      );
+    } catch {
+      // ignore malformed tool result
+    }
+  }
+  return out;
+}
+
 export function MessageCard({
   message,
   toolEvents = [],
@@ -167,6 +219,24 @@ export function MessageCard({
   const componentBlocks = isUser ? [] : extractComponentResults(toolEvents);
   const bomBlocks = isUser ? [] : extractBomResults(toolEvents);
   const placementBlocks = isUser ? [] : extractPlacementProposals(toolEvents);
+  const placementIds = new Set(
+    placementBlocks.map(({ proposal }) => proposal.proposalId),
+  );
+  const toolEventIds = new Set(toolEvents.map((event) => event.id));
+  const genericProposals = isUser
+    ? []
+    : extractGenericToolProposals(toolEvents, writeProposals).filter(
+        (record) => !placementIds.has(record.id),
+      );
+  const proposalToolEventIds = new Set([
+    ...placementBlocks.map(({ event }) => event.id),
+    ...genericProposals.flatMap((proposal) =>
+      proposal.toolEventId ? [proposal.toolEventId] : [],
+    ),
+  ]);
+  const visibleToolEvents = toolEvents.filter(
+    (event) => !proposalToolEventIds.has(event.id),
+  );
   const showWaitingDots = loading && !hasContent && toolEvents.length === 0;
   const showStreamingPulse = Boolean(runState) || (loading && (hasContent || toolEvents.length > 0));
   const isStreaming = !isUser && (loading || Boolean(runState));
@@ -252,9 +322,22 @@ export function MessageCard({
             ))}
           </div>
         ) : null}
-        {toolEvents.length > 0 ? (
+        {genericProposals.length > 0 ? (
+          <div className="space-y-3">
+            {genericProposals.map((proposal) => (
+              <GenericProposalCard
+                key={proposal.id}
+                proposal={proposal}
+                assistantBaseUrl={assistantBaseUrl}
+                onProposalChanged={onProposalChanged}
+                compact={compact}
+              />
+            ))}
+          </div>
+        ) : null}
+        {visibleToolEvents.length > 0 ? (
           <div className="space-y-1.5">
-            {toolEvents.map((event) => (
+            {visibleToolEvents.map((event) => (
               <ToolCard key={event.id} event={event} compact={compact} />
             ))}
           </div>

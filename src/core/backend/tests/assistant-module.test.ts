@@ -513,6 +513,140 @@ describe("assistant module", () => {
     expect(columns).not.toContain("enable_write_tools_beta");
   });
 
+  test("write proposal schema includes generic proposal metadata", async () => {
+    await bootAssistantWorkspace();
+
+    const columns = getSharedSqlite()
+      .query<{ name: string }, []>("PRAGMA table_info(assistant_write_proposal)")
+      .all()
+      .map((column) => column.name);
+
+    expect(columns).toContain("tool_name");
+    expect(columns).toContain("title");
+    expect(columns).toContain("summary");
+    expect(columns).toContain("risk_level");
+    expect(columns).toContain("operations_json");
+    expect(columns).toContain("sources_json");
+    expect(columns).toContain("warnings_json");
+    expect(columns).toContain("envelope_json");
+  });
+
+  test("persists and lists generic write proposal metadata", async () => {
+    const { server } = await bootAssistantWorkspace();
+    const service = getAssistantService();
+    const chat = service.createChat({ title: "Generic proposal" });
+
+    service.conversation.createWriteProposal({
+      id: "proposal-generic-1",
+      chatId: chat.id,
+      kind: "designer_schematic_edits",
+      designId: "design-1",
+      baseRevision: 12,
+      proposal: { legacyPayload: true },
+      envelope: {
+        id: "proposal-generic-1",
+        kind: "designer_schematic_edits",
+        toolName: "designer_propose_schematic_edits",
+        title: "Add LED indicator",
+        summary: "Place LED, resistor, and labels.",
+        riskLevel: "medium",
+        designId: "design-1",
+        baseRevision: 12,
+        operations: [
+          {
+            id: "op-1",
+            kind: "designer.place_part",
+            title: "Place LED",
+            summary: "Place an LED on the schematic.",
+            riskLevel: "medium",
+            payload: { componentId: "led" },
+            warnings: ["Position is approximate."],
+          },
+        ],
+        payload: { operationCount: 1 },
+        sources: [
+          {
+            id: "design_design-1",
+            kind: "design",
+            label: "Design 1",
+            refId: "design-1",
+          },
+        ],
+        warnings: ["Review before applying."],
+        createdByToolCallId: "tool-call-1",
+      },
+    });
+
+    const response = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/assistant/chats/${chat.id}/write-proposals`,
+      ),
+    );
+    expect(response.status).toBe(200);
+    const proposals = (await response.json()) as Array<{
+      kind: string;
+      toolName: string | null;
+      title: string | null;
+      riskLevel: string | null;
+      operations: Array<{ id: string; kind: string }>;
+      sources: Array<{ kind: string }>;
+      warnings: string[];
+      envelope: { toolName: string } | null;
+    }>;
+
+    expect(proposals).toHaveLength(1);
+    expect(proposals[0]?.kind).toBe("designer_schematic_edits");
+    expect(proposals[0]?.toolName).toBe("designer_propose_schematic_edits");
+    expect(proposals[0]?.title).toBe("Add LED indicator");
+    expect(proposals[0]?.riskLevel).toBe("medium");
+    expect(proposals[0]?.operations[0]?.kind).toBe("designer.place_part");
+    expect(proposals[0]?.sources[0]?.kind).toBe("design");
+    expect(proposals[0]?.warnings).toContain("Review before applying.");
+    expect(proposals[0]?.envelope?.toolName).toBe(
+      "designer_propose_schematic_edits",
+    );
+  });
+
+  test("session write allowance can be added listed and revoked", async () => {
+    const { server } = await bootAssistantWorkspace();
+    const service = getAssistantService();
+    const chat = service.createChat({ title: "Policy" });
+
+    const allowResponse = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/assistant/chats/${chat.id}/write-policy/session-allow`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            toolName: "designer_place_components",
+            proposalKind: "designer_place_components",
+            riskLevel: "medium",
+          }),
+        },
+      ),
+    );
+    expect(allowResponse.status).toBe(201);
+    const allowance = (await allowResponse.json()) as { key: string };
+
+    const listResponse = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/assistant/chats/${chat.id}/write-policy/session-allow`,
+      ),
+    );
+    const allowances = (await listResponse.json()) as Array<{ key: string }>;
+    expect(allowances.map((item) => item.key)).toContain(allowance.key);
+
+    const revokeResponse = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/assistant/chats/${chat.id}/write-policy/session-allow/${encodeURIComponent(allowance.key)}`,
+        { method: "DELETE" },
+      ),
+    );
+    expect(revokeResponse.status).toBe(200);
+    expect(service.listSessionWriteAllowances(chat.id)).toHaveLength(0);
+  });
+
   test("context binding deletion is scoped to chat", async () => {
     const { server } = await bootAssistantWorkspace();
     const service = getAssistantService();

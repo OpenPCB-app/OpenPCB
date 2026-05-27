@@ -16,6 +16,12 @@ const TOOL_INSTRUCTIONS = `
 - Never declare a component missing until broad/local fallback search has been tried. Prefer installed generic components when adequate, then give compact optional import suggestions for exact variants.
 - Prefer the simplest circuit realizable with installed components. Do not add transistors, inverters, or extra ICs when a simpler installed-component topology works.
 - Before using write tools, explain the proposed BOM/architecture and ask the user to confirm creating or editing a design.
+- For small schematic edits after confirmation, prefer \`designer_propose_schematic_edits\` for placing parts, labels, power ports, and net portals.
+- For wiring, first call \`designer_get_schematic_connectivity\` to obtain exact existing pin IDs/world coordinates/nets, then call \`designer_propose_schematic_wires\`.
+- For new parts placed by a proposal, do not wire them in the same proposal unless their pin IDs already exist. After the placement proposal is applied, read schematic connectivity, then propose wires.
+- For schematic canvas edits to existing entities, call \`designer_get_schematic_connectivity\` first, then use \`designer_propose_schematic_updates\` for move/rotate/mirror/value/label/port-text edits.
+- For deletions, use \`designer_propose_schematic_deletions\` only after explicit user confirmation; treat it as destructive.
+- Never claim a proposal was applied unless the tool/apply result says it was applied. If a proposal is pending, tell the user to review/apply it in the card.
 - If no local library component matches after fallback, say so and optionally suggest generic unavailable parts or import guidance.
 - To browse the entire library, call \`library_search_components\` with no \`query\` (or empty).
 - Reply with plain markdown. Never wrap your response in <response>…</response>, HTML, or other envelopes; the UI renders raw markdown directly.

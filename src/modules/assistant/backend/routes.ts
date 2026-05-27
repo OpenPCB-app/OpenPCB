@@ -200,6 +200,35 @@ export function registerRoutes(
       ),
     );
   });
+  router.get("/chats/:id/write-policy/session-allow", (ctx) => {
+    const id = chatId(ctx);
+    requireChat(id);
+    return json(getAssistantService().listSessionWriteAllowances(id));
+  });
+  router.post("/chats/:id/write-policy/session-allow", async (ctx) => {
+    const id = chatId(ctx);
+    requireChat(id);
+    return json(
+      getAssistantService().allowSessionWriteTool(
+        id,
+        await body<{
+          toolName?: unknown;
+          proposalKind?: unknown;
+          riskLevel?: unknown;
+        }>(ctx.req),
+      ),
+      201,
+    );
+  });
+  router.delete("/chats/:id/write-policy/session-allow/:key", (ctx) => {
+    const id = chatId(ctx);
+    requireChat(id);
+    getAssistantService().revokeSessionWriteAllowance(
+      id,
+      ctx.params.getOrThrow("key"),
+    );
+    return json({ ok: true });
+  });
 
   // Context bindings
   router.get("/chats/:id/context-bindings", (ctx) => {

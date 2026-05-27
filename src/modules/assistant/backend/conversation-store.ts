@@ -19,6 +19,35 @@ import type {
   AssistantWriteProposalStatus,
 } from "../../../sdks/assistant";
 
+type AssistantWriteRiskLevel = "low" | "medium" | "high" | "destructive";
+
+interface AssistantWriteOperationLike {
+  id: string;
+  kind: string;
+  title: string;
+  summary: string;
+  riskLevel: AssistantWriteRiskLevel;
+  payload: unknown;
+  sources?: AiSourceRef[];
+  warnings?: string[];
+}
+
+interface AssistantWriteProposalEnvelopeLike {
+  id: string;
+  kind: string;
+  toolName: string;
+  title: string;
+  summary: string;
+  riskLevel: AssistantWriteRiskLevel;
+  designId: string | null;
+  baseRevision: number | null;
+  operations: AssistantWriteOperationLike[];
+  payload: unknown;
+  sources: AiSourceRef[];
+  warnings: string[];
+  createdByToolCallId?: string;
+}
+
 type RawSqlFn = (
   query: string,
   params?: unknown[],
@@ -121,7 +150,12 @@ function rowToToolEvent(row: Record<string, unknown>): AssistantToolEventDto {
 function rowToWriteProposal(
   row: Record<string, unknown>,
 ): AssistantWriteProposalDto {
-  return {
+  const envelope = decodeJson<AssistantWriteProposalEnvelopeLike | null>(
+    row.envelope_json,
+    null,
+  );
+  const proposal = decodeJson(row.proposal_json, null);
+  const dto = {
     id: String(row.id),
     chatId: String(row.chat_id),
     toolEventId: row.tool_event_id ? String(row.tool_event_id) : null,
@@ -132,11 +166,28 @@ function rowToWriteProposal(
       row.base_revision === null || row.base_revision === undefined
         ? null
         : Number(row.base_revision),
-    proposal: decodeJson(row.proposal_json, null),
+    toolName: row.tool_name ? String(row.tool_name) : envelope?.toolName ?? null,
+    title: row.title ? String(row.title) : envelope?.title ?? null,
+    summary: row.summary ? String(row.summary) : envelope?.summary ?? null,
+    riskLevel: row.risk_level
+      ? (String(row.risk_level) as AssistantWriteRiskLevel)
+      : envelope?.riskLevel ?? null,
+    operations: decodeJson<AssistantWriteOperationLike[]>(
+      row.operations_json,
+      envelope?.operations ?? [],
+    ),
+    sources: decodeJson<AiSourceRef[]>(
+      row.sources_json,
+      envelope?.sources ?? [],
+    ),
+    warnings: decodeJson<string[]>(row.warnings_json, envelope?.warnings ?? []),
+    proposal,
+    envelope,
     applyResult: decodeJson(row.apply_result_json, null),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
+  return dto as AssistantWriteProposalDto;
 }
 
 export interface CreateChatRecord {
@@ -176,10 +227,18 @@ export interface CreateWriteProposalInput {
   id?: string;
   chatId: string;
   toolEventId?: string | null;
-  kind: AssistantWriteProposalKind;
+  kind: AssistantWriteProposalKind | string;
   designId: string;
   baseRevision: number | null;
   proposal: unknown;
+  envelope?: AssistantWriteProposalEnvelopeLike | null;
+  toolName?: string | null;
+  title?: string | null;
+  summary?: string | null;
+  riskLevel?: AssistantWriteRiskLevel | null;
+  operations?: AssistantWriteOperationLike[];
+  sources?: AiSourceRef[];
+  warnings?: string[];
 }
 
 export interface ListMessagesOptions {
@@ -539,8 +598,12 @@ export class ConversationStore {
   createWriteProposal(input: CreateWriteProposalInput): AssistantWriteProposalDto {
     const timestamp = now();
     const proposalId = input.id ?? id();
+    const envelope = input.envelope ?? null;
+    const operations = input.operations ?? envelope?.operations ?? [];
+    const sources = input.sources ?? envelope?.sources ?? [];
+    const warnings = input.warnings ?? envelope?.warnings ?? [];
     this.rawSql(
-      "INSERT INTO assistant_write_proposal (id,chat_id,tool_event_id,kind,status,design_id,base_revision,proposal_json,apply_result_json,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO assistant_write_proposal (id,chat_id,tool_event_id,kind,status,design_id,base_revision,proposal_json,apply_result_json,tool_name,title,summary,risk_level,operations_json,sources_json,warnings_json,envelope_json,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         proposalId,
         input.chatId,
@@ -551,6 +614,14 @@ export class ConversationStore {
         input.baseRevision,
         encode(input.proposal),
         null,
+        input.toolName ?? envelope?.toolName ?? null,
+        input.title ?? envelope?.title ?? null,
+        input.summary ?? envelope?.summary ?? null,
+        input.riskLevel ?? envelope?.riskLevel ?? null,
+        encode(operations),
+        encode(sources),
+        encode(warnings),
+        envelope ? encode(envelope) : null,
         timestamp,
         timestamp,
       ],
