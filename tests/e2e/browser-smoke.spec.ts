@@ -22,7 +22,8 @@ test("boots browser app, loads modules, and opens designer", async ({ page, requ
   await page.getByRole("button", { name: "Designer" }).click();
   await expect(page.getByRole("tab", { name: "Schem" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "PCB" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /No design|Untitled Design/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No design open" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New design" })).toBeVisible();
 });
 
 test("creates a design from home and renders schematic shell", async ({ page }) => {

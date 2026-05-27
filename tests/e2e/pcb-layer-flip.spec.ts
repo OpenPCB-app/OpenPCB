@@ -22,6 +22,17 @@ async function openPcb(page: import("@playwright/test").Page): Promise<void> {
   await expect(page.locator(CANVAS)).toBeVisible();
 }
 
+function layerRow(page: import("@playwright/test").Page, layer: "F.Cu" | "B.Cu") {
+  return page.getByTestId(`pcb-layer-row-${layer}`);
+}
+
+async function expectActiveLayer(
+  page: import("@playwright/test").Page,
+  layer: "F.Cu" | "B.Cu",
+): Promise<void> {
+  await expect(layerRow(page, layer)).toContainText("Focus");
+}
+
 test("active layer switch does not flip the view", async ({ page }) => {
   await openPcb(page);
   await expect(page.locator(FLIP_BADGE)).toHaveCount(0);
@@ -29,11 +40,8 @@ test("active layer switch does not flip the view", async ({ page }) => {
 
   // Toolbar layer button toggles F.Cu ↔ B.Cu (label is the single source of
   // truth). View overlays must stay absent.
-  const layerButton = page
-    .locator(FLIP_VIEW_BUTTON)
-    .locator("..")
-    .getByRole("button", { name: /Top Copper|Bottom Copper/ });
-  await layerButton.click();
+  await layerRow(page, "B.Cu").click();
+  await expectActiveLayer(page, "B.Cu");
   await expect(page.locator(FLIP_BADGE)).toHaveCount(0);
   await expect(page.locator(FLIP_TINT)).toHaveCount(0);
 });
@@ -44,11 +52,7 @@ test("Shift+F flips view and syncs active layer to the visible side", async ({
   await openPcb(page);
   await page.locator(CANVAS).click();
 
-  const layerButton = page
-    .locator(FLIP_VIEW_BUTTON)
-    .locator("..")
-    .getByRole("button", { name: /Top Copper|Bottom Copper/ });
-  await expect(layerButton).toHaveText(/Top Copper/);
+  await expectActiveLayer(page, "F.Cu");
 
   await page.keyboard.press("Shift+F");
 
@@ -59,29 +63,24 @@ test("Shift+F flips view and syncs active layer to the visible side", async ({
     "true",
   );
   // Bottom view → B.Cu must be the active layer.
-  await expect(layerButton).toHaveText(/Bottom Copper/);
+  await expectActiveLayer(page, "B.Cu");
 
   // Shift+F again returns to top view and F.Cu active.
   await page.keyboard.press("Shift+F");
   await expect(page.locator(FLIP_BADGE)).toHaveCount(0);
-  await expect(layerButton).toHaveText(/Top Copper/);
+  await expectActiveLayer(page, "F.Cu");
 });
 
 test("T and B keys switch active layer, view stays put", async ({ page }) => {
   await openPcb(page);
   await page.locator(CANVAS).click();
 
-  const layerButton = page
-    .locator(FLIP_VIEW_BUTTON)
-    .locator("..")
-    .getByRole("button", { name: /Top Copper|Bottom Copper/ });
-
   await page.keyboard.press("b");
-  await expect(layerButton).toHaveText(/Bottom Copper/);
+  await expectActiveLayer(page, "B.Cu");
   await expect(page.locator(FLIP_BADGE)).toHaveCount(0);
 
   await page.keyboard.press("t");
-  await expect(layerButton).toHaveText(/Top Copper/);
+  await expectActiveLayer(page, "F.Cu");
   await expect(page.locator(FLIP_BADGE)).toHaveCount(0);
 });
 

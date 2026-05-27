@@ -337,6 +337,7 @@ export function PcbLayersPanel({
                 <button
                   type="button"
                   onClick={handleRowClick}
+                  data-testid={`pcb-layer-row-${node.id}`}
                   className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default"
                   title={
                     onToggleSoloLayer
