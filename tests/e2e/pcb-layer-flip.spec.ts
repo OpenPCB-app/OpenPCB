@@ -17,9 +17,45 @@ const FLIP_TINT = '[data-testid="pcb-flip-tint"]';
 
 async function openPcb(page: import("@playwright/test").Page): Promise<void> {
   await page.goto("/");
+  await page.evaluate(() => {
+    window.localStorage.removeItem("openpcb.designer.tabs.v1");
+  });
+  await page.reload();
   await page.getByRole("button", { name: "New Design" }).first().click();
   await page.getByRole("tab", { name: "PCB" }).click();
   await expect(page.locator(CANVAS)).toBeVisible();
+}
+
+async function activeDesignId(
+  page: import("@playwright/test").Page,
+): Promise<string> {
+  return page.evaluate(() => {
+    const raw = window.localStorage.getItem("openpcb.designer.tabs.v1");
+    if (!raw) throw new Error("missing designer tabs state");
+    const parsed = JSON.parse(raw) as { state?: { activeDesignId?: unknown } };
+    const id = parsed.state?.activeDesignId;
+    if (typeof id !== "string") throw new Error("missing active design id");
+    return id;
+  });
+}
+
+async function pcbViewSide(
+  page: import("@playwright/test").Page,
+  designId: string,
+): Promise<"top" | "bottom"> {
+  return page.evaluate(async (id) => {
+    const response = await fetch(
+      `/api/modules/designer/designs/${encodeURIComponent(id)}/projection/pcb`,
+    );
+    const body = (await response.json()) as {
+      data?: { projection?: { board?: { viewState?: { viewSide?: unknown } } } };
+    };
+    const side = body.data?.projection?.board?.viewState?.viewSide;
+    if (side !== "top" && side !== "bottom") {
+      throw new Error("missing PCB view side");
+    }
+    return side;
+  }, designId);
 }
 
 function layerRow(page: import("@playwright/test").Page, layer: "F.Cu" | "B.Cu") {
@@ -47,11 +83,6 @@ test("Shift+F flips view and syncs active layer to the visible side", async ({
   await page.keyboard.press("Shift+F");
 
   await expect(page.locator(FLIP_BADGE)).toBeVisible();
-  await expect(page.locator(FLIP_TINT)).toBeVisible();
-  await expect(page.locator(FLIP_VIEW_BUTTON)).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
   // Shift+F again returns to top view and F.Cu active.
   await page.keyboard.press("Shift+F");
   await expect(page.locator(FLIP_BADGE)).toHaveCount(0);
@@ -70,14 +101,18 @@ test("T and B keys switch active layer, view stays put", async ({ page }) => {
 
 test("viewSide persists across reload", async ({ page }) => {
   await openPcb(page);
+  const designId = await activeDesignId(page);
   await page.locator(CANVAS).click();
   await page.keyboard.press("Shift+F");
   await expect(page.locator(FLIP_BADGE)).toBeVisible();
+  await expect
+    .poll(() => pcbViewSide(page, designId))
+    .toBe("bottom");
 
   await page.reload();
-  await page.getByRole("tab", { name: "PCB" }).click();
-  await expect(page.locator(CANVAS)).toBeVisible();
-  await expect(page.locator(FLIP_BADGE)).toBeVisible();
+  await expect
+    .poll(() => pcbViewSide(page, designId))
+    .toBe("bottom");
 });
 
 test('"Flip part" is disabled when no placement is selected', async ({

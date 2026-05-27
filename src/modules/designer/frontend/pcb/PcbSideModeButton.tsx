@@ -24,6 +24,7 @@ export function PcbSideModeButton({
       onClick={onToggle}
       title={aria}
       aria-label={aria}
+      aria-pressed={!isTop}
       data-testid="pcb-flip-view-button"
       className="inline-flex h-7 items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-900/80 px-2 text-xs font-medium text-zinc-100 transition-colors hover:bg-zinc-800"
     >
