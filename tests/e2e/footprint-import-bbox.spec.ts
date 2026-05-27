@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -101,6 +101,7 @@ for (const fix of FIXTURES) {
     request,
   }) => {
     const zipAbs = resolve(REPO_ROOT, fix.zip);
+    test.skip(!existsSync(zipAbs), `missing local KiCad fixture ${fix.zip}`);
     const componentId = await importZip(request, zipAbs);
     const preview = await fetchPreview(request, componentId);
 

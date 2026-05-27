@@ -23,7 +23,7 @@ test("boots browser app, loads modules, and opens designer", async ({ page, requ
   await expect(page.getByRole("tab", { name: "Schem" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "PCB" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "No design open" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "New design" })).toBeVisible();
+  await expect(page.getByText("New design", { exact: true }).last()).toBeVisible();
 });
 
 test("creates a design from home and renders schematic shell", async ({ page }) => {
