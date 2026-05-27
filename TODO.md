@@ -96,7 +96,7 @@ Decisions:
 - [x] Add `electron-desktop` Playwright project and npm script.
 - [x] Gate `release.yml` matrix with packaged desktop E2E on macOS, Windows, and Linux/Xvfb before publishing.
 - [x] Validate locally with typecheck, packaged macOS build, and packaged Electron smoke.
-- [ ] Run updated release workflow via GitHub Actions after commit/push approval.
+- [x] Run updated release workflow via GitHub Actions after commit/push approval.
 
 ## Active PCB Canvas UX Optimization
 
