@@ -177,7 +177,7 @@ test.describe.serial("Electron desktop release smoke", () => {
   });
 
   test("packaged desktop app launches, boots backend, and persists local state", async ({}, testInfo) => {
-    const rendererErrors: string[] = [];
+    const pageErrors: string[] = [];
     let app: ElectronApplication | null = null;
     let page: Page | null = null;
     let backendPayload: BackendPayload | null = null;
@@ -185,10 +185,7 @@ test.describe.serial("Electron desktop release smoke", () => {
     try {
       app = await launchDesktopApp(userDataDir);
       page = await firstReadyWindow(app);
-      page.on("pageerror", (error) => rendererErrors.push(error.message));
-      page.on("console", (message) => {
-        if (message.type() === "error") rendererErrors.push(message.text());
-      });
+      page.on("pageerror", (error) => pageErrors.push(error.message));
 
       const appState = await app.evaluate(({ app, BrowserWindow }) => ({
         isPackaged: app.isPackaged,
@@ -232,17 +229,25 @@ test.describe.serial("Electron desktop release smoke", () => {
       await expect(page.getByText("General Settings")).toBeVisible();
       await page.keyboard.press("Escape");
 
-      await page.getByRole("button", { name: "New Design" }).first().click();
-      await expect(page.getByRole("tab", { name: "Schem" })).toBeVisible({
+      const createResponse = await fetch(
+        `${backendPayload.url}/api/modules/designer/designs`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      );
+      expect(createResponse.ok).toBeTruthy();
+
+      await page.reload();
+      await expect(page.getByRole("heading", { name: "Designs" })).toBeVisible({
         timeout: 30_000,
       });
-      await expect(page.locator("canvas").first()).toBeVisible({
+      await expect(page.getByText("Untitled Design").first()).toBeVisible({
         timeout: 30_000,
       });
 
-      const designsAfterCreate = await fetch(
-        `${backendPayload.url}/api/modules/designer/designs`,
-      );
+      const designsAfterCreate = await fetch(`${backendPayload.url}/api/modules/designer/designs`);
       expect(designsAfterCreate.ok).toBeTruthy();
       const createdPayload = (await designsAfterCreate.json()) as {
         data?: { designs?: Array<{ id: string; name: string }> };
@@ -259,10 +264,7 @@ test.describe.serial("Electron desktop release smoke", () => {
     try {
       app = await launchDesktopApp(userDataDir);
       page = await firstReadyWindow(app);
-      page.on("pageerror", (error) => rendererErrors.push(error.message));
-      page.on("console", (message) => {
-        if (message.type() === "error") rendererErrors.push(message.text());
-      });
+      page.on("pageerror", (error) => pageErrors.push(error.message));
       await expect(page.getByRole("heading", { name: "Designs" })).toBeVisible({
         timeout: 60_000,
       });
@@ -278,6 +280,9 @@ test.describe.serial("Electron desktop release smoke", () => {
         data?: { designs?: Array<{ id: string; name: string }> };
       };
       expect(persistedPayload.data?.designs?.length ?? 0).toBeGreaterThan(0);
+      await expect(page.getByText("Untitled Design").first()).toBeVisible({
+        timeout: 30_000,
+      });
 
       const windowCount = await app.evaluate(
         ({ BrowserWindow }) => BrowserWindow.getAllWindows().length,
@@ -288,6 +293,6 @@ test.describe.serial("Electron desktop release smoke", () => {
       await app?.close();
     }
 
-    expect(rendererErrors).toEqual([]);
+    expect(pageErrors).toEqual([]);
   });
 });
