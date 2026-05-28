@@ -1,0 +1,282 @@
+<h2 class="sr-only">Redesigned OpenPCB Settings Assistant screen with providers as full-width stacked accordion cards instead of a master-detail sidebar layout. Three providers shown collapsed with summary status; the OpenAI provider is expanded inline showing its full configuration form across the full content width.</h2>
+
+<div style="background:#0A0E14;border-radius:12px;border:1px solid rgba(255,255,255,0.08);overflow:hidden;font-family:var(--font-sans);color:#E5E7EB;">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#070A0F;border-bottom:1px solid rgba(255,255,255,0.06);">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <i class="ti ti-settings" style="font-size:14px;color:#9CA3AF;" aria-hidden="true"></i>
+      <span style="font-size:13px;font-weight:500;color:#F3F4F6;">Settings</span>
+    </div>
+    <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;display:flex;padding:4px;" aria-label="Close">
+      <i class="ti ti-x" style="font-size:16px;" aria-hidden="true"></i>
+    </button>
+  </div>
+
+  <div style="display:flex;min-height:780px;">
+
+    <nav style="width:148px;background:#0B1117;border-right:1px solid rgba(255,255,255,0.05);padding:10px 8px;flex-shrink:0;display:flex;flex-direction:column;gap:2px;">
+      <button style="display:flex;align-items:center;gap:9px;padding:7px 10px;background:transparent;border:0;color:#9CA3AF;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;text-align:left;">
+        <i class="ti ti-adjustments" style="font-size:14px;" aria-hidden="true"></i>General
+      </button>
+      <button style="display:flex;align-items:center;gap:9px;padding:7px 10px;background:transparent;border:0;color:#9CA3AF;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;text-align:left;">
+        <i class="ti ti-user" style="font-size:14px;" aria-hidden="true"></i>Account
+      </button>
+      <button style="display:flex;align-items:center;gap:9px;padding:7px 10px;background:transparent;border:0;color:#9CA3AF;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;text-align:left;">
+        <i class="ti ti-books" style="font-size:14px;" aria-hidden="true"></i>Libraries
+      </button>
+      <button style="display:flex;align-items:center;gap:9px;padding:7px 10px;background:rgba(139,92,246,0.15);border:0;color:#C4B5FD;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;text-align:left;font-weight:500;">
+        <i class="ti ti-robot" style="font-size:14px;" aria-hidden="true"></i>Assistant
+      </button>
+      <button style="display:flex;align-items:center;gap:9px;padding:7px 10px;background:transparent;border:0;color:#9CA3AF;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;text-align:left;">
+        <i class="ti ti-lock" style="font-size:14px;" aria-hidden="true"></i>Privacy
+      </button>
+      <button style="display:flex;align-items:center;gap:9px;padding:7px 10px;background:transparent;border:0;color:#9CA3AF;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit;text-align:left;">
+        <i class="ti ti-info-circle" style="font-size:14px;" aria-hidden="true"></i>About
+      </button>
+    </nav>
+
+    <main style="flex:1;min-width:0;padding:16px 20px;overflow:hidden;">
+
+      <div style="margin-bottom:14px;">
+        <h1 style="margin:0 0 3px;font-size:18px;font-weight:500;color:#F3F4F6;">Assistant</h1>
+        <p style="margin:0;font-size:11px;color:#9CA3AF;line-height:1.4;">Bring your own key. Free on desktop — keys stored encrypted locally.</p>
+      </div>
+
+      <div style="background:#10141B;border:1px solid rgba(139,92,246,0.25);border-radius:8px;padding:11px 14px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+        <div style="width:32px;height:32px;border-radius:7px;background:rgba(139,92,246,0.20);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i class="ti ti-sparkles" style="font-size:16px;color:#C4B5FD;" aria-hidden="true"></i>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+            <span style="font-size:12px;font-weight:500;color:#F3F4F6;">OpenPCB AI Cloud</span>
+            <span style="font-size:9px;color:#C4B5FD;background:rgba(139,92,246,0.20);padding:1px 5px;border-radius:3px;letter-spacing:0.04em;">PAID</span>
+          </div>
+          <div style="font-size:10px;color:#9CA3AF;line-height:1.4;">Skip setup. Tuned models for schematic generation, BOM auto-source, and ERC fixes.</div>
+        </div>
+        <button style="background:transparent;border:1px solid rgba(167,139,250,0.30);color:#C4B5FD;padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;flex-shrink:0;display:flex;align-items:center;gap:4px;">
+          Learn more
+          <i class="ti ti-arrow-right" style="font-size:11px;" aria-hidden="true"></i>
+        </button>
+      </div>
+
+      <div style="margin-bottom:18px;">
+        <div style="font-size:10px;font-weight:500;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:10px;">Default assistant</div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;margin-bottom:10px;">
+          <div>
+            <label style="font-size:11px;color:#9CA3AF;display:block;margin-bottom:4px;">Default provider</label>
+            <select style="width:100%;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#F3F4F6;font-size:11px;padding:5px 7px;border-radius:5px;font-family:inherit;outline:0;">
+              <option>OpenAI</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:#9CA3AF;display:block;margin-bottom:4px;">Prompt preset</label>
+            <select style="width:100%;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#F3F4F6;font-size:11px;padding:5px 7px;border-radius:5px;font-family:inherit;outline:0;">
+              <option>Strict grounded</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:#9CA3AF;display:block;margin-bottom:4px;">Context per tool</label>
+            <select style="width:100%;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#F3F4F6;font-size:11px;padding:5px 7px;border-radius:5px;font-family:inherit;outline:0;">
+              <option>Medium · ~64 KB</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:#9CA3AF;display:block;margin-bottom:4px;">Tool policy</label>
+            <select style="width:100%;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#F3F4F6;font-size:11px;padding:5px 7px;border-radius:5px;font-family:inherit;outline:0;">
+              <option>Auto read · confirm writes</option>
+            </select>
+          </div>
+        </div>
+
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#9CA3AF;cursor:pointer;">
+          <input type="checkbox" style="margin:0;" />
+          Allow raw tool data
+          <span style="font-size:9px;color:#6B7280;background:#1C2128;padding:1px 5px;border-radius:3px;">Advanced</span>
+        </label>
+      </div>
+
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="font-size:10px;font-weight:500;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;">Providers · 4</div>
+          <button style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.30);color:#C4B5FD;padding:4px 9px;border-radius:6px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;font-family:inherit;">
+            <i class="ti ti-plus" style="font-size:12px;" aria-hidden="true"></i>Add provider
+          </button>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px;">
+
+          <button style="text-align:left;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:11px 14px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:12px;width:100%;">
+            <div style="width:32px;height:32px;border-radius:7px;background:#1C2128;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <i class="ti ti-server" style="font-size:15px;color:#9CA3AF;" aria-hidden="true"></i>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                <span style="font-size:12px;font-weight:500;color:#F3F4F6;">Custom OpenAI-compatible</span>
+              </div>
+              <div style="font-size:10px;color:#6B7280;display:flex;align-items:center;gap:6px;">
+                <span style="display:flex;align-items:center;gap:4px;color:#34D399;"><span style="width:6px;height:6px;background:#34D399;border-radius:50%;"></span>Active</span>
+                <span>·</span>
+                <span style="font-family:var(--font-mono);">local-model</span>
+                <span>·</span>
+                <span>32k context</span>
+              </div>
+            </div>
+            <i class="ti ti-chevron-down" style="font-size:14px;color:#6B7280;flex-shrink:0;" aria-hidden="true"></i>
+          </button>
+
+          <button style="text-align:left;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:11px 14px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:12px;width:100%;">
+            <div style="width:32px;height:32px;border-radius:7px;background:#1C2128;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <i class="ti ti-cpu-2" style="font-size:15px;color:#9CA3AF;" aria-hidden="true"></i>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                <span style="font-size:12px;font-weight:500;color:#F3F4F6;">LM Studio</span>
+                <span style="font-size:9px;color:#9CA3AF;background:#1C2128;padding:1px 5px;border-radius:3px;letter-spacing:0.04em;">LOCAL</span>
+              </div>
+              <div style="font-size:10px;color:#6B7280;display:flex;align-items:center;gap:6px;">
+                <span style="display:flex;align-items:center;gap:4px;color:#34D399;"><span style="width:6px;height:6px;background:#34D399;border-radius:50%;"></span>Active</span>
+                <span>·</span>
+                <span style="font-family:var(--font-mono);">qwen3.5-27b</span>
+                <span>·</span>
+                <span>localhost:1234</span>
+              </div>
+            </div>
+            <i class="ti ti-chevron-down" style="font-size:14px;color:#6B7280;flex-shrink:0;" aria-hidden="true"></i>
+          </button>
+
+          <div style="background:rgba(139,92,246,0.04);border:1px solid rgba(139,92,246,0.25);border-radius:8px;overflow:hidden;">
+
+            <div style="padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;border-bottom:1px solid rgba(139,92,246,0.12);">
+              <div style="width:32px;height:32px;border-radius:7px;background:rgba(52,211,153,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="ti ti-brand-openai" style="font-size:16px;color:#34D399;" aria-hidden="true"></i>
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                  <span style="font-size:13px;font-weight:500;color:#F3F4F6;">OpenAI</span>
+                  <span style="font-size:9px;color:#C4B5FD;background:rgba(139,92,246,0.20);padding:1px 5px;border-radius:3px;letter-spacing:0.04em;">DEFAULT</span>
+                </div>
+                <div style="font-size:10px;color:#34D399;display:flex;align-items:center;gap:5px;">
+                  <i class="ti ti-circle-check" style="font-size:11px;" aria-hidden="true"></i>
+                  Connected · 142 ms · 47 models · last tested 2m ago
+                </div>
+              </div>
+              <div style="display:flex;gap:5px;align-items:center;flex-shrink:0;">
+                <button style="background:rgba(52,211,153,0.10);border:1px solid rgba(52,211,153,0.25);color:#34D399;padding:5px 9px;border-radius:6px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;font-family:inherit;">
+                  <i class="ti ti-refresh" style="font-size:12px;" aria-hidden="true"></i>Re-test
+                </button>
+                <button style="background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:5px 9px;border-radius:6px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;font-family:inherit;">
+                  <i class="ti ti-list" style="font-size:12px;" aria-hidden="true"></i>Models
+                </button>
+                <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#6B7280;padding:5px 7px;border-radius:6px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Delete">
+                  <i class="ti ti-trash" style="font-size:13px;" aria-hidden="true"></i>
+                </button>
+                <i class="ti ti-chevron-up" style="font-size:14px;color:#A78BFA;margin-left:4px;" aria-hidden="true"></i>
+              </div>
+            </div>
+
+            <div style="padding:14px;">
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:11px;">
+                <div>
+                  <label style="font-size:11px;color:#9CA3AF;display:block;margin-bottom:4px;">Label</label>
+                  <input value="OpenAI" style="width:100%;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#F3F4F6;font-size:12px;padding:6px 9px;border-radius:6px;font-family:inherit;outline:0;box-sizing:border-box;" />
+                </div>
+                <div>
+                  <label style="font-size:11px;color:#9CA3AF;display:block;margin-bottom:4px;">Type</label>
+                  <select style="width:100%;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#F3F4F6;font-size:12px;padding:6px 9px;border-radius:6px;font-family:inherit;outline:0;">
+                    <option>OpenAI official</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="margin-bottom:11px;">
+                <label style="font-size:11px;color:#9CA3AF;display:block;margin-bottom:4px;">Base URL</label>
+                <input value="https://api.openai.com/v1" style="width:100%;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#F3F4F6;font-size:12px;padding:6px 9px;border-radius:6px;font-family:var(--font-mono);outline:0;box-sizing:border-box;" />
+              </div>
+
+              <div style="margin-bottom:11px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                  <label style="font-size:11px;color:#9CA3AF;">API key</label>
+                  <span style="font-size:10px;color:#34D399;display:flex;align-items:center;gap:4px;">
+                    <i class="ti ti-lock" style="font-size:11px;" aria-hidden="true"></i>
+                    Saved · encrypted locally
+                  </span>
+                </div>
+                <div style="display:flex;align-items:center;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:6px 9px;gap:8px;">
+                  <i class="ti ti-key" style="font-size:12px;color:#6B7280;" aria-hidden="true"></i>
+                  <span style="font-family:var(--font-mono);font-size:12px;color:#9CA3AF;letter-spacing:0.5px;flex:1;">••••••••••••••••••••••••</span>
+                  <span style="font-family:var(--font-mono);font-size:12px;color:#F3F4F6;">F9aB</span>
+                  <button style="background:transparent;border:0;color:#6B7280;cursor:pointer;padding:0 4px;display:flex;" aria-label="Show key"><i class="ti ti-eye" style="font-size:12px;" aria-hidden="true"></i></button>
+                  <div style="width:1px;height:14px;background:rgba(255,255,255,0.08);"></div>
+                  <button style="background:transparent;border:0;color:#A78BFA;cursor:pointer;padding:0 4px;font-size:11px;display:flex;align-items:center;gap:4px;font-family:inherit;">
+                    <i class="ti ti-edit" style="font-size:11px;" aria-hidden="true"></i>Replace
+                  </button>
+                </div>
+              </div>
+
+              <div style="margin-bottom:14px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                  <label style="font-size:11px;color:#9CA3AF;">Default model</label>
+                  <button style="background:transparent;border:0;color:#A78BFA;font-size:11px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;">
+                    <i class="ti ti-refresh" style="font-size:11px;" aria-hidden="true"></i>Refresh models
+                  </button>
+                </div>
+                <select style="width:100%;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#F3F4F6;font-size:12px;padding:6px 9px;border-radius:6px;font-family:var(--font-mono);outline:0;">
+                  <option>gpt-4o · context 128k · $5/M in · $15/M out</option>
+                </select>
+              </div>
+
+              <div style="padding-top:12px;border-top:1px solid rgba(139,92,246,0.12);">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
+                  <span style="font-size:10px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;">This month</span>
+                  <button style="background:transparent;border:0;color:#A78BFA;font-size:10px;cursor:pointer;font-family:inherit;">View details →</button>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:9px;">
+                  <div style="background:#10141B;border:1px solid rgba(255,255,255,0.04);border-radius:6px;padding:7px 10px;">
+                    <div style="font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px;">Tokens</div>
+                    <div style="font-size:14px;font-weight:500;color:#F3F4F6;font-family:var(--font-mono);">12.4k</div>
+                  </div>
+                  <div style="background:#10141B;border:1px solid rgba(255,255,255,0.04);border-radius:6px;padding:7px 10px;">
+                    <div style="font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px;">Spend</div>
+                    <div style="font-size:14px;font-weight:500;color:#F3F4F6;font-family:var(--font-mono);">$0.02</div>
+                  </div>
+                  <div style="background:#10141B;border:1px solid rgba(255,255,255,0.04);border-radius:6px;padding:7px 10px;">
+                    <div style="font-size:10px;color:#6B7280;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px;">Calls</div>
+                    <div style="font-size:14px;font-weight:500;color:#F3F4F6;font-family:var(--font-mono);">47</div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          <button style="text-align:left;background:rgba(251,191,36,0.04);border:1px solid rgba(251,191,36,0.20);border-radius:8px;padding:11px 14px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:12px;width:100%;">
+            <div style="width:32px;height:32px;border-radius:7px;background:rgba(251,191,36,0.10);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <i class="ti ti-key" style="font-size:15px;color:#FBBF24;" aria-hidden="true"></i>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                <span style="font-size:12px;font-weight:500;color:#F3F4F6;">Anthropic</span>
+              </div>
+              <div style="font-size:10px;color:#FBBF24;display:flex;align-items:center;gap:5px;">
+                <i class="ti ti-alert-triangle" style="font-size:11px;" aria-hidden="true"></i>
+                Needs API key to activate
+              </div>
+            </div>
+            <span style="font-size:11px;color:#FBBF24;background:rgba(251,191,36,0.10);padding:4px 9px;border-radius:6px;border:1px solid rgba(251,191,36,0.25);">Set up →</span>
+          </button>
+
+          <button style="text-align:left;background:transparent;border:1px dashed rgba(255,255,255,0.12);border-radius:8px;padding:13px 14px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;color:#6B7280;font-size:11px;">
+            <i class="ti ti-plus" style="font-size:13px;" aria-hidden="true"></i>
+            Add another provider
+          </button>
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+</div>

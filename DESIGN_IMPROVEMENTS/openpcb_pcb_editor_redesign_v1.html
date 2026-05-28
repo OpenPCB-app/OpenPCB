@@ -1,0 +1,429 @@
+<h2 class="sr-only">High-fidelity mockup of the redesigned OpenPCB PCB editor, showing a three-column layout with a layers panel on the left, a PCB board visualization in the center with grouped floating toolbar and DRC status pill, and a component inspector on the right. The board shows the Dual LED Blinker design with routed copper traces, unrouted ratsnest lines, a DRC violation marker, and proper silkscreen designators. A bottom status bar shows DRC status, routing completion, grid, cursor, active layer, and zoom.</h2>
+
+<div style="background:#0A0E14;border-radius:12px;border:1px solid rgba(255,255,255,0.08);overflow:hidden;font-family:var(--font-sans);color:#E5E7EB;">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#070A0F;border-bottom:1px solid rgba(255,255,255,0.06);">
+    <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+      <div style="display:flex;align-items:center;gap:6px;background:#13191F;border:1px solid rgba(255,255,255,0.08);padding:4px 10px;border-radius:6px;font-size:12px;color:#F3F4F6;">
+        <span>Dual LED Blinker</span>
+        <span style="background:#1C2128;color:#A78BFA;padding:1px 5px;border-radius:3px;font-family:var(--font-mono);font-size:10px;">r59</span>
+        <i class="ti ti-x" style="font-size:11px;color:#6B7280;margin-left:2px;cursor:pointer;" aria-hidden="true"></i>
+      </div>
+      <button style="background:transparent;border:0;color:#6B7280;cursor:pointer;display:flex;padding:4px;" aria-label="New tab"><i class="ti ti-plus" style="font-size:14px;" aria-hidden="true"></i></button>
+    </div>
+
+    <div style="display:inline-flex;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:7px;padding:2px;">
+      <button style="padding:4px 12px;font-size:12px;background:transparent;color:#9CA3AF;border:0;border-radius:5px;cursor:pointer;font-family:inherit;">Schem</button>
+      <button style="padding:4px 12px;font-size:12px;background:rgba(139,92,246,0.18);color:#C4B5FD;border:0;border-radius:5px;cursor:pointer;font-family:inherit;font-weight:500;">PCB</button>
+      <button style="padding:4px 12px;font-size:12px;background:transparent;color:#9CA3AF;border:0;border-radius:5px;cursor:pointer;font-family:inherit;">3D</button>
+      <button style="padding:4px 12px;font-size:12px;background:transparent;color:#9CA3AF;border:0;border-radius:5px;cursor:pointer;font-family:inherit;">BOM</button>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:6px;">
+      <button style="font-size:11px;padding:4px 9px;border-radius:999px;background:rgba(251,191,36,0.08);color:#FBBF24;border:1px solid rgba(251,191,36,0.18);cursor:pointer;display:flex;align-items:center;gap:4px;font-family:inherit;">
+        <i class="ti ti-cloud-off" style="font-size:11px;" aria-hidden="true"></i>
+        Local
+      </button>
+      <button style="font-size:11px;padding:4px 9px;border-radius:6px;background:#7C3AED;color:#FFFFFF;border:0;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:inherit;font-weight:500;">
+        <i class="ti ti-download" style="font-size:12px;" aria-hidden="true"></i>
+        Export
+      </button>
+    </div>
+  </div>
+
+  <div style="display:flex;height:520px;">
+
+    <aside style="width:168px;background:#0B1117;border-right:1px solid rgba(255,255,255,0.05);flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;">
+
+      <div style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:10px;font-weight:500;color:#9CA3AF;letter-spacing:0.06em;text-transform:uppercase;">Board</span>
+          <span style="font-size:9px;color:#A78BFA;background:rgba(139,92,246,0.12);padding:1px 5px;border-radius:3px;">2-layer</span>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <div style="flex:1;">
+            <div style="font-size:9px;color:#6B7280;margin-bottom:2px;">W mm</div>
+            <input value="50" style="width:100%;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:4px;color:#F3F4F6;font-size:11px;padding:3px 5px;font-family:var(--font-mono);outline:0;" />
+          </div>
+          <div style="font-size:10px;color:#4B5563;margin-top:12px;">×</div>
+          <div style="flex:1;">
+            <div style="font-size:9px;color:#6B7280;margin-bottom:2px;">H mm</div>
+            <input value="30" style="width:100%;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:4px;color:#F3F4F6;font-size:11px;padding:3px 5px;font-family:var(--font-mono);outline:0;" />
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:10px 8px 4px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0 4px 6px;">
+          <span style="font-size:10px;font-weight:500;color:#9CA3AF;letter-spacing:0.06em;text-transform:uppercase;">Layers</span>
+        </div>
+        <div style="display:inline-flex;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:5px;padding:2px;width:100%;">
+          <button style="flex:1;padding:3px 0;font-size:9px;background:rgba(139,92,246,0.15);color:#C4B5FD;border:0;border-radius:3px;cursor:pointer;font-family:inherit;">Top</button>
+          <button style="flex:1;padding:3px 0;font-size:9px;background:transparent;color:#9CA3AF;border:0;border-radius:3px;cursor:pointer;font-family:inherit;">Bot</button>
+          <button style="flex:1;padding:3px 0;font-size:9px;background:transparent;color:#9CA3AF;border:0;border-radius:3px;cursor:pointer;font-family:inherit;">All</button>
+          <button style="flex:1;padding:3px 0;font-size:9px;background:transparent;color:#9CA3AF;border:0;border-radius:3px;cursor:pointer;font-family:inherit;">Asm</button>
+        </div>
+      </div>
+
+      <div style="flex:1;overflow:hidden;padding:6px 4px 4px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;cursor:pointer;border-radius:4px;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <span style="width:10px;height:10px;background:#D4A017;border-radius:2px;display:inline-block;"></span>
+            <span style="font-size:11px;color:#D1D5DB;">Edge cuts</span>
+          </div>
+          <i class="ti ti-eye" style="font-size:12px;color:#9CA3AF;" aria-hidden="true"></i>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;cursor:pointer;border-radius:4px;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <span style="width:10px;height:10px;background:#1F2937;border:1px solid #374151;border-radius:2px;display:inline-block;"></span>
+            <span style="font-size:11px;color:#D1D5DB;">Drill holes</span>
+          </div>
+          <i class="ti ti-eye" style="font-size:12px;color:#9CA3AF;" aria-hidden="true"></i>
+        </div>
+
+        <div style="padding:6px 8px 2px;display:flex;align-items:center;gap:4px;">
+          <i class="ti ti-chevron-down" style="font-size:10px;color:#6B7280;" aria-hidden="true"></i>
+          <span style="font-size:9px;color:#6B7280;letter-spacing:0.05em;text-transform:uppercase;">Top side</span>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;cursor:pointer;border-radius:4px;background:rgba(217,119,87,0.10);border:1px solid rgba(217,119,87,0.25);margin-bottom:2px;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <span style="width:10px;height:10px;background:#D97757;border-radius:2px;display:inline-block;"></span>
+            <span style="font-size:11px;color:#F3F4F6;font-weight:500;">Top copper</span>
+          </div>
+          <span style="font-size:9px;color:#D97757;background:rgba(217,119,87,0.15);padding:1px 4px;border-radius:3px;">Active</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;cursor:pointer;border-radius:4px;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <span style="width:10px;height:10px;background:#E5E7EB;border-radius:2px;display:inline-block;"></span>
+            <span style="font-size:11px;color:#D1D5DB;">Top silk</span>
+          </div>
+          <i class="ti ti-eye" style="font-size:12px;color:#9CA3AF;" aria-hidden="true"></i>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;cursor:pointer;border-radius:4px;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <span style="width:10px;height:10px;background:#9F1239;opacity:0.6;border-radius:2px;display:inline-block;"></span>
+            <span style="font-size:11px;color:#6B7280;">Top mask</span>
+          </div>
+          <i class="ti ti-eye-off" style="font-size:12px;color:#4B5563;" aria-hidden="true"></i>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;cursor:pointer;border-radius:4px;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <span style="width:10px;height:10px;background:#374151;border-radius:2px;display:inline-block;"></span>
+            <span style="font-size:11px;color:#6B7280;">Top paste</span>
+          </div>
+          <i class="ti ti-eye-off" style="font-size:12px;color:#4B5563;" aria-hidden="true"></i>
+        </div>
+
+        <div style="padding:6px 8px 2px;display:flex;align-items:center;gap:4px;">
+          <i class="ti ti-chevron-right" style="font-size:10px;color:#6B7280;" aria-hidden="true"></i>
+          <span style="font-size:9px;color:#6B7280;letter-spacing:0.05em;text-transform:uppercase;">Bottom side</span>
+        </div>
+      </div>
+
+      <div style="padding:8px 12px;border-top:1px solid rgba(255,255,255,0.05);background:#0A0E14;">
+        <div style="font-size:9px;color:#6B7280;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:5px;">Display</div>
+        <div style="display:inline-flex;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:5px;padding:2px;width:100%;">
+          <button style="flex:1;padding:3px 0;font-size:10px;background:rgba(139,92,246,0.15);color:#C4B5FD;border:0;border-radius:3px;cursor:pointer;font-family:inherit;">Normal</button>
+          <button style="flex:1;padding:3px 0;font-size:10px;background:transparent;color:#9CA3AF;border:0;border-radius:3px;cursor:pointer;font-family:inherit;">Dim</button>
+          <button style="flex:1;padding:3px 0;font-size:10px;background:transparent;color:#9CA3AF;border:0;border-radius:3px;cursor:pointer;font-family:inherit;">Solo</button>
+        </div>
+      </div>
+    </aside>
+
+    <main style="flex:1;min-width:0;position:relative;display:flex;flex-direction:column;background:#0A0E14;">
+
+      <div style="position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:10;display:flex;align-items:center;gap:6px;background:#13191F;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:4px;box-shadow:0 4px 14px rgba(0,0,0,0.4);">
+
+        <div style="display:flex;gap:1px;">
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;" aria-label="Undo"><i class="ti ti-arrow-back-up" style="font-size:14px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:0;color:#4B5563;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;" aria-label="Redo"><i class="ti ti-arrow-forward-up" style="font-size:14px;" aria-hidden="true"></i></button>
+        </div>
+
+        <div style="width:1px;height:18px;background:rgba(255,255,255,0.08);"></div>
+
+        <div style="display:flex;gap:1px;align-items:center;">
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;" aria-label="Zoom out"><i class="ti ti-minus" style="font-size:14px;" aria-hidden="true"></i></button>
+          <span style="font-size:11px;color:#9CA3AF;padding:0 4px;font-family:var(--font-mono);">200%</span>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;" aria-label="Zoom in"><i class="ti ti-plus" style="font-size:14px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;" aria-label="Zoom to fit"><i class="ti ti-maximize" style="font-size:13px;" aria-hidden="true"></i></button>
+        </div>
+
+        <div style="width:1px;height:18px;background:rgba(255,255,255,0.08);"></div>
+
+        <div style="display:flex;gap:1px;">
+          <button style="background:rgba(139,92,246,0.18);border:0;color:#C4B5FD;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;font-size:11px;font-family:inherit;" aria-label="Cursor, active" aria-pressed="true"><i class="ti ti-pointer" style="font-size:13px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 7px;display:flex;align-items:center;gap:3px;border-radius:5px;font-size:11px;font-family:inherit;"><i class="ti ti-vector-bezier" style="font-size:13px;" aria-hidden="true"></i><span>Route</span><span style="font-size:9px;color:#6B7280;background:#1C2128;padding:1px 4px;border-radius:3px;font-family:var(--font-mono);">R</span></button>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 7px;display:flex;align-items:center;gap:3px;border-radius:5px;font-size:11px;font-family:inherit;"><i class="ti ti-circle-dot" style="font-size:13px;" aria-hidden="true"></i><span>Via</span><span style="font-size:9px;color:#6B7280;background:#1C2128;padding:1px 4px;border-radius:3px;font-family:var(--font-mono);">V</span></button>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;font-size:11px;font-family:inherit;" aria-label="Drill hole"><i class="ti ti-target" style="font-size:13px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;font-size:11px;font-family:inherit;" aria-label="Add pad"><i class="ti ti-square" style="font-size:13px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;font-size:11px;font-family:inherit;" aria-label="Measure"><i class="ti ti-ruler-measure" style="font-size:13px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;font-size:11px;font-family:inherit;" aria-label="Text"><i class="ti ti-typography" style="font-size:13px;" aria-hidden="true"></i></button>
+        </div>
+
+        <div style="width:1px;height:18px;background:rgba(255,255,255,0.08);"></div>
+
+        <button style="background:rgba(251,191,36,0.10);border:1px solid rgba(251,191,36,0.30);color:#FBBF24;cursor:pointer;padding:4px 8px;display:flex;align-items:center;gap:5px;border-radius:5px;font-size:11px;font-family:inherit;">
+          <i class="ti ti-alert-triangle" style="font-size:12px;" aria-hidden="true"></i>
+          <span>DRC: 1</span>
+        </button>
+        <button style="background:transparent;border:1px solid rgba(255,255,255,0.08);color:#9CA3AF;cursor:pointer;padding:4px 8px;display:flex;align-items:center;gap:5px;border-radius:5px;font-size:11px;font-family:inherit;">
+          <i class="ti ti-line-dashed" style="font-size:12px;" aria-hidden="true"></i>
+          <span>Ratsnest</span>
+        </button>
+      </div>
+
+      <div style="flex:1;position:relative;overflow:hidden;">
+        <svg viewBox="0 0 520 460" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;" aria-hidden="true">
+
+          <defs>
+            <pattern id="pcbGrid" x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+              <circle cx="7" cy="7" r="0.5" fill="#1F2937" opacity="0.7"/>
+            </pattern>
+            <pattern id="pcbGridMajor" x="0" y="0" width="70" height="70" patternUnits="userSpaceOnUse">
+              <rect width="70" height="70" fill="none" stroke="#141B24" stroke-width="0.4"/>
+            </pattern>
+          </defs>
+
+          <rect width="520" height="460" fill="#0A0E14"/>
+          <rect width="520" height="460" fill="url(#pcbGridMajor)"/>
+          <rect width="520" height="460" fill="url(#pcbGrid)"/>
+
+          <g transform="translate(35, 95)">
+            <rect x="0" y="0" width="450" height="270" fill="#0D4D2C" stroke="#D4A017" stroke-width="1.5" rx="3"/>
+
+            <text x="225" y="-8" font-size="9" fill="#D4A017" font-family="var(--font-mono)" text-anchor="middle" opacity="0.85">50.00 mm</text>
+            <text x="-12" y="138" font-size="9" fill="#D4A017" font-family="var(--font-mono)" text-anchor="middle" opacity="0.85" transform="rotate(-90, -12, 138)">30.00 mm</text>
+
+            <g>
+              <line x1="0" y1="135" x2="450" y2="135" stroke="#FFFFFF" stroke-width="0.2" opacity="0.04" stroke-dasharray="2 3"/>
+              <line x1="225" y1="0" x2="225" y2="270" stroke="#FFFFFF" stroke-width="0.2" opacity="0.04" stroke-dasharray="2 3"/>
+            </g>
+
+            <g transform="translate(180, 115)">
+              <rect x="-6" y="-8" width="62" height="56" fill="rgba(167,139,250,0.10)" stroke="#A78BFA" stroke-width="1" rx="2" stroke-dasharray="3 2"/>
+              <rect x="6" y="8" width="44" height="34" fill="#1F2937" stroke="#94A3B8" stroke-width="0.4" rx="1"/>
+              <circle cx="11" cy="13" r="0.8" fill="#94A3B8"/>
+              <g fill="#D97757">
+                <rect x="2" y="11" width="6" height="3" rx="0.5"/>
+                <rect x="2" y="18" width="6" height="3" rx="0.5"/>
+                <rect x="2" y="25" width="6" height="3" rx="0.5"/>
+                <rect x="2" y="32" width="6" height="3" rx="0.5"/>
+                <rect x="48" y="11" width="6" height="3" rx="0.5"/>
+                <rect x="48" y="18" width="6" height="3" rx="0.5"/>
+                <rect x="48" y="25" width="6" height="3" rx="0.5"/>
+                <rect x="48" y="32" width="6" height="3" rx="0.5"/>
+              </g>
+              <text x="28" y="56" font-size="8" fill="#F3F4F6" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">U1</text>
+            </g>
+
+            <g transform="translate(70, 50)">
+              <rect x="-2" y="-2" width="14" height="9" fill="none" stroke="#FFFFFF" stroke-width="0.3" opacity="0.4"/>
+              <rect x="0" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <rect x="6" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <text x="5" y="15" font-size="6" fill="#FFFFFF" font-family="var(--font-mono)" text-anchor="middle" opacity="0.8">C1</text>
+            </g>
+
+            <g transform="translate(130, 70)">
+              <rect x="-2" y="-2" width="14" height="9" fill="none" stroke="#FFFFFF" stroke-width="0.3" opacity="0.4"/>
+              <rect x="0" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <rect x="6" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <text x="5" y="15" font-size="6" fill="#FFFFFF" font-family="var(--font-mono)" text-anchor="middle" opacity="0.8">R4</text>
+            </g>
+
+            <g transform="translate(130, 110)">
+              <rect x="-2" y="-2" width="14" height="9" fill="none" stroke="#FFFFFF" stroke-width="0.3" opacity="0.4"/>
+              <rect x="0" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <rect x="6" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <text x="5" y="15" font-size="6" fill="#FFFFFF" font-family="var(--font-mono)" text-anchor="middle" opacity="0.8">R3</text>
+            </g>
+
+            <g transform="translate(130, 195)">
+              <rect x="-2" y="-2" width="14" height="9" fill="none" stroke="#FFFFFF" stroke-width="0.3" opacity="0.4"/>
+              <rect x="0" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <rect x="6" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <text x="5" y="15" font-size="6" fill="#FFFFFF" font-family="var(--font-mono)" text-anchor="middle" opacity="0.8">R5</text>
+            </g>
+
+            <g transform="translate(70, 195)">
+              <rect x="-2" y="-2" width="14" height="9" fill="none" stroke="#FFFFFF" stroke-width="0.3" opacity="0.4"/>
+              <rect x="0" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <rect x="6" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <text x="5" y="15" font-size="6" fill="#FFFFFF" font-family="var(--font-mono)" text-anchor="middle" opacity="0.8">R2</text>
+            </g>
+
+            <g transform="translate(260, 70)">
+              <rect x="-2" y="-2" width="14" height="9" fill="none" stroke="#FFFFFF" stroke-width="0.3" opacity="0.4"/>
+              <rect x="0" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <rect x="6" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <text x="5" y="15" font-size="6" fill="#FFFFFF" font-family="var(--font-mono)" text-anchor="middle" opacity="0.8">R1</text>
+            </g>
+
+            <g transform="translate(260, 195)">
+              <rect x="-2" y="-2" width="14" height="9" fill="none" stroke="#FFFFFF" stroke-width="0.3" opacity="0.4"/>
+              <rect x="0" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <rect x="6" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <text x="5" y="15" font-size="6" fill="#FFFFFF" font-family="var(--font-mono)" text-anchor="middle" opacity="0.8">R6</text>
+            </g>
+
+            <g transform="translate(320, 65)">
+              <rect x="-2" y="-2" width="14" height="9" fill="none" stroke="#FFFFFF" stroke-width="0.3" opacity="0.4"/>
+              <rect x="0" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <rect x="6" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <path d="M 8 4 L 11 1 M 11 1 L 11 3 M 11 1 L 9 1" stroke="#F87171" stroke-width="0.4" fill="none"/>
+              <text x="5" y="15" font-size="6" fill="#FFFFFF" font-family="var(--font-mono)" text-anchor="middle" opacity="0.8">D1</text>
+            </g>
+
+            <g transform="translate(320, 190)">
+              <rect x="-2" y="-2" width="14" height="9" fill="none" stroke="#FFFFFF" stroke-width="0.3" opacity="0.4"/>
+              <rect x="0" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <rect x="6" y="0" width="4" height="5" fill="#D97757" rx="0.3"/>
+              <path d="M 8 4 L 11 1 M 11 1 L 11 3 M 11 1 L 9 1" stroke="#34D399" stroke-width="0.4" fill="none"/>
+              <text x="5" y="15" font-size="6" fill="#FFFFFF" font-family="var(--font-mono)" text-anchor="middle" opacity="0.8">D2</text>
+            </g>
+
+            <g transform="translate(385, 110)">
+              <rect x="-3" y="-3" width="18" height="40" fill="none" stroke="#FFFFFF" stroke-width="0.3" opacity="0.5"/>
+              <circle cx="6" cy="5" r="3.5" fill="#D97757"/>
+              <circle cx="6" cy="5" r="1.4" fill="#0D4D2C"/>
+              <text x="6" y="6" font-size="3" fill="#FFFFFF" font-family="var(--font-mono)" text-anchor="middle">1</text>
+              <circle cx="6" cy="28" r="3.5" fill="#D97757"/>
+              <circle cx="6" cy="28" r="1.4" fill="#0D4D2C"/>
+              <text x="20" y="20" font-size="6" fill="#FFFFFF" font-family="var(--font-mono)" opacity="0.8">J1</text>
+            </g>
+
+            <g stroke="#D97757" stroke-width="2" fill="none" stroke-linecap="round">
+              <path d="M 74 50 L 74 30 L 220 30 L 220 122"/>
+              <path d="M 240 125 L 264 73"/>
+              <path d="M 274 73 L 320 70"/>
+              <path d="M 332 70 L 360 70 L 360 30 L 395 30 L 395 115"/>
+            </g>
+
+            <g stroke="#94A3B8" stroke-width="0.6" fill="none" stroke-dasharray="2.5 2.5" opacity="0.75">
+              <path d="M 144 75 L 180 130"/>
+              <path d="M 144 115 L 180 138"/>
+              <path d="M 144 200 L 180 165"/>
+              <path d="M 84 200 L 180 158"/>
+              <path d="M 240 138 L 264 198"/>
+              <path d="M 332 195 L 391 138"/>
+              <path d="M 84 55 L 226 158"/>
+            </g>
+
+            <g transform="translate(285, 65)">
+              <circle cx="0" cy="0" r="5" fill="rgba(251,191,36,0.18)" stroke="#FBBF24" stroke-width="0.6"/>
+              <path d="M 0 -3 L 2.6 1.5 L -2.6 1.5 Z" fill="#FBBF24"/>
+              <text x="0" y="0.5" font-size="2.5" fill="#0A0E14" font-family="var(--font-mono)" text-anchor="middle" font-weight="500">!</text>
+            </g>
+
+          </g>
+
+        </svg>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 12px;background:#070A0F;border-top:1px solid rgba(255,255,255,0.05);font-size:10px;color:#6B7280;flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="color:#FBBF24;display:flex;align-items:center;gap:4px;cursor:pointer;"><i class="ti ti-alert-triangle" style="font-size:11px;" aria-hidden="true"></i>DRC: 1 issue</span>
+          <span style="display:flex;align-items:center;gap:4px;"><i class="ti ti-route" style="font-size:11px;color:#A78BFA;" aria-hidden="true"></i>Routed 4/11 nets (36%)</span>
+          <span>Grid 0.5 mm</span>
+          <span style="font-family:var(--font-mono);">X 25.4 Y 15.0 mm</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="display:flex;align-items:center;gap:4px;"><span style="width:7px;height:7px;background:#D97757;border-radius:1.5px;display:inline-block;"></span>Top copper</span>
+          <span style="font-family:var(--font-mono);">200%</span>
+        </div>
+      </div>
+    </main>
+
+    <aside style="width:184px;background:#0B1117;border-left:1px solid rgba(255,255,255,0.05);flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;">
+
+      <div style="padding:10px 12px 6px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:10px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">Selected part</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <div style="width:32px;height:32px;border-radius:6px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <i class="ti ti-cpu" style="font-size:16px;color:#A78BFA;" aria-hidden="true"></i>
+          </div>
+          <div style="min-width:0;">
+            <div style="font-size:13px;font-weight:500;color:#F3F4F6;font-family:var(--font-mono);">U1</div>
+            <div style="font-size:10px;color:#9CA3AF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">SOIC-8 · NE555</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px;">
+          <button style="flex:1;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:4px 0;border-radius:5px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;font-family:inherit;">
+            <i class="ti ti-schema" style="font-size:11px;" aria-hidden="true"></i>Schem
+          </button>
+          <button style="flex:1;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:4px 0;border-radius:5px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;font-family:inherit;">
+            <i class="ti ti-flip-horizontal" style="font-size:11px;" aria-hidden="true"></i>Flip
+          </button>
+        </div>
+      </div>
+
+      <div style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:10px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;">Placement</div>
+        <div style="display:grid;grid-template-columns:55px 1fr;gap:5px 8px;font-size:11px;">
+          <span style="color:#6B7280;">X</span>
+          <span style="color:#F3F4F6;font-family:var(--font-mono);">25.40 mm</span>
+          <span style="color:#6B7280;">Y</span>
+          <span style="color:#F3F4F6;font-family:var(--font-mono);">15.00 mm</span>
+          <span style="color:#6B7280;">Rotation</span>
+          <span style="color:#F3F4F6;font-family:var(--font-mono);">0°</span>
+          <span style="color:#6B7280;">Side</span>
+          <span style="color:#F3F4F6;">Top</span>
+          <span style="color:#6B7280;">Footprint</span>
+          <span style="color:#F3F4F6;font-size:10px;">SOIC-8_3.9x4.9mm</span>
+        </div>
+      </div>
+
+      <div style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:10px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;">DRC issues</span>
+          <span style="font-size:9px;color:#FBBF24;background:rgba(251,191,36,0.10);padding:1px 5px;border-radius:3px;">1 nearby</span>
+        </div>
+        <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.20);border-radius:5px;padding:6px 8px;cursor:pointer;">
+          <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">
+            <i class="ti ti-alert-triangle" style="font-size:10px;color:#FBBF24;" aria-hidden="true"></i>
+            <span style="font-size:10px;color:#FBBF24;font-weight:500;">Clearance violation</span>
+          </div>
+          <div style="font-size:10px;color:#9CA3AF;line-height:1.4;">Trace OUT too close to R1 pad (0.12 mm &lt; 0.15 mm)</div>
+        </div>
+      </div>
+
+      <div style="padding:10px 12px;flex:1;overflow:hidden;">
+        <div style="font-size:10px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">Pad nets</div>
+        <div style="display:flex;flex-direction:column;gap:3px;font-size:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0;">
+            <span style="color:#9CA3AF;font-family:var(--font-mono);">1</span>
+            <span style="color:#5DCAA5;font-family:var(--font-mono);">GND</span>
+            <span style="color:#34D399;font-size:9px;">●</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0;">
+            <span style="color:#9CA3AF;font-family:var(--font-mono);">3</span>
+            <span style="color:#94A3B8;font-family:var(--font-mono);">OUT</span>
+            <span style="color:#FBBF24;font-size:9px;">●</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0;">
+            <span style="color:#9CA3AF;font-family:var(--font-mono);">8</span>
+            <span style="color:#E0573A;font-family:var(--font-mono);">VCC</span>
+            <span style="color:#34D399;font-size:9px;">●</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0;">
+            <span style="color:#9CA3AF;font-family:var(--font-mono);">2,6</span>
+            <span style="color:#94A3B8;font-family:var(--font-mono);">N$3</span>
+            <span style="color:#6B7280;font-size:9px;">○</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0;">
+            <span style="color:#9CA3AF;font-family:var(--font-mono);">7</span>
+            <span style="color:#94A3B8;font-family:var(--font-mono);">N$4</span>
+            <span style="color:#6B7280;font-size:9px;">○</span>
+          </div>
+          <div style="padding-top:6px;font-size:9px;color:#4B5563;border-top:1px solid rgba(255,255,255,0.05);margin-top:4px;">
+            <span style="color:#34D399;">● routed</span>
+            <span style="margin:0 4px;color:#FBBF24;">● issue</span>
+            <span style="color:#6B7280;">○ unrouted</span>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+</div>

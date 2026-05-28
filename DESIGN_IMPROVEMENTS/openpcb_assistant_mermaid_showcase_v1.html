@@ -1,0 +1,394 @@
+<h2 class="sr-only">Showcase of five Mermaid diagram types rendered in the OpenPCB Assistant chat: a flowchart for power supply topology selection, a state diagram for a button debouncer, a sequence diagram for an I2C sensor read, a mindmap of design considerations, and a pie chart of BOM cost breakdown. Each diagram lives in a consistent card frame with type label, title, and zoom/download/source controls.</h2>
+
+<div style="background:#0A0E14;border-radius:12px;border:1px solid rgba(255,255,255,0.08);overflow:hidden;font-family:var(--font-sans);color:#E5E7EB;padding:18px 22px;">
+
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+    <div style="width:22px;height:22px;border-radius:6px;background:rgba(139,92,246,0.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <i class="ti ti-sparkles" style="font-size:12px;color:#C4B5FD;" aria-hidden="true"></i>
+    </div>
+    <span style="font-size:12px;font-weight:500;color:#F3F4F6;">Assistant</span>
+  </div>
+
+  <div style="padding-left:30px;font-size:13px;color:#D1D5DB;line-height:1.65;margin-bottom:18px;">
+    Five diagram types I generate for electronics work. Each renders in a consistent card with zoom, download, and source-code access.
+  </div>
+
+  <div style="margin-left:30px;display:flex;flex-direction:column;gap:18px;">
+
+    <div style="background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:8px;overflow:hidden;">
+      <div style="padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(0,0,0,0.10);">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <i class="ti ti-binary-tree" style="font-size:14px;color:#A78BFA;flex-shrink:0;" aria-hidden="true"></i>
+          <span style="font-size:9px;color:#C4B5FD;background:rgba(139,92,246,0.18);padding:1px 5px;border-radius:3px;letter-spacing:0.06em;font-weight:500;">FLOWCHART</span>
+          <span style="font-size:12px;color:#F3F4F6;font-weight:500;">Power supply topology selector</span>
+        </div>
+        <div style="display:flex;gap:3px;flex-shrink:0;">
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Source"><i class="ti ti-code" style="font-size:12px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Download"><i class="ti ti-download" style="font-size:12px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Fullscreen"><i class="ti ti-maximize" style="font-size:12px;" aria-hidden="true"></i></button>
+        </div>
+      </div>
+
+      <div style="padding:14px;background:#0A0E14;">
+        <svg viewBox="0 0 500 360" style="width:100%;height:auto;display:block;" aria-hidden="true">
+          <defs>
+            <marker id="arr1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#9CA3AF"/></marker>
+          </defs>
+
+          <g>
+            <rect x="200" y="14" width="100" height="28" rx="14" fill="#13191F" stroke="#9CA3AF" stroke-width="0.8"/>
+            <text x="250" y="32" font-size="11" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)">Start</text>
+          </g>
+
+          <line x1="250" y1="42" x2="250" y2="62" stroke="#9CA3AF" stroke-width="0.8" marker-end="url(#arr1)"/>
+
+          <g>
+            <polygon points="250,68 320,100 250,132 180,100" fill="rgba(139,92,246,0.06)" stroke="#A78BFA" stroke-width="1"/>
+            <text x="250" y="97" font-size="10" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Vin &gt; Vout?</text>
+            <text x="250" y="110" font-size="9" fill="#9CA3AF" text-anchor="middle" font-family="var(--font-sans)">step down?</text>
+          </g>
+
+          <line x1="180" y1="100" x2="125" y2="100" stroke="#9CA3AF" stroke-width="0.8" marker-end="url(#arr1)"/>
+          <text x="152" y="93" font-size="9" fill="#FBBF24" text-anchor="middle" font-family="var(--font-mono)" font-weight="500">No</text>
+
+          <g>
+            <rect x="20" y="86" width="100" height="28" rx="4" fill="rgba(52,211,153,0.08)" stroke="#34D399" stroke-width="0.8"/>
+            <text x="70" y="104" font-size="10" fill="#34D399" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Boost</text>
+          </g>
+
+          <line x1="250" y1="132" x2="250" y2="156" stroke="#9CA3AF" stroke-width="0.8" marker-end="url(#arr1)"/>
+          <text x="262" y="148" font-size="9" fill="#34D399" font-family="var(--font-mono)" font-weight="500">Yes</text>
+
+          <g>
+            <polygon points="250,162 330,196 250,230 170,196" fill="rgba(139,92,246,0.06)" stroke="#A78BFA" stroke-width="1"/>
+            <text x="250" y="194" font-size="10" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Need</text>
+            <text x="250" y="207" font-size="10" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">isolation?</text>
+          </g>
+
+          <line x1="330" y1="196" x2="385" y2="196" stroke="#9CA3AF" stroke-width="0.8" marker-end="url(#arr1)"/>
+          <text x="358" y="190" font-size="9" fill="#34D399" text-anchor="middle" font-family="var(--font-mono)" font-weight="500">Yes</text>
+
+          <g>
+            <rect x="385" y="182" width="100" height="28" rx="4" fill="rgba(52,211,153,0.08)" stroke="#34D399" stroke-width="0.8"/>
+            <text x="435" y="200" font-size="10" fill="#34D399" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Isolated DC/DC</text>
+          </g>
+
+          <line x1="250" y1="230" x2="250" y2="252" stroke="#9CA3AF" stroke-width="0.8" marker-end="url(#arr1)"/>
+          <text x="262" y="245" font-size="9" fill="#FBBF24" font-family="var(--font-mono)" font-weight="500">No</text>
+
+          <g>
+            <polygon points="250,258 330,292 250,326 170,292" fill="rgba(139,92,246,0.06)" stroke="#A78BFA" stroke-width="1"/>
+            <text x="250" y="291" font-size="10" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Iout &gt; 1 A?</text>
+            <text x="250" y="304" font-size="9" fill="#9CA3AF" text-anchor="middle" font-family="var(--font-sans)">efficiency?</text>
+          </g>
+
+          <line x1="330" y1="292" x2="385" y2="292" stroke="#9CA3AF" stroke-width="0.8" marker-end="url(#arr1)"/>
+          <text x="358" y="286" font-size="9" fill="#34D399" text-anchor="middle" font-family="var(--font-mono)" font-weight="500">Yes</text>
+
+          <g>
+            <rect x="385" y="278" width="100" height="28" rx="4" fill="rgba(52,211,153,0.08)" stroke="#34D399" stroke-width="0.8"/>
+            <text x="435" y="296" font-size="10" fill="#34D399" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Buck</text>
+          </g>
+
+          <line x1="170" y1="292" x2="115" y2="292" stroke="#9CA3AF" stroke-width="0.8" marker-end="url(#arr1)"/>
+          <text x="142" y="286" font-size="9" fill="#FBBF24" text-anchor="middle" font-family="var(--font-mono)" font-weight="500">No</text>
+
+          <g>
+            <rect x="15" y="278" width="100" height="28" rx="4" fill="rgba(52,211,153,0.08)" stroke="#34D399" stroke-width="0.8"/>
+            <text x="65" y="296" font-size="10" fill="#34D399" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">LDO</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div style="background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:8px;overflow:hidden;">
+      <div style="padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(0,0,0,0.10);">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <i class="ti ti-state-change" style="font-size:14px;color:#A78BFA;flex-shrink:0;" aria-hidden="true"></i>
+          <span style="font-size:9px;color:#C4B5FD;background:rgba(139,92,246,0.18);padding:1px 5px;border-radius:3px;letter-spacing:0.06em;font-weight:500;">STATE DIAGRAM</span>
+          <span style="font-size:12px;color:#F3F4F6;font-weight:500;">Button debouncer FSM</span>
+        </div>
+        <div style="display:flex;gap:3px;flex-shrink:0;">
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Source"><i class="ti ti-code" style="font-size:12px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Download"><i class="ti ti-download" style="font-size:12px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Fullscreen"><i class="ti ti-maximize" style="font-size:12px;" aria-hidden="true"></i></button>
+        </div>
+      </div>
+
+      <div style="padding:14px;background:#0A0E14;">
+        <svg viewBox="0 0 500 240" style="width:100%;height:auto;display:block;" aria-hidden="true">
+          <defs>
+            <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#9CA3AF"/></marker>
+          </defs>
+
+          <circle cx="40" cy="60" r="6" fill="#F3F4F6"/>
+          <line x1="46" y1="60" x2="78" y2="60" stroke="#9CA3AF" stroke-width="0.8" marker-end="url(#arr2)"/>
+
+          <g>
+            <rect x="80" y="42" width="84" height="36" rx="18" fill="rgba(167,139,250,0.10)" stroke="#A78BFA" stroke-width="1"/>
+            <text x="122" y="60" font-size="11" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Idle</text>
+            <text x="122" y="72" font-size="8" fill="#9CA3AF" text-anchor="middle" font-family="var(--font-mono)">waiting</text>
+          </g>
+
+          <path d="M 164 60 Q 200 60 220 80 L 250 100" fill="none" stroke="#9CA3AF" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <text x="195" y="80" font-size="9" fill="#FBBF24" text-anchor="middle" font-family="var(--font-mono)">press_edge</text>
+
+          <g>
+            <rect x="252" y="100" width="100" height="36" rx="18" fill="rgba(251,191,36,0.08)" stroke="#FBBF24" stroke-width="1"/>
+            <text x="302" y="118" font-size="11" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Debouncing</text>
+            <text x="302" y="130" font-size="8" fill="#9CA3AF" text-anchor="middle" font-family="var(--font-mono)">20 ms timer</text>
+          </g>
+
+          <path d="M 302 100 Q 302 60 230 60" fill="none" stroke="#9CA3AF" stroke-width="0.8" stroke-dasharray="3 2" marker-end="url(#arr2)"/>
+          <text x="262" y="50" font-size="9" fill="#F87171" text-anchor="middle" font-family="var(--font-mono)">noise → reset</text>
+
+          <line x1="352" y1="118" x2="392" y2="118" stroke="#9CA3AF" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <text x="372" y="110" font-size="9" fill="#34D399" text-anchor="middle" font-family="var(--font-mono)">stable</text>
+
+          <g>
+            <rect x="394" y="100" width="86" height="36" rx="18" fill="rgba(52,211,153,0.10)" stroke="#34D399" stroke-width="1"/>
+            <text x="437" y="118" font-size="11" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Pressed</text>
+            <text x="437" y="130" font-size="8" fill="#9CA3AF" text-anchor="middle" font-family="var(--font-mono)">emit event</text>
+          </g>
+
+          <path d="M 437 136 Q 437 175 350 187" fill="none" stroke="#9CA3AF" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <text x="430" y="170" font-size="9" fill="#FBBF24" font-family="var(--font-mono)">release_edge</text>
+
+          <g>
+            <rect x="252" y="178" width="100" height="36" rx="18" fill="rgba(94,202,165,0.08)" stroke="#5DCAA5" stroke-width="1"/>
+            <text x="302" y="196" font-size="11" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Released</text>
+            <text x="302" y="208" font-size="8" fill="#9CA3AF" text-anchor="middle" font-family="var(--font-mono)">cool-down</text>
+          </g>
+
+          <path d="M 252 196 Q 180 196 122 80" fill="none" stroke="#9CA3AF" stroke-width="0.8" marker-end="url(#arr2)"/>
+          <text x="155" y="170" font-size="9" fill="#34D399" font-family="var(--font-mono)">10 ms</text>
+        </svg>
+      </div>
+    </div>
+
+    <div style="background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:8px;overflow:hidden;">
+      <div style="padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(0,0,0,0.10);">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <i class="ti ti-arrows-left-right" style="font-size:14px;color:#A78BFA;flex-shrink:0;" aria-hidden="true"></i>
+          <span style="font-size:9px;color:#C4B5FD;background:rgba(139,92,246,0.18);padding:1px 5px;border-radius:3px;letter-spacing:0.06em;font-weight:500;">SEQUENCE</span>
+          <span style="font-size:12px;color:#F3F4F6;font-weight:500;">I²C sensor read · MPU-6050</span>
+        </div>
+        <div style="display:flex;gap:3px;flex-shrink:0;">
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Source"><i class="ti ti-code" style="font-size:12px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Download"><i class="ti ti-download" style="font-size:12px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Fullscreen"><i class="ti ti-maximize" style="font-size:12px;" aria-hidden="true"></i></button>
+        </div>
+      </div>
+
+      <div style="padding:14px;background:#0A0E14;">
+        <svg viewBox="0 0 500 350" style="width:100%;height:auto;display:block;" aria-hidden="true">
+          <defs>
+            <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#A78BFA"/></marker>
+            <marker id="arr3r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#5DCAA5"/></marker>
+          </defs>
+
+          <g>
+            <rect x="60" y="14" width="100" height="32" rx="4" fill="rgba(167,139,250,0.10)" stroke="#A78BFA" stroke-width="0.8"/>
+            <text x="110" y="32" font-size="11" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">MCU master</text>
+            <text x="110" y="42" font-size="8" fill="#9CA3AF" text-anchor="middle" font-family="var(--font-mono)">SDA · SCL</text>
+          </g>
+          <line x1="110" y1="46" x2="110" y2="330" stroke="#9CA3AF" stroke-width="0.7" stroke-dasharray="3 3" opacity="0.5"/>
+
+          <g>
+            <rect x="340" y="14" width="120" height="32" rx="4" fill="rgba(94,202,165,0.10)" stroke="#5DCAA5" stroke-width="0.8"/>
+            <text x="400" y="32" font-size="11" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">MPU-6050</text>
+            <text x="400" y="42" font-size="8" fill="#9CA3AF" text-anchor="middle" font-family="var(--font-mono)">addr 0x68</text>
+          </g>
+          <line x1="400" y1="46" x2="400" y2="330" stroke="#9CA3AF" stroke-width="0.7" stroke-dasharray="3 3" opacity="0.5"/>
+
+          <rect x="105" y="70" width="10" height="240" fill="rgba(167,139,250,0.10)" stroke="rgba(167,139,250,0.30)" stroke-width="0.5"/>
+
+          <rect x="395" y="100" width="10" height="50" fill="rgba(94,202,165,0.10)" stroke="rgba(94,202,165,0.30)" stroke-width="0.5"/>
+          <rect x="395" y="200" width="10" height="80" fill="rgba(94,202,165,0.10)" stroke="rgba(94,202,165,0.30)" stroke-width="0.5"/>
+
+          <line x1="115" y1="80" x2="395" y2="80" stroke="#A78BFA" stroke-width="1" marker-end="url(#arr3)"/>
+          <text x="255" y="73" font-size="10" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-mono)">START · 0xD0 (0x68 W)</text>
+
+          <line x1="395" y1="112" x2="115" y2="112" stroke="#5DCAA5" stroke-width="0.8" stroke-dasharray="3 2" marker-end="url(#arr3r)"/>
+          <text x="255" y="106" font-size="10" fill="#5DCAA5" text-anchor="middle" font-family="var(--font-mono)">ACK</text>
+
+          <line x1="115" y1="140" x2="395" y2="140" stroke="#A78BFA" stroke-width="1" marker-end="url(#arr3)"/>
+          <text x="255" y="133" font-size="10" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-mono)">0x3B · ACCEL_XOUT_H</text>
+
+          <line x1="395" y1="170" x2="115" y2="170" stroke="#5DCAA5" stroke-width="0.8" stroke-dasharray="3 2" marker-end="url(#arr3r)"/>
+          <text x="255" y="163" font-size="10" fill="#5DCAA5" text-anchor="middle" font-family="var(--font-mono)">ACK</text>
+
+          <line x1="115" y1="210" x2="395" y2="210" stroke="#A78BFA" stroke-width="1" marker-end="url(#arr3)"/>
+          <text x="255" y="203" font-size="10" fill="#FBBF24" text-anchor="middle" font-family="var(--font-mono)">REPEAT START · 0xD1 (0x68 R)</text>
+
+          <line x1="395" y1="240" x2="115" y2="240" stroke="#5DCAA5" stroke-width="1" marker-end="url(#arr3r)"/>
+          <text x="255" y="233" font-size="10" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-mono)">DATA[0..5] · 6 bytes accel</text>
+
+          <line x1="115" y1="275" x2="395" y2="275" stroke="#A78BFA" stroke-width="1" stroke-dasharray="3 2" marker-end="url(#arr3)"/>
+          <text x="255" y="268" font-size="10" fill="#F87171" text-anchor="middle" font-family="var(--font-mono)">NACK · stop reading</text>
+
+          <line x1="115" y1="305" x2="395" y2="305" stroke="#A78BFA" stroke-width="1" marker-end="url(#arr3)"/>
+          <text x="255" y="298" font-size="10" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-mono)">STOP</text>
+
+          <text x="20" y="200" font-size="8" fill="#6B7280" font-family="var(--font-sans)" transform="rotate(-90, 20, 200)" letter-spacing="0.5">time →</text>
+        </svg>
+      </div>
+    </div>
+
+    <div style="background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:8px;overflow:hidden;">
+      <div style="padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(0,0,0,0.10);">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <i class="ti ti-affiliate" style="font-size:14px;color:#A78BFA;flex-shrink:0;" aria-hidden="true"></i>
+          <span style="font-size:9px;color:#C4B5FD;background:rgba(139,92,246,0.18);padding:1px 5px;border-radius:3px;letter-spacing:0.06em;font-weight:500;">MINDMAP</span>
+          <span style="font-size:12px;color:#F3F4F6;font-weight:500;">Design considerations · IoT sensor</span>
+        </div>
+        <div style="display:flex;gap:3px;flex-shrink:0;">
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Source"><i class="ti ti-code" style="font-size:12px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Download"><i class="ti ti-download" style="font-size:12px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Fullscreen"><i class="ti ti-maximize" style="font-size:12px;" aria-hidden="true"></i></button>
+        </div>
+      </div>
+
+      <div style="padding:14px;background:#0A0E14;">
+        <svg viewBox="0 0 500 320" style="width:100%;height:auto;display:block;" aria-hidden="true">
+
+          <g>
+            <ellipse cx="80" cy="160" rx="56" ry="28" fill="rgba(139,92,246,0.15)" stroke="#A78BFA" stroke-width="1.2"/>
+            <text x="80" y="156" font-size="11" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Design</text>
+            <text x="80" y="170" font-size="9" fill="#C4B5FD" text-anchor="middle" font-family="var(--font-sans)">IoT sensor</text>
+          </g>
+
+          <path d="M 132 145 Q 175 80 220 50" fill="none" stroke="#A78BFA" stroke-width="1"/>
+          <g>
+            <rect x="220" y="35" width="84" height="24" rx="12" fill="rgba(224,87,58,0.10)" stroke="#E0573A" stroke-width="0.9"/>
+            <text x="262" y="51" font-size="10" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Power</text>
+          </g>
+          <line x1="304" y1="45" x2="332" y2="40" stroke="#E0573A" stroke-width="0.7" opacity="0.5"/>
+          <text x="338" y="36" font-size="9" fill="#E0573A" font-family="var(--font-mono)">3.3 V battery</text>
+          <line x1="304" y1="48" x2="332" y2="50" stroke="#E0573A" stroke-width="0.7" opacity="0.5"/>
+          <text x="338" y="53" font-size="9" fill="#9CA3AF" font-family="var(--font-mono)">≤100 mA avg</text>
+          <line x1="304" y1="52" x2="332" y2="62" stroke="#E0573A" stroke-width="0.7" opacity="0.5"/>
+          <text x="338" y="68" font-size="9" fill="#9CA3AF" font-family="var(--font-mono)">µA deep sleep</text>
+
+          <path d="M 132 152 Q 175 115 220 105" fill="none" stroke="#A78BFA" stroke-width="1"/>
+          <g>
+            <rect x="220" y="93" width="100" height="24" rx="12" fill="rgba(94,202,165,0.10)" stroke="#5DCAA5" stroke-width="0.9"/>
+            <text x="270" y="109" font-size="10" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Mechanical</text>
+          </g>
+          <line x1="320" y1="100" x2="346" y2="95" stroke="#5DCAA5" stroke-width="0.7" opacity="0.5"/>
+          <text x="352" y="91" font-size="9" fill="#9CA3AF" font-family="var(--font-mono)">50 × 30 mm</text>
+          <line x1="320" y1="105" x2="346" y2="105" stroke="#5DCAA5" stroke-width="0.7" opacity="0.5"/>
+          <text x="352" y="108" font-size="9" fill="#9CA3AF" font-family="var(--font-mono)">4× M3 mounts</text>
+          <line x1="320" y1="110" x2="346" y2="120" stroke="#5DCAA5" stroke-width="0.7" opacity="0.5"/>
+          <text x="352" y="123" font-size="9" fill="#9CA3AF" font-family="var(--font-mono)">12 mm height</text>
+
+          <path d="M 136 162 Q 175 162 220 162" fill="none" stroke="#A78BFA" stroke-width="1"/>
+          <g>
+            <rect x="220" y="150" width="84" height="24" rx="12" fill="rgba(251,191,36,0.10)" stroke="#FBBF24" stroke-width="0.9"/>
+            <text x="262" y="166" font-size="10" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Cost</text>
+          </g>
+          <line x1="304" y1="158" x2="332" y2="152" stroke="#FBBF24" stroke-width="0.7" opacity="0.5"/>
+          <text x="338" y="148" font-size="9" fill="#FBBF24" font-family="var(--font-mono)">&lt; $5/board</text>
+          <line x1="304" y1="162" x2="332" y2="162" stroke="#FBBF24" stroke-width="0.7" opacity="0.5"/>
+          <text x="338" y="166" font-size="9" fill="#9CA3AF" font-family="var(--font-mono)">JLCPCB Basic</text>
+          <line x1="304" y1="167" x2="332" y2="178" stroke="#FBBF24" stroke-width="0.7" opacity="0.5"/>
+          <text x="338" y="181" font-size="9" fill="#9CA3AF" font-family="var(--font-mono)">100-piece qty</text>
+
+          <path d="M 132 168 Q 175 205 220 220" fill="none" stroke="#A78BFA" stroke-width="1"/>
+          <g>
+            <rect x="220" y="208" width="106" height="24" rx="12" fill="rgba(167,139,250,0.10)" stroke="#A78BFA" stroke-width="0.9"/>
+            <text x="273" y="224" font-size="10" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">Manufacturing</text>
+          </g>
+          <line x1="326" y1="215" x2="352" y2="208" stroke="#A78BFA" stroke-width="0.7" opacity="0.5"/>
+          <text x="358" y="204" font-size="9" fill="#9CA3AF" font-family="var(--font-mono)">2-layer, 1 oz Cu</text>
+          <line x1="326" y1="220" x2="352" y2="220" stroke="#A78BFA" stroke-width="0.7" opacity="0.5"/>
+          <text x="358" y="222" font-size="9" fill="#9CA3AF" font-family="var(--font-mono)">Lead-free SMT</text>
+          <line x1="326" y1="225" x2="352" y2="234" stroke="#A78BFA" stroke-width="0.7" opacity="0.5"/>
+          <text x="358" y="238" font-size="9" fill="#9CA3AF" font-family="var(--font-mono)">No BGA</text>
+
+          <path d="M 132 175 Q 175 245 220 275" fill="none" stroke="#A78BFA" stroke-width="1"/>
+          <g>
+            <rect x="220" y="262" width="84" height="24" rx="12" fill="rgba(248,113,113,0.10)" stroke="#F87171" stroke-width="0.9"/>
+            <text x="262" y="278" font-size="10" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">EMI/EMC</text>
+          </g>
+          <line x1="304" y1="270" x2="332" y2="264" stroke="#F87171" stroke-width="0.7" opacity="0.5"/>
+          <text x="338" y="260" font-size="9" fill="#9CA3AF" font-family="var(--font-mono)">FCC Class B</text>
+          <line x1="304" y1="275" x2="332" y2="275" stroke="#F87171" stroke-width="0.7" opacity="0.5"/>
+          <text x="338" y="278" font-size="9" fill="#9CA3AF" font-family="var(--font-mono)">Full GND plane</text>
+          <line x1="304" y1="280" x2="332" y2="290" stroke="#F87171" stroke-width="0.7" opacity="0.5"/>
+          <text x="338" y="293" font-size="9" fill="#9CA3AF" font-family="var(--font-mono)">Shielded MCU</text>
+        </svg>
+      </div>
+    </div>
+
+    <div style="background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:8px;overflow:hidden;">
+      <div style="padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(0,0,0,0.10);">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <i class="ti ti-chart-pie" style="font-size:14px;color:#A78BFA;flex-shrink:0;" aria-hidden="true"></i>
+          <span style="font-size:9px;color:#C4B5FD;background:rgba(139,92,246,0.18);padding:1px 5px;border-radius:3px;letter-spacing:0.06em;font-weight:500;">PIE CHART</span>
+          <span style="font-size:12px;color:#F3F4F6;font-weight:500;">BOM cost breakdown · 100-piece run</span>
+        </div>
+        <div style="display:flex;gap:3px;flex-shrink:0;">
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Source"><i class="ti ti-code" style="font-size:12px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Download"><i class="ti ti-download" style="font-size:12px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Fullscreen"><i class="ti ti-maximize" style="font-size:12px;" aria-hidden="true"></i></button>
+        </div>
+      </div>
+
+      <div style="padding:14px;background:#0A0E14;display:flex;align-items:center;gap:20px;">
+
+        <svg viewBox="0 0 240 240" style="width:50%;max-width:240px;height:auto;display:block;" aria-hidden="true">
+          <g transform="translate(120, 120)">
+            <path d="M 0,0 L 0,-90 A 90,90 0 0,1 85.6,-27.8 Z" fill="#7C3AED" stroke="#0A0E14" stroke-width="1.5"/>
+            <path d="M 0,0 L 85.6,-27.8 A 90,90 0 0,1 52.9,72.8 Z" fill="#34D399" stroke="#0A0E14" stroke-width="1.5"/>
+            <path d="M 0,0 L 52.9,72.8 A 90,90 0 0,1 -52.9,72.8 Z" fill="#FBBF24" stroke="#0A0E14" stroke-width="1.5"/>
+            <path d="M 0,0 L -52.9,72.8 A 90,90 0 0,1 -85.6,-27.8 Z" fill="#F87171" stroke="#0A0E14" stroke-width="1.5"/>
+            <path d="M 0,0 L -85.6,-27.8 A 90,90 0 0,1 0,-90 Z" fill="#94A3B8" stroke="#0A0E14" stroke-width="1.5"/>
+            <circle cx="0" cy="0" r="38" fill="#0A0E14"/>
+            <text x="0" y="-4" font-size="11" fill="#F3F4F6" text-anchor="middle" font-family="var(--font-sans)" font-weight="500">$4.94</text>
+            <text x="0" y="10" font-size="9" fill="#9CA3AF" text-anchor="middle" font-family="var(--font-sans)">per board</text>
+          </g>
+        </svg>
+
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px;font-size:11px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="width:11px;height:11px;background:#7C3AED;border-radius:2px;flex-shrink:0;"></span>
+            <span style="flex:1;color:#D1D5DB;">MCU / ICs</span>
+            <span style="font-family:var(--font-mono);color:#F3F4F6;font-weight:500;">$2.22</span>
+            <span style="font-family:var(--font-mono);color:#A78BFA;font-size:10px;width:32px;text-align:right;">45%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="width:11px;height:11px;background:#34D399;border-radius:2px;flex-shrink:0;"></span>
+            <span style="flex:1;color:#D1D5DB;">Connectors</span>
+            <span style="font-family:var(--font-mono);color:#F3F4F6;font-weight:500;">$0.99</span>
+            <span style="font-family:var(--font-mono);color:#A78BFA;font-size:10px;width:32px;text-align:right;">20%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="width:11px;height:11px;background:#FBBF24;border-radius:2px;flex-shrink:0;"></span>
+            <span style="flex:1;color:#D1D5DB;">PCB fab</span>
+            <span style="font-family:var(--font-mono);color:#F3F4F6;font-weight:500;">$0.74</span>
+            <span style="font-family:var(--font-mono);color:#A78BFA;font-size:10px;width:32px;text-align:right;">15%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="width:11px;height:11px;background:#F87171;border-radius:2px;flex-shrink:0;"></span>
+            <span style="flex:1;color:#D1D5DB;">Assembly</span>
+            <span style="font-family:var(--font-mono);color:#F3F4F6;font-weight:500;">$0.74</span>
+            <span style="font-family:var(--font-mono);color:#A78BFA;font-size:10px;width:32px;text-align:right;">15%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="width:11px;height:11px;background:#94A3B8;border-radius:2px;flex-shrink:0;"></span>
+            <span style="flex:1;color:#D1D5DB;">Passives</span>
+            <span style="font-family:var(--font-mono);color:#F3F4F6;font-weight:500;">$0.25</span>
+            <span style="font-family:var(--font-mono);color:#A78BFA;font-size:10px;width:32px;text-align:right;">5%</span>
+          </div>
+          <div style="margin-top:4px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:8px;font-size:10px;color:#6B7280;">
+            <i class="ti ti-info-circle" style="font-size:11px;" aria-hidden="true"></i>
+            Excludes shipping &amp; tax
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>

@@ -1,0 +1,332 @@
+<h2 class="sr-only">High-fidelity mockup of the redesigned OpenPCB BOM editor, showing a Bill of Materials table with severity-coded status pills, a prominent purple Auto-source button, a selected row with a JLCPCB suggestion panel on the right, and a bottom bar showing sourcing progress, order quantity selector, and total cost estimate.</h2>
+
+<div style="background:#0A0E14;border-radius:12px;border:1px solid rgba(255,255,255,0.08);overflow:hidden;font-family:var(--font-sans);color:#E5E7EB;">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#070A0F;border-bottom:1px solid rgba(255,255,255,0.06);">
+    <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+      <div style="display:flex;align-items:center;gap:6px;background:#13191F;border:1px solid rgba(255,255,255,0.08);padding:4px 10px;border-radius:6px;font-size:12px;color:#F3F4F6;">
+        <span>Dual LED Blinker</span>
+        <span style="background:#1C2128;color:#A78BFA;padding:1px 5px;border-radius:3px;font-family:var(--font-mono);font-size:10px;">r59</span>
+        <i class="ti ti-x" style="font-size:11px;color:#6B7280;margin-left:2px;cursor:pointer;" aria-hidden="true"></i>
+      </div>
+      <button style="background:transparent;border:0;color:#6B7280;cursor:pointer;display:flex;padding:4px;" aria-label="New tab"><i class="ti ti-plus" style="font-size:14px;" aria-hidden="true"></i></button>
+    </div>
+
+    <div style="display:inline-flex;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:7px;padding:2px;">
+      <button style="padding:4px 12px;font-size:12px;background:transparent;color:#9CA3AF;border:0;border-radius:5px;cursor:pointer;font-family:inherit;">Schem</button>
+      <button style="padding:4px 12px;font-size:12px;background:transparent;color:#9CA3AF;border:0;border-radius:5px;cursor:pointer;font-family:inherit;">PCB</button>
+      <button style="padding:4px 12px;font-size:12px;background:transparent;color:#9CA3AF;border:0;border-radius:5px;cursor:pointer;font-family:inherit;">3D</button>
+      <button style="padding:4px 12px;font-size:12px;background:rgba(139,92,246,0.18);color:#C4B5FD;border:0;border-radius:5px;cursor:pointer;font-family:inherit;font-weight:500;">BOM</button>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:6px;">
+      <button style="font-size:11px;padding:4px 9px;border-radius:999px;background:rgba(251,191,36,0.08);color:#FBBF24;border:1px solid rgba(251,191,36,0.18);cursor:pointer;display:flex;align-items:center;gap:4px;font-family:inherit;">
+        <i class="ti ti-cloud-off" style="font-size:11px;" aria-hidden="true"></i>
+        Local
+      </button>
+      <button style="font-size:11px;padding:4px 9px;border-radius:6px;background:#7C3AED;color:#FFFFFF;border:0;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:inherit;font-weight:500;">
+        <i class="ti ti-download" style="font-size:12px;" aria-hidden="true"></i>
+        Export
+        <i class="ti ti-chevron-down" style="font-size:10px;opacity:0.7;" aria-hidden="true"></i>
+      </button>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#0B1117;border-bottom:1px solid rgba(255,255,255,0.05);">
+
+    <div style="display:inline-flex;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:7px;padding:2px;flex-shrink:0;">
+      <button style="padding:4px 10px;font-size:11px;background:rgba(139,92,246,0.15);color:#C4B5FD;border:0;border-radius:5px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;">All<span style="font-size:9px;color:#A78BFA;opacity:0.8;">9</span></button>
+      <button style="padding:4px 10px;font-size:11px;background:transparent;color:#9CA3AF;border:0;border-radius:5px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;">Unsourced<span style="font-size:9px;color:#F87171;">2</span></button>
+      <button style="padding:4px 10px;font-size:11px;background:transparent;color:#9CA3AF;border:0;border-radius:5px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;">Sourced<span style="font-size:9px;color:#34D399;">7</span></button>
+      <button style="padding:4px 10px;font-size:11px;background:transparent;color:#9CA3AF;border:0;border-radius:5px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;">Extended<span style="font-size:9px;color:#FBBF24;">1</span></button>
+      <button style="padding:4px 10px;font-size:11px;background:transparent;color:#9CA3AF;border:0;border-radius:5px;cursor:pointer;font-family:inherit;">DNP</button>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:7px;padding:5px 9px;">
+      <i class="ti ti-search" style="font-size:12px;color:#6B7280;" aria-hidden="true"></i>
+      <input placeholder="Filter by ref, value, MPN, footprint..." style="background:transparent;border:0;outline:0;color:#E5E7EB;font-size:11px;flex:1;min-width:0;width:100%;font-family:inherit;" />
+    </div>
+
+    <button style="background:rgba(139,92,246,0.18);border:1px solid rgba(139,92,246,0.40);color:#C4B5FD;padding:5px 10px;border-radius:7px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:inherit;font-weight:500;flex-shrink:0;">
+      <i class="ti ti-sparkles" style="font-size:13px;" aria-hidden="true"></i>
+      Auto-source all
+      <span style="font-size:9px;background:rgba(255,255,255,0.10);padding:1px 5px;border-radius:3px;color:#C4B5FD;">2 unsourced</span>
+    </button>
+  </div>
+
+  <div style="display:flex;height:480px;">
+
+    <main style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:#0A0E14;">
+
+      <div style="display:grid;grid-template-columns:24px 32px 60px 32px 70px 1fr 64px;gap:8px;padding:8px 14px;background:#0B1117;border-bottom:1px solid rgba(255,255,255,0.06);font-size:9px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;align-items:center;">
+        <span><input type="checkbox" style="margin:0;" /></span>
+        <span>Status</span>
+        <span>Ref ▲</span>
+        <span style="text-align:right;">Qty</span>
+        <span>Value</span>
+        <span>MPN · Source</span>
+        <span style="text-align:right;">Cost</span>
+      </div>
+
+      <div style="flex:1;overflow:hidden;">
+
+        <div style="display:grid;grid-template-columns:24px 32px 60px 32px 70px 1fr 64px;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:11px;align-items:center;cursor:pointer;">
+          <span><input type="checkbox" style="margin:0;" /></span>
+          <span style="display:flex;align-items:center;gap:3px;background:rgba(52,211,153,0.10);color:#34D399;padding:2px 5px;border-radius:999px;font-size:9px;width:fit-content;"><i class="ti ti-check" style="font-size:11px;" aria-hidden="true"></i></span>
+          <span style="font-family:var(--font-mono);color:#E5E7EB;">C1</span>
+          <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">1</span>
+          <span style="color:#F3F4F6;">10µF</span>
+          <span style="display:flex;align-items:center;gap:6px;min-width:0;">
+            <span style="font-family:var(--font-mono);color:#A78BFA;font-size:10px;">C19702</span>
+            <span style="font-size:8px;color:#34D399;background:rgba(52,211,153,0.10);padding:1px 4px;border-radius:3px;letter-spacing:0.04em;">BASIC</span>
+            <span style="font-size:9px;color:#6B7280;">89k in stock</span>
+          </span>
+          <span style="font-family:var(--font-mono);color:#F3F4F6;text-align:right;font-size:10px;">$0.012</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:24px 32px 60px 32px 70px 1fr 64px;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:11px;align-items:center;cursor:pointer;">
+          <span><input type="checkbox" style="margin:0;" /></span>
+          <span style="display:flex;align-items:center;gap:3px;background:rgba(52,211,153,0.10);color:#34D399;padding:2px 5px;border-radius:999px;font-size:9px;width:fit-content;"><i class="ti ti-check" style="font-size:11px;" aria-hidden="true"></i></span>
+          <span style="font-family:var(--font-mono);color:#E5E7EB;">D1</span>
+          <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">1</span>
+          <span style="color:#F87171;display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;background:#F87171;border-radius:50%;display:inline-block;"></span>red</span>
+          <span style="display:flex;align-items:center;gap:6px;min-width:0;">
+            <span style="font-family:var(--font-mono);color:#A78BFA;font-size:10px;">C2286</span>
+            <span style="font-size:8px;color:#34D399;background:rgba(52,211,153,0.10);padding:1px 4px;border-radius:3px;letter-spacing:0.04em;">BASIC</span>
+            <span style="font-size:9px;color:#6B7280;">42k</span>
+          </span>
+          <span style="font-family:var(--font-mono);color:#F3F4F6;text-align:right;font-size:10px;">$0.045</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:24px 32px 60px 32px 70px 1fr 64px;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:11px;align-items:center;cursor:pointer;">
+          <span><input type="checkbox" style="margin:0;" /></span>
+          <span style="display:flex;align-items:center;gap:3px;background:rgba(52,211,153,0.10);color:#34D399;padding:2px 5px;border-radius:999px;font-size:9px;width:fit-content;"><i class="ti ti-check" style="font-size:11px;" aria-hidden="true"></i></span>
+          <span style="font-family:var(--font-mono);color:#E5E7EB;">D2</span>
+          <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">1</span>
+          <span style="color:#34D399;display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;background:#34D399;border-radius:50%;display:inline-block;"></span>green</span>
+          <span style="display:flex;align-items:center;gap:6px;min-width:0;">
+            <span style="font-family:var(--font-mono);color:#A78BFA;font-size:10px;">C72043</span>
+            <span style="font-size:8px;color:#34D399;background:rgba(52,211,153,0.10);padding:1px 4px;border-radius:3px;letter-spacing:0.04em;">BASIC</span>
+            <span style="font-size:9px;color:#6B7280;">28k</span>
+          </span>
+          <span style="font-family:var(--font-mono);color:#F3F4F6;text-align:right;font-size:10px;">$0.052</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:24px 32px 60px 32px 70px 1fr 64px;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:11px;align-items:center;cursor:pointer;background:rgba(248,113,113,0.04);border-left:3px solid transparent;border-left-color:#F87171;">
+          <span><input type="checkbox" style="margin:0;" /></span>
+          <span style="display:flex;align-items:center;gap:3px;background:rgba(248,113,113,0.12);color:#F87171;padding:2px 5px;border-radius:999px;font-size:9px;width:fit-content;"><i class="ti ti-alert-octagon" style="font-size:11px;" aria-hidden="true"></i></span>
+          <span style="font-family:var(--font-mono);color:#E5E7EB;">J1</span>
+          <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">1</span>
+          <span style="color:#F3F4F6;">2-pin</span>
+          <span style="display:flex;align-items:center;gap:6px;min-width:0;">
+            <span style="color:#F87171;font-size:10px;font-style:italic;">No MPN — through-hole, manual sourcing</span>
+          </span>
+          <span style="font-family:var(--font-mono);color:#6B7280;text-align:right;font-size:10px;">—</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:24px 32px 60px 32px 70px 1fr 64px;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:11px;align-items:center;cursor:pointer;">
+          <span><input type="checkbox" style="margin:0;" /></span>
+          <span style="display:flex;align-items:center;gap:3px;background:rgba(52,211,153,0.10);color:#34D399;padding:2px 5px;border-radius:999px;font-size:9px;width:fit-content;"><i class="ti ti-check" style="font-size:11px;" aria-hidden="true"></i></span>
+          <span style="font-family:var(--font-mono);color:#E5E7EB;">R1, R2</span>
+          <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">2</span>
+          <span style="color:#F3F4F6;">220Ω</span>
+          <span style="display:flex;align-items:center;gap:6px;min-width:0;">
+            <span style="font-family:var(--font-mono);color:#A78BFA;font-size:10px;">C17557</span>
+            <span style="font-size:8px;color:#34D399;background:rgba(52,211,153,0.10);padding:1px 4px;border-radius:3px;letter-spacing:0.04em;">BASIC</span>
+            <span style="font-size:9px;color:#6B7280;">230k</span>
+          </span>
+          <span style="font-family:var(--font-mono);color:#F3F4F6;text-align:right;font-size:10px;">$0.005</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:24px 32px 60px 32px 70px 1fr 64px;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:11px;align-items:center;cursor:pointer;">
+          <span><input type="checkbox" style="margin:0;" /></span>
+          <span style="display:flex;align-items:center;gap:3px;background:rgba(52,211,153,0.10);color:#34D399;padding:2px 5px;border-radius:999px;font-size:9px;width:fit-content;"><i class="ti ti-check" style="font-size:11px;" aria-hidden="true"></i></span>
+          <span style="font-family:var(--font-mono);color:#E5E7EB;">R3</span>
+          <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">1</span>
+          <span style="color:#F3F4F6;">10kΩ</span>
+          <span style="display:flex;align-items:center;gap:6px;min-width:0;">
+            <span style="font-family:var(--font-mono);color:#A78BFA;font-size:10px;">C17414</span>
+            <span style="font-size:8px;color:#34D399;background:rgba(52,211,153,0.10);padding:1px 4px;border-radius:3px;letter-spacing:0.04em;">BASIC</span>
+            <span style="font-size:9px;color:#6B7280;">340k</span>
+          </span>
+          <span style="font-family:var(--font-mono);color:#F3F4F6;text-align:right;font-size:10px;">$0.002</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:24px 32px 60px 32px 70px 1fr 64px;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:11px;align-items:center;cursor:pointer;background:rgba(139,92,246,0.07);border-left:3px solid #A78BFA;">
+          <span><input type="checkbox" style="margin:0;" /></span>
+          <span style="display:flex;align-items:center;gap:3px;background:rgba(167,139,250,0.18);color:#C4B5FD;padding:2px 5px;border-radius:999px;font-size:9px;width:fit-content;"><i class="ti ti-sparkles" style="font-size:11px;" aria-hidden="true"></i></span>
+          <span style="font-family:var(--font-mono);color:#F3F4F6;font-weight:500;">R4</span>
+          <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">1</span>
+          <span style="color:#F3F4F6;">47kΩ</span>
+          <span style="display:flex;align-items:center;gap:6px;min-width:0;">
+            <span style="font-family:var(--font-mono);color:#C4B5FD;font-size:10px;">C25819</span>
+            <span style="font-size:8px;color:#C4B5FD;background:rgba(167,139,250,0.18);padding:1px 4px;border-radius:3px;letter-spacing:0.04em;">SUGGESTED</span>
+            <span style="font-size:9px;color:#A78BFA;">→ apply</span>
+          </span>
+          <span style="font-family:var(--font-mono);color:#C4B5FD;text-align:right;font-size:10px;">$0.002</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:24px 32px 60px 32px 70px 1fr 64px;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:11px;align-items:center;cursor:pointer;">
+          <span><input type="checkbox" style="margin:0;" /></span>
+          <span style="display:flex;align-items:center;gap:3px;background:rgba(52,211,153,0.10);color:#34D399;padding:2px 5px;border-radius:999px;font-size:9px;width:fit-content;"><i class="ti ti-check" style="font-size:11px;" aria-hidden="true"></i></span>
+          <span style="font-family:var(--font-mono);color:#E5E7EB;">R5, R6</span>
+          <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">2</span>
+          <span style="color:#F3F4F6;">4.7kΩ</span>
+          <span style="display:flex;align-items:center;gap:6px;min-width:0;">
+            <span style="font-family:var(--font-mono);color:#A78BFA;font-size:10px;">C26010</span>
+            <span style="font-size:8px;color:#34D399;background:rgba(52,211,153,0.10);padding:1px 4px;border-radius:3px;letter-spacing:0.04em;">BASIC</span>
+            <span style="font-size:9px;color:#6B7280;">450k</span>
+          </span>
+          <span style="font-family:var(--font-mono);color:#F3F4F6;text-align:right;font-size:10px;">$0.005</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:24px 32px 60px 32px 70px 1fr 64px;gap:8px;padding:8px 14px;font-size:11px;align-items:center;cursor:pointer;background:rgba(251,191,36,0.04);border-left:3px solid #FBBF24;">
+          <span><input type="checkbox" style="margin:0;" /></span>
+          <span style="display:flex;align-items:center;gap:3px;background:rgba(251,191,36,0.12);color:#FBBF24;padding:2px 5px;border-radius:999px;font-size:9px;width:fit-content;"><i class="ti ti-alert-triangle" style="font-size:11px;" aria-hidden="true"></i></span>
+          <span style="font-family:var(--font-mono);color:#E5E7EB;">U1</span>
+          <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">1</span>
+          <span style="color:#F3F4F6;">NE555</span>
+          <span style="display:flex;align-items:center;gap:6px;min-width:0;">
+            <span style="font-family:var(--font-mono);color:#A78BFA;font-size:10px;">C7593</span>
+            <span style="font-size:8px;color:#FBBF24;background:rgba(251,191,36,0.12);padding:1px 4px;border-radius:3px;letter-spacing:0.04em;">EXTENDED</span>
+            <span style="font-size:9px;color:#FBBF24;">+$3 setup</span>
+          </span>
+          <span style="font-family:var(--font-mono);color:#F3F4F6;text-align:right;font-size:10px;">$0.185</span>
+        </div>
+
+      </div>
+
+    </main>
+
+    <aside style="width:212px;background:#0B1117;border-left:1px solid rgba(255,255,255,0.05);flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;">
+
+      <div style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:10px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;">Selected</span>
+          <span style="font-size:9px;color:#C4B5FD;background:rgba(167,139,250,0.15);padding:1px 5px;border-radius:3px;display:flex;align-items:center;gap:3px;"><i class="ti ti-sparkles" style="font-size:10px;" aria-hidden="true"></i>Suggestion</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <div style="width:32px;height:32px;border-radius:6px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <i class="ti ti-circuit-resistor" style="font-size:16px;color:#A78BFA;" aria-hidden="true"></i>
+          </div>
+          <div style="min-width:0;">
+            <div style="font-size:13px;font-weight:500;color:#F3F4F6;font-family:var(--font-mono);">R4</div>
+            <div style="font-size:10px;color:#9CA3AF;">47kΩ · 0603 · 1%</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px;">
+          <button style="flex:1;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:4px 0;border-radius:5px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;font-family:inherit;">
+            <i class="ti ti-schema" style="font-size:11px;" aria-hidden="true"></i>Schem
+          </button>
+          <button style="flex:1;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:4px 0;border-radius:5px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;font-family:inherit;">
+            <i class="ti ti-circuit-pcb" style="font-size:11px;" aria-hidden="true"></i>PCB
+          </button>
+        </div>
+      </div>
+
+      <div style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.05);background:rgba(139,92,246,0.04);">
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">
+          <i class="ti ti-sparkles" style="font-size:12px;color:#A78BFA;" aria-hidden="true"></i>
+          <span style="font-size:11px;font-weight:500;color:#C4B5FD;">JLCPCB suggestion</span>
+        </div>
+        <div style="background:#10141B;border:1px solid rgba(167,139,250,0.20);border-radius:6px;padding:8px;margin-bottom:6px;">
+          <div style="font-family:var(--font-mono);font-size:11px;color:#F3F4F6;margin-bottom:2px;">C25819</div>
+          <div style="font-size:10px;color:#9CA3AF;margin-bottom:6px;">UNI-ROYAL · 0603WAF4702T5E</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:10px;">
+            <span style="color:#6B7280;">Type</span>
+            <span style="color:#34D399;display:flex;align-items:center;gap:3px;"><span style="width:6px;height:6px;background:#34D399;border-radius:50%;"></span>Basic</span>
+            <span style="color:#6B7280;">Stock</span>
+            <span style="color:#F3F4F6;font-family:var(--font-mono);">89,234</span>
+            <span style="color:#6B7280;">Unit</span>
+            <span style="color:#F3F4F6;font-family:var(--font-mono);">$0.0023</span>
+            <span style="color:#6B7280;">Match</span>
+            <span style="color:#34D399;font-family:var(--font-mono);">98%</span>
+          </div>
+        </div>
+        <button style="width:100%;background:#7C3AED;color:#FFFFFF;border:0;padding:7px 0;border-radius:5px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;font-family:inherit;font-weight:500;margin-bottom:4px;">
+          <i class="ti ti-check" style="font-size:13px;" aria-hidden="true"></i>
+          Apply suggestion
+        </button>
+        <div style="display:flex;gap:4px;">
+          <button style="flex:1;background:transparent;color:#9CA3AF;border:1px solid rgba(255,255,255,0.06);padding:4px 0;border-radius:5px;font-size:10px;cursor:pointer;font-family:inherit;">Alternatives</button>
+          <button style="flex:1;background:transparent;color:#6B7280;border:1px solid rgba(255,255,255,0.06);padding:4px 0;border-radius:5px;font-size:10px;cursor:pointer;font-family:inherit;">Reject</button>
+        </div>
+      </div>
+
+      <div style="padding:10px 12px;flex:1;overflow:hidden;">
+        <div style="font-size:10px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">Cheaper alternatives</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:10px;">
+          <div style="background:#10141B;border:1px solid rgba(255,255,255,0.04);border-radius:5px;padding:6px 8px;cursor:pointer;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1px;">
+              <span style="font-family:var(--font-mono);color:#E5E7EB;">C58144</span>
+              <span style="color:#F3F4F6;font-family:var(--font-mono);">$0.0019</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:9px;color:#34D399;">Basic · 156k</span>
+              <span style="font-size:9px;color:#6B7280;">93% match</span>
+            </div>
+          </div>
+          <div style="background:#10141B;border:1px solid rgba(255,255,255,0.04);border-radius:5px;padding:6px 8px;cursor:pointer;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1px;">
+              <span style="font-family:var(--font-mono);color:#E5E7EB;">C23202</span>
+              <span style="color:#F3F4F6;font-family:var(--font-mono);">$0.0021</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:9px;color:#FBBF24;">Extended · 12k</span>
+              <span style="font-size:9px;color:#6B7280;">95% match</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+  <div style="padding:10px 14px;background:#070A0F;border-top:1px solid rgba(255,255,255,0.05);">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+
+      <div style="display:flex;align-items:center;gap:14px;font-size:10px;color:#9CA3AF;">
+        <div>
+          <span style="color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;font-size:9px;">Lines</span>
+          <span style="margin-left:4px;color:#F3F4F6;font-weight:500;font-size:12px;">9</span>
+        </div>
+        <div>
+          <span style="color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;font-size:9px;">Active</span>
+          <span style="margin-left:4px;color:#F3F4F6;font-weight:500;font-size:12px;">11</span>
+        </div>
+        <div>
+          <span style="color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;font-size:9px;">DNP</span>
+          <span style="margin-left:4px;color:#6B7280;font-weight:500;font-size:12px;">0</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;font-size:9px;">Sourced</span>
+          <span style="display:flex;align-items:center;gap:5px;">
+            <span style="color:#34D399;font-weight:500;font-size:12px;">7</span>
+            <span style="color:#6B7280;">/</span>
+            <span style="color:#9CA3AF;">9</span>
+            <span style="width:60px;height:4px;background:#1C2128;border-radius:2px;display:inline-block;position:relative;">
+              <span style="position:absolute;left:0;top:0;width:78%;height:100%;background:#34D399;border-radius:2px;"></span>
+            </span>
+            <span style="color:#34D399;font-family:var(--font-mono);font-size:10px;">78%</span>
+          </span>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#9CA3AF;">
+          <span style="color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;font-size:9px;">Order qty</span>
+          <select style="background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#F3F4F6;font-size:11px;padding:3px 5px;border-radius:5px;font-family:var(--font-mono);outline:0;">
+            <option>5</option>
+          </select>
+        </div>
+        <div style="background:#10141B;border:1px solid rgba(139,92,246,0.20);border-radius:6px;padding:5px 10px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:9px;color:#6B7280;text-transform:uppercase;letter-spacing:0.06em;">JLCPCB est.</span>
+          <span style="color:#F3F4F6;font-family:var(--font-mono);font-size:13px;font-weight:500;">$6.78</span>
+          <span style="font-size:9px;color:#A78BFA;">$1.36/board</span>
+          <i class="ti ti-info-circle" style="font-size:11px;color:#6B7280;cursor:pointer;" aria-hidden="true"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

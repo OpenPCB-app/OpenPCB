@@ -1,0 +1,247 @@
+<h2 class="sr-only">Redesigned OpenPCB Assistant chat interface with a slim app rail on the left, a chat sidebar with filter chips and richer list items showing linked design chips and last-activity timestamps, a top bar with editable chat title and a linked-design chip and chat actions menu, a constrained-width message column, and a rich composer with slash command hint, file attach, multiline support, context size indicator, and stop generation control.</h2>
+
+<div style="background:#0A0E14;border-radius:12px;border:1px solid rgba(255,255,255,0.08);overflow:hidden;font-family:var(--font-sans);color:#E5E7EB;">
+
+  <div style="display:flex;height:700px;">
+
+    <aside style="width:48px;background:#070A0F;border-right:1px solid rgba(255,255,255,0.05);padding:9px 0;display:flex;flex-direction:column;align-items:center;flex-shrink:0;">
+      <div style="width:30px;height:30px;border-radius:7px;background:#161B22;display:flex;align-items:center;justify-content:center;margin-bottom:12px;border:1px solid rgba(139,92,246,0.25);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4 L20 4 L20 20 L4 20 Z M9 9 L15 15 M15 9 L9 15"/></svg>
+      </div>
+
+      <button style="width:36px;padding:6px 0;background:transparent;border:0;border-radius:7px;color:#6B7280;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;margin-bottom:3px;" aria-label="Home"><i class="ti ti-layout-grid" style="font-size:16px;" aria-hidden="true"></i><span style="font-size:8px;">Home</span></button>
+      <button style="width:36px;padding:6px 0;background:transparent;border:0;border-radius:7px;color:#6B7280;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;margin-bottom:3px;" aria-label="Designer"><i class="ti ti-pencil" style="font-size:16px;" aria-hidden="true"></i><span style="font-size:8px;">Designer</span></button>
+      <button style="width:36px;padding:6px 0;background:transparent;border:0;border-radius:7px;color:#6B7280;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;margin-bottom:3px;" aria-label="Library"><i class="ti ti-package" style="font-size:16px;" aria-hidden="true"></i><span style="font-size:8px;">Library</span></button>
+      <button style="width:36px;padding:6px 0;background:rgba(139,92,246,0.12);border:0;border-radius:7px;color:#C4B5FD;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;" aria-current="page" aria-label="Assistant, current"><i class="ti ti-robot" style="font-size:16px;" aria-hidden="true"></i><span style="font-size:8px;">Assistant</span></button>
+
+      <div style="margin-top:auto;">
+        <button style="width:36px;padding:6px 0;background:transparent;border:0;border-radius:7px;color:#6B7280;display:flex;cursor:pointer;" aria-label="Settings"><i class="ti ti-settings" style="font-size:16px;" aria-hidden="true"></i></button>
+      </div>
+    </aside>
+
+    <aside style="width:198px;background:#0B1117;border-right:1px solid rgba(255,255,255,0.05);flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;">
+
+      <div style="padding:10px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,0.04);">
+        <span style="font-size:12px;font-weight:500;color:#F3F4F6;">Chats</span>
+        <div style="display:flex;align-items:center;gap:3px;">
+          <button style="background:transparent;border:0;color:#6B7280;cursor:pointer;display:flex;padding:3px;border-radius:4px;" aria-label="Collapse"><i class="ti ti-layout-sidebar-left-collapse" style="font-size:13px;" aria-hidden="true"></i></button>
+          <button style="background:#7C3AED;border:0;color:#FFF;cursor:pointer;display:flex;padding:3px 6px;border-radius:5px;font-family:inherit;font-size:10px;align-items:center;gap:3px;" aria-label="New chat">
+            <i class="ti ti-plus" style="font-size:11px;" aria-hidden="true"></i>New
+          </button>
+        </div>
+      </div>
+
+      <div style="padding:8px 10px 6px;">
+        <div style="display:flex;align-items:center;gap:5px;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:4px 7px;">
+          <i class="ti ti-search" style="font-size:11px;color:#6B7280;" aria-hidden="true"></i>
+          <input placeholder="Search chats" autocomplete="off" style="background:transparent;border:0;outline:0;color:#E5E7EB;font-size:11px;flex:1;min-width:0;font-family:inherit;width:100%;" />
+        </div>
+      </div>
+
+      <div style="padding:0 10px 8px;display:flex;gap:3px;flex-wrap:wrap;">
+        <button style="background:rgba(139,92,246,0.15);border:0;color:#C4B5FD;padding:2px 7px;border-radius:999px;font-size:9px;cursor:pointer;font-family:inherit;">All <span style="color:#A78BFA;">12</span></button>
+        <button style="background:transparent;border:0;color:#9CA3AF;padding:2px 6px;border-radius:999px;font-size:9px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:3px;"><i class="ti ti-pin" style="font-size:10px;" aria-hidden="true"></i>1</button>
+        <button style="background:transparent;border:0;color:#9CA3AF;padding:2px 6px;border-radius:999px;font-size:9px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:3px;"><i class="ti ti-link" style="font-size:10px;" aria-hidden="true"></i>3</button>
+        <button style="background:transparent;border:0;color:#6B7280;padding:2px 6px;border-radius:999px;font-size:9px;cursor:pointer;font-family:inherit;">Archived</button>
+      </div>
+
+      <div style="flex:1;overflow:hidden;padding:0 6px;">
+
+        <button style="text-align:left;background:rgba(139,92,246,0.10);border:1px solid rgba(139,92,246,0.25);border-radius:6px;padding:8px 9px;cursor:pointer;font-family:inherit;width:100%;display:block;margin-bottom:3px;border-left:3px solid #A78BFA;">
+          <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">
+            <span style="width:6px;height:6px;background:#34D399;border-radius:50%;flex-shrink:0;" aria-label="Local model"></span>
+            <span style="font-size:11px;color:#F3F4F6;font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Astable multivibrator</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">
+            <span style="display:inline-flex;align-items:center;gap:3px;background:#1C2128;padding:1px 5px;border-radius:3px;font-size:9px;color:#A78BFA;max-width:100%;">
+              <i class="ti ti-link" style="font-size:9px;flex-shrink:0;" aria-hidden="true"></i>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Dual LED Blinker</span>
+            </span>
+          </div>
+          <div style="font-size:9px;color:#6B7280;">8 min ago · 14 msgs</div>
+        </button>
+
+        <button style="text-align:left;background:#10141B;border:1px solid rgba(255,255,255,0.04);border-radius:6px;padding:8px 9px;cursor:pointer;font-family:inherit;width:100%;display:block;margin-bottom:3px;">
+          <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">
+            <span style="width:6px;height:6px;background:#34D399;border-radius:50%;flex-shrink:0;"></span>
+            <span style="font-size:11px;color:#F3F4F6;font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Power supply design notes</span>
+            <i class="ti ti-pin" style="font-size:10px;color:#FBBF24;flex-shrink:0;" aria-hidden="true"></i>
+          </div>
+          <div style="font-size:9px;color:#6B7280;">2 hours ago · 47 msgs</div>
+        </button>
+
+        <button style="text-align:left;background:#10141B;border:1px solid rgba(255,255,255,0.04);border-radius:6px;padding:8px 9px;cursor:pointer;font-family:inherit;width:100%;display:block;margin-bottom:3px;">
+          <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">
+            <span style="width:6px;height:6px;background:#A78BFA;border-radius:50%;flex-shrink:0;"></span>
+            <span style="font-size:11px;color:#F3F4F6;font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">ATmega328 firmware ideas</span>
+          </div>
+          <div style="font-size:9px;color:#6B7280;">Yesterday · 9 msgs</div>
+        </button>
+
+        <button style="text-align:left;background:#10141B;border:1px solid rgba(255,255,255,0.04);border-radius:6px;padding:8px 9px;cursor:pointer;font-family:inherit;width:100%;display:block;margin-bottom:3px;">
+          <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">
+            <span style="width:6px;height:6px;background:#34D399;border-radius:50%;flex-shrink:0;"></span>
+            <span style="font-size:11px;color:#F3F4F6;font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">JLCPCB cost optimization</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">
+            <span style="display:inline-flex;align-items:center;gap:3px;background:#1C2128;padding:1px 5px;border-radius:3px;font-size:9px;color:#A78BFA;max-width:100%;">
+              <i class="ti ti-link" style="font-size:9px;" aria-hidden="true"></i>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Motor controller v2</span>
+            </span>
+          </div>
+          <div style="font-size:9px;color:#6B7280;">3 days ago · 22 msgs</div>
+        </button>
+
+        <button style="text-align:left;background:#10141B;border:1px solid rgba(255,255,255,0.04);border-radius:6px;padding:8px 9px;cursor:pointer;font-family:inherit;width:100%;display:block;margin-bottom:3px;opacity:0.55;">
+          <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">
+            <span style="width:6px;height:6px;background:#6B7280;border-radius:50%;flex-shrink:0;"></span>
+            <span style="font-size:11px;color:#9CA3AF;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Old experiments</span>
+            <i class="ti ti-archive" style="font-size:10px;color:#6B7280;flex-shrink:0;" aria-hidden="true"></i>
+          </div>
+          <div style="font-size:9px;color:#6B7280;">2 weeks ago · archived</div>
+        </button>
+
+      </div>
+
+      <div style="padding:8px 10px;border-top:1px solid rgba(255,255,255,0.05);background:#070A0F;cursor:pointer;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+          <span style="width:6px;height:6px;background:#34D399;border-radius:50%;flex-shrink:0;"></span>
+          <span style="font-size:10px;font-weight:500;color:#F3F4F6;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Qwen 3.5 · 27B</span>
+          <span style="font-size:9px;color:#6B7280;flex-shrink:0;">Local</span>
+        </div>
+        <div style="font-size:9px;color:#6B7280;">142 ms · 12.4k tokens this mo.</div>
+      </div>
+
+    </aside>
+
+    <main style="flex:1;min-width:0;display:flex;flex-direction:column;background:#0A0E14;">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;background:#070A0F;border-bottom:1px solid rgba(255,255,255,0.06);gap:10px;">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+          <span style="font-size:13px;font-weight:500;color:#F3F4F6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text;">Astable multivibrator</span>
+          <i class="ti ti-pencil" style="font-size:10px;color:#4B5563;cursor:pointer;flex-shrink:0;" aria-label="Rename" aria-hidden="true"></i>
+          <button style="display:inline-flex;align-items:center;gap:4px;background:#13191F;border:1px solid rgba(255,255,255,0.06);padding:2px 7px;border-radius:5px;font-size:10px;color:#A78BFA;cursor:pointer;font-family:inherit;flex-shrink:0;">
+            <i class="ti ti-link" style="font-size:10px;" aria-hidden="true"></i>
+            Dual LED Blinker
+            <span style="font-family:var(--font-mono);font-size:9px;color:#6B7280;">r59</span>
+          </button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
+          <button style="background:#13191F;border:1px solid rgba(255,255,255,0.06);padding:3px 7px;border-radius:5px;font-size:10px;color:#D1D5DB;display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-family:inherit;" aria-label="Tools">
+            <i class="ti ti-tool" style="font-size:11px;color:#34D399;" aria-hidden="true"></i>
+            5
+            <span style="font-size:9px;color:#6B7280;">tools</span>
+          </button>
+          <button style="background:#13191F;border:1px solid rgba(255,255,255,0.06);padding:3px 8px;border-radius:5px;font-size:10px;color:#D1D5DB;display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-family:inherit;">
+            <span style="width:6px;height:6px;background:#34D399;border-radius:50%;"></span>
+            Qwen 27B
+            <span style="font-size:9px;color:#A78BFA;background:rgba(139,92,246,0.18);padding:0 4px;border-radius:3px;letter-spacing:0.04em;">STRICT</span>
+            <i class="ti ti-chevron-down" style="font-size:10px;color:#6B7280;" aria-hidden="true"></i>
+          </button>
+          <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);padding:3px 6px;border-radius:5px;color:#9CA3AF;cursor:pointer;display:flex;font-family:inherit;" aria-label="Chat actions"><i class="ti ti-dots" style="font-size:13px;" aria-hidden="true"></i></button>
+        </div>
+      </div>
+
+      <div style="flex:1;overflow:hidden;padding:14px 20px;">
+        <div style="max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:14px;">
+
+          <div style="display:flex;align-items:center;gap:10px;font-size:9px;color:#6B7280;text-transform:uppercase;letter-spacing:0.08em;">
+            <span style="flex:1;height:1px;background:rgba(255,255,255,0.06);"></span>
+            <span>Today</span>
+            <span style="flex:1;height:1px;background:rgba(255,255,255,0.06);"></span>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;">
+            <div style="max-width:75%;background:rgba(139,92,246,0.10);border:1px solid rgba(139,92,246,0.20);border-radius:10px 10px 2px 10px;padding:8px 12px;font-size:12px;color:#F3F4F6;line-height:1.5;">
+              Help me wire up the astable multivibrator schematic
+            </div>
+          </div>
+
+          <div>
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px;">
+              <div style="width:20px;height:20px;border-radius:5px;background:rgba(139,92,246,0.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="ti ti-sparkles" style="font-size:11px;color:#C4B5FD;" aria-hidden="true"></i>
+              </div>
+              <span style="font-size:11px;font-weight:500;color:#F3F4F6;">Assistant</span>
+              <span style="font-size:10px;color:#6B7280;">· thinking…</span>
+              <span style="display:inline-flex;gap:2px;margin-left:4px;">
+                <span style="width:4px;height:4px;background:#A78BFA;border-radius:50%;opacity:0.4;"></span>
+                <span style="width:4px;height:4px;background:#A78BFA;border-radius:50%;opacity:0.7;"></span>
+                <span style="width:4px;height:4px;background:#A78BFA;border-radius:50%;opacity:1;"></span>
+              </span>
+            </div>
+            <div style="padding-left:27px;font-size:12px;color:#D1D5DB;line-height:1.6;">
+              I'll walk through the wiring step by step. First, let me read the current schematic state…
+            </div>
+
+            <div style="padding-left:27px;margin-top:8px;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:7px 11px 7px 11px;display:flex;align-items:center;gap:8px;">
+              <i class="ti ti-file-search" style="font-size:13px;color:#A78BFA;" aria-hidden="true"></i>
+              <span style="font-size:11px;color:#F3F4F6;font-weight:500;">Read design</span>
+              <span style="font-size:10px;color:#6B7280;">running…</span>
+              <span style="flex:1;"></span>
+              <div style="width:50px;height:3px;background:#1C2128;border-radius:2px;overflow:hidden;">
+                <div style="height:100%;width:65%;background:#A78BFA;border-radius:2px;"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div style="padding:10px 20px 12px;border-top:1px solid rgba(255,255,255,0.05);background:#0A0E14;">
+        <div style="max-width:520px;margin:0 auto;">
+
+          <div style="background:#10141B;border:1px solid rgba(139,92,246,0.20);border-radius:9px;overflow:hidden;">
+
+            <div style="padding:5px 10px;display:flex;align-items:center;gap:5px;border-bottom:1px solid rgba(255,255,255,0.04);background:rgba(0,0,0,0.10);">
+              <span style="display:inline-flex;align-items:center;gap:3px;background:#1C2128;padding:1px 6px;border-radius:3px;font-size:9px;color:#A78BFA;">
+                <i class="ti ti-paperclip" style="font-size:9px;" aria-hidden="true"></i>
+                schematic_v3.png
+                <i class="ti ti-x" style="font-size:9px;cursor:pointer;margin-left:2px;" aria-hidden="true"></i>
+              </span>
+              <span style="font-size:9px;color:#6B7280;flex:1;">98 KB</span>
+              <span style="font-size:9px;color:#6B7280;display:inline-flex;align-items:center;gap:3px;">
+                <i class="ti ti-keyboard" style="font-size:10px;" aria-hidden="true"></i>
+                Type <span style="font-family:var(--font-mono);background:#13191F;padding:0 4px;border-radius:2px;color:#9CA3AF;">/</span> for commands
+              </span>
+            </div>
+
+            <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;">
+              <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:3px;display:flex;align-self:flex-start;margin-top:2px;" aria-label="Attach"><i class="ti ti-paperclip" style="font-size:14px;" aria-hidden="true"></i></button>
+
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;color:#F3F4F6;line-height:1.55;min-height:40px;font-family:inherit;">Now wire pin 3 of Q1 to the base of Q2 via the timing capacitor, and<br/><span style="color:#6B7280;">|</span></div>
+              </div>
+
+              <button style="background:#7C3AED;border:0;color:#FFF;padding:5px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;align-self:flex-end;width:26px;height:26px;" aria-label="Send"><i class="ti ti-arrow-up" style="font-size:14px;" aria-hidden="true"></i></button>
+            </div>
+
+            <div style="padding:5px 10px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(255,255,255,0.04);background:rgba(0,0,0,0.10);font-size:9px;color:#6B7280;gap:8px;">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                <span style="display:inline-flex;align-items:center;gap:3px;"><i class="ti ti-tool" style="font-size:10px;color:#34D399;" aria-hidden="true"></i>5 tools</span>
+                <span>·</span>
+                <span style="display:inline-flex;align-items:center;gap:3px;">
+                  <span style="display:inline-block;width:32px;height:3px;background:#1C2128;border-radius:1.5px;position:relative;">
+                    <span style="position:absolute;left:0;top:0;width:18%;height:100%;background:#34D399;border-radius:1.5px;"></span>
+                  </span>
+                  12k / 64k tokens
+                </span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span><span style="font-family:var(--font-mono);background:#13191F;padding:0 4px;border-radius:2px;color:#9CA3AF;">⏎</span> send</span>
+                <span><span style="font-family:var(--font-mono);background:#13191F;padding:0 4px;border-radius:2px;color:#9CA3AF;">⇧⏎</span> newline</span>
+              </div>
+            </div>
+
+          </div>
+
+          <div style="font-size:9px;color:#4B5563;text-align:center;margin-top:5px;">Assistant can make mistakes — verify critical design decisions</div>
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+</div>

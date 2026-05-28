@@ -1,0 +1,180 @@
+<h2 class="sr-only">Redesigned OpenPCB Assistant chat surface showing a consolidated header with one model pill instead of three dropdowns, a linked-design chip, a user message styled as a right-aligned bubble, an assistant response with clean markdown rendering, a collapsed and an expanded tool call card with human-readable names and pretty-printed parameters, a system warning banner, and a composer with quick-action suggestion chips.</h2>
+
+<div style="background:#0A0E14;border-radius:12px;border:1px solid rgba(255,255,255,0.08);overflow:hidden;font-family:var(--font-sans);color:#E5E7EB;">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;background:#070A0F;border-bottom:1px solid rgba(255,255,255,0.06);gap:12px;">
+    <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+      <i class="ti ti-message-2" style="font-size:14px;color:#A78BFA;flex-shrink:0;" aria-hidden="true"></i>
+      <span style="font-size:13px;font-weight:500;color:#F3F4F6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Astable multivibrator chat</span>
+      <button style="background:#13191F;border:1px solid rgba(255,255,255,0.06);padding:2px 7px;border-radius:5px;font-size:10px;color:#9CA3AF;display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-family:inherit;flex-shrink:0;">
+        <i class="ti ti-link" style="font-size:10px;color:#A78BFA;" aria-hidden="true"></i>
+        Dual LED Blinker
+        <span style="font-family:var(--font-mono);font-size:9px;color:#6B7280;">r59</span>
+      </button>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+      <button style="background:#13191F;border:1px solid rgba(255,255,255,0.06);padding:4px 9px;border-radius:6px;font-size:11px;color:#D1D5DB;display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-family:inherit;">
+        <span style="width:6px;height:6px;background:#34D399;border-radius:50%;"></span>
+        Qwen 3.5 · 27B
+        <span style="font-size:9px;color:#A78BFA;background:rgba(139,92,246,0.18);padding:1px 5px;border-radius:3px;letter-spacing:0.04em;">STRICT</span>
+        <i class="ti ti-chevron-down" style="font-size:11px;color:#6B7280;" aria-hidden="true"></i>
+      </button>
+      <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);padding:4px 6px;border-radius:6px;color:#9CA3AF;display:flex;cursor:pointer;font-family:inherit;" aria-label="Settings">
+        <i class="ti ti-settings" style="font-size:13px;" aria-hidden="true"></i>
+      </button>
+    </div>
+  </div>
+
+  <div style="padding:18px 22px;display:flex;flex-direction:column;gap:14px;">
+
+    <div style="display:flex;justify-content:flex-end;">
+      <div style="max-width:75%;background:rgba(139,92,246,0.10);border:1px solid rgba(139,92,246,0.20);border-radius:10px 10px 2px 10px;padding:9px 13px;font-size:13px;color:#F3F4F6;line-height:1.5;">
+        Add a simple two-pin connector for power
+      </div>
+    </div>
+
+    <div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <div style="width:22px;height:22px;border-radius:6px;background:rgba(139,92,246,0.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i class="ti ti-sparkles" style="font-size:12px;color:#C4B5FD;" aria-hidden="true"></i>
+        </div>
+        <span style="font-size:12px;font-weight:500;color:#F3F4F6;">Assistant</span>
+        <span style="font-size:10px;color:#6B7280;">· 2 tool calls · 1.4s</span>
+      </div>
+
+      <div style="padding-left:30px;font-size:13px;color:#D1D5DB;line-height:1.65;">
+        <p style="margin:0 0 12px;">I'll add a <strong style="color:#F3F4F6;font-weight:500;">2-pin connector</strong> for power. Standard <code style="background:#1C2128;border:1px solid rgba(255,255,255,0.04);padding:1px 5px;border-radius:3px;font-family:var(--font-mono);font-size:11px;color:#C4B5FD;">2.54 mm</code> pitch — compatible with jumper wires and breadboards.</p>
+
+        <h3 style="margin:14px 0 8px;font-size:13px;font-weight:500;color:#F3F4F6;">Pin assignment</h3>
+        <table style="width:100%;border-collapse:collapse;margin:0 0 12px;font-size:12px;">
+          <thead>
+            <tr style="background:#10141B;">
+              <th style="text-align:left;padding:6px 10px;font-size:10px;font-weight:500;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.06em;border:1px solid rgba(255,255,255,0.05);">Pin</th>
+              <th style="text-align:left;padding:6px 10px;font-size:10px;font-weight:500;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.06em;border:1px solid rgba(255,255,255,0.05);">Net</th>
+              <th style="text-align:left;padding:6px 10px;font-size:10px;font-weight:500;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.06em;border:1px solid rgba(255,255,255,0.05);">Voltage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:6px 10px;font-family:var(--font-mono);color:#F3F4F6;border:1px solid rgba(255,255,255,0.05);">1</td>
+              <td style="padding:6px 10px;color:#E0573A;font-family:var(--font-mono);border:1px solid rgba(255,255,255,0.05);">VCC</td>
+              <td style="padding:6px 10px;color:#D1D5DB;border:1px solid rgba(255,255,255,0.05);">+5 V typical</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 10px;font-family:var(--font-mono);color:#F3F4F6;border:1px solid rgba(255,255,255,0.05);">2</td>
+              <td style="padding:6px 10px;color:#5DCAA5;font-family:var(--font-mono);border:1px solid rgba(255,255,255,0.05);">GND</td>
+              <td style="padding:6px 10px;color:#D1D5DB;border:1px solid rgba(255,255,255,0.05);">0 V</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p style="margin:0 0 8px;">After placement, wire it up:</p>
+        <ul style="margin:0 0 12px;padding-left:18px;list-style:disc;">
+          <li style="margin:0 0 4px;"><code style="background:#1C2128;border:1px solid rgba(255,255,255,0.04);padding:1px 5px;border-radius:3px;font-family:var(--font-mono);font-size:11px;color:#C4B5FD;">J1.1</code> → <code style="background:#1C2128;border:1px solid rgba(255,255,255,0.04);padding:1px 5px;border-radius:3px;font-family:var(--font-mono);font-size:11px;color:#C4B5FD;">VCC</code> rail (transistor collectors + R1, R2)</li>
+            <li style="margin:0 0 4px;"><code style="background:#1C2128;border:1px solid rgba(255,255,255,0.04);padding:1px 5px;border-radius:3px;font-family:var(--font-mono);font-size:11px;color:#C4B5FD;">J1.2</code> → <code style="background:#1C2128;border:1px solid rgba(255,255,255,0.04);padding:1px 5px;border-radius:3px;font-family:var(--font-mono);font-size:11px;color:#C4B5FD;">GND</code> rail (emitters + LED cathode resistors)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="margin-left:30px;display:flex;flex-direction:column;gap:6px;">
+      <div style="font-size:9px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:2px;">Tools used</div>
+
+      <div style="background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:7px;padding:8px 11px;display:flex;align-items:center;gap:10px;cursor:pointer;">
+        <i class="ti ti-file-search" style="font-size:14px;color:#34D399;" aria-hidden="true"></i>
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12px;color:#F3F4F6;font-weight:500;">Read design</span>
+          <span style="font-size:10px;color:#6B7280;">·</span>
+          <span style="font-size:10px;color:#9CA3AF;font-family:var(--font-mono);">3 sources</span>
+        </div>
+        <span style="font-size:10px;color:#6B7280;">120 ms</span>
+        <i class="ti ti-circle-check" style="font-size:13px;color:#34D399;" aria-hidden="true"></i>
+        <i class="ti ti-chevron-down" style="font-size:12px;color:#6B7280;" aria-hidden="true"></i>
+      </div>
+
+      <div style="background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:7px;overflow:hidden;">
+        <div style="padding:8px 11px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <i class="ti ti-search" style="font-size:14px;color:#34D399;" aria-hidden="true"></i>
+          <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;color:#F3F4F6;font-weight:500;">Search library</span>
+            <span style="font-size:10px;color:#6B7280;">·</span>
+            <span style="font-size:10px;color:#9CA3AF;font-family:var(--font-mono);">10 results</span>
+          </div>
+          <span style="font-size:10px;color:#6B7280;">340 ms</span>
+          <i class="ti ti-circle-check" style="font-size:13px;color:#34D399;" aria-hidden="true"></i>
+          <i class="ti ti-chevron-up" style="font-size:12px;color:#A78BFA;" aria-hidden="true"></i>
+        </div>
+        <div style="padding:9px 11px 11px;background:rgba(0,0,0,0.15);">
+          <div style="font-size:9px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:5px;">Parameters</div>
+          <div style="display:grid;grid-template-columns:80px 1fr;gap:4px 10px;font-size:11px;margin-bottom:10px;">
+            <span style="color:#6B7280;">query</span>
+            <span style="color:#F3F4F6;font-family:var(--font-mono);">"connector 2 pin"</span>
+            <span style="color:#6B7280;">limit</span>
+            <span style="color:#F3F4F6;font-family:var(--font-mono);">10</span>
+            <span style="color:#6B7280;">filter</span>
+            <span style="color:#F3F4F6;font-family:var(--font-mono);">family=header · pins=2</span>
+          </div>
+          <div style="font-size:9px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:5px;">Top results</div>
+          <div style="display:flex;flex-direction:column;gap:3px;font-size:11px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="width:18px;color:#6B7280;font-family:var(--font-mono);font-size:9px;text-align:right;">98%</span>
+              <span style="color:#F3F4F6;">Pin Header 1×02 2.54 mm</span>
+              <span style="font-size:9px;color:#A78BFA;background:rgba(139,92,246,0.10);padding:0 5px;border-radius:3px;">CORE</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="width:18px;color:#6B7280;font-family:var(--font-mono);font-size:9px;text-align:right;">94%</span>
+              <span style="color:#F3F4F6;">Pin Header 1×02 2.00 mm</span>
+              <span style="font-size:9px;color:#A78BFA;background:rgba(139,92,246,0.10);padding:0 5px;border-radius:3px;">CORE</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="width:18px;color:#6B7280;font-family:var(--font-mono);font-size:9px;text-align:right;">76%</span>
+              <span style="color:#9CA3AF;">8 more results</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.22);border-radius:7px;padding:8px 12px;display:flex;align-items:center;gap:10px;">
+      <i class="ti ti-alert-triangle" style="font-size:14px;color:#FBBF24;flex-shrink:0;" aria-hidden="true"></i>
+      <div style="flex:1;min-width:0;font-size:11px;color:#D1D5DB;line-height:1.4;">
+        Provider rejected the tool call. Retried in chat-only mode — placement steps below are advisory.
+      </div>
+      <button style="background:rgba(251,191,36,0.10);border:1px solid rgba(251,191,36,0.30);color:#FBBF24;padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;">
+        <i class="ti ti-refresh" style="font-size:11px;" aria-hidden="true"></i>
+        Retry with tools
+      </button>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;">
+      <div style="max-width:75%;background:rgba(139,92,246,0.10);border:1px solid rgba(139,92,246,0.20);border-radius:10px 10px 2px 10px;padding:9px 13px;font-size:13px;color:#F3F4F6;line-height:1.5;">
+        Generate the wiring diagram
+      </div>
+    </div>
+
+  </div>
+
+  <div style="padding:10px 22px 14px;border-top:1px solid rgba(255,255,255,0.05);background:#070A0F;">
+    <div style="display:flex;gap:5px;margin-bottom:7px;overflow:hidden;">
+      <button style="background:#13191F;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 8px;border-radius:999px;font-size:10px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap;">
+        <i class="ti ti-circuit-pcb" style="font-size:10px;" aria-hidden="true"></i>Wire schematic
+      </button>
+      <button style="background:#13191F;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 8px;border-radius:999px;font-size:10px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap;">
+        <i class="ti ti-list" style="font-size:10px;" aria-hidden="true"></i>Resolve BOM
+      </button>
+      <button style="background:#13191F;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 8px;border-radius:999px;font-size:10px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap;">
+        <i class="ti ti-shield-check" style="font-size:10px;" aria-hidden="true"></i>Run ERC
+      </button>
+      <button style="background:#13191F;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 8px;border-radius:999px;font-size:10px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;white-space:nowrap;">
+        <i class="ti ti-sparkles" style="font-size:10px;color:#A78BFA;" aria-hidden="true"></i>Suggest improvements
+      </button>
+    </div>
+
+    <div style="background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:7px 11px;display:flex;align-items:center;gap:8px;">
+      <input placeholder="Ask about your PCB, or describe what to build..." style="background:transparent;border:0;outline:0;color:#E5E7EB;font-size:12px;flex:1;min-width:0;font-family:inherit;" />
+      <button style="background:transparent;border:0;color:#6B7280;cursor:pointer;padding:0;display:flex;" aria-label="Attach"><i class="ti ti-paperclip" style="font-size:14px;" aria-hidden="true"></i></button>
+      <button style="background:#7C3AED;border:0;color:#FFF;padding:5px 7px;border-radius:5px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Send"><i class="ti ti-send" style="font-size:13px;" aria-hidden="true"></i></button>
+    </div>
+    <div style="font-size:9px;color:#6B7280;text-align:center;margin-top:6px;">Assistant can make mistakes. Verify critical design decisions.</div>
+  </div>
+
+</div>

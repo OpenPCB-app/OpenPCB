@@ -1,0 +1,470 @@
+<h2 class="sr-only">High-fidelity mockup of the redesigned OpenPCB Schematic editor, showing a three-column layout with an outline panel on the left, a clean wired schematic canvas in the center with a floating toolbar, and a component inspector panel on the right. A bottom status bar shows ERC status, grid, cursor coordinates, zoom level, and selection.</h2>
+
+<div style="background:#0A0E14;border-radius:12px;border:1px solid rgba(255,255,255,0.08);overflow:hidden;font-family:var(--font-sans);color:#E5E7EB;">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#070A0F;border-bottom:1px solid rgba(255,255,255,0.06);">
+    <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+      <div style="display:flex;align-items:center;gap:6px;background:#13191F;border:1px solid rgba(255,255,255,0.08);padding:4px 10px;border-radius:6px;font-size:12px;color:#F3F4F6;">
+        <span>Dual LED Blinker</span>
+        <span style="background:#1C2128;color:#A78BFA;padding:1px 5px;border-radius:3px;font-family:var(--font-mono);font-size:10px;">r59</span>
+        <i class="ti ti-x" style="font-size:11px;color:#6B7280;margin-left:2px;cursor:pointer;" aria-hidden="true"></i>
+      </div>
+      <button style="background:transparent;border:0;color:#6B7280;cursor:pointer;display:flex;padding:4px;" aria-label="New tab"><i class="ti ti-plus" style="font-size:14px;" aria-hidden="true"></i></button>
+    </div>
+
+    <div style="display:inline-flex;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:7px;padding:2px;">
+      <button style="padding:4px 12px;font-size:12px;background:rgba(139,92,246,0.18);color:#C4B5FD;border:0;border-radius:5px;cursor:pointer;font-family:inherit;font-weight:500;">Schem</button>
+      <button style="padding:4px 12px;font-size:12px;background:transparent;color:#9CA3AF;border:0;border-radius:5px;cursor:pointer;font-family:inherit;">PCB</button>
+      <button style="padding:4px 12px;font-size:12px;background:transparent;color:#9CA3AF;border:0;border-radius:5px;cursor:pointer;font-family:inherit;">3D</button>
+      <button style="padding:4px 12px;font-size:12px;background:transparent;color:#9CA3AF;border:0;border-radius:5px;cursor:pointer;font-family:inherit;">BOM</button>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:6px;">
+      <button style="font-size:11px;padding:4px 9px;border-radius:999px;background:rgba(251,191,36,0.08);color:#FBBF24;border:1px solid rgba(251,191,36,0.18);cursor:pointer;display:flex;align-items:center;gap:4px;font-family:inherit;">
+        <i class="ti ti-cloud-off" style="font-size:11px;" aria-hidden="true"></i>
+        Local
+      </button>
+      <button style="font-size:11px;padding:4px 9px;border-radius:6px;background:#13191F;color:#9CA3AF;border:1px solid rgba(255,255,255,0.06);cursor:pointer;display:flex;align-items:center;gap:4px;font-family:inherit;">
+        <i class="ti ti-message" style="font-size:11px;" aria-hidden="true"></i>
+        Chat
+      </button>
+    </div>
+  </div>
+
+  <div style="display:flex;height:520px;">
+
+    <aside style="width:158px;background:#0B1117;border-right:1px solid rgba(255,255,255,0.05);flex-shrink:0;display:flex;flex-direction:column;">
+      <div style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:10px;font-weight:500;color:#9CA3AF;letter-spacing:0.06em;text-transform:uppercase;">Outline</span>
+          <span style="font-size:10px;color:#6B7280;background:#1C2128;padding:1px 5px;border-radius:3px;">11</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:5px;padding:4px 7px;">
+          <i class="ti ti-search" style="font-size:11px;color:#6B7280;" aria-hidden="true"></i>
+          <input placeholder="Filter..." style="background:transparent;border:0;outline:0;color:#E5E7EB;font-size:11px;flex:1;min-width:0;width:100%;font-family:inherit;" />
+        </div>
+      </div>
+
+      <div style="padding:8px 8px 4px;display:flex;gap:3px;">
+        <button style="font-size:10px;padding:3px 7px;background:rgba(139,92,246,0.15);color:#C4B5FD;border:0;border-radius:4px;cursor:pointer;font-family:inherit;">Parts</button>
+        <button style="font-size:10px;padding:3px 7px;background:transparent;color:#9CA3AF;border:0;border-radius:4px;cursor:pointer;font-family:inherit;">Nets</button>
+        <button style="font-size:10px;padding:3px 7px;background:transparent;color:#9CA3AF;border:0;border-radius:4px;cursor:pointer;font-family:inherit;">Labels</button>
+      </div>
+
+      <div style="flex:1;overflow:hidden;padding:0 4px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;font-size:9px;color:#4B5563;letter-spacing:0.05em;text-transform:uppercase;">
+          <span>Ref ▲</span>
+          <span>Value</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:11px;color:#D1D5DB;border-radius:4px;cursor:pointer;">
+          <i class="ti ti-circuit-capacitor" style="font-size:12px;color:#6B7280;" aria-hidden="true"></i>
+          <span style="font-family:var(--font-mono);font-size:11px;flex:1;">C1</span>
+          <span style="color:#6B7280;font-size:10px;">10µF</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:11px;color:#D1D5DB;border-radius:4px;cursor:pointer;">
+          <i class="ti ti-bulb" style="font-size:12px;color:#F87171;" aria-hidden="true"></i>
+          <span style="font-family:var(--font-mono);font-size:11px;flex:1;">D1</span>
+          <span style="color:#6B7280;font-size:10px;">red</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:11px;color:#D1D5DB;border-radius:4px;cursor:pointer;">
+          <i class="ti ti-bulb" style="font-size:12px;color:#34D399;" aria-hidden="true"></i>
+          <span style="font-family:var(--font-mono);font-size:11px;flex:1;">D2</span>
+          <span style="color:#6B7280;font-size:10px;">green</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:11px;color:#D1D5DB;border-radius:4px;cursor:pointer;">
+          <i class="ti ti-plug-connected" style="font-size:12px;color:#6B7280;" aria-hidden="true"></i>
+          <span style="font-family:var(--font-mono);font-size:11px;flex:1;">J1</span>
+          <span style="color:#6B7280;font-size:10px;">2-pin</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:11px;color:#D1D5DB;border-radius:4px;cursor:pointer;">
+          <i class="ti ti-circuit-resistor" style="font-size:12px;color:#6B7280;" aria-hidden="true"></i>
+          <span style="font-family:var(--font-mono);font-size:11px;flex:1;">R1</span>
+          <span style="color:#6B7280;font-size:10px;">220Ω</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:11px;color:#D1D5DB;border-radius:4px;cursor:pointer;">
+          <i class="ti ti-circuit-resistor" style="font-size:12px;color:#6B7280;" aria-hidden="true"></i>
+          <span style="font-family:var(--font-mono);font-size:11px;flex:1;">R2</span>
+          <span style="color:#6B7280;font-size:10px;">220Ω</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:11px;color:#D1D5DB;border-radius:4px;cursor:pointer;">
+          <i class="ti ti-circuit-resistor" style="font-size:12px;color:#6B7280;" aria-hidden="true"></i>
+          <span style="font-family:var(--font-mono);font-size:11px;flex:1;">R3</span>
+          <span style="color:#6B7280;font-size:10px;">10kΩ</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:11px;color:#D1D5DB;border-radius:4px;cursor:pointer;">
+          <i class="ti ti-circuit-resistor" style="font-size:12px;color:#6B7280;" aria-hidden="true"></i>
+          <span style="font-family:var(--font-mono);font-size:11px;flex:1;">R4</span>
+          <span style="color:#6B7280;font-size:10px;">47kΩ</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:11px;color:#D1D5DB;border-radius:4px;cursor:pointer;">
+          <i class="ti ti-circuit-resistor" style="font-size:12px;color:#6B7280;" aria-hidden="true"></i>
+          <span style="font-family:var(--font-mono);font-size:11px;flex:1;">R5</span>
+          <span style="color:#6B7280;font-size:10px;">4.7kΩ</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:11px;color:#D1D5DB;border-radius:4px;cursor:pointer;">
+          <i class="ti ti-circuit-resistor" style="font-size:12px;color:#6B7280;" aria-hidden="true"></i>
+          <span style="font-family:var(--font-mono);font-size:11px;flex:1;">R6</span>
+          <span style="color:#6B7280;font-size:10px;">4.7kΩ</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;font-size:11px;color:#C4B5FD;border-radius:4px;cursor:pointer;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.25);">
+          <i class="ti ti-cpu" style="font-size:12px;color:#A78BFA;" aria-hidden="true"></i>
+          <span style="font-family:var(--font-mono);font-size:11px;flex:1;font-weight:500;">U1</span>
+          <span style="color:#A78BFA;font-size:10px;">NE555</span>
+        </div>
+      </div>
+
+      <div style="padding:8px 12px;border-top:1px solid rgba(255,255,255,0.05);background:#0A0E14;">
+        <div style="display:flex;align-items:center;justify-content:space-between;font-size:10px;color:#6B7280;">
+          <span>Nets</span>
+          <span style="background:#1C2128;padding:1px 5px;border-radius:3px;">5</span>
+        </div>
+      </div>
+    </aside>
+
+    <main style="flex:1;min-width:0;position:relative;display:flex;flex-direction:column;background:#0A0E14;">
+
+      <div style="position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:10;display:flex;align-items:center;gap:6px;background:#13191F;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:4px;box-shadow:0 4px 14px rgba(0,0,0,0.4);">
+
+        <div style="display:flex;gap:1px;">
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;" aria-label="Undo"><i class="ti ti-arrow-back-up" style="font-size:14px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:0;color:#4B5563;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;" aria-label="Redo"><i class="ti ti-arrow-forward-up" style="font-size:14px;" aria-hidden="true"></i></button>
+        </div>
+
+        <div style="width:1px;height:18px;background:rgba(255,255,255,0.08);"></div>
+
+        <div style="display:flex;gap:1px;align-items:center;">
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;" aria-label="Zoom out"><i class="ti ti-minus" style="font-size:14px;" aria-hidden="true"></i></button>
+          <span style="font-size:11px;color:#9CA3AF;padding:0 4px;font-family:var(--font-mono);">125%</span>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;" aria-label="Zoom in"><i class="ti ti-plus" style="font-size:14px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 6px;display:flex;border-radius:5px;" aria-label="Zoom to fit"><i class="ti ti-maximize" style="font-size:13px;" aria-hidden="true"></i></button>
+        </div>
+
+        <div style="width:1px;height:18px;background:rgba(255,255,255,0.08);"></div>
+
+        <div style="display:flex;gap:1px;">
+          <button style="background:rgba(139,92,246,0.18);border:0;color:#C4B5FD;cursor:pointer;padding:5px 7px;display:flex;align-items:center;gap:3px;border-radius:5px;font-size:11px;font-family:inherit;" aria-label="Cursor tool, active" aria-pressed="true"><i class="ti ti-pointer" style="font-size:13px;" aria-hidden="true"></i></button>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 7px;display:flex;align-items:center;gap:3px;border-radius:5px;font-size:11px;font-family:inherit;"><i class="ti ti-component" style="font-size:13px;" aria-hidden="true"></i><span>Part</span><span style="font-size:9px;color:#6B7280;background:#1C2128;padding:1px 4px;border-radius:3px;font-family:var(--font-mono);">C</span></button>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 7px;display:flex;align-items:center;gap:3px;border-radius:5px;font-size:11px;font-family:inherit;"><i class="ti ti-line" style="font-size:13px;" aria-hidden="true"></i><span>Wire</span><span style="font-size:9px;color:#6B7280;background:#1C2128;padding:1px 4px;border-radius:3px;font-family:var(--font-mono);">W</span></button>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 7px;display:flex;align-items:center;gap:3px;border-radius:5px;font-size:11px;font-family:inherit;"><i class="ti ti-tag" style="font-size:13px;" aria-hidden="true"></i><span>Label</span></button>
+          <button style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:5px 7px;display:flex;align-items:center;gap:3px;border-radius:5px;font-size:11px;font-family:inherit;"><i class="ti ti-bolt" style="font-size:13px;" aria-hidden="true"></i><span>Power</span></button>
+        </div>
+
+        <div style="width:1px;height:18px;background:rgba(255,255,255,0.08);"></div>
+
+        <button style="background:rgba(52,211,153,0.10);border:1px solid rgba(52,211,153,0.25);color:#34D399;cursor:pointer;padding:4px 8px;display:flex;align-items:center;gap:5px;border-radius:5px;font-size:11px;font-family:inherit;">
+          <i class="ti ti-shield-check" style="font-size:12px;" aria-hidden="true"></i>
+          <span>ERC clean</span>
+        </button>
+      </div>
+
+      <div style="flex:1;position:relative;overflow:hidden;">
+        <svg viewBox="0 0 520 460" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;" aria-hidden="true">
+
+          <defs>
+            <pattern id="schemGrid" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+              <circle cx="10" cy="10" r="0.5" fill="#1F2937" opacity="0.7"/>
+            </pattern>
+            <pattern id="schemGridMajor" x="0" y="0" width="100" height="100" patternUnits="userSpaceOnUse">
+              <rect width="100" height="100" fill="none" stroke="#141B24" stroke-width="0.4"/>
+            </pattern>
+          </defs>
+
+          <rect width="520" height="460" fill="#0A0E14"/>
+          <rect width="520" height="460" fill="url(#schemGridMajor)"/>
+          <rect width="520" height="460" fill="url(#schemGrid)"/>
+
+          <g stroke="#E0573A" stroke-width="1" fill="none" opacity="0.85">
+            <line x1="60" y1="100" x2="60" y2="130"/>
+            <line x1="180" y1="100" x2="180" y2="140"/>
+            <line x1="180" y1="140" x2="220" y2="140"/>
+            <line x1="380" y1="100" x2="380" y2="170"/>
+            <line x1="380" y1="170" x2="320" y2="170"/>
+            <line x1="460" y1="100" x2="460" y2="270"/>
+          </g>
+
+          <g stroke="#94A3B8" stroke-width="1" fill="none">
+            <line x1="60" y1="200" x2="60" y2="240"/>
+            <line x1="180" y1="240" x2="180" y2="220"/>
+            <line x1="180" y1="220" x2="220" y2="220"/>
+            <line x1="320" y1="200" x2="380" y2="200"/>
+            <line x1="380" y1="200" x2="380" y2="240"/>
+            <line x1="380" y1="280" x2="380" y2="320"/>
+            <line x1="380" y1="320" x2="460" y2="320"/>
+          </g>
+
+          <g stroke="#5DCAA5" stroke-width="1" fill="none" opacity="0.85">
+            <line x1="60" y1="280" x2="60" y2="360"/>
+            <line x1="220" y1="180" x2="180" y2="180"/>
+            <line x1="180" y1="180" x2="180" y2="360"/>
+            <line x1="380" y1="360" x2="180" y2="360"/>
+            <line x1="460" y1="360" x2="380" y2="360"/>
+          </g>
+
+          <circle cx="180" cy="360" r="2.2" fill="#5DCAA5"/>
+          <circle cx="380" cy="360" r="2.2" fill="#5DCAA5"/>
+          <circle cx="180" cy="220" r="2.2" fill="#94A3B8"/>
+          <circle cx="380" cy="200" r="2.2" fill="#94A3B8"/>
+
+          <g transform="translate(50, 80)">
+            <text x="10" y="0" font-size="9" fill="#E0573A" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">VCC</text>
+            <path d="M 5 4 L 15 4 L 10 12 Z" fill="#E0573A" opacity="0.85"/>
+          </g>
+          <g transform="translate(170, 80)">
+            <text x="10" y="0" font-size="9" fill="#E0573A" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">VCC</text>
+            <path d="M 5 4 L 15 4 L 10 12 Z" fill="#E0573A" opacity="0.85"/>
+          </g>
+          <g transform="translate(370, 80)">
+            <text x="10" y="0" font-size="9" fill="#E0573A" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">VCC</text>
+            <path d="M 5 4 L 15 4 L 10 12 Z" fill="#E0573A" opacity="0.85"/>
+          </g>
+          <g transform="translate(450, 80)">
+            <text x="10" y="0" font-size="9" fill="#E0573A" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">VCC</text>
+            <path d="M 5 4 L 15 4 L 10 12 Z" fill="#E0573A" opacity="0.85"/>
+          </g>
+
+          <g transform="translate(50, 380)">
+            <line x1="10" y1="0" x2="10" y2="6" stroke="#5DCAA5" stroke-width="1"/>
+            <line x1="2" y1="8" x2="18" y2="8" stroke="#5DCAA5" stroke-width="1.4"/>
+            <line x1="5" y1="12" x2="15" y2="12" stroke="#5DCAA5" stroke-width="1.2"/>
+            <line x1="8" y1="16" x2="12" y2="16" stroke="#5DCAA5" stroke-width="1"/>
+            <text x="10" y="30" font-size="9" fill="#5DCAA5" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">GND</text>
+          </g>
+          <g transform="translate(170, 380)">
+            <line x1="10" y1="-20" x2="10" y2="-14" stroke="#5DCAA5" stroke-width="1"/>
+            <line x1="2" y1="-12" x2="18" y2="-12" stroke="#5DCAA5" stroke-width="1.4"/>
+            <line x1="5" y1="-8" x2="15" y2="-8" stroke="#5DCAA5" stroke-width="1.2"/>
+            <line x1="8" y1="-4" x2="12" y2="-4" stroke="#5DCAA5" stroke-width="1"/>
+            <text x="10" y="10" font-size="9" fill="#5DCAA5" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">GND</text>
+          </g>
+          <g transform="translate(370, 380)">
+            <line x1="10" y1="-20" x2="10" y2="-14" stroke="#5DCAA5" stroke-width="1"/>
+            <line x1="2" y1="-12" x2="18" y2="-12" stroke="#5DCAA5" stroke-width="1.4"/>
+            <line x1="5" y1="-8" x2="15" y2="-8" stroke="#5DCAA5" stroke-width="1.2"/>
+            <line x1="8" y1="-4" x2="12" y2="-4" stroke="#5DCAA5" stroke-width="1"/>
+            <text x="10" y="10" font-size="9" fill="#5DCAA5" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">GND</text>
+          </g>
+
+          <g transform="translate(46, 130)">
+            <line x1="14" y1="0" x2="14" y2="28" stroke="#E5E7EB" stroke-width="1"/>
+            <line x1="0" y1="28" x2="28" y2="28" stroke="#E5E7EB" stroke-width="1.4"/>
+            <line x1="0" y1="36" x2="28" y2="36" stroke="#E5E7EB" stroke-width="1.4"/>
+            <line x1="14" y1="36" x2="14" y2="70" stroke="#E5E7EB" stroke-width="1"/>
+            <text x="36" y="22" font-size="10" fill="#F3F4F6" font-family="var(--font-sans)" font-weight="500">C1</text>
+            <text x="36" y="46" font-size="9" fill="#9CA3AF" font-family="var(--font-sans)">10µF</text>
+          </g>
+
+          <g transform="translate(110, 130)">
+            <line x1="0" y1="10" x2="14" y2="10" stroke="#E5E7EB" stroke-width="1"/>
+            <rect x="14" y="5" width="42" height="10" fill="none" stroke="#E5E7EB" stroke-width="1"/>
+            <line x1="56" y1="10" x2="70" y2="10" stroke="#E5E7EB" stroke-width="1"/>
+            <text x="35" y="-3" font-size="10" fill="#F3F4F6" font-family="var(--font-sans)" font-weight="500" text-anchor="middle">R4</text>
+            <text x="35" y="30" font-size="9" fill="#9CA3AF" font-family="var(--font-sans)" text-anchor="middle">47kΩ</text>
+          </g>
+          <g transform="translate(110, 170)">
+            <line x1="0" y1="10" x2="14" y2="10" stroke="#E5E7EB" stroke-width="1"/>
+            <rect x="14" y="5" width="42" height="10" fill="none" stroke="#E5E7EB" stroke-width="1"/>
+            <line x1="56" y1="10" x2="70" y2="10" stroke="#E5E7EB" stroke-width="1"/>
+            <text x="35" y="-3" font-size="10" fill="#F3F4F6" font-family="var(--font-sans)" font-weight="500" text-anchor="middle">R3</text>
+            <text x="35" y="30" font-size="9" fill="#9CA3AF" font-family="var(--font-sans)" text-anchor="middle">10kΩ</text>
+          </g>
+
+          <g transform="translate(220, 140)">
+            <rect x="-6" y="-6" width="112" height="132" fill="rgba(139,92,246,0.06)" stroke="#A78BFA" stroke-width="1.4" rx="2"/>
+            <rect x="0" y="0" width="100" height="120" fill="#0F1419" stroke="#E5E7EB" stroke-width="1.1"/>
+
+            <line x1="-20" y1="40" x2="0" y2="40" stroke="#E5E7EB" stroke-width="1"/>
+            <circle cx="-20" cy="40" r="1.4" fill="#A78BFA"/>
+            <text x="-23" y="38" font-size="7" fill="#6B7280" font-family="var(--font-mono)" text-anchor="end">2</text>
+            <text x="6" y="42" font-size="8" fill="#9CA3AF" font-family="var(--font-sans)">TRIG</text>
+
+            <line x1="-20" y1="80" x2="0" y2="80" stroke="#E5E7EB" stroke-width="1"/>
+            <circle cx="-20" cy="80" r="1.4" fill="#A78BFA"/>
+            <text x="-23" y="78" font-size="7" fill="#6B7280" font-family="var(--font-mono)" text-anchor="end">6</text>
+            <text x="6" y="82" font-size="8" fill="#9CA3AF" font-family="var(--font-sans)">THR</text>
+
+            <line x1="100" y1="20" x2="120" y2="20" stroke="#E5E7EB" stroke-width="1"/>
+            <circle cx="120" cy="20" r="1.4" fill="#A78BFA"/>
+            <text x="123" y="18" font-size="7" fill="#6B7280" font-family="var(--font-mono)">8</text>
+            <text x="94" y="22" font-size="8" fill="#9CA3AF" font-family="var(--font-sans)" text-anchor="end">V+</text>
+
+            <line x1="100" y1="60" x2="120" y2="60" stroke="#E5E7EB" stroke-width="1"/>
+            <circle cx="120" cy="60" r="1.4" fill="#A78BFA"/>
+            <text x="123" y="58" font-size="7" fill="#6B7280" font-family="var(--font-mono)">3</text>
+            <text x="94" y="62" font-size="8" fill="#9CA3AF" font-family="var(--font-sans)" text-anchor="end">OUT</text>
+
+            <line x1="100" y1="100" x2="120" y2="100" stroke="#E5E7EB" stroke-width="1"/>
+            <circle cx="120" cy="100" r="1.4" fill="#A78BFA"/>
+            <text x="123" y="98" font-size="7" fill="#6B7280" font-family="var(--font-mono)">7</text>
+            <text x="94" y="102" font-size="8" fill="#9CA3AF" font-family="var(--font-sans)" text-anchor="end">DIS</text>
+
+            <line x1="40" y1="120" x2="40" y2="140" stroke="#E5E7EB" stroke-width="1"/>
+            <circle cx="40" cy="140" r="1.4" fill="#A78BFA"/>
+            <text x="44" y="135" font-size="7" fill="#6B7280" font-family="var(--font-mono)">1</text>
+            <text x="44" y="115" font-size="8" fill="#9CA3AF" font-family="var(--font-sans)">GND</text>
+
+            <line x1="60" y1="120" x2="60" y2="140" stroke="#E5E7EB" stroke-width="1"/>
+            <circle cx="60" cy="140" r="1.4" fill="#A78BFA"/>
+            <text x="64" y="135" font-size="7" fill="#6B7280" font-family="var(--font-mono)">5</text>
+            <text x="64" y="115" font-size="8" fill="#9CA3AF" font-family="var(--font-sans)">CTRL</text>
+
+            <line x1="40" y1="0" x2="40" y2="-20" stroke="#E5E7EB" stroke-width="1"/>
+            <circle cx="40" cy="-20" r="1.4" fill="#A78BFA"/>
+            <text x="44" y="-22" font-size="7" fill="#6B7280" font-family="var(--font-mono)">4</text>
+            <text x="44" y="5" font-size="8" fill="#9CA3AF" font-family="var(--font-sans)">RST</text>
+
+            <text x="50" y="-30" font-size="11" fill="#C4B5FD" font-family="var(--font-sans)" font-weight="500" text-anchor="middle">U1</text>
+            <text x="50" y="160" font-size="9" fill="#A78BFA" font-family="var(--font-sans)" text-anchor="middle">NE555</text>
+          </g>
+
+          <g transform="translate(320, 195)">
+            <line x1="0" y1="5" x2="14" y2="5" stroke="#E5E7EB" stroke-width="1"/>
+            <rect x="14" y="0" width="42" height="10" fill="none" stroke="#E5E7EB" stroke-width="1"/>
+            <line x1="56" y1="5" x2="70" y2="5" stroke="#E5E7EB" stroke-width="1"/>
+            <text x="35" y="-8" font-size="10" fill="#F3F4F6" font-family="var(--font-sans)" font-weight="500" text-anchor="middle">R1</text>
+            <text x="35" y="22" font-size="9" fill="#9CA3AF" font-family="var(--font-sans)" text-anchor="middle">220Ω</text>
+          </g>
+
+          <g transform="translate(370, 240)">
+            <line x1="10" y1="0" x2="10" y2="6" stroke="#E5E7EB" stroke-width="1"/>
+            <path d="M 2 6 L 18 6 L 10 18 Z" fill="none" stroke="#F87171" stroke-width="1.2"/>
+            <line x1="2" y1="18" x2="18" y2="18" stroke="#F87171" stroke-width="1.4"/>
+            <line x1="10" y1="18" x2="10" y2="28" stroke="#E5E7EB" stroke-width="1"/>
+            <path d="M 20 4 L 24 0 M 20 4 L 24 4 M 20 4 L 20 0" fill="none" stroke="#F87171" stroke-width="0.8"/>
+            <path d="M 23 8 L 27 4 M 23 8 L 27 8 M 23 8 L 23 4" fill="none" stroke="#F87171" stroke-width="0.8"/>
+            <text x="32" y="10" font-size="10" fill="#F3F4F6" font-family="var(--font-sans)" font-weight="500">D1</text>
+            <text x="32" y="22" font-size="9" fill="#9CA3AF" font-family="var(--font-sans)">red</text>
+          </g>
+
+          <g transform="translate(320, 275)">
+            <line x1="0" y1="5" x2="14" y2="5" stroke="#E5E7EB" stroke-width="1"/>
+            <rect x="14" y="0" width="42" height="10" fill="none" stroke="#E5E7EB" stroke-width="1"/>
+            <line x1="56" y1="5" x2="70" y2="5" stroke="#E5E7EB" stroke-width="1"/>
+            <text x="35" y="-8" font-size="10" fill="#F3F4F6" font-family="var(--font-sans)" font-weight="500" text-anchor="middle">R6</text>
+            <text x="35" y="22" font-size="9" fill="#9CA3AF" font-family="var(--font-sans)" text-anchor="middle">4.7kΩ</text>
+          </g>
+
+          <g transform="translate(370, 320)">
+            <line x1="10" y1="-10" x2="10" y2="-4" stroke="#E5E7EB" stroke-width="1"/>
+            <path d="M 2 -4 L 18 -4 L 10 8 Z" fill="none" stroke="#34D399" stroke-width="1.2"/>
+            <line x1="2" y1="8" x2="18" y2="8" stroke="#34D399" stroke-width="1.4"/>
+            <line x1="10" y1="8" x2="10" y2="40" stroke="#E5E7EB" stroke-width="1"/>
+            <path d="M 20 -6 L 24 -10 M 20 -6 L 24 -6 M 20 -6 L 20 -10" fill="none" stroke="#34D399" stroke-width="0.8"/>
+            <path d="M 23 -2 L 27 -6 M 23 -2 L 27 -2 M 23 -2 L 23 -6" fill="none" stroke="#34D399" stroke-width="0.8"/>
+            <text x="32" y="2" font-size="10" fill="#F3F4F6" font-family="var(--font-sans)" font-weight="500">D2</text>
+            <text x="32" y="14" font-size="9" fill="#9CA3AF" font-family="var(--font-sans)">green</text>
+          </g>
+
+          <g transform="translate(446, 240)">
+            <rect x="0" y="0" width="20" height="38" fill="none" stroke="#E5E7EB" stroke-width="1.1"/>
+            <line x1="14" y1="0" x2="14" y2="-12" stroke="#E5E7EB" stroke-width="1"/>
+            <circle cx="14" cy="-12" r="1.4" fill="#94A3B8"/>
+            <text x="14" y="-16" font-size="7" fill="#6B7280" font-family="var(--font-mono)" text-anchor="middle">1</text>
+            <line x1="14" y1="38" x2="14" y2="80" stroke="#E5E7EB" stroke-width="1"/>
+            <circle cx="14" cy="80" r="1.4" fill="#5DCAA5"/>
+            <text x="22" y="80" font-size="7" fill="#6B7280" font-family="var(--font-mono)">2</text>
+            <text x="-3" y="22" font-size="10" fill="#F3F4F6" font-family="var(--font-sans)" font-weight="500" text-anchor="end">J1</text>
+            <text x="-3" y="34" font-size="9" fill="#9CA3AF" font-family="var(--font-sans)" text-anchor="end">2-pin</text>
+          </g>
+
+        </svg>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 12px;background:#070A0F;border-top:1px solid rgba(255,255,255,0.05);font-size:10px;color:#6B7280;flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="color:#34D399;display:flex;align-items:center;gap:4px;"><i class="ti ti-shield-check" style="font-size:11px;" aria-hidden="true"></i>ERC: 0 errors · 0 warnings</span>
+          <span>Grid 100 mil</span>
+          <span style="font-family:var(--font-mono);">X 50.8 Y 25.4 mm</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="color:#A78BFA;">1 selected · U1</span>
+          <span style="font-family:var(--font-mono);">125%</span>
+        </div>
+      </div>
+    </main>
+
+    <aside style="width:184px;background:#0B1117;border-left:1px solid rgba(255,255,255,0.05);flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;">
+
+      <div style="padding:10px 12px 6px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:10px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">Selected part</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <div style="width:32px;height:32px;border-radius:6px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <i class="ti ti-cpu" style="font-size:16px;color:#A78BFA;" aria-hidden="true"></i>
+          </div>
+          <div style="min-width:0;">
+            <div style="font-size:13px;font-weight:500;color:#F3F4F6;font-family:var(--font-mono);">U1</div>
+            <div style="font-size:10px;color:#9CA3AF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">NE555 Timer</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px;">
+          <button style="flex:1;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:4px 0;border-radius:5px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;font-family:inherit;">
+            <i class="ti ti-circuit-pcb" style="font-size:11px;" aria-hidden="true"></i>PCB
+          </button>
+          <button style="flex:1;background:#10141B;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:4px 0;border-radius:5px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;font-family:inherit;">
+            <i class="ti ti-file-text" style="font-size:11px;" aria-hidden="true"></i>Sheet
+          </button>
+        </div>
+      </div>
+
+      <div style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:10px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;">Properties</div>
+        <div style="display:grid;grid-template-columns:50px 1fr;gap:5px 8px;font-size:11px;">
+          <span style="color:#6B7280;">Ref</span>
+          <span style="color:#F3F4F6;font-family:var(--font-mono);">U1</span>
+          <span style="color:#6B7280;">Value</span>
+          <span style="color:#F3F4F6;">NE555</span>
+          <span style="color:#6B7280;">Footprint</span>
+          <span style="color:#F3F4F6;font-size:10px;">SOIC-8</span>
+          <span style="color:#6B7280;">Pins</span>
+          <span style="color:#F3F4F6;">8</span>
+        </div>
+      </div>
+
+      <div style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:10px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;">Sourcing</span>
+          <span style="font-size:9px;color:#FBBF24;background:rgba(251,191,36,0.10);padding:1px 5px;border-radius:3px;">Missing</span>
+        </div>
+        <div style="display:grid;grid-template-columns:50px 1fr;gap:5px 8px;font-size:11px;margin-bottom:8px;">
+          <span style="color:#6B7280;">MPN</span>
+          <span style="color:#4B5563;font-style:italic;">—</span>
+          <span style="color:#6B7280;">JLCPCB</span>
+          <span style="color:#4B5563;font-style:italic;">—</span>
+        </div>
+        <button style="width:100%;background:rgba(139,92,246,0.10);border:1px solid rgba(139,92,246,0.25);color:#C4B5FD;padding:5px 0;border-radius:5px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;font-family:inherit;">
+          <i class="ti ti-sparkles" style="font-size:11px;" aria-hidden="true"></i>
+          Auto-source on JLCPCB
+        </button>
+      </div>
+
+      <div style="padding:10px 12px;flex:1;overflow:hidden;">
+        <div style="font-size:10px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">Pin connections</div>
+        <div style="display:flex;flex-direction:column;gap:3px;font-size:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0;">
+            <span style="color:#9CA3AF;font-family:var(--font-mono);">1 GND</span>
+            <span style="color:#5DCAA5;font-family:var(--font-mono);">GND</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0;">
+            <span style="color:#9CA3AF;font-family:var(--font-mono);">2 TRIG</span>
+            <span style="color:#94A3B8;font-family:var(--font-mono);">N$3</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0;">
+            <span style="color:#9CA3AF;font-family:var(--font-mono);">3 OUT</span>
+            <span style="color:#94A3B8;font-family:var(--font-mono);">OUT</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0;">
+            <span style="color:#9CA3AF;font-family:var(--font-mono);">4 RST</span>
+            <span style="color:#E0573A;font-family:var(--font-mono);">VCC</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:2px 0;">
+            <span style="color:#9CA3AF;font-family:var(--font-mono);">8 V+</span>
+            <span style="color:#E0573A;font-family:var(--font-mono);">VCC</span>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+</div>

@@ -1,0 +1,369 @@
+<h2 class="sr-only">Redesigned BOM proposal, placement proposal with approve actions, and Mermaid diagram card for the OpenPCB Assistant chat. BOM shows parameter chips and a compact table without nested cards. Placement proposal shows human-readable millimeter coordinates and a primary Apply button with clear secondary actions. Mermaid diagram is wrapped in a titled card with download and fullscreen controls.</h2>
+
+<div style="background:#0A0E14;border-radius:12px;border:1px solid rgba(255,255,255,0.08);overflow:hidden;font-family:var(--font-sans);color:#E5E7EB;padding:18px 22px;">
+
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+    <div style="width:22px;height:22px;border-radius:6px;background:rgba(139,92,246,0.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <i class="ti ti-sparkles" style="font-size:12px;color:#C4B5FD;" aria-hidden="true"></i>
+    </div>
+    <span style="font-size:12px;font-weight:500;color:#F3F4F6;">Assistant</span>
+  </div>
+
+  <div style="padding-left:30px;font-size:13px;color:#D1D5DB;line-height:1.65;margin-bottom:12px;">
+    Here's the resolved BOM. All components are in your local library — no external sourcing needed at this stage.
+  </div>
+
+  <div style="margin-left:30px;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:8px;overflow:hidden;margin-bottom:16px;">
+
+    <div style="padding:11px 14px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div style="display:flex;align-items:center;gap:9px;min-width:0;">
+        <div style="width:28px;height:28px;border-radius:6px;background:rgba(52,211,153,0.10);border:1px solid rgba(52,211,153,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i class="ti ti-list-check" style="font-size:14px;color:#34D399;" aria-hidden="true"></i>
+        </div>
+        <div style="min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:1px;">
+            <span style="font-size:12px;font-weight:500;color:#F3F4F6;">BOM proposal</span>
+            <span style="font-size:9px;color:#34D399;background:rgba(52,211,153,0.10);padding:1px 5px;border-radius:3px;letter-spacing:0.04em;">READY</span>
+          </div>
+          <div style="font-size:10px;color:#9CA3AF;">10 components · all resolved from core library</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:9px 14px;background:rgba(0,0,0,0.10);border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <span style="font-size:9px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-right:2px;">Assumed</span>
+      <span style="font-size:10px;background:#13191F;border:1px solid rgba(255,255,255,0.06);padding:2px 7px;border-radius:999px;color:#D1D5DB;display:inline-flex;align-items:center;gap:4px;">
+        <span style="color:#6B7280;">Supply</span>
+        <span style="color:#E0573A;font-family:var(--font-mono);">5 V</span>
+      </span>
+      <span style="font-size:10px;background:#13191F;border:1px solid rgba(255,255,255,0.06);padding:2px 7px;border-radius:999px;color:#D1D5DB;display:inline-flex;align-items:center;gap:4px;">
+        <span style="color:#6B7280;">Blink rate</span>
+        <span style="color:#F3F4F6;font-family:var(--font-mono);">1 Hz</span>
+      </span>
+      <span style="font-size:10px;background:#13191F;border:1px solid rgba(255,255,255,0.06);padding:2px 7px;border-radius:999px;color:#D1D5DB;display:inline-flex;align-items:center;gap:4px;">
+        <span style="color:#6B7280;">Package</span>
+        <span style="color:#F3F4F6;font-family:var(--font-mono);">0603</span>
+      </span>
+      <button style="background:transparent;border:0;color:#A78BFA;font-size:10px;cursor:pointer;font-family:inherit;margin-left:auto;display:flex;align-items:center;gap:3px;">
+        <i class="ti ti-edit" style="font-size:10px;" aria-hidden="true"></i>Adjust
+      </button>
+    </div>
+
+    <div>
+      <div style="display:grid;grid-template-columns:90px 50px 1fr 70px;gap:8px;padding:6px 14px;font-size:9px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;background:rgba(0,0,0,0.15);">
+        <span>Type</span>
+        <span style="text-align:right;">Qty</span>
+        <span>Value</span>
+        <span>Source</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:90px 50px 1fr 70px;gap:8px;padding:7px 14px;font-size:11px;align-items:center;border-bottom:1px solid rgba(255,255,255,0.03);">
+        <span style="display:flex;align-items:center;gap:5px;color:#D1D5DB;"><i class="ti ti-bulb" style="font-size:12px;color:#F87171;" aria-hidden="true"></i>LED</span>
+        <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">1×</span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          <span style="font-family:var(--font-mono);color:#F3F4F6;">LED1</span>
+          <span style="font-size:9px;color:#F87171;background:rgba(248,113,113,0.10);padding:1px 5px;border-radius:3px;">red</span>
+          <span style="font-size:10px;color:#6B7280;font-family:var(--font-mono);">0603</span>
+        </span>
+        <span style="font-size:9px;color:#A78BFA;font-family:var(--font-mono);">core:LED</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:90px 50px 1fr 70px;gap:8px;padding:7px 14px;font-size:11px;align-items:center;border-bottom:1px solid rgba(255,255,255,0.03);">
+        <span style="display:flex;align-items:center;gap:5px;color:#D1D5DB;"><i class="ti ti-bulb" style="font-size:12px;color:#34D399;" aria-hidden="true"></i>LED</span>
+        <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">1×</span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          <span style="font-family:var(--font-mono);color:#F3F4F6;">LED2</span>
+          <span style="font-size:9px;color:#34D399;background:rgba(52,211,153,0.10);padding:1px 5px;border-radius:3px;">green</span>
+          <span style="font-size:10px;color:#6B7280;font-family:var(--font-mono);">0603</span>
+        </span>
+        <span style="font-size:9px;color:#A78BFA;font-family:var(--font-mono);">core:LED</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:90px 50px 1fr 70px;gap:8px;padding:7px 14px;font-size:11px;align-items:center;border-bottom:1px solid rgba(255,255,255,0.03);">
+        <span style="display:flex;align-items:center;gap:5px;color:#D1D5DB;"><i class="ti ti-circuit-resistor" style="font-size:12px;color:#9CA3AF;" aria-hidden="true"></i>Resistor</span>
+        <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">2×</span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          <span style="font-family:var(--font-mono);color:#F3F4F6;">R1, R2</span>
+          <span style="color:#D1D5DB;">10 kΩ</span>
+          <span style="font-size:10px;color:#6B7280;font-family:var(--font-mono);">0603</span>
+        </span>
+        <span style="font-size:9px;color:#A78BFA;font-family:var(--font-mono);">core:Resistor</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:90px 50px 1fr 70px;gap:8px;padding:7px 14px;font-size:11px;align-items:center;border-bottom:1px solid rgba(255,255,255,0.03);">
+        <span style="display:flex;align-items:center;gap:5px;color:#D1D5DB;"><i class="ti ti-circuit-resistor" style="font-size:12px;color:#9CA3AF;" aria-hidden="true"></i>Resistor</span>
+        <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">2×</span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          <span style="font-family:var(--font-mono);color:#F3F4F6;">R3, R4</span>
+          <span style="color:#D1D5DB;">330 Ω</span>
+          <span style="font-size:10px;color:#6B7280;font-family:var(--font-mono);">0603</span>
+        </span>
+        <span style="font-size:9px;color:#A78BFA;font-family:var(--font-mono);">core:Resistor</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:90px 50px 1fr 70px;gap:8px;padding:7px 14px;font-size:11px;align-items:center;border-bottom:1px solid rgba(255,255,255,0.03);">
+        <span style="display:flex;align-items:center;gap:5px;color:#D1D5DB;"><i class="ti ti-circuit-capacitor" style="font-size:12px;color:#9CA3AF;" aria-hidden="true"></i>Capacitor</span>
+        <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">2×</span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          <span style="font-family:var(--font-mono);color:#F3F4F6;">C1, C2</span>
+          <span style="color:#D1D5DB;">10 µF</span>
+          <span style="font-size:10px;color:#6B7280;font-family:var(--font-mono);">0603</span>
+        </span>
+        <span style="font-size:9px;color:#A78BFA;font-family:var(--font-mono);">core:Capacitor</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:90px 50px 1fr 70px;gap:8px;padding:7px 14px;font-size:11px;align-items:center;">
+        <span style="display:flex;align-items:center;gap:5px;color:#D1D5DB;"><i class="ti ti-component" style="font-size:12px;color:#9CA3AF;" aria-hidden="true"></i>Transistor</span>
+        <span style="font-family:var(--font-mono);color:#9CA3AF;text-align:right;">2×</span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          <span style="font-family:var(--font-mono);color:#F3F4F6;">Q1, Q2</span>
+          <span style="color:#D1D5DB;">NPN SOT-23</span>
+        </span>
+        <span style="font-size:9px;color:#A78BFA;font-family:var(--font-mono);">core:Q_NPN</span>
+      </div>
+    </div>
+
+    <div style="padding:9px 14px;background:rgba(0,0,0,0.15);border-top:1px solid rgba(255,255,255,0.05);font-size:10px;color:#6B7280;line-height:1.5;">
+      Values follow standard astable formula <code style="background:#1C2128;border:1px solid rgba(255,255,255,0.04);padding:0 4px;border-radius:2px;font-family:var(--font-mono);color:#C4B5FD;font-size:10px;">T ≈ 1.4 × R × C</code>. Change supply or rate above to recompute.
+    </div>
+  </div>
+
+  <div style="padding-left:30px;font-size:13px;color:#D1D5DB;line-height:1.65;margin-bottom:12px;">
+    Proposed placement on a <strong style="color:#F3F4F6;font-weight:500;">50 × 30 mm</strong> board. Components are arranged symmetrically — left side mirrors right.
+  </div>
+
+  <div style="margin-left:30px;background:#10141B;border:1px solid rgba(139,92,246,0.20);border-radius:8px;overflow:hidden;margin-bottom:16px;">
+
+    <div style="padding:11px 14px;border-bottom:1px solid rgba(139,92,246,0.12);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div style="display:flex;align-items:center;gap:9px;min-width:0;">
+        <div style="width:28px;height:28px;border-radius:6px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.30);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i class="ti ti-layout-grid" style="font-size:14px;color:#C4B5FD;" aria-hidden="true"></i>
+        </div>
+        <div style="min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:1px;">
+            <span style="font-size:12px;font-weight:500;color:#F3F4F6;">Placement proposal</span>
+            <span style="font-size:9px;color:#C4B5FD;background:rgba(139,92,246,0.18);padding:1px 5px;border-radius:3px;letter-spacing:0.04em;">PENDING</span>
+          </div>
+          <div style="font-size:10px;color:#9CA3AF;">10 components · awaiting your confirmation</div>
+        </div>
+      </div>
+      <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:4px 8px;border-radius:5px;font-size:10px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;flex-shrink:0;">
+        <i class="ti ti-eye" style="font-size:11px;" aria-hidden="true"></i>Preview in Designer
+      </button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 14px;">
+
+      <div>
+        <div style="font-size:9px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">Layout preview</div>
+        <svg viewBox="0 0 200 130" style="width:100%;height:auto;background:#0D4D2C;border-radius:5px;border:1px solid rgba(212,160,23,0.4);" aria-hidden="true">
+          <rect x="2" y="2" width="196" height="126" fill="none" stroke="#D4A017" stroke-width="0.5" rx="2"/>
+          <g>
+            <rect x="22" y="22" width="8" height="6" fill="#F87171" rx="1"/>
+            <text x="26" y="35" font-size="5" fill="#FFF" text-anchor="middle" opacity="0.7">LED1</text>
+            <rect x="170" y="22" width="8" height="6" fill="#34D399" rx="1"/>
+            <text x="174" y="35" font-size="5" fill="#FFF" text-anchor="middle" opacity="0.7">LED2</text>
+            <rect x="60" y="50" width="9" height="8" fill="#1F2937" stroke="#9CA3AF" stroke-width="0.3"/>
+            <text x="64" y="65" font-size="5" fill="#FFF" text-anchor="middle" opacity="0.7">Q1</text>
+            <rect x="131" y="50" width="9" height="8" fill="#1F2937" stroke="#9CA3AF" stroke-width="0.3"/>
+            <text x="135" y="65" font-size="5" fill="#FFF" text-anchor="middle" opacity="0.7">Q2</text>
+            <rect x="22" y="72" width="6" height="3" fill="#D97757"/>
+            <rect x="42" y="72" width="6" height="3" fill="#D97757"/>
+            <rect x="68" y="72" width="6" height="3" fill="#D97757"/>
+            <rect x="126" y="72" width="6" height="3" fill="#D97757"/>
+            <rect x="152" y="72" width="6" height="3" fill="#D97757"/>
+            <rect x="172" y="72" width="6" height="3" fill="#D97757"/>
+            <rect x="85" y="95" width="7" height="4" fill="#D97757"/>
+            <rect x="108" y="95" width="7" height="4" fill="#D97757"/>
+            <text x="88" y="105" font-size="5" fill="#FFF" text-anchor="middle" opacity="0.7">C1</text>
+            <text x="111" y="105" font-size="5" fill="#FFF" text-anchor="middle" opacity="0.7">C2</text>
+          </g>
+        </svg>
+        <div style="font-size:9px;color:#6B7280;margin-top:4px;text-align:center;">50 × 30 mm · 2 layers</div>
+      </div>
+
+      <div>
+        <div style="font-size:9px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">Coordinates</div>
+        <div style="font-size:10px;display:flex;flex-direction:column;gap:2px;font-family:var(--font-mono);">
+          <div style="display:flex;justify-content:space-between;color:#D1D5DB;"><span style="color:#9CA3AF;">LED1</span><span>5.50 · 5.00 mm</span></div>
+          <div style="display:flex;justify-content:space-between;color:#D1D5DB;"><span style="color:#9CA3AF;">LED2</span><span>42.50 · 5.00 mm</span></div>
+          <div style="display:flex;justify-content:space-between;color:#D1D5DB;"><span style="color:#9CA3AF;">Q1</span><span>16.00 · 12.50 mm</span></div>
+          <div style="display:flex;justify-content:space-between;color:#D1D5DB;"><span style="color:#9CA3AF;">Q2</span><span>33.75 · 12.50 mm</span></div>
+          <div style="display:flex;justify-content:space-between;color:#D1D5DB;"><span style="color:#9CA3AF;">R1, R2</span><span>5.50 · 17.50 mm</span></div>
+          <div style="display:flex;justify-content:space-between;color:#D1D5DB;"><span style="color:#9CA3AF;">R3, R4</span><span>17.00 · 17.50 mm</span></div>
+          <div style="display:flex;justify-content:space-between;color:#D1D5DB;"><span style="color:#9CA3AF;">C1</span><span>21.75 · 23.50 mm</span></div>
+          <div style="display:flex;justify-content:space-between;color:#D1D5DB;"><span style="color:#9CA3AF;">C2</span><span>27.50 · 23.50 mm</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="padding:10px 14px;background:rgba(0,0,0,0.15);border-top:1px solid rgba(139,92,246,0.12);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div style="display:flex;align-items:center;gap:8px;font-size:10px;color:#6B7280;">
+        <i class="ti ti-info-circle" style="font-size:11px;color:#A78BFA;" aria-hidden="true"></i>
+        Applies via a single revisioned command — undoable with ⌘Z
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button style="background:transparent;border:0;color:#6B7280;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit;">Reject</button>
+        <button style="background:#7C3AED;color:#FFFFFF;border:0;padding:6px 14px;border-radius:5px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;display:flex;align-items:center;gap:5px;">
+          <i class="ti ti-check" style="font-size:13px;" aria-hidden="true"></i>
+          Apply placement
+        </button>
+      </div>
+    </div>
+
+    <div style="padding:6px 14px;background:rgba(0,0,0,0.20);border-top:1px solid rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:space-between;">
+      <label style="display:flex;align-items:center;gap:5px;font-size:10px;color:#6B7280;cursor:pointer;">
+        <input type="checkbox" style="margin:0;width:11px;height:11px;" />
+        Don't ask again this session for placement tools
+      </label>
+      <span style="font-size:9px;color:#6B7280;display:flex;align-items:center;gap:3px;">
+        <i class="ti ti-clock" style="font-size:10px;" aria-hidden="true"></i>
+        Will auto-reject in 5 min
+      </span>
+    </div>
+  </div>
+
+  <div style="padding-left:30px;font-size:13px;color:#D1D5DB;line-height:1.65;margin-bottom:12px;">
+    And here's how each component connects:
+  </div>
+
+  <div style="margin-left:30px;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:8px;overflow:hidden;">
+
+    <div style="padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(0,0,0,0.10);">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+        <i class="ti ti-route-2" style="font-size:14px;color:#A78BFA;flex-shrink:0;" aria-hidden="true"></i>
+        <span style="font-size:12px;font-weight:500;color:#F3F4F6;">Wiring diagram</span>
+        <span style="font-size:10px;color:#6B7280;">·</span>
+        <span style="font-size:10px;color:#9CA3AF;">Astable multivibrator · 9 nets</span>
+      </div>
+      <div style="display:flex;gap:3px;flex-shrink:0;">
+        <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Zoom"><i class="ti ti-zoom-in" style="font-size:12px;" aria-hidden="true"></i></button>
+        <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Download"><i class="ti ti-download" style="font-size:12px;" aria-hidden="true"></i></button>
+        <button style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#9CA3AF;padding:3px 5px;border-radius:4px;cursor:pointer;display:flex;font-family:inherit;" aria-label="Fullscreen"><i class="ti ti-maximize" style="font-size:12px;" aria-hidden="true"></i></button>
+      </div>
+    </div>
+
+    <div style="padding:14px;background:#0A0E14;">
+      <svg viewBox="0 0 500 280" style="width:100%;height:auto;display:block;" aria-hidden="true">
+
+        <g transform="translate(220, 14)">
+          <rect x="0" y="0" width="60" height="22" rx="4" fill="rgba(224,87,58,0.12)" stroke="#E0573A" stroke-width="0.8"/>
+          <text x="30" y="14" font-size="9" fill="#E0573A" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">VCC · 5 V</text>
+        </g>
+
+        <line x1="250" y1="36" x2="80" y2="56" stroke="#E0573A" stroke-width="0.7" stroke-dasharray="2 2"/>
+        <line x1="250" y1="36" x2="420" y2="56" stroke="#E0573A" stroke-width="0.7" stroke-dasharray="2 2"/>
+
+        <g transform="translate(20, 50)">
+          <rect x="0" y="0" width="120" height="160" rx="6" fill="rgba(167,139,250,0.04)" stroke="rgba(167,139,250,0.30)" stroke-width="0.6" stroke-dasharray="3 2"/>
+          <text x="60" y="13" font-size="8" fill="#A78BFA" font-family="var(--font-sans)" text-anchor="middle" letter-spacing="0.5">Left side · Q1</text>
+
+          <g transform="translate(40, 22)">
+            <rect x="0" y="0" width="40" height="22" rx="3" fill="#13191F" stroke="#9CA3AF" stroke-width="0.6"/>
+            <text x="20" y="10" font-size="8" fill="#F3F4F6" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">R1</text>
+            <text x="20" y="18" font-size="7" fill="#9CA3AF" font-family="var(--font-mono)" text-anchor="middle">10 kΩ</text>
+          </g>
+
+          <line x1="60" y1="44" x2="60" y2="56" stroke="#94A3B8" stroke-width="0.8"/>
+
+          <g transform="translate(40, 58)">
+            <rect x="0" y="0" width="40" height="22" rx="3" fill="#13191F" stroke="#94A3B8" stroke-width="0.6"/>
+            <text x="20" y="10" font-size="8" fill="#F3F4F6" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">Q1</text>
+            <text x="20" y="18" font-size="7" fill="#9CA3AF" font-family="var(--font-mono)" text-anchor="middle">NPN</text>
+          </g>
+
+          <line x1="60" y1="80" x2="60" y2="92" stroke="#94A3B8" stroke-width="0.8"/>
+
+          <g transform="translate(20, 95)">
+            <rect x="0" y="0" width="40" height="22" rx="3" fill="rgba(248,113,113,0.10)" stroke="#F87171" stroke-width="0.6"/>
+            <text x="20" y="10" font-size="8" fill="#F3F4F6" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">LED1</text>
+            <text x="20" y="18" font-size="7" fill="#F87171" font-family="var(--font-sans)" text-anchor="middle">red</text>
+          </g>
+
+          <g transform="translate(70, 95)">
+            <rect x="0" y="0" width="40" height="22" rx="3" fill="#13191F" stroke="#94A3B8" stroke-width="0.6"/>
+            <text x="20" y="10" font-size="8" fill="#F3F4F6" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">R3</text>
+            <text x="20" y="18" font-size="7" fill="#9CA3AF" font-family="var(--font-mono)" text-anchor="middle">330 Ω</text>
+          </g>
+
+          <line x1="40" y1="117" x2="40" y2="135" stroke="#5DCAA5" stroke-width="0.8"/>
+          <line x1="90" y1="117" x2="90" y2="135" stroke="#5DCAA5" stroke-width="0.8"/>
+
+          <text x="60" y="148" font-size="7" fill="#5DCAA5" font-family="var(--font-sans)" text-anchor="middle">to GND</text>
+        </g>
+
+        <g transform="translate(170, 105)">
+          <rect x="0" y="0" width="50" height="22" rx="3" fill="#13191F" stroke="#FBBF24" stroke-width="0.6"/>
+          <text x="25" y="10" font-size="8" fill="#F3F4F6" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">C1</text>
+          <text x="25" y="18" font-size="7" fill="#9CA3AF" font-family="var(--font-mono)" text-anchor="middle">10 µF</text>
+          <text x="25" y="-3" font-size="6" fill="#FBBF24" font-family="var(--font-sans)" text-anchor="middle" letter-spacing="0.4">timing C1</text>
+        </g>
+
+        <line x1="140" y1="80" x2="170" y2="111" stroke="#FBBF24" stroke-width="0.7"/>
+        <line x1="220" y1="116" x2="290" y2="80" stroke="#FBBF24" stroke-width="0.7"/>
+
+        <g transform="translate(280, 50)">
+          <rect x="0" y="0" width="120" height="160" rx="6" fill="rgba(167,139,250,0.04)" stroke="rgba(167,139,250,0.30)" stroke-width="0.6" stroke-dasharray="3 2"/>
+          <text x="60" y="13" font-size="8" fill="#A78BFA" font-family="var(--font-sans)" text-anchor="middle" letter-spacing="0.5">Right side · Q2</text>
+
+          <g transform="translate(40, 22)">
+            <rect x="0" y="0" width="40" height="22" rx="3" fill="#13191F" stroke="#9CA3AF" stroke-width="0.6"/>
+            <text x="20" y="10" font-size="8" fill="#F3F4F6" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">R2</text>
+            <text x="20" y="18" font-size="7" fill="#9CA3AF" font-family="var(--font-mono)" text-anchor="middle">10 kΩ</text>
+          </g>
+
+          <line x1="60" y1="44" x2="60" y2="56" stroke="#94A3B8" stroke-width="0.8"/>
+
+          <g transform="translate(40, 58)">
+            <rect x="0" y="0" width="40" height="22" rx="3" fill="#13191F" stroke="#94A3B8" stroke-width="0.6"/>
+            <text x="20" y="10" font-size="8" fill="#F3F4F6" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">Q2</text>
+            <text x="20" y="18" font-size="7" fill="#9CA3AF" font-family="var(--font-mono)" text-anchor="middle">NPN</text>
+          </g>
+
+          <line x1="60" y1="80" x2="60" y2="92" stroke="#94A3B8" stroke-width="0.8"/>
+
+          <g transform="translate(20, 95)">
+            <rect x="0" y="0" width="40" height="22" rx="3" fill="rgba(52,211,153,0.10)" stroke="#34D399" stroke-width="0.6"/>
+            <text x="20" y="10" font-size="8" fill="#F3F4F6" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">LED2</text>
+            <text x="20" y="18" font-size="7" fill="#34D399" font-family="var(--font-sans)" text-anchor="middle">green</text>
+          </g>
+
+          <g transform="translate(70, 95)">
+            <rect x="0" y="0" width="40" height="22" rx="3" fill="#13191F" stroke="#94A3B8" stroke-width="0.6"/>
+            <text x="20" y="10" font-size="8" fill="#F3F4F6" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">R4</text>
+            <text x="20" y="18" font-size="7" fill="#9CA3AF" font-family="var(--font-mono)" text-anchor="middle">330 Ω</text>
+          </g>
+
+          <line x1="40" y1="117" x2="40" y2="135" stroke="#5DCAA5" stroke-width="0.8"/>
+          <line x1="90" y1="117" x2="90" y2="135" stroke="#5DCAA5" stroke-width="0.8"/>
+
+          <text x="60" y="148" font-size="7" fill="#5DCAA5" font-family="var(--font-sans)" text-anchor="middle">to GND</text>
+        </g>
+
+        <g transform="translate(420, 105)">
+          <rect x="0" y="0" width="50" height="22" rx="3" fill="#13191F" stroke="#FBBF24" stroke-width="0.6"/>
+          <text x="25" y="10" font-size="8" fill="#F3F4F6" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">C2</text>
+          <text x="25" y="18" font-size="7" fill="#9CA3AF" font-family="var(--font-mono)" text-anchor="middle">10 µF</text>
+          <text x="25" y="-3" font-size="6" fill="#FBBF24" font-family="var(--font-sans)" text-anchor="middle" letter-spacing="0.4">timing C2</text>
+        </g>
+
+        <text x="250" y="240" font-size="8" fill="#5DCAA5" font-family="var(--font-sans)" text-anchor="middle" font-weight="500">GND rail</text>
+        <line x1="40" y1="220" x2="460" y2="220" stroke="#5DCAA5" stroke-width="0.6" stroke-dasharray="2 2"/>
+
+        <g transform="translate(14, 256)">
+          <rect width="11" height="2" fill="#E0573A" y="2"/>
+          <text x="16" y="6" font-size="7" fill="#9CA3AF" font-family="var(--font-sans)">power</text>
+          <rect width="11" height="2" fill="#5DCAA5" x="55" y="2"/>
+          <text x="71" y="6" font-size="7" fill="#9CA3AF" font-family="var(--font-sans)">ground</text>
+          <rect width="11" height="2" fill="#FBBF24" x="118" y="2"/>
+          <text x="134" y="6" font-size="7" fill="#9CA3AF" font-family="var(--font-sans)">timing</text>
+          <rect width="11" height="2" fill="#94A3B8" x="180" y="2"/>
+          <text x="196" y="6" font-size="7" fill="#9CA3AF" font-family="var(--font-sans)">signal</text>
+        </g>
+
+      </svg>
+    </div>
+  </div>
+
+</div>

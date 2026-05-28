@@ -1,0 +1,192 @@
+<h2 class="sr-only">Redesigned component search results in OpenPCB Assistant chat. Tool header summarizes the search; results render as a clean 2-column grid where each card shows a symbol thumbnail, name, package, two informative tags, and a relevance bar. Tag chips and BUILT-IN labels are not repeated. One card is in hover state with drag-to-canvas affordance visible.</h2>
+
+<div style="background:#0A0E14;border-radius:12px;border:1px solid rgba(255,255,255,0.08);overflow:hidden;font-family:var(--font-sans);color:#E5E7EB;padding:18px 22px;">
+
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+    <div style="width:22px;height:22px;border-radius:6px;background:rgba(139,92,246,0.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <i class="ti ti-sparkles" style="font-size:12px;color:#C4B5FD;" aria-hidden="true"></i>
+    </div>
+    <span style="font-size:12px;font-weight:500;color:#F3F4F6;">Assistant</span>
+  </div>
+
+  <div style="padding-left:30px;font-size:13px;color:#D1D5DB;line-height:1.65;margin-bottom:12px;">
+    I found <strong style="color:#F3F4F6;font-weight:500;">6 transistor candidates</strong> for the astable multivibrator. The NPN SOT-23 EBC matches the schematic conventions you're using elsewhere.
+  </div>
+
+  <div style="margin-left:30px;background:#10141B;border:1px solid rgba(255,255,255,0.06);border-radius:8px;overflow:hidden;">
+
+    <div style="padding:9px 12px;background:rgba(0,0,0,0.15);border-bottom:1px solid rgba(255,255,255,0.04);display:flex;align-items:center;gap:10px;">
+      <i class="ti ti-search" style="font-size:14px;color:#34D399;flex-shrink:0;" aria-hidden="true"></i>
+      <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:12px;color:#F3F4F6;font-weight:500;">Search library</span>
+        <span style="font-size:10px;color:#6B7280;">·</span>
+        <span style="font-size:10px;color:#9CA3AF;font-family:var(--font-mono);">"transistor 2 pin"</span>
+        <span style="font-size:10px;color:#6B7280;">·</span>
+        <span style="font-size:10px;color:#9CA3AF;">6 of 10 shown</span>
+      </div>
+      <span style="font-size:10px;color:#6B7280;flex-shrink:0;">320 ms</span>
+      <i class="ti ti-circle-check" style="font-size:13px;color:#34D399;flex-shrink:0;" aria-hidden="true"></i>
+    </div>
+
+    <div style="padding:8px 12px;display:flex;align-items:center;gap:4px;border-bottom:1px solid rgba(255,255,255,0.04);flex-wrap:wrap;">
+      <span style="font-size:9px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-right:4px;">Source</span>
+      <button style="background:rgba(139,92,246,0.15);border:0;color:#C4B5FD;padding:2px 8px;border-radius:999px;font-size:10px;cursor:pointer;font-family:inherit;">All</button>
+      <button style="background:transparent;border:0;color:#9CA3AF;padding:2px 8px;border-radius:999px;font-size:10px;cursor:pointer;font-family:inherit;">Core <span style="color:#6B7280;">5</span></button>
+      <button style="background:transparent;border:0;color:#9CA3AF;padding:2px 8px;border-radius:999px;font-size:10px;cursor:pointer;font-family:inherit;">User <span style="color:#6B7280;">1</span></button>
+      <span style="width:1px;height:14px;background:rgba(255,255,255,0.08);margin:0 6px;"></span>
+      <span style="font-size:9px;color:#6B7280;letter-spacing:0.06em;text-transform:uppercase;margin-right:4px;">Package</span>
+      <button style="background:transparent;border:0;color:#9CA3AF;padding:2px 8px;border-radius:999px;font-size:10px;cursor:pointer;font-family:inherit;">SOT-23 <span style="color:#6B7280;">3</span></button>
+      <button style="background:transparent;border:0;color:#9CA3AF;padding:2px 8px;border-radius:999px;font-size:10px;cursor:pointer;font-family:inherit;">SOIC-14 <span style="color:#6B7280;">1</span></button>
+    </div>
+
+    <div style="padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+
+      <div style="background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.30);border-radius:7px;padding:10px;cursor:pointer;position:relative;">
+        <div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:8px;">
+          <div style="width:42px;height:34px;background:#0A0E14;border:1px solid rgba(255,255,255,0.06);border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="28" height="22" viewBox="0 0 36 28" aria-hidden="true">
+              <circle cx="18" cy="14" r="9" fill="none" stroke="#E5E7EB" stroke-width="0.8"/>
+              <line x1="9" y1="14" x2="13" y2="14" stroke="#E5E7EB" stroke-width="0.8"/>
+              <line x1="13" y1="6" x2="13" y2="22" stroke="#E5E7EB" stroke-width="1"/>
+              <line x1="13" y1="11" x2="22" y2="6" stroke="#E5E7EB" stroke-width="0.8"/>
+              <path d="M 13 17 L 22 22 L 19 18 M 22 22 L 18 21" fill="#E5E7EB" stroke="#E5E7EB" stroke-width="0.4"/>
+            </svg>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;flex-wrap:wrap;">
+              <span style="font-size:12px;font-weight:500;color:#F3F4F6;">NPN SOT-23 EBC</span>
+            </div>
+            <div style="font-size:10px;color:#9CA3AF;line-height:1.4;">Generic NPN BJT, E-B-C pin order</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <div style="display:flex;gap:3px;">
+            <span style="font-size:9px;background:#1C2128;color:#9CA3AF;padding:1px 5px;border-radius:3px;letter-spacing:0.02em;">transistor</span>
+            <span style="font-size:9px;background:#1C2128;color:#9CA3AF;padding:1px 5px;border-radius:3px;letter-spacing:0.02em;">npn</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <span style="display:flex;align-items:center;gap:3px;">
+              <span style="width:28px;height:3px;background:rgba(52,211,153,0.18);border-radius:2px;display:inline-block;position:relative;"><span style="position:absolute;left:0;top:0;width:96%;height:100%;background:#34D399;border-radius:2px;"></span></span>
+              <span style="font-size:9px;color:#34D399;font-family:var(--font-mono);">96%</span>
+            </span>
+          </div>
+        </div>
+        <div style="position:absolute;top:7px;right:8px;display:flex;align-items:center;gap:4px;">
+          <span style="font-size:8px;color:#34D399;background:rgba(52,211,153,0.12);padding:1px 5px;border-radius:3px;letter-spacing:0.06em;font-weight:500;">BEST MATCH</span>
+        </div>
+        <div style="margin-top:7px;padding-top:7px;border-top:1px solid rgba(139,92,246,0.18);display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:5px;font-size:9px;color:#A78BFA;">
+            <i class="ti ti-arrows-move" style="font-size:11px;" aria-hidden="true"></i>
+            Drag to canvas
+          </div>
+          <button style="background:transparent;border:0;color:#A78BFA;font-size:10px;cursor:pointer;display:flex;align-items:center;gap:3px;font-family:inherit;">
+            Place
+            <i class="ti ti-arrow-right" style="font-size:11px;" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+
+      <div style="background:#13191F;border:1px solid rgba(255,255,255,0.06);border-radius:7px;padding:10px;cursor:pointer;">
+        <div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:8px;">
+          <div style="width:42px;height:34px;background:#0A0E14;border:1px solid rgba(255,255,255,0.06);border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="28" height="22" viewBox="0 0 36 28" aria-hidden="true">
+              <circle cx="18" cy="14" r="9" fill="none" stroke="#E5E7EB" stroke-width="0.8"/>
+              <line x1="9" y1="14" x2="13" y2="14" stroke="#E5E7EB" stroke-width="0.8"/>
+              <line x1="13" y1="6" x2="13" y2="22" stroke="#E5E7EB" stroke-width="1"/>
+              <line x1="13" y1="11" x2="22" y2="6" stroke="#E5E7EB" stroke-width="0.8"/>
+              <line x1="13" y1="17" x2="22" y2="22" stroke="#E5E7EB" stroke-width="0.8"/>
+              <path d="M 17 11 L 13 11 L 14 8" fill="none" stroke="#E5E7EB" stroke-width="0.5"/>
+            </svg>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:500;color:#F3F4F6;margin-bottom:2px;">PNP SOT-23 EBC</div>
+            <div style="font-size:10px;color:#9CA3AF;line-height:1.4;">Generic PNP BJT, E-B-C pin order</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <div style="display:flex;gap:3px;">
+            <span style="font-size:9px;background:#1C2128;color:#9CA3AF;padding:1px 5px;border-radius:3px;">transistor</span>
+            <span style="font-size:9px;background:#1C2128;color:#9CA3AF;padding:1px 5px;border-radius:3px;">pnp</span>
+          </div>
+          <span style="display:flex;align-items:center;gap:3px;">
+            <span style="width:28px;height:3px;background:rgba(52,211,153,0.12);border-radius:2px;display:inline-block;position:relative;"><span style="position:absolute;left:0;top:0;width:84%;height:100%;background:#5DCAA5;border-radius:2px;"></span></span>
+            <span style="font-size:9px;color:#9CA3AF;font-family:var(--font-mono);">84%</span>
+          </span>
+        </div>
+      </div>
+
+      <div style="background:#13191F;border:1px solid rgba(255,255,255,0.06);border-radius:7px;padding:10px;cursor:pointer;">
+        <div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:8px;">
+          <div style="width:42px;height:34px;background:#0A0E14;border:1px solid rgba(255,255,255,0.06);border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="28" height="22" viewBox="0 0 36 28" aria-hidden="true">
+              <rect x="11" y="6" width="14" height="16" fill="none" stroke="#E5E7EB" stroke-width="0.7"/>
+              <line x1="11" y1="9" x2="8" y2="9" stroke="#E5E7EB" stroke-width="0.6"/>
+              <line x1="11" y1="13" x2="8" y2="13" stroke="#E5E7EB" stroke-width="0.6"/>
+              <line x1="11" y1="17" x2="8" y2="17" stroke="#E5E7EB" stroke-width="0.6"/>
+              <line x1="25" y1="9" x2="28" y2="9" stroke="#E5E7EB" stroke-width="0.6"/>
+              <line x1="25" y1="13" x2="28" y2="13" stroke="#E5E7EB" stroke-width="0.6"/>
+              <line x1="25" y1="17" x2="28" y2="17" stroke="#E5E7EB" stroke-width="0.6"/>
+            </svg>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:500;color:#F3F4F6;margin-bottom:2px;">NMOS SOT-23 GSD</div>
+            <div style="font-size:10px;color:#9CA3AF;line-height:1.4;">N-channel MOSFET, G-S-D pin order</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <div style="display:flex;gap:3px;">
+            <span style="font-size:9px;background:#1C2128;color:#9CA3AF;padding:1px 5px;border-radius:3px;">transistor</span>
+            <span style="font-size:9px;background:#1C2128;color:#9CA3AF;padding:1px 5px;border-radius:3px;">mosfet</span>
+          </div>
+          <span style="display:flex;align-items:center;gap:3px;">
+            <span style="width:28px;height:3px;background:rgba(52,211,153,0.12);border-radius:2px;display:inline-block;position:relative;"><span style="position:absolute;left:0;top:0;width:72%;height:100%;background:#5DCAA5;border-radius:2px;"></span></span>
+            <span style="font-size:9px;color:#9CA3AF;font-family:var(--font-mono);">72%</span>
+          </span>
+        </div>
+      </div>
+
+      <div style="background:#13191F;border:1px solid rgba(255,255,255,0.06);border-radius:7px;padding:10px;cursor:pointer;">
+        <div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:8px;">
+          <div style="width:42px;height:34px;background:#0A0E14;border:1px solid rgba(255,255,255,0.06);border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="28" height="22" viewBox="0 0 36 28" aria-hidden="true">
+              <rect x="8" y="9" width="20" height="10" fill="none" stroke="#E5E7EB" stroke-width="0.7"/>
+              <line x1="11" y1="9" x2="11" y2="6" stroke="#E5E7EB" stroke-width="0.5"/>
+              <line x1="14" y1="9" x2="14" y2="6" stroke="#E5E7EB" stroke-width="0.5"/>
+              <line x1="17" y1="9" x2="17" y2="6" stroke="#E5E7EB" stroke-width="0.5"/>
+              <line x1="20" y1="9" x2="20" y2="6" stroke="#E5E7EB" stroke-width="0.5"/>
+              <line x1="11" y1="22" x2="11" y2="19" stroke="#E5E7EB" stroke-width="0.5"/>
+              <line x1="14" y1="22" x2="14" y2="19" stroke="#E5E7EB" stroke-width="0.5"/>
+              <line x1="17" y1="22" x2="17" y2="19" stroke="#E5E7EB" stroke-width="0.5"/>
+              <line x1="20" y1="22" x2="20" y2="19" stroke="#E5E7EB" stroke-width="0.5"/>
+            </svg>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:500;color:#F3F4F6;margin-bottom:2px;">74HC00 Quad NAND</div>
+            <div style="font-size:10px;color:#9CA3AF;line-height:1.4;">Quad 2-input NAND in SOIC-14</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <div style="display:flex;gap:3px;">
+            <span style="font-size:9px;background:#1C2128;color:#9CA3AF;padding:1px 5px;border-radius:3px;">logic</span>
+            <span style="font-size:9px;background:#1C2128;color:#9CA3AF;padding:1px 5px;border-radius:3px;">nand</span>
+          </div>
+          <span style="display:flex;align-items:center;gap:3px;">
+            <span style="width:28px;height:3px;background:rgba(251,191,36,0.12);border-radius:2px;display:inline-block;position:relative;"><span style="position:absolute;left:0;top:0;width:42%;height:100%;background:#FBBF24;border-radius:2px;"></span></span>
+            <span style="font-size:9px;color:#9CA3AF;font-family:var(--font-mono);">42%</span>
+          </span>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="padding:8px 12px;border-top:1px solid rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,0.10);">
+      <span style="font-size:10px;color:#6B7280;">2 more results below 40% relevance hidden</span>
+      <button style="background:transparent;border:0;color:#A78BFA;font-size:10px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:3px;">
+        Show all 10
+        <i class="ti ti-chevron-down" style="font-size:11px;" aria-hidden="true"></i>
+      </button>
+    </div>
+
+  </div>
+
+</div>
