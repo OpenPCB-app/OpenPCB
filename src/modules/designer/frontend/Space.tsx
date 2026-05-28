@@ -330,6 +330,7 @@ function DesignerSpaceInner({
   const [pcbLayersSlot, setPcbLayersSlot] = useState<HTMLDivElement | null>(
     null,
   );
+  const [threeDSlot, setThreeDSlot] = useState<HTMLDivElement | null>(null);
   const canvasRef = useRef<SchematicCanvasHandle | null>(null);
   const viewportRef = useRef<Map<string, ViewportState>>(new Map());
   const designsLoadedRef = useRef(false);
@@ -644,7 +645,9 @@ function DesignerSpaceInner({
         nonce: (current?.nonce ?? 0) + 1,
       }));
       actions.setActiveView("schem");
-      const parts = state.projection?.parts.filter((part) => partIds.includes(part.id)) ?? [];
+      const parts =
+        state.projection?.parts.filter((part) => partIds.includes(part.id)) ??
+        [];
       if (parts.length > 0) {
         const xs = parts.map((part) => part.positionNm.x / 1_000_000);
         const ys = parts.map((part) => part.positionNm.y / 1_000_000);
@@ -678,7 +681,9 @@ function DesignerSpaceInner({
 
   const noTabsOpen = openDesignIds.length === 0;
   const activeDesign = useMemo(
-    () => state.designs.find((design) => design.id === state.selectedDesignId) ?? null,
+    () =>
+      state.designs.find((design) => design.id === state.selectedDesignId) ??
+      null,
     [state.designs, state.selectedDesignId],
   );
 
@@ -867,8 +872,11 @@ function DesignerSpaceInner({
                 activeView={state.activeView}
                 pcbSlotRef={setPcbBoardSlot}
                 pcbLayersSlotRef={setPcbLayersSlot}
+                threeDSlotRef={setThreeDSlot}
                 onPlaceComponent={openComponentPalette}
-                onAddNetLabel={() => canvasRef.current?.armPrimitive("net_portal")}
+                onAddNetLabel={() =>
+                  canvasRef.current?.armPrimitive("net_portal")
+                }
                 onBrowseLibrary={() => navigateToModule("library")}
                 onFrameBoundsMm={(bounds) =>
                   canvasRef.current?.frameToBoundsMm(bounds)
@@ -922,6 +930,7 @@ function DesignerSpaceInner({
               moduleId={moduleId}
               selectedDesignId={state.selectedDesignId}
               error={state.error}
+              controlsTarget={threeDSlot}
             />
           ) : state.activeView === "bom" ? (
             <DesignerBomView

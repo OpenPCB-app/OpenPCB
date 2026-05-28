@@ -15,6 +15,7 @@ interface DesignerSidebarProps {
   activeView: DesignerView;
   pcbSlotRef?: (el: HTMLDivElement | null) => void;
   pcbLayersSlotRef?: (el: HTMLDivElement | null) => void;
+  threeDSlotRef?: (el: HTMLDivElement | null) => void;
   onPlaceComponent(): void;
   onAddNetLabel(): void;
   onBrowseLibrary(): void;
@@ -32,6 +33,7 @@ export function DesignerSidebar({
   activeView,
   pcbSlotRef,
   pcbLayersSlotRef,
+  threeDSlotRef,
   onPlaceComponent,
   onAddNetLabel,
   onBrowseLibrary,
@@ -50,8 +52,18 @@ export function DesignerSidebar({
     );
   }
 
+  if (activeView === "3d") {
+    return (
+      <aside className="flex h-full min-h-0 flex-col overflow-hidden border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
+        <div ref={threeDSlotRef} className="min-h-0 flex-1" />
+      </aside>
+    );
+  }
+
   if (activeView !== "schem") {
-    return <aside className="flex h-full min-h-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950" />;
+    return (
+      <aside className="flex h-full min-h-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950" />
+    );
   }
 
   return (

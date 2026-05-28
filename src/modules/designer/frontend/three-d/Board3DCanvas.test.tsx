@@ -26,9 +26,14 @@ vi.mock("@react-three/fiber", () => ({
 
 vi.mock("@react-three/drei", () => ({
   OrbitControls: ({ makeDefault }: { makeDefault?: boolean }) => (
-    <div data-testid="mock-orbit-controls" data-make-default={String(makeDefault)} />
+    <div
+      data-testid="mock-orbit-controls"
+      data-make-default={String(makeDefault)}
+    />
   ),
-  Text: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
+  Text: ({ children }: { children?: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
 }));
 
 function fixtureProjection(): DesignerPcbProjection {
@@ -68,7 +73,13 @@ function fixtureProjection(): DesignerPcbProjection {
     placements: [],
     traces: [],
     vias: [],
+    freeHoles: [],
+    freePads: [],
+    overlayTexts: [],
+    overlayShapes: [],
+    zones: [],
     ratsnest: [],
+    netNames: {},
     warnings: [],
   };
 }
