@@ -21,6 +21,7 @@ import {
   type DesignerHistoryActionResult,
   type DesignerHistorySnapshot,
   type DesignerPcbProjection,
+  type DesignerSchematicPreview,
   type DesignerSchematicProjection,
   type DesignerSearchLibraryParams,
   type LibraryComponent,
@@ -84,8 +85,10 @@ import {
   type DesignerWorldComponent,
 } from "./projection-world";
 import {
+  loadSchematicPreview,
   loadSchematicProjection,
   mapDesignSummary,
+  PREVIEW_SCHEMA_VERSION,
   toDesignRecordFromProjection,
 } from "./projection-read";
 import { conflict, parseDispatchResultJson } from "./results";
@@ -200,6 +203,38 @@ export function createDesignerStore(
     return created;
   }
 
+  /** Return the cached schematic preview for a design head, recomputing and
+   *  persisting it only when the stored snapshot is missing or its embedded
+   *  revision has fallen behind the head revision. Keeps Home thumbnails from
+   *  re-deriving geometry on every read while staying correct across commands,
+   *  undo/redo, and imports (all bump `revision`). */
+  function readOrRefreshPreview(
+    row: typeof designHeads.$inferSelect,
+  ): DesignerSchematicPreview | null {
+    if (row.schematicPreviewJson) {
+      try {
+        const cached = JSON.parse(
+          row.schematicPreviewJson,
+        ) as DesignerSchematicPreview;
+        if (
+          cached.revision === row.revision &&
+          cached.schemaVersion === PREVIEW_SCHEMA_VERSION
+        )
+          return cached;
+      } catch {
+        // Corrupt cache — fall through and recompute.
+      }
+    }
+    const preview = loadSchematicPreview(db, row.id);
+    if (preview) {
+      db.update(designHeads)
+        .set({ schematicPreviewJson: JSON.stringify(preview) })
+        .where(eq(designHeads.id, row.id))
+        .run();
+    }
+    return preview;
+  }
+
   function persistSessionHistory(designId: string, sessionId: string): void {
     const history = resolveSessionHistory(designId, sessionId);
     persistSessionHistorySnapshot({
@@ -301,7 +336,10 @@ export function createDesignerStore(
         .from(designHeads)
         .orderBy(asc(designHeads.createdAt))
         .all();
-      return rows.map(mapDesignSummary);
+      return rows.map((row) => ({
+        ...mapDesignSummary(row),
+        schematicPreview: readOrRefreshPreview(row),
+      }));
     },
 
     async getDesign(designId) {

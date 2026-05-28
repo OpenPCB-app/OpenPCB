@@ -6,6 +6,7 @@ import type {
   DesignerLabel,
   DesignerPin,
   DesignerPlacedPart,
+  DesignerSchematicPreview,
   DesignerSchematicProjection,
   DesignerWire,
   LibraryComponentPlacementDetail,
@@ -173,6 +174,73 @@ export function loadSchematicProjection(
     primitives,
     nets: derived.nets,
     junctions: derived.junctions,
+  };
+}
+
+/** Bump when the {@link DesignerSchematicPreview} shape changes so cached
+ *  previews (keyed only on design revision) are recomputed. v2 added pin stubs,
+ *  connection-point primitives, and dropped the per-design strokeWidth. */
+export const PREVIEW_SCHEMA_VERSION = 2;
+
+/** Compact schematic snapshot for Home-screen thumbnails. Loads parts, wires,
+ *  and power/ground/portal primitives, stripping each symbol snapshot down to
+ *  its render graphics/bounds + pin stubs so the payload stays small across the
+ *  design grid (no footprints/labels/nets). */
+export function loadSchematicPreview(
+  db: DbClient,
+  designId: string,
+): DesignerSchematicPreview | null {
+  const head = db
+    .select()
+    .from(designHeads)
+    .where(eq(designHeads.id, designId))
+    .get();
+  if (!head) return null;
+
+  const partRows = db
+    .select()
+    .from(schematicParts)
+    .where(eq(schematicParts.designId, designId))
+    .orderBy(asc(schematicParts.createdAt))
+    .all();
+  const wireRows = db
+    .select()
+    .from(schematicWires)
+    .where(eq(schematicWires.designId, designId))
+    .orderBy(asc(schematicWires.createdAt))
+    .all();
+
+  const parts = partRows.map((row) => {
+    const symbol = parseSymbolSnapshotJson(row.symbolSnapshotJson);
+    const pins = (symbol.preview.pins ?? []).map((pin) => ({
+      anchor: { x: pin.anchor.x, y: pin.anchor.y },
+      bodyEnd: { x: pin.bodyEnd.x, y: pin.bodyEnd.y },
+    }));
+    return {
+      positionNm: { x: row.positionXNm, y: row.positionYNm },
+      rotationDeg: normalizeRotationDeg(row.rotationDeg),
+      mirrored: row.mirrored === 1,
+      graphics: symbol.preview.graphics,
+      bounds: symbol.preview.bounds,
+      pins,
+    };
+  });
+  const wires = wireRows.map((row) => ({
+    pointsNm: parseWirePointsJson(row.pointsJson),
+  }));
+  const primitives = loadPrimitives(db, designId).map((primitive) => ({
+    kind: primitive.kind,
+    positionNm: { x: primitive.positionNm.x, y: primitive.positionNm.y },
+    rotationDeg: primitive.rotationDeg,
+  }));
+
+  return {
+    schemaVersion: PREVIEW_SCHEMA_VERSION,
+    designId,
+    revision: head.revision,
+    parts,
+    wires,
+    primitives,
   };
 }
 

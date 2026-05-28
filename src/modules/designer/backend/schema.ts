@@ -14,6 +14,10 @@ export const designHeads = sqliteTable(
     revision: integer("revision").notNull().default(0),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    // Cached compact schematic preview (DesignerSchematicPreview JSON) for
+    // Home-screen thumbnails. Recomputed lazily when its embedded revision
+    // falls behind `revision`.
+    schematicPreviewJson: text("schematic_preview_json"),
   },
   (table) => ({
     nameIdx: index("designer_design_heads_name_idx").on(table.name),

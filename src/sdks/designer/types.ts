@@ -20,6 +20,9 @@ export interface DesignerDesignSummary {
   revision: number;
   createdAt: string;
   updatedAt: string;
+  /** Cached schematic preview for Home-screen thumbnails. Populated by
+   *  `listDesigns`; omitted from command/create results. */
+  schematicPreview?: DesignerSchematicPreview | null;
 }
 
 export interface DesignerEntityRecord {
@@ -53,6 +56,38 @@ export interface DesignerSchematicProjection {
   primitives: DesignerPrimitive[];
   junctions: DesignerJunction[];
   nets: DesignerDerivedNet[];
+}
+
+/** Compact schematic snapshot for Home-screen thumbnails. Carries the vector
+ *  geometry needed to draw an auto-fit SVG preview — placed-symbol
+ *  graphics/bounds + pin stubs (mm), wire polylines (nm), and power/ground/
+ *  portal primitives — without footprints, labels, or derived nets.
+ *
+ *  `schemaVersion` lets the cache (`designer_design_heads.schematic_preview_json`)
+ *  detect a shape change and recompute even when the design revision is unchanged. */
+export interface DesignerSchematicPreview {
+  schemaVersion: number;
+  designId: string;
+  revision: number;
+  parts: Array<{
+    positionNm: { x: number; y: number };
+    rotationDeg: number;
+    mirrored: boolean;
+    graphics: LibrarySymbolPlacementSnapshot["preview"]["graphics"];
+    bounds: LibrarySymbolPlacementSnapshot["preview"]["bounds"];
+    /** Pin stub segments in local mm (anchor = wire connection point). */
+    pins: Array<{
+      anchor: { x: number; y: number };
+      bodyEnd: { x: number; y: number };
+    }>;
+  }>;
+  wires: Array<{ pointsNm: Array<{ x: number; y: number }> }>;
+  /** Power/ground/portal primitives (geometry templated client-side per kind). */
+  primitives: Array<{
+    kind: DesignerPrimitiveKind;
+    positionNm: { x: number; y: number };
+    rotationDeg: number;
+  }>;
 }
 
 /**

@@ -122,6 +122,7 @@ export type {
   DesignerPwrPort,
   DesignerNetPortal,
   DesignerRotatePartCommand,
+  DesignerSchematicPreview,
   DesignerSchematicProjection,
   DesignerSearchLibraryParams,
   DesignerUpdatePartPropertiesCommand,
