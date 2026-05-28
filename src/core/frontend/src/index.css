@@ -8,6 +8,52 @@
   --color-slate-50: #f0f4fb;
   --color-slate-100: #e4eaf4;
   --color-slate-200: #d2dded;
+
+  /* Radii (theme-invariant) */
+  --radius-card: 14px;
+  --radius-control: 8px;
+  --radius-pill: 999px;
+
+  /* Mono font (was missing) */
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+}
+
+/*
+ * Semantic design tokens. `inline` makes utilities (e.g. bg-surface-card,
+ * text-status-warning) compile to var(--<token>) so they resolve per theme
+ * from the :root / html.dark definitions below — incremental on top of the
+ * existing slate theme, no full re-skin.
+ */
+@theme inline {
+  --color-surface-app: var(--surface-app);
+  --color-surface-rail: var(--surface-rail);
+  --color-surface-card: var(--surface-card);
+  --color-surface-card-hover: var(--surface-card-hover);
+  --color-surface-input: var(--surface-input);
+
+  --color-accent: var(--accent-purple);
+  --color-accent-soft: var(--accent-purple-soft);
+  --color-accent-text: var(--accent-purple-text);
+
+  --color-status-success: var(--status-success);
+  --color-status-success-soft: var(--status-success-soft);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-soft: var(--status-warning-soft);
+  --color-status-danger: var(--status-danger);
+  --color-status-danger-soft: var(--status-danger-soft);
+  --color-status-neutral: var(--status-neutral);
+  --color-status-neutral-soft: var(--status-neutral-soft);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-disabled: var(--text-disabled);
+
+  --color-net-power: var(--net-power);
+  --color-net-ground: var(--net-ground);
+  --color-net-signal: var(--net-signal);
 }
 
 :root {
@@ -23,6 +69,36 @@
   --color-slate-50: #f0f4fb;
   --color-slate-100: #e4eaf4;
   --color-slate-200: #d2dded;
+
+  /* Semantic tokens — light mode (mapped to current light surfaces) */
+  --surface-app: #f0f4fb;
+  --surface-rail: #ffffff;
+  --surface-card: #ffffff;
+  --surface-card-hover: #f8fafc;
+  --surface-input: #f8fafc;
+
+  --accent-purple: #7c3aed;
+  --accent-purple-soft: rgba(124, 58, 237, 0.1);
+  --accent-purple-text: #6d28d9;
+
+  /* Darker status hues so contrast holds on white */
+  --status-success: #059669;
+  --status-success-soft: rgba(5, 150, 105, 0.1);
+  --status-warning: #b45309;
+  --status-warning-soft: rgba(180, 83, 9, 0.1);
+  --status-danger: #dc2626;
+  --status-danger-soft: rgba(220, 38, 38, 0.08);
+  --status-neutral: #64748b;
+  --status-neutral-soft: rgba(100, 116, 139, 0.1);
+
+  --text-primary: #111827;
+  --text-secondary: #475569;
+  --text-tertiary: #64748b;
+  --text-disabled: #94a3b8;
+
+  --net-power: #e0573a;
+  --net-ground: #5dcaa5;
+  --net-signal: #94a3b8;
 }
 
 html.dark {
@@ -33,6 +109,35 @@ html.dark {
   --color-slate-800: #1a2438;
   --color-slate-700: #2c3a55;
   --color-slate-600: #3d5070;
+
+  /* Semantic tokens — dark mode (proposal palette, mapped to slate theme) */
+  --surface-app: #0f1520;
+  --surface-rail: #0b1018;
+  --surface-card: #151e30;
+  --surface-card-hover: #1a2438;
+  --surface-input: #10141b;
+
+  --accent-purple: #7c3aed;
+  --accent-purple-soft: rgba(139, 92, 246, 0.15);
+  --accent-purple-text: #c4b5fd;
+
+  --status-success: #34d399;
+  --status-success-soft: rgba(52, 211, 153, 0.1);
+  --status-warning: #fbbf24;
+  --status-warning-soft: rgba(251, 191, 36, 0.1);
+  --status-danger: #f87171;
+  --status-danger-soft: rgba(248, 113, 113, 0.08);
+  --status-neutral: #6b7280;
+  --status-neutral-soft: rgba(107, 114, 128, 0.12);
+
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --text-tertiary: #6b7280;
+  --text-disabled: #4b5563;
+
+  --net-power: #e0573a;
+  --net-ground: #5dcaa5;
+  --net-signal: #94a3b8;
 }
 
 html,
