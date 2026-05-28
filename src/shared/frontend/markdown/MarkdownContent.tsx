@@ -20,8 +20,14 @@ function isMermaidLanguage(language: string | undefined): boolean {
   return language === "mermaid" || language === "mmd";
 }
 
-function isFenceClose(line: string, marker: "`" | "~", length: number): boolean {
-  const closePattern = new RegExp(`^ {0,3}${marker === "`" ? "`" : "~"}{${length},}\\s*$`);
+function isFenceClose(
+  line: string,
+  marker: "`" | "~",
+  length: number,
+): boolean {
+  const closePattern = new RegExp(
+    `^ {0,3}${marker === "`" ? "`" : "~"}{${length},}\\s*$`,
+  );
   return closePattern.test(line);
 }
 
@@ -33,14 +39,12 @@ function replaceFenceLanguage(line: string, language: string): string {
 
 function markStreamingMermaidFences(markdown: string): string {
   const lines = markdown.split("\n");
-  let activeFence:
-    | {
-        marker: "`" | "~";
-        length: number;
-        openingLine: number;
-        mermaid: boolean;
-      }
-    | null = null;
+  let activeFence: {
+    marker: "`" | "~";
+    length: number;
+    openingLine: number;
+    mermaid: boolean;
+  } | null = null;
 
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx] ?? "";
@@ -73,8 +77,13 @@ function markStreamingMermaidFences(markdown: string): string {
   return lines.join("\n");
 }
 
-function MermaidStreamingPlaceholder({ source }: { source: string }): ReactElement {
-  const lineCount = source.trim().length === 0 ? 0 : source.trim().split("\n").length;
+function MermaidStreamingPlaceholder({
+  source,
+}: {
+  source: string;
+}): ReactElement {
+  const lineCount =
+    source.trim().length === 0 ? 0 : source.trim().split("\n").length;
   return (
     <figure
       className="my-3 rounded-lg border border-violet-500/30 bg-violet-950/20 p-3 text-xs text-violet-100"
@@ -82,23 +91,37 @@ function MermaidStreamingPlaceholder({ source }: { source: string }): ReactEleme
     >
       <figcaption className="font-medium">Writing diagram…</figcaption>
       <p className="mt-1 text-violet-200/80">
-        Rendering will start when the Mermaid block is complete{lineCount > 0 ? ` (${lineCount} lines so far).` : "."}
+        Rendering will start when the Mermaid block is complete
+        {lineCount > 0 ? ` (${lineCount} lines so far).` : "."}
       </p>
     </figure>
   );
 }
 
-function markdownComponents(streaming: boolean): Components {
+function markdownComponents(
+  streaming: boolean,
+  mermaidTheme?: "light" | "dark",
+): Components {
   return {
     pre({ children, ...props }) {
       const child = Array.isArray(children) ? children[0] : children;
       if (isValidElement<{ className?: string; children?: unknown }>(child)) {
         const language = getLanguage(child.props.className);
         if (isMermaidLanguage(language)) {
-          return <MermaidDiagram source={textFromChildren(child.props.children)} streaming={streaming} />;
+          return (
+            <MermaidDiagram
+              source={textFromChildren(child.props.children)}
+              streaming={streaming}
+              theme={mermaidTheme}
+            />
+          );
         }
         if (language === STREAMING_MERMAID_LANGUAGE) {
-          return <MermaidStreamingPlaceholder source={textFromChildren(child.props.children)} />;
+          return (
+            <MermaidStreamingPlaceholder
+              source={textFromChildren(child.props.children)}
+            />
+          );
         }
       }
       return <pre {...props}>{children}</pre>;
@@ -117,16 +140,22 @@ export function MarkdownContent({
   children,
   className,
   streaming = false,
+  mermaidTheme,
 }: {
   children: string;
   className?: string;
   streaming?: boolean;
+  /** Force the embedded Mermaid diagrams' theme (e.g. always-dark chat). */
+  mermaidTheme?: "light" | "dark";
 }): ReactElement {
   const renderedMarkdown = useMemo(
     () => (streaming ? markStreamingMermaidFences(children) : children),
     [children, streaming],
   );
-  const components = useMemo(() => markdownComponents(streaming), [streaming]);
+  const components = useMemo(
+    () => markdownComponents(streaming, mermaidTheme),
+    [streaming, mermaidTheme],
+  );
 
   return (
     <div className={className}>

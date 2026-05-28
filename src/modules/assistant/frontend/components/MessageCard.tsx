@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { Bot, User } from "lucide-react";
+import { AlertTriangle, Sparkles } from "lucide-react";
 import { MarkdownContent } from "../../../../shared/frontend/markdown";
 import type {
   AssistantMessage,
@@ -11,7 +11,10 @@ import {
   PlacementProposalCard,
   parsePlacementProposal,
 } from "./PlacementProposalCard";
-import { AssistantRunStatusCard, type ActiveRunState } from "./AssistantRunStatusCard";
+import {
+  AssistantRunStatusCard,
+  type ActiveRunState,
+} from "./AssistantRunStatusCard";
 import {
   ComponentResultsBlock,
   type ComponentResultsPayload,
@@ -34,7 +37,9 @@ const PROSE_CLASSES = [
   "prose-pre:bg-slate-950/80",
   "prose-pre:border",
   "prose-pre:border-slate-800",
-  "prose-code:bg-slate-800",
+  "prose-code:bg-violet-500/15",
+  "prose-code:text-violet-200",
+  "prose-code:font-mono",
   "prose-code:px-1",
   "prose-code:py-0.5",
   "prose-code:rounded",
@@ -72,6 +77,10 @@ const COMPACT_PROSE_CLASSES = [
   "prose-pre:bg-slate-100",
   "dark:prose-pre:bg-slate-950/80",
   "prose-code:break-words",
+  "prose-code:bg-violet-500/10",
+  "prose-code:text-violet-700",
+  "dark:prose-code:text-violet-300",
+  "prose-code:font-mono",
   "prose-code:before:content-none",
   "prose-code:after:content-none",
   "prose-table:text-xs",
@@ -109,7 +118,9 @@ function extractComponentResults(
   return out;
 }
 
-function extractBomResults(events: AssistantToolEventDto[]): BomResultPayload[] {
+function extractBomResults(
+  events: AssistantToolEventDto[],
+): BomResultPayload[] {
   const out: BomResultPayload[] = [];
   for (const event of events) {
     if (event.toolName !== "library_resolve_bom") continue;
@@ -124,9 +135,10 @@ function extractBomResults(events: AssistantToolEventDto[]): BomResultPayload[] 
   return out;
 }
 
-function extractPlacementProposals(
-  events: AssistantToolEventDto[],
-): Array<{ event: AssistantToolEventDto; proposal: NonNullable<ReturnType<typeof parsePlacementProposal>> }> {
+function extractPlacementProposals(events: AssistantToolEventDto[]): Array<{
+  event: AssistantToolEventDto;
+  proposal: NonNullable<ReturnType<typeof parsePlacementProposal>>;
+}> {
   return events.flatMap((event) => {
     const proposal = parsePlacementProposal(event);
     return proposal ? [{ event, proposal }] : [];
@@ -137,7 +149,9 @@ function extractGenericToolProposals(
   events: AssistantToolEventDto[],
   writeProposals: AssistantWriteProposalDto[],
 ): AssistantWriteProposalDto[] {
-  const recordsById = new Map(writeProposals.map((record) => [record.id, record]));
+  const recordsById = new Map(
+    writeProposals.map((record) => [record.id, record]),
+  );
   const out: AssistantWriteProposalDto[] = [];
   for (const event of events) {
     if (event.status !== "succeeded" || !event.resultJson) continue;
@@ -148,7 +162,11 @@ function extractGenericToolProposals(
         designId?: string;
         baseRevision?: number | null;
       };
-      if (!parsed.id || !parsed.kind || parsed.kind === "designer_place_components") {
+      if (
+        !parsed.id ||
+        !parsed.kind ||
+        parsed.kind === "designer_place_components"
+      ) {
         continue;
       }
       const record = recordsById.get(parsed.id);
@@ -156,26 +174,26 @@ function extractGenericToolProposals(
         record
           ? { ...record, toolEventId: record.toolEventId ?? event.id }
           : ({
-            id: parsed.id,
-            chatId: event.chatId,
-            toolEventId: event.id,
-            kind: parsed.kind,
-            status: "pending",
-            designId: parsed.designId ?? "",
-            baseRevision: parsed.baseRevision ?? null,
-            toolName: event.toolName,
-            title: null,
-            summary: null,
-            riskLevel: null,
-            operations: [],
-            sources: event.sources,
-            warnings: [],
-            proposal: parsed,
-            envelope: parsed,
-            applyResult: null,
-            createdAt: event.createdAt,
-            updatedAt: event.updatedAt,
-          } as AssistantWriteProposalDto),
+              id: parsed.id,
+              chatId: event.chatId,
+              toolEventId: event.id,
+              kind: parsed.kind,
+              status: "pending",
+              designId: parsed.designId ?? "",
+              baseRevision: parsed.baseRevision ?? null,
+              toolName: event.toolName,
+              title: null,
+              summary: null,
+              riskLevel: null,
+              operations: [],
+              sources: event.sources,
+              warnings: [],
+              proposal: parsed,
+              envelope: parsed,
+              applyResult: null,
+              createdAt: event.createdAt,
+              updatedAt: event.updatedAt,
+            } as AssistantWriteProposalDto),
       );
     } catch {
       // ignore malformed tool result
@@ -190,6 +208,7 @@ export function MessageCard({
   loading = false,
   runState,
   assistantBaseUrl,
+  backendURL,
   writeProposals = [],
   onProposalChanged,
   onStopRun,
@@ -201,6 +220,7 @@ export function MessageCard({
   loading?: boolean;
   runState?: ActiveRunState | null;
   assistantBaseUrl?: string | null;
+  backendURL?: string | null;
   writeProposals?: AssistantWriteProposalDto[];
   onProposalChanged?: (change: {
     kind: "applied" | "rejected";
@@ -238,26 +258,42 @@ export function MessageCard({
     (event) => !proposalToolEventIds.has(event.id),
   );
   const showWaitingDots = loading && !hasContent && toolEvents.length === 0;
-  const showStreamingPulse = Boolean(runState) || (loading && (hasContent || toolEvents.length > 0));
+  const showStreamingPulse =
+    Boolean(runState) || (loading && (hasContent || toolEvents.length > 0));
   const isStreaming = !isUser && (loading || Boolean(runState));
+
+  // System messages (e.g. provider-failure / retry notices) → warning banner,
+  // visually distinct from assistant content. Persists in the thread as history.
+  if (message.role === "system") {
+    return (
+      <div className={compact ? "px-3 py-2" : "px-4 py-3"}>
+        <div className="flex items-start gap-2 rounded-lg border border-amber-300/50 bg-status-warning-soft px-3 py-2 text-xs text-status-warning dark:border-amber-800/50">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 break-words">{cleanedContent}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // User messages: right-aligned bubble (iMessage-style) for instant scan.
+  if (isUser) {
+    return (
+      <div
+        className={`flex min-w-0 justify-end ${compact ? "px-3 py-3" : "px-4 py-4"}`}
+      >
+        <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-[10px_10px_2px_10px] border border-violet-300/40 bg-accent-soft px-3.5 py-2.5 text-sm leading-relaxed text-slate-800 dark:border-violet-700/40 dark:text-slate-100">
+          {cleanedContent}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      className={`flex min-w-0 border-b ${
-        compact
-          ? `gap-3 border-slate-200 px-3 py-4 dark:border-slate-800/70 ${isUser ? "bg-white dark:bg-slate-950" : "bg-slate-50 dark:bg-slate-900/40"}`
-          : `gap-4 border-slate-800/50 px-4 py-6 ${isUser ? "" : "bg-slate-900/40"}`
-      }`}
+      className={`flex min-w-0 ${compact ? "gap-3 px-3 py-4" : "gap-3 px-4 py-6"}`}
     >
-      <div
-        className={`mt-1 flex shrink-0 items-center justify-center rounded-lg ${compact ? "h-7 w-7" : "h-7 w-7"} ${
-          isUser
-            ? compact
-              ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-              : "bg-slate-800 text-slate-300"
-            : "bg-violet-600 text-white shadow-sm shadow-violet-900/50"
-        }`}
-      >
-        {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-violet-300">
+        <Sparkles className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1 space-y-3">
         <div className="flex items-center gap-2">
@@ -265,21 +301,39 @@ export function MessageCard({
             {isUser ? "You" : "Assistant"}
           </span>
           {showStreamingPulse ? (
-            <span
-              className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-violet-400 shadow-[0_0_6px_rgba(167,139,250,0.7)]"
-              title="Streaming…"
-            />
+            <span className="flex items-center gap-1 text-[11px] text-slate-500">
+              · thinking…
+              <span className="ml-0.5 inline-flex gap-0.5">
+                <span className="h-1 w-1 animate-pulse rounded-full bg-violet-400" />
+                <span
+                  className="h-1 w-1 animate-pulse rounded-full bg-violet-400"
+                  style={{ animationDelay: "150ms" }}
+                />
+                <span
+                  className="h-1 w-1 animate-pulse rounded-full bg-violet-400"
+                  style={{ animationDelay: "300ms" }}
+                />
+              </span>
+            </span>
+          ) : toolEvents.length > 0 ? (
+            <span className="text-[11px] text-slate-500">
+              · {toolEvents.length} tool{" "}
+              {toolEvents.length === 1 ? "call" : "calls"}
+            </span>
           ) : null}
         </div>
         {hasContent ? (
           isUser ? (
-            <div className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${compact ? "text-slate-800 dark:text-slate-100" : "text-slate-100"}`}>
+            <div
+              className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${compact ? "text-slate-800 dark:text-slate-100" : "text-slate-100"}`}
+            >
               {cleanedContent}
             </div>
           ) : (
             <MarkdownContent
               className={compact ? COMPACT_PROSE_CLASSES : PROSE_CLASSES}
               streaming={isStreaming}
+              mermaidTheme="dark"
             >
               {cleanedContent}
             </MarkdownContent>
@@ -312,9 +366,11 @@ export function MessageCard({
                 event={event}
                 proposal={proposal}
                 assistantBaseUrl={assistantBaseUrl}
+                backendURL={backendURL}
                 statusRecord={
-                  writeProposals.find((record) => record.id === proposal.proposalId) ??
-                  null
+                  writeProposals.find(
+                    (record) => record.id === proposal.proposalId,
+                  ) ?? null
                 }
                 onProposalChanged={onProposalChanged}
                 compact={compact}
@@ -337,6 +393,9 @@ export function MessageCard({
         ) : null}
         {visibleToolEvents.length > 0 ? (
           <div className="space-y-1.5">
+            <div className="text-[9px] font-medium uppercase tracking-wider text-slate-500">
+              Tools used
+            </div>
             {visibleToolEvents.map((event) => (
               <ToolCard key={event.id} event={event} compact={compact} />
             ))}

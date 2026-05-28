@@ -1,5 +1,10 @@
-import type { ReactElement, ReactNode } from "react";
-import { CheckCircle2, PackageCheck, PackageOpen } from "lucide-react";
+import type { ReactElement } from "react";
+import { Pill } from "../../../../shared/frontend/ui/pill";
+import {
+  classifyComponentType,
+  ledColorTone,
+  type ComponentTypeInfo,
+} from "./component-type";
 
 interface ComponentHit {
   componentId: string;
@@ -9,7 +14,7 @@ interface ComponentHit {
   score: number;
 }
 
-interface BomItem {
+export interface BomItem {
   role: string;
   requestedQuery: string;
   rewrittenQuery: string;
@@ -19,7 +24,11 @@ interface BomItem {
   selected: ComponentHit | null;
   alternatives: ComponentHit[];
   assumptions: string[];
-  importSuggestions: Array<{ label: string; reason: string; availability: "not-installed" }>;
+  importSuggestions: Array<{
+    label: string;
+    reason: string;
+    availability: "not-installed";
+  }>;
   status: "resolved" | "generic-resolved" | "missing";
 }
 
@@ -36,112 +45,184 @@ export interface BomResultPayload {
   nextAction: string;
 }
 
+/** One displayed table row — same-value parts collapsed into a single line. */
+interface BomGroup {
+  type: ComponentTypeInfo;
+  refdes: string[];
+  quantity: number;
+  value: string | null;
+  sourceName: string | null;
+  /** Show a package chip only for passives/LEDs where it's meaningful. */
+  showPackage: boolean;
+}
+
+/** Group items by (type, value, source); join refdes and sum quantity. */
+export function groupBomItems(items: BomItem[]): BomGroup[] {
+  const groups = new Map<string, BomGroup>();
+  for (const item of items) {
+    const type = classifyComponentType(
+      item.selected?.name,
+      item.value,
+      item.role,
+    );
+    const sourceName = item.selected ? `core:${item.selected.name}` : null;
+    const key = `${type.key}|${item.value ?? ""}|${sourceName ?? ""}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.refdes.push(item.role);
+      existing.quantity += item.quantity;
+    } else {
+      groups.set(key, {
+        type,
+        refdes: [item.role],
+        quantity: item.quantity,
+        value: item.value,
+        sourceName,
+        showPackage: [
+          "led",
+          "resistor",
+          "capacitor",
+          "inductor",
+          "diode",
+        ].includes(type.key),
+      });
+    }
+  }
+  return [...groups.values()];
+}
+
 export function BomResultCard({
   data,
-  compact = false,
 }: {
   data: BomResultPayload;
   compact?: boolean;
 }): ReactElement {
+  const sourced = data.items.filter((i) => i.status === "resolved").length;
+  const groups = groupBomItems(data.items);
+  const pkg = data.defaults.packagePreference;
   return (
-    <section className="max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-200">
-      <header className="flex items-start justify-between gap-3">
-        <div>
+    <section className="max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-200">
+      <header className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+        <div className="min-w-0">
           <div className="text-[10px] uppercase tracking-wider text-violet-400">
             BOM proposal
           </div>
-          <h3 className="mt-1 break-words font-semibold text-slate-900 dark:text-slate-100">
+          <h3 className="mt-0.5 break-words font-semibold text-slate-900 dark:text-slate-100">
             {data.goal ?? "Resolved local components"}
           </h3>
         </div>
-        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] ${data.readyForPlacement ? "bg-emerald-950/60 text-emerald-300" : "bg-amber-950/60 text-amber-300"}`}>
-          {data.readyForPlacement ? <CheckCircle2 className="h-3 w-3" /> : <PackageOpen className="h-3 w-3" />}
-          {data.readyForPlacement ? "ready" : "needs review"}
-        </span>
+        <Pill tone={data.readyForPlacement ? "success" : "warning"}>
+          {sourced}/{data.items.length} sourced
+        </Pill>
       </header>
 
-      <div className={`mt-3 grid grid-cols-1 gap-2 text-xs text-slate-600 dark:text-slate-400 ${compact ? "" : "md:grid-cols-3"}`}>
-        <Fact label="Supply" value={data.defaults.supplyVoltage} />
-        <Fact label="Blink rate" value={data.defaults.blinkRate} />
-        <Fact label="Package" value={data.defaults.packagePreference} />
+      {/* Assumed parameter chips */}
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5 dark:border-slate-800/70 dark:bg-black/10">
+        <span className="mr-0.5 text-[9px] uppercase tracking-wider text-slate-400">
+          Assumed
+        </span>
+        <ParamChip label="Supply" value={data.defaults.supplyVoltage} />
+        <ParamChip label="Blink rate" value={data.defaults.blinkRate} />
+        <ParamChip label="Package" value={pkg} />
+        <button
+          type="button"
+          disabled
+          title="Adjust parameters — coming soon"
+          className="ml-auto text-[11px] text-accent-text opacity-60"
+        >
+          Adjust
+        </button>
       </div>
 
-      <div className="mt-4 space-y-2">
-        {data.items.map((item, idx) => (
-          <article key={`${item.role}-${idx}`} className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/70">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="break-words font-medium text-slate-900 dark:text-slate-100">{item.quantity}× {item.role}</span>
-                  {item.value ? <Tag>{item.value}</Tag> : null}
-                  {Object.entries(item.attributes).map(([key, value]) => (
-                    <Tag key={key}>{key}: {Array.isArray(value) ? value.join("/") : String(value)}</Tag>
-                  ))}
-                </div>
-                <div className="mt-1 break-words text-xs text-slate-500">
-                  query: {item.requestedQuery} → {item.rewrittenQuery}
-                </div>
-              </div>
-              <StatusPill status={item.status} />
-            </div>
-
-            {item.selected ? (
-              <div className="mt-3 rounded-md border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-950/60">
-                <div className="flex min-w-0 items-center gap-2 font-medium text-slate-900 dark:text-slate-100">
-                  <PackageCheck className="h-4 w-4 text-violet-300" />
-                  {item.selected.name}
-                </div>
-                <p className="mt-1 line-clamp-2 text-xs text-slate-600 dark:text-slate-400">
-                  {item.selected.description}
-                </p>
-                {item.selected.tags.length > 0 ? (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {item.selected.tags.slice(0, 6).map((tag) => <Tag key={tag}>{tag}</Tag>)}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {item.importSuggestions.length > 0 ? (
-              <div className="mt-2 text-xs text-amber-300">
-                Optional import: {item.importSuggestions.map((s) => s.label).join(", ")}
-              </div>
-            ) : null}
-            {item.assumptions.length > 0 ? (
-              <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-slate-500">
-                {item.assumptions.slice(0, 3).map((assumption) => <li key={assumption}>{assumption}</li>)}
-              </ul>
-            ) : null}
-          </article>
-        ))}
+      {/* Reference layout: Type · Qty · Value · Source (status omitted) */}
+      <div className="px-2 pb-2">
+        <table className="w-full table-fixed border-collapse text-xs">
+          <thead>
+            <tr className="text-left text-[10px] uppercase tracking-wide text-slate-400">
+              <th className="px-2 py-1.5">Type</th>
+              <th className="w-10 px-1 py-1.5 text-right">Qty</th>
+              <th className="px-1 py-1.5">Value</th>
+              <th className="w-24 px-1 py-1.5">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((group, idx) => {
+              const Icon = group.type.icon;
+              const led = group.type.key === "led";
+              const tone = led ? ledColorTone(group.value) : null;
+              return (
+                <tr
+                  key={`${group.type.key}-${idx}`}
+                  className="border-t border-slate-100 align-top dark:border-slate-800/70"
+                >
+                  <td className="px-2 py-2">
+                    <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-200">
+                      <Icon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                      <span className="truncate">{group.type.label}</span>
+                    </span>
+                  </td>
+                  <td className="px-1 py-2 text-right font-mono tabular-nums text-slate-500">
+                    {group.quantity}×
+                  </td>
+                  <td className="min-w-0 px-1 py-2">
+                    <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                      <span className="font-mono text-[11px] text-slate-700 dark:text-slate-200">
+                        {group.refdes.join(", ")}
+                      </span>
+                      {led && tone ? (
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[9px] ${tone.bg} ${tone.text}`}
+                        >
+                          {group.value}
+                        </span>
+                      ) : group.value ? (
+                        <span className="text-slate-500 dark:text-slate-300">
+                          {group.value}
+                        </span>
+                      ) : null}
+                      {group.showPackage && pkg ? (
+                        <span className="font-mono text-[10px] text-slate-400">
+                          {pkg}
+                        </span>
+                      ) : null}
+                    </span>
+                  </td>
+                  <td className="min-w-0 px-1 py-2">
+                    {group.sourceName ? (
+                      <span className="truncate font-mono text-[11px] text-accent-text">
+                        {group.sourceName}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-slate-400">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
-      {data.assumptions.length > 0 ? (
-        <p className="mt-3 text-xs text-slate-400">{data.assumptions.join(" ")}</p>
-      ) : null}
-      <p className="mt-2 break-words text-xs font-medium text-violet-700 dark:text-violet-300">Next: {data.nextAction}</p>
+      <p className="break-words border-t border-slate-100 px-4 py-2.5 text-xs font-medium text-violet-700 dark:border-slate-800 dark:text-violet-300">
+        Next: {data.nextAction}
+      </p>
     </section>
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }): ReactElement {
+function ParamChip({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}): ReactElement {
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-900/70">
-      <div className="text-[10px] uppercase text-slate-500">{label}</div>
-      <div className="text-slate-700 dark:text-slate-300">{value}</div>
-    </div>
+    <span className="inline-flex items-center gap-1 rounded-pill bg-slate-100 px-2 py-0.5 text-[11px] dark:bg-slate-800">
+      <span className="text-slate-400">{label}</span>
+      <span className="font-medium text-slate-700 dark:text-slate-200">
+        {value}
+      </span>
+    </span>
   );
-}
-
-function Tag({ children }: { children: ReactNode }): ReactElement {
-  return <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-400">{children}</span>;
-}
-
-function StatusPill({ status }: { status: BomItem["status"] }): ReactElement {
-  const cls = status === "missing"
-    ? "bg-amber-950/60 text-amber-300"
-    : status === "generic-resolved"
-      ? "bg-blue-950/60 text-blue-300"
-      : "bg-emerald-950/60 text-emerald-300";
-  return <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] ${cls}`}>{status}</span>;
 }

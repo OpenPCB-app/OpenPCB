@@ -26,9 +26,17 @@ const TOOL_INSTRUCTIONS = `
 - To browse the entire library, call \`library_search_components\` with no \`query\` (or empty).
 - Reply with plain markdown. Never wrap your response in <response>…</response>, HTML, or other envelopes; the UI renders raw markdown directly.
 - For diagrams, flows, quick references, state machines, or architecture sketches, prefer fenced Mermaid blocks (start the fence with \`\`\`mermaid) over ASCII art.
-- Mermaid must work with strict security: no HTML tags, <br/>, click directives, links, embedded CSS/JS, or custom scripts. Avoid comments and complex style lines.
+- Mermaid must work with strict security: no HTML tags, <br/>, click directives, links, embedded CSS/JS, or custom scripts, and no comments. (\`classDef\`, \`class\`, \`style\` and \`linkStyle\` directives ARE allowed and encouraged — see below.)
 - For Mermaid flowcharts, prefer \`flowchart LR\`; use simple IDs like \`VCC\`, \`GND\`, \`R1\`, \`Q1_B\`; put display text in quoted labels like \`R1["R1 10k resistor"]\`; quote edge labels with punctuation.
-- For circuit wiring diagrams, represent power rails and shared nets as explicit nodes, keep labels short, and add a wiring table after the diagram when precise pin-to-pin detail matters.
+- Color nodes by meaning using ONLY this fixed palette. Add the relevant \`classDef\` lines at the END of the block, then assign with \`class NodeId className\` (or \`NodeId:::className\`). Use ≤7 classes; omit any you don't need:
+  \`classDef power fill:#13191F,stroke:#E0573A,color:#F3F4F6;\` (power rails / VCC)
+  \`classDef ground fill:#13191F,stroke:#5DCAA5,color:#F3F4F6;\` (GND / returns)
+  \`classDef timing fill:#13191F,stroke:#FBBF24,color:#F3F4F6;\` (caps / timing)
+  \`classDef signal fill:#13191F,stroke:#94A3B8,color:#F3F4F6;\` (generic signal)
+  \`classDef ok fill:#13191F,stroke:#34D399,color:#F3F4F6;\` (result / success / chosen path)
+  \`classDef warn fill:#13191F,stroke:#FBBF24,color:#F3F4F6;\` (caution)
+  \`classDef err fill:#13191F,stroke:#F87171,color:#F3F4F6;\` (error / fault)
+- For circuit wiring diagrams, represent power rails and shared nets as explicit nodes (class them \`power\`/\`ground\`), keep labels short, and add a wiring table after the diagram when precise pin-to-pin detail matters.
 - Ensure every Mermaid block is syntactically complete. If unsure, use a simple wiring table instead of a fragile diagram.
 - When a tool returns component results, do NOT repeat them as a markdown table — the UI renders structured cards automatically. Reference items by name in prose.
 `.trim();

@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -11,12 +12,21 @@ import {
   type ReactElement,
 } from "react";
 import {
-  ArrowUp,
+  Archive,
+  ChevronDown,
+  Download,
+  Link2,
   MessageSquarePlus,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pencil,
+  Pin,
+  Plus,
   Search,
-  Settings,
   Sparkles,
+  Trash2,
+  Wrench,
 } from "lucide-react";
 import type { ModuleSpaceProps } from "../../../core/contracts/modules/frontend-entry";
 import type {
@@ -34,11 +44,54 @@ import type {
 } from "../../../sdks/assistant";
 import type { Task, TaskEvent } from "../../../sdks/tasks";
 import { MessageCard } from "./components/MessageCard";
-import { ProviderCapabilityBadge } from "./components/ProviderCapabilityBadge";
-import { PromptPresetPicker } from "./components/PromptPresetPicker";
+import { ModelSelectorPill } from "./components/ModelSelectorPill";
+import { ChatComposer } from "./components/ChatComposer";
+import { useChatUserState } from "./components/useChatUserState";
+import { useNavigationStore } from "../../../core/frontend/src/stores/navigation-store";
+import {
+  contextBudgetKb,
+  dateDividerLabel,
+  dayKey,
+  relativeTime,
+} from "./components/chat-format";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@shared/frontend/ui/dropdown-menu";
+
+const QUICK_ACTIONS = [
+  "Wire the schematic",
+  "Resolve BOM",
+  "Run ERC",
+  "Suggest improvements",
+];
+
+/** Reads a chat's linked design (set on design-scoped chats via metadata). */
+function linkedDesign(
+  chat: AssistantChat | undefined,
+): { id: string; name: string } | null {
+  const meta = chat?.metadata as
+    | { designId?: unknown; designName?: unknown }
+    | null
+    | undefined;
+  if (meta && typeof meta.designId === "string") {
+    return {
+      id: meta.designId,
+      name:
+        typeof meta.designName === "string" ? meta.designName : meta.designId,
+    };
+  }
+  return null;
+}
 import { useAssistantStream } from "./hooks/useAssistantStream";
 import { useScrollAnchor, isNearBottom } from "./hooks/useScrollAnchor";
-import type { ActiveRunState, ActiveRunStatus } from "./components/AssistantRunStatusCard";
+import type {
+  ActiveRunState,
+  ActiveRunStatus,
+} from "./components/AssistantRunStatusCard";
 
 function headers(): HeadersInit {
   return { "content-type": "application/json" };
@@ -87,7 +140,9 @@ export function AssistantSpace({
   const [chats, setChats] = useState<AssistantChat[]>([]);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [toolEvents, setToolEvents] = useState<AssistantToolEventDto[]>([]);
-  const [writeProposals, setWriteProposals] = useState<AssistantWriteProposalDto[]>([]);
+  const [writeProposals, setWriteProposals] = useState<
+    AssistantWriteProposalDto[]
+  >([]);
   const [providers, setProviders] = useState<AssistantProviderConfig[]>([]);
   const [models, setModels] = useState<AssistantProviderModel[]>([]);
   const [settings, setSettings] = useState<AssistantSettings | null>(null);
@@ -103,7 +158,9 @@ export function AssistantSpace({
     () => new Set(),
   );
   const [loading, setLoading] = useState(false);
-  const [activeRunsByChat, setActiveRunsByChat] = useState<Record<string, ActiveRunState>>({});
+  const [activeRunsByChat, setActiveRunsByChat] = useState<
+    Record<string, ActiveRunState>
+  >({});
   const [messagesPage, setMessagesPage] = useState({
     oldestCursor: null as string | null,
     hasMore: false,
@@ -117,6 +174,15 @@ export function AssistantSpace({
     x: number;
     y: number;
   } | null>(null);
+  const [filter, setFilter] = useState<
+    "all" | "pinned" | "linked" | "archived"
+  >("all");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [toolCount, setToolCount] = useState<number | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const userState = useChatUserState();
+  const navigateToModule = useNavigationStore((s) => s.navigateToModule);
   const activeChatIdRef = useRef<string | null>(null);
   const routeChatId = params?.chatId ?? null;
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -124,14 +190,58 @@ export function AssistantSpace({
 
   const selectedProvider =
     providers.find((provider) => provider.id === providerId) ?? null;
-  const filteredChats = chats.filter((chat) =>
-    `${chat.title} ${chat.model}`.toLowerCase().includes(query.toLowerCase()),
-  );
+  const chatCounts = useMemo(() => {
+    const active = chats.filter((c) => !userState.isArchived(c.id));
+    return {
+      all: active.length,
+      pinned: active.filter((c) => userState.isPinned(c.id)).length,
+      linked: active.filter((c) => linkedDesign(c)).length,
+      archived: chats.filter((c) => userState.isArchived(c.id)).length,
+    };
+  }, [chats, userState]);
+
+  const filteredChats = useMemo(() => {
+    const q = query.toLowerCase();
+    return chats
+      .filter((chat) => {
+        const archived = userState.isArchived(chat.id);
+        if (filter === "archived") {
+          if (!archived) return false;
+        } else if (archived) {
+          return false;
+        } else if (filter === "pinned" && !userState.isPinned(chat.id)) {
+          return false;
+        } else if (filter === "linked" && !linkedDesign(chat)) {
+          return false;
+        }
+        return q ? chat.title.toLowerCase().includes(q) : true;
+      })
+      .sort((a, b) => {
+        const pa = userState.isPinned(a.id) ? 1 : 0;
+        const pb = userState.isPinned(b.id) ? 1 : 0;
+        if (pa !== pb) return pb - pa;
+        return (b.lastMessageAt ?? b.updatedAt).localeCompare(
+          a.lastMessageAt ?? a.updatedAt,
+        );
+      });
+  }, [chats, query, filter, userState]);
+
+  const selectedChat = chats.find((c) => c.id === selectedChatId) ?? null;
+  const selectedLinked = linkedDesign(selectedChat ?? undefined);
+
+  useEffect(() => {
+    if (!base) return;
+    void api<unknown[]>(`${base}/tools`)
+      .then((tools) => setToolCount(Array.isArray(tools) ? tools.length : null))
+      .catch(() => setToolCount(null));
+  }, [base]);
   const hasPendingAssistantMessage = messages.some(
     (message) =>
       message.role === "assistant" && message.content.trim().length === 0,
   );
-  const selectedRun = selectedChatId ? activeRunsByChat[selectedChatId] : undefined;
+  const selectedRun = selectedChatId
+    ? activeRunsByChat[selectedChatId]
+    : undefined;
 
   const toolEventsByMessage = useMemo(() => {
     const map = new Map<string, AssistantToolEventDto[]>();
@@ -148,7 +258,9 @@ export function AssistantSpace({
     setToolEvents((prev) => {
       const map = new Map(prev.map((event) => [event.id, event]));
       for (const event of incoming) map.set(event.id, event);
-      return [...map.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      return [...map.values()].sort((a, b) =>
+        a.createdAt.localeCompare(b.createdAt),
+      );
     });
   }, []);
 
@@ -175,12 +287,15 @@ export function AssistantSpace({
     const data = await api<AssistantChat[]>(`${base}/chats`);
     setChats(data);
     setSelectedChatId((current) => {
-      const routeChat = routeChatId && data.some((chat) => chat.id === routeChatId)
-        ? routeChatId
-        : null;
-      const next = routeChat ?? (isUsableChatId(current) && data.some((chat) => chat.id === current)
-        ? current
-        : (data[0]?.id ?? null));
+      const routeChat =
+        routeChatId && data.some((chat) => chat.id === routeChatId)
+          ? routeChatId
+          : null;
+      const next =
+        routeChat ??
+        (isUsableChatId(current) && data.some((chat) => chat.id === current)
+          ? current
+          : (data[0]?.id ?? null));
       activeChatIdRef.current = next;
       return next;
     });
@@ -217,7 +332,14 @@ export function AssistantSpace({
   );
 
   const loadOlderMessages = useCallback(async () => {
-    if (!base || !selectedChatId || !messagesPage.hasMore || messagesPage.loadingOlder || !messagesPage.oldestCursor) return;
+    if (
+      !base ||
+      !selectedChatId ||
+      !messagesPage.hasMore ||
+      messagesPage.loadingOlder ||
+      !messagesPage.oldestCursor
+    )
+      return;
     setMessagesPage((prev) => ({ ...prev, loadingOlder: true }));
     scroll.captureBeforePrepend();
     try {
@@ -242,7 +364,15 @@ export function AssistantSpace({
       setError(err instanceof Error ? err.message : String(err));
       setMessagesPage((prev) => ({ ...prev, loadingOlder: false }));
     }
-  }, [base, mergeToolEvents, messagesPage.hasMore, messagesPage.loadingOlder, messagesPage.oldestCursor, scroll, selectedChatId]);
+  }, [
+    base,
+    mergeToolEvents,
+    messagesPage.hasMore,
+    messagesPage.loadingOlder,
+    messagesPage.oldestCursor,
+    scroll,
+    selectedChatId,
+  ]);
 
   const refreshConfig = useCallback(async () => {
     if (!base) return;
@@ -267,34 +397,69 @@ export function AssistantSpace({
     }
   }, [base]);
 
-  const taskStage = useCallback((task: Task | TaskEvent): { status: ActiveRunStatus; stage: string; error: string | null } => {
-    const status = "status" in task ? task.status : undefined;
-    switch (status) {
-      case "queued":
-      case "pending":
-        return { status: "queued", stage: "Assistant is queued…", error: null };
-      case "running":
-        return { status: "running", stage: "Assistant is working…", error: null };
-      case "streaming":
-        return { status: "streaming", stage: "Writing response…", error: null };
-      case "completed":
-        return { status: "completed", stage: "Completed", error: null };
-      case "failed":
-        return { status: "failed", stage: "Assistant stopped before completing.", error: "error" in task ? task.error?.message ?? null : null };
-      case "cancelled":
-        return { status: "cancelled", stage: "Assistant task cancelled.", error: null };
-      case "paused":
-        return { status: "paused", stage: "Assistant paused before completing.", error: "error" in task ? task.error?.message ?? null : null };
-      default:
-        return { status: "running", stage: "Assistant is working…", error: null };
-    }
-  }, []);
+  const taskStage = useCallback(
+    (
+      task: Task | TaskEvent,
+    ): { status: ActiveRunStatus; stage: string; error: string | null } => {
+      const status = "status" in task ? task.status : undefined;
+      switch (status) {
+        case "queued":
+        case "pending":
+          return {
+            status: "queued",
+            stage: "Assistant is queued…",
+            error: null,
+          };
+        case "running":
+          return {
+            status: "running",
+            stage: "Assistant is working…",
+            error: null,
+          };
+        case "streaming":
+          return {
+            status: "streaming",
+            stage: "Writing response…",
+            error: null,
+          };
+        case "completed":
+          return { status: "completed", stage: "Completed", error: null };
+        case "failed":
+          return {
+            status: "failed",
+            stage: "Assistant stopped before completing.",
+            error: "error" in task ? (task.error?.message ?? null) : null,
+          };
+        case "cancelled":
+          return {
+            status: "cancelled",
+            stage: "Assistant task cancelled.",
+            error: null,
+          };
+        case "paused":
+          return {
+            status: "paused",
+            stage: "Assistant paused before completing.",
+            error: "error" in task ? (task.error?.message ?? null) : null,
+          };
+        default:
+          return {
+            status: "running",
+            stage: "Assistant is working…",
+            error: null,
+          };
+      }
+    },
+    [],
+  );
 
   // Typed SSE consumer
   const stream = useAssistantStream({
     backendUrl: backendURL,
     onChunkText: (ctx, delta) => {
-      const near = scroll.scrollRef.current ? isNearBottom(scroll.scrollRef.current) : true;
+      const near = scroll.scrollRef.current
+        ? isNearBottom(scroll.scrollRef.current)
+        : true;
       setMessages((prev) => {
         const next = prev.map((message) =>
           message.id === ctx.assistantMessageId
@@ -303,7 +468,10 @@ export function AssistantSpace({
         );
         return next;
       });
-      updateRun(ctx.chatId, { status: "streaming", currentStage: "Writing response…" });
+      updateRun(ctx.chatId, {
+        status: "streaming",
+        currentStage: "Writing response…",
+      });
       if (near) requestAnimationFrame(scroll.scrollToBottom);
       else setShowNewMessagesPill(true);
     },
@@ -326,25 +494,43 @@ export function AssistantSpace({
             ...(activeRunsByChat[ctx.chatId]?.activeTools ?? []).filter(
               (tool) => tool.callId !== event.data.toolCallId,
             ),
-            { callId: event.data.toolCallId, name: event.data.toolName, status: "requested" },
+            {
+              callId: event.data.toolCallId,
+              name: event.data.toolName,
+              status: "requested",
+            },
           ],
         });
-      } else if (event.type === "run.tool.running" || event.type === "run.tool.succeeded" || event.type === "run.tool.failed") {
+      } else if (
+        event.type === "run.tool.running" ||
+        event.type === "run.tool.succeeded" ||
+        event.type === "run.tool.failed"
+      ) {
         updateRun(ctx.chatId, {
           status: "tooling",
           currentStage: "Using OpenPCB tools…",
-          activeTools: (activeRunsByChat[ctx.chatId]?.activeTools ?? []).map((tool) =>
-            tool.callId === event.data.toolCallId
-              ? { ...tool, status: event.type.replace("run.tool.", "") }
-              : tool,
+          activeTools: (activeRunsByChat[ctx.chatId]?.activeTools ?? []).map(
+            (tool) =>
+              tool.callId === event.data.toolCallId
+                ? { ...tool, status: event.type.replace("run.tool.", "") }
+                : tool,
           ),
         });
       } else if (event.type === "run.completed") {
-        updateRun(ctx.chatId, { status: "finalizing", currentStage: "Finalizing answer…" });
+        updateRun(ctx.chatId, {
+          status: "finalizing",
+          currentStage: "Finalizing answer…",
+        });
       } else if (event.type === "run.failed") {
-        updateRun(ctx.chatId, { status: "failed", currentStage: "Assistant stopped before completing.", lastError: event.data.errorMessage });
+        updateRun(ctx.chatId, {
+          status: "failed",
+          currentStage: "Assistant stopped before completing.",
+          lastError: event.data.errorMessage,
+        });
       }
-      void api<AssistantToolEventDto[]>(`${base}/chats/${ctx.chatId}/tool-events`)
+      void api<AssistantToolEventDto[]>(
+        `${base}/chats/${ctx.chatId}/tool-events`,
+      )
         .then(mergeToolEvents)
         .catch(() => undefined);
       void api<AssistantWriteProposalDto[]>(
@@ -364,11 +550,15 @@ export function AssistantSpace({
       } else {
         updateRun(ctx.chatId, {
           status: status === "cancelled" ? "cancelled" : "failed",
-          currentStage: status === "cancelled" ? "Assistant task cancelled." : "Assistant stopped before completing.",
+          currentStage:
+            status === "cancelled"
+              ? "Assistant task cancelled."
+              : "Assistant stopped before completing.",
           lastError: message ?? null,
         });
       }
-      if (activeChatIdRef.current === ctx.chatId) void refreshMessages(ctx.chatId);
+      if (activeChatIdRef.current === ctx.chatId)
+        void refreshMessages(ctx.chatId);
       void refreshChats();
     },
   });
@@ -381,9 +571,9 @@ export function AssistantSpace({
         .reverse()
         .find((message) => message.role === "assistant" && message.taskId);
       if (!latestAssistant?.taskId) return;
-      const task = await api<Task>(`${tasksBase}/tasks/${latestAssistant.taskId}`).catch(
-        () => null,
-      );
+      const task = await api<Task>(
+        `${tasksBase}/tasks/${latestAssistant.taskId}`,
+      ).catch(() => null);
       if (!task || task.status === "completed") return;
       const mapped = taskStage(task);
       setActiveRunsByChat((prev) => ({
@@ -402,7 +592,11 @@ export function AssistantSpace({
         },
       }));
       if (!["failed", "cancelled", "paused"].includes(task.status)) {
-        openStream({ chatId, taskId: task.id, assistantMessageId: latestAssistant.id });
+        openStream({
+          chatId,
+          taskId: task.id,
+          assistantMessageId: latestAssistant.id,
+        });
       }
     },
     [openStream, taskStage, tasksBase],
@@ -421,7 +615,9 @@ export function AssistantSpace({
       setProviderId(chat.providerConfigId);
       setModel(chat.model);
       setPromptPresetId(chat.promptPresetId);
-      void refreshMessages(chat.id).then((items) => restoreActiveTask(chat.id, items));
+      void refreshMessages(chat.id).then((items) =>
+        restoreActiveTask(chat.id, items),
+      );
     }
   }, [chats, refreshMessages, restoreActiveTask, selectedChatId]);
 
@@ -452,7 +648,8 @@ export function AssistantSpace({
     if (!root || !target) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) void loadOlderMessages();
+        if (entries.some((entry) => entry.isIntersecting))
+          void loadOlderMessages();
       },
       { root, threshold: 1 },
     );
@@ -474,7 +671,12 @@ export function AssistantSpace({
     if (messagesPage.initialLoadedChatId === selectedChatId) {
       scroll.restoreAfterPrepend();
     }
-  }, [messages.length, messagesPage.initialLoadedChatId, scroll, selectedChatId]);
+  }, [
+    messages.length,
+    messagesPage.initialLoadedChatId,
+    scroll,
+    selectedChatId,
+  ]);
 
   const createChat = useCallback(async (): Promise<AssistantChat | null> => {
     if (!base) return null;
@@ -516,7 +718,12 @@ export function AssistantSpace({
   const deleteSelectedChats = useCallback(async () => {
     if (!base || selectedChatIds.size === 0) return;
     const chatIds = [...selectedChatIds];
-    if (!window.confirm(`Delete ${chatIds.length} selected chat${chatIds.length === 1 ? "" : "s"}?`)) return;
+    if (
+      !window.confirm(
+        `Delete ${chatIds.length} selected chat${chatIds.length === 1 ? "" : "s"}?`,
+      )
+    )
+      return;
     await api<{ ok: true; deleted: number }>(`${base}/chats/bulk-delete`, {
       method: "POST",
       headers: headers(),
@@ -649,213 +856,395 @@ export function AssistantSpace({
     !selectedProvider.capabilities.toolCalling,
   );
 
+  const beginRename = () => {
+    if (!selectedChat) return;
+    setTitleDraft(selectedChat.title);
+    setEditingTitle(true);
+  };
+  const commitTitle = async () => {
+    setEditingTitle(false);
+    const next = titleDraft.trim();
+    if (!base || !selectedChatId || !next || next === selectedChat?.title)
+      return;
+    try {
+      const updated = await api<AssistantChat>(
+        `${base}/chats/${selectedChatId}`,
+        {
+          method: "PATCH",
+          headers: headers(),
+          body: JSON.stringify({ title: next }),
+        },
+      );
+      setChats((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 bg-slate-950 text-slate-100">
-      <aside className="flex w-80 min-w-0 flex-col border-r border-slate-800 bg-slate-900/80">
-        <div className="border-b border-slate-800 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-semibold">Assistant</h1>
-              <p className="text-xs text-slate-400">
-                PCB-aware workspace copilot
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                void createChat().catch((err: unknown) =>
-                  setError(err instanceof Error ? err.message : String(err)),
-                )
-              }
-              className="rounded-xl bg-violet-600 p-2 text-white shadow-lg shadow-violet-950/40 hover:bg-violet-500"
-              aria-label="New chat"
-            >
-              <MessageSquarePlus className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-400">
-            <Search className="h-4 w-4" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search chats"
-              className="min-w-0 flex-1 bg-transparent outline-none"
-            />
-          </div>
-          {selectedChatIds.size > 0 ? (
-            <div className="mt-3 flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300">
-              <span>{selectedChatIds.size} selected</span>
-              <div className="flex items-center gap-2">
+      {sidebarOpen ? (
+        <aside className="flex w-80 min-w-0 flex-col border-r border-slate-800 bg-slate-900/80">
+          <div className="border-b border-slate-800 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold">Chats</span>
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setSelectedChatIds(new Set())}
-                  className="text-slate-400 hover:text-slate-100"
+                  onClick={() => setSidebarOpen(false)}
+                  aria-label="Collapse sidebar"
+                  className="rounded p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200"
                 >
-                  Clear
+                  <PanelLeftClose className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() =>
-                    void deleteSelectedChats().catch((err: unknown) =>
-                      setError(err instanceof Error ? err.message : String(err)),
+                    void createChat().catch((err: unknown) =>
+                      setError(
+                        err instanceof Error ? err.message : String(err),
+                      ),
                     )
                   }
-                  className="rounded bg-red-950/60 px-2 py-1 font-semibold text-red-200 hover:bg-red-900/70"
+                  className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-violet-500"
                 >
-                  Delete selected
+                  <Plus className="h-3.5 w-3.5" />
+                  New
                 </button>
               </div>
             </div>
-          ) : null}
-        </div>
-        <div className="min-h-0 flex-1 space-y-1 overflow-auto p-3">
-          {filteredChats.map((chat) => (
-            <div
-              key={chat.id}
-              onContextMenu={(event: MouseEvent<HTMLDivElement>) => {
-                event.preventDefault();
-                setContextMenu({
-                  chatId: chat.id,
-                  x: event.clientX,
-                  y: event.clientY,
-                });
-              }}
-              className={`group flex w-full flex-col gap-1 rounded-lg px-3 py-2.5 text-left transition-colors ${
-                selectedChatId === chat.id
-                  ? "bg-slate-800 text-slate-100"
-                  : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-              }`}
-            >
-              <div className="flex w-full items-center justify-between gap-2">
-                <input
-                  type="checkbox"
-                  checked={selectedChatIds.has(chat.id)}
-                  onChange={(event) => {
-                    const checked = event.target.checked;
-                    setSelectedChatIds((current) => {
-                      const next = new Set(current);
-                      if (checked) next.add(chat.id);
-                      else next.delete(chat.id);
-                      return next;
-                    });
-                  }}
-                  onClick={(event) => event.stopPropagation()}
-                  className="h-3.5 w-3.5 shrink-0 rounded border-slate-600 bg-slate-950"
-                  aria-label={`Select ${chat.title}`}
-                />
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-400">
+              <Search className="h-3.5 w-3.5" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search chats"
+                name="assistant-chat-search"
+                autoComplete="off"
+                className="min-w-0 flex-1 bg-transparent text-xs outline-none"
+              />
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {(
+                [
+                  { key: "all", label: "All", count: chatCounts.all },
+                  {
+                    key: "pinned",
+                    label: "Pinned",
+                    count: chatCounts.pinned,
+                    icon: <Pin className="h-3 w-3" />,
+                  },
+                  {
+                    key: "linked",
+                    label: "Linked",
+                    count: chatCounts.linked,
+                    icon: <Link2 className="h-3 w-3" />,
+                  },
+                  {
+                    key: "archived",
+                    label: "Archived",
+                    count: chatCounts.archived,
+                  },
+                ] as const
+              ).map((f) => (
                 <button
+                  key={f.key}
                   type="button"
-                  onClick={() => setSelectedChatId(chat.id)}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  onClick={() => setFilter(f.key)}
+                  className={`inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[10px] ${
+                    filter === f.key
+                      ? "bg-accent-soft text-accent-text"
+                      : "text-slate-400 hover:bg-slate-800"
+                  }`}
                 >
-                  {activeRunsByChat[chat.id] ? (
-                    <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-violet-400" />
-                  ) : null}
-                  <div className="truncate text-sm font-medium">{chat.title}</div>
+                  {"icon" in f ? f.icon : null}
+                  {f.label}
+                  <span
+                    className={
+                      filter === f.key ? "text-accent-text" : "text-slate-500"
+                    }
+                  >
+                    {f.count}
+                  </span>
                 </button>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setContextMenu({ chatId: chat.id, x: event.clientX, y: event.clientY });
-                  }}
-                  className="rounded p-1 text-slate-600 opacity-0 transition-opacity hover:bg-slate-700 hover:text-slate-200 group-hover:opacity-100"
-                  aria-label={`Chat actions for ${chat.title}`}
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
+              ))}
+            </div>
+            {selectedChatIds.size > 0 ? (
+              <div className="mt-3 flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300">
+                <span>{selectedChatIds.size} selected</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedChatIds(new Set())}
+                    className="text-slate-400 hover:text-slate-100"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void deleteSelectedChats().catch((err: unknown) =>
+                        setError(
+                          err instanceof Error ? err.message : String(err),
+                        ),
+                      )
+                    }
+                    className="rounded bg-red-950/60 px-2 py-1 font-semibold text-red-200 hover:bg-red-900/70"
+                  >
+                    Delete selected
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedChatId(chat.id)}
-                className="truncate text-left text-xs opacity-60"
-              >
-                {chat.model}
-              </button>
-            </div>
-          ))}
-          {filteredChats.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-800 p-4 text-center text-sm text-slate-500">
-              No chats yet.
-            </div>
-          ) : null}
-        </div>
-        <div className="border-t border-slate-800 p-3">
-          <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-xs text-slate-400">
-            <Settings className="h-4 w-4" />
-            Configure providers in global Settings → Assistant.
+            ) : null}
           </div>
-        </div>
-      </aside>
+          <div className="min-h-0 flex-1 space-y-1 overflow-auto p-3">
+            {filteredChats.map((chat) => (
+              <div
+                key={chat.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedChatId(chat.id)}
+                onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelectedChatId(chat.id);
+                  }
+                }}
+                onContextMenu={(event: MouseEvent<HTMLDivElement>) => {
+                  event.preventDefault();
+                  setContextMenu({
+                    chatId: chat.id,
+                    x: event.clientX,
+                    y: event.clientY,
+                  });
+                }}
+                className={`group flex w-full cursor-pointer flex-col gap-1 rounded-lg border-l-2 px-3 py-2.5 text-left transition-colors ${
+                  selectedChatId === chat.id
+                    ? "border-l-violet-400 bg-slate-800 text-slate-100"
+                    : "border-l-transparent text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                } ${userState.isArchived(chat.id) ? "opacity-60" : ""}`}
+              >
+                <div className="flex w-full items-center justify-between gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedChatIds.has(chat.id)}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setSelectedChatIds((current) => {
+                        const next = new Set(current);
+                        if (checked) next.add(chat.id);
+                        else next.delete(chat.id);
+                        return next;
+                      });
+                    }}
+                    onClick={(event) => event.stopPropagation()}
+                    className="h-3.5 w-3.5 shrink-0 rounded border-slate-600 bg-slate-950"
+                    aria-label={`Select ${chat.title}`}
+                  />
+                  <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                    {activeRunsByChat[chat.id] ? (
+                      <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-violet-400" />
+                    ) : null}
+                    <div className="truncate text-sm font-medium">
+                      {chat.title}
+                    </div>
+                  </div>
+                  {userState.isPinned(chat.id) ? (
+                    <Pin className="h-3 w-3 shrink-0 text-amber-400" />
+                  ) : null}
+                  {userState.isArchived(chat.id) ? (
+                    <Archive className="h-3 w-3 shrink-0 text-slate-500" />
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setContextMenu({
+                        chatId: chat.id,
+                        x: event.clientX,
+                        y: event.clientY,
+                      });
+                    }}
+                    className="rounded p-1 text-slate-600 opacity-0 transition-opacity hover:bg-slate-700 hover:text-slate-200 group-hover:opacity-100"
+                    aria-label={`Chat actions for ${chat.title}`}
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                </div>
+                {linkedDesign(chat) ? (
+                  <span className="inline-flex w-fit max-w-full items-center gap-1 rounded bg-slate-800 px-1.5 py-0.5 text-[9px] text-accent-text">
+                    <Link2 className="h-2.5 w-2.5 shrink-0" />
+                    <span className="truncate">{linkedDesign(chat)!.name}</span>
+                  </span>
+                ) : null}
+                <div
+                  className="flex items-center gap-1.5 text-left text-[11px] text-slate-500"
+                  title={chat.model}
+                >
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-status-success" />
+                  {relativeTime(chat.lastMessageAt ?? chat.updatedAt)}
+                </div>
+              </div>
+            ))}
+            {filteredChats.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-800 p-4 text-center text-sm text-slate-500">
+                No chats yet.
+              </div>
+            ) : null}
+          </div>
+          <div className="border-t border-slate-800 p-3">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-status-success" />
+              <span className="min-w-0 flex-1 truncate font-medium text-slate-200">
+                {model}
+              </span>
+              <span className="shrink-0 text-[10px] text-slate-500">
+                {selectedProvider?.kind === "lmstudio" ||
+                selectedProvider?.kind === "omlx"
+                  ? "Local"
+                  : (selectedProvider?.label ?? "Cloud")}
+              </span>
+            </div>
+          </div>
+        </aside>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(true)}
+          aria-label="Expand sidebar"
+          className="flex w-9 shrink-0 items-center justify-center border-r border-slate-800 bg-slate-900/80 text-slate-500 hover:text-slate-200"
+        >
+          <PanelLeftOpen className="h-4 w-4" />
+        </button>
+      )}
 
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-14 items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-6">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium">
-              {chats.find((chat) => chat.id === selectedChatId)?.title ??
-                "New chat"}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <PromptPresetPicker
-              presets={presets}
-              value={promptPresetId}
-              onChange={setPromptPresetId}
-            />
-            <div className="flex h-8 items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-2 shadow-sm transition-colors hover:border-slate-700 focus-within:border-slate-700">
-              <select
-                value={providerId}
-                onChange={(event) => {
-                  const provider = providers.find(
-                    (entry) => entry.id === event.target.value,
-                  );
-                  setProviderId(event.target.value);
-                  if (provider) setModel(provider.defaultModel);
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            {editingTitle ? (
+              <input
+                autoFocus
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={() => void commitTitle()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void commitTitle();
+                  if (e.key === "Escape") setEditingTitle(false);
                 }}
-                className="max-w-[120px] cursor-pointer truncate bg-transparent text-xs text-slate-300 outline-none hover:text-white"
+                className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm font-medium text-slate-100 outline-none"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={beginRename}
+                disabled={!selectedChat}
+                className="group flex min-w-0 items-center gap-1.5 text-left"
+                title="Rename chat"
               >
-                {providers
-                  .filter((provider) => provider.enabled)
-                  .map((provider) => (
-                    <option key={provider.id} value={provider.id}>
-                      {provider.label}
-                    </option>
-                  ))}
-              </select>
-              <span className="text-slate-600">/</span>
-              {models.length > 0 ? (
-                <select
-                  value={
-                    models.some((entry) => entry.modelId === model)
-                      ? model
-                      : (models[0]?.modelId ?? "")
-                  }
-                  onChange={(event) => setModel(event.target.value)}
-                  className="max-w-[200px] cursor-pointer truncate bg-transparent text-xs text-slate-300 outline-none hover:text-white"
+                <span className="truncate text-sm font-medium text-slate-100">
+                  {selectedChat?.title ?? "New chat"}
+                </span>
+                {selectedChat ? (
+                  <Pencil className="h-3 w-3 shrink-0 text-slate-600 opacity-0 group-hover:opacity-100" />
+                ) : null}
+              </button>
+            )}
+            {selectedLinked ? (
+              <button
+                type="button"
+                onClick={() => navigateToModule("designer", selectedLinked.id)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-control border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-accent-text hover:bg-slate-800"
+                title="Open linked design"
+              >
+                <Link2 className="h-3 w-3" />
+                <span className="max-w-[140px] truncate">
+                  {selectedLinked.name}
+                </span>
+              </button>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {toolCount !== null ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-control border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-300"
+                title={`${toolCount} grounded tools available`}
+              >
+                <Wrench className="h-3 w-3 text-status-success" />
+                {toolCount}
+                <span className="text-slate-500">tools</span>
+              </span>
+            ) : null}
+            <ModelSelectorPill
+              providers={providers}
+              providerId={providerId}
+              onProviderChange={setProviderId}
+              model={model}
+              onModelChange={setModel}
+              models={models}
+              presets={presets}
+              promptPresetId={promptPresetId}
+              onPresetChange={setPromptPresetId}
+              selectedProvider={selectedProvider}
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Chat actions"
+                  disabled={!selectedChat}
+                  className="rounded-control border border-slate-700 p-1.5 text-slate-400 hover:bg-slate-800 disabled:opacity-40"
                 >
-                  {models.map((entry) => (
-                    <option key={entry.modelId} value={entry.modelId}>
-                      {entry.displayName ?? entry.modelId}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  value={model}
-                  onChange={(event) => setModel(event.target.value)}
-                  className="max-w-[200px] bg-transparent text-xs text-slate-300 outline-none"
-                />
-              )}
-            </div>
-            <ProviderCapabilityBadge provider={selectedProvider} />
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onSelect={() => beginRename()}>
+                  <Pencil className="h-3.5 w-3.5" /> Rename
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled title="Coming soon">
+                  <Download className="h-3.5 w-3.5" /> Export markdown
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    if (selectedChatId) userState.toggleArchive(selectedChatId);
+                  }}
+                >
+                  <Archive className="h-3.5 w-3.5" />
+                  {selectedChatId && userState.isArchived(selectedChatId)
+                    ? "Unarchive"
+                    : "Archive"}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  destructive
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    if (selectedChatId)
+                      void deleteChat(selectedChatId).catch((err: unknown) =>
+                        setError(
+                          err instanceof Error ? err.message : String(err),
+                        ),
+                      );
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
-        <div ref={scroll.scrollRef} className="relative min-h-0 flex-1 overflow-auto">
-          <div className="mx-auto max-w-4xl pb-8 pt-4">
+        <div
+          ref={scroll.scrollRef}
+          className="relative min-h-0 flex-1 overflow-auto"
+        >
+          <div className="mx-auto max-w-5xl pb-8 pt-4">
             <div ref={topSentinelRef} className="h-px" />
             {messagesPage.loadingOlder ? (
-              <div className="py-2 text-center text-xs text-slate-500">Loading older messages…</div>
+              <div className="py-2 text-center text-xs text-slate-500">
+                Loading older messages…
+              </div>
             ) : null}
             {chatOnly ? (
               <div className="mx-4 mb-3 rounded-xl border border-amber-900/60 bg-amber-950/20 p-3 text-xs text-amber-200">
@@ -870,7 +1259,7 @@ export function AssistantSpace({
             ) : null}
             {messages.length === 0 ? (
               <div className="px-4">
-                <EmptyState />
+                <EmptyState onPrompt={setInput} />
               </div>
             ) : (
               (() => {
@@ -885,30 +1274,59 @@ export function AssistantSpace({
                   }
                   return -1;
                 })();
-                return visible.map((message, idx) => (
-                  <MessageCard
-                    key={message.id}
-                    message={message}
-                    toolEvents={toolEventsByMessage.get(message.id) ?? []}
-                    assistantBaseUrl={base}
-                    writeProposals={writeProposals}
-                    onProposalChanged={() => {
-                      if (selectedChatId) void refreshMessages(selectedChatId);
-                    }}
-                    runState={
-                      selectedRun?.assistantMessageId === message.id
-                        ? selectedRun
-                        : null
-                    }
-                    onStopRun={(run) => void stopRun(run).catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))}
-                    onRetryRun={(run) => void retryRunAsNew(run).catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))}
-                    loading={
-                      loading &&
-                      idx === lastAssistantIdx &&
-                      message.role === "assistant"
-                    }
-                  />
-                ));
+                return visible.map((message, idx) => {
+                  const prev = idx > 0 ? visible[idx - 1] : null;
+                  const showDivider =
+                    Boolean(message.createdAt) &&
+                    (!prev ||
+                      dayKey(prev.createdAt) !== dayKey(message.createdAt));
+                  return (
+                    <Fragment key={message.id}>
+                      {showDivider ? (
+                        <div className="my-3 flex items-center gap-3 px-4 text-[10px] uppercase tracking-wider text-slate-500">
+                          <span className="h-px flex-1 bg-slate-800" />
+                          {dateDividerLabel(message.createdAt)}
+                          <span className="h-px flex-1 bg-slate-800" />
+                        </div>
+                      ) : null}
+                      <MessageCard
+                        message={message}
+                        toolEvents={toolEventsByMessage.get(message.id) ?? []}
+                        assistantBaseUrl={base}
+                        backendURL={backendURL}
+                        writeProposals={writeProposals}
+                        onProposalChanged={() => {
+                          if (selectedChatId)
+                            void refreshMessages(selectedChatId);
+                        }}
+                        runState={
+                          selectedRun?.assistantMessageId === message.id
+                            ? selectedRun
+                            : null
+                        }
+                        onStopRun={(run) =>
+                          void stopRun(run).catch((err: unknown) =>
+                            setError(
+                              err instanceof Error ? err.message : String(err),
+                            ),
+                          )
+                        }
+                        onRetryRun={(run) =>
+                          void retryRunAsNew(run).catch((err: unknown) =>
+                            setError(
+                              err instanceof Error ? err.message : String(err),
+                            ),
+                          )
+                        }
+                        loading={
+                          loading &&
+                          idx === lastAssistantIdx &&
+                          message.role === "assistant"
+                        }
+                      />
+                    </Fragment>
+                  );
+                });
               })()
             )}
             {loading && messages.length === 0 ? (
@@ -928,6 +1346,7 @@ export function AssistantSpace({
                 }}
                 loading
                 assistantBaseUrl={base}
+                backendURL={backendURL}
               />
             ) : null}
           </div>
@@ -946,31 +1365,30 @@ export function AssistantSpace({
         </div>
 
         <div className="border-t border-slate-800/50 bg-slate-950 p-4">
-          <form
-            onSubmit={(event) => void submit(event)}
-            className="mx-auto max-w-4xl"
-          >
-            <div className="relative flex items-end rounded-xl border border-slate-700 bg-slate-900 shadow-sm transition-all focus-within:border-violet-500 focus-within:ring-1 focus-within:ring-violet-500/50">
-              <textarea
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={handleComposerKey}
-                placeholder="Ask about your PCB…"
-                rows={1}
-                className="max-h-64 min-h-[56px] w-full resize-none bg-transparent py-4 pl-4 pr-14 text-sm leading-relaxed outline-none placeholder:text-slate-500"
-              />
-              <button
-                type="submit"
-                disabled={loading || !input.trim()}
-                className="absolute bottom-2.5 right-3 flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600 text-white transition-colors hover:bg-violet-500 disabled:bg-slate-800 disabled:text-slate-500"
-              >
-                <ArrowUp className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="mt-2 text-center text-[10px] text-slate-500">
+          <div className="mx-auto max-w-5xl">
+            <ChatComposer
+              value={input}
+              onChange={setInput}
+              onSubmit={() => void submit()}
+              onStop={
+                selectedRun
+                  ? () =>
+                      void stopRun(selectedRun).catch((err: unknown) =>
+                        setError(
+                          err instanceof Error ? err.message : String(err),
+                        ),
+                      )
+                  : undefined
+              }
+              busy={loading}
+              toolCount={toolCount ?? undefined}
+              contextBudgetKb={contextBudgetKb(settings?.contextSizePreference)}
+              quickActions={QUICK_ACTIONS}
+            />
+            <div className="mt-1.5 text-center text-[10px] text-slate-500">
               Assistant can make mistakes. Verify critical design decisions.
             </div>
-          </form>
+          </div>
         </div>
       </main>
       {contextMenu ? (
@@ -1006,7 +1424,18 @@ export function AssistantSpace({
   );
 }
 
-function EmptyState(): ReactElement {
+const STARTER_PROMPTS = [
+  "Find a 3.3V regulator for 500mA",
+  "Sketch a power supply for me",
+  "Resolve the BOM for this design",
+  "Run ERC and explain any issues",
+];
+
+function EmptyState({
+  onPrompt,
+}: {
+  onPrompt: (prompt: string) => void;
+}): ReactElement {
   return (
     <div className="rounded-3xl border border-dashed border-slate-800 bg-slate-900/40 p-10 text-center">
       <Sparkles className="mx-auto h-8 w-8 text-violet-300" />
@@ -1014,8 +1443,20 @@ function EmptyState(): ReactElement {
         Start a PCB-focused conversation
       </h2>
       <p className="mt-2 text-sm text-slate-500">
-        Try: <em>"Find a 3.3V regulator for 500mA"</em>
+        Ask about components, nets, ERC, or PCB layout — or try one of these:
       </p>
+      <div className="mx-auto mt-4 flex max-w-md flex-wrap justify-center gap-2">
+        {STARTER_PROMPTS.map((prompt) => (
+          <button
+            key={prompt}
+            type="button"
+            onClick={() => onPrompt(prompt)}
+            className="rounded-pill border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:border-violet-500/50 hover:bg-violet-500/10 hover:text-violet-200"
+          >
+            {prompt}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
