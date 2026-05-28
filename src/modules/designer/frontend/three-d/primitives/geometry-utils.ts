@@ -6,7 +6,9 @@ import type {
   PcbTrace,
   PcbVia,
 } from "../../../../../sdks";
+import { collectDrills } from "../../pcb/pcb-drills";
 import { graphicStrokeSegments } from "../../../../../shared/frontend/canvas/preview/geometry";
+import { flattenOutline } from "../../../backend/pcb/outline-geometry";
 import type {
   FootprintRenderSourcePad,
   PreviewLabel,
@@ -121,10 +123,79 @@ export function shapeFromBounds(bounds: BoardBoundsMm): THREE.Shape {
   return shape;
 }
 
+/**
+ * Build the board substrate `THREE.Shape` from the actual outline geometry (any
+ * kind — arcs already discretised via `flattenOutline`) in world mm coords, with
+ * internal cutouts punched as holes.
+ */
 export function boardOutlineToShape(
   outline: DesignerPcbProjection["board"]["outline"],
+  cutouts?: DesignerPcbProjection["board"]["cutouts"],
 ): THREE.Shape {
-  return shapeFromBounds(boardOutlineBoundsMm(outline));
+  const ring = flattenOutline(outline);
+  const shape = new THREE.Shape();
+  if (ring.length > 0) {
+    shape.moveTo(ring[0]!.x, ring[0]!.y);
+    for (let i = 1; i < ring.length; i += 1) {
+      shape.lineTo(ring[i]!.x, ring[i]!.y);
+    }
+    shape.closePath();
+  }
+  for (const cut of cutouts ?? []) {
+    const hole = new THREE.Path();
+    const cutRing = flattenOutline(cut.shape);
+    if (cutRing.length === 0) continue;
+    hole.moveTo(cutRing[0]!.x, cutRing[0]!.y);
+    for (let i = 1; i < cutRing.length; i += 1) {
+      hole.lineTo(cutRing[i]!.x, cutRing[i]!.y);
+    }
+    hole.closePath();
+    shape.holes.push(hole);
+  }
+  return shape;
+}
+
+/**
+ * Board substrate outline (with cutouts) plus a circular through-hole punched
+ * for every drilled object (PTH pads, vias, free holes/pads). Coords are
+ * absolute world mm. Drills whose bbox falls outside the board bounds are
+ * skipped (matching the 2D `BoardFill` guard) so `ExtrudeGeometry` never gets
+ * an edge-crossing hole.
+ */
+export function boardSubstrateShape(
+  projection: DesignerPcbProjection,
+): THREE.Shape {
+  const outline = projection.board?.outline;
+  const bounds = outline
+    ? boardOutlineBoundsMm(outline)
+    : fallbackBoardBoundsFromProjection(projection);
+  const shape = outline
+    ? boardOutlineToShape(outline, projection.board?.cutouts)
+    : shapeFromBounds(bounds);
+
+  const drills = collectDrills(
+    projection.vias,
+    projection.placements,
+    projection.freeHoles,
+    projection.freePads,
+  );
+  for (const drill of drills) {
+    const { x, y } = drill.centerMm;
+    const r = drill.radiusMm;
+    if (
+      x - r < bounds.minX ||
+      x + r > bounds.maxX ||
+      y - r < bounds.minY ||
+      y + r > bounds.maxY
+    ) {
+      continue;
+    }
+    const hole = new THREE.Path();
+    hole.absarc(x, y, r, 0, Math.PI * 2, false);
+    shape.holes.push(hole);
+  }
+
+  return shape;
 }
 
 export function traceToMeshInputs(trace: PcbTrace): CopperTraceMeshInput[] {
@@ -235,7 +306,11 @@ export function placementTransform(
   const isBackLayer = placement.layer === "B.Cu";
   const mirrorX = placement.mirrored || isBackLayer;
   return {
-    position: [placement.positionMm.x, placement.positionMm.y, isBackLayer ? -boardThicknessMm : 0],
+    position: [
+      placement.positionMm.x,
+      placement.positionMm.y,
+      isBackLayer ? -boardThicknessMm : 0,
+    ],
     rotation: [0, 0, (placement.rotationDeg * Math.PI) / 180],
     scale: [mirrorX ? -1 : 1, 1, 1],
   };

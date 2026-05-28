@@ -11,6 +11,20 @@ const PCB_HIDDEN_LAYERS: ReadonlySet<string> = new Set([
 ]);
 const FOOTPRINT_OVERLAY_Z_OFFSET_MM = 0.06;
 
+// Pad copper is rendered by `CopperPads` (so through-hole pads can be annular
+// and see-through). The shared layer can't hide pads via `hiddenLayers`, but
+// `PadInstances` goes transparent when its opacity (= max of pad-layer
+// opacities) drops below 1 — so force copper layers to 0 to suppress its pads
+// while silkscreen / refdes labels (non-copper) stay fully opaque.
+const COPPER_LAYERS_3D: ReadonlySet<string> = new Set([
+  "F.Cu",
+  "B.Cu",
+  "In1.Cu",
+  "In2.Cu",
+]);
+const hideCopperPadOpacity = (layer: string): number =>
+  COPPER_LAYERS_3D.has(layer) ? 0 : 1;
+
 function FootprintOverlay({
   placement,
   boardThicknessMm,
@@ -43,6 +57,7 @@ function FootprintOverlay({
         useLayerColors
         surface="pcb"
         hiddenLayers={PCB_HIDDEN_LAYERS}
+        layerOpacity={hideCopperPadOpacity}
         placeholderSubstitutions={{ reference: placement.reference }}
         enableDepthTest
         hidePadNumbers

@@ -3,9 +3,7 @@ import * as THREE from "three";
 import type { DesignerPcbProjection } from "../../../../../sdks";
 import {
   DEFAULT_BOARD_THICKNESS_MM,
-  boardOutlineToShape,
-  fallbackBoardBoundsFromProjection,
-  shapeFromBounds,
+  boardSubstrateShape,
 } from "./geometry-utils";
 
 const FR4_SOLDERMASK_COLOR = "rgb(28, 100, 42)";
@@ -18,16 +16,14 @@ export function BoardSubstrate({
   projection: DesignerPcbProjection;
   thicknessMm?: number;
 }): ReactElement {
-  const geometry = useMemo(() => {
-    const outline = projection.board?.outline;
-    const shape = outline
-      ? boardOutlineToShape(outline)
-      : shapeFromBounds(fallbackBoardBoundsFromProjection(projection));
-    return new THREE.ExtrudeGeometry(shape, {
-      depth: thicknessMm,
-      bevelEnabled: false,
-    });
-  }, [projection, thicknessMm]);
+  const geometry = useMemo(
+    () =>
+      new THREE.ExtrudeGeometry(boardSubstrateShape(projection), {
+        depth: thicknessMm,
+        bevelEnabled: false,
+      }),
+    [projection, thicknessMm],
+  );
 
   useEffect(() => () => geometry.dispose(), [geometry]);
 
@@ -36,6 +32,7 @@ export function BoardSubstrate({
       <meshLambertMaterial
         color={FR4_SOLDERMASK_COLOR}
         emissive={FR4_SOLDERMASK_EMISSIVE}
+        side={THREE.DoubleSide}
       />
     </mesh>
   );
