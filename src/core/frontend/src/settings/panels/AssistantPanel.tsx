@@ -1,13 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  CheckCircle2,
+  AlertTriangle,
+  ArrowRight,
+  ChevronDown,
+  CircleCheck,
+  Cpu,
+  Eye,
   EyeOff,
+  KeyRound,
+  List as ListIcon,
+  Lock,
+  Pencil,
   Plus,
   RefreshCw,
+  Server,
+  Sparkles,
   Trash2,
   Wifi,
 } from "lucide-react";
 import { useRuntime } from "../../providers/RuntimeProvider";
+import { cn } from "@/lib/utils";
+import { Pill } from "@shared/frontend/ui/pill";
+import { StackedCard } from "@shared/frontend/ui/stacked-card";
 import type {
   AiProviderKind,
   AssistantProviderConfig,
@@ -33,9 +47,24 @@ const emptyProvider: ProviderInput = {
   enabled: true,
 };
 
-function previewKey(provider: AssistantProviderConfig): string {
-  if (!provider.hasApiKey) return "No key saved";
-  return provider.apiKeyPreview ?? "Saved";
+const LOCAL_KINDS: AiProviderKind[] = ["lmstudio", "omlx"];
+
+function isLocal(kind: AiProviderKind): boolean {
+  return LOCAL_KINDS.includes(kind);
+}
+
+function needsKey(provider: AssistantProviderConfig): boolean {
+  return provider.kind === "openai" && !provider.hasApiKey;
+}
+
+function maskedKey(provider: AssistantProviderConfig): {
+  dots: string;
+  hint: string;
+} {
+  const preview = provider.apiKeyPreview ?? "";
+  // Show trailing chars as the recognizable hint.
+  const hint = preview.length > 4 ? preview.slice(-4) : preview;
+  return { dots: "••••••••••••••••", hint };
 }
 
 async function readJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -64,16 +93,22 @@ export function AssistantPanel() {
   const [settings, setSettings] = useState<AssistantSettings | null>(null);
   const [providers, setProviders] = useState<AssistantProviderConfig[]>([]);
   const [models, setModels] = useState<AssistantProviderModel[]>([]);
-  const [selectedId, setSelectedId] = useState("openai");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ProviderInput>(emptyProvider);
   const [includeCompletion, setIncludeCompletion] = useState(false);
+  const [replacingKey, setReplacingKey] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [lastTest, setLastTest] = useState<{
+    providerId: string;
+    ok: boolean;
+    text: string;
+  } | null>(null);
+  const [showCloud, setShowCloud] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const selected =
-    providers.find((provider) => provider.id === selectedId) ??
-    providers[0] ??
-    null;
+  const expanded =
+    providers.find((provider) => provider.id === expandedId) ?? null;
   const modelIds = models.map((entry) => entry.modelId);
 
   const load = async () => {
@@ -84,11 +119,6 @@ export function AssistantPanel() {
     ]);
     setSettings(nextSettings);
     setProviders(nextProviders);
-    setSelectedId((current) =>
-      nextProviders.some((provider) => provider.id === current)
-        ? current
-        : nextSettings.defaultProviderId,
-    );
   };
 
   useEffect(() => {
@@ -97,22 +127,28 @@ export function AssistantPanel() {
     );
   }, [base]);
 
+  // Load draft + models whenever a different card expands.
   useEffect(() => {
-    if (!selected || !base) return;
+    if (!expanded || !base) return;
     setDraft({
-      label: selected.label,
-      kind: selected.kind,
-      baseUrl: selected.baseUrl,
+      label: expanded.label,
+      kind: expanded.kind,
+      baseUrl: expanded.baseUrl,
       apiKey: "",
-      defaultModel: selected.defaultModel,
-      enabled: selected.enabled,
+      defaultModel: expanded.defaultModel,
+      enabled: expanded.enabled,
     });
+    setReplacingKey(!expanded.hasApiKey);
+    setShowKey(false);
     void readJson<AssistantProviderModel[]>(
-      `${base}/providers/${selected.id}/models`,
+      `${base}/providers/${expanded.id}/models`,
     )
       .then(setModels)
       .catch(() => setModels([]));
-  }, [base, selected?.id, selected?.updatedAt]);
+  }, [base, expanded?.id, expanded?.updatedAt]);
+
+  const reportError = (err: unknown) =>
+    setError(err instanceof Error ? err.message : String(err));
 
   const saveSettings = async (patch: Partial<AssistantSettings>) => {
     if (!base || !settings) return;
@@ -128,14 +164,14 @@ export function AssistantPanel() {
 
   const saveProviderDraft =
     async (): Promise<AssistantProviderConfig | null> => {
-      if (!base || !selected) return null;
+      if (!base || !expanded) return null;
       setError(null);
       const payload = {
         ...draft,
         ...(draft.apiKey.trim() ? { apiKey: draft.apiKey.trim() } : {}),
       };
       const updated = await readJson<AssistantProviderConfig>(
-        `${base}/providers/${selected.id}`,
+        `${base}/providers/${expanded.id}`,
         {
           method: "PUT",
           headers: { "content-type": "application/json" },
@@ -153,6 +189,7 @@ export function AssistantPanel() {
 
   const saveProvider = async () => {
     await saveProviderDraft();
+    setReplacingKey(false);
     setMessage("Provider saved.");
   };
 
@@ -168,64 +205,72 @@ export function AssistantPanel() {
       },
     );
     setProviders((current) => [...current, created]);
-    setSelectedId(created.id);
+    setExpandedId(created.id);
   };
 
-  const deleteProvider = async () => {
-    if (!base || !selected || selected.isBuiltin) return;
+  const deleteProvider = async (provider: AssistantProviderConfig) => {
+    if (!base || provider.isBuiltin) return;
     setError(null);
-    await readJson<{ ok: true }>(`${base}/providers/${selected.id}`, {
+    await readJson<{ ok: true }>(`${base}/providers/${provider.id}`, {
       method: "DELETE",
     });
+    setExpandedId(null);
     await load();
     setMessage("Provider deleted.");
   };
 
   const refreshModels = async () => {
-    if (!base || !selected) return;
+    if (!base || !expanded) return;
     setError(null);
     await saveProviderDraft();
     const nextModels = await readJson<AssistantProviderModel[]>(
-      `${base}/providers/${selected.id}/models/refresh`,
+      `${base}/providers/${expanded.id}/models/refresh`,
       { method: "POST" },
     );
     setModels(nextModels);
     const nextModelIds = nextModels.map((entry) => entry.modelId);
     if (nextModelIds.length > 0 && !nextModelIds.includes(draft.defaultModel)) {
       setDraft((current) => ({ ...current, defaultModel: nextModelIds[0]! }));
-      setMessage(
-        `Model list refreshed. Default model updated to ${nextModelIds[0]} because ${draft.defaultModel} is unavailable.`,
+    }
+    setMessage("Model list refreshed.");
+    await load();
+  };
+
+  const testProvider = async (provider: AssistantProviderConfig) => {
+    if (!base) return;
+    setError(null);
+    if (provider.id === expanded?.id) await saveProviderDraft();
+    try {
+      const result = await readJson<{ message: string }>(
+        `${base}/providers/${provider.id}/test`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ includeCompletion }),
+        },
       );
-    } else {
-      setMessage("Model list refreshed.");
+      setLastTest({ providerId: provider.id, ok: true, text: result.message });
+    } catch (err) {
+      setLastTest({
+        providerId: provider.id,
+        ok: false,
+        text: err instanceof Error ? err.message : String(err),
+      });
     }
     await load();
   };
 
-  const testProvider = async () => {
-    if (!base || !selected) return;
-    setError(null);
-    await saveProviderDraft();
-    const result = await readJson<{ message: string }>(
-      `${base}/providers/${selected.id}/test`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ includeCompletion }),
-      },
-    );
-    await load();
-    setMessage(result.message);
-  };
+  const defaultProviderId = settings?.defaultProviderId;
 
   return (
-    <div className="space-y-6 pb-24 text-slate-900 dark:text-slate-100">
+    <div className="space-y-5 pb-24 text-slate-900 dark:text-slate-100">
       <div>
         <h2 className="text-lg font-semibold">Assistant</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Configure model providers, local API keys, and assistant defaults.
+          Bring your own key. Free on desktop — keys stored encrypted locally.
         </p>
       </div>
+
       {error ? (
         <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
           {error}
@@ -237,340 +282,639 @@ export function AssistantPanel() {
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h3 className="font-semibold">Default assistant</h3>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="space-y-2 text-sm">
-            <span className="text-slate-500">Default provider</span>
-            <select
-              value={settings?.defaultProviderId ?? ""}
-              onChange={(event) =>
-                void saveSettings({
-                  defaultProviderId: event.target.value,
-                }).catch((err: unknown) =>
-                  setError(err instanceof Error ? err.message : String(err)),
-                )
+      {/* OpenPCB AI Cloud upsell banner (UI stub). */}
+      <div className="flex items-center gap-3 rounded-xl border border-violet-300/60 bg-accent-soft p-3 dark:border-violet-800/60">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/20">
+          <Sparkles className="h-4 w-4 text-accent-text" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-medium">OpenPCB AI Cloud</span>
+            <Pill tone="accent" className="text-[9px] tracking-wide">
+              PAID
+            </Pill>
+          </div>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            Skip setup. Tuned models for schematic generation, BOM auto-source,
+            and ERC fixes.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCloud((v) => !v)}
+          className="inline-flex shrink-0 items-center gap-1 rounded-control border border-violet-400/40 px-2.5 py-1.5 text-xs text-accent-text hover:bg-violet-500/10"
+        >
+          Learn more
+          <ArrowRight className="h-3 w-3" />
+        </button>
+      </div>
+      {showCloud ? (
+        <div className="rounded-xl border border-violet-300/50 bg-white p-4 text-sm dark:border-violet-800/50 dark:bg-slate-900">
+          <h4 className="mb-2 font-medium">OpenPCB AI Cloud — coming soon</h4>
+          <p className="text-slate-500 dark:text-slate-400">
+            A managed, optimized assistant. Today OpenPCB is{" "}
+            <strong>free</strong> with your own provider key (BYOK). Cloud will
+            add zero-setup tuned models, direct JLCPCB BOM sourcing, and
+            EDA-trained ERC/DRC suggestions on a subscription.
+          </p>
+        </div>
+      ) : null}
+
+      {/* Default assistant defaults */}
+      <section>
+        <div className="mb-2.5 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+          Default assistant
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Default provider">
+            <Select
+              value={defaultProviderId ?? ""}
+              onChange={(v) =>
+                void saveSettings({ defaultProviderId: v }).catch(reportError)
               }
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
             >
-              {providers.map((provider) => (
-                <option key={provider.id} value={provider.id}>
-                  {provider.label}
+              {providers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="space-y-2 text-sm">
-            <span className="text-slate-500">Default prompt preset</span>
-            <select
+            </Select>
+          </Field>
+          <Field label="Prompt preset">
+            <Select
               value={settings?.defaultPromptPresetId ?? "strict-grounded"}
-              onChange={(event) =>
+              onChange={(v) =>
                 void saveSettings({
-                  defaultPromptPresetId: event.target
-                    .value as AssistantSettings["defaultPromptPresetId"],
-                }).catch((err: unknown) =>
-                  setError(err instanceof Error ? err.message : String(err)),
-                )
+                  defaultPromptPresetId:
+                    v as AssistantSettings["defaultPromptPresetId"],
+                }).catch(reportError)
               }
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
             >
-              <option value="strict-grounded">Strict Grounded (default)</option>
-              <option value="friendly-tutorial">Friendly Tutorial</option>
-              <option value="minimal-concise">Minimal Concise</option>
-            </select>
-          </label>
-          <label className="space-y-2 text-sm">
-            <span className="text-slate-500">Context size preference</span>
-            <select
+              <option value="strict-grounded">Strict grounded</option>
+              <option value="friendly-tutorial">Friendly tutorial</option>
+              <option value="minimal-concise">Minimal concise</option>
+            </Select>
+          </Field>
+          <Field label="Context per tool">
+            <Select
               value={settings?.contextSizePreference ?? "medium"}
-              onChange={(event) =>
+              onChange={(v) =>
                 void saveSettings({
-                  contextSizePreference: event.target
-                    .value as AssistantSettings["contextSizePreference"],
-                }).catch((err: unknown) =>
-                  setError(err instanceof Error ? err.message : String(err)),
-                )
+                  contextSizePreference:
+                    v as AssistantSettings["contextSizePreference"],
+                }).catch(reportError)
               }
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
             >
-              <option value="small">Small (~16 KB/tool)</option>
-              <option value="medium">Medium (~64 KB/tool)</option>
-              <option value="large">Large (~128 KB/tool)</option>
-            </select>
-          </label>
-          <label className="space-y-2 text-sm">
-            <span className="text-slate-500">Tool execution policy</span>
-            <select
+              <option value="small">Small · ~16 KB</option>
+              <option value="medium">Medium · ~64 KB</option>
+              <option value="large">Large · ~128 KB</option>
+            </Select>
+          </Field>
+          <Field label="Tool policy">
+            <Select
               value={
                 settings?.toolExecutionPolicy ?? "auto_readonly_confirm_writes"
               }
-              onChange={(event) =>
+              onChange={(v) =>
                 void saveSettings({
-                  toolExecutionPolicy: event.target
-                    .value as AssistantSettings["toolExecutionPolicy"],
-                }).catch((err: unknown) =>
-                  setError(err instanceof Error ? err.message : String(err)),
-                )
+                  toolExecutionPolicy:
+                    v as AssistantSettings["toolExecutionPolicy"],
+                }).catch(reportError)
               }
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
             >
               <option value="auto_readonly_confirm_writes">
-                Auto read-only, confirm writes
+                Auto read · confirm writes
               </option>
               <option value="confirm_all_writes">Confirm all writes</option>
               <option value="auto_all">Auto all tools</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={settings?.allowRawToolData ?? false}
-              onChange={(event) =>
-                void saveSettings({
-                  allowRawToolData: event.target.checked,
-                }).catch((err: unknown) =>
-                  setError(err instanceof Error ? err.message : String(err)),
-                )
-              }
-              className="h-4 w-4"
-            />
-            <span className="text-slate-500">
-              Allow raw tool data (advanced debug)
-            </span>
-          </label>
+            </Select>
+          </Field>
         </div>
+        <label className="mt-3 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <input
+            type="checkbox"
+            checked={settings?.allowRawToolData ?? false}
+            onChange={(e) =>
+              void saveSettings({ allowRawToolData: e.target.checked }).catch(
+                reportError,
+              )
+            }
+            className="h-3.5 w-3.5"
+          />
+          Allow raw tool data
+          <span className="rounded bg-slate-100 px-1.5 text-[9px] dark:bg-slate-800">
+            Advanced
+          </span>
+        </label>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[18rem_1fr]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center justify-between px-2 py-2">
-            <h3 className="font-semibold">Providers</h3>
-            <button
-              type="button"
-              onClick={() =>
-                void addProvider().catch((err: unknown) =>
-                  setError(err instanceof Error ? err.message : String(err)),
-                )
-              }
-              className="rounded-lg bg-violet-600 p-2 text-white"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
+      {/* Providers — stacked accordion */}
+      <section>
+        <div className="mb-2.5 flex items-center justify-between">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+            Providers · {providers.length}
           </div>
-          <div className="mt-2 space-y-2">
-            {providers.map((provider) => (
-              <button
-                key={provider.id}
-                type="button"
-                onClick={() => setSelectedId(provider.id)}
-                className={`w-full rounded-xl border px-3 py-3 text-left text-sm transition ${selectedId === provider.id ? "border-violet-500 bg-violet-50 text-violet-800 dark:bg-violet-950/40 dark:text-violet-100" : "border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"}`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{provider.label}</span>
-                  {provider.enabled ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  ) : (
-                    <EyeOff className="h-4 w-4 text-slate-400" />
-                  )}
-                </div>
-                <div className="mt-1 truncate text-xs text-slate-500">
-                  {provider.defaultModel}
-                </div>
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={() => void addProvider().catch(reportError)}
+            className="inline-flex items-center gap-1 rounded-control border border-violet-400/40 bg-accent-soft px-2.5 py-1 text-xs text-accent-text hover:bg-violet-500/15"
+          >
+            <Plus className="h-3 w-3" /> Add provider
+          </button>
         </div>
 
-        {selected ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="font-semibold">{selected.label}</h3>
-                <p className="text-sm text-slate-500">
-                  {selected.kind} · {previewKey(selected)}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    void testProvider().catch((err: unknown) =>
-                      setError(
-                        err instanceof Error ? err.message : String(err),
-                      ),
-                    )
-                  }
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                >
-                  <Wifi className="mr-1 inline h-4 w-4" /> Test
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void refreshModels().catch((err: unknown) =>
-                      setError(
-                        err instanceof Error ? err.message : String(err),
-                      ),
-                    )
-                  }
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                >
-                  <RefreshCw className="mr-1 inline h-4 w-4" /> Models
-                </button>
-                <button
-                  type="button"
-                  disabled={selected.isBuiltin}
-                  onClick={() =>
-                    void deleteProvider().catch((err: unknown) =>
-                      setError(
-                        err instanceof Error ? err.message : String(err),
-                      ),
-                    )
-                  }
-                  className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-900"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <Input
-                label="Label"
-                value={draft.label}
-                onChange={(value) => setDraft({ ...draft, label: value })}
-              />
-              <label className="space-y-2 text-sm">
-                <span className="text-slate-500">Type</span>
-                <select
-                  value={draft.kind}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      kind: event.target.value as ProviderInput["kind"],
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
-                >
-                  <option value="openai">OpenAI official</option>
-                  <option value="openai-compatible">OpenAI-compatible</option>
-                  <option value="lmstudio">LM Studio (local)</option>
-                  <option value="omlx">oMLX (local, Apple Silicon)</option>
-                </select>
-              </label>
-              <Input
-                label="Base URL"
-                value={draft.baseUrl}
-                onChange={(value) => setDraft({ ...draft, baseUrl: value })}
-              />
-              <Input
-                label="API key"
-                value={draft.apiKey}
-                placeholder={previewKey(selected)}
-                type="password"
-                onChange={(value) => setDraft({ ...draft, apiKey: value })}
-              />
-              <label className="space-y-2 text-sm">
-                <span className="text-slate-500">Default model</span>
-                {models.length > 0 ? (
-                  <select
-                    value={
-                      modelIds.includes(draft.defaultModel)
-                        ? draft.defaultModel
-                        : ""
-                    }
-                    onChange={(event) =>
-                      setDraft({ ...draft, defaultModel: event.target.value })
-                    }
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
-                  >
-                    <option value="" disabled>
-                      Select fetched model
-                    </option>
-                    {models.map((entry) => (
-                      <option key={entry.modelId} value={entry.modelId}>
-                        {entry.displayName ?? entry.modelId}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    value={draft.defaultModel}
-                    onChange={(event) =>
-                      setDraft({ ...draft, defaultModel: event.target.value })
-                    }
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
-                  />
-                )}
-                <span className="block text-xs text-slate-500">
-                  {models.length > 0
-                    ? `${models.length} cached model${models.length === 1 ? "" : "s"}. Use Models to refetch.`
-                    : "No cached models yet. Click Models to fetch."}
-                </span>
-              </label>
-              <label className="flex items-center gap-2 pt-7 text-sm">
-                <input
-                  type="checkbox"
-                  checked={draft.enabled}
-                  onChange={(event) =>
-                    setDraft({ ...draft, enabled: event.target.checked })
-                  }
-                />{" "}
-                Enabled
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={includeCompletion}
-                  onChange={(event) =>
-                    setIncludeCompletion(event.target.checked)
-                  }
-                />{" "}
-                Include chat completion in test
-              </label>
-            </div>
-            <div className="mt-5 flex justify-end">
-              <button
-                type="button"
-                onClick={() =>
-                  void saveProvider().catch((err: unknown) =>
-                    setError(err instanceof Error ? err.message : String(err)),
+        <div className="flex flex-col gap-1.5">
+          {providers.map((provider) => {
+            const isOpen = provider.id === expandedId;
+            const isDefault = provider.id === defaultProviderId;
+            const warnKey = needsKey(provider);
+            const tone = isOpen ? "accent" : warnKey ? "warning" : "default";
+            return (
+              <StackedCard
+                key={provider.id}
+                open={isOpen}
+                onToggle={() =>
+                  setExpandedId((cur) =>
+                    cur === provider.id ? null : provider.id,
                   )
                 }
-                className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500"
+                tone={tone}
+                summary={
+                  <ProviderSummary
+                    provider={provider}
+                    isDefault={isDefault}
+                    warnKey={warnKey}
+                    lastTest={
+                      lastTest?.providerId === provider.id ? lastTest : null
+                    }
+                  />
+                }
+                actions={
+                  isOpen ? (
+                    <>
+                      <HeaderButton
+                        tone="success"
+                        onClick={() =>
+                          void testProvider(provider).catch(reportError)
+                        }
+                        icon={<Wifi className="h-3 w-3" />}
+                      >
+                        Re-test
+                      </HeaderButton>
+                      <HeaderButton
+                        onClick={() => void refreshModels().catch(reportError)}
+                        icon={<ListIcon className="h-3 w-3" />}
+                      >
+                        Models
+                      </HeaderButton>
+                      <button
+                        type="button"
+                        aria-label="Delete provider"
+                        disabled={provider.isBuiltin || isDefault}
+                        title={
+                          isDefault
+                            ? "Set another provider as default first."
+                            : undefined
+                        }
+                        onClick={() =>
+                          void deleteProvider(provider).catch(reportError)
+                        }
+                        className="rounded-control border border-slate-200 p-1.5 text-slate-400 hover:text-red-500 disabled:opacity-40 dark:border-slate-700"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                      <ChevronDown className="h-4 w-4 rotate-180 text-accent-text" />
+                    </>
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-slate-400" />
+                  )
+                }
               >
-                Save provider
-              </button>
-            </div>
-          </div>
-        ) : null}
+                <ProviderForm
+                  draft={draft}
+                  setDraft={setDraft}
+                  provider={provider}
+                  models={models}
+                  modelIds={modelIds}
+                  replacingKey={replacingKey}
+                  setReplacingKey={setReplacingKey}
+                  showKey={showKey}
+                  setShowKey={setShowKey}
+                  includeCompletion={includeCompletion}
+                  setIncludeCompletion={setIncludeCompletion}
+                  onSave={() => void saveProvider().catch(reportError)}
+                  onRefreshModels={() =>
+                    void refreshModels().catch(reportError)
+                  }
+                />
+              </StackedCard>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() => void addProvider().catch(reportError)}
+            className="flex items-center justify-center gap-1.5 rounded-control border border-dashed border-slate-300 px-3.5 py-3 text-xs text-slate-400 hover:border-slate-400 hover:text-slate-500 dark:border-slate-700 dark:hover:border-slate-600"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add another provider
+          </button>
+        </div>
       </section>
     </div>
   );
 }
 
-function Input({
+function ProviderIcon({ kind }: { kind: AiProviderKind }) {
+  const Icon = isLocal(kind) ? Cpu : Server;
+  return (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+      <Icon className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+    </div>
+  );
+}
+
+function ProviderSummary({
+  provider,
+  isDefault,
+  warnKey,
+  lastTest,
+}: {
+  provider: AssistantProviderConfig;
+  isDefault: boolean;
+  warnKey: boolean;
+  lastTest: { ok: boolean; text: string } | null;
+}) {
+  return (
+    <>
+      <ProviderIcon kind={provider.kind} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-sm font-medium">{provider.label}</span>
+          {isDefault ? (
+            <Pill tone="accent" className="text-[9px] tracking-wide">
+              DEFAULT
+            </Pill>
+          ) : null}
+          {isLocal(provider.kind) ? (
+            <Pill tone="neutral" className="text-[9px] tracking-wide">
+              LOCAL
+            </Pill>
+          ) : null}
+        </div>
+        <div className="mt-0.5 truncate text-[11px]">
+          {lastTest ? (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1",
+                lastTest.ok ? "text-status-success" : "text-status-danger",
+              )}
+            >
+              {lastTest.ok ? (
+                <CircleCheck className="h-3 w-3" />
+              ) : (
+                <AlertTriangle className="h-3 w-3" />
+              )}
+              {lastTest.text}
+            </span>
+          ) : warnKey ? (
+            <span className="inline-flex items-center gap-1 text-status-warning">
+              <AlertTriangle className="h-3 w-3" /> Needs API key to activate
+            </span>
+          ) : !provider.enabled ? (
+            <span className="text-slate-400">Disabled</span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-status-success">
+              <span className="h-1.5 w-1.5 rounded-full bg-status-success" />
+              <span className="text-slate-500 dark:text-slate-400">
+                Active ·{" "}
+                <span className="font-mono">{provider.defaultModel}</span>
+              </span>
+            </span>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ProviderForm({
+  draft,
+  setDraft,
+  provider,
+  models,
+  modelIds,
+  replacingKey,
+  setReplacingKey,
+  showKey,
+  setShowKey,
+  includeCompletion,
+  setIncludeCompletion,
+  onSave,
+  onRefreshModels,
+}: {
+  draft: ProviderInput;
+  setDraft: React.Dispatch<React.SetStateAction<ProviderInput>>;
+  provider: AssistantProviderConfig;
+  models: AssistantProviderModel[];
+  modelIds: string[];
+  replacingKey: boolean;
+  setReplacingKey: (v: boolean) => void;
+  showKey: boolean;
+  setShowKey: (v: boolean) => void;
+  includeCompletion: boolean;
+  setIncludeCompletion: (v: boolean) => void;
+  onSave: () => void;
+  onRefreshModels: () => void;
+}) {
+  const mask = maskedKey(provider);
+  const showMasked = provider.hasApiKey && !replacingKey;
+  return (
+    <>
+      <div className="mb-3 grid gap-3 md:grid-cols-2">
+        <Field label="Label">
+          <TextInput
+            value={draft.label}
+            onChange={(v) => setDraft({ ...draft, label: v })}
+          />
+        </Field>
+        <Field label="Type">
+          <Select
+            value={draft.kind}
+            onChange={(v) =>
+              setDraft({ ...draft, kind: v as ProviderInput["kind"] })
+            }
+          >
+            <option value="openai">OpenAI official</option>
+            <option value="openai-compatible">OpenAI-compatible</option>
+            <option value="lmstudio">LM Studio (local)</option>
+            <option value="omlx">oMLX (local, Apple Silicon)</option>
+          </Select>
+        </Field>
+      </div>
+
+      <Field label="Base URL" className="mb-3">
+        <TextInput
+          mono
+          value={draft.baseUrl}
+          onChange={(v) => setDraft({ ...draft, baseUrl: v })}
+        />
+      </Field>
+
+      <div className="mb-3">
+        <div className="mb-1 flex items-center justify-between">
+          <label className="text-[11px] text-slate-500 dark:text-slate-400">
+            API key
+          </label>
+          {provider.hasApiKey ? (
+            <span className="inline-flex items-center gap-1 text-[10px] text-status-success">
+              <Lock className="h-3 w-3" /> Saved · encrypted locally
+            </span>
+          ) : null}
+        </div>
+        {showMasked ? (
+          <div className="flex items-center gap-2 rounded-control border border-slate-200 bg-white px-2.5 py-2 dark:border-slate-700 dark:bg-slate-950">
+            <KeyRound className="h-3 w-3 text-slate-400" />
+            <span className="flex-1 truncate font-mono text-xs tracking-wider text-slate-400">
+              {showKey ? `${mask.dots}${mask.hint}` : mask.dots}
+            </span>
+            {mask.hint ? (
+              <span className="font-mono text-xs">{mask.hint}</span>
+            ) : null}
+            <button
+              type="button"
+              aria-label="Show key hint"
+              onClick={() => setShowKey(!showKey)}
+              className="px-1 text-slate-400 hover:text-slate-600"
+            >
+              {showKey ? (
+                <EyeOff className="h-3.5 w-3.5" />
+              ) : (
+                <Eye className="h-3.5 w-3.5" />
+              )}
+            </button>
+            <div className="h-3.5 w-px bg-slate-200 dark:bg-slate-700" />
+            <button
+              type="button"
+              onClick={() => setReplacingKey(true)}
+              className="inline-flex items-center gap-1 px-1 text-xs text-accent-text"
+            >
+              <Pencil className="h-3 w-3" /> Replace
+            </button>
+          </div>
+        ) : (
+          <TextInput
+            type="password"
+            placeholder={provider.hasApiKey ? "Enter new key" : "Paste API key"}
+            value={draft.apiKey}
+            onChange={(v) => setDraft({ ...draft, apiKey: v })}
+          />
+        )}
+      </div>
+
+      <div className="mb-3">
+        <div className="mb-1 flex items-center justify-between">
+          <label className="text-[11px] text-slate-500 dark:text-slate-400">
+            Default model
+          </label>
+          <button
+            type="button"
+            onClick={onRefreshModels}
+            className="inline-flex items-center gap-1 text-[11px] text-accent-text"
+          >
+            <RefreshCw className="h-3 w-3" /> Refresh models
+          </button>
+        </div>
+        {models.length > 0 ? (
+          <Select
+            mono
+            value={
+              modelIds.includes(draft.defaultModel) ? draft.defaultModel : ""
+            }
+            onChange={(v) => setDraft({ ...draft, defaultModel: v })}
+          >
+            <option value="" disabled>
+              Select fetched model
+            </option>
+            {models.map((entry) => (
+              <option key={entry.modelId} value={entry.modelId}>
+                {entry.displayName ?? entry.modelId}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <TextInput
+            mono
+            value={draft.defaultModel}
+            onChange={(v) => setDraft({ ...draft, defaultModel: v })}
+          />
+        )}
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+            <input
+              type="checkbox"
+              checked={draft.enabled}
+              onChange={(e) =>
+                setDraft({ ...draft, enabled: e.target.checked })
+              }
+              className="h-3.5 w-3.5"
+            />
+            Enabled
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+            <input
+              type="checkbox"
+              checked={includeCompletion}
+              onChange={(e) => setIncludeCompletion(e.target.checked)}
+              className="h-3.5 w-3.5"
+            />
+            Include completion in test
+          </label>
+        </div>
+        <button
+          type="button"
+          onClick={onSave}
+          className="rounded-control bg-violet-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-violet-500"
+        >
+          Save provider
+        </button>
+      </div>
+
+      {/* Usage tiles (layout now, data Phase 2). */}
+      <div className="mt-4 border-t border-violet-300/30 pt-3 dark:border-violet-800/30">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[10px] uppercase tracking-wide text-slate-400">
+            This month
+          </span>
+          <button
+            type="button"
+            disabled
+            title="Usage tracking — coming soon"
+            className="text-[10px] text-accent-text opacity-60"
+          >
+            View details →
+          </button>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: "Tokens", value: "—" },
+            { label: "Spend", value: "—" },
+            { label: "Calls", value: "—" },
+          ].map((tile) => (
+            <div
+              key={tile.label}
+              className="rounded-control border border-slate-200 bg-white px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-950"
+            >
+              <div className="text-[10px] uppercase tracking-wide text-slate-400">
+                {tile.label}
+              </div>
+              <div className="font-mono text-sm font-medium">{tile.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Field({
   label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className={cn("block", className)}>
+      <span className="mb-1 block text-[11px] text-slate-500 dark:text-slate-400">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function TextInput({
   value,
   onChange,
   type = "text",
   placeholder,
+  mono = false,
 }: {
-  label: string;
   value: string;
-  onChange(value: string): void;
+  onChange: (value: string) => void;
   type?: string;
   placeholder?: string;
+  mono?: boolean;
 }) {
   return (
-    <label className="space-y-2 text-sm">
-      <span className="text-slate-500">{label}</span>
-      <input
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
-      />
-    </label>
+    <input
+      type={type}
+      value={value}
+      placeholder={placeholder}
+      autoComplete="off"
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        "w-full rounded-control border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none dark:border-slate-700 dark:bg-slate-950",
+        mono && "font-mono",
+      )}
+    />
+  );
+}
+
+function Select({
+  value,
+  onChange,
+  children,
+  mono = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        "w-full rounded-control border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none dark:border-slate-700 dark:bg-slate-950",
+        mono && "font-mono",
+      )}
+    >
+      {children}
+    </select>
+  );
+}
+
+function HeaderButton({
+  children,
+  icon,
+  onClick,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  icon: React.ReactNode;
+  onClick: () => void;
+  tone?: "neutral" | "success";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-control border px-2 py-1 text-[11px]",
+        tone === "success"
+          ? "border-emerald-400/30 bg-status-success-soft text-status-success"
+          : "border-slate-200 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800",
+      )}
+    >
+      {icon}
+      {children}
+    </button>
   );
 }
