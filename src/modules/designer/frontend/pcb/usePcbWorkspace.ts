@@ -3,6 +3,8 @@ import type {
   DesignerCommand,
   DesignerDispatchResult,
   DesignerPcbProjection,
+  PcbBoardOutline,
+  PcbBoardSettings,
   PcbCopperLayerId,
   PcbDisplayMode,
   PcbLayerId,
@@ -10,6 +12,7 @@ import type {
   PcbTraceSegmentMode,
 } from "../../../../sdks";
 import { createDesignerApi } from "../api";
+import { fallbackBoardBoundsFromProjection } from "../three-d/primitives/geometry-utils";
 import { useDesignerHighlight } from "../useDesignerHighlight";
 import { syncLayerPresetFromVisible, usePcbViewStore } from "./pcb-view-store";
 
@@ -147,7 +150,7 @@ export function usePcbWorkspace(params: {
   }, [designId, flushView]);
 
   const updateBoardSize = useCallback(
-    async (widthMm: number, heightMm: number) => {
+    async (widthMm: number, heightMm: number, centerMm?: PcbPointMm) => {
       setSaving(true);
       setError(null);
       try {
@@ -155,6 +158,7 @@ export function usePcbWorkspace(params: {
           type: "pcb_set_board_settings",
           widthMm,
           heightMm,
+          ...(centerMm ? { centerMm } : {}),
         });
         await refresh();
         await refreshHistory();
@@ -170,6 +174,49 @@ export function usePcbWorkspace(params: {
     },
     [dispatchCommand, refresh, refreshHistory],
   );
+
+  /** Set the full board outline (any shape) and optionally its cutouts. */
+  const updateBoardOutline = useCallback(
+    async (outline: PcbBoardOutline, cutouts?: PcbBoardSettings["cutouts"]) => {
+      setSaving(true);
+      setError(null);
+      try {
+        await dispatchCommand({
+          type: "pcb_set_board_outline",
+          outline,
+          ...(cutouts !== undefined ? { cutouts } : {}),
+        });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to save PCB board outline",
+        );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  /** Shrink-wrap the board outline tightly around all parts/traces. Uses a
+   * small fixed edge margin (the default 10mm camera-framing padding is far too
+   * generous for a board outline — leaves a huge gap around small layouts). */
+  const fitBoardToParts = useCallback(async () => {
+    if (!projection) return;
+    const FIT_MARGIN_MM = 2;
+    const b = fallbackBoardBoundsFromProjection(projection, FIT_MARGIN_MM);
+    // Round up to the next 0.1mm so the margin is never shaved below the target.
+    const widthMm = Math.max(1, Math.ceil((b.maxX - b.minX) * 10) / 10);
+    const heightMm = Math.max(1, Math.ceil((b.maxY - b.minY) * 10) / 10);
+    const centerMm: PcbPointMm = {
+      x: (b.minX + b.maxX) / 2,
+      y: (b.minY + b.maxY) / 2,
+    };
+    await updateBoardSize(widthMm, heightMm, centerMm);
+  }, [projection, updateBoardSize]);
 
   const undo = useCallback(async () => {
     if (!designId) return;
@@ -766,6 +813,8 @@ export function usePcbWorkspace(params: {
     toggleCopperFillLayer,
     refresh,
     updateBoardSize,
+    updateBoardOutline,
+    fitBoardToParts,
     setActiveLayer,
     setVisibleLayers,
     undo,

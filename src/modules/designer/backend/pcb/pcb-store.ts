@@ -13,6 +13,7 @@ import type {
   PcbOverlayShape,
   PcbOverlayShapeKind,
   PcbOverlayText,
+  PcbOutlineSegment,
   PcbPlacedPart,
   PcbPointMm,
   PcbTrace,
@@ -257,42 +258,108 @@ function mergeViewState(
   };
 }
 
-function parseBoardSettings(value: unknown): PcbBoardSettings | null {
-  const record = asRecord(value);
-  const outline = asRecord(record?.outline);
-  const center = asRecord(outline?.centerMm);
-  const widthMm = asNumber(outline?.widthMm);
-  const heightMm = asNumber(outline?.heightMm);
-  const centerX = asNumber(center?.x);
-  const centerY = asNumber(center?.y);
-  const updatedAt = asString(record?.updatedAt);
-  const activeLayer = asString(record?.activeLayer);
+/** Parse one point `{x,y}`; returns null when malformed. */
+function parsePointOrNull(value: unknown): { x: number; y: number } | null {
+  const r = asRecord(value);
+  const x = asNumber(r?.x);
+  const y = asNumber(r?.y);
+  if (x === null || y === null) return null;
+  return { x, y };
+}
 
-  const outlineKind = outline?.kind === "polygon" ? "polygon" : "rect";
+/**
+ * Parse any persisted outline shape, returning null when malformed. Mirrors the
+ * discriminated union in `PcbBoardOutline`.
+ */
+function parseOutlineShape(value: unknown): PcbBoardSettings["outline"] | null {
+  const outline = asRecord(value);
+  if (!outline) return null;
+  const widthMm = asNumber(outline.widthMm);
+  const heightMm = asNumber(outline.heightMm);
+  const centerMm = parsePointOrNull(outline.centerMm);
   if (
-    !record ||
-    (outline?.kind !== "rect" && outline?.kind !== "polygon") ||
     widthMm === null ||
     heightMm === null ||
     widthMm <= 0 ||
     heightMm <= 0 ||
-    centerX === null ||
-    centerY === null ||
-    !updatedAt ||
-    !isPcbLayerId(activeLayer)
+    !centerMm
   ) {
     return null;
   }
-
-  // Polygon outlines round-trip an extra `pointsMm` field.
-  const polygonPoints: Array<{ x: number; y: number }> = [];
-  if (outlineKind === "polygon" && Array.isArray(outline?.pointsMm)) {
-    for (const raw of outline.pointsMm as unknown[]) {
-      const r = asRecord(raw);
-      const x = asNumber(r?.x);
-      const y = asNumber(r?.y);
-      if (x !== null && y !== null) polygonPoints.push({ x, y });
+  switch (outline.kind) {
+    case "rect":
+      return { kind: "rect", widthMm, heightMm, centerMm };
+    case "roundrect": {
+      const cornerRadiusMm = asNumber(outline.cornerRadiusMm);
+      if (cornerRadiusMm === null || cornerRadiusMm < 0) return null;
+      return { kind: "roundrect", widthMm, heightMm, centerMm, cornerRadiusMm };
     }
+    case "circle":
+      return { kind: "circle", widthMm, heightMm, centerMm };
+    case "polygon": {
+      if (!Array.isArray(outline.pointsMm)) return null;
+      const pointsMm: Array<{ x: number; y: number }> = [];
+      for (const raw of outline.pointsMm as unknown[]) {
+        const p = parsePointOrNull(raw);
+        if (p) pointsMm.push(p);
+      }
+      if (pointsMm.length < 3) return null;
+      return { kind: "polygon", widthMm, heightMm, centerMm, pointsMm };
+    }
+    case "contour": {
+      const start = parsePointOrNull(outline.start);
+      if (!start || !Array.isArray(outline.segments)) return null;
+      const segments: PcbOutlineSegment[] = [];
+      for (const raw of outline.segments as unknown[]) {
+        const r = asRecord(raw);
+        const to = parsePointOrNull(r?.to);
+        if (!to) return null;
+        if (r?.type === "arc") {
+          const cm = parsePointOrNull(r.centerMm);
+          if (!cm) return null;
+          segments.push({ type: "arc", to, centerMm: cm, cw: r.cw === true });
+        } else if (r?.type === "line") {
+          segments.push({ type: "line", to });
+        } else {
+          return null;
+        }
+      }
+      if (segments.length < 3) return null;
+      return { kind: "contour", widthMm, heightMm, centerMm, start, segments };
+    }
+    default:
+      return null;
+  }
+}
+
+function parseCutouts(value: unknown): PcbBoardSettings["cutouts"] {
+  if (!Array.isArray(value)) return undefined;
+  const cutouts: NonNullable<PcbBoardSettings["cutouts"]> = [];
+  for (const raw of value as unknown[]) {
+    const r = asRecord(raw);
+    const id = asString(r?.id);
+    const shape = parseOutlineShape(r?.shape);
+    if (
+      id &&
+      shape &&
+      (shape.kind === "roundrect" ||
+        shape.kind === "circle" ||
+        shape.kind === "contour")
+    ) {
+      cutouts.push({ id, shape });
+    }
+  }
+  return cutouts;
+}
+
+function parseBoardSettings(value: unknown): PcbBoardSettings | null {
+  const record = asRecord(value);
+  const updatedAt = asString(record?.updatedAt);
+  const activeLayer = asString(record?.activeLayer);
+  const outlineParsed = parseOutlineShape(record?.outline);
+
+  if (!record || !outlineParsed || !updatedAt || !isPcbLayerId(activeLayer)) {
+    return null;
   }
 
   const defaults = createDefaultPcbBoardSettings(updatedAt);
@@ -307,24 +374,11 @@ function parseBoardSettings(value: unknown): PcbBoardSettings | null {
       : tracePresetsRaw
           .map((value) => asNumber(value))
           .filter((value): value is number => value !== null && value > 0);
-  const outlineParsed =
-    outlineKind === "polygon" && polygonPoints.length >= 3
-      ? {
-          kind: "polygon" as const,
-          widthMm,
-          heightMm,
-          centerMm: { x: centerX, y: centerY },
-          pointsMm: polygonPoints,
-        }
-      : {
-          kind: "rect" as const,
-          widthMm,
-          heightMm,
-          centerMm: { x: centerX, y: centerY },
-        };
+  const cutouts = parseCutouts(record.cutouts);
   return {
     ...defaults,
     outline: outlineParsed,
+    ...(cutouts !== undefined ? { cutouts } : {}),
     activeLayer,
     visibleLayers: parseVisibleLayers(record.visibleLayers),
     tracePresets:
@@ -409,6 +463,8 @@ export function updatePcbBoardSize(params: {
   designId: string;
   widthMm: number;
   heightMm: number;
+  /** Optional new center. When omitted, the existing center is preserved. */
+  centerMm?: { x: number; y: number };
   timestamp: string;
 }): PcbBoardSettings {
   const settings = ensurePcbBoardSettings(
@@ -422,10 +478,43 @@ export function updatePcbBoardSize(params: {
       ...settings.outline,
       widthMm: params.widthMm,
       heightMm: params.heightMm,
+      ...(params.centerMm ? { centerMm: params.centerMm } : {}),
     },
     updatedAt: params.timestamp,
   };
 
+  params.db
+    .update(pcbEntities)
+    .set({ payloadJson: JSON.stringify(next), updatedAt: params.timestamp })
+    .where(
+      and(
+        eq(pcbEntities.designId, params.designId),
+        eq(pcbEntities.kind, BOARD_SETTINGS_KIND),
+      ),
+    )
+    .run();
+  return next;
+}
+
+export function updatePcbBoardOutline(params: {
+  db: DbClient;
+  designId: string;
+  outline: PcbBoardSettings["outline"];
+  /** When omitted, existing cutouts are preserved. Pass `[]` to clear them. */
+  cutouts?: PcbBoardSettings["cutouts"];
+  timestamp: string;
+}): PcbBoardSettings {
+  const settings = ensurePcbBoardSettings(
+    params.db,
+    params.designId,
+    params.timestamp,
+  );
+  const next: PcbBoardSettings = {
+    ...settings,
+    outline: params.outline,
+    cutouts: params.cutouts ?? settings.cutouts,
+    updatedAt: params.timestamp,
+  };
   params.db
     .update(pcbEntities)
     .set({ payloadJson: JSON.stringify(next), updatedAt: params.timestamp })

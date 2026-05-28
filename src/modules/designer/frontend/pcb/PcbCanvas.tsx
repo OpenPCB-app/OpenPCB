@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import type {
   DesignerCommand,
   DesignerDispatchResult,
+  PcbBoardOutline,
   PcbCopperLayerId,
   PcbPointMm,
 } from "../../../../sdks";
@@ -34,6 +35,15 @@ import {
   type PcbHitCandidate,
   type TraceHit,
 } from "./pcb-hit";
+import {
+  applyHandleDrag,
+  countOutsideBoard,
+  handleCursor,
+  handlePointMm,
+  hitBoardHandle,
+  roundDimMm,
+  type BoardHandle,
+} from "./pcb-board-resize";
 import {
   PcbDisambiguationPopup,
   formatCandidateLabel,
@@ -175,6 +185,19 @@ interface FreePrimitiveDragSession {
   moved: boolean;
 }
 
+interface BoardResizeSession {
+  handle: BoardHandle;
+  initialRect: PcbBoardOutline;
+  currentRect: PcbBoardOutline;
+  /** Offset from the pointer to the grabbed handle at press — keeps the edge
+   * pinned under the cursor instead of jumping to it on the first move. */
+  pointerOffsetMm: PcbPointMm;
+  moved: boolean;
+}
+
+/** Grab radius for board resize handles, in mm. Matches other fixed-mm hits. */
+const BOARD_HANDLE_TOLERANCE_MM = 1.0;
+
 interface PcbCanvasProps {
   backendURL?: string | null;
   moduleId: string;
@@ -280,6 +303,25 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     null,
   );
   freePrimitiveDragSessionRef.current = freePrimitiveDragSession;
+  const [boardResizeSession, setBoardResizeSession] =
+    useState<BoardResizeSession | null>(null);
+  const boardResizeSessionRef = useRef<BoardResizeSession | null>(null);
+  boardResizeSessionRef.current = boardResizeSession;
+  // Holds the just-committed outline so the preview persists across the async
+  // backend refresh — without it the board flashes back to its old size for a
+  // few frames before the new projection lands.
+  const [committedOutlineOverride, setCommittedOutlineOverride] =
+    useState<PcbBoardOutline | null>(null);
+  // CSS cursor for the canvas container — set when hovering a board handle so
+  // the resize affordance reads before the user presses down.
+  const [boardHandleCursor, setBoardHandleCursor] = useState<string | null>(
+    null,
+  );
+  // Board-dimension edit mode — an explicit toggle (sidebar button). Only when
+  // active are the dimension inputs usable and the canvas resize handles shown.
+  const [boardDimMode, setBoardDimMode] = useState(false);
+  const boardDimModeRef = useRef(boardDimMode);
+  boardDimModeRef.current = boardDimMode;
   const [toolMode, setToolMode] = useState<ToolMode>("select");
   const [routeState, dispatchRoute] = useReducer(
     routeToolReducer,
@@ -368,8 +410,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   useEffect(() => {
     const board = workspace.projection?.board.outline;
     if (!board) return;
-    setWidthText(String(board.widthMm));
-    setHeightText(String(board.heightMm));
+    setWidthText(String(roundDimMm(board.widthMm)));
+    setHeightText(String(roundDimMm(board.heightMm)));
   }, [workspace.projection?.board.outline]);
 
   // Prune stale ids when projection changes (e.g. undo deleted a trace that
@@ -969,6 +1011,33 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           return;
         }
 
+        // Board resize — a grip on the board edge/corner wins over everything
+        // else in select mode. Gated behind the explicit Board-dimensions
+        // toggle. The bbox handles resize any outline kind.
+        const outline = workspace.projection?.board.outline;
+        if (boardDimModeRef.current && outline) {
+          const handle = hitBoardHandle(
+            outline,
+            cursor,
+            BOARD_HANDLE_TOLERANCE_MM,
+          );
+          if (handle) {
+            const anchor = handlePointMm(outline, handle);
+            setSelection(emptyPcbSelection());
+            setBoardResizeSession({
+              handle,
+              initialRect: outline,
+              currentRect: outline,
+              pointerOffsetMm: {
+                x: anchor.x - cursor.x,
+                y: anchor.y - cursor.y,
+              },
+              moved: false,
+            });
+            return;
+          }
+        }
+
         // Alt+click — open the disambiguation popup at the cursor with every
         // primitive under the pointer (spec §4.4 / research §4.4). Plain
         // click still uses the first-match-wins flow below.
@@ -1202,6 +1271,57 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         setCursorMm(cursor);
         setCursorClientPx({ x: event.screenPoint.x, y: event.screenPoint.y });
         setMeasureShowDeltas(event.modifiers.shift);
+
+        // Board resize drag in flight — move the grabbed edge(s), opposite edge
+        // fixed. Suppresses all hover/selection feedback while resizing.
+        if (boardResizeSessionRef.current) {
+          setBoardResizeSession((prev) => {
+            if (!prev) return prev;
+            const anchored = {
+              x: cursor.x + prev.pointerOffsetMm.x,
+              y: cursor.y + prev.pointerOffsetMm.y,
+            };
+            const next = applyHandleDrag(
+              prev.initialRect,
+              prev.handle,
+              anchored,
+              {
+                snap,
+              },
+            );
+            if (
+              next.widthMm === prev.currentRect.widthMm &&
+              next.heightMm === prev.currentRect.heightMm &&
+              next.centerMm.x === prev.currentRect.centerMm.x &&
+              next.centerMm.y === prev.currentRect.centerMm.y
+            ) {
+              return prev;
+            }
+            // Live two-way sync with the side panel inputs.
+            setWidthText(String(roundDimMm(next.widthMm)));
+            setHeightText(String(roundDimMm(next.heightMm)));
+            return { ...prev, currentRect: next, moved: true };
+          });
+          return;
+        }
+
+        // Hover affordance for board handles (board-dim mode, any outline).
+        if (boardDimModeRef.current && toolMode === "select") {
+          const outline = workspace.projection?.board.outline;
+          if (outline) {
+            const handle = hitBoardHandle(
+              outline,
+              cursor,
+              BOARD_HANDLE_TOLERANCE_MM,
+            );
+            setBoardHandleCursor(handle ? handleCursor(handle) : null);
+          } else if (boardHandleCursor !== null) {
+            setBoardHandleCursor(null);
+          }
+        } else if (boardHandleCursor !== null) {
+          setBoardHandleCursor(null);
+        }
+
         if (toolMode === "measure") {
           workspace.hoverNet(null);
           return;
@@ -1248,6 +1368,23 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         });
       },
       onPointerUp() {
+        // Commit a board resize. The command writes ONLY the outline — no
+        // placement/trace/via position is ever recomputed (non-destructive).
+        const resize = boardResizeSessionRef.current;
+        if (resize) {
+          setBoardResizeSession(null);
+          if (resize.moved) {
+            const next = resize.currentRect;
+            // Keep the preview pinned across the async refresh so the board
+            // doesn't flash back to its old size before the new size lands.
+            setCommittedOutlineOverride(next);
+            void workspace
+              .updateBoardOutline(next)
+              .catch(() => undefined)
+              .finally(() => setCommittedOutlineOverride(null));
+          }
+          return;
+        }
         if (marquee.marqueeSession) {
           marquee.finishMarquee();
           return;
@@ -1318,6 +1455,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           setCursorMm(null);
         }
         setCursorClientPx(null);
+        setBoardHandleCursor(null);
       },
       onContextMenu(event) {
         const cursor = eventToMm(event);
@@ -2032,6 +2170,23 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     widthMm > 0 &&
     heightMm > 0;
 
+  // Count of parts/traces falling outside the current (or live-drag) outline.
+  // Drives the non-blocking "N items outside board" warning. Resizing never
+  // moves or deletes any of them — this is purely informational.
+  const effectiveOutlineRect: PcbBoardOutline | null =
+    boardResizeSession?.currentRect ??
+    committedOutlineOverride ??
+    workspace.projection?.board.outline ??
+    null;
+  const outsideCount = useMemo(() => {
+    if (!workspace.projection || !effectiveOutlineRect) return 0;
+    return countOutsideBoard(
+      workspace.projection,
+      effectiveOutlineRect,
+      workspace.projection.board.cutouts,
+    );
+  }, [workspace.projection, effectiveOutlineRect]);
+
   const dragOverride = useMemo<ReadonlyMap<string, PcbPointMm> | null>(() => {
     if (!dragSession || !dragSession.moved) return committedDragOverride;
     const dx = dragSession.currentPrimaryMm.x - dragSession.initialPrimaryMm.x;
@@ -2213,8 +2368,15 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     );
   }
 
+  const canvasCursor = boardResizeSession
+    ? handleCursor(boardResizeSession.handle)
+    : boardHandleCursor;
+
   return (
-    <div className="relative h-full w-full bg-slate-950">
+    <div
+      className="relative h-full w-full bg-slate-950"
+      style={canvasCursor ? { cursor: canvasCursor } : undefined}
+    >
       {workspace.projection ? (
         <EdaCanvas
           key={props.designId}
@@ -2227,6 +2389,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           <PcbScene
             projection={workspace.projection}
             selection={selection}
+            outlineOverride={
+              boardResizeSession?.currentRect ?? committedOutlineOverride
+            }
+            boardHandlesVisible={boardDimMode && toolMode === "select"}
             dragOverride={dragOverride}
             freePrimitiveDragOverrides={freePrimitiveDragOverrides}
             highlightedNetId={workspace.highlightedNetId}
@@ -2495,6 +2661,38 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         </>
       ) : null}
 
+      {boardResizeSession && cursorClientPx ? (
+        <div
+          className="pointer-events-none fixed z-30 flex items-center gap-2 rounded-full border border-violet-500/60 bg-slate-950/95 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-slate-100 shadow-lg backdrop-blur"
+          style={{
+            left: cursorClientPx.x + 14,
+            top: cursorClientPx.y + 14,
+          }}
+        >
+          <span>
+            {roundDimMm(boardResizeSession.currentRect.widthMm)} ×{" "}
+            {roundDimMm(boardResizeSession.currentRect.heightMm)} mm
+          </span>
+          {(() => {
+            const dw = roundDimMm(
+              boardResizeSession.currentRect.widthMm -
+                boardResizeSession.initialRect.widthMm,
+            );
+            const dh = roundDimMm(
+              boardResizeSession.currentRect.heightMm -
+                boardResizeSession.initialRect.heightMm,
+            );
+            if (dw === 0 && dh === 0) return null;
+            const fmt = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+            return (
+              <span className="text-slate-400">
+                Δ {fmt(dw)}, {fmt(dh)}
+              </span>
+            );
+          })()}
+        </div>
+      ) : null}
+
       {toolMode === "route" && cursorClientPx ? (
         <div
           className="pointer-events-none fixed z-30 flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-950/90 px-2 py-0.5 text-[10px] font-medium text-slate-100 shadow-lg backdrop-blur"
@@ -2635,6 +2833,27 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               widthMm={widthMm}
               heightMm={heightMm}
               valid={valid}
+              currentOutline={workspace.projection?.board.outline ?? null}
+              outsideCount={outsideCount}
+              onApplyOutline={(outline) =>
+                void workspace
+                  .updateBoardOutline(outline)
+                  .then(() => cameraControlsRef.current?.fit())
+              }
+              onFitToParts={() =>
+                void workspace
+                  .fitBoardToParts()
+                  .then(() => cameraControlsRef.current?.fit())
+              }
+              editMode={boardDimMode}
+              onToggleEditMode={() =>
+                setBoardDimMode((prev) => {
+                  // Entering edit mode forces the select tool so the edge
+                  // handles are interactive (route/measure would intercept).
+                  if (!prev) setToolMode("select");
+                  return !prev;
+                })
+              }
             />,
             props.boardPanelTarget,
           )

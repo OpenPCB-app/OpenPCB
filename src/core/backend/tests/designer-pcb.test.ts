@@ -100,6 +100,35 @@ describe("designer PCB phase 1", () => {
     expect(projection?.board.outline.heightMm).toBe(60);
   });
 
+  test("persists board center when provided (drag-resize)", async () => {
+    isolateTestDb("designer-pcb-center");
+    const { moduleRuntime } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const design = await designerSdk.createDesign({ name: "PCB Center" });
+    const result = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-pcb-center",
+      sessionId: "pcb-test",
+      aggregateId: design.id,
+      baseRevision: 0,
+      issuedAt: Date.now(),
+      command: {
+        type: "pcb_set_board_settings",
+        widthMm: 80,
+        heightMm: 40,
+        centerMm: { x: 15, y: -5 },
+      },
+    });
+    const projection = await designerSdk.getPcbProjection(design.id);
+
+    expect(result.ok).toBe(true);
+    expect(projection?.board.outline.widthMm).toBe(80);
+    expect(projection?.board.outline.heightMm).toBe(40);
+    expect(projection?.board.outline.centerMm).toEqual({ x: 15, y: -5 });
+  });
+
   test("rejects invalid PCB board size", async () => {
     isolateTestDb("designer-pcb-invalid");
     const { moduleRuntime } = await createRuntime();
@@ -146,6 +175,46 @@ describe("designer PCB phase 1", () => {
     expect(body.data?.projection?.board?.outline?.widthMm).toBe(50);
   });
 
+  test("HTTP command dispatch preserves board centerMm", async () => {
+    isolateTestDb("designer-pcb-http-center");
+    const { moduleRuntime, server } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const design = await designerSdk.createDesign({ name: "PCB HTTP Center" });
+
+    const dispatch = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/designer/designs/${design.id}/commands`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            commandId: "http-center-cmd",
+            sessionId: "pcb-http",
+            aggregateId: design.id,
+            baseRevision: 0,
+            issuedAt: Date.now(),
+            command: {
+              type: "pcb_set_board_settings",
+              widthMm: 33,
+              heightMm: 22,
+              centerMm: { x: 7, y: -3 },
+            },
+          }),
+        },
+      ),
+    );
+    expect(dispatch.status).toBe(200);
+
+    const projection = await designerSdk.getPcbProjection(design.id);
+    expect(projection?.board.outline.widthMm).toBe(33);
+    expect(projection?.board.outline.heightMm).toBe(22);
+    // Regression guard: the HTTP command parser must forward centerMm — it was
+    // previously stripped, collapsing drag-resize to a symmetric resize.
+    expect(projection?.board.outline.centerMm).toEqual({ x: 7, y: -3 });
+  });
+
   test("PCB board size undo/redo via separate session", async () => {
     isolateTestDb("designer-pcb-undo");
     const { moduleRuntime } = await createRuntime();
@@ -190,6 +259,139 @@ describe("designer PCB phase 1", () => {
     const afterRedo = await designerSdk.getPcbProjection(design.id);
     expect(afterRedo?.board.outline.widthMm).toBe(150);
     expect(afterRedo?.board.outline.heightMm).toBe(100);
+  });
+});
+
+describe("designer PCB custom board shapes", () => {
+  test("sets a rounded-rect outline via command", async () => {
+    isolateTestDb("designer-pcb-roundrect");
+    const { moduleRuntime } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const design = await designerSdk.createDesign({ name: "RoundRect" });
+
+    const result = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-roundrect",
+      sessionId: "shape-test",
+      aggregateId: design.id,
+      baseRevision: 0,
+      issuedAt: Date.now(),
+      command: {
+        type: "pcb_set_board_outline",
+        outline: {
+          kind: "roundrect",
+          widthMm: 80,
+          heightMm: 40,
+          centerMm: { x: 0, y: 0 },
+          cornerRadiusMm: 5,
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+
+    const projection = await designerSdk.getPcbProjection(design.id);
+    const outline = projection?.board.outline;
+    expect(outline?.kind).toBe("roundrect");
+    expect(outline?.widthMm).toBe(80);
+    if (outline?.kind === "roundrect") {
+      expect(outline.cornerRadiusMm).toBe(5);
+    }
+  });
+
+  test("HTTP dispatch preserves roundrect radius, contour segments + cutouts", async () => {
+    isolateTestDb("designer-pcb-shape-http");
+    const { moduleRuntime, server } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const design = await designerSdk.createDesign({ name: "Shape HTTP" });
+
+    // A triangle contour outline with a circular cutout.
+    const dispatch = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/designer/designs/${design.id}/commands`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            commandId: "http-shape-cmd",
+            sessionId: "shape-http",
+            aggregateId: design.id,
+            baseRevision: 0,
+            issuedAt: Date.now(),
+            command: {
+              type: "pcb_set_board_outline",
+              outline: {
+                kind: "contour",
+                widthMm: 1,
+                heightMm: 1,
+                centerMm: { x: 0, y: 0 },
+                start: { x: -10, y: -10 },
+                segments: [
+                  { type: "line", to: { x: 10, y: -10 } },
+                  { type: "line", to: { x: 0, y: 10 } },
+                  { type: "line", to: { x: -10, y: -10 } },
+                ],
+              },
+              cutouts: [
+                {
+                  id: "cut-1",
+                  shape: {
+                    kind: "circle",
+                    widthMm: 4,
+                    heightMm: 4,
+                    centerMm: { x: 0, y: -4 },
+                  },
+                },
+              ],
+            },
+          }),
+        },
+      ),
+    );
+    expect(dispatch.status).toBe(200);
+
+    const projection = await designerSdk.getPcbProjection(design.id);
+    const outline = projection?.board.outline;
+    // Regression guard: the HTTP parser must forward every shape field.
+    expect(outline?.kind).toBe("contour");
+    if (outline?.kind === "contour") {
+      expect(outline.segments.length).toBe(3);
+      expect(outline.start).toEqual({ x: -10, y: -10 });
+    }
+    // bbox recomputed from geometry, not the placeholder 1×1 we sent.
+    expect(outline?.widthMm).toBe(20);
+    expect(outline?.heightMm).toBe(20);
+    expect(projection?.board.cutouts?.length).toBe(1);
+    expect(projection?.board.cutouts?.[0]?.shape.kind).toBe("circle");
+  });
+
+  test("rejects an outline larger than the 2000mm cap", async () => {
+    isolateTestDb("designer-pcb-shape-cap");
+    const { moduleRuntime } = await createRuntime();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const design = await designerSdk.createDesign({ name: "Too Big" });
+
+    const result = await designerSdk.dispatchCommand(design.id, {
+      commandId: "cmd-too-big",
+      sessionId: "shape-test",
+      aggregateId: design.id,
+      baseRevision: 0,
+      issuedAt: Date.now(),
+      command: {
+        type: "pcb_set_board_outline",
+        outline: {
+          kind: "circle",
+          widthMm: 3000,
+          heightMm: 3000,
+          centerMm: { x: 0, y: 0 },
+        },
+      },
+    });
+    expect(result.ok).toBe(false);
   });
 });
 

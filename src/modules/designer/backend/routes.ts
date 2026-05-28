@@ -36,6 +36,7 @@ import type {
   DesignerPcbRotatePlacementCommand,
   DesignerPcbSetActiveLayerCommand,
   DesignerPcbSetBoardSettingsCommand,
+  DesignerPcbSetBoardOutlineCommand,
   DesignerPcbSetViewStateCommand,
   DesignerPcbSetVisibleLayersCommand,
   DesignerPcbUpdateTraceGeometryCommand,
@@ -70,6 +71,10 @@ import type {
   PcbCopperLayerId,
   PcbLayerId,
   PcbTraceSegmentMode,
+  PcbBoardOutline,
+  PcbBoardCutout,
+  PcbBoardCutoutShape,
+  PcbOutlineSegment,
 } from "../../../sdks/designer";
 import { buildDesignerSdk } from "./sdk";
 import { createDesignerStore } from "./store";
@@ -121,7 +126,9 @@ function parseBomOverridePatch(raw: unknown): BomOverridePatch {
     else {
       const price = asNumber(rawPrice);
       if (price === null || price < 0) {
-        throw new ValidationError("unitPrice must be a non-negative number or null");
+        throw new ValidationError(
+          "unitPrice must be a non-negative number or null",
+        );
       }
       patch.unitPrice = price;
     }
@@ -160,7 +167,11 @@ function parseOptionalString(
   set(value);
 }
 
-function textResponse(text: string, contentType: string, fileName: string): Response {
+function textResponse(
+  text: string,
+  contentType: string,
+  fileName: string,
+): Response {
   return new Response(text, {
     status: 200,
     headers: {
@@ -561,7 +572,16 @@ function parsePcbSetBoardSettingsCommand(
       "command.widthMm and command.heightMm must be positive",
     );
   }
-  return { type: "pcb_set_board_settings", widthMm, heightMm };
+  const centerMm =
+    raw.centerMm === undefined
+      ? undefined
+      : parsePointMm(raw.centerMm, "command.centerMm");
+  return {
+    type: "pcb_set_board_settings",
+    widthMm,
+    heightMm,
+    ...(centerMm ? { centerMm } : {}),
+  };
 }
 
 function parsePointMm(value: unknown, field: string): { x: number; y: number } {
@@ -577,6 +597,127 @@ function parsePointMm(value: unknown, field: string): { x: number; y: number } {
     );
   }
   return { x, y };
+}
+
+function parsePositiveDim(value: unknown, field: string): number {
+  const n = asNumber(value);
+  if (n === null || n <= 0) {
+    throw new ValidationError(`${field} must be a positive number`);
+  }
+  return n;
+}
+
+function parseOutlineSegments(
+  value: unknown,
+  field: string,
+): PcbOutlineSegment[] {
+  if (!Array.isArray(value)) {
+    throw new ValidationError(`${field} must be an array`);
+  }
+  return value.map((entry, i): PcbOutlineSegment => {
+    const rec = asRecord(entry);
+    if (!rec) throw new ValidationError(`${field}[${i}] must be an object`);
+    const to = parsePointMm(rec.to, `${field}[${i}].to`);
+    if (rec.type === "arc") {
+      return {
+        type: "arc",
+        to,
+        centerMm: parsePointMm(rec.centerMm, `${field}[${i}].centerMm`),
+        cw: rec.cw === true,
+      };
+    }
+    if (rec.type === "line") {
+      return { type: "line", to };
+    }
+    throw new ValidationError(`${field}[${i}].type must be "line" or "arc"`);
+  });
+}
+
+/**
+ * Parse any board-outline shape. ⚠️ HTTP-parser gotcha (see CLAUDE memory): the
+ * POST /commands route reconstructs commands field-by-field, so every shape
+ * field MUST be copied here or it is silently dropped over HTTP.
+ */
+function parseBoardOutline(value: unknown, field: string): PcbBoardOutline {
+  const rec = asRecord(value);
+  if (!rec) throw new ValidationError(`${field} must be an object`);
+  const widthMm = parsePositiveDim(rec.widthMm, `${field}.widthMm`);
+  const heightMm = parsePositiveDim(rec.heightMm, `${field}.heightMm`);
+  const centerMm = parsePointMm(rec.centerMm, `${field}.centerMm`);
+  switch (rec.kind) {
+    case "rect":
+      return { kind: "rect", widthMm, heightMm, centerMm };
+    case "roundrect": {
+      const cornerRadiusMm = asNumber(rec.cornerRadiusMm);
+      if (cornerRadiusMm === null || cornerRadiusMm < 0) {
+        throw new ValidationError(
+          `${field}.cornerRadiusMm must be a non-negative number`,
+        );
+      }
+      return { kind: "roundrect", widthMm, heightMm, centerMm, cornerRadiusMm };
+    }
+    case "circle":
+      return { kind: "circle", widthMm, heightMm, centerMm };
+    case "polygon": {
+      if (!Array.isArray(rec.pointsMm) || rec.pointsMm.length < 3) {
+        throw new ValidationError(
+          `${field}.pointsMm must have at least 3 points`,
+        );
+      }
+      const pointsMm = rec.pointsMm.map((p, i) =>
+        parsePointMm(p, `${field}.pointsMm[${i}]`),
+      );
+      return { kind: "polygon", widthMm, heightMm, centerMm, pointsMm };
+    }
+    case "contour": {
+      const start = parsePointMm(rec.start, `${field}.start`);
+      const segments = parseOutlineSegments(rec.segments, `${field}.segments`);
+      if (segments.length < 3) {
+        throw new ValidationError(
+          `${field}.segments must have at least 3 segments`,
+        );
+      }
+      return { kind: "contour", widthMm, heightMm, centerMm, start, segments };
+    }
+    default:
+      throw new ValidationError(
+        `${field}.kind must be rect|roundrect|circle|polygon|contour`,
+      );
+  }
+}
+
+function parseBoardCutouts(value: unknown, field: string): PcbBoardCutout[] {
+  if (!Array.isArray(value)) {
+    throw new ValidationError(`${field} must be an array`);
+  }
+  return value.map((entry, i): PcbBoardCutout => {
+    const rec = asRecord(entry);
+    if (!rec) throw new ValidationError(`${field}[${i}] must be an object`);
+    const id = asString(rec.id);
+    if (!id) throw new ValidationError(`${field}[${i}].id must be a string`);
+    const shape = parseBoardOutline(rec.shape, `${field}[${i}].shape`);
+    if (shape.kind === "rect" || shape.kind === "polygon") {
+      throw new ValidationError(
+        `${field}[${i}].shape must be roundrect|circle|contour`,
+      );
+    }
+    return { id, shape: shape as PcbBoardCutoutShape };
+  });
+}
+
+function parsePcbSetBoardOutlineCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbSetBoardOutlineCommand {
+  const outline = parseBoardOutline(raw.outline, "command.outline");
+  const cutouts =
+    raw.cutouts === undefined
+      ? undefined
+      : parseBoardCutouts(raw.cutouts, "command.cutouts");
+  return {
+    type: "pcb_set_board_outline",
+    outline,
+    ...(cutouts ? { cutouts } : {}),
+  };
 }
 
 function parsePcbMovePlacementCommand(
@@ -1563,6 +1704,9 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
     case "pcb_set_board_settings":
       command = parsePcbSetBoardSettingsCommand(commandRecord);
       break;
+    case "pcb_set_board_outline":
+      command = parsePcbSetBoardOutlineCommand(commandRecord);
+      break;
     case "pcb_move_placement":
       command = parsePcbMovePlacementCommand(commandRecord);
       break;
@@ -1741,17 +1885,20 @@ export function registerRoutes(
     return success({ bom });
   });
 
-  router.patch("/designs/:designId/bom/refs/:refdes", async ({ params, req }) => {
-    const designId = params.getOrThrow("designId");
-    const refdes = params.getOrThrow("refdes");
-    const patch = parseBomOverridePatch(await parseJsonBody<unknown>(req));
-    const override = await store.updateBomOverride(designId, refdes, patch);
-    if (!override) {
-      throw new NotFoundError(`Design '${designId}' not found`);
-    }
-    const bom = await store.getBomProjection(designId);
-    return success({ override, bom });
-  });
+  router.patch(
+    "/designs/:designId/bom/refs/:refdes",
+    async ({ params, req }) => {
+      const designId = params.getOrThrow("designId");
+      const refdes = params.getOrThrow("refdes");
+      const patch = parseBomOverridePatch(await parseJsonBody<unknown>(req));
+      const override = await store.updateBomOverride(designId, refdes, patch);
+      if (!override) {
+        throw new NotFoundError(`Design '${designId}' not found`);
+      }
+      const bom = await store.getBomProjection(designId);
+      return success({ override, bom });
+    },
+  );
 
   router.get("/designs/:designId/exports/bom.csv", async ({ params }) => {
     const designId = params.getOrThrow("designId");

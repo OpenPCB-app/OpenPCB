@@ -9,6 +9,7 @@ import type {
   DesignerPrimitive,
   DesignerSchematicProjection,
   LibraryComponentPlacementDetail,
+  PcbBoardOutline,
   PcbBoardSettings,
   PcbTrace,
   PcbVia,
@@ -92,6 +93,7 @@ import {
   rotatePcbPlacement,
   updatePcbActiveLayer,
   updatePcbBoardSize,
+  updatePcbBoardOutline,
   updatePcbFreeHole,
   updatePcbFreePad,
   updatePcbOverlayShape,
@@ -108,6 +110,7 @@ import {
   validateTraceAgainstFab,
   validateViaAgainstFab,
 } from "./pcb/fab-presets";
+import { computeOutlineBboxMm } from "./pcb/outline-geometry";
 import {
   insertVertexOnWire,
   parseWirePointsJson,
@@ -130,6 +133,55 @@ export interface ExecuteDesignerCommandParams {
 
 function isFinitePoint(point: { x: number; y: number }): boolean {
   return Number.isFinite(point.x) && Number.isFinite(point.y);
+}
+
+const MAX_BOARD_DIM_MM = 2000;
+
+/**
+ * Validate a board outline (or cutout shape). Returns an error message, or null
+ * when valid. Shared by the rect and the general outline command paths.
+ */
+function validateBoardOutlineGeometry(outline: PcbBoardOutline): string | null {
+  if (outline.widthMm <= 0 || outline.heightMm <= 0) {
+    return "board width and height must be positive";
+  }
+  if (
+    outline.widthMm > MAX_BOARD_DIM_MM ||
+    outline.heightMm > MAX_BOARD_DIM_MM
+  ) {
+    return `board width and height must be <= ${MAX_BOARD_DIM_MM}mm`;
+  }
+  if (!isFinitePoint(outline.centerMm)) {
+    return "board center must be finite";
+  }
+  switch (outline.kind) {
+    case "roundrect":
+      if (
+        !Number.isFinite(outline.cornerRadiusMm) ||
+        outline.cornerRadiusMm < 0
+      ) {
+        return "corner radius must be a non-negative number";
+      }
+      return null;
+    case "polygon":
+      if (outline.pointsMm.length < 3) return "polygon needs >= 3 points";
+      if (!outline.pointsMm.every(isFinitePoint)) {
+        return "polygon points must be finite";
+      }
+      return null;
+    case "contour":
+      if (!isFinitePoint(outline.start)) return "contour start must be finite";
+      if (outline.segments.length < 3) return "contour needs >= 3 segments";
+      for (const seg of outline.segments) {
+        if (!isFinitePoint(seg.to)) return "contour points must be finite";
+        if (seg.type === "arc" && !isFinitePoint(seg.centerMm)) {
+          return "contour arc centers must be finite";
+        }
+      }
+      return null;
+    default:
+      return null;
+  }
 }
 
 function mapPinRow(row: PinRow): DesignerPin {
@@ -413,11 +465,43 @@ export function executeDesignerCommand({
         "board width and height must be <= 2000mm",
       );
     }
+    if (
+      command.centerMm &&
+      (!Number.isFinite(command.centerMm.x) ||
+        !Number.isFinite(command.centerMm.y))
+    ) {
+      return invalidPcbBoardSettings("board center must be finite");
+    }
     updatePcbBoardSize({
       db: tx,
       designId,
       widthMm: command.widthMm,
       heightMm: command.heightMm,
+      ...(command.centerMm ? { centerMm: command.centerMm } : {}),
+      timestamp,
+    });
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_set_board_outline") {
+    const invalid = validateBoardOutlineGeometry(command.outline);
+    if (invalid) return invalidPcbBoardSettings(invalid);
+    for (const cut of command.cutouts ?? []) {
+      const cutInvalid = validateBoardOutlineGeometry(cut.shape);
+      if (cutInvalid) return invalidPcbBoardSettings(`cutout: ${cutInvalid}`);
+    }
+    // Recompute the cached bbox so non-rect shapes report a correct footprint.
+    const bbox = computeOutlineBboxMm(command.outline);
+    const outline = { ...command.outline, ...bbox };
+    const cutouts = command.cutouts?.map((cut) => ({
+      ...cut,
+      shape: { ...cut.shape, ...computeOutlineBboxMm(cut.shape) },
+    }));
+    updatePcbBoardOutline({
+      db: tx,
+      designId,
+      outline,
+      ...(cutouts ? { cutouts } : {}),
       timestamp,
     });
     return okResult(bumpRevision(tx, designId, revision, timestamp), null);

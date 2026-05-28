@@ -17,6 +17,7 @@ import {
   projectLocal,
 } from "../transform";
 import { gerberDim, xyOperand } from "../units";
+import { flattenOutline } from "../../pcb/outline-geometry";
 
 /**
  * Build a complete Gerber X2 file for one fabrication layer.
@@ -584,17 +585,27 @@ function emitEdgeCuts(
   }
   // Profile uses a thin round aperture (0.1 mm is the de-facto convention).
   const code = apers.allocate({ kind: "circle", diameterMm: 0.1 }, "Profile");
-  const pts = outlinePoints(outline);
-  if (pts.length < 2) return;
   out.push(`D${code}*`);
   out.push("G01*");
+  // Outer board contour, then one closed contour per internal cutout — each is
+  // a separate Profile loop (KiCad-compatible: outermost = edge, inner = holes).
+  emitContour(out, outlinePoints(outline));
+  for (const cut of ctx.proj.board.cutouts ?? []) {
+    emitContour(out, flattenOutline(cut.shape));
+  }
+}
+
+/** Emit one closed Edge.Cuts contour as move-to + draw-to commands. */
+function emitContour(
+  out: string[],
+  pts: Array<{ x: number; y: number }>,
+): void {
+  if (pts.length < 2) return;
   for (let i = 0; i < pts.length; i++) {
     const pt = pts[i]!;
     out.push(`${xyOperand(pt.x, pt.y)}${i === 0 ? "D02*" : "D01*"}`);
   }
-  // Close the loop back to the first point only when the source polygon
-  // isn't already closed (KiCad emits closed polygons; rect outline we
-  // build internally is open).
+  // Close the loop back to the first point unless already closed.
   const first = pts[0]!;
   const last = pts[pts.length - 1]!;
   if (!pointsEqual(first, last)) {
@@ -613,20 +624,8 @@ function pointsEqual(
 function outlinePoints(
   outline: PcbBoardOutline,
 ): Array<{ x: number; y: number }> {
-  if (outline.kind === "polygon") {
-    return outline.pointsMm.map((p) => ({ x: p.x, y: p.y }));
-  }
-  // Rect: build four corners from center + width/height.
-  const cx = outline.centerMm.x;
-  const cy = outline.centerMm.y;
-  const halfW = outline.widthMm / 2;
-  const halfH = outline.heightMm / 2;
-  return [
-    { x: cx - halfW, y: cy - halfH },
-    { x: cx + halfW, y: cy - halfH },
-    { x: cx + halfW, y: cy + halfH },
-    { x: cx - halfW, y: cy + halfH },
-  ];
+  // All shape kinds flatten through the shared helper (arcs discretised).
+  return flattenOutline(outline);
 }
 
 // =========================================================================

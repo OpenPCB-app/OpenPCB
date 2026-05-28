@@ -187,8 +187,20 @@ export interface PcbPointMm {
   y: number;
 }
 
-export type PcbBoardOutline = PcbBoardOutlineRect | PcbBoardOutlinePolygon;
+export type PcbBoardOutline =
+  | PcbBoardOutlineRect
+  | PcbBoardOutlineRoundRect
+  | PcbBoardOutlineCircle
+  | PcbBoardOutlinePolygon
+  | PcbBoardContour;
 
+/**
+ * Every outline variant carries a `widthMm` / `heightMm` / `centerMm` bounding
+ * box. For non-rect shapes this is a *cache* of the shape's extent — kept so
+ * consumers that only need the board footprint (3D enclosure, fab presets,
+ * legacy code) keep working without shape awareness. Recompute it with
+ * `computeOutlineBboxMm` whenever the shape geometry changes.
+ */
 export interface PcbBoardOutlineRect {
   kind: "rect";
   widthMm: number;
@@ -196,11 +208,30 @@ export interface PcbBoardOutlineRect {
   centerMm: PcbPointMm;
 }
 
+/** Rounded rectangle with a single (uniform) corner radius. */
+export interface PcbBoardOutlineRoundRect {
+  kind: "roundrect";
+  widthMm: number;
+  heightMm: number;
+  centerMm: PcbPointMm;
+  cornerRadiusMm: number;
+}
+
 /**
- * Closed polygon outline imported from KiCad's Edge.Cuts graphics. The
- * `widthMm` / `heightMm` / `centerMm` fields are the polygon's bounding box
- * — kept so consumers that only care about board footprint (3D, fab presets)
- * keep working without polygon awareness.
+ * Circle / ellipse. `widthMm` / `heightMm` are the bounding box (= the two
+ * diameters); a circle has `widthMm === heightMm`. An oval has them differ.
+ */
+export interface PcbBoardOutlineCircle {
+  kind: "circle";
+  widthMm: number;
+  heightMm: number;
+  centerMm: PcbPointMm;
+}
+
+/**
+ * Closed polygon outline imported from KiCad's Edge.Cuts graphics. Line-only
+ * (no arc fidelity). Kept for back-compat with existing KiCad imports; new
+ * free-form shapes use `PcbBoardContour` instead.
  */
 export interface PcbBoardOutlinePolygon {
   kind: "polygon";
@@ -208,6 +239,44 @@ export interface PcbBoardOutlinePolygon {
   heightMm: number;
   centerMm: PcbPointMm;
   pointsMm: Array<{ x: number; y: number }>;
+}
+
+/**
+ * One edge of a closed contour. The segment's start point is the previous
+ * segment's `to` (the contour's `start` for the first segment); the loop closes
+ * from the last segment's `to` back to `start`.
+ */
+export type PcbOutlineSegment =
+  | { type: "line"; to: PcbPointMm }
+  | { type: "arc"; to: PcbPointMm; centerMm: PcbPointMm; cw: boolean };
+
+/**
+ * Arc-aware free-form closed outline — the result of polygon drawing, fillet /
+ * chamfer edits, and DXF / SVG import. Arcs are preserved (not flattened) so
+ * Gerber / fabrication keep true curves.
+ */
+export interface PcbBoardContour {
+  kind: "contour";
+  widthMm: number;
+  heightMm: number;
+  centerMm: PcbPointMm;
+  start: PcbPointMm;
+  segments: PcbOutlineSegment[];
+}
+
+/**
+ * A closed shape representing a single internal cutout (slot, window, internal
+ * milling). Cutouts are punched out of the board substrate and exported as
+ * additional closed Edge.Cuts contours. Reuses the non-rect outline shapes.
+ */
+export type PcbBoardCutoutShape =
+  | PcbBoardOutlineRoundRect
+  | PcbBoardOutlineCircle
+  | PcbBoardContour;
+
+export interface PcbBoardCutout {
+  id: string;
+  shape: PcbBoardCutoutShape;
 }
 
 export interface PcbDesignRules {
@@ -243,6 +312,11 @@ export interface PcbNetClass {
 
 export interface PcbBoardSettings {
   outline: PcbBoardOutline;
+  /**
+   * Internal cutouts punched out of the board. Optional for back-compat with
+   * pre-cutout saves; readers must treat an absent field as an empty list.
+   */
+  cutouts?: PcbBoardCutout[];
   activeLayer: PcbLayerId;
   visibleLayers: PcbLayerId[];
   designRules: PcbDesignRules;
@@ -792,6 +866,22 @@ export interface DesignerPcbSetBoardSettingsCommand {
   type: "pcb_set_board_settings";
   widthMm: number;
   heightMm: number;
+  /** Optional new board center. When omitted, the existing center is kept
+   * (symmetric resize). Set by drag-resize to keep the opposite edge fixed. */
+  centerMm?: PcbPointMm;
+}
+
+/**
+ * General board-geometry command — sets the full outline shape (any kind) and,
+ * optionally, the internal cutouts. Used by the shape picker, drag handles for
+ * non-rect shapes, the polygon draw tool, import, and templates. The legacy
+ * `pcb_set_board_settings` remains for the simple rect width/height path.
+ */
+export interface DesignerPcbSetBoardOutlineCommand {
+  type: "pcb_set_board_outline";
+  outline: PcbBoardOutline;
+  /** When omitted, existing cutouts are kept; pass `[]` to clear them. */
+  cutouts?: PcbBoardCutout[];
 }
 
 export interface DesignerPcbMovePlacementCommand {
@@ -1044,6 +1134,7 @@ export type DesignerCommand =
   | DesignerRotatePrimitiveCommand
   | DesignerUpdatePrimitiveTextCommand
   | DesignerPcbSetBoardSettingsCommand
+  | DesignerPcbSetBoardOutlineCommand
   | DesignerPcbMovePlacementCommand
   | DesignerPcbMovePlacementsCommand
   | DesignerPcbRotatePlacementCommand

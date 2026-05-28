@@ -9,6 +9,7 @@ import {
 import * as THREE from "three";
 import type {
   DesignerPcbProjection,
+  PcbBoardCutout,
   PcbBoardOutline,
   PcbCopperLayerId,
   PcbFreeHole,
@@ -41,6 +42,12 @@ import { ViaLayer } from "./layers/ViaLayer";
 import { DrillLayer } from "./layers/DrillLayer";
 import { FreePadLayer } from "./layers/FreePadLayer";
 import { OverlayLayer } from "./layers/OverlayLayer";
+import { BOARD_HANDLES, handlePointMm } from "./pcb-board-resize";
+import {
+  cutoutToPath,
+  outlineToLinePoints,
+  outlineToShape,
+} from "./pcb-outline-three";
 import { collectDrills } from "./pcb-drills";
 import { SolderMaskLayer } from "./layers/SolderMaskLayer";
 import { SolderPasteLayer } from "./layers/SolderPasteLayer";
@@ -71,6 +78,9 @@ export interface PcbCameraControls {
   zoomOut(): void;
   fit(): void;
 }
+
+/** Stable empty reference so `useMemo` deps don't churn on absent cutouts. */
+const EMPTY_CUTOUTS: readonly PcbBoardCutout[] = [];
 
 function fitCameraToOutline(
   camera: THREE.OrthographicCamera,
@@ -193,32 +203,26 @@ function BoardOutline({
   projection,
   visibleLayers,
   tintColor,
+  outlineOverride,
 }: {
   projection: DesignerPcbProjection;
   visibleLayers: ReadonlySet<PcbLayerId>;
   /** Optional active-layer color override (Flux convention in Solo mode). */
   tintColor?: string;
+  /** Live resize preview; overrides the persisted outline when set. */
+  outlineOverride?: PcbBoardOutline | null;
 }): ReactElement | null {
+  const outline = outlineOverride ?? projection.board.outline;
+  const cutouts = projection.board.cutouts ?? EMPTY_CUTOUTS;
   const geometry = useMemo(() => {
-    const { widthMm, heightMm, centerMm } = projection.board.outline;
-    const halfW = widthMm / 2;
-    const halfH = heightMm / 2;
-    const left = centerMm.x - halfW;
-    const right = centerMm.x + halfW;
-    const bottom = centerMm.y - halfH;
-    const top = centerMm.y + halfH;
-    const points = [
-      new THREE.Vector3(left, bottom, 0),
-      new THREE.Vector3(right, bottom, 0),
-      new THREE.Vector3(right, bottom, 0),
-      new THREE.Vector3(right, top, 0),
-      new THREE.Vector3(right, top, 0),
-      new THREE.Vector3(left, top, 0),
-      new THREE.Vector3(left, top, 0),
-      new THREE.Vector3(left, bottom, 0),
-    ];
+    const points = outlineToLinePoints(outline);
+    // Cutouts draw on the same Edge.Cuts layer (their own closed contours).
+    for (const cut of cutouts) {
+      const ring = outlineToLinePoints(cut.shape);
+      points.push(...ring);
+    }
     return new THREE.BufferGeometry().setFromPoints(points);
-  }, [projection.board.outline]);
+  }, [outline, cutouts]);
 
   useEffect(() => () => geometry.dispose(), [geometry]);
 
@@ -237,15 +241,55 @@ function BoardOutline({
   );
 }
 
+/**
+ * Draggable resize grips at the 4 edge midpoints + 4 corners of a rectangular
+ * board outline. Rendered only in select mode (gated by the caller). Hit-tested
+ * separately in PcbCanvas via `hitBoardHandle`; these are purely visual.
+ */
+function BoardResizeHandles({
+  outline,
+}: {
+  outline: PcbBoardOutline;
+}): ReactElement {
+  const { theme } = useCanvasTheme();
+  return (
+    <group>
+      {BOARD_HANDLES.map((handle) => {
+        const p = handlePointMm(outline, handle);
+        return (
+          <mesh
+            key={handle}
+            position={[p.x, p.y, 0]}
+            renderOrder={RENDER_ORDER.BOARD_OUTLINE + 2}
+          >
+            <planeGeometry args={[0.7, 0.7]} />
+            <meshBasicMaterial
+              color={theme.pcbCanvas.selectionOutline}
+              depthTest={false}
+              depthWrite={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
 function BoardFill({
   projection,
   visualState,
+  outlineOverride,
 }: {
   projection: DesignerPcbProjection;
   visualState: PcbVisualState;
+  /** Live resize preview; overrides the persisted outline when set. */
+  outlineOverride?: PcbBoardOutline | null;
 }): ReactElement {
   const { theme } = useCanvasTheme();
-  const { widthMm, heightMm, centerMm } = projection.board.outline;
+  const outline = outlineOverride ?? projection.board.outline;
+  const { widthMm, heightMm, centerMm } = outline;
+  const cutouts = projection.board.cutouts ?? EMPTY_CUTOUTS;
   const fillColor = useMemo(() => {
     if (visualState.boardTintOpacity <= 0) return theme.pcbCanvas.boardFill;
     const base = new THREE.Color(theme.pcbCanvas.boardFill);
@@ -262,12 +306,12 @@ function BoardFill({
   const fillGeometry = useMemo(() => {
     const halfW = widthMm / 2;
     const halfH = heightMm / 2;
-    const shape = new THREE.Shape();
-    shape.moveTo(-halfW, -halfH);
-    shape.lineTo(halfW, -halfH);
-    shape.lineTo(halfW, halfH);
-    shape.lineTo(-halfW, halfH);
-    shape.closePath();
+    // Outer substrate from the actual outline shape (local space around center).
+    const shape = outlineToShape(outline, centerMm);
+    // Internal cutouts punch holes through the substrate.
+    for (const cut of cutouts) {
+      shape.holes.push(cutoutToPath(cut.shape, centerMm));
+    }
     const drills = collectDrills(
       projection.vias,
       projection.placements,
@@ -277,7 +321,7 @@ function BoardFill({
     for (const drill of drills) {
       const localX = drill.centerMm.x - centerMm.x;
       const localY = drill.centerMm.y - centerMm.y;
-      // Reject drills outside the outline (defensive — placements past board
+      // Reject drills outside the bbox (defensive — placements past board
       // edge punch nothing, otherwise THREE silently produces invalid geom).
       if (
         localX - drill.radiusMm < -halfW ||
@@ -293,10 +337,13 @@ function BoardFill({
     }
     return new THREE.ShapeGeometry(shape);
   }, [
+    outline,
+    cutouts,
     widthMm,
     heightMm,
     centerMm.x,
     centerMm.y,
+    centerMm,
     projection.vias,
     projection.placements,
     projection.freeHoles,
@@ -1073,6 +1120,13 @@ function DynamicRatsnestGuide({
 interface PcbSceneProps {
   projection: DesignerPcbProjection;
   selection?: PcbSelection;
+  /**
+   * Live board-outline preview while drag-resizing. When set, the board
+   * outline + substrate render at this rect instead of the persisted one.
+   */
+  outlineOverride?: PcbBoardOutline | null;
+  /** Show draggable board resize handles (select tool). */
+  boardHandlesVisible?: boolean;
   /** Per-placement live drag preview positions (group drag). */
   dragOverride?: ReadonlyMap<string, PcbPointMm> | null;
   /** Live drag preview positions for free primitives (hole/pad/text). */
@@ -1150,6 +1204,8 @@ interface PcbSceneProps {
 export function PcbScene({
   projection,
   selection,
+  outlineOverride = null,
+  boardHandlesVisible = false,
   dragOverride,
   freePrimitiveDragOverrides,
   highlightedNetId,
@@ -1176,6 +1232,8 @@ export function PcbScene({
   }, [
     projection,
     selection,
+    outlineOverride,
+    boardHandlesVisible,
     dragOverride,
     freePrimitiveDragOverrides,
     highlightedNetId,
@@ -1445,8 +1503,21 @@ export function PcbScene({
           majorAlpha={0.45}
           minSpacingPx={5}
         />
-        <BoardFill projection={projection} visualState={visualState} />
-        <BoardOutline projection={projection} visibleLayers={visibleLayers} />
+        <BoardFill
+          projection={projection}
+          visualState={visualState}
+          outlineOverride={outlineOverride}
+        />
+        <BoardOutline
+          projection={projection}
+          visibleLayers={visibleLayers}
+          outlineOverride={outlineOverride}
+        />
+        {boardHandlesVisible ? (
+          <BoardResizeHandles
+            outline={outlineOverride ?? projection.board.outline}
+          />
+        ) : null}
         {(["B.Cu", "In2.Cu", "In1.Cu", "F.Cu"] as const).map((layer) =>
           copperFillSet.has(layer) &&
           isCopperLayerVisible(visibleLayers, layer) &&

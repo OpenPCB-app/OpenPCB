@@ -11,10 +11,18 @@ import {
   PCB_DRILL_OUTLINE_THICKNESS_MM,
   RENDER_ORDER,
 } from "../../../../../shared/frontend/canvas/layers";
+import { useCanvasTheme } from "../../../../../shared/frontend/canvas/theme";
 import { collectDrills, type DrillInstance } from "../pcb-drills";
 
 const MOUNTING_HOLE_THRESHOLD_MM = 1.5;
 const MOUNTING_RING_THICKNESS_MM = 0.4;
+
+// Footprint pad copper from the shared FootprintRenderLayer is a *solid* disc
+// (no annular cutout) drawn at the copper order (F_COPPER = 12). To reveal the
+// drill we paint a board-colored disc + outline ring just above the top copper,
+// below the ANNULAR (13) slot used by mounting / selection rings.
+const PCB_DRILL_FILL_RENDER_ORDER = RENDER_ORDER.F_COPPER + 0.6;
+const PCB_DRILL_RING_RENDER_ORDER = RENDER_ORDER.F_COPPER + 0.7;
 
 interface DrillLayerProps {
   vias: ReadonlyArray<PcbVia>;
@@ -31,10 +39,11 @@ interface DrillLayerProps {
 }
 
 /**
- * DrillLayer — renders a thin lime-green outline around every PTH pad + via
- * drill. The actual hole is a real geometric cutout in the board substrate
- * (`BoardFill.ShapeGeometry.holes[]`), so the canvas background reads through.
- * This layer only paints the boundary ring.
+ * DrillLayer — paints every PTH pad + via drill on top of the copper so the
+ * hole reads. Footprint pad copper is a solid disc (the shared renderer has no
+ * annular cutout), so we draw a board-colored fill disc + a thin lime outline
+ * ring just above the top copper. Vias (drawn as a `RingGeometry`) get the same
+ * treatment for a consistent hole look across pads / vias / free holes.
  *
  * Mounting holes (drill ≥ 1.5 mm) additionally get a magenta annulus on the
  * top silkscreen render order to mark non-electrical mechanical holes.
@@ -47,6 +56,7 @@ export function DrillLayer({
   selectedFreeHoleIds,
   showMountingHoleRing = true,
 }: DrillLayerProps): ReactElement | null {
+  const { theme } = useCanvasTheme();
   const drills = useMemo(
     () => collectDrills(vias, placements, freeHoles, freePads),
     [vias, placements, freeHoles, freePads],
@@ -71,6 +81,7 @@ export function DrillLayer({
   if (drills.length === 0) return null;
   return (
     <>
+      <DrillHoleFills drills={drills} color={theme.pcbCanvas.boardFill} />
       <DrillOutlineRings drills={drills} />
       {mountingHoles.length > 0 ? (
         <MountingHoleRings holes={mountingHoles} />
@@ -79,6 +90,60 @@ export function DrillLayer({
         <SelectedHoleRing key={hole.id} hole={hole} />
       ))}
     </>
+  );
+}
+
+/**
+ * Per-drill board-colored fill disc, painted above the top copper so it covers
+ * the solid footprint pad and reads as an empty hole.
+ */
+function DrillHoleFills({
+  drills,
+  color,
+}: {
+  drills: ReadonlyArray<DrillInstance>;
+  color: string;
+}): ReactElement {
+  return (
+    <group renderOrder={PCB_DRILL_FILL_RENDER_ORDER}>
+      {drills.map((drill, i) => (
+        <DrillHoleFill key={i} drill={drill} color={color} />
+      ))}
+    </group>
+  );
+}
+
+function DrillHoleFill({
+  drill,
+  color,
+}: {
+  drill: DrillInstance;
+  color: string;
+}): ReactElement {
+  const geom = useMemo(
+    () => new THREE.CircleGeometry(drill.radiusMm, 32),
+    [drill.radiusMm],
+  );
+  useEffect(() => () => geom.dispose(), [geom]);
+  return (
+    <mesh
+      geometry={geom}
+      position={[drill.centerMm.x, drill.centerMm.y, 0]}
+      renderOrder={PCB_DRILL_FILL_RENDER_ORDER}
+    >
+      {/* `transparent` so this shares the transparent render pass with the
+          footprint pad copper (which is transparent because the PCB canvas runs
+          depthTest-off). Otherwise the opaque pass would draw the fill first and
+          the transparent pad would paint over it regardless of renderOrder. */}
+      <meshBasicMaterial
+        color={color}
+        depthTest={false}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+        transparent
+        opacity={1}
+      />
+    </mesh>
   );
 }
 
@@ -93,7 +158,7 @@ function DrillOutlineRings({
   drills: ReadonlyArray<DrillInstance>;
 }): ReactElement {
   return (
-    <group renderOrder={RENDER_ORDER.DRILL}>
+    <group renderOrder={PCB_DRILL_RING_RENDER_ORDER}>
       {drills.map((drill, i) => (
         <DrillOutlineRing key={i} drill={drill} />
       ))}
@@ -116,14 +181,15 @@ function DrillOutlineRing({ drill }: { drill: DrillInstance }): ReactElement {
     <mesh
       geometry={geom}
       position={[drill.centerMm.x, drill.centerMm.y, 0]}
-      renderOrder={RENDER_ORDER.DRILL}
+      renderOrder={PCB_DRILL_RING_RENDER_ORDER}
     >
       <meshBasicMaterial
         color={PCB_DRILL_OUTLINE_COLOR}
         depthTest={false}
         depthWrite={false}
         side={THREE.DoubleSide}
-        transparent={false}
+        transparent
+        opacity={1}
       />
     </mesh>
   );
