@@ -174,7 +174,7 @@ export function ToolCard({
           ) : null}
           <SourceChipRow sources={event.sources} />
           {event.errorJson ? (
-            <pre className="overflow-x-auto rounded bg-red-950/30 p-2 text-[11px] text-red-200">
+            <pre className="overflow-x-auto rounded bg-red-50 p-2 text-[11px] text-red-700 dark:bg-red-950/30 dark:text-red-200">
               {event.errorJson}
             </pre>
           ) : null}

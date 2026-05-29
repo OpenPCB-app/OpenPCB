@@ -947,10 +947,10 @@ export function AssistantSpace({
   };
 
   return (
-    <div className="flex h-full min-h-0 bg-slate-950 text-slate-100">
+    <div className="flex h-full min-h-0 bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       {sidebarOpen ? (
-        <aside className="flex w-80 min-w-0 flex-col border-r border-slate-800 bg-slate-900/80">
-          <div className="border-b border-slate-800 p-3">
+        <aside className="flex w-80 min-w-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/80">
+          <div className="border-b border-slate-200 p-3 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold">Chats</span>
               <div className="flex items-center gap-1">
@@ -958,7 +958,7 @@ export function AssistantSpace({
                   type="button"
                   onClick={() => setSidebarOpen(false)}
                   aria-label="Collapse sidebar"
-                  className="rounded p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200"
+                  className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 >
                   <PanelLeftClose className="h-4 w-4" />
                 </button>
@@ -978,7 +978,7 @@ export function AssistantSpace({
                 </button>
               </div>
             </div>
-            <div className="mt-3 flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-400">
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-400">
               <Search className="h-3.5 w-3.5" />
               <input
                 value={query}
@@ -986,7 +986,7 @@ export function AssistantSpace({
                 placeholder="Search chats"
                 name="assistant-chat-search"
                 autoComplete="off"
-                className="min-w-0 flex-1 bg-transparent text-xs outline-none"
+                className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
               />
             </div>
             <div className="mt-2 flex flex-wrap gap-1">
@@ -1019,7 +1019,7 @@ export function AssistantSpace({
                   className={`inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[10px] ${
                     filter === f.key
                       ? "bg-accent-soft text-accent-text"
-                      : "text-slate-400 hover:bg-slate-800"
+                      : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                   }`}
                 >
                   {"icon" in f ? f.icon : null}
@@ -1035,13 +1035,13 @@ export function AssistantSpace({
               ))}
             </div>
             {selectedChatIds.size > 0 ? (
-              <div className="mt-3 flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300">
+              <div className="mt-3 flex items-center justify-between rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
                 <span>{selectedChatIds.size} selected</span>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setSelectedChatIds(new Set())}
-                    className="text-slate-400 hover:text-slate-100"
+                    className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
                   >
                     Clear
                   </button>
@@ -1054,7 +1054,7 @@ export function AssistantSpace({
                         ),
                       )
                     }
-                    className="rounded bg-red-950/60 px-2 py-1 font-semibold text-red-200 hover:bg-red-900/70"
+                    className="rounded bg-red-100 px-2 py-1 font-semibold text-red-700 hover:bg-red-200 dark:bg-red-950/60 dark:text-red-200 dark:hover:bg-red-900/70"
                   >
                     Delete selected
                   </button>
@@ -1087,8 +1087,8 @@ export function AssistantSpace({
                 }}
                 className={`group flex w-full cursor-pointer flex-col gap-1 rounded-lg border-l-2 px-3 py-2.5 text-left transition-colors ${
                   selectedChatId === chat.id
-                    ? "border-l-violet-400 bg-slate-800 text-slate-100"
-                    : "border-l-transparent text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                    ? "border-l-violet-500 bg-slate-100 text-slate-900 dark:border-l-violet-400 dark:bg-slate-800 dark:text-slate-100"
+                    : "border-l-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200"
                 } ${userState.isArchived(chat.id) ? "opacity-60" : ""}`}
               >
                 <div className="flex w-full items-center justify-between gap-2">
@@ -1105,7 +1105,7 @@ export function AssistantSpace({
                       });
                     }}
                     onClick={(event) => event.stopPropagation()}
-                    className="h-3.5 w-3.5 shrink-0 rounded border-slate-600 bg-slate-950"
+                    className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-950"
                     aria-label={`Select ${chat.title}`}
                   />
                   <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
@@ -1132,14 +1132,14 @@ export function AssistantSpace({
                         y: event.clientY,
                       });
                     }}
-                    className="rounded p-1 text-slate-600 opacity-0 transition-opacity hover:bg-slate-700 hover:text-slate-200 group-hover:opacity-100"
+                    className="rounded p-1 text-slate-400 opacity-0 transition-opacity hover:bg-slate-200 hover:text-slate-700 group-hover:opacity-100 dark:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-200"
                     aria-label={`Chat actions for ${chat.title}`}
                   >
                     <MoreHorizontal className="h-4 w-4" />
                   </button>
                 </div>
                 {linkedDesign(chat) ? (
-                  <span className="inline-flex w-fit max-w-full items-center gap-1 rounded bg-slate-800 px-1.5 py-0.5 text-[9px] text-accent-text">
+                  <span className="inline-flex w-fit max-w-full items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] text-accent-text dark:bg-slate-800">
                     <Link2 className="h-2.5 w-2.5 shrink-0" />
                     <span className="truncate">{linkedDesign(chat)!.name}</span>
                   </span>
@@ -1154,15 +1154,15 @@ export function AssistantSpace({
               </div>
             ))}
             {filteredChats.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-800 p-4 text-center text-sm text-slate-500">
+              <div className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500 dark:border-slate-800">
                 No chats yet.
               </div>
             ) : null}
           </div>
-          <div className="border-t border-slate-800 p-3">
+          <div className="border-t border-slate-200 p-3 dark:border-slate-800">
             <div className="flex items-center gap-2 text-xs">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-status-success" />
-              <span className="min-w-0 flex-1 truncate font-medium text-slate-200">
+              <span className="min-w-0 flex-1 truncate font-medium text-slate-700 dark:text-slate-200">
                 {model}
               </span>
               <span className="shrink-0 text-[10px] text-slate-500">
@@ -1174,20 +1174,40 @@ export function AssistantSpace({
             </div>
           </div>
         </aside>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setSidebarOpen(true)}
-          aria-label="Expand sidebar"
-          className="flex w-9 shrink-0 items-center justify-center border-r border-slate-800 bg-slate-900/80 text-slate-500 hover:text-slate-200"
-        >
-          <PanelLeftOpen className="h-4 w-4" />
-        </button>
-      )}
+      ) : null}
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-14 items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-6">
+      <main className="relative flex min-w-0 flex-1 flex-col">
+        <div className="flex h-14 items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 dark:border-slate-800 dark:bg-slate-950/95">
           <div className="flex min-w-0 flex-1 items-center gap-2">
+            {!sidebarOpen ? (
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(true)}
+                  aria-label="Show chats"
+                  title="Show chats"
+                  className="rounded-control border border-slate-300 p-1.5 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                >
+                  <PanelLeftOpen className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void createChat().catch((err: unknown) =>
+                      setError(
+                        err instanceof Error ? err.message : String(err),
+                      ),
+                    )
+                  }
+                  aria-label="New chat"
+                  title="New chat"
+                  className="rounded-control border border-slate-300 p-1.5 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                >
+                  <MessageSquarePlus className="h-4 w-4" />
+                </button>
+                <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-800" />
+              </div>
+            ) : null}
             {editingTitle ? (
               <input
                 autoFocus
@@ -1201,7 +1221,7 @@ export function AssistantSpace({
                   if (e.key === "Enter") void commitTitle();
                   if (e.key === "Escape") setEditingTitle(false);
                 }}
-                className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm font-medium text-slate-100 outline-none focus-visible:border-violet-500 disabled:opacity-60"
+                className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-sm font-medium text-slate-900 outline-none focus-visible:border-violet-500 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             ) : (
               <button
@@ -1211,11 +1231,11 @@ export function AssistantSpace({
                 className="group flex min-w-0 items-center gap-1.5 text-left"
                 title="Rename chat"
               >
-                <span className="truncate text-sm font-medium text-slate-100">
+                <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
                   {selectedChat?.title ?? "New chat"}
                 </span>
                 {selectedChat ? (
-                  <Pencil className="h-3 w-3 shrink-0 text-slate-600 opacity-0 group-hover:opacity-100" />
+                  <Pencil className="h-3 w-3 shrink-0 text-slate-400 opacity-0 group-hover:opacity-100 dark:text-slate-600" />
                 ) : null}
               </button>
             )}
@@ -1223,7 +1243,7 @@ export function AssistantSpace({
               <button
                 type="button"
                 onClick={() => navigateToModule("designer", selectedLinked.id)}
-                className="inline-flex shrink-0 items-center gap-1 rounded-control border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-accent-text hover:bg-slate-800"
+                className="inline-flex shrink-0 items-center gap-1 rounded-control border border-slate-300 bg-white px-2 py-1 text-[11px] text-accent-text hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
                 title="Open linked design"
               >
                 <Link2 className="h-3 w-3" />
@@ -1236,7 +1256,7 @@ export function AssistantSpace({
           <div className="flex shrink-0 items-center gap-2">
             {toolCount !== null ? (
               <span
-                className="inline-flex items-center gap-1 rounded-control border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-300"
+                className="inline-flex items-center gap-1 rounded-control border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
                 title={`${toolCount} grounded tools available`}
               >
                 <Wrench className="h-3 w-3 text-status-success" />
@@ -1262,7 +1282,7 @@ export function AssistantSpace({
                   type="button"
                   aria-label="Chat actions"
                   disabled={!selectedChat}
-                  className="rounded-control border border-slate-700 p-1.5 text-slate-400 hover:bg-slate-800 disabled:opacity-40"
+                  className="rounded-control border border-slate-300 p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
                 >
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
@@ -1315,7 +1335,7 @@ export function AssistantSpace({
           ref={scroll.scrollRef}
           className="relative min-h-0 flex-1 overflow-auto"
         >
-          <div className="mx-auto max-w-5xl pb-8 pt-4">
+          <div className="mx-auto max-w-5xl pb-48 pt-4">
             <div ref={topSentinelRef} className="h-px" />
             {messagesPage.loadingOlder ? (
               <div className="py-2 text-center text-xs text-slate-500">
@@ -1323,7 +1343,7 @@ export function AssistantSpace({
               </div>
             ) : null}
             {chatOnly ? (
-              <div className="mx-4 mb-3 rounded-xl border border-amber-900/60 bg-amber-950/20 p-3 text-xs text-amber-200">
+              <div className="mx-4 mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
                 This provider is running without grounded OpenPCB tools. Answers
                 will not use library or designer data.
               </div>
@@ -1332,14 +1352,14 @@ export function AssistantSpace({
               <div
                 role="alert"
                 aria-live="assertive"
-                className="mx-4 mb-4 flex items-start gap-2 rounded-xl border border-red-900/70 bg-red-950/30 p-4 text-sm text-red-200"
+                className="mx-4 mb-4 flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-200"
               >
                 <span className="min-w-0 flex-1 break-words">{error}</span>
                 <button
                   type="button"
                   onClick={() => setError(null)}
                   aria-label="Dismiss error"
-                  className="shrink-0 rounded p-0.5 text-red-300 hover:bg-red-900/40 hover:text-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400"
+                  className="shrink-0 rounded p-0.5 text-red-500 hover:bg-red-100 hover:text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400 dark:text-red-300 dark:hover:bg-red-900/40 dark:hover:text-red-100"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -1372,9 +1392,9 @@ export function AssistantSpace({
                     <Fragment key={message.id}>
                       {showDivider ? (
                         <div className="my-3 flex items-center gap-3 px-4 text-[10px] uppercase tracking-wider text-slate-500">
-                          <span className="h-px flex-1 bg-slate-800" />
+                          <span className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
                           {dateDividerLabel(message.createdAt)}
-                          <span className="h-px flex-1 bg-slate-800" />
+                          <span className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
                         </div>
                       ) : null}
                       <MessageCard
@@ -1438,50 +1458,61 @@ export function AssistantSpace({
               />
             ) : null}
           </div>
-          {showNewMessagesPill ? (
-            <button
-              type="button"
-              onClick={() => {
-                scroll.scrollToBottom();
-                setShowNewMessagesPill(false);
-              }}
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-violet-800 bg-violet-950 px-3 py-1 text-xs text-violet-100 shadow-lg"
-            >
-              ↓ New messages
-            </button>
-          ) : null}
         </div>
 
-        <div className="border-t border-slate-800/50 bg-slate-950 p-4">
-          <div className="mx-auto max-w-5xl">
-            <ChatComposer
-              value={input}
-              onChange={setInput}
-              onSubmit={() => void submit()}
-              onStop={
-                selectedRun
-                  ? () =>
-                      void stopRun(selectedRun).catch((err: unknown) =>
-                        setError(
-                          err instanceof Error ? err.message : String(err),
-                        ),
-                      )
-                  : undefined
-              }
-              busy={loading}
-              toolCount={toolCount ?? undefined}
-              contextBudgetKb={contextBudgetKb(settings?.contextSizePreference)}
-              quickActions={QUICK_ACTIONS}
-            />
-            <div className="mt-1.5 text-center text-[10px] text-slate-500">
-              Assistant can make mistakes. Verify critical design decisions.
+        {/* Floating composer — overlays the chat (ChatGPT-style) instead of a
+            fixed bottom bar. A gradient fade lets messages scroll under it. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col">
+          <div className="h-20 bg-gradient-to-t from-slate-50 to-transparent dark:from-slate-950" />
+          <div className="bg-slate-50 px-4 pb-4 dark:bg-slate-950">
+            <div className="pointer-events-auto mx-auto w-full max-w-5xl">
+              {showNewMessagesPill ? (
+                <div className="mb-2 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      scroll.scrollToBottom();
+                      setShowNewMessagesPill(false);
+                    }}
+                    className="rounded-full border border-violet-300 bg-violet-100 px-3 py-1 text-xs text-violet-700 shadow-lg dark:border-violet-800 dark:bg-violet-950 dark:text-violet-100"
+                  >
+                    ↓ New messages
+                  </button>
+                </div>
+              ) : null}
+              <div className="rounded-xl shadow-xl shadow-slate-900/5 dark:shadow-black/40">
+                <ChatComposer
+                  value={input}
+                  onChange={setInput}
+                  onSubmit={() => void submit()}
+                  onStop={
+                    selectedRun
+                      ? () =>
+                          void stopRun(selectedRun).catch((err: unknown) =>
+                            setError(
+                              err instanceof Error ? err.message : String(err),
+                            ),
+                          )
+                      : undefined
+                  }
+                  busy={loading}
+                  toolCount={toolCount ?? undefined}
+                  contextBudgetKb={contextBudgetKb(
+                    settings?.contextSizePreference,
+                  )}
+                  quickActions={QUICK_ACTIONS}
+                />
+              </div>
+              <div className="mt-1.5 text-center text-[10px] text-slate-500">
+                Assistant can make mistakes. Verify critical design decisions.
+              </div>
             </div>
           </div>
         </div>
       </main>
       {contextMenu ? (
         <div
-          className="fixed z-50 rounded-xl border border-slate-700 bg-slate-900 p-1 shadow-xl"
+          className="fixed z-50 rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           <button
@@ -1491,7 +1522,7 @@ export function AssistantSpace({
                 setError(err instanceof Error ? err.message : String(err)),
               )
             }
-            className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-800"
+            className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             Rename chat
           </button>
@@ -1502,7 +1533,7 @@ export function AssistantSpace({
                 setError(err instanceof Error ? err.message : String(err)),
               )
             }
-            className="rounded-lg px-3 py-2 text-sm text-red-300 hover:bg-red-950/40"
+            className="rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40"
           >
             Delete chat
           </button>
@@ -1525,8 +1556,8 @@ function EmptyState({
   onPrompt: (prompt: string) => void;
 }): ReactElement {
   return (
-    <div className="rounded-3xl border border-dashed border-slate-800 bg-slate-900/40 p-10 text-center">
-      <Sparkles className="mx-auto h-8 w-8 text-violet-300" />
+    <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-slate-800 dark:bg-slate-900/40">
+      <Sparkles className="mx-auto h-8 w-8 text-violet-500 dark:text-violet-300" />
       <h2 className="mt-4 text-lg font-semibold">
         Start a PCB-focused conversation
       </h2>
@@ -1539,7 +1570,7 @@ function EmptyState({
             key={prompt}
             type="button"
             onClick={() => onPrompt(prompt)}
-            className="rounded-pill border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:border-violet-500/50 hover:bg-violet-500/10 hover:text-violet-200"
+            className="rounded-pill border border-slate-300 px-3 py-1.5 text-xs text-slate-600 transition-colors hover:border-violet-400 hover:bg-violet-500/10 hover:text-violet-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-violet-500/50 dark:hover:text-violet-200"
           >
             {prompt}
           </button>

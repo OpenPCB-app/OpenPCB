@@ -70,7 +70,7 @@ export function AssistantRunStatusCard({
     <div
       role="status"
       aria-live="polite"
-      className={`rounded-xl border p-3 text-xs ${terminal ? "border-amber-900/60 bg-amber-950/20 text-amber-100" : "border-violet-900/60 bg-violet-950/20 text-violet-100"}`}
+      className={`rounded-xl border p-3 text-xs ${terminal ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100" : "border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/20 dark:text-violet-100"}`}
     >
       <div className="flex items-start gap-3">
         {terminal ? (
@@ -87,14 +87,16 @@ export function AssistantRunStatusCard({
             {run.currentStage || "Assistant is working…"}
           </div>
           {run.lastError ? (
-            <div className="text-amber-200/90">{run.lastError}</div>
+            <div className="text-amber-700/90 dark:text-amber-200/90">
+              {run.lastError}
+            </div>
           ) : null}
           {run.activeTools.length > 0 ? (
             <div className="flex flex-wrap gap-1.5 pt-1">
               {run.activeTools.map((tool) => (
                 <span
                   key={tool.callId}
-                  className="rounded-full border border-slate-700 bg-slate-950/40 px-2 py-0.5 text-[11px] text-slate-300"
+                  className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300"
                 >
                   {labelTool(tool.name)} · {tool.status}
                 </span>
@@ -107,7 +109,7 @@ export function AssistantRunStatusCard({
             <button
               type="button"
               onClick={onStop}
-              className="inline-flex items-center gap-1 rounded bg-slate-900 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
+              className="inline-flex items-center gap-1 rounded bg-slate-200 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-300 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               <Square className="h-3 w-3" /> Stop
             </button>
@@ -115,7 +117,7 @@ export function AssistantRunStatusCard({
             <button
               type="button"
               onClick={onRetry}
-              className="inline-flex items-center gap-1 rounded bg-slate-900 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
+              className="inline-flex items-center gap-1 rounded bg-slate-200 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-300 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               <RotateCcw className="h-3 w-3" /> Retry
             </button>

@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { AlertTriangle, ChevronRight, Sparkles } from "lucide-react";
 import { MarkdownContent } from "../../../../shared/frontend/markdown";
+import { useTheme } from "../../../../core/frontend/src/providers/ThemeProvider";
 import type {
   AssistantMessage,
   AssistantToolEventDto,
@@ -25,20 +26,25 @@ import { GenericProposalCard } from "./GenericProposalCard";
 const PROSE_CLASSES = [
   "prose",
   "prose-sm",
-  "prose-invert",
+  "dark:prose-invert",
   "max-w-none",
   "prose-p:my-2",
   "prose-headings:mt-4",
   "prose-headings:mb-2",
-  "prose-headings:text-slate-100",
+  "prose-headings:text-slate-900",
+  "dark:prose-headings:text-slate-100",
   "prose-li:my-0.5",
   "prose-ul:my-2",
   "prose-ol:my-2",
-  "prose-pre:bg-slate-950/80",
+  "prose-pre:bg-slate-100",
+  "dark:prose-pre:bg-slate-950/80",
   "prose-pre:border",
-  "prose-pre:border-slate-800",
-  "prose-code:bg-violet-500/15",
-  "prose-code:text-violet-200",
+  "prose-pre:border-slate-200",
+  "dark:prose-pre:border-slate-800",
+  "prose-code:bg-violet-500/10",
+  "dark:prose-code:bg-violet-500/15",
+  "prose-code:text-violet-700",
+  "dark:prose-code:text-violet-200",
   "prose-code:font-mono",
   "prose-code:px-1",
   "prose-code:py-0.5",
@@ -47,20 +53,27 @@ const PROSE_CLASSES = [
   "prose-code:after:content-none",
   "prose-table:text-xs",
   "prose-table:w-full",
-  "prose-th:bg-slate-800/60",
+  "prose-th:bg-slate-100",
+  "dark:prose-th:bg-slate-800/60",
   "prose-th:px-2",
   "prose-th:py-1",
   "prose-th:text-left",
   "prose-td:px-2",
   "prose-td:py-1",
   "prose-td:border",
-  "prose-td:border-slate-800",
+  "prose-td:border-slate-200",
+  "dark:prose-td:border-slate-800",
   "prose-th:border",
-  "prose-th:border-slate-800",
-  "prose-a:text-violet-400",
-  "hover:prose-a:text-violet-300",
-  "prose-blockquote:border-l-violet-700",
-  "prose-blockquote:text-slate-300",
+  "prose-th:border-slate-200",
+  "dark:prose-th:border-slate-800",
+  "prose-a:text-violet-600",
+  "dark:prose-a:text-violet-400",
+  "hover:prose-a:text-violet-700",
+  "dark:hover:prose-a:text-violet-300",
+  "prose-blockquote:border-l-violet-300",
+  "dark:prose-blockquote:border-l-violet-700",
+  "prose-blockquote:text-slate-600",
+  "dark:prose-blockquote:text-slate-300",
 ].join(" ");
 
 const COMPACT_PROSE_CLASSES = [
@@ -231,6 +244,7 @@ export function MessageCard({
   onRetryRun?: (run: ActiveRunState) => void;
   compact?: boolean;
 }): ReactElement {
+  const { mode } = useTheme();
   const isUser = message.role === "user";
   const cleanedContent = isUser
     ? message.content
@@ -294,12 +308,12 @@ export function MessageCard({
     <div
       className={`flex min-w-0 ${compact ? "gap-3 px-3 py-4" : "gap-3 px-4 py-6"}`}
     >
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-violet-300">
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-violet-600 dark:text-violet-300">
         <Sparkles className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1 space-y-3">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate-300">
+          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
             {isUser ? "You" : "Assistant"}
           </span>
           {showStreamingPulse ? (
@@ -329,7 +343,7 @@ export function MessageCard({
           // before the answer (thinking precedes the response). Auto-opened when there
           // is no visible answer so the bubble is never blank.
           <details open={!hasContent} className="group">
-            <summary className="inline-flex cursor-pointer select-none items-center gap-1 text-[11px] text-slate-500 transition-colors hover:text-slate-300 [&::-webkit-details-marker]:hidden">
+            <summary className="inline-flex cursor-pointer select-none items-center gap-1 text-[11px] text-slate-500 transition-colors hover:text-slate-700 dark:hover:text-slate-300 [&::-webkit-details-marker]:hidden">
               <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
               Reasoning
             </summary>
@@ -338,29 +352,9 @@ export function MessageCard({
             </div>
           </details>
         ) : null}
-        {hasContent ? (
-          isUser ? (
-            <div
-              className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${compact ? "text-slate-800 dark:text-slate-100" : "text-slate-100"}`}
-            >
-              {cleanedContent}
-            </div>
-          ) : (
-            <MarkdownContent
-              className={compact ? COMPACT_PROSE_CLASSES : PROSE_CLASSES}
-              streaming={isStreaming}
-              mermaidTheme="dark"
-            >
-              {cleanedContent}
-            </MarkdownContent>
-          )
-        ) : null}
-        {truncated ? (
-          <div className="flex items-center gap-1.5 text-[11px] text-status-warning">
-            <AlertTriangle className="h-3 w-3 shrink-0" />
-            Response may be truncated (token limit reached).
-          </div>
-        ) : null}
+        {/* Tool activity precedes the written answer chronologically (tools run,
+            then the model composes its response), so tool calls + their result
+            cards render after the reasoning and before the response text. */}
         {componentBlocks.length > 0 ? (
           <div className="space-y-3">
             {componentBlocks.map((data, idx) => (
@@ -421,6 +415,29 @@ export function MessageCard({
             {visibleToolEvents.map((event) => (
               <ToolCard key={event.id} event={event} compact={compact} />
             ))}
+          </div>
+        ) : null}
+        {hasContent ? (
+          isUser ? (
+            <div
+              className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${compact ? "text-slate-800 dark:text-slate-100" : "text-slate-100"}`}
+            >
+              {cleanedContent}
+            </div>
+          ) : (
+            <MarkdownContent
+              className={compact ? COMPACT_PROSE_CLASSES : PROSE_CLASSES}
+              streaming={isStreaming}
+              mermaidTheme={mode === "dark" ? "dark" : "light"}
+            >
+              {cleanedContent}
+            </MarkdownContent>
+          )
+        ) : null}
+        {truncated ? (
+          <div className="flex items-center gap-1.5 text-[11px] text-status-warning">
+            <AlertTriangle className="h-3 w-3 shrink-0" />
+            Response may be truncated (token limit reached).
           </div>
         ) : null}
         {runState ? (

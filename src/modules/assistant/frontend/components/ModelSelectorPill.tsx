@@ -89,16 +89,16 @@ export function ModelSelectorPill({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-8 max-w-[260px] items-center gap-1.5 rounded-control border border-slate-700 bg-slate-900 px-2.5 text-xs text-slate-300 hover:border-slate-600"
+        className="flex h-8 max-w-[260px] items-center gap-1.5 rounded-control border border-slate-300 bg-white px-2.5 text-xs text-slate-600 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600"
         title={dot.title}
       >
         <span
           className={`h-2 w-2 shrink-0 rounded-full ${dot.cls} shadow-[0_0_6px_currentColor]`}
         />
-        <span className="truncate font-medium text-slate-200">
+        <span className="truncate font-medium text-slate-700 dark:text-slate-200">
           {shortModel(model)}
         </span>
-        <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-slate-400">
+        <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
           {PRESET_SHORT[promptPresetId]}
         </span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-500" />
@@ -106,7 +106,7 @@ export function ModelSelectorPill({
 
       {open ? (
         <div
-          className={`absolute top-full z-40 mt-1 w-72 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl ${align === "right" ? "right-0" : "left-0"}`}
+          className={`absolute top-full z-40 mt-1 w-72 rounded-lg border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900 ${align === "right" ? "right-0" : "left-0"}`}
         >
           <label className="block text-[10px] uppercase tracking-wide text-slate-500">
             Provider
@@ -118,7 +118,7 @@ export function ModelSelectorPill({
               onProviderChange(e.target.value);
               if (provider) onModelChange(provider.defaultModel);
             }}
-            className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 outline-none"
+            className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
           >
             {providers
               .filter((p) => p.enabled)
@@ -140,7 +140,7 @@ export function ModelSelectorPill({
                   : (models[0]?.modelId ?? "")
               }
               onChange={(e) => onModelChange(e.target.value)}
-              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-xs text-slate-200 outline-none"
+              className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
             >
               {models.map((m) => (
                 <option key={m.modelId} value={m.modelId}>
@@ -152,7 +152,7 @@ export function ModelSelectorPill({
             <input
               value={model}
               onChange={(e) => onModelChange(e.target.value)}
-              className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-xs text-slate-200 outline-none"
+              className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
             />
           )}
 
@@ -164,7 +164,7 @@ export function ModelSelectorPill({
             onChange={(e) =>
               onPresetChange(e.target.value as AssistantPromptPresetId)
             }
-            className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 outline-none"
+            className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
           >
             {(presets.length > 0
               ? presets.map((p) => ({ id: p.id, label: p.label }))
@@ -184,7 +184,7 @@ export function ModelSelectorPill({
               setOpen(false);
               onOpenSettings?.();
             }}
-            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded border border-slate-700 py-1.5 text-[11px] text-slate-400 hover:bg-slate-800"
+            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded border border-slate-300 py-1.5 text-[11px] text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
           >
             <Settings className="h-3 w-3" /> Configure providers
           </button>

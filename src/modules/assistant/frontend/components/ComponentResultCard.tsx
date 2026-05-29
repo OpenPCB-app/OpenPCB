@@ -139,7 +139,7 @@ export function ComponentResultsBlock({
       ) : null}
 
       {data.noLocalMatch ? (
-        <div className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-3 text-xs text-amber-200">
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
           <div className="flex items-center gap-2 font-medium">
             <PackageOpen className="h-4 w-4" />
             No installed component matches.
@@ -148,12 +148,14 @@ export function ComponentResultsBlock({
             <ul className="mt-2 space-y-1">
               {data.genericSuggestions.map((s) => (
                 <li key={s.label} className="flex items-start gap-2">
-                  <span className="rounded bg-amber-900/40 px-1 text-[10px] uppercase text-amber-300">
+                  <span className="rounded bg-amber-200 px-1 text-[10px] uppercase text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
                     not installed
                   </span>
                   <div>
-                    <div className="font-mono text-amber-100">{s.label}</div>
-                    <div className="text-[11px] text-amber-300/80">
+                    <div className="font-mono text-amber-900 dark:text-amber-100">
+                      {s.label}
+                    </div>
+                    <div className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
                       {s.reason}
                     </div>
                   </div>
@@ -162,7 +164,7 @@ export function ComponentResultsBlock({
             </ul>
           ) : null}
           {data.importGuidance ? (
-            <p className="mt-2 inline-flex items-center gap-1 text-amber-300">
+            <p className="mt-2 inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
               <ExternalLink className="h-3 w-3" />
               {data.importGuidance}
             </p>

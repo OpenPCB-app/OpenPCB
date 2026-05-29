@@ -142,7 +142,7 @@ function nextUntitledName(existingNames: readonly string[]): string {
 
 function CanvasEmptyState({ message }: { message: string }): ReactElement {
   return (
-    <div className="flex h-full w-full items-center justify-center bg-slate-950">
+    <div className="flex h-full w-full items-center justify-center bg-slate-50 dark:bg-slate-950">
       <p className="text-sm text-slate-500 dark:text-slate-400">{message}</p>
     </div>
   );
@@ -795,7 +795,7 @@ function DesignerSpaceInner({
   };
 
   return (
-    <div className="flex h-full w-full flex-col bg-slate-950">
+    <div className="flex h-full w-full flex-col bg-slate-50 dark:bg-slate-950">
       <DesignerHeader
         activeView={state.activeView}
         designs={state.designs}
@@ -885,7 +885,7 @@ function DesignerSpaceInner({
             </div>
 
             <div
-              className="group relative w-1 shrink-0 cursor-col-resize bg-slate-800/40 hover:bg-violet-600/60"
+              className="group relative w-1 shrink-0 cursor-col-resize bg-slate-200 hover:bg-violet-600/60 dark:bg-slate-800/40"
               onPointerDown={startResize}
             >
               <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
@@ -991,7 +991,7 @@ function DesignerSpaceInner({
         {chatOpen ? (
           <>
             <div
-              className="group relative w-1 shrink-0 cursor-col-resize bg-slate-800/20 hover:bg-violet-600/60"
+              className="group relative w-1 shrink-0 cursor-col-resize bg-slate-200/70 hover:bg-violet-600/60 dark:bg-slate-800/20"
               onPointerDown={startChatResize}
             >
               <div className="absolute inset-y-0 -left-1.5 -right-1.5" />

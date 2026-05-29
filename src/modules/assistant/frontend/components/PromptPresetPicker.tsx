@@ -20,7 +20,7 @@ export function PromptPresetPicker({
       onChange={(event) =>
         onChange(event.target.value as AssistantPromptPresetId)
       }
-      className="h-8 rounded-lg border border-slate-800 bg-slate-900 px-2 text-xs text-slate-300 hover:text-white"
+      className="h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white"
       title="Prompt preset"
     >
       {presets.map((preset) => (
