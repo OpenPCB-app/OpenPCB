@@ -39,7 +39,7 @@ type ProviderInput = {
 };
 
 const emptyProvider: ProviderInput = {
-  label: "Custom provider",
+  label: "Custom OpenAI-compatible",
   kind: "openai-compatible",
   baseUrl: "http://127.0.0.1:1234/v1",
   apiKey: "",
