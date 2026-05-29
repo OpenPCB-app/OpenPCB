@@ -59,10 +59,16 @@ export function resolveThreeDPreviewState(
   if (!metadata) {
     return { kind: "loading" };
   }
-  if (metadata.status === "pending" || metadata.status === PENDING_CLIENT_CONVERSION) {
+  if (
+    metadata.status === "pending" ||
+    metadata.status === PENDING_CLIENT_CONVERSION
+  ) {
     return { kind: "pending_client_conversion" };
   }
-  if (metadata.status === "unsupported_format" || metadata.sourceFilename?.toLowerCase().endsWith(".wrl")) {
+  if (
+    metadata.status === "unsupported_format" ||
+    metadata.sourceFilename?.toLowerCase().endsWith(".wrl")
+  ) {
     return { kind: "unsupported_format" };
   }
   if (metadata.status === FAILED || metadata.status === "error") {
@@ -176,7 +182,11 @@ function ThreeDCanvas({
       <directionalLight position={[-5, -3, 6]} intensity={1.2} />
       <Suspense fallback={null}>
         <Bounds fit clip observe margin={1.25}>
-          <ComponentGLB modelUrl={modelUrl} category={category} mountType={mountType} />
+          <ComponentGLB
+            modelUrl={modelUrl}
+            category={category}
+            mountType={mountType}
+          />
         </Bounds>
       </Suspense>
       <InvalidateOnControlsChange />
@@ -223,17 +233,25 @@ export function ThreeDComponentPreview({
 
     const run = async () => {
       try {
-        const response = await fetch(`${baseUrl}/meta`, { signal: controller.signal });
+        const response = await fetch(`${baseUrl}/meta`, {
+          signal: controller.signal,
+        });
         const payload = await response.json();
         if (!response.ok) {
-          throw new Error(`3D model metadata fetch failed (HTTP ${response.status})`);
+          throw new Error(
+            `3D model metadata fetch failed (HTTP ${response.status})`,
+          );
         }
         setMetadata(normalizeMetadataPayload(payload));
       } catch (error) {
         if (controller.signal.aborted) {
           return;
         }
-        setLoadError(error instanceof Error ? error.message : "Failed to load 3D model metadata");
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load 3D model metadata",
+        );
       }
     };
 
@@ -247,17 +265,25 @@ export function ThreeDComponentPreview({
     setLoadError(null);
     void (async () => {
       try {
-        const response = await fetch(`${baseUrl}/meta`, { signal: controller.signal });
+        const response = await fetch(`${baseUrl}/meta`, {
+          signal: controller.signal,
+        });
         const payload = await response.json();
         if (!response.ok) {
-          throw new Error(`3D model metadata fetch failed (HTTP ${response.status})`);
+          throw new Error(
+            `3D model metadata fetch failed (HTTP ${response.status})`,
+          );
         }
         setMetadata(normalizeMetadataPayload(payload));
       } catch (error) {
         if (controller.signal.aborted) {
           return;
         }
-        setLoadError(error instanceof Error ? error.message : "Failed to load 3D model metadata");
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load 3D model metadata",
+        );
       }
     })();
   }, [baseUrl]);
@@ -305,31 +331,43 @@ export function ThreeDComponentPreview({
         const failureMessage =
           error instanceof Error ? error.message : "3D model conversion failed";
         setMetadata((prev) =>
-          prev ? { ...prev, status: FAILED, errorMessage: failureMessage } : prev,
+          prev
+            ? { ...prev, status: FAILED, errorMessage: failureMessage }
+            : prev,
         );
         setLoadError(failureMessage);
       })
       .finally(() => {
         setRetrying(false);
       });
-  }, [backendURL, baseUrl, canRetryConversion, footprintId, metadata, moduleId, refreshMetadata]);
+  }, [
+    backendURL,
+    baseUrl,
+    canRetryConversion,
+    footprintId,
+    metadata,
+    moduleId,
+    refreshMetadata,
+  ]);
 
-  const modelUrl = metadata?.glbSha256 ? `${baseUrl}?sha=${metadata.glbSha256}` : (baseUrl ?? "");
+  const modelUrl = metadata?.glbSha256
+    ? `${baseUrl}?sha=${metadata.glbSha256}`
+    : (baseUrl ?? "");
   const state = resolveThreeDPreviewState(metadata, modelUrl, loadError);
 
   return (
-    <div className="h-64 overflow-hidden rounded-xl border border-slate-200 bg-slate-950 dark:border-slate-800">
+    <div className="h-full min-h-[260px] flex-1 overflow-hidden bg-slate-950">
       {state.kind === "ready" ? (
-        <ThreeDCanvas modelUrl={state.modelUrl} category={category} mountType={mountType} />
+        <ThreeDCanvas
+          modelUrl={state.modelUrl}
+          category={category}
+          mountType={mountType}
+        />
       ) : (
         <ThreeDPreviewStatePanel
           state={state}
           isBuiltin={isBuiltin}
-          onRetry={
-            canRetryConversion && !retrying
-              ? handleRetry
-              : null
-          }
+          onRetry={canRetryConversion && !retrying ? handleRetry : null}
         />
       )}
     </div>

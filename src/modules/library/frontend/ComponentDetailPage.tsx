@@ -1,4 +1,15 @@
-import { ArrowLeft, Copy, Lock, Pencil, Save, Upload, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Copy,
+  Lock,
+  Maximize2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Save,
+  Upload,
+  X,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -11,41 +22,33 @@ import {
   SymbolPreviewCanvas,
 } from "../../../shared/frontend/canvas/preview";
 import type { LibraryComponent } from "../../../sdks/library";
-import type {
-  FootprintRenderModel,
-  SymbolRenderModel,
-} from "../../../shared/rendering";
 import { useTheme } from "../../../core/frontend/src/providers/ThemeProvider";
-import { TagChip } from "./components/TagChip";
 import { TagTokenInput } from "./components/TagTokenInput";
+import { DetailsCard } from "./components/DetailsCard";
+import { FootprintOptionsList } from "./components/FootprintOptionsList";
+import { PinsTable } from "./components/PinsTable";
+import { PreviewModal } from "./components/PreviewModal";
 import { useLibraryTags } from "./hooks/useLibraryTags";
+import { useFootprintGeometry } from "./hooks/useFootprintGeometry";
 import type { ComponentDetailPayload } from "./types";
 import { ThreeDComponentPreview } from "./three-d/ThreeDComponentPreview";
 import {
   uploadFootprintStepModel,
   validateStepUploadFile,
 } from "./three-d/model-conversion";
+import {
+  asFootprintRender,
+  asSymbolRender,
+  formatSourceLabel,
+  getDefaultVariant,
+  packageLabel,
+  splitTags,
+} from "./detail-helpers";
 import { toUserError } from "./utils";
 
 export { uploadFootprintStepModel, validateStepUploadFile };
 
 type UploadStatus = "idle" | "converting" | "uploading" | "ready";
-
-function asSymbolRender(value: unknown): SymbolRenderModel | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-  const record = value as { kind?: unknown };
-  return record.kind === "symbol" ? (value as SymbolRenderModel) : null;
-}
-
-function asFootprintRender(value: unknown): FootprintRenderModel | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-  const record = value as { kind?: unknown };
-  return record.kind === "footprint" ? (value as FootprintRenderModel) : null;
-}
 
 export function ComponentDetailPage({
   backendURL,
@@ -79,6 +82,11 @@ export function ComponentDetailPage({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [tagsRefreshToken, setTagsRefreshToken] = useState(0);
+  // Local UI selection — no command, no persistence (spec §6).
+  const [selectedFootprintId, setSelectedFootprintId] = useState("");
+  const [fullscreen, setFullscreen] = useState<null | "symbol" | "footprint">(
+    null,
+  );
 
   const { tags: tagSuggestions } = useLibraryTags({
     backendURL,
@@ -139,25 +147,64 @@ export function ComponentDetailPage({
     return () => controller.abort();
   }, [backendURL, componentId, moduleId]);
 
+  // Reset selection to the default footprint whenever the component changes.
+  const defaultFootprintId = detail?.footprint.id ?? "";
+  useEffect(() => {
+    setSelectedFootprintId(defaultFootprintId);
+  }, [defaultFootprintId]);
+
+  const effectiveSelectedId = selectedFootprintId || defaultFootprintId;
+
   const symbolPreview = useMemo(
     () => asSymbolRender(detail?.symbol.preview),
     [detail?.symbol.preview],
   );
-  const footprintPreview = useMemo(
+  const defaultModel = useMemo(
     () => asFootprintRender(detail?.footprint.preview),
     [detail?.footprint.preview],
   );
+
+  const geometry = useFootprintGeometry({
+    backendURL,
+    moduleId,
+    selectedFootprintId: effectiveSelectedId,
+    defaultFootprintId,
+    defaultModel,
+  });
+
+  const variants = useMemo(
+    () => detail?.footprintVariants ?? [],
+    [detail?.footprintVariants],
+  );
+  const hasOptions = variants.length > 1;
+  const selectedVariant = useMemo(
+    () =>
+      variants.find((variant) => variant.footprintId === effectiveSelectedId) ??
+      (detail ? getDefaultVariant(detail) : null),
+    [variants, effectiveSelectedId, detail],
+  );
+
+  const electricalTypeByPin = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const pin of symbolPreview?.pins ?? []) {
+      if (pin.number) {
+        map.set(pin.number, pin.electricalType);
+      }
+    }
+    return map;
+  }, [symbolPreview]);
+
   const isPlaceholderFootprint =
     detail?.component.tags.some(
       (tag) => tag.toLowerCase() === "placeholder-footprint",
     ) ?? false;
   const isBuiltin = detail?.component.isBuiltin ?? false;
+  const tagSplit = useMemo(
+    () => splitTags(detail?.component.tags ?? []),
+    [detail?.component.tags],
+  );
   const componentCategory =
-    detail?.component.tags.find(
-      (tag) => tag.toLowerCase() !== "placeholder-footprint",
-    ) ??
-    detail?.component.name ??
-    "component";
+    tagSplit.semantic[0] ?? detail?.component.name ?? "component";
 
   const beginEdit = useCallback(() => {
     if (!detail || isBuiltin) return;
@@ -205,14 +252,7 @@ export function ComponentDetailPage({
         );
       }
       const updated = payload.data.component;
-      setDetail((prev) =>
-        prev
-          ? {
-              ...prev,
-              component: updated,
-            }
-          : prev,
-      );
+      setDetail((prev) => (prev ? { ...prev, component: updated } : prev));
       setEditing(false);
       setTagsRefreshToken((tick) => tick + 1);
       onUpdated?.(updated);
@@ -268,7 +308,13 @@ export function ComponentDetailPage({
 
   const handleStepUpload = useCallback(
     async (file: File | null | undefined) => {
-      if (!file || !backendURL || !detail || isBuiltin) {
+      if (
+        !file ||
+        !backendURL ||
+        !detail ||
+        isBuiltin ||
+        !effectiveSelectedId
+      ) {
         return;
       }
       const validationError = validateStepUploadFile(file);
@@ -285,7 +331,7 @@ export function ComponentDetailPage({
         await uploadFootprintStepModel({
           backendURL,
           moduleId,
-          footprintId: detail.footprint.id,
+          footprintId: effectiveSelectedId,
           stepFile: file,
           signal: controller.signal,
           onProgress: (status) => {
@@ -311,16 +357,29 @@ export function ComponentDetailPage({
         );
       }
     },
-    [backendURL, detail, isBuiltin, moduleId],
+    [backendURL, detail, effectiveSelectedId, isBuiltin, moduleId],
   );
+
+  const selectedPackageLabel = selectedVariant
+    ? packageLabel(selectedVariant)
+    : "—";
+  const sourceLabel = detail
+    ? formatSourceLabel(
+        detail.footprint.provenance ?? detail.symbol.provenance,
+        isBuiltin,
+      )
+    : "—";
+  const defaultVariant = detail ? getDefaultVariant(detail) : null;
+  // STEP upload is an edit affordance — only surfaced while editing.
+  const canUploadStep = !isBuiltin && !isPlaceholderFootprint && editing;
 
   return (
     <div className="flex h-full w-full flex-col bg-slate-50 dark:bg-slate-950">
-      <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
+      <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-200 bg-white/90 px-6 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          className="inline-flex h-9 cursor-pointer items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
         >
           <ArrowLeft className="h-4 w-4" />
           Back
@@ -330,33 +389,41 @@ export function ComponentDetailPage({
             ? "Loading component..."
             : (detail?.component.name ?? "Component")}
         </h1>
+        {detail && isBuiltin && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+            <Lock className="h-3 w-3" />
+            Core
+          </span>
+        )}
         {detail && (
           <div className="ml-auto flex items-center gap-2">
-            {isBuiltin && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
-                <Lock className="h-3 w-3" />
-                Core
-              </span>
-            )}
-            {!isBuiltin && !editing && (
+            <button
+              type="button"
+              disabled
+              title="Open a design to place"
+              className="inline-flex h-9 cursor-not-allowed items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-500 opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+            >
+              <Plus className="h-4 w-4" />
+              Place in design
+            </button>
+
+            {isBuiltin ? (
               <button
                 type="button"
-                onClick={beginEdit}
-                disabled={!backendURL}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                data-testid="component-edit-button"
+                onClick={() => void handleClone()}
+                disabled={cloning || !backendURL}
+                className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-violet-600 bg-violet-600 px-3 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
               >
-                <Pencil className="h-4 w-4" />
-                Edit
+                <Copy className="h-4 w-4" />
+                {cloning ? "Duplicating..." : "Duplicate to edit"}
               </button>
-            )}
-            {editing && (
+            ) : editing ? (
               <>
                 <button
                   type="button"
                   onClick={cancelEdit}
                   disabled={saving}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   <X className="h-4 w-4" />
                   Cancel
@@ -365,360 +432,413 @@ export function ComponentDetailPage({
                   type="button"
                   onClick={() => void handleSave()}
                   disabled={saving || !backendURL}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-600 bg-violet-600 px-3 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                  className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-violet-600 bg-violet-600 px-3 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
                   data-testid="component-save-button"
                 >
                   <Save className="h-4 w-4" />
                   {saving ? "Saving…" : "Save"}
                 </button>
               </>
+            ) : (
+              <button
+                type="button"
+                onClick={beginEdit}
+                disabled={!backendURL}
+                className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-violet-600 bg-violet-600 px-3 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                data-testid="component-edit-button"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit
+              </button>
             )}
-            <button
-              type="button"
-              onClick={() => void handleClone()}
-              disabled={cloning || !backendURL || editing}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 disabled:opacity-50 dark:border-violet-700 dark:bg-slate-800 dark:text-violet-300 dark:hover:bg-slate-700"
-            >
-              <Copy className="h-4 w-4" />
-              {cloning ? "Duplicating..." : "Duplicate"}
-            </button>
           </div>
         )}
       </header>
 
-      <main className="flex-1 overflow-auto p-6">
-        {loading && (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-            Loading component detail...
-          </div>
-        )}
+      <main className="flex-1 overflow-auto">
+        <div className="mx-auto w-full max-w-[1380px] px-6 py-6">
+          {loading && (
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+              Loading component detail...
+            </div>
+          )}
 
-        {!loading && error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-            {error}
-          </div>
-        )}
+          {!loading && error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+              {error}
+            </div>
+          )}
 
-        {!loading && !error && detail && (
-          <section className="space-y-4">
-            {isBuiltin && (
-              <p className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                <Lock className="h-3 w-3" />
-                Read-only built-in. Click{" "}
-                <span className="font-medium">Duplicate</span> to make an
-                editable copy.
-              </p>
-            )}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          {!loading && !error && detail && (
+            <div className="space-y-[18px]">
+              {isBuiltin && (
+                <p className="flex items-center gap-2 text-[13px] text-slate-500 dark:text-slate-400">
+                  <Lock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                  <span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-200">
+                      Read-only built-in.
+                    </span>{" "}
+                    Duplicate to make an editable copy. Placing is allowed.
+                  </span>
+                </p>
+              )}
+
               {editing ? (
-                <div className="space-y-3">
-                  <div>
-                    <label
-                      htmlFor="component-edit-name"
-                      className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
-                    >
-                      Name
-                    </label>
-                    <input
-                      id="component-edit-name"
-                      type="text"
-                      value={draftName}
-                      onChange={(event) => setDraftName(event.target.value)}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      maxLength={200}
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="component-edit-description"
-                      className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
-                    >
-                      Description
-                    </label>
-                    <textarea
-                      id="component-edit-description"
-                      value={draftDescription}
-                      onChange={(event) =>
-                        setDraftDescription(event.target.value)
-                      }
-                      rows={3}
-                      className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      maxLength={2000}
-                    />
-                  </div>
-                  <div>
-                    <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Tags
-                    </span>
-                    <div className="mt-1">
-                      <TagTokenInput
-                        value={draftTags}
-                        onChange={setDraftTags}
-                        suggestions={tagSuggestions}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                  <div className="space-y-3">
+                    <div>
+                      <label
+                        htmlFor="component-edit-name"
+                        className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+                      >
+                        Name
+                      </label>
+                      <input
+                        id="component-edit-name"
+                        type="text"
+                        value={draftName}
+                        onChange={(event) => setDraftName(event.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        maxLength={200}
                       />
                     </div>
-                  </div>
-                  {saveError ? (
-                    <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-                      {saveError}
+                    <div>
+                      <label
+                        htmlFor="component-edit-description"
+                        className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+                      >
+                        Description
+                      </label>
+                      <textarea
+                        id="component-edit-description"
+                        value={draftDescription}
+                        onChange={(event) =>
+                          setDraftDescription(event.target.value)
+                        }
+                        rows={3}
+                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        maxLength={2000}
+                      />
                     </div>
-                  ) : null}
+                    <div>
+                      <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Tags
+                      </span>
+                      <div className="mt-1">
+                        <TagTokenInput
+                          value={draftTags}
+                          onChange={setDraftTags}
+                          suggestions={tagSuggestions}
+                        />
+                      </div>
+                    </div>
+                    {saveError ? (
+                      <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+                        {saveError}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ) : (
-                <>
-                  <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                <div>
+                  <h2 className="text-[26px] font-bold tracking-tight text-slate-900 dark:text-slate-100">
                     {detail.component.name}
                   </h2>
-                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                    {detail.component.description || "No description"}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {detail.component.tags.length > 0 ? (
-                      detail.component.tags.map((tag) => (
-                        <TagChip key={tag} label={tag} />
-                      ))
-                    ) : (
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        No tags
+                  {detail.component.description ? (
+                    <p className="mt-1.5 max-w-2xl text-[14.5px] leading-relaxed text-slate-500 dark:text-slate-400">
+                      {detail.component.description}
+                    </p>
+                  ) : null}
+                  <div className="mt-3.5 flex flex-wrap items-center gap-2">
+                    {tagSplit.semantic.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 dark:border-violet-800/50 dark:bg-violet-950/40 dark:text-violet-300"
+                      >
+                        {tag}
                       </span>
-                    )}
+                    ))}
+                    {tagSplit.provenance.map((chip) => (
+                      <span
+                        key={chip.tag}
+                        className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-dashed border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:border-slate-600 dark:text-slate-400"
+                      >
+                        {chip.label}
+                      </span>
+                    ))}
                   </div>
-                </>
+                </div>
               )}
-            </div>
 
-            <div
-              className="grid gap-4 lg:grid-cols-3"
-              data-testid="library-preview-cards"
-            >
-              <article className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-                <header className="mb-3 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    Symbol
-                  </h3>
-                </header>
-                <div className="h-64 overflow-hidden rounded-xl border border-slate-200 bg-slate-900 dark:border-slate-800">
-                  <SymbolPreviewCanvas model={symbolPreview} />
-                </div>
-                <dl className="mt-3 grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
-                  <dt className="text-slate-500 dark:text-slate-400">Name</dt>
-                  <dd className="text-slate-800 dark:text-slate-200">
-                    {detail.symbol.name}
-                  </dd>
-                  <dt className="text-slate-500 dark:text-slate-400">
-                    Reference
-                  </dt>
-                  <dd className="text-slate-800 dark:text-slate-200">
-                    {detail.symbol.referencePrefix ?? "—"}
-                  </dd>
-                  <dt className="text-slate-500 dark:text-slate-400">Pins</dt>
-                  <dd className="text-slate-800 dark:text-slate-200">
-                    {detail.symbol.pinCount}
-                  </dd>
-                  {detail.symbol.warnings.length > 0 && (
-                    <>
-                      <dt className="text-amber-600 dark:text-amber-400">
-                        Warnings
-                      </dt>
-                      <dd className="font-medium text-amber-600 dark:text-amber-400">
-                        {detail.symbol.warnings.length}
-                      </dd>
-                    </>
-                  )}
-                </dl>
-              </article>
+              {/* ROW 1: Details (wide) | Symbol (narrow) */}
+              <div className="grid grid-cols-1 items-stretch gap-[18px] lg:grid-cols-[1.5fr_1fr]">
+                <DetailsCard
+                  componentName={detail.component.name}
+                  defaultFootprintName={
+                    defaultVariant?.name ?? detail.footprint.name
+                  }
+                  optionCount={variants.length}
+                  source={sourceLabel}
+                  datasheetUrl={null}
+                />
 
-              <article className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-                <header className="mb-3 flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    Footprint
-                  </h3>
-                  {isPlaceholderFootprint ? (
-                    <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300">
-                      No footprint yet
+                <section className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                  <header className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+                    <span className="font-mono text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Symbol
                     </span>
-                  ) : null}
-                </header>
-                <div
-                  className="h-64 overflow-hidden rounded-xl border border-slate-200 bg-slate-900 dark:border-slate-800"
-                  data-testid="footprint-preview-canvas"
-                >
-                  <FootprintPreviewCanvas model={footprintPreview} />
-                </div>
-                <dl className="mt-3 grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
-                  <dt className="text-slate-500 dark:text-slate-400">Name</dt>
-                  <dd className="text-slate-800 dark:text-slate-200">
-                    {detail.footprint.name}
-                    {isPlaceholderFootprint ? " (No footprint yet)" : ""}
-                  </dd>
-                  <dt className="text-slate-500 dark:text-slate-400">Mount</dt>
-                  <dd
-                    className="text-slate-800 dark:text-slate-200"
-                    data-testid="component-mount-type"
-                  >
-                    {detail.footprint.mountType ?? "—"}
-                  </dd>
-                  <dt className="text-slate-500 dark:text-slate-400">Pads</dt>
-                  <dd
-                    className="text-slate-800 dark:text-slate-200"
-                    data-testid="component-pad-count"
-                  >
-                    {detail.footprint.padCount}
-                  </dd>
-                  <dt className="text-slate-500 dark:text-slate-400">
-                    Package
-                  </dt>
-                  <dd className="text-slate-800 dark:text-slate-200">
-                    {detail.footprint.packageCode.metric ??
-                      detail.footprint.packageCode.imperial ??
-                      "—"}
-                  </dd>
-                  {detail.footprint.warnings.length > 0 && (
-                    <>
-                      <dt className="text-amber-600 dark:text-amber-400">
-                        Warnings
-                      </dt>
-                      <dd className="font-medium text-amber-600 dark:text-amber-400">
-                        {detail.footprint.warnings.length}
-                      </dd>
-                    </>
-                  )}
-                </dl>
-              </article>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                        shared across options
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setFullscreen("symbol")}
+                        disabled={!symbolPreview}
+                        title="Full screen"
+                        aria-label="Open symbol full screen"
+                        className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </header>
+                  <div className="min-h-[320px] flex-1 overflow-hidden bg-slate-950">
+                    <SymbolPreviewCanvas
+                      model={symbolPreview}
+                      emptyMessage="No symbol preview"
+                    />
+                  </div>
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 border-t border-slate-200 px-4 py-3 dark:border-slate-800">
+                    <dt className="text-sm text-slate-500 dark:text-slate-400">
+                      Reference prefix
+                    </dt>
+                    <dd className="text-right font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      {detail.symbol.referencePrefix || "—"}
+                    </dd>
+                    <dt className="text-sm text-slate-500 dark:text-slate-400">
+                      Pins
+                    </dt>
+                    <dd className="text-right font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      {detail.symbol.pinCount}
+                    </dd>
+                  </dl>
+                </section>
+              </div>
 
-              <article
-                className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
-                data-testid="library-component-3d-card"
+              {/* ROW 2: [Options] | Footprint | 3D */}
+              <div
+                className={`grid grid-cols-1 items-stretch gap-[18px] ${
+                  hasOptions ? "lg:grid-cols-3" : "lg:grid-cols-2"
+                }`}
               >
-                <header className="mb-3 flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    3D
-                  </h3>
-                  {!isBuiltin && !isPlaceholderFootprint ? (
-                    <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-700 dark:bg-slate-800 dark:text-violet-300 dark:hover:bg-slate-700">
-                      <Upload className="h-3.5 w-3.5" />
-                      Upload STEP
-                      <input
-                        type="file"
-                        accept=".step,.stp"
-                        className="hidden"
-                        disabled={
-                          uploadStatus === "converting" ||
-                          uploadStatus === "uploading"
-                        }
-                        onChange={(event) => {
-                          void handleStepUpload(
-                            event.currentTarget.files?.[0] ?? null,
-                          );
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                  ) : null}
-                </header>
-                {uploadStatus !== "idle" ? (
-                  <span
-                    className="mb-2 text-xs text-slate-500 dark:text-slate-400"
-                    data-testid="library-3d-upload-progress"
-                  >
-                    {uploadStatus === "converting"
-                      ? "Converting 3D model…"
-                      : uploadStatus === "uploading"
-                        ? "Uploading GLB…"
-                        : "Ready"}
-                  </span>
-                ) : null}
-                {uploadError ? (
-                  <div
-                    className="mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
-                    data-testid="library-3d-upload-error"
-                  >
-                    {uploadError}
-                  </div>
-                ) : null}
-                {isPlaceholderFootprint ? (
-                  <div className="flex h-64 items-center justify-center rounded-xl border border-slate-200 bg-slate-900 px-4 text-center text-xs text-slate-400 dark:border-slate-800">
-                    Add a footprint to enable 3D preview.
-                  </div>
-                ) : (
-                  <ThreeDComponentPreview
-                    key={`${modelRefreshToken}:${externalModelRefreshToken}`}
+                {hasOptions ? (
+                  <FootprintOptionsList
+                    variants={variants}
+                    selectedFootprintId={effectiveSelectedId}
+                    onSelect={setSelectedFootprintId}
                     backendURL={backendURL}
                     moduleId={moduleId}
-                    footprintId={detail.footprint.id}
-                    category={componentCategory}
-                    mountType={detail.footprint.mountType}
-                    isBuiltin={isBuiltin}
+                    themeMode={themeMode}
                   />
-                )}
-              </article>
-            </div>
+                ) : null}
 
-            {detail.footprintVariants && detail.footprintVariants.length > 1 ? (
-              <div
-                className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
-                data-testid="component-footprint-variants"
-              >
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Footprint variants
-                </h3>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  This component can use any of the{" "}
-                  {detail.footprintVariants.length} footprints below. The
-                  default is preselected when placing a new instance;
-                  per-placement override coming soon.
-                </p>
-                <ul className="mt-3 divide-y divide-slate-200 dark:divide-slate-800">
-                  {detail.footprintVariants
-                    .slice()
-                    .sort((a, b) => a.sortOrder - b.sortOrder)
-                    .map((variant) => (
-                      <li
-                        key={variant.footprintId}
-                        className="flex items-center justify-between gap-4 py-2"
-                        data-testid={`component-footprint-variant-${variant.footprintId}`}
+                <section className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                  <header className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+                    <span className="font-mono text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Footprint
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {hasOptions && selectedVariant ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 font-mono text-[10px] font-semibold text-violet-600 dark:border-violet-800/50 dark:bg-violet-950/40 dark:text-violet-300">
+                          <RefreshCw className="h-3 w-3" />
+                          {selectedVariant.variantLabel}
+                        </span>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => setFullscreen("footprint")}
+                        disabled={geometry.status !== "ready"}
+                        title="Full screen"
+                        aria-label="Open footprint full screen"
+                        className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                       >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
-                            {backendURL && (
-                              <img
-                                src={`${backendURL}/api/modules/${moduleId}/footprints/${encodeURIComponent(variant.footprintId)}/preview.svg?theme=${themeMode}`}
-                                alt=""
-                                loading="lazy"
-                                decoding="async"
-                                className="h-full w-full object-contain p-1"
-                              />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="truncate text-xs font-medium text-slate-800 dark:text-slate-200">
-                                {variant.variantLabel}
-                              </span>
-                              {variant.isDefault ? (
-                                <span className="rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wider text-violet-700 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-300">
-                                  Default
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="mt-0.5 truncate text-[0.6875rem] text-slate-500 dark:text-slate-400">
-                              {variant.name}
-                            </div>
-                          </div>
+                        <Maximize2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </header>
+                  <div
+                    className="relative min-h-[300px] flex-1 overflow-hidden bg-slate-950"
+                    data-testid="footprint-preview-canvas"
+                  >
+                    {isPlaceholderFootprint ? (
+                      <FootprintPreviewCanvas
+                        model={null}
+                        emptyMessage="No footprint yet"
+                      />
+                    ) : geometry.status === "loading" ? (
+                      <div className="flex h-full items-center justify-center text-sm text-slate-400">
+                        <div className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900/85 px-3 py-2">
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-600 border-t-violet-400" />
+                          Loading footprint…
                         </div>
-                        <div className="flex shrink-0 items-center gap-2 text-[0.6875rem] text-slate-500 dark:text-slate-400">
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800">
-                            {variant.mountType ?? "—"}
-                          </span>
-                          <span>{variant.padCount} pads</span>
-                        </div>
-                      </li>
-                    ))}
-                </ul>
+                      </div>
+                    ) : geometry.status === "error" ? (
+                      <div className="flex h-full items-center justify-center bg-red-950/40 px-4 text-center text-sm text-red-300">
+                        {geometry.message}
+                      </div>
+                    ) : (
+                      <FootprintPreviewCanvas
+                        model={
+                          geometry.status === "ready" ? geometry.model : null
+                        }
+                        emptyMessage="No footprint geometry"
+                      />
+                    )}
+                  </div>
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 border-t border-slate-200 px-4 py-3 dark:border-slate-800">
+                    <dt className="text-sm text-slate-500 dark:text-slate-400">
+                      Package
+                    </dt>
+                    <dd className="text-right font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      {selectedPackageLabel}
+                    </dd>
+                    <dt className="text-sm text-slate-500 dark:text-slate-400">
+                      Mount
+                    </dt>
+                    <dd
+                      className="text-right font-mono text-xs font-semibold text-slate-800 dark:text-slate-200"
+                      data-testid="component-mount-type"
+                    >
+                      {selectedVariant?.mountType ?? "—"}
+                    </dd>
+                    <dt className="text-sm text-slate-500 dark:text-slate-400">
+                      Pads
+                    </dt>
+                    <dd
+                      className="text-right font-mono text-xs font-semibold text-slate-800 dark:text-slate-200"
+                      data-testid="component-pad-count"
+                    >
+                      {selectedVariant?.padCount ?? 0}
+                    </dd>
+                  </dl>
+                </section>
+
+                <section
+                  className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+                  data-testid="library-component-3d-card"
+                >
+                  <header className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+                    <span className="font-mono text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      3D model
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {hasOptions && selectedVariant ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 font-mono text-[10px] font-semibold text-violet-600 dark:border-violet-800/50 dark:bg-violet-950/40 dark:text-violet-300">
+                          <RefreshCw className="h-3 w-3" />
+                          {selectedVariant.variantLabel}
+                        </span>
+                      ) : null}
+                      {canUploadStep ? (
+                        <label className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-2.5 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-50 dark:border-violet-700 dark:bg-slate-800 dark:text-violet-300 dark:hover:bg-slate-700">
+                          <Upload className="h-3.5 w-3.5" />
+                          Upload STEP
+                          <input
+                            type="file"
+                            accept=".step,.stp"
+                            className="hidden"
+                            disabled={
+                              uploadStatus === "converting" ||
+                              uploadStatus === "uploading"
+                            }
+                            onChange={(event) => {
+                              void handleStepUpload(
+                                event.currentTarget.files?.[0] ?? null,
+                              );
+                              event.currentTarget.value = "";
+                            }}
+                          />
+                        </label>
+                      ) : null}
+                    </div>
+                  </header>
+                  {uploadStatus !== "idle" ? (
+                    <span
+                      className="px-4 pt-2 text-xs text-slate-500 dark:text-slate-400"
+                      data-testid="library-3d-upload-progress"
+                    >
+                      {uploadStatus === "converting"
+                        ? "Converting 3D model…"
+                        : uploadStatus === "uploading"
+                          ? "Uploading GLB…"
+                          : "Ready"}
+                    </span>
+                  ) : null}
+                  {uploadError ? (
+                    <div
+                      className="mx-4 mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+                      data-testid="library-3d-upload-error"
+                    >
+                      {uploadError}
+                    </div>
+                  ) : null}
+                  <div className="flex min-h-[300px] flex-1 flex-col">
+                    {isPlaceholderFootprint ? (
+                      <div className="flex h-full min-h-[300px] items-center justify-center bg-slate-950 px-4 text-center text-xs text-slate-400">
+                        Add a footprint to enable 3D preview.
+                      </div>
+                    ) : (
+                      <ThreeDComponentPreview
+                        key={`${effectiveSelectedId}:${modelRefreshToken}:${externalModelRefreshToken}`}
+                        backendURL={backendURL}
+                        moduleId={moduleId}
+                        footprintId={effectiveSelectedId}
+                        category={componentCategory}
+                        mountType={selectedVariant?.mountType ?? null}
+                        isBuiltin={isBuiltin}
+                      />
+                    )}
+                  </div>
+                  <p className="flex items-center justify-center gap-1.5 border-t border-slate-200 px-4 py-2.5 text-[11px] text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <RefreshCw className="h-3 w-3" />
+                    Drag to rotate · scroll to zoom
+                  </p>
+                </section>
               </div>
-            ) : null}
-          </section>
-        )}
+
+              {/* ROW 3: Pins (full width) */}
+              <PinsTable
+                pinMap={selectedVariant?.pinMap ?? null}
+                electricalTypeByPin={electricalTypeByPin}
+                packageLabel={selectedPackageLabel}
+              />
+
+              {fullscreen === "symbol" ? (
+                <PreviewModal
+                  title={`${detail.symbol.name} — Symbol`}
+                  onClose={() => setFullscreen(null)}
+                >
+                  <SymbolPreviewCanvas
+                    model={symbolPreview}
+                    emptyMessage="No symbol preview"
+                  />
+                </PreviewModal>
+              ) : null}
+
+              {fullscreen === "footprint" ? (
+                <PreviewModal
+                  title={`${selectedVariant?.name ?? detail.footprint.name} — Footprint`}
+                  onClose={() => setFullscreen(null)}
+                >
+                  <FootprintPreviewCanvas
+                    model={geometry.status === "ready" ? geometry.model : null}
+                    emptyMessage="No footprint geometry"
+                  />
+                </PreviewModal>
+              ) : null}
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
