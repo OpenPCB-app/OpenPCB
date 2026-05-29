@@ -1085,10 +1085,10 @@ export function AssistantSpace({
                     y: event.clientY,
                   });
                 }}
-                className={`group flex w-full cursor-pointer flex-col gap-1 rounded-lg border-l-2 px-3 py-2.5 text-left transition-colors ${
+                className={`group flex w-full cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors ${
                   selectedChatId === chat.id
-                    ? "border-l-violet-500 bg-slate-100 text-slate-900 dark:border-l-violet-400 dark:bg-slate-800 dark:text-slate-100"
-                    : "border-l-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200"
+                    ? "border-violet-600 bg-violet-50 text-slate-900 dark:border-violet-400 dark:bg-violet-500/10 dark:text-slate-100"
+                    : "border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200"
                 } ${userState.isArchived(chat.id) ? "opacity-60" : ""}`}
               >
                 <div className="flex w-full items-center justify-between gap-2">

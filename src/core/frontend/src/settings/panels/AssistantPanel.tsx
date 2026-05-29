@@ -19,6 +19,7 @@ import {
   Wifi,
 } from "lucide-react";
 import { useRuntime } from "../../providers/RuntimeProvider";
+import { useNavigationStore } from "../../stores/navigation-store";
 import { cn } from "@/lib/utils";
 import { Pill } from "@shared/frontend/ui/pill";
 import { StackedCard } from "@shared/frontend/ui/stacked-card";
@@ -103,7 +104,7 @@ export function AssistantPanel() {
     ok: boolean;
     text: string;
   } | null>(null);
-  const [showCloud, setShowCloud] = useState(false);
+  const openSettings = useNavigationStore((s) => s.openSettings);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -301,24 +302,13 @@ export function AssistantPanel() {
         </div>
         <button
           type="button"
-          onClick={() => setShowCloud((v) => !v)}
+          onClick={() => openSettings("account")}
           className="inline-flex shrink-0 items-center gap-1 rounded-control border border-violet-400/40 px-2.5 py-1.5 text-xs text-accent-text hover:bg-violet-500/10"
         >
           Learn more
           <ArrowRight className="h-3 w-3" />
         </button>
       </div>
-      {showCloud ? (
-        <div className="rounded-xl border border-violet-300/50 bg-white p-4 text-sm dark:border-violet-800/50 dark:bg-slate-900">
-          <h4 className="mb-2 font-medium">OpenPCB AI Cloud — coming soon</h4>
-          <p className="text-slate-500 dark:text-slate-400">
-            A managed, optimized assistant. Today OpenPCB is{" "}
-            <strong>free</strong> with your own provider key (BYOK). Cloud will
-            add zero-setup tuned models, direct JLCPCB BOM sourcing, and
-            EDA-trained ERC/DRC suggestions on a subscription.
-          </p>
-        </div>
-      ) : null}
 
       {/* Default assistant defaults */}
       <section>

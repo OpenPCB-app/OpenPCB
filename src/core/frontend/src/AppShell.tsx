@@ -1,13 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useBootstrap } from "./providers/BootstrapProvider";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { AppRouter } from "./AppRouter";
-import { SettingsDialog } from "@/settings";
 import { AppContextMenu } from "./components/AppContextMenu";
-import {
-  openContextMenu,
-  useContextMenuStore,
-} from "@shared/frontend/context-menu";
+import { useNavigationStore } from "./stores/navigation-store";
+import { useSettingsHotkeys } from "./settings/hooks/useSettingsHotkeys";
+import { openContextMenu } from "@shared/frontend/context-menu";
 
 function LoadingScreen() {
   return (
@@ -29,23 +27,9 @@ function ErrorScreen({ message }: { message: string }) {
 
 export function AppShell() {
   const { status, error } = useBootstrap();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const openSettings = useNavigationStore((state) => state.openSettings);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const isComma = event.key === ",";
-      const hasModifier = event.metaKey || event.ctrlKey;
-      if (!isComma || !hasModifier) {
-        return;
-      }
-
-      event.preventDefault();
-      setSettingsOpen(true);
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  useSettingsHotkeys();
 
   useEffect(() => {
     const suppressNativeContextMenu = (event: MouseEvent) => {
@@ -88,7 +72,7 @@ export function AppShell() {
                     id: "settings",
                     label: "Settings",
                     shortcut: "Ctrl+,",
-                    onSelect: () => setSettingsOpen(true),
+                    onSelect: () => openSettings(),
                   },
                 ],
               },
@@ -96,12 +80,11 @@ export function AppShell() {
           });
         }}
       >
-        <LeftSidebar onSettingsClick={() => setSettingsOpen(true)} />
+        <LeftSidebar onSettingsClick={() => openSettings()} />
         <main className="h-full min-h-0 min-w-0">
           <AppRouter />
         </main>
       </div>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <AppContextMenu />
     </>
   );

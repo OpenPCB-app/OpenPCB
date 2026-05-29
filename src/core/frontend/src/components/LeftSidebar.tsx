@@ -10,9 +10,9 @@ interface LeftSidebarProps {
 }
 
 function navButtonClass(active: boolean): string {
-  return `flex w-16 flex-col items-center justify-center rounded-2xl py-2 transition-colors ${
+  return `flex w-16 cursor-pointer flex-col items-center justify-center rounded-2xl border border-transparent py-2 transition-colors ${
     active
-      ? "bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300"
+      ? "border-violet-600 bg-violet-100 text-violet-600 dark:border-violet-400 dark:bg-violet-900/40 dark:text-violet-300"
       : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
   }`;
 }
@@ -128,7 +128,8 @@ export function LeftSidebar({ onSettingsClick }: LeftSidebarProps) {
         <button
           type="button"
           aria-label="Settings"
-          className="flex w-16 flex-col items-center justify-center rounded-2xl py-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          aria-current={currentRoute.kind === "settings" ? "page" : undefined}
+          className={navButtonClass(currentRoute.kind === "settings")}
           onClick={onSettingsClick}
         >
           <Settings className="h-6 w-6" strokeWidth={1.8} />
