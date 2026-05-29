@@ -27,6 +27,7 @@ import {
   Sparkles,
   Trash2,
   Wrench,
+  X,
 } from "lucide-react";
 import type { ModuleSpaceProps } from "../../../core/contracts/modules/frontend-entry";
 import type {
@@ -181,6 +182,7 @@ export function AssistantSpace({
   const [toolCount, setToolCount] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  const [titleCommitting, setTitleCommitting] = useState(false);
   const userState = useChatUserState();
   const navigateToModule = useNavigationStore((s) => s.navigateToModule);
   const activeChatIdRef = useRef<string | null>(null);
@@ -316,6 +318,9 @@ export function AssistantSpace({
             `${base}/chats/${chatId}/tool-events?messageIds=${encodeURIComponent(messageIds.join(","))}`,
           ).catch(() => [] as AssistantToolEventDto[])
         : [];
+      // Drop stale results: the user may have switched chats while these requests
+      // were in flight — applying them would clobber the now-active chat's view.
+      if (activeChatIdRef.current !== chatId) return page.items;
       setMessages(page.items);
       setToolEvents(events);
       setWriteProposals(proposals);
@@ -521,6 +526,10 @@ export function AssistantSpace({
           status: "finalizing",
           currentStage: "Finalizing answer…",
         });
+      } else if (event.type === "run.warning") {
+        if (event.data.code === "empty_response") {
+          updateRun(ctx.chatId, { emptyResponse: true });
+        }
       } else if (event.type === "run.failed") {
         updateRun(ctx.chatId, {
           status: "failed",
@@ -543,17 +552,38 @@ export function AssistantSpace({
       setLoading(false);
       if (status === "completed") {
         setActiveRunsByChat((prev) => {
+          const current = prev[ctx.chatId];
+          // A run that completed with no visible answer keeps a retry card instead of
+          // vanishing into a blank bubble (mirrors the cancelled/failed affordance).
+          if (current?.emptyResponse) {
+            return {
+              ...prev,
+              [ctx.chatId]: {
+                ...current,
+                status: "failed",
+                currentStage: "No answer returned.",
+                lastError: "The model returned no answer — Retry.",
+              },
+            };
+          }
           const next = { ...prev };
           delete next[ctx.chatId];
           return next;
         });
       } else {
         updateRun(ctx.chatId, {
-          status: status === "cancelled" ? "cancelled" : "failed",
+          status:
+            status === "cancelled"
+              ? "cancelled"
+              : status === "disconnected"
+                ? "disconnected"
+                : "failed",
           currentStage:
             status === "cancelled"
               ? "Assistant task cancelled."
-              : "Assistant stopped before completing.",
+              : status === "disconnected"
+                ? "Connection lost before completing."
+                : "Assistant stopped before completing.",
           lastError: message ?? null,
         });
       }
@@ -862,10 +892,13 @@ export function AssistantSpace({
     setEditingTitle(true);
   };
   const commitTitle = async () => {
-    setEditingTitle(false);
+    if (titleCommitting) return;
     const next = titleDraft.trim();
-    if (!base || !selectedChatId || !next || next === selectedChat?.title)
+    if (!base || !selectedChatId || !next || next === selectedChat?.title) {
+      setEditingTitle(false);
       return;
+    }
+    setTitleCommitting(true);
     try {
       const updated = await api<AssistantChat>(
         `${base}/chats/${selectedChatId}`,
@@ -876,9 +909,41 @@ export function AssistantSpace({
         },
       );
       setChats((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+      setEditingTitle(false);
     } catch (err) {
+      // Keep edit mode open with the draft intact so the user can retry.
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTitleCommitting(false);
     }
+  };
+
+  const exportMarkdown = () => {
+    if (!selectedChat) return;
+    const lines = [`# ${selectedChat.title}`, ""];
+    for (const m of messages) {
+      if (m.role === "tool" || m.metadata?.ai?.internal) continue;
+      const body = (m.content ?? "").trim();
+      if (!body) continue;
+      const who =
+        m.role === "user"
+          ? "You"
+          : m.role === "assistant"
+            ? "Assistant"
+            : "System";
+      lines.push(`**${who}:**`, "", body, "");
+    }
+    const blob = new Blob([lines.join("\n")], {
+      type: "text/markdown;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${selectedChat.title.replace(/[^\w.-]+/g, "_") || "chat"}.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -1003,6 +1068,8 @@ export function AssistantSpace({
                 key={chat.id}
                 role="button"
                 tabIndex={0}
+                aria-label={`Open chat ${chat.title}`}
+                aria-current={selectedChatId === chat.id}
                 onClick={() => setSelectedChatId(chat.id)}
                 onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
                   if (event.key === "Enter" || event.key === " ") {
@@ -1125,13 +1192,16 @@ export function AssistantSpace({
               <input
                 autoFocus
                 value={titleDraft}
+                disabled={titleCommitting}
+                aria-label="Chat title"
+                aria-busy={titleCommitting}
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={() => void commitTitle()}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") void commitTitle();
                   if (e.key === "Escape") setEditingTitle(false);
                 }}
-                className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm font-medium text-slate-100 outline-none"
+                className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm font-medium text-slate-100 outline-none focus-visible:border-violet-500 disabled:opacity-60"
               />
             ) : (
               <button
@@ -1201,7 +1271,13 @@ export function AssistantSpace({
                 <DropdownMenuItem onSelect={() => beginRename()}>
                   <Pencil className="h-3.5 w-3.5" /> Rename
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled title="Coming soon">
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    exportMarkdown();
+                  }}
+                  disabled={!selectedChat || messages.length === 0}
+                >
                   <Download className="h-3.5 w-3.5" /> Export markdown
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -1253,8 +1329,20 @@ export function AssistantSpace({
               </div>
             ) : null}
             {error ? (
-              <div className="mx-4 mb-4 rounded-xl border border-red-900/70 bg-red-950/30 p-4 text-sm text-red-200">
-                {error}
+              <div
+                role="alert"
+                aria-live="assertive"
+                className="mx-4 mb-4 flex items-start gap-2 rounded-xl border border-red-900/70 bg-red-950/30 p-4 text-sm text-red-200"
+              >
+                <span className="min-w-0 flex-1 break-words">{error}</span>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  aria-label="Dismiss error"
+                  className="shrink-0 rounded p-0.5 text-red-300 hover:bg-red-900/40 hover:text-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
             ) : null}
             {messages.length === 0 ? (

@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { AlertTriangle, Sparkles } from "lucide-react";
+import { AlertTriangle, ChevronRight, Sparkles } from "lucide-react";
 import { MarkdownContent } from "../../../../shared/frontend/markdown";
 import type {
   AssistantMessage,
@@ -189,7 +189,7 @@ function extractGenericToolProposals(
               sources: event.sources,
               warnings: [],
               proposal: parsed,
-              envelope: parsed,
+              envelope: null,
               applyResult: null,
               createdAt: event.createdAt,
               updatedAt: event.updatedAt,
@@ -236,6 +236,8 @@ export function MessageCard({
     ? message.content
     : stripResponseWrapper(message.content);
   const hasContent = cleanedContent.length > 0;
+  const reasoning = isUser ? undefined : message.metadata?.ai?.reasoning;
+  const truncated = !isUser && message.metadata?.ai?.truncated === true;
   const componentBlocks = isUser ? [] : extractComponentResults(toolEvents);
   const bomBlocks = isUser ? [] : extractBomResults(toolEvents);
   const placementBlocks = isUser ? [] : extractPlacementProposals(toolEvents);
@@ -322,6 +324,20 @@ export function MessageCard({
             </span>
           ) : null}
         </div>
+        {reasoning ? (
+          // Chain-of-thought from reasoning models — a subtle one-line toggle rendered
+          // before the answer (thinking precedes the response). Auto-opened when there
+          // is no visible answer so the bubble is never blank.
+          <details open={!hasContent} className="group">
+            <summary className="inline-flex cursor-pointer select-none items-center gap-1 text-[11px] text-slate-500 transition-colors hover:text-slate-300 [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
+              Reasoning
+            </summary>
+            <div className="mt-1.5 whitespace-pre-wrap break-words pl-4 text-[11px] leading-relaxed text-slate-500">
+              {reasoning}
+            </div>
+          </details>
+        ) : null}
         {hasContent ? (
           isUser ? (
             <div
@@ -338,6 +354,12 @@ export function MessageCard({
               {cleanedContent}
             </MarkdownContent>
           )
+        ) : null}
+        {truncated ? (
+          <div className="flex items-center gap-1.5 text-[11px] text-status-warning">
+            <AlertTriangle className="h-3 w-3 shrink-0" />
+            Response may be truncated (token limit reached).
+          </div>
         ) : null}
         {componentBlocks.length > 0 ? (
           <div className="space-y-3">
