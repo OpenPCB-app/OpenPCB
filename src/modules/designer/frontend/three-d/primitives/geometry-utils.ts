@@ -1,10 +1,12 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import type {
   DesignerPcbProjection,
   PcbPlacedPart,
   PcbPointMm,
   PcbTrace,
   PcbVia,
+  PcbViaProtection,
 } from "../../../../../sdks";
 import { collectDrills } from "../../pcb/pcb-drills";
 import { graphicStrokeSegments } from "../../../../../shared/frontend/canvas/preview/geometry";
@@ -19,6 +21,12 @@ export const DEFAULT_COPPER_THICKNESS_MM = 0.035;
 export const DEFAULT_PAD_HEIGHT_MM = 0.05;
 export const DEFAULT_SILKSCREEN_HEIGHT_MM = 0.02;
 export const DEFAULT_BOARD_PADDING_MM = 10;
+// Soldermask plane: above copper top (0.035) but below the pad face (0.05) so
+// pads render proud of the (translucent) mask and read as exposed ENIG gold.
+export const SOLDERMASK_Z_MM = 0.04;
+// Rendered copper thickness for traces/pour/vias. Real 1 oz copper is 0.035 mm;
+// nudged up slightly for a visible edge wall but kept below the pad face (0.05).
+export const COPPER_RELIEF_HEIGHT_MM = 0.04;
 
 export interface PointNm {
   x: number;
@@ -52,6 +60,7 @@ export interface ViaMeshInput {
   centerMm: PcbPointMm;
   diameterMm: number;
   drillMm: number;
+  protection: PcbViaProtection;
 }
 
 export interface PadMeshInput {
@@ -174,7 +183,10 @@ export function boardSubstrateShape(
     : shapeFromBounds(bounds);
 
   const drills = collectDrills(
-    projection.vias,
+    // Vias are tented (soldermask bridges over them) — no board hole / mask
+    // opening; CopperVias draws them as raised green bumps. Component pad drills,
+    // free holes and mounting holes stay drilled.
+    [],
     projection.placements,
     projection.freeHoles,
     projection.freePads,
@@ -196,6 +208,56 @@ export function boardSubstrateShape(
   }
 
   return shape;
+}
+
+const TRACE_CAP_SEGMENTS = 16;
+
+/**
+ * Stroke a trace polyline into a single **extruded** copper ribbon (a box per
+ * straight segment + a short cylinder at every vertex to round the corners and
+ * cap the ends), centred on z=0 with thickness `heightMm`. One geometry per
+ * trace → many merge per layer into a single draw call. The cylinders give
+ * smooth rounded corners (no miter spikes) and the box/cylinder side walls give
+ * the trace real copper thickness. Returns null for degenerate (<2 distinct).
+ */
+export function buildTraceRibbonGeometry(
+  pointsNm: ReadonlyArray<{ x: number; y: number }>,
+  widthMm: number,
+  heightMm: number,
+): THREE.BufferGeometry | null {
+  const pts: PcbPointMm[] = [];
+  for (const p of pointsNm) {
+    const mm = { x: nmToMm(p.x), y: nmToMm(p.y) };
+    const prev = pts[pts.length - 1];
+    if (!prev || prev.x !== mm.x || prev.y !== mm.y) pts.push(mm);
+  }
+  if (pts.length < 2 || widthMm <= 0 || heightMm <= 0) return null;
+
+  const r = widthMm / 2;
+  const parts: THREE.BufferGeometry[] = [];
+
+  for (let i = 0; i < pts.length - 1; i += 1) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len === 0) continue;
+    const box = new THREE.BoxGeometry(len, widthMm, heightMm);
+    box.applyMatrix4(new THREE.Matrix4().makeRotationZ(Math.atan2(dy, dx)));
+    box.translate((a.x + b.x) / 2, (a.y + b.y) / 2, 0);
+    parts.push(box);
+  }
+  for (const p of pts) {
+    const cyl = new THREE.CylinderGeometry(r, r, heightMm, TRACE_CAP_SEGMENTS);
+    cyl.rotateX(Math.PI / 2); // cylinder axis Y → Z
+    cyl.translate(p.x, p.y, 0);
+    parts.push(cyl);
+  }
+  if (parts.length === 0) return null;
+  const merged = mergeGeometries(parts, false);
+  parts.forEach((part) => part.dispose());
+  return merged;
 }
 
 export function traceToMeshInputs(trace: PcbTrace): CopperTraceMeshInput[] {
@@ -225,6 +287,7 @@ export function viasToMeshInputs(vias: readonly PcbVia[]): ViaMeshInput[] {
     centerMm: via.centerMm,
     diameterMm: via.diameterMm > 0 ? via.diameterMm : 0.6,
     drillMm: via.drillMm > 0 ? via.drillMm : 0.3,
+    protection: via.protection ?? "tented",
   }));
 }
 

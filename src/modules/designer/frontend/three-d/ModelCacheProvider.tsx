@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import * as THREE from "three";
+import { SRGBColorSpace } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export type ModelLoadStatus = "idle" | "loading" | "ready" | "failed";
@@ -59,15 +60,66 @@ export function disposeModelScene(scene: THREE.Object3D): void {
   });
 }
 
-function forceDoubleSidedMaterials(scene: THREE.Object3D): void {
+const _hsl = { h: 0, s: 0, l: 0 };
+
+/**
+ * STEP→GLB bakes flat `MeshLambertMaterial`; the glTF round-trip re-imports it
+ * as `MeshStandardMaterial` with metalness≈0 / roughness≈1, so metal leads read
+ * as matte grey plastic under the IBL. Reclassify by perceptual colour so gold/
+ * silver terminals become real PBR metal (shiny) while plastic bodies stay
+ * satin. Runs at load time → fixes existing cached GLBs without re-conversion.
+ */
+function upgradeComponentMaterial(material: THREE.Material): void {
+  const std = material as THREE.MeshStandardMaterial;
+  if (!std.isMeshStandardMaterial) return;
+
+  std.color.getHSL(_hsl, SRGBColorSpace);
+  const hueDeg = _hsl.h * 360;
+  // Gold / brass / copper leads: warm hue, saturated, mid-light.
+  const isGold =
+    hueDeg >= 28 && hueDeg <= 60 && _hsl.s >= 0.25 && _hsl.l >= 0.4;
+  // Bare metal (tin/silver/nickel): near-neutral, bright — but not white (which
+  // is a matte LED/cap body) and not dark grey (an IC body).
+  const isSilver = _hsl.s <= 0.14 && _hsl.l >= 0.5 && _hsl.l <= 0.82;
+  const isMetal = isGold || isSilver;
+
+  if (isMetal) {
+    std.metalness = 1;
+    std.roughness = 0.28;
+    std.envMapIntensity = 1.1;
+  } else {
+    std.metalness = 0;
+    std.roughness = Math.min(Math.max(std.roughness ?? 0.6, 0.45), 0.85);
+    std.envMapIntensity = 0.8;
+  }
+  // The baker inflated emissive to keep undersides lit; with proper IBL that
+  // just washes the body out. Keep only a whisper.
+  if (std.emissiveIntensity > 0.12) std.emissiveIntensity = 0.12;
+  std.needsUpdate = true;
+}
+
+function prepareModelMeshes(scene: THREE.Object3D): void {
   scene.traverse((object) => {
-    const mesh = object as MeshLike;
+    const mesh = object as MeshLike & {
+      castShadow?: boolean;
+      receiveShadow?: boolean;
+    };
     if (!mesh.isMesh || !mesh.material) return;
+    // B.Cu placements apply scale [-1,1,1] which flips winding-order parity.
+    // Existing GLBs may have been baked single-sided; force DoubleSide so old
+    // assets don't need re-conversion.
     if (Array.isArray(mesh.material)) {
-      for (const material of mesh.material) material.side = THREE.DoubleSide;
+      for (const material of mesh.material) {
+        material.side = THREE.DoubleSide;
+        upgradeComponentMaterial(material);
+      }
     } else {
       mesh.material.side = THREE.DoubleSide;
+      upgradeComponentMaterial(mesh.material);
     }
+    // Component bodies cast onto the board and receive board/part shadows.
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
   });
 }
 
@@ -81,10 +133,7 @@ async function parseGlb(arrayBuffer: ArrayBuffer): Promise<THREE.Group | null> {
         const group = new THREE.Group();
         group.name = gltf.scene.name || "component-glb";
         group.add(gltf.scene);
-        // Defense-in-depth: B.Cu placements apply scale [-1,1,1] which flips
-        // winding-order parity. Existing GLBs may have been baked with single-sided
-        // materials; force DoubleSide on load so old assets don't need re-conversion.
-        forceDoubleSidedMaterials(group);
+        prepareModelMeshes(group);
         resolve(group);
       },
       (error) => reject(error),

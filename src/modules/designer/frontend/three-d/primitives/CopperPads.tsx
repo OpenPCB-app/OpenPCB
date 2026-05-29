@@ -4,12 +4,16 @@ import type { PcbPlacedPart } from "../../../../../sdks";
 import type { FootprintRenderSourcePad } from "../../../../../shared/rendering";
 import { getPlacementTransformProps } from "../transform-helpers";
 import { DEFAULT_BOARD_THICKNESS_MM } from "./geometry-utils";
+import {
+  ENIG_ENV_INTENSITY,
+  ENIG_GOLD_COLOR,
+  ENIG_METALNESS,
+  ENIG_ROUGHNESS,
+} from "./materials";
 
 // Lift the copper face just off the board so it doesn't z-fight the substrate.
 const PAD_SURFACE_Z_MM = 0.05;
 const SHAPE_CURVE_SEGMENTS = 24;
-// ENIG-gold pad copper, matching KiCad's realistic look (gold annular rings).
-const PAD_COPPER_COLOR = "#c9a227";
 
 function roundedRectPath(
   s: THREE.Shape | THREE.Path,
@@ -80,8 +84,15 @@ function PadFace({ pad }: { pad: FootprintRenderSourcePad }): ReactElement {
       geometry={geometry}
       position={[pad.centerMm.x, pad.centerMm.y, 0]}
       rotation={[0, 0, (pad.rotationDeg * Math.PI) / 180]}
+      receiveShadow
     >
-      <meshBasicMaterial color={PAD_COPPER_COLOR} side={THREE.DoubleSide} />
+      <meshStandardMaterial
+        color={ENIG_GOLD_COLOR}
+        metalness={ENIG_METALNESS}
+        roughness={ENIG_ROUGHNESS}
+        envMapIntensity={ENIG_ENV_INTENSITY}
+        side={THREE.DoubleSide}
+      />
     </mesh>
   );
 }

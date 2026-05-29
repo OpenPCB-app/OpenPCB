@@ -137,13 +137,11 @@ export function Board3DControls({
           label="Components"
           checked={display.components}
           onChange={() => onToggleDisplay("components")}
-          stub
         />
         <ToggleRow
           label="Silkscreen"
           checked={display.silkscreen}
           onChange={() => onToggleDisplay("silkscreen")}
-          stub
         />
         <ToggleRow
           label="Refdes labels"
@@ -170,7 +168,7 @@ export function Board3DControls({
             <button
               key={c.id}
               type="button"
-              title={`${c.label} — coming soon`}
+              title={c.label}
               onClick={() => onBoardColor(c.id)}
               className={`h-5 w-5 rounded ${boardColor === c.id ? "ring-2 ring-accent ring-offset-1 ring-offset-slate-950" : ""}`}
               style={{ backgroundColor: c.hex }}
@@ -183,7 +181,7 @@ export function Board3DControls({
         <select
           value={scene}
           onChange={(e) => onScene(e.target.value)}
-          title="Lighting scene — coming soon"
+          title="Lighting scene"
           className="w-full rounded border border-slate-700 bg-slate-950 px-1.5 py-1 text-[11px] text-slate-300 outline-none"
         >
           <option value="studio-dark">Studio dark</option>
@@ -200,7 +198,7 @@ export function Board3DControls({
           max={100}
           value={transparency}
           onChange={(e) => onTransparency(Number(e.target.value))}
-          title="Board transparency — coming soon"
+          title="Board transparency"
           className="w-full accent-violet-500"
         />
       </Section>

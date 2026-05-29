@@ -233,9 +233,10 @@ describe("3D board geometry utilities", () => {
     } as unknown as DesignerPcbProjection;
 
     const shape = boardSubstrateShape(projection);
-    // pad-1 drill + via-1 drill = 2; pad-2 (SMD, no drill) and the off-board
-    // free hole contribute nothing.
-    expect(shape.holes).toHaveLength(2);
+    // Only pad-1's drill: vias are tented (soldermask bridges over them, so the
+    // substrate is not drilled — CopperVias renders them as a dome). pad-2 (SMD,
+    // no drill) and the off-board free hole contribute nothing.
+    expect(shape.holes).toHaveLength(1);
   });
 
   test("creates via mesh inputs with safe defaults", () => {
@@ -260,6 +261,7 @@ describe("3D board geometry utilities", () => {
         centerMm: { x: 2, y: 3 },
         diameterMm: 0.6,
         drillMm: 0.3,
+        protection: "tented",
       },
     ]);
   });

@@ -3,8 +3,8 @@ import * as THREE from "three";
 import type { DesignerPcbProjection } from "../../../../../sdks";
 import { collectDrills } from "../../pcb/pcb-drills";
 import { DEFAULT_BOARD_THICKNESS_MM } from "./geometry-utils";
+import { COPPER_COLOR, COPPER_METALNESS, COPPER_ROUGHNESS } from "./materials";
 
-const BARREL_COPPER_COLOR = "rgb(184, 115, 51)";
 // Sit the barrel just inside the drilled board wall to avoid coplanar z-fight.
 const BARREL_RADIUS_FACTOR = 0.97;
 // Extend the barrel slightly past both faces so it meets the annular pad copper
@@ -57,8 +57,10 @@ export function CopperBarrels({
                 true,
               ]}
             />
-            <meshLambertMaterial
-              color={BARREL_COPPER_COLOR}
+            <meshStandardMaterial
+              color={COPPER_COLOR}
+              metalness={COPPER_METALNESS}
+              roughness={COPPER_ROUGHNESS}
               side={THREE.DoubleSide}
             />
           </mesh>

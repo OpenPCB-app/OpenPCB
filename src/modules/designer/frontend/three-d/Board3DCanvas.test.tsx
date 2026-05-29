@@ -34,6 +34,24 @@ vi.mock("@react-three/drei", () => ({
   Text: ({ children }: { children?: React.ReactNode }) => (
     <span>{children}</span>
   ),
+  Environment: ({ children }: { children?: React.ReactNode }) => (
+    <div data-testid="mock-environment">{children}</div>
+  ),
+  Lightformer: () => null,
+  ContactShadows: () => null,
+}));
+
+vi.mock("@react-three/postprocessing", () => ({
+  EffectComposer: ({ children }: { children?: React.ReactNode }) => (
+    <div data-testid="mock-effectcomposer">{children}</div>
+  ),
+  N8AO: () => null,
+  SMAA: () => null,
+  ToneMapping: () => null,
+}));
+
+vi.mock("postprocessing", () => ({
+  ToneMappingMode: { ACES_FILMIC: 4 },
 }));
 
 function fixtureProjection(): DesignerPcbProjection {

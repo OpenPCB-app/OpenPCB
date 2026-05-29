@@ -1,4 +1,3 @@
-import polygonClipping from "polygon-clipping";
 import * as THREE from "three";
 import type {
   PcbBoardOutline,
@@ -9,6 +8,7 @@ import type {
   PcbTrace,
   PcbVia,
 } from "../../../../../sdks";
+import { flattenOutline } from "../../../backend/pcb/outline-geometry";
 import { flipLayerSide } from "../../../../../shared/frontend/canvas/scene/layer-side";
 import { padAperturePath } from "../../../../../shared/frontend/canvas/scene/pad-aperture-geometry";
 import type { FootprintRenderSourcePad } from "../../../../../shared/rendering";
@@ -16,6 +16,8 @@ import {
   buildTraceMaskPolygons,
   buildViaMaskPolygon,
   isSameNetAsPour,
+  polygonDifference,
+  polygonIntersection,
   polygonUnion,
   viaCrossesLayer,
 } from "./copper-fill-trace-geometry";
@@ -71,17 +73,6 @@ type ClipperPoint = [number, number];
 type ClipperRing = ClipperPoint[];
 type ClipperPolygon = ClipperRing[];
 type ClipperMultiPolygon = ClipperPolygon[];
-type PolygonUnion = (...polygons: ClipperPolygon[]) => ClipperMultiPolygon;
-type PolygonDifference = (
-  subject: ClipperPolygon | ClipperMultiPolygon,
-  ...clippers: Array<ClipperPolygon | ClipperMultiPolygon>
-) => ClipperMultiPolygon;
-type PolygonIntersection = (
-  subject: ClipperPolygon | ClipperMultiPolygon,
-  ...clippers: Array<ClipperPolygon | ClipperMultiPolygon>
-) => ClipperMultiPolygon;
-const polygonDifference = polygonClipping.difference as PolygonDifference;
-const polygonIntersection = polygonClipping.intersection as PolygonIntersection;
 
 export interface CopperFillRectSpec {
   center: PcbPointMm;
@@ -259,6 +250,48 @@ function polygonArea(polygon: ClipperPolygon): number {
     total -= Math.abs(signedArea(polygon[i]!));
   }
   return total;
+}
+
+/**
+ * Shrink a board outline inward by `e` mm for the copper-to-board-edge
+ * clearance. Parametric kinds (rect/roundrect/circle) inset analytically;
+ * polygon/contour outlines fall back to no inset (pour reaches the edge).
+ */
+function insetOutline(outline: PcbBoardOutline, e: number): PcbBoardOutline {
+  if (e <= 0) return outline;
+  switch (outline.kind) {
+    case "rect":
+      return {
+        ...outline,
+        widthMm: Math.max(0.01, outline.widthMm - e * 2),
+        heightMm: Math.max(0.01, outline.heightMm - e * 2),
+      };
+    case "roundrect":
+      return {
+        ...outline,
+        widthMm: Math.max(0.01, outline.widthMm - e * 2),
+        heightMm: Math.max(0.01, outline.heightMm - e * 2),
+        cornerRadiusMm: Math.max(0, outline.cornerRadiusMm - e),
+      };
+    case "circle":
+      return {
+        ...outline,
+        widthMm: Math.max(0.01, outline.widthMm - e * 2),
+        heightMm: Math.max(0.01, outline.heightMm - e * 2),
+      };
+    default:
+      return outline;
+  }
+}
+
+/** Board-outline polygon (inset by edge clearance) as a clipper ring (mm). */
+function outlinePourRing(
+  outline: PcbBoardOutline,
+  edgeMm: number,
+): ClipperRing {
+  return flattenOutline(insetOutline(outline, Math.max(0, edgeMm))).map(
+    (p): ClipperPoint => [p.x, p.y],
+  );
 }
 
 function rectPolygonRing(
@@ -604,46 +637,129 @@ export function buildCopperFillGeometrySpec(params: {
     rectPolygonRing(fill.center, fill.widthMm, fill.heightMm),
   ];
 
+  // Board area outside the actual (possibly rounded) outline, inset by the edge
+  // clearance. Masking it stops the rectangular fill plane from overhanging
+  // rounded corners. Empty for a plain rect board.
+  const cornerOverhang = polygonDifference(pourRectPoly, [
+    outlinePourRing(params.outline, edge),
+  ]);
+
+  // Clearance-halo masks (unchanged logic; subject = the fill rect).
+  let haloMaskMP: ClipperMultiPolygon;
   if (knockouts.length === 0) {
-    // No knockouts → entire pour is one island. If it survives the area
-    // filter, no mask is needed (pour shows full). If not, the whole fill is
-    // pruned away (rare edge case for tiny boards).
-    return polygonArea(pourRectPoly) >= minIslandArea
-      ? { fill, masks: [] }
-      : {
-          fill,
-          masks: maskSpecsFromPolygons(
-            [pourRectPoly],
-            `pour-mask:${params.layer}`,
-          ),
-        };
+    haloMaskMP =
+      polygonArea(pourRectPoly) >= minIslandArea ? [] : [pourRectPoly];
+  } else {
+    const knockoutUnion = polygonUnion(...knockouts);
+    const pourVisible = polygonDifference(pourRectPoly, knockoutUnion);
+    const keptIslands = pourVisible.filter(
+      (poly) => polygonArea(poly) >= minIslandArea,
+    );
+    haloMaskMP =
+      keptIslands.length === pourVisible.length
+        ? knockoutUnion
+        : keptIslands.length === 0
+          ? [pourRectPoly]
+          : polygonDifference(pourRectPoly, keptIslands);
   }
 
-  const knockoutUnion = polygonUnion(...knockouts);
-  const pourVisible = polygonDifference(pourRectPoly, knockoutUnion);
-  const keptIslands = pourVisible.filter(
-    (poly) => polygonArea(poly) >= minIslandArea,
-  );
-
-  // Common case: nothing pruned → reuse knockoutUnion directly (one fewer
-  // boolean op). Algebraically equivalent to `pourRect − keptIslands`.
-  if (keptIslands.length === pourVisible.length) {
-    return {
-      fill,
-      masks: maskSpecsFromPolygons(knockoutUnion, `pour-mask:${params.layer}`),
-    };
-  }
-
-  // Some islands pruned. Re-derive the mask as pourRect − keptIslands so the
-  // pruned islands get covered by board-bg paint.
-  const finalMaskMP =
-    keptIslands.length === 0
-      ? [pourRectPoly]
-      : polygonDifference(pourRectPoly, keptIslands);
   return {
     fill,
-    masks: maskSpecsFromPolygons(finalMaskMP, `pour-mask:${params.layer}`),
+    masks: maskSpecsFromPolygons(
+      [...haloMaskMP, ...cornerOverhang],
+      `pour-mask:${params.layer}`,
+    ),
   };
+}
+
+/**
+ * Like {@link buildCopperFillGeometrySpec} but returns the POSITIVE pour copper
+ * polygons (the kept islands) as `THREE.Shape[]`, ready for `ShapeGeometry`.
+ * The 2D layer paints a solid plane + board-coloured masks (a depth-test trick
+ * that doesn't survive a real 3D scene); the 3D board instead needs the actual
+ * filled copper geometry. Shares all the clearance/knockout/island logic so the
+ * 3D pour matches the 2D fill. Holes (e.g. a QFP-interior island that survives
+ * the area filter) are preserved as `shape.holes`.
+ */
+export function buildCopperFillPourShapes(params: {
+  layer: PcbCopperLayerId;
+  outline: PcbBoardOutline;
+  placements: ReadonlyArray<PcbPlacedPart>;
+  traces: ReadonlyArray<PcbTrace>;
+  vias: ReadonlyArray<PcbVia>;
+  pourNetId: string | null;
+  padNetIds: ReadonlyMap<string, string>;
+  clearanceMm: number;
+  copperToBoardEdgeMm: number;
+  minIslandAreaMm2?: number;
+}): THREE.Shape[] {
+  const edge = Math.max(0, params.copperToBoardEdgeMm);
+  const fillWidth = params.outline.widthMm - edge * 2;
+  const fillHeight = params.outline.heightMm - edge * 2;
+  if (fillWidth <= 0 || fillHeight <= 0) return [];
+
+  const clearance = Math.max(0, params.clearanceMm);
+  const minIslandArea = Math.max(
+    0,
+    params.minIslandAreaMm2 ?? DEFAULT_MIN_POUR_ISLAND_AREA_MM2,
+  );
+
+  const padCollection = collectPadPolygons(
+    params.layer,
+    params.placements,
+    clearance,
+    params.pourNetId,
+    params.padNetIds,
+  );
+  const traceKnockouts = collectTracePolygons(
+    params.traces,
+    params.layer,
+    params.pourNetId,
+    clearance,
+  );
+  const viaKnockouts = collectViaPolygons(
+    params.vias,
+    params.layer,
+    params.pourNetId,
+    clearance,
+  );
+
+  const diffNetKnockouts: ClipperPolygon[] = [
+    ...padCollection.knockouts,
+    ...traceKnockouts,
+    ...viaKnockouts,
+  ];
+  const diffNetUnion: ClipperMultiPolygon =
+    diffNetKnockouts.length > 0 ? polygonUnion(...diffNetKnockouts) : [];
+
+  const unsafeMergeHalos: ClipperPolygon[] = [];
+  for (const candidate of padCollection.sameNetCandidates) {
+    if (
+      diffNetUnion.length > 0 &&
+      polygonIntersection(candidate.bareWorld, diffNetUnion).length > 0
+    ) {
+      unsafeMergeHalos.push(candidate.haloWorld);
+    }
+  }
+
+  const knockouts: ClipperPolygon[] = [
+    ...diffNetKnockouts,
+    ...unsafeMergeHalos,
+  ];
+  // Follow the actual (possibly rounded) board outline inset by the edge
+  // clearance, not a bare rectangle — so the pour respects rounded corners.
+  const pourSubject: ClipperPolygon = [
+    outlinePourRing(params.outline, params.copperToBoardEdgeMm),
+  ];
+
+  const islands: ClipperMultiPolygon =
+    knockouts.length === 0
+      ? [pourSubject]
+      : polygonDifference(pourSubject, polygonUnion(...knockouts));
+
+  return islands
+    .filter((poly) => polygonArea(poly) >= minIslandArea)
+    .map(polygonToShape);
 }
 
 function maskSpecsFromPolygons(
