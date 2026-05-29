@@ -22,6 +22,7 @@ import {
 } from "react";
 import {
   NoToneMapping,
+  Spherical,
   SRGBColorSpace,
   Vector3,
   type PerspectiveCamera,
@@ -129,10 +130,39 @@ export function applyPan(
   const right = new Vector3().setFromMatrixColumn(camera.matrix, 0);
   const up = new Vector3().setFromMatrixColumn(camera.matrix, 1);
   const move = right
-    .multiplyScalar(-dx * panScale)
-    .add(up.multiplyScalar(dy * panScale));
+    .multiplyScalar(dx * panScale)
+    .add(up.multiplyScalar(-dy * panScale));
   camera.position.add(move);
   target.add(move);
+  return true;
+}
+
+// Radians of orbit per canvas-height of swipe (matches OrbitControls' drag feel).
+const ROTATE_SPEED = 1;
+
+/**
+ * Orbit the camera around the target — same motion as a left-drag — driven by
+ * wheel deltas (used for Shift + two-finger swipe). Mutates `camera.position`.
+ * Returns true if anything changed.
+ */
+export function applyRotate(
+  camera: PerspectiveCamera,
+  target: Vector3,
+  e: WheelEvent,
+  canvasHeightPx: number,
+): boolean {
+  const { dx, dy } = normalizePanDelta(e);
+  if (dx === 0 && dy === 0) return false;
+  if (canvasHeightPx <= 0) return false;
+  const offset = camera.position.clone().sub(target);
+  const spherical = new Spherical().setFromVector3(offset);
+  const factor = (2 * Math.PI * ROTATE_SPEED) / canvasHeightPx;
+  // Inverted vs OrbitControls pointer drag so Shift + swipe orbits the other way.
+  spherical.theta += dx * factor;
+  spherical.phi += dy * factor;
+  spherical.makeSafe(); // clamp polar angle off the poles to avoid flips
+  offset.setFromSpherical(spherical);
+  camera.position.copy(target).add(offset);
   return true;
 }
 
@@ -353,7 +383,10 @@ function Board3DTrackpadControls(): null {
           ndcY,
         );
       } else if (isLikelyTrackpadWheelEvent(e)) {
-        changed = applyPan(cam, ctrls.target, e, rect.height);
+        // Shift + two-finger swipe orbits like a left-drag; otherwise it pans.
+        changed = e.shiftKey
+          ? applyRotate(cam, ctrls.target, e, rect.height)
+          : applyPan(cam, ctrls.target, e, rect.height);
       } else {
         changed = applyDollyToCursor(
           cam,
