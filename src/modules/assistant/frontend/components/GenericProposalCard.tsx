@@ -62,17 +62,21 @@ export function GenericProposalCard({
   }, [proposal.status]);
   const operations = proposal.operations?.length
     ? proposal.operations
-    : proposal.envelope?.operations ?? [];
+    : (proposal.envelope?.operations ?? []);
   const warnings = proposal.warnings?.length
     ? proposal.warnings
-    : proposal.envelope?.warnings ?? [];
+    : (proposal.envelope?.warnings ?? []);
   const sources = proposal.sources?.length
     ? proposal.sources
-    : proposal.envelope?.sources ?? [];
+    : (proposal.envelope?.sources ?? []);
   const title = proposal.title ?? proposal.envelope?.title ?? proposal.kind;
-  const summary = proposal.summary ?? proposal.envelope?.summary ?? "Pending AI write proposal.";
+  const summary =
+    proposal.summary ??
+    proposal.envelope?.summary ??
+    "Pending AI write proposal.";
   const risk = proposal.riskLevel ?? proposal.envelope?.riskLevel ?? "medium";
-  const toolName = proposal.toolName ?? proposal.envelope?.toolName ?? proposal.kind;
+  const toolName =
+    proposal.toolName ?? proposal.envelope?.toolName ?? proposal.kind;
   const isActionable = localStatus === "pending" && Boolean(assistantBaseUrl);
   const operationGroups = groupOperations(operations);
   const operationLimit = compact ? 5 : 8;
@@ -110,12 +114,18 @@ export function GenericProposalCard({
         operations?: Array<{ revisionAfter?: number }>;
         message?: string;
       };
-      const nextStatus = result.status === "partial" || result.status === "failed"
-        ? result.status
-        : "applied";
+      const nextStatus =
+        result.status === "partial" || result.status === "failed"
+          ? result.status
+          : "applied";
       setLocalStatus(nextStatus);
       setConfirmPartial(false);
-      setActionMessage(result.message ?? (nextStatus === "applied" ? "Proposal applied." : "Proposal partially applied or failed."));
+      setActionMessage(
+        result.message ??
+          (nextStatus === "applied"
+            ? "Proposal applied."
+            : "Proposal partially applied or failed."),
+      );
       const revisionFromPlacement = result.applied?.reduce<number | undefined>(
         (max, item) =>
           item.revision === undefined
@@ -125,7 +135,9 @@ export function GenericProposalCard({
               : Math.max(max, item.revision),
         undefined,
       );
-      const revisionFromOperations = result.operations?.reduce<number | undefined>(
+      const revisionFromOperations = result.operations?.reduce<
+        number | undefined
+      >(
         (max, item) =>
           item.revisionAfter === undefined
             ? max
@@ -186,7 +198,9 @@ export function GenericProposalCard({
         },
       );
       if (!response.ok) throw new Error("Session allow failed");
-      setActionMessage("Future proposals from this tool will auto-apply this session.");
+      setActionMessage(
+        "Future proposals from this tool will auto-apply this session.",
+      );
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -209,7 +223,8 @@ export function GenericProposalCard({
         {summary}
       </div>
       <div className="text-[10px] text-slate-500 dark:text-slate-400">
-        {toolName} · {operations.length} operation(s) · {sources.length} source(s)
+        {toolName} · {operations.length} operation(s) · {sources.length}{" "}
+        source(s)
       </div>
       {operations.length > 0 ? (
         <div className="space-y-2 text-[11px] text-slate-700 dark:text-slate-300">
@@ -220,12 +235,21 @@ export function GenericProposalCard({
               </div>
               <ul className="space-y-1">
                 {group.items.slice(0, operationLimit).map((operation) => (
-                  <li key={operation.id} className="rounded bg-white/60 p-2 dark:bg-slate-950/40">
+                  <li
+                    key={operation.id}
+                    className="rounded bg-white/60 p-2 dark:bg-slate-950/40"
+                  >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{operation.title}</span>
-                      {operation.riskLevel ? <span className={riskClass(operation.riskLevel)}>{operation.riskLevel}</span> : null}
+                      {operation.riskLevel ? (
+                        <span className={riskClass(operation.riskLevel)}>
+                          {operation.riskLevel}
+                        </span>
+                      ) : null}
                     </div>
-                    <div className="text-slate-500 dark:text-slate-400">{operation.summary}</div>
+                    <div className="text-slate-500 dark:text-slate-400">
+                      {operation.summary}
+                    </div>
                     {operation.warnings?.length ? (
                       <div className="mt-1 text-amber-600 dark:text-amber-300">
                         {operation.warnings.join(" · ")}
@@ -236,7 +260,8 @@ export function GenericProposalCard({
               </ul>
               {group.items.length > operationLimit ? (
                 <div className="text-[11px] text-slate-500">
-                  +{group.items.length - operationLimit} more in {group.label.toLowerCase()}
+                  +{group.items.length - operationLimit} more in{" "}
+                  {group.label.toLowerCase()}
                 </div>
               ) : null}
             </div>
@@ -255,7 +280,9 @@ export function GenericProposalCard({
           ))}
         </div>
       ) : null}
-      <div className={`flex flex-wrap gap-2 ${compact ? "[&>button]:flex-1 [&>button]:whitespace-nowrap" : ""}`}>
+      <div
+        className={`flex flex-wrap gap-2 ${compact ? "[&>button]:flex-1 [&>button]:whitespace-nowrap" : ""}`}
+      >
         <button
           type="button"
           disabled={busy || !isActionable}
@@ -268,7 +295,7 @@ export function GenericProposalCard({
           type="button"
           disabled={busy || !isActionable}
           onClick={() => void rejectProposal()}
-          className="rounded bg-slate-800 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+          className="rounded bg-slate-200 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-300 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
         >
           Reject
         </button>
@@ -292,9 +319,12 @@ export function GenericProposalCard({
 
 function riskClass(risk: GenericRiskLevel): string {
   const base = "rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide";
-  if (risk === "destructive") return `${base} bg-red-500/15 text-red-700 dark:text-red-300`;
-  if (risk === "high") return `${base} bg-orange-500/15 text-orange-700 dark:text-orange-300`;
-  if (risk === "medium") return `${base} bg-amber-500/15 text-amber-700 dark:text-amber-300`;
+  if (risk === "destructive")
+    return `${base} bg-red-500/15 text-red-700 dark:text-red-300`;
+  if (risk === "high")
+    return `${base} bg-orange-500/15 text-orange-700 dark:text-orange-300`;
+  if (risk === "medium")
+    return `${base} bg-amber-500/15 text-amber-700 dark:text-amber-300`;
   return `${base} bg-emerald-500/15 text-emerald-700 dark:text-emerald-300`;
 }
 
@@ -310,7 +340,9 @@ function groupOperations(operations: GenericOperation[]): Array<{
       ? "Deletes"
       : kind.includes("wire") || kind.includes("junction")
         ? "Wires"
-        : kind.includes("label") || kind.includes("primitive") || kind.includes("port")
+        : kind.includes("label") ||
+            kind.includes("primitive") ||
+            kind.includes("port")
           ? "Labels & ports"
           : kind.includes("part") || kind.includes("place")
             ? "Parts"

@@ -19,6 +19,17 @@ interface DiagnosticsPaths {
   appVersion: string;
 }
 
+interface AppVersions {
+  app: string;
+  electron: string;
+  chromium: string;
+  node: string;
+  v8: string;
+  platform: string;
+  arch: string;
+  osRelease: string;
+}
+
 contextBridge.exposeInMainWorld("electronAPI", {
   onBackendReady: (callback: (payload: BackendReadyPayload) => void) => {
     ipcRenderer.on("backend-ready", (_event, payload: BackendReadyPayload) => {
@@ -36,6 +47,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   getDiagnosticsPaths: (): Promise<DiagnosticsPaths> => {
     return ipcRenderer.invoke("diagnostics:paths");
+  },
+  getAppVersions: (): Promise<AppVersions> => {
+    return ipcRenderer.invoke("app:get-versions");
+  },
+  openUserDataFolder: (): Promise<{ dir: string; error: string | null }> => {
+    return ipcRenderer.invoke("diagnostics:open-user-data");
   },
   onDeepLink: (callback: (url: string) => void) => {
     ipcRenderer.on("deep-link", (_event, url: string) => callback(url));

@@ -4,41 +4,28 @@ import type {
   AssistantPromptPresetId,
 } from "../../../sdks/assistant";
 
-const TOOL_INSTRUCTIONS = `
-- Use tools for OpenPCB project/library facts.
-- Prefer compact targeted tools before broad summaries.
-- If a tool result is truncated, say so.
-- Use read-only tools freely for research. Use write tools only when they are available and only after the user confirms the proposed action.
-- If a requested design/part/component is ambiguous, ask for clarification.
-- For circuit creation/planning, first decompose the request into a BOM and call \`library_resolve_bom\` before creating a design or placing components.
-- For vague circuit requests, assume 5V supply, ~1Hz target blink rate, and 0603 SMD where available for brainstorming; ask before write actions.
-- Search by generic component family first. Treat colors, values, packages, tolerances, and ratings as requirements/instance properties, not literal component names. Example: search \`LED\` with color=red/green rather than \`LED red\`.
-- Never declare a component missing until broad/local fallback search has been tried. Prefer installed generic components when adequate, then give compact optional import suggestions for exact variants.
-- Prefer the simplest circuit realizable with installed components. Do not add transistors, inverters, or extra ICs when a simpler installed-component topology works.
-- Before using write tools, explain the proposed BOM/architecture and ask the user to confirm creating or editing a design.
-- For small schematic edits after confirmation, prefer \`designer_propose_schematic_edits\` for placing parts, labels, power ports, and net portals.
-- For wiring, first call \`designer_get_schematic_connectivity\` to obtain exact existing pin IDs/world coordinates/nets, then call \`designer_propose_schematic_wires\`.
-- For new parts placed by a proposal, do not wire them in the same proposal unless their pin IDs already exist. After the placement proposal is applied, read schematic connectivity, then propose wires.
-- For schematic canvas edits to existing entities, call \`designer_get_schematic_connectivity\` first, then use \`designer_propose_schematic_updates\` for move/rotate/mirror/value/label/port-text edits.
-- For deletions, use \`designer_propose_schematic_deletions\` only after explicit user confirmation; treat it as destructive.
-- Never claim a proposal was applied unless the tool/apply result says it was applied. If a proposal is pending, tell the user to review/apply it in the card.
-- If no local library component matches after fallback, say so and optionally suggest generic unavailable parts or import guidance.
-- To browse the entire library, call \`library_search_components\` with no \`query\` (or empty).
-- Reply with plain markdown. Never wrap your response in <response>…</response>, HTML, or other envelopes; the UI renders raw markdown directly.
-- For diagrams, flows, quick references, state machines, or architecture sketches, prefer fenced Mermaid blocks (start the fence with \`\`\`mermaid) over ASCII art.
-- Mermaid must work with strict security: no HTML tags, <br/>, click directives, links, embedded CSS/JS, or custom scripts, and no comments. (\`classDef\`, \`class\`, \`style\` and \`linkStyle\` directives ARE allowed and encouraged — see below.)
-- For Mermaid flowcharts, prefer \`flowchart LR\`; use simple IDs like \`VCC\`, \`GND\`, \`R1\`, \`Q1_B\`; put display text in quoted labels like \`R1["R1 10k resistor"]\`; quote edge labels with punctuation.
-- Color nodes by meaning using ONLY this fixed palette. Add the relevant \`classDef\` lines at the END of the block, then assign with \`class NodeId className\` (or \`NodeId:::className\`). Use ≤7 classes; omit any you don't need:
-  \`classDef power fill:#13191F,stroke:#E0573A,color:#F3F4F6;\` (power rails / VCC)
-  \`classDef ground fill:#13191F,stroke:#5DCAA5,color:#F3F4F6;\` (GND / returns)
-  \`classDef timing fill:#13191F,stroke:#FBBF24,color:#F3F4F6;\` (caps / timing)
-  \`classDef signal fill:#13191F,stroke:#94A3B8,color:#F3F4F6;\` (generic signal)
-  \`classDef ok fill:#13191F,stroke:#34D399,color:#F3F4F6;\` (result / success / chosen path)
-  \`classDef warn fill:#13191F,stroke:#FBBF24,color:#F3F4F6;\` (caution)
-  \`classDef err fill:#13191F,stroke:#F87171,color:#F3F4F6;\` (error / fault)
-- For circuit wiring diagrams, represent power rails and shared nets as explicit nodes (class them \`power\`/\`ground\`), keep labels short, and add a wiring table after the diagram when precise pin-to-pin detail matters.
-- Ensure every Mermaid block is syntactically complete. If unsure, use a simple wiring table instead of a fragile diagram.
-- When a tool returns component results, do NOT repeat them as a markdown table — the UI renders structured cards automatically. Reference items by name in prose.
+// Always-on guidance: grounding, search/library heuristics, output format. Kept lean
+// so per-call payload stays small for reasoning models (write-workflow rules are added
+// only when write tools are staged — see WRITE_TOOL_INSTRUCTIONS).
+const CORE_TOOL_INSTRUCTIONS = `
+- Use tools for OpenPCB project/library facts; prefer compact targeted tools, and say so if a result is truncated. Ask for clarification when a design/part/component is ambiguous.
+- Search by generic component family first; treat colors, values, packages, tolerances, and ratings as requirements, not literal names (search \`LED\` color=red, not \`LED red\`). Browse the whole library by calling \`library_search_components\` with an empty query.
+- Never declare a component missing until broad/local fallback search has been tried. Prefer adequate installed generics, then optionally suggest exact-variant imports.
+- For circuit creation, decompose the request into a BOM and call \`library_resolve_bom\` first. Prefer the simplest topology realizable with installed components (no extra transistors/inverters/ICs); for vague requests assume 5V, ~1Hz blink, 0603 SMD, and ask before any write action.
+- Reply in plain markdown — never wrap output in <response>…</response>, HTML, or other envelopes. When a tool returns component results, reference them by name in prose; do NOT repeat them as a table (the UI renders structured cards).
+- For diagrams/flows/state machines, prefer fenced Mermaid (\`\`\`mermaid, \`flowchart LR\`, simple IDs like \`VCC\`/\`R1\`, quoted labels like \`R1["R1 10k"]\`) over ASCII art. Strict security: no HTML, <br/>, links, click directives, embedded CSS/JS, or comments (\`classDef\`/\`class\`/\`style\`/\`linkStyle\` ARE allowed). Represent power rails/nets as explicit nodes, keep labels short, and ensure every block is syntactically complete — else use a wiring table.
+- Color Mermaid nodes by meaning using ONLY this palette (\`classDef\` lines at the end, assign via \`class NodeId className\`; omit unused):
+  \`classDef power fill:#13191F,stroke:#E0573A,color:#F3F4F6;\` \`classDef ground fill:#13191F,stroke:#5DCAA5,color:#F3F4F6;\` \`classDef timing fill:#13191F,stroke:#FBBF24,color:#F3F4F6;\` \`classDef signal fill:#13191F,stroke:#94A3B8,color:#F3F4F6;\` \`classDef ok fill:#13191F,stroke:#34D399,color:#F3F4F6;\` \`classDef err fill:#13191F,stroke:#F87171,color:#F3F4F6;\`
+`.trim();
+
+// Added only when write/propose tools are available (a design is bound). These rules
+// are dead weight — and payload bloat — when the chat has no design context.
+const WRITE_TOOL_INSTRUCTIONS = `
+- Use write tools only after explaining the proposed BOM/architecture and getting user confirmation. Never claim a proposal was applied unless the tool/apply result says so; if pending, tell the user to review/apply it in the card.
+- Small schematic edits: \`designer_propose_schematic_edits\` for placing parts, labels, power ports, net portals.
+- Wiring: first call \`designer_get_schematic_connectivity\` for exact pin IDs/coords/nets, then \`designer_propose_schematic_wires\`. Do not wire newly proposed parts until their placement proposal is applied and connectivity re-read.
+- Edits to existing entities: call \`designer_get_schematic_connectivity\` first, then \`designer_propose_schematic_updates\` (move/rotate/mirror/value/label/port-text).
+- Deletions: \`designer_propose_schematic_deletions\` only after explicit confirmation; treat as destructive.
 `.trim();
 
 const PRESETS: Record<AssistantPromptPresetId, AiPromptPreset> = {
@@ -88,11 +75,16 @@ export class PromptService {
       content: string;
       priority: number;
     }[] = [],
+    options: { includeWriteTools?: boolean } = {},
   ): string {
+    const includeWriteTools = options.includeWriteTools ?? true;
+    const toolInstructions = includeWriteTools
+      ? `${CORE_TOOL_INSTRUCTIONS}\n${WRITE_TOOL_INSTRUCTIONS}`
+      : CORE_TOOL_INSTRUCTIONS;
     return composeSystemPrompt({
       preset: this.getPreset(presetId),
       blocks: contextBlocks,
-      toolInstructions: TOOL_INSTRUCTIONS,
+      toolInstructions,
     });
   }
 }

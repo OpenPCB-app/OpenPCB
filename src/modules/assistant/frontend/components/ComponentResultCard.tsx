@@ -32,9 +32,13 @@ export interface ComponentResultsPayload {
 export function ComponentResultsBlock({
   data,
   compact = false,
+  onSendPrompt,
 }: {
   data: ComponentResultsPayload;
   compact?: boolean;
+  /** Sends a follow-up prompt that makes the model dispatch a Propose-level
+   *  command (designer_place_components) — never a direct mutation. */
+  onSendPrompt?: (prompt: string) => void;
 }): ReactElement {
   const navigateToModule = useNavigationStore(
     (state) => state.navigateToModule,
@@ -131,6 +135,23 @@ export function ComponentResultsBlock({
                       </span>
                     ))}
                   </div>
+                  {/* Command-based CTA — proposes a placement (Propose level),
+                      not a direct mutation. stopPropagation so it doesn't also
+                      trigger the card's open-in-Library click. */}
+                  {onSendPrompt && hit.detailAvailable ? (
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSendPrompt(`Add ${hit.name} to the schematic.`);
+                        }}
+                        className="rounded-control bg-violet-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-violet-500"
+                      >
+                        Add to schematic
+                      </button>
+                    </div>
+                  ) : null}
                 </article>
               );
             })}
@@ -139,7 +160,7 @@ export function ComponentResultsBlock({
       ) : null}
 
       {data.noLocalMatch ? (
-        <div className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-3 text-xs text-amber-200">
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
           <div className="flex items-center gap-2 font-medium">
             <PackageOpen className="h-4 w-4" />
             No installed component matches.
@@ -148,12 +169,14 @@ export function ComponentResultsBlock({
             <ul className="mt-2 space-y-1">
               {data.genericSuggestions.map((s) => (
                 <li key={s.label} className="flex items-start gap-2">
-                  <span className="rounded bg-amber-900/40 px-1 text-[10px] uppercase text-amber-300">
+                  <span className="rounded bg-amber-200 px-1 text-[10px] uppercase text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
                     not installed
                   </span>
                   <div>
-                    <div className="font-mono text-amber-100">{s.label}</div>
-                    <div className="text-[11px] text-amber-300/80">
+                    <div className="font-mono text-amber-900 dark:text-amber-100">
+                      {s.label}
+                    </div>
+                    <div className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
                       {s.reason}
                     </div>
                   </div>
@@ -162,7 +185,7 @@ export function ComponentResultsBlock({
             </ul>
           ) : null}
           {data.importGuidance ? (
-            <p className="mt-2 inline-flex items-center gap-1 text-amber-300">
+            <p className="mt-2 inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
               <ExternalLink className="h-3 w-3" />
               {data.importGuidance}
             </p>

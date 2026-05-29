@@ -1,6 +1,7 @@
 import { useNavigationStore } from "./stores/navigation-store";
 import { HomeScreen } from "./screens/HomeScreen";
 import { ModuleScreen } from "./screens/ModuleScreen";
+import { SettingsScreen } from "./screens/SettingsScreen";
 
 export function AppRouter() {
   const currentRoute = useNavigationStore((state) => state.currentRoute);
@@ -17,6 +18,10 @@ export function AppRouter() {
         params={currentRoute.params}
       />
     );
+  }
+
+  if (currentRoute.kind === "settings") {
+    return <SettingsScreen tab={currentRoute.tab} />;
   }
 
   return <HomeScreen />;

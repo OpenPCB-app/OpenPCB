@@ -1,6 +1,15 @@
-import { useRef, useState, type KeyboardEvent, type ReactElement } from "react";
-import { ArrowUp, Paperclip, Square, Wrench } from "lucide-react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactElement,
+} from "react";
+import { ArrowUp, Square, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/** Max grown height in px — matches the textarea's `max-h-48` (12rem) cap. */
+const MAX_TEXTAREA_PX = 192;
 
 export interface ChatComposerProps {
   value: string;
@@ -24,9 +33,9 @@ export interface ChatComposerProps {
 
 /**
  * Rich composer card shared by the standalone Assistant view and the docked
- * panel: file-attach (stub), `/`-command popover, multiline input, send/stop,
- * and a footer with tool count + context budget + keyboard hints. File attach
- * and token *usage* are intentionally stubbed (no backend support yet).
+ * panel: `/`-command popover, auto-growing multiline input, send/stop, and a
+ * footer with tool count + context budget + keyboard hints. Token *usage* is
+ * intentionally stubbed (no backend support yet).
  */
 export function ChatComposer({
   value,
@@ -43,6 +52,15 @@ export function ChatComposer({
 }: ChatComposerProps): ReactElement {
   const [slashOpen, setSlashOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Auto-grow the textarea up to MAX_TEXTAREA_PX, then scroll. Driven by `value` so it
+  // also handles quick-action fills and the reset-to-one-row after send/clear.
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_PX)}px`;
+  }, [value]);
 
   const handleChange = (next: string) => {
     onChange(next);
@@ -101,15 +119,6 @@ export function ChatComposer({
 
         {/* Input row */}
         <div className="flex items-end gap-2 px-2.5 py-2">
-          <button
-            type="button"
-            disabled
-            title="Attach a file — coming soon"
-            aria-label="Attach a file"
-            className="mb-1 flex shrink-0 cursor-not-allowed p-1 text-slate-400 opacity-60"
-          >
-            <Paperclip className="h-4 w-4" />
-          </button>
           <textarea
             ref={textareaRef}
             value={value}
@@ -119,7 +128,7 @@ export function ChatComposer({
             rows={compact ? 2 : 1}
             placeholder={placeholder}
             className={cn(
-              "max-h-48 min-h-0 w-full resize-none bg-transparent text-sm leading-relaxed text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100",
+              "max-h-48 min-h-0 w-full resize-none overflow-y-auto bg-transparent text-sm leading-relaxed text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100",
               compact ? "py-1" : "py-1.5",
             )}
           />

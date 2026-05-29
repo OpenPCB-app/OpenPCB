@@ -7,7 +7,8 @@ export type StreamStatus =
   | "streaming"
   | "completed"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "disconnected";
 
 export interface AssistantStreamState {
   status: StreamStatus;
@@ -44,14 +45,20 @@ interface ParsedChunkData {
  * Text deltas (kind:'text') fire onChunkText.
  */
 export function useAssistantStream(options: UseAssistantStreamOptions) {
-  const { backendUrl, onChunkText, onAiEvent, onTaskEvent, onTerminal } = options;
+  const { backendUrl, onChunkText, onAiEvent, onTaskEvent, onTerminal } =
+    options;
   const [state, setState] = useState<AssistantStreamState>({
     status: "idle",
     events: [],
     lastError: null,
   });
   const streamRef = useRef<EventSource | null>(null);
-  const handlersRef = useRef({ onChunkText, onAiEvent, onTaskEvent, onTerminal });
+  const handlersRef = useRef({
+    onChunkText,
+    onAiEvent,
+    onTaskEvent,
+    onTerminal,
+  });
   handlersRef.current = { onChunkText, onAiEvent, onTaskEvent, onTerminal };
   const retryTimersRef = useRef<number[]>([]);
 
@@ -90,20 +97,25 @@ export function useAssistantStream(options: UseAssistantStreamOptions) {
           const task = (await response.json()) as Task;
           const status = task.status;
           if (status === "completed") return finish("completed");
-          if (status === "failed") return finish("failed", task.error?.message ?? "Task failed");
+          if (status === "failed")
+            return finish("failed", task.error?.message ?? "Task failed");
           if (status === "cancelled") return finish("cancelled");
           if (attempt >= 2) {
-            setState((prev) => ({ ...prev, status: "failed", lastError: "Stream disconnected" }));
-            handlersRef.current.onTerminal?.(ctx, "failed", "Stream disconnected");
-            return;
+            return finish("disconnected", "Stream disconnected");
           }
           const delays = [500, 1000, 2000];
-          const timer = window.setTimeout(() => open(ctx, attempt + 1), delays[attempt]);
+          const timer = window.setTimeout(
+            () => open(ctx, attempt + 1),
+            delays[attempt],
+          );
           retryTimersRef.current.push(timer);
         } catch {
           if (attempt >= 2) return finish("failed", "Stream error");
           const delays = [500, 1000, 2000];
-          const timer = window.setTimeout(() => open(ctx, attempt + 1), delays[attempt]);
+          const timer = window.setTimeout(
+            () => open(ctx, attempt + 1),
+            delays[attempt],
+          );
           retryTimersRef.current.push(timer);
         }
       };
@@ -117,7 +129,13 @@ export function useAssistantStream(options: UseAssistantStreamOptions) {
         }
       };
 
-      ["task.created", "task.queued", "task.started", "task.streaming", "task.progress"].forEach((type) => {
+      [
+        "task.created",
+        "task.queued",
+        "task.started",
+        "task.streaming",
+        "task.progress",
+      ].forEach((type) => {
         stream.addEventListener(type, handleTaskEvent);
       });
 

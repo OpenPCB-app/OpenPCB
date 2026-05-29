@@ -36,6 +36,7 @@ import {
 import type { BoundsMm } from "../../../../shared/rendering/types";
 import { RENDER_ORDER } from "../../../../shared/frontend/canvas/layers";
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
+import { useTheme } from "../../../../core/frontend/src/providers/ThemeProvider";
 import { Units } from "../../../../shared/frontend/canvas/coords";
 import {
   DEFAULT_SCHEMATIC_ZOOM,
@@ -453,7 +454,10 @@ function firstSelectedId(set: Set<string>): string | null {
   return null;
 }
 
-function sameStringSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+function sameStringSet(
+  a: ReadonlySet<string>,
+  b: ReadonlySet<string>,
+): boolean {
   if (a.size !== b.size) return false;
   for (const value of a) {
     if (!b.has(value)) return false;
@@ -726,6 +730,11 @@ export const SchematicCanvas = forwardRef<
     initialViewport,
     onViewportChange,
   } = props;
+
+  // Light-mode canvas background tracks the app surface (#f0f4fb) so the
+  // schematic reads as part of the shell; dark mode keeps the canvas default.
+  const { mode } = useTheme();
+  const canvasBackground = mode === "light" ? "#f0f4fb" : undefined;
 
   const snap = (pointNm: PointNm) => snapNm(pointNm, gridVisible);
 
@@ -2473,6 +2482,7 @@ export const SchematicCanvas = forwardRef<
         initialZoom={DEFAULT_SCHEMATIC_ZOOM}
         enableDragDrop
         gridSize={SCHEMATIC_GRID_NM}
+        backgroundColor={canvasBackground}
       >
         <CameraRefBridge
           cameraRef={cameraRef}

@@ -16,6 +16,60 @@
 - Manufacturing export (Gerber X2 + Excellon + BOM + PnP + ZIP + Export dialog): **shipped 2026-05-17** — see "Manufacturing Export (v0)" section below. **First fab-able beta is unblocked.**
 - Active sprint: post-merge cleanup + dead-code removal (see plan in `.claude/plans/act-as-senior-software-resilient-meadow.md`).
 
+## Active Assistant Release-Readiness (P0→P2 fixes + hardening)
+
+Plan: `~/.claude/plans/read-openpcb-assistant-findings-handoff-robust-island.md`. Shared dev: edit `../shared/packages/{ai-core,contracts}/src` → build → `npm run shared:link`; restart Vite after `src/modules`/`src/shared` edits; verify headed, **27B only** (OOM).
+
+- **P0 empty bubbles**: reasoning_content discarded + payload bloat (13 tools + ~7KB prompt) + no empty-completed fallback.
+
+Status: Phases 0–6 implemented + green (typecheck clean; backend 450 pass; frontend 198 pass; ai-core 38 pass). Phase 7 = release tagging (needs push auth) + headed Playwright (needs oMLX :8000 up).
+
+### Phase 0 — testability seam + dev unblock
+
+- [x] `run-service.ts`: optional `buildClient` in `RunServiceOptions` (default `buildAiProviderClient`)
+- [~] dev: clear poisoned `assistant_provider_capability` omlx row (probe fix prevents re-poison; clear at verify time)
+
+### Phase 1 — P0 payload reduction
+
+- [x] `stageRegistryForBindings()` bind-gated staging (unbound 5 tools, bound 13) — tested
+- [x] wire into `run-service.ts` (after providerAllowsTools gate)
+- [x] condense `TOOL_INSTRUCTIONS` → core (always) + write-workflow (bound only) in `prompt-service.ts`
+
+### Phase 2 — P0 reasoning capture + empty-completed fallback
+
+- [x] ai-core `events.ts`: `reasoningContent?`/`finishReason?` on completed event
+- [x] ai-core `openai-compatible.ts`: capture reasoning_content/reasoning; emit in completed
+- [x] ai-core `run-loop.ts`: pass through finishReason/reasoning
+- [x] contracts `AssistantMessageMetadata.ai`: `reasoning?`/`truncated?`/`emptyResponse?`
+- [x] backend `run-service.ts`: runState threading + empty-completed detect + auto-retry + persist reasoning
+- [x] FE `Space.tsx`: `run.warning` handler; onTerminal keep-empty-run→failed+lastError
+- [x] FE `MessageCard.tsx`: collapsed "Show reasoning" disclosure (auto-open when empty)
+
+### Phase 3 — P1 probe + finish_reason
+
+- [x] ai-core `probeToolCall`: maxOutputTokens 16→256; length→inconclusive (never cache false)
+- [x] ai-core `run-loop.ts`: `run.warning(truncated)` on length; accurate finishReason
+- [x] backend/FE: surface truncated warning (metadata.truncated + MessageCard note)
+
+### Phase 4 — P1 composer auto-grow
+
+- [x] `ChatComposer.tsx`: scrollHeight auto-grow (value-driven useLayoutEffect) + reset on send
+
+### Phase 5 — P2 hardening
+
+- [x] chat-selection race guard; rename committing state + draft-keep; dismissible error banner
+- [x] SSE parse drop counting; wire `"disconnected"` status; a11y (aria-label/live/current); Export-markdown impl; removed Attach-file stub
+
+### Phase 6 — tests
+
+- [x] ai-core tests (reasoning capture, probe finish_reason, truncation, sse drop) — 38 pass
+- [x] backend `assistant-run-service.test.ts` (empty/retry/reasoning/staging) — 7 pass
+
+### Phase 7 — release + verification
+
+- [ ] tag ai-core-v0.2.0 + contracts-v0.2.3 (push to shared repo — needs user auth); then `shared:unlink` + bump deps + reinstall
+- [~] typecheck + test:backend + test:react + ai-core bun test = ALL GREEN; headed Playwright (a)-(e) pending oMLX :8000
+
 ## Active Dev CoreLibrary Integration
 
 - [x] Add OpenPCB dev script to pack sibling `../CoreLibrary` as fixed `999.0.0-dev` package.

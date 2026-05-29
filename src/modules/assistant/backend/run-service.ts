@@ -38,6 +38,45 @@ export interface RunServiceOptions {
   prompts: PromptService;
   contextResolver: ContextResolver;
   buildRegistry: (allowRawToolData: boolean) => AiToolRegistry;
+  /** Injectable provider-client factory (defaults to buildAiProviderClient); tests override. */
+  buildClient?: typeof buildAiProviderClient;
+}
+
+/** Per-turn signals captured from ai-core events for fallback decisions + metadata. */
+interface AssistantTurnState {
+  reasoning?: string;
+  finishReason?: string;
+  truncated?: boolean;
+}
+
+/**
+ * Tools exposed when no design is bound to the chat: library reads plus the two
+ * designer entry points. The full designer read+write set is only sent once a
+ * design is bound — this keeps the per-call schema payload small enough that
+ * reasoning models reliably emit content/tool calls instead of going empty.
+ */
+const UNBOUND_TOOL_NAMES = new Set<string>([
+  "library_search_components",
+  "library_resolve_bom",
+  "library_get_component_detail",
+  "designer_resolve_design",
+  "designer_create_design",
+]);
+
+function stageRegistryForBindings(
+  full: AiToolRegistry,
+  hasBoundDesign: boolean,
+): AiToolRegistry {
+  if (hasBoundDesign) return full;
+  const staged = new AiToolRegistry();
+  for (const tool of full.list()) {
+    if (UNBOUND_TOOL_NAMES.has(tool.definition.name)) staged.register(tool);
+  }
+  return staged;
+}
+
+function isBlank(text: string | null | undefined): boolean {
+  return !text || text.trim().length === 0;
 }
 
 export class RunService {
@@ -71,10 +110,19 @@ export class RunService {
     await this.options.contextResolver.refreshBindingHealth(payload.chatId);
     const bindings = this.options.contextResolver.listBindings(payload.chatId);
 
-    const configuredRegistry = this.options.buildRegistry(settings.allowRawToolData);
+    const configuredRegistry = this.options.buildRegistry(
+      settings.allowRawToolData,
+    );
     const providerAllowsTools = provider.capabilities?.toolCalling !== false;
-    const registry = providerAllowsTools ? configuredRegistry : new AiToolRegistry();
-    const client = buildAiProviderClient(provider);
+    const hasBoundDesign = bindings.some(
+      (b) => b.kind === "design" && b.status === "active",
+    );
+    const registry = providerAllowsTools
+      ? stageRegistryForBindings(configuredRegistry, hasBoundDesign)
+      : new AiToolRegistry();
+    const client = (this.options.buildClient ?? buildAiProviderClient)(
+      provider,
+    );
     const limits = resolveToolLimits({
       preference: settings.contextSizePreference,
       modelContextTokens: provider.capabilities?.maxContextTokens,
@@ -91,10 +139,12 @@ export class RunService {
     const systemPrompt = this.options.prompts.composeSystem(
       chat.promptPresetId,
       systemBlocks,
+      { includeWriteTools: hasBoundDesign },
     );
 
     const history = orderMessagesForProvider(
-      this.options.conversation.listMessages(payload.chatId, { limit: 200 }).items,
+      this.options.conversation.listMessages(payload.chatId, { limit: 200 })
+        .items,
     );
     const messages: AiChatMessage[] = [
       { role: "system", content: systemPrompt },
@@ -122,8 +172,12 @@ export class RunService {
       }
     }
 
+    // Snapshot the pre-run prompt; runChat mutates `messages` in place (appends
+    // assistant/tool turns). The empty-completed retry reuses this clean copy.
+    const initialMessages = messages.slice();
     const callSummaries = new Map<string, AssistantToolCallSummary>();
     const toolEventsByCall = new Map<string, AssistantToolEventDto>();
+    const runState: AssistantTurnState = {};
 
     try {
       let failedEvent: AiRunEvent | null = null;
@@ -145,12 +199,16 @@ export class RunService {
           taskCtx,
           callSummaries,
           toolEventsByCall,
+          runState,
         );
       }
       if (failedEvent && registry.listDefinitions().length > 0) {
         const warning =
           "Provider failed while tools were enabled. Retrying this answer in chat-only mode.";
-        this.options.conversation.setMessageContent(payload.assistantMessageId, "");
+        this.options.conversation.setMessageContent(
+          payload.assistantMessageId,
+          "",
+        );
         this.options.conversation.appendMessageContent(
           payload.assistantMessageId,
           `_${warning}_\n\n`,
@@ -175,16 +233,67 @@ export class RunService {
             taskCtx,
             callSummaries,
             toolEventsByCall,
+            runState,
           );
         }
       }
-      // Persist final summaries onto the assistant message metadata.
+
+      // Empty-completed safety net: a reasoning model can finish a turn with no
+      // visible content and no tool calls (it spent the turn on reasoning_content).
+      // Retry once chat-only; if still empty, signal an empty_response so the UI
+      // shows a retry affordance instead of a blank bubble.
+      const answeredOrToolWork = () =>
+        !isBlank(
+          this.options.conversation.getMessage(payload.assistantMessageId)
+            ?.content,
+        ) || callSummaries.size > 0;
+      if (!answeredOrToolWork() && !failedEvent) {
+        for await (const event of runChat({
+          client,
+          registry: new AiToolRegistry(),
+          model: payload.model,
+          messages: initialMessages.filter(
+            (m) => m.role !== "tool" && !m.toolCalls,
+          ),
+          bindings,
+          limits,
+          chatId: payload.chatId,
+          maxToolIterations: 1,
+          signal: taskCtx.signal,
+        })) {
+          await this.handleEvent(
+            event,
+            payload,
+            taskCtx,
+            callSummaries,
+            toolEventsByCall,
+            runState,
+          );
+        }
+      }
+      const emptyResponse = !answeredOrToolWork();
+      if (emptyResponse) {
+        await this.emitAiEvent(taskCtx, {
+          type: "run.warning",
+          runId: payload.chatId,
+          timestamp: new Date().toISOString(),
+          data: {
+            code: "empty_response",
+            message: "The model returned no answer.",
+          },
+        });
+      }
+
+      // Persist final summaries + reasoning/diagnostics onto the assistant message metadata.
       const summaries = Array.from(callSummaries.values());
       const totalSources = summaries.reduce((acc, s) => acc + s.sourceCount, 0);
       const metadata: AssistantMessageMetadata = {
         ai: {
           toolCallSummaries: summaries,
           totalSources,
+          ...(runState.reasoning ? { reasoning: runState.reasoning } : {}),
+          ...(runState.truncated ? { truncated: true } : {}),
+          ...(emptyResponse ? { emptyResponse: true } : {}),
         },
       };
       this.options.conversation.setMessageMetadata(
@@ -205,12 +314,23 @@ export class RunService {
     }
   }
 
+  private async emitAiEvent(
+    taskCtx: TaskExecutionContext<SubmitPayload>,
+    event: AiRunEvent,
+  ): Promise<void> {
+    await taskCtx.emitChunk({
+      kind: "json",
+      content: JSON.stringify({ _aiEvent: event }),
+    });
+  }
+
   private async handleEvent(
     event: AiRunEvent,
     payload: SubmitPayload,
     taskCtx: TaskExecutionContext<SubmitPayload>,
     callSummaries: Map<string, AssistantToolCallSummary>,
     toolEventsByCall: Map<string, AssistantToolEventDto>,
+    runState: AssistantTurnState,
   ): Promise<void> {
     switch (event.type) {
       case "run.message.delta":
@@ -221,6 +341,10 @@ export class RunService {
         await taskCtx.emitChunk({ kind: "text", content: event.data.delta });
         break;
       case "run.message.completed":
+        if (event.data.reasoningContent)
+          runState.reasoning = event.data.reasoningContent;
+        if (event.data.finishReason)
+          runState.finishReason = event.data.finishReason;
         if (event.data.toolCallCount > 0) {
           this.options.conversation.createMessage({
             chatId: payload.chatId,
@@ -231,10 +355,7 @@ export class RunService {
             metadata: { ai: { internal: true } },
           });
         }
-        await taskCtx.emitChunk({
-          kind: "json",
-          content: JSON.stringify({ _aiEvent: event }),
-        });
+        await this.emitAiEvent(taskCtx, event);
         break;
       case "run.tool.requested": {
         const dto = this.options.conversation.upsertToolEvent({
@@ -346,7 +467,10 @@ export class RunService {
         this.options.conversation.createMessage({
           chatId: payload.chatId,
           role: "tool",
-          content: JSON.stringify({ ok: false, error: event.data.errorMessage }),
+          content: JSON.stringify({
+            ok: false,
+            error: event.data.errorMessage,
+          }),
           toolCallId: event.data.toolCallId,
           toolName: event.data.toolName,
           taskId: taskCtx.task.id,
@@ -359,14 +483,14 @@ export class RunService {
         break;
       }
       case "run.warning":
+        if (event.data.code === "truncated") runState.truncated = true;
+        await this.emitAiEvent(taskCtx, event);
+        break;
       case "run.started":
       case "run.completed":
       case "run.failed":
       case "run.cancelled":
-        await taskCtx.emitChunk({
-          kind: "json",
-          content: JSON.stringify({ _aiEvent: event }),
-        });
+        await this.emitAiEvent(taskCtx, event);
         break;
     }
   }
@@ -381,7 +505,9 @@ function safeParseArray<T>(json: string): T[] | null {
   }
 }
 
-function orderMessagesForProvider(messages: AssistantMessage[]): AssistantMessage[] {
+function orderMessagesForProvider(
+  messages: AssistantMessage[],
+): AssistantMessage[] {
   return messages
     .map((message, index) => ({ message, index }))
     .sort((a, b) => {

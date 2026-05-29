@@ -61,6 +61,11 @@ const VALID_KINDS: AiProviderKind[] = [
   "omlx",
 ];
 
+// Curated built-ins seeded on first run. `openai-compatible` is intentionally
+// excluded — it stays a valid kind so users can add their own custom endpoint
+// via "Add provider", but we don't ship it as a default preset.
+const SEEDED_BUILTIN_KINDS: AiProviderKind[] = ["openai", "lmstudio", "omlx"];
+
 export class ProviderStore {
   private readonly rawSql: RawSqlFn;
 
@@ -70,8 +75,9 @@ export class ProviderStore {
 
   ensureDefaults(): void {
     const timestamp = now();
-    // Seed every preset as a builtin (disabled by default for those that need user setup).
+    // Seed curated presets as builtins (disabled by default for those that need user setup).
     for (const preset of AI_PROVIDER_PRESETS) {
+      if (!SEEDED_BUILTIN_KINDS.includes(preset.kind)) continue;
       const presetId = preset.kind; // stable id == kind for builtins
       const existing = this.rawSql(
         "SELECT id FROM assistant_provider_config WHERE id=?",
