@@ -510,9 +510,9 @@ export function DesignerChatDock({
     selectedChatId,
   ]);
 
-  const submit = async (event?: FormEvent) => {
+  const submit = async (event?: FormEvent, contentOverride?: string) => {
     event?.preventDefault();
-    const content = input.trim();
+    const content = (contentOverride ?? input).trim();
     if (!assistantBase || !content || !designId) return;
     setLoading(true);
     setError(null);
@@ -791,6 +791,11 @@ export function DesignerChatDock({
                   void stopRun(run).catch((err: unknown) =>
                     setError(err instanceof Error ? err.message : String(err)),
                   )
+                }
+                onSendPrompt={
+                  selectedRun || loading
+                    ? undefined
+                    : (prompt) => void submit(undefined, prompt)
                 }
                 loading={
                   loading &&

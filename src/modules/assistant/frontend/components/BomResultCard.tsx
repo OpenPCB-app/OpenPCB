@@ -93,9 +93,13 @@ export function groupBomItems(items: BomItem[]): BomGroup[] {
 
 export function BomResultCard({
   data,
+  onSendPrompt,
 }: {
   data: BomResultPayload;
   compact?: boolean;
+  /** Sends a follow-up prompt that makes the model dispatch a Propose-level
+   *  command (create design / place components) — never a direct mutation. */
+  onSendPrompt?: (prompt: string) => void;
 }): ReactElement {
   const sourced = data.items.filter((i) => i.status === "resolved").length;
   const groups = groupBomItems(data.items);
@@ -203,9 +207,36 @@ export function BomResultCard({
         </table>
       </div>
 
-      <p className="break-words border-t border-slate-100 px-4 py-2.5 text-xs font-medium text-violet-700 dark:border-slate-800 dark:text-violet-300">
-        Next: {data.nextAction}
-      </p>
+      {/* Actions — command-based CTAs (Propose level). The model's `nextAction`
+          is planning guidance for the model, not user-facing copy → not shown. */}
+      {onSendPrompt ? (
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-4 py-2.5 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={() =>
+              onSendPrompt("Create a new design and place these components.")
+            }
+            className="rounded-control border border-slate-300 px-3 py-1.5 text-[11px] font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Create design
+          </button>
+          <button
+            type="button"
+            disabled={!data.readyForPlacement}
+            title={
+              data.readyForPlacement
+                ? undefined
+                : "Resolve the missing parts first"
+            }
+            onClick={() =>
+              onSendPrompt("Place these components on the schematic.")
+            }
+            className="rounded-control bg-violet-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+          >
+            Place components
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

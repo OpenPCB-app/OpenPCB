@@ -32,9 +32,13 @@ export interface ComponentResultsPayload {
 export function ComponentResultsBlock({
   data,
   compact = false,
+  onSendPrompt,
 }: {
   data: ComponentResultsPayload;
   compact?: boolean;
+  /** Sends a follow-up prompt that makes the model dispatch a Propose-level
+   *  command (designer_place_components) — never a direct mutation. */
+  onSendPrompt?: (prompt: string) => void;
 }): ReactElement {
   const navigateToModule = useNavigationStore(
     (state) => state.navigateToModule,
@@ -131,6 +135,23 @@ export function ComponentResultsBlock({
                       </span>
                     ))}
                   </div>
+                  {/* Command-based CTA — proposes a placement (Propose level),
+                      not a direct mutation. stopPropagation so it doesn't also
+                      trigger the card's open-in-Library click. */}
+                  {onSendPrompt && hit.detailAvailable ? (
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSendPrompt(`Add ${hit.name} to the schematic.`);
+                        }}
+                        className="rounded-control bg-violet-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-violet-500"
+                      >
+                        Add to schematic
+                      </button>
+                    </div>
+                  ) : null}
                 </article>
               );
             })}

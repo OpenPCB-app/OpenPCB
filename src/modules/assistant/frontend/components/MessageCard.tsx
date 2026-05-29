@@ -1,5 +1,11 @@
 import type { ReactElement } from "react";
-import { AlertTriangle, ChevronRight, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronRight,
+  Loader2,
+  Sparkles,
+  Wrench,
+} from "lucide-react";
 import { MarkdownContent } from "../../../../shared/frontend/markdown";
 import { useTheme } from "../../../../core/frontend/src/providers/ThemeProvider";
 import type {
@@ -22,6 +28,8 @@ import {
 } from "./ComponentResultCard";
 import { BomResultCard, type BomResultPayload } from "./BomResultCard";
 import { GenericProposalCard } from "./GenericProposalCard";
+import { toolDisplay } from "../../../../shared/frontend/assistant/tool-display-names";
+import { toolDurationMs } from "./chat-format";
 
 const PROSE_CLASSES = [
   "prose",
@@ -215,6 +223,52 @@ function extractGenericToolProposals(
   return out;
 }
 
+/**
+ * Drop component-search hits already represented by another result block (a BOM
+ * selection or a placement proposal) or by an earlier component block, so the
+ * same part is never shown in two "Components from library" cards. A block with
+ * no remaining hits is removed unless it carries "no local match" guidance.
+ */
+function dedupeComponentBlocks(
+  blocks: ComponentResultsPayload[],
+  claimedComponentIds: Set<string>,
+): ComponentResultsPayload[] {
+  const seen = new Set(claimedComponentIds);
+  const out: ComponentResultsPayload[] = [];
+  for (const block of blocks) {
+    const results = block.results.filter((hit) => {
+      if (seen.has(hit.componentId)) return false;
+      seen.add(hit.componentId);
+      return true;
+    });
+    if (results.length > 0 || block.noLocalMatch)
+      out.push({ ...block, results });
+  }
+  return out;
+}
+
+/** Compact latency for the collapsed Tools summary line (e.g. `17ms`, `1.2s`). */
+function formatMsShort(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+}
+
+/** One-line trust trail for the collapsed Tools block: `name · src · ms`. */
+function toolsSummaryLine(events: AssistantToolEventDto[]): string {
+  const totalSrc = events.reduce((n, event) => n + event.sources.length, 0);
+  const totalMs = events.reduce(
+    (n, event) => n + (toolDurationMs(event.createdAt, event.updatedAt) ?? 0),
+    0,
+  );
+  const head =
+    events.length === 1 && events[0]
+      ? toolDisplay(events[0].toolName).label
+      : `${events.length} tools`;
+  const parts = [head];
+  if (totalSrc > 0) parts.push(`${totalSrc} src`);
+  if (totalMs > 0) parts.push(formatMsShort(totalMs));
+  return parts.join(" · ");
+}
+
 export function MessageCard({
   message,
   toolEvents = [],
@@ -226,6 +280,7 @@ export function MessageCard({
   onProposalChanged,
   onStopRun,
   onRetryRun,
+  onSendPrompt,
   compact = false,
 }: {
   message: AssistantMessage;
@@ -242,6 +297,9 @@ export function MessageCard({
   }) => void;
   onStopRun?: (run: ActiveRunState) => void;
   onRetryRun?: (run: ActiveRunState) => void;
+  /** Send a follow-up prompt — result-block CTAs use this to make the model
+   *  dispatch a Propose-level command (e.g. designer_place_components). */
+  onSendPrompt?: (prompt: string) => void;
   compact?: boolean;
 }): ReactElement {
   const { mode } = useTheme();
@@ -273,10 +331,30 @@ export function MessageCard({
   const visibleToolEvents = toolEvents.filter(
     (event) => !proposalToolEventIds.has(event.id),
   );
-  const showWaitingDots = loading && !hasContent && toolEvents.length === 0;
-  const showStreamingPulse =
-    Boolean(runState) || (loading && (hasContent || toolEvents.length > 0));
-  const isStreaming = !isUser && (loading || Boolean(runState));
+  const terminalRun =
+    !!runState &&
+    ["failed", "cancelled", "paused", "disconnected"].includes(runState.status);
+  // Actively working = the inline indicator owns the loading UI; result blocks
+  // stay hidden until prose finishes (status cleared on completion by the host).
+  const runWorking =
+    !!runState && !terminalRun && runState.status !== "completed";
+  const isActive = !isUser && (loading || runWorking);
+  const isStreaming = isActive;
+  const showResults = !isActive;
+  // Parts already shown in an authoritative result block (BOM table / placement
+  // proposal). Component-search cards repeating these are duplicates → filtered.
+  const claimedComponentIds = new Set<string>();
+  for (const bom of bomBlocks)
+    for (const item of bom.items)
+      if (item.selected) claimedComponentIds.add(item.selected.componentId);
+  for (const { proposal } of placementBlocks)
+    for (const placement of proposal.placements)
+      claimedComponentIds.add(placement.componentId);
+  const dedupedComponentBlocks = isUser
+    ? []
+    : dedupeComponentBlocks(componentBlocks, claimedComponentIds);
+  // Single status label for the one inline indicator.
+  const loadingStatus = "Working…";
 
   // System messages (e.g. provider-failure / retry notices) → warning banner,
   // visually distinct from assistant content. Persists in the thread as history.
@@ -314,35 +392,13 @@ export function MessageCard({
       <div className="min-w-0 flex-1 space-y-3">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-            {isUser ? "You" : "Assistant"}
+            Assistant
           </span>
-          {showStreamingPulse ? (
-            <span className="flex items-center gap-1 text-[11px] text-slate-500">
-              · thinking…
-              <span className="ml-0.5 inline-flex gap-0.5">
-                <span className="h-1 w-1 animate-pulse rounded-full bg-violet-400" />
-                <span
-                  className="h-1 w-1 animate-pulse rounded-full bg-violet-400"
-                  style={{ animationDelay: "150ms" }}
-                />
-                <span
-                  className="h-1 w-1 animate-pulse rounded-full bg-violet-400"
-                  style={{ animationDelay: "300ms" }}
-                />
-              </span>
-            </span>
-          ) : toolEvents.length > 0 ? (
-            <span className="text-[11px] text-slate-500">
-              · {toolEvents.length} tool{" "}
-              {toolEvents.length === 1 ? "call" : "calls"}
-            </span>
-          ) : null}
         </div>
+        {/* 1 · Reasoning — how it thought. Collapsed by default; the inline
+            indicator below keeps the bubble from reading blank while thinking. */}
         {reasoning ? (
-          // Chain-of-thought from reasoning models — a subtle one-line toggle rendered
-          // before the answer (thinking precedes the response). Auto-opened when there
-          // is no visible answer so the bubble is never blank.
-          <details open={!hasContent} className="group">
+          <details className="group">
             <summary className="inline-flex cursor-pointer select-none items-center gap-1 text-[11px] text-slate-500 transition-colors hover:text-slate-700 dark:hover:text-slate-300 [&::-webkit-details-marker]:hidden">
               <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
               Reasoning
@@ -352,29 +408,84 @@ export function MessageCard({
             </div>
           </details>
         ) : null}
-        {/* Tool activity precedes the written answer chronologically (tools run,
-            then the model composes its response), so tool calls + their result
-            cards render after the reasoning and before the response text. */}
-        {componentBlocks.length > 0 ? (
+        {/* 2 · Tools used — what it did. Collapsed by default behind a one-line
+            summary (name · src · ms); omitted entirely when no tools ran. */}
+        {visibleToolEvents.length > 0 ? (
+          <details className="group">
+            <summary className="inline-flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-slate-500 transition-colors hover:text-slate-700 dark:hover:text-slate-300 [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" />
+              <Wrench className="h-3 w-3 shrink-0 text-violet-500 dark:text-violet-400" />
+              <span className="truncate">
+                {toolsSummaryLine(visibleToolEvents)}
+              </span>
+            </summary>
+            <div className="mt-2 space-y-1.5">
+              {visibleToolEvents.map((event) => (
+                <ToolCard key={event.id} event={event} compact={compact} />
+              ))}
+            </div>
+          </details>
+        ) : null}
+        {/* 3 · Message prose — the answer, streamed first, before any result. */}
+        {hasContent ? (
+          <MarkdownContent
+            className={compact ? COMPACT_PROSE_CLASSES : PROSE_CLASSES}
+            streaming={isStreaming}
+            mermaidTheme={mode === "dark" ? "dark" : "light"}
+          >
+            {cleanedContent}
+          </MarkdownContent>
+        ) : null}
+        {/* Exactly one inline loading indicator — no border, no dots, Stop inline.
+            Sits at the active block (body caret) as prose streams. */}
+        {isActive ? (
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-500 dark:text-violet-400" />
+            <span>{loadingStatus}</span>
+            {runState && onStopRun ? (
+              <button
+                type="button"
+                onClick={() => onStopRun(runState)}
+                className="font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
+              >
+                Stop
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {/* 4 · Result blocks — BOM / component / spec, inline at the END, only
+            after prose finishes. De-duplicated so a part shown in a BOM table or
+            placement proposal never repeats as a "Components from library" card. */}
+        {showResults && dedupedComponentBlocks.length > 0 ? (
           <div className="space-y-3">
-            {componentBlocks.map((data, idx) => (
+            {dedupedComponentBlocks.map((data, idx) => (
               <div key={idx} className="space-y-1.5">
                 <div className="text-[10px] uppercase tracking-wider text-violet-400">
                   Components from library
                 </div>
-                <ComponentResultsBlock data={data} compact={compact} />
+                <ComponentResultsBlock
+                  data={data}
+                  compact={compact}
+                  onSendPrompt={onSendPrompt}
+                />
               </div>
             ))}
           </div>
         ) : null}
-        {bomBlocks.length > 0 ? (
+        {showResults && bomBlocks.length > 0 ? (
           <div className="space-y-3">
             {bomBlocks.map((data, idx) => (
-              <BomResultCard key={idx} data={data} compact={compact} />
+              <BomResultCard
+                key={idx}
+                data={data}
+                compact={compact}
+                onSendPrompt={onSendPrompt}
+              />
             ))}
           </div>
         ) : null}
-        {placementBlocks.length > 0 ? (
+        {/* 5 · Actions — command-based CTAs (Apply / Add to schematic), last. */}
+        {showResults && placementBlocks.length > 0 ? (
           <div className="space-y-3">
             {placementBlocks.map(({ event, proposal }) => (
               <PlacementProposalCard
@@ -394,7 +505,7 @@ export function MessageCard({
             ))}
           </div>
         ) : null}
-        {genericProposals.length > 0 ? (
+        {showResults && genericProposals.length > 0 ? (
           <div className="space-y-3">
             {genericProposals.map((proposal) => (
               <GenericProposalCard
@@ -407,56 +518,20 @@ export function MessageCard({
             ))}
           </div>
         ) : null}
-        {visibleToolEvents.length > 0 ? (
-          <div className="space-y-1.5">
-            <div className="text-[9px] font-medium uppercase tracking-wider text-slate-500">
-              Tools used
-            </div>
-            {visibleToolEvents.map((event) => (
-              <ToolCard key={event.id} event={event} compact={compact} />
-            ))}
-          </div>
-        ) : null}
-        {hasContent ? (
-          isUser ? (
-            <div
-              className={`whitespace-pre-wrap break-words text-sm leading-relaxed ${compact ? "text-slate-800 dark:text-slate-100" : "text-slate-100"}`}
-            >
-              {cleanedContent}
-            </div>
-          ) : (
-            <MarkdownContent
-              className={compact ? COMPACT_PROSE_CLASSES : PROSE_CLASSES}
-              streaming={isStreaming}
-              mermaidTheme={mode === "dark" ? "dark" : "light"}
-            >
-              {cleanedContent}
-            </MarkdownContent>
-          )
-        ) : null}
         {truncated ? (
           <div className="flex items-center gap-1.5 text-[11px] text-status-warning">
             <AlertTriangle className="h-3 w-3 shrink-0" />
             Response may be truncated (token limit reached).
           </div>
         ) : null}
-        {runState ? (
+        {/* Terminal runs (failed / cancelled / paused / disconnected) keep the
+            retry affordance; active runs use the inline indicator above. */}
+        {terminalRun && runState ? (
           <AssistantRunStatusCard
             run={runState}
             onStop={() => onStopRun?.(runState)}
             onRetry={() => onRetryRun?.(runState)}
           />
-        ) : null}
-        {showWaitingDots ? (
-          <span className="flex items-center gap-0.5 text-xs text-violet-400">
-            <span className="animate-pulse">●</span>
-            <span className="animate-pulse" style={{ animationDelay: "150ms" }}>
-              ●
-            </span>
-            <span className="animate-pulse" style={{ animationDelay: "300ms" }}>
-              ●
-            </span>
-          </span>
         ) : null}
       </div>
     </div>

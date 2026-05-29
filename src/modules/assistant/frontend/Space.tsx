@@ -1426,6 +1426,11 @@ export function AssistantSpace({
                             ),
                           )
                         }
+                        onSendPrompt={
+                          selectedRun || loading
+                            ? undefined
+                            : (prompt) => void submit(undefined, prompt)
+                        }
                         loading={
                           loading &&
                           idx === lastAssistantIdx &&
