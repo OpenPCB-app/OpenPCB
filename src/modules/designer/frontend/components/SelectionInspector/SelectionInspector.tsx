@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
-import { CircuitBoard, Layers, Network, Tag, X } from "lucide-react";
+import { CircuitBoard, Network, PanelRightClose, Tag, X } from "lucide-react";
 import type {
   DesignerLabel,
   DesignerPlacedPart,
@@ -8,6 +8,8 @@ import type {
   LibraryComponentFootprintVariant,
 } from "../../../../../sdks";
 import type { DesignerWorkspaceActions } from "../../hooks/useDesignerWorkspace";
+import { inferComponentClass } from "../../lib/outline-format";
+import { ComponentClassIcon } from "../ComponentClassIcon";
 import { PartInspectorPanel } from "./PartInspectorPanel";
 import { MultiPartInspectorPanel } from "./MultiPartInspectorPanel";
 import { LabelInspectorPanel } from "./LabelInspectorPanel";
@@ -28,18 +30,12 @@ interface SelectionInspectorProps {
   setError: DesignerWorkspaceActions["setError"];
   onClose(): void;
   onOpenInLibrary?(componentId: string): void;
-}
-
-function inferComponentClass(part: DesignerPlacedPart): string {
-  const name = part.symbol.name?.trim();
-  if (name) return name;
-  const ref = part.reference.toUpperCase();
-  if (ref.startsWith("C")) return "Capacitor";
-  if (ref.startsWith("R")) return "Resistor";
-  if (ref.startsWith("L")) return "Inductor";
-  if (ref.startsWith("D")) return "Diode";
-  if (ref.startsWith("U")) return "IC";
-  return "Component";
+  /** When true, render as a docked column (full height, no overlay chrome). */
+  docked?: boolean;
+  /** Collapse the docked column (docked mode only). */
+  onCollapse?(): void;
+  /** Cross-probe the selected part to the PCB editor. */
+  onCrossProbePcb?(part: DesignerPlacedPart): void;
 }
 
 export function SelectionInspector({
@@ -50,6 +46,9 @@ export function SelectionInspector({
   setError,
   onClose,
   onOpenInLibrary,
+  docked = false,
+  onCollapse,
+  onCrossProbePcb,
 }: SelectionInspectorProps): ReactElement | null {
   const [referenceDraft, setReferenceDraft] = useState("");
   const [referenceEditing, setReferenceEditing] = useState(false);
@@ -71,7 +70,49 @@ export function SelectionInspector({
     }
   }, [referenceEditing]);
 
-  if (!selection) return null;
+  const containerClass = docked
+    ? "relative flex h-full w-full flex-col overflow-hidden border-l border-slate-200 bg-white text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+    : "pointer-events-auto absolute right-4 top-4 z-40 flex max-h-[70vh] w-80 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white/95 text-xs text-slate-800 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-100";
+
+  const dismissButton =
+    docked && onCollapse ? (
+      <button
+        type="button"
+        onClick={onCollapse}
+        aria-label="Collapse inspector"
+        className="ml-1 shrink-0 cursor-pointer rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+      >
+        <PanelRightClose className="h-3.5 w-3.5" />
+      </button>
+    ) : (
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close inspector"
+        className="ml-1 shrink-0 cursor-pointer rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    );
+
+  // Docked mode keeps the column present with a placeholder so the layout is
+  // stable; floating mode simply disappears when nothing is selected.
+  if (!selection) {
+    if (!docked) return null;
+    return (
+      <div className={containerClass} data-testid="selection-inspector">
+        <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
+          <span className="min-w-0 flex-1 truncate text-xs font-semibold tracking-tight text-slate-500 dark:text-slate-400">
+            Inspector
+          </span>
+          {dismissButton}
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-6 text-center text-[11px] text-slate-400 dark:text-slate-500">
+          Select a part to inspect its properties.
+        </div>
+      </div>
+    );
+  }
 
   const commitReference = async () => {
     if (!part) {
@@ -106,17 +147,24 @@ export function SelectionInspector({
   switch (selection.kind) {
     case "part": {
       headerIcon = (
-        <Layers className="h-3.5 w-3.5 text-violet-500 dark:text-violet-300" />
+        <ComponentClassIcon
+          part={selection.part}
+          className="h-3.5 w-3.5 shrink-0 text-violet-500 dark:text-violet-300"
+        />
       );
       headerPrimary = selection.part.reference || selection.part.id.slice(0, 6);
       headerSecondary = inferComponentClass(selection.part);
       body = (
         <PartInspectorPanel
           part={selection.part}
+          projection={projection}
           variants={variants}
           dispatchCommand={dispatchCommand}
           setError={setError}
           onOpenInLibrary={onOpenInLibrary}
+          onCrossProbePcb={
+            onCrossProbePcb ? () => onCrossProbePcb(selection.part) : undefined
+          }
           onReplaceComponentDisabledMessage="Per-instance override coming soon"
         />
       );
@@ -177,10 +225,7 @@ export function SelectionInspector({
   const allowReferenceEdit = selection.kind === "part";
 
   return (
-    <div
-      className="pointer-events-auto absolute right-4 top-4 z-40 flex w-80 max-h-[70vh] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white/95 text-xs text-slate-800 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-100"
-      data-testid="selection-inspector"
-    >
+    <div className={containerClass} data-testid="selection-inspector">
       <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-700">
         {headerIcon}
         {allowReferenceEdit && referenceEditing ? (
@@ -215,14 +260,7 @@ export function SelectionInspector({
         <span className="shrink-0 truncate text-[11px] text-slate-500 dark:text-slate-400">
           {headerSecondary}
         </span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close inspector"
-          className="ml-1 shrink-0 rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+        {dismissButton}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">{body}</div>
     </div>

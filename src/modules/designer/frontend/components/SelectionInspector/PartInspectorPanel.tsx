@@ -9,21 +9,26 @@ import {
   BookOpen,
   ChevronDown,
   ChevronRight,
+  CircuitBoard,
   Layers,
   Replace,
 } from "lucide-react";
 import type {
   DesignerPlacedPart,
+  DesignerSchematicProjection,
   LibraryComponentFootprintVariant,
 } from "../../../../../sdks";
 import type { DesignerWorkspaceActions } from "../../hooks/useDesignerWorkspace";
+import { classifyNet, netClassTextClass } from "../../lib/net-class";
 
 interface PartInspectorPanelProps {
   part: DesignerPlacedPart;
+  projection: DesignerSchematicProjection;
   variants: readonly LibraryComponentFootprintVariant[];
   dispatchCommand: DesignerWorkspaceActions["dispatchCommand"];
   setError: DesignerWorkspaceActions["setError"];
   onOpenInLibrary?(componentId: string): void;
+  onCrossProbePcb?(): void;
   onReplaceComponentDisabledMessage?: string;
 }
 
@@ -103,10 +108,12 @@ function parseInlineValue(
 
 export function PartInspectorPanel({
   part,
+  projection,
   variants,
   dispatchCommand,
   setError,
   onOpenInLibrary,
+  onCrossProbePcb,
   onReplaceComponentDisabledMessage,
 }: PartInspectorPanelProps): ReactElement {
   const [valueDraft, setValueDraft] = useState(part.value);
@@ -257,6 +264,24 @@ export function PartInspectorPanel({
   );
 
   const hasAlternatives = variants.length > 1;
+
+  const pinNets = useMemo(() => {
+    const rows = part.pins.map((pin) => ({
+      pin,
+      net:
+        projection.nets.find((net) => net.pinIds.includes(pin.id))?.name ??
+        null,
+    }));
+    rows.sort((a, b) => {
+      const an = a.pin.number;
+      const bn = b.pin.number;
+      if (an == null && bn == null) return 0;
+      if (an == null) return 1;
+      if (bn == null) return -1;
+      return an.localeCompare(bn, undefined, { numeric: true });
+    });
+    return rows;
+  }, [part.pins, projection.nets]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -438,10 +463,55 @@ export function PartInspectorPanel({
         </div>
       </section>
 
+      {pinNets.length > 0 && (
+        <>
+          <div className="h-px bg-slate-200 dark:bg-slate-800" />
+          <section>
+            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Pin connections
+            </p>
+            <div className="flex flex-col gap-0.5">
+              {pinNets.map(({ pin, net }) => (
+                <div
+                  key={pin.id}
+                  className="flex items-center justify-between gap-2 text-[11px]"
+                >
+                  <span className="min-w-0 flex-1 truncate font-mono text-slate-600 dark:text-slate-300">
+                    <span className="text-slate-400 dark:text-slate-500">
+                      {pin.number ?? "·"}
+                    </span>{" "}
+                    {pin.name}
+                  </span>
+                  <span
+                    className={`shrink-0 font-mono ${
+                      net
+                        ? netClassTextClass(classifyNet(net))
+                        : "text-slate-400 dark:text-slate-600"
+                    }`}
+                  >
+                    {net ?? "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
+
       <div className="h-px bg-slate-200 dark:bg-slate-800" />
 
       {/* Quick actions */}
       <section className="flex flex-col gap-1.5">
+        {onCrossProbePcb && (
+          <button
+            type="button"
+            onClick={onCrossProbePcb}
+            className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <CircuitBoard className="h-3.5 w-3.5 text-slate-400" />
+            View on PCB
+          </button>
+        )}
         <button
           type="button"
           disabled

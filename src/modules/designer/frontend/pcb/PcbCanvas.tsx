@@ -212,6 +212,8 @@ interface PcbCanvasProps {
   layersPanelTarget?: HTMLElement | null;
   selectionRequest?: {
     placementIds: readonly string[];
+    /** Cross-probe by refdes (resolved against loaded placements). */
+    references?: readonly string[];
     nonce: number;
   } | null;
   initialViewport?: ViewportState | null;
@@ -375,16 +377,57 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const viasRef = useRef(workspace.projection?.vias ?? []);
   viasRef.current = workspace.projection?.vias ?? [];
 
+  // Cross-probe requests carrying refdes that can't be resolved yet (PCB
+  // projection still loading) are parked here and resolved once placements
+  // arrive — one-shot per request nonce.
+  const pendingRefSelectRef = useRef<{
+    references: readonly string[];
+    nonce: number;
+  } | null>(null);
+
   useEffect(() => {
     const request = props.selectionRequest;
     if (!request) return;
     setToolMode("select");
     dispatchMeasure({ kind: "clear" });
-    setSelection({
-      ...emptyPcbSelection(),
-      placementIds: new Set(request.placementIds),
-    });
+    const ids = new Set(request.placementIds);
+    const references = request.references ?? [];
+    if (references.length > 0) {
+      const placements = workspace.projection?.placements ?? [];
+      const refSet = new Set(references);
+      let matched = 0;
+      for (const placement of placements) {
+        if (refSet.has(placement.reference)) {
+          ids.add(placement.id);
+          matched += 1;
+        }
+      }
+      pendingRefSelectRef.current =
+        matched < references.length
+          ? { references, nonce: request.nonce }
+          : null;
+    } else {
+      pendingRefSelectRef.current = null;
+    }
+    setSelection({ ...emptyPcbSelection(), placementIds: ids });
   }, [props.selectionRequest]);
+
+  // Resolve a parked refdes cross-probe once the PCB projection loads.
+  useEffect(() => {
+    const pending = pendingRefSelectRef.current;
+    if (!pending) return;
+    const placements = workspace.projection?.placements ?? [];
+    if (placements.length === 0) return;
+    const refSet = new Set(pending.references);
+    const ids = new Set<string>();
+    for (const placement of placements) {
+      if (refSet.has(placement.reference)) ids.add(placement.id);
+    }
+    if (ids.size === 0) return;
+    pendingRefSelectRef.current = null;
+    setToolMode("select");
+    setSelection({ ...emptyPcbSelection(), placementIds: ids });
+  }, [workspace.projection?.placements]);
   const freeHolesRef = useRef(workspace.projection?.freeHoles ?? []);
   freeHolesRef.current = workspace.projection?.freeHoles ?? [];
   const freePadsRef = useRef(workspace.projection?.freePads ?? []);

@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactElement } from "react";
-import { Cable, CircuitBoard, Search, Tag, Zap } from "lucide-react";
+import { Cable, ChevronDown, ChevronUp, Search, Tag, Zap } from "lucide-react";
 import type {
   DesignerDerivedNet,
   DesignerLabel,
@@ -11,13 +11,24 @@ import type {
   DesignerWorkspaceActions,
   DesignerWorkspaceState,
 } from "../../hooks/useDesignerWorkspace";
-import { OutlineGroup } from "./OutlineGroup";
+import {
+  compareDesignators,
+  inferComponentClass,
+  partValueLabel,
+} from "../../lib/outline-format";
+import { classifyNet, isPowerNet } from "../../lib/net-class";
+import { ComponentClassIcon } from "../ComponentClassIcon";
 import { OutlineRow, type OutlineRowAction } from "./OutlineRow";
 import { OutlineEmptyState } from "./OutlineEmptyState";
 
 const FRAME_PADDING_MM = 5;
 
-type FilterKey = "components" | "nets" | "labels";
+type TabKey = "parts" | "nets" | "labels";
+type SortKey = "primary" | "secondary";
+interface SortState {
+  key: SortKey;
+  dir: "asc" | "desc";
+}
 
 interface OutlinePanelProps {
   state: DesignerWorkspaceState;
@@ -30,6 +41,11 @@ interface OutlinePanelProps {
     minY: number;
     maxX: number;
     maxY: number;
+  }): void;
+  onSelectOnCanvas(sel: {
+    partIds?: string[];
+    wireIds?: string[];
+    labelIds?: string[];
   }): void;
 }
 
@@ -114,17 +130,16 @@ function netBoundsMm(
   };
 }
 
-function inferComponentClass(part: DesignerPlacedPart): string {
-  const name = part.symbol.name?.trim();
-  if (name) return name;
-  const ref = part.reference.toUpperCase();
-  if (ref.startsWith("C")) return "Capacitor";
-  if (ref.startsWith("R")) return "Resistor";
-  if (ref.startsWith("L")) return "Inductor";
-  if (ref.startsWith("D")) return "Diode";
-  if (ref.startsWith("U")) return "IC";
-  if (ref.startsWith("Q")) return "Transistor";
-  return "Component";
+const TABS: ReadonlyArray<{ key: TabKey; label: string }> = [
+  { key: "parts", label: "Parts" },
+  { key: "nets", label: "Nets" },
+  { key: "labels", label: "Labels" },
+];
+
+function headerColumns(tab: TabKey): { primary: string; secondary?: string } {
+  if (tab === "parts") return { primary: "Ref", secondary: "Value" };
+  if (tab === "nets") return { primary: "Net", secondary: "Pins" };
+  return { primary: "Label" };
 }
 
 export function OutlinePanel({
@@ -134,11 +149,11 @@ export function OutlinePanel({
   onAddNetLabel,
   onBrowseLibrary,
   onFrameBoundsMm,
+  onSelectOnCanvas,
 }: OutlinePanelProps): ReactElement {
   const [query, setQuery] = useState("");
-  const [enabledFilters, setEnabledFilters] = useState<Set<FilterKey>>(
-    new Set<FilterKey>(["components", "nets", "labels"]),
-  );
+  const [activeTab, setActiveTab] = useState<TabKey>("parts");
+  const [sort, setSort] = useState<SortState>({ key: "primary", dir: "asc" });
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
 
   const projection = state.projection;
@@ -165,7 +180,6 @@ export function OutlinePanel({
   const lowerQuery = query.trim().toLowerCase();
 
   const filteredParts = useMemo(() => {
-    if (!enabledFilters.has("components")) return [];
     if (!lowerQuery) return parts;
     return parts.filter((part) => {
       const klass = inferComponentClass(part).toLowerCase();
@@ -176,33 +190,73 @@ export function OutlinePanel({
         part.footprint.name.toLowerCase().includes(lowerQuery)
       );
     });
-  }, [parts, lowerQuery, enabledFilters]);
+  }, [parts, lowerQuery]);
 
   const filteredNets = useMemo(() => {
-    if (!enabledFilters.has("nets")) return [];
     if (!lowerQuery) return nets;
     return nets.filter((net) => net.name.toLowerCase().includes(lowerQuery));
-  }, [nets, lowerQuery, enabledFilters]);
+  }, [nets, lowerQuery]);
 
   const filteredLabels = useMemo(() => {
-    if (!enabledFilters.has("labels")) return [];
     if (!lowerQuery) return labels;
     return labels.filter((label) =>
       label.text.toLowerCase().includes(lowerQuery),
     );
-  }, [labels, lowerQuery, enabledFilters]);
+  }, [labels, lowerQuery]);
 
-  const toggleFilter = (key: FilterKey) => {
-    setEnabledFilters((current) => {
-      const next = new Set(current);
-      if (next.has(key)) {
-        if (next.size === 1) return current; // never empty
-        next.delete(key);
-      } else {
-        next.add(key);
+  const dir = sort.dir === "asc" ? 1 : -1;
+
+  const sortedParts = useMemo(() => {
+    const arr = [...filteredParts];
+    arr.sort((a, b) => {
+      if (sort.key === "secondary") {
+        const v = partValueLabel(a).localeCompare(
+          partValueLabel(b),
+          undefined,
+          {
+            numeric: true,
+          },
+        );
+        if (v !== 0) return v * dir;
+        return compareDesignators(a.reference, b.reference) * dir;
       }
-      return next;
+      return compareDesignators(a.reference, b.reference) * dir;
     });
+    return arr;
+  }, [filteredParts, sort.key, dir]);
+
+  const sortedNets = useMemo(() => {
+    const arr = [...filteredNets];
+    arr.sort((a, b) => {
+      if (sort.key === "secondary") {
+        const d = a.pinIds.length - b.pinIds.length;
+        if (d !== 0) return d * dir;
+      }
+      return a.name.localeCompare(b.name, undefined, { numeric: true }) * dir;
+    });
+    return arr;
+  }, [filteredNets, sort.key, dir]);
+
+  const sortedLabels = useMemo(() => {
+    const arr = [...filteredLabels];
+    arr.sort(
+      (a, b) =>
+        a.text.localeCompare(b.text, undefined, { numeric: true }) * dir,
+    );
+    return arr;
+  }, [filteredLabels, dir]);
+
+  const selectTab = (key: TabKey) => {
+    setActiveTab(key);
+    setSort({ key: "primary", dir: "asc" });
+  };
+
+  const toggleSort = (key: SortKey) => {
+    setSort((current) =>
+      current.key === key
+        ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: "asc" },
+    );
   };
 
   const selectPart = (partId: string) => {
@@ -211,6 +265,7 @@ export function OutlinePanel({
     actions.setSelectedLabelId(null);
     actions.setSelectedWireId(null);
     actions.setSelectedPinId(null);
+    onSelectOnCanvas({ partIds: [partId] });
   };
 
   const selectLabel = (labelId: string) => {
@@ -219,6 +274,7 @@ export function OutlinePanel({
     actions.setSelectedLabelId(labelId);
     actions.setSelectedWireId(null);
     actions.setSelectedPinId(null);
+    onSelectOnCanvas({ labelIds: [labelId] });
   };
 
   const selectNet = (net: DesignerDerivedNet) => {
@@ -233,6 +289,8 @@ export function OutlinePanel({
     actions.setSelectedPartId(null);
     actions.setSelectedLabelId(null);
     actions.setSelectedPinId(null);
+    // Highlight every wire on the net so the whole net lights up on the canvas.
+    onSelectOnCanvas({ wireIds: [...net.wireIds] });
   };
 
   const frameToPart = (part: DesignerPlacedPart) => {
@@ -405,18 +463,22 @@ export function OutlinePanel({
     },
   ];
 
-  const isPowerNet = (name: string): boolean => {
-    const trimmed = name.trim().toUpperCase();
-    if (!trimmed) return false;
-    return (
-      trimmed.startsWith("+") ||
-      trimmed === "GND" ||
-      trimmed === "VCC" ||
-      trimmed === "VDD" ||
-      trimmed === "VSS" ||
-      trimmed.startsWith("VBAT")
+  const cols = headerColumns(activeTab);
+  const SortArrow = ({ active }: { active: boolean }): ReactElement | null => {
+    if (!active) return null;
+    return sort.dir === "asc" ? (
+      <ChevronUp className="h-2.5 w-2.5" />
+    ) : (
+      <ChevronDown className="h-2.5 w-2.5" />
     );
   };
+
+  const activeCount =
+    activeTab === "parts"
+      ? sortedParts.length
+      : activeTab === "nets"
+        ? sortedNets.length
+        : sortedLabels.length;
 
   return (
     <aside className="flex h-full min-h-0 flex-col border-r border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
@@ -439,24 +501,18 @@ export function OutlinePanel({
             className="w-full rounded-md border border-slate-200 bg-white py-1 pl-7 pr-2 text-xs text-slate-800 outline-none placeholder:text-slate-400 focus:border-violet-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           />
         </label>
-        <div className="mt-2 flex flex-wrap gap-1">
-          {(
-            [
-              { key: "components", label: "Components" },
-              { key: "nets", label: "Nets" },
-              { key: "labels", label: "Labels" },
-            ] as Array<{ key: FilterKey; label: string }>
-          ).map(({ key, label }) => {
-            const enabled = enabledFilters.has(key);
+        <div className="mt-2 inline-flex w-full rounded-md bg-slate-200/70 p-0.5 dark:bg-slate-800/70">
+          {TABS.map(({ key, label }) => {
+            const active = activeTab === key;
             return (
               <button
                 key={key}
                 type="button"
-                onClick={() => toggleFilter(key)}
-                className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                  enabled
-                    ? "bg-violet-600 text-white"
-                    : "bg-slate-200 text-slate-500 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+                onClick={() => selectTab(key)}
+                className={`flex-1 cursor-pointer rounded px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                  active
+                    ? "bg-violet-600 text-white shadow-sm"
+                    : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                 }`}
               >
                 {label}
@@ -474,108 +530,118 @@ export function OutlinePanel({
             onBrowseLibrary={onBrowseLibrary}
           />
         ) : (
-          <div className="flex flex-col gap-1 py-1">
-            {enabledFilters.has("components") && (
-              <OutlineGroup
-                label="Components"
-                count={filteredParts.length}
-                defaultOpen
+          <>
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-500">
+              <button
+                type="button"
+                onClick={() => toggleSort("primary")}
+                className="flex cursor-pointer items-center gap-0.5 hover:text-slate-600 dark:hover:text-slate-300"
               >
-                {filteredParts.map((part) => {
-                  const selected =
-                    state.selectedPartId === part.id ||
-                    state.selectedPartIds.has(part.id);
-                  return (
-                    <OutlineRow
-                      key={part.id}
-                      icon={<CircuitBoard className="h-3 w-3" />}
-                      primary={part.reference || part.id.slice(0, 6)}
-                      secondary={inferComponentClass(part)}
-                      tertiary={part.value || part.footprint.name}
-                      selected={selected}
-                      onSelect={() => selectPart(part.id)}
-                      onActivate={() => frameToPart(part)}
-                      actions={partActions(part)}
-                      renaming={
-                        renameTarget?.kind === "part" &&
-                        renameTarget.id === part.id
-                      }
-                      onRenameCommit={(value) =>
-                        void renamePart(part.id, value)
-                      }
-                      onRenameCancel={() => setRenameTarget(null)}
-                    />
-                  );
-                })}
-              </OutlineGroup>
+                {cols.primary}
+                <SortArrow active={sort.key === "primary"} />
+              </button>
+              {cols.secondary && (
+                <button
+                  type="button"
+                  onClick={() => toggleSort("secondary")}
+                  className="flex cursor-pointer items-center gap-0.5 hover:text-slate-600 dark:hover:text-slate-300"
+                >
+                  {cols.secondary}
+                  <SortArrow active={sort.key === "secondary"} />
+                </button>
+              )}
+            </div>
+
+            {activeCount === 0 && (
+              <p className="px-3 py-3 text-[11px] text-slate-400 dark:text-slate-600">
+                No {activeTab} match “{query}”.
+              </p>
             )}
-            {enabledFilters.has("nets") && (
-              <OutlineGroup
-                label="Nets"
-                count={filteredNets.length}
-                defaultOpen
-              >
-                {filteredNets.map((net) => {
-                  const connectionCount = net.pinIds.length;
-                  const power = isPowerNet(net.name);
-                  const isSelected =
-                    state.selectedWireId != null &&
-                    net.wireIds.includes(state.selectedWireId);
-                  return (
-                    <OutlineRow
-                      key={net.id}
-                      icon={
-                        power ? (
-                          <Zap className="h-3 w-3" />
-                        ) : (
-                          <Cable className="h-3 w-3" />
-                        )
-                      }
-                      primary={net.name}
-                      secondary={null}
-                      tertiary={`${connectionCount} pin${connectionCount === 1 ? "" : "s"}`}
-                      selected={isSelected}
-                      onSelect={() => selectNet(net)}
-                      onActivate={() => frameToNet(net)}
-                      actions={netActions(net)}
-                    />
-                  );
-                })}
-              </OutlineGroup>
-            )}
-            {enabledFilters.has("labels") && (
-              <OutlineGroup
-                label="Labels"
-                count={filteredLabels.length}
-                defaultOpen
-              >
-                {filteredLabels.map((label) => {
-                  const selected = state.selectedLabelId === label.id;
-                  return (
-                    <OutlineRow
-                      key={label.id}
-                      icon={<Tag className="h-3 w-3" />}
-                      primary={label.text}
-                      secondary={null}
-                      tertiary={null}
-                      selected={selected}
-                      onSelect={() => selectLabel(label.id)}
-                      onActivate={() => frameToLabel(label)}
-                      actions={labelActions(label)}
-                      renaming={
-                        renameTarget?.kind === "label" &&
-                        renameTarget.id === label.id
-                      }
-                      onRenameCommit={(value) =>
-                        void renameLabel(label.id, value)
-                      }
-                      onRenameCancel={() => setRenameTarget(null)}
-                    />
-                  );
-                })}
-              </OutlineGroup>
-            )}
-          </div>
+
+            {activeTab === "parts" &&
+              sortedParts.map((part) => {
+                const selected =
+                  state.selectedPartId === part.id ||
+                  state.selectedPartIds.has(part.id);
+                return (
+                  <OutlineRow
+                    key={part.id}
+                    icon={
+                      <ComponentClassIcon part={part} className="h-3.5 w-3.5" />
+                    }
+                    primary={part.reference || part.id.slice(0, 6)}
+                    secondary={null}
+                    tertiary={partValueLabel(part)}
+                    selected={selected}
+                    onSelect={() => selectPart(part.id)}
+                    onActivate={() => frameToPart(part)}
+                    actions={partActions(part)}
+                    renaming={
+                      renameTarget?.kind === "part" &&
+                      renameTarget.id === part.id
+                    }
+                    onRenameCommit={(value) => void renamePart(part.id, value)}
+                    onRenameCancel={() => setRenameTarget(null)}
+                  />
+                );
+              })}
+
+            {activeTab === "nets" &&
+              sortedNets.map((net) => {
+                const connectionCount = net.pinIds.length;
+                const power = isPowerNet(net.name);
+                const unconnected =
+                  classifyNet(net.name) === "ground" && connectionCount <= 1;
+                const isSelected =
+                  state.selectedWireId != null &&
+                  net.wireIds.includes(state.selectedWireId);
+                return (
+                  <OutlineRow
+                    key={net.id}
+                    icon={
+                      power ? (
+                        <Zap className="h-3 w-3" />
+                      ) : (
+                        <Cable className="h-3 w-3" />
+                      )
+                    }
+                    primary={net.name}
+                    secondary={null}
+                    tertiary={`${connectionCount} pin${connectionCount === 1 ? "" : "s"}${unconnected ? " · unconnected" : ""}`}
+                    selected={isSelected}
+                    onSelect={() => selectNet(net)}
+                    onActivate={() => frameToNet(net)}
+                    actions={netActions(net)}
+                  />
+                );
+              })}
+
+            {activeTab === "labels" &&
+              sortedLabels.map((label) => {
+                const selected = state.selectedLabelId === label.id;
+                return (
+                  <OutlineRow
+                    key={label.id}
+                    icon={<Tag className="h-3 w-3" />}
+                    primary={label.text}
+                    secondary={null}
+                    tertiary={null}
+                    selected={selected}
+                    onSelect={() => selectLabel(label.id)}
+                    onActivate={() => frameToLabel(label)}
+                    actions={labelActions(label)}
+                    renaming={
+                      renameTarget?.kind === "label" &&
+                      renameTarget.id === label.id
+                    }
+                    onRenameCommit={(value) =>
+                      void renameLabel(label.id, value)
+                    }
+                    onRenameCancel={() => setRenameTarget(null)}
+                  />
+                );
+              })}
+          </>
         )}
       </div>
     </aside>

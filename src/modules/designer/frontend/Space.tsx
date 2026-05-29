@@ -8,7 +8,7 @@ import {
   type ReactElement,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { Bot } from "lucide-react";
+import { Bot, PanelRightOpen } from "lucide-react";
 import { useNavigationStore } from "@/stores/navigation-store";
 import { useAuth } from "@/cloud/AuthProvider";
 import { readCloudConfig } from "@/cloud/config";
@@ -39,6 +39,7 @@ import { Board3DCanvas } from "./three-d/Board3DCanvas";
 import { DesignerChatDock } from "../../assistant/frontend";
 import { useDesignerTabsStore } from "./stores/designer-tabs-store";
 import type {
+  DesignerPlacedPart,
   LibraryComponent,
   LibraryComponentFootprintVariant,
   LibraryComponentPlacementDetail,
@@ -51,8 +52,12 @@ const MIN_LEFT = 240;
 const MAX_LEFT = 520;
 const MIN_CHAT = 320;
 const MAX_CHAT = 560;
+const MIN_INSPECTOR = 260;
+const MAX_INSPECTOR = 440;
 const CHAT_OPEN_KEY = "openpcb:designer:chat-open";
 const CHAT_WIDTH_KEY = "openpcb:designer:chat-width";
+const INSPECTOR_OPEN_KEY = "openpcb:designer:inspector-open";
+const INSPECTOR_WIDTH_KEY = "openpcb:designer:inspector-width";
 const DEFAULT_COMPONENT_LIMIT = 8;
 const RECENT_PLACEMENTS_KEY = "openpcb:designer:recents";
 const RECENT_PLACEMENTS_CAP = 20;
@@ -156,6 +161,9 @@ function SelectionInspectorMount({
   setError,
   onClose,
   onOpenInLibrary,
+  docked,
+  onCollapse,
+  onCrossProbePcb,
 }: {
   projection: NonNullable<DesignerWorkspaceState["projection"]>;
   state: DesignerWorkspaceState;
@@ -168,6 +176,9 @@ function SelectionInspectorMount({
   setError: ReturnType<typeof useDesignerWorkspace>["actions"]["setError"];
   onClose(): void;
   onOpenInLibrary(componentId: string): void;
+  docked?: boolean;
+  onCollapse?(): void;
+  onCrossProbePcb?(part: DesignerPlacedPart): void;
 }): ReactElement | null {
   const selectedIds = useMemo(() => {
     if (state.selectedPartIds.size > 0) {
@@ -244,7 +255,9 @@ function SelectionInspectorMount({
     };
   }, [partForVariants?.componentId, resolvePlacement]);
 
-  if (!selection) return null;
+  // Docked mode keeps the column mounted (with a placeholder) when nothing is
+  // selected; floating mode disappears.
+  if (!selection && !docked) return null;
 
   return (
     <SelectionInspector
@@ -255,6 +268,9 @@ function SelectionInspectorMount({
       setError={setError}
       onClose={onClose}
       onOpenInLibrary={onOpenInLibrary}
+      docked={docked}
+      onCollapse={onCollapse}
+      onCrossProbePcb={onCrossProbePcb}
     />
   );
 }
@@ -314,16 +330,29 @@ function DesignerSpaceInner({
   const [chatWidth, setChatWidth] = useState(() =>
     clamp(readPersistedNumber(CHAT_WIDTH_KEY, 380), MIN_CHAT, MAX_CHAT),
   );
+  const [inspectorOpen, setInspectorOpen] = useState(() =>
+    readPersistedBoolean(INSPECTOR_OPEN_KEY, true),
+  );
+  const [inspectorWidth, setInspectorWidth] = useState(() =>
+    clamp(
+      readPersistedNumber(INSPECTOR_WIDTH_KEY, 300),
+      MIN_INSPECTOR,
+      MAX_INSPECTOR,
+    ),
+  );
   const [zoomPercent, setZoomPercent] = useState(20);
   const [gridVisible, setGridVisible] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [pcbDrcCount, setPcbDrcCount] = useState(0);
   const [schematicSelectionRequest, setSchematicSelectionRequest] = useState<{
-    partIds: string[];
+    partIds?: string[];
+    wireIds?: string[];
+    labelIds?: string[];
     nonce: number;
   } | null>(null);
   const [pcbSelectionRequest, setPcbSelectionRequest] = useState<{
     placementIds: string[];
+    references?: string[];
     nonce: number;
   } | null>(null);
   const [pcbBoardSlot, setPcbBoardSlot] = useState<HTMLDivElement | null>(null);
@@ -664,6 +693,18 @@ function DesignerSpaceInner({
     [actions, state.projection?.parts],
   );
 
+  // Clicking a row in the outline highlights it on the schematic canvas (the
+  // canvas owns its own selection state — sync via an imperative request).
+  const handleOutlineSelect = useCallback(
+    (sel: { partIds?: string[]; wireIds?: string[]; labelIds?: string[] }) => {
+      setSchematicSelectionRequest((current) => ({
+        ...sel,
+        nonce: (current?.nonce ?? 0) + 1,
+      }));
+    },
+    [],
+  );
+
   const handleBomShowPcb = useCallback(
     (placementIds: string[]) => {
       if (placementIds.length === 0) {
@@ -677,6 +718,21 @@ function DesignerSpaceInner({
       actions.setActiveView("pcb");
     },
     [actions, addToast],
+  );
+
+  const handleCrossProbePcb = useCallback(
+    (part: DesignerPlacedPart) => {
+      // Resolve the PCB placement by reference designator inside PcbCanvas once
+      // its projection loads; if the part isn't placed yet, the view still
+      // switches with an empty selection.
+      setPcbSelectionRequest((current) => ({
+        placementIds: [],
+        references: [part.reference],
+        nonce: (current?.nonce ?? 0) + 1,
+      }));
+      actions.setActiveView("pcb");
+    },
+    [actions],
   );
 
   const noTabsOpen = openDesignIds.length === 0;
@@ -696,12 +752,25 @@ function DesignerSpaceInner({
   }, [chatWidth]);
 
   useEffect(() => {
+    window.localStorage.setItem(INSPECTOR_OPEN_KEY, String(inspectorOpen));
+  }, [inspectorOpen]);
+
+  useEffect(() => {
+    window.localStorage.setItem(INSPECTOR_WIDTH_KEY, String(inspectorWidth));
+  }, [inspectorWidth]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isEditableShortcutTarget(event.target)) return;
       if (!(event.metaKey || event.ctrlKey)) return;
-      if (event.key.toLowerCase() !== "i") return;
-      event.preventDefault();
-      setChatOpen((value) => !value);
+      const key = event.key.toLowerCase();
+      if (key === "i") {
+        event.preventDefault();
+        setChatOpen((value) => !value);
+      } else if (event.key === ".") {
+        event.preventDefault();
+        setInspectorOpen((value) => !value);
+      }
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
@@ -714,6 +783,26 @@ function DesignerSpaceInner({
     const onMove = (moveEvent: PointerEvent) => {
       const delta = startX - moveEvent.clientX;
       setChatWidth(clamp(startWidth + delta, MIN_CHAT, MAX_CHAT));
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  };
+
+  const startInspectorResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = inspectorWidth;
+    const onMove = (moveEvent: PointerEvent) => {
+      const delta = startX - moveEvent.clientX;
+      setInspectorWidth(
+        clamp(startWidth + delta, MIN_INSPECTOR, MAX_INSPECTOR),
+      );
     };
     const stop = () => {
       window.removeEventListener("pointermove", onMove);
@@ -881,6 +970,7 @@ function DesignerSpaceInner({
                 onFrameBoundsMm={(bounds) =>
                   canvasRef.current?.frameToBoundsMm(bounds)
                 }
+                onSelectOnCanvas={handleOutlineSelect}
               />
             </div>
 
@@ -945,22 +1035,19 @@ function DesignerSpaceInner({
             <DesignerPlaceholderView view={state.activeView} />
           )}
 
-          {!noTabsOpen && state.activeView === "schem" && state.projection ? (
-            <SelectionInspectorMount
-              projection={state.projection}
-              state={state}
-              resolvePlacement={actions.resolvePlacement}
-              dispatchCommand={actions.dispatchCommand}
-              setError={actions.setError}
-              onClose={() => {
-                actions.setSelectedPartId(null);
-                actions.setSelectedPartIds(new Set<string>());
-                actions.setSelectedLabelId(null);
-                actions.setSelectedWireId(null);
-                actions.setSelectedPinId(null);
-              }}
-              onOpenInLibrary={() => navigateToModule("library")}
-            />
+          {!noTabsOpen &&
+          state.activeView === "schem" &&
+          state.projection &&
+          !inspectorOpen ? (
+            <button
+              type="button"
+              onClick={() => setInspectorOpen(true)}
+              title="Show inspector (Cmd/Ctrl+.)"
+              aria-label="Show inspector"
+              className="absolute right-2 top-2 z-20 cursor-pointer rounded-md border border-slate-200 bg-white/90 p-1 text-slate-500 shadow-sm backdrop-blur hover:bg-slate-100 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            >
+              <PanelRightOpen className="h-4 w-4" />
+            </button>
           ) : null}
 
           {!noTabsOpen && state.activeView === "schem" && state.projection ? (
@@ -987,6 +1074,41 @@ function DesignerSpaceInner({
             </div>
           ) : null}
         </div>
+
+        {!noTabsOpen &&
+        state.activeView === "schem" &&
+        state.projection &&
+        inspectorOpen ? (
+          <>
+            <div
+              className="group relative w-1 shrink-0 cursor-col-resize bg-slate-200/70 hover:bg-violet-600/60 dark:bg-slate-800/20"
+              onPointerDown={startInspectorResize}
+            >
+              <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
+              <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-slate-300 group-hover:bg-violet-400 dark:bg-slate-700" />
+            </div>
+            <div style={{ width: inspectorWidth }} className="min-h-0 shrink-0">
+              <SelectionInspectorMount
+                projection={state.projection}
+                state={state}
+                resolvePlacement={actions.resolvePlacement}
+                dispatchCommand={actions.dispatchCommand}
+                setError={actions.setError}
+                docked
+                onCollapse={() => setInspectorOpen(false)}
+                onCrossProbePcb={handleCrossProbePcb}
+                onClose={() => {
+                  actions.setSelectedPartId(null);
+                  actions.setSelectedPartIds(new Set<string>());
+                  actions.setSelectedLabelId(null);
+                  actions.setSelectedWireId(null);
+                  actions.setSelectedPinId(null);
+                }}
+                onOpenInLibrary={() => navigateToModule("library")}
+              />
+            </div>
+          </>
+        ) : null}
 
         {chatOpen ? (
           <>

@@ -160,7 +160,9 @@ interface SchematicCanvasProps {
   selectedPinId: string | null;
   selectedLabelId: string | null;
   selectionRequest?: {
-    partIds: readonly string[];
+    partIds?: readonly string[];
+    wireIds?: readonly string[];
+    labelIds?: readonly string[];
     nonce: number;
   } | null;
   wireSourcePinId: string | null;
@@ -759,6 +761,7 @@ export const SchematicCanvas = forwardRef<
     actions.setSelectedPartId(firstSelectedId(selection.partIds));
     actions.setSelectedPartIds(selection.partIds);
     actions.setSelectedLabelId(firstSelectedId(selection.labelIds));
+    actions.setSelectedWireId(firstSelectedId(selection.wireIds));
     const pinId = wireSession?.sourcePinId ?? null;
     actions.setSelectedPinId(pinId);
     actions.setWireSourcePinId(pinId);
@@ -768,19 +771,21 @@ export const SchematicCanvas = forwardRef<
     const request = props.selectionRequest;
     if (!request) return;
     setSelection((current) => {
-      const nextPartIds = new Set(request.partIds);
+      const nextPartIds = new Set(request.partIds ?? []);
+      const nextWireIds = new Set(request.wireIds ?? []);
+      const nextLabelIds = new Set(request.labelIds ?? []);
       if (
         sameStringSet(current.partIds, nextPartIds) &&
-        current.wireIds.size === 0 &&
-        current.labelIds.size === 0 &&
+        sameStringSet(current.wireIds, nextWireIds) &&
+        sameStringSet(current.labelIds, nextLabelIds) &&
         current.primitiveIds.size === 0
       ) {
         return current;
       }
       return {
         partIds: nextPartIds,
-        wireIds: new Set<string>(),
-        labelIds: new Set<string>(),
+        wireIds: nextWireIds,
+        labelIds: nextLabelIds,
         primitiveIds: new Set<string>(),
       };
     });

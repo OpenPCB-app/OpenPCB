@@ -25,6 +25,11 @@ interface DesignerSidebarProps {
     maxX: number;
     maxY: number;
   }): void;
+  onSelectOnCanvas(sel: {
+    partIds?: string[];
+    wireIds?: string[];
+    labelIds?: string[];
+  }): void;
 }
 
 export function DesignerSidebar({
@@ -38,6 +43,7 @@ export function DesignerSidebar({
   onAddNetLabel,
   onBrowseLibrary,
   onFrameBoundsMm,
+  onSelectOnCanvas,
 }: DesignerSidebarProps): ReactElement {
   if (activeView === "pcb") {
     return (
@@ -74,6 +80,7 @@ export function DesignerSidebar({
       onAddNetLabel={onAddNetLabel}
       onBrowseLibrary={onBrowseLibrary}
       onFrameBoundsMm={onFrameBoundsMm}
+      onSelectOnCanvas={onSelectOnCanvas}
     />
   );
 }
