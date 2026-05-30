@@ -16,10 +16,6 @@ import {
 } from "./geometry-utils";
 import { COPPER_FILL_GREEN, COPPER_FILL_ROUGHNESS } from "./materials";
 
-// Copper layers poured by default when the projection carries no persisted
-// view state (pre-viewState boards): the common two-layer F+B plane.
-const DEFAULT_FILL_LAYERS: ReadonlyArray<PcbCopperLayerId> = ["F.Cu", "B.Cu"];
-
 function PourLayer({
   shapes,
   zMm,
@@ -79,10 +75,11 @@ export function CopperPour({
 
   const shapesByLayer = useMemo(() => {
     if (!designRules) return { front: [], back: [] };
+    // The 3D model is a realistic board preview: always flood the pour on both
+    // copper faces, independent of the 2D canvas's `copperFillLayers` visibility
+    // toggle (an editor-only concern). The per-layer poured net still drives
+    // same-net merge below.
     const viewState = projection.board.viewState;
-    const fillLayers = new Set<PcbCopperLayerId>(
-      viewState?.copperFillLayers ?? DEFAULT_FILL_LAYERS,
-    );
     const pourNetIds = viewState?.copperFillPourNetIds ?? {};
     const padNetIds = buildPadNetIds(
       projection.ratsnest,
@@ -102,13 +99,11 @@ export function CopperPour({
       freePads: projection.freePads,
     };
     const forLayer = (layer: PcbCopperLayerId): THREE.Shape[] =>
-      fillLayers.has(layer)
-        ? buildCopperFillPourShapes({
-            ...common,
-            layer,
-            pourNetId: pourNetIds[layer] ?? null,
-          })
-        : [];
+      buildCopperFillPourShapes({
+        ...common,
+        layer,
+        pourNetId: pourNetIds[layer] ?? null,
+      });
     return { front: forLayer("F.Cu"), back: forLayer("B.Cu") };
   }, [
     designRules,
