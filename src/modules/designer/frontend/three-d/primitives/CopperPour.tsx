@@ -1,22 +1,24 @@
 import { useEffect, useMemo, type ReactElement } from "react";
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import type { DesignerPcbProjection } from "../../../../../sdks";
+import type {
+  DesignerPcbProjection,
+  PcbCopperLayerId,
+} from "../../../../../sdks";
 import {
   buildCopperFillPourShapes,
   resolveCopperFillClearanceMm,
 } from "../../pcb/layers/copper-fill-geometry";
+import { buildPadNetIds } from "../../pcb/pcb-pad-nets";
 import {
   COPPER_RELIEF_HEIGHT_MM,
   DEFAULT_BOARD_THICKNESS_MM,
 } from "./geometry-utils";
 import { COPPER_FILL_GREEN, COPPER_FILL_ROUGHNESS } from "./materials";
 
-// The 3D board view fetches its own projection and has no access to the live
-// pcb-view-store, so it can't know which net is poured. Default to no same-net
-// merge (every copper object gets a clearance moat) — the common, safe look.
-const POUR_NET_ID = null;
-const EMPTY_PAD_NETS: ReadonlyMap<string, string> = new Map();
+// Copper layers poured by default when the projection carries no persisted
+// view state (pre-viewState boards): the common two-layer F+B plane.
+const DEFAULT_FILL_LAYERS: ReadonlyArray<PcbCopperLayerId> = ["F.Cu", "B.Cu"];
 
 function PourLayer({
   shapes,
@@ -58,11 +60,13 @@ function PourLayer({
 
 /**
  * Copper pour flooding the empty board area (the ground/power plane), mirroring
- * the 2D `CopperFillLayer`. Computed with the same net-aware clearance logic
- * (`buildCopperFillPourShapes`) so the 3D fill matches the 2D fill: copper up to
- * `copperToBoardEdge` from the edge, with clearance moats carved around traces,
- * pads and vias. Sits just under the translucent soldermask → reads as the
- * flooded green plane with subtle moats (see reference screenshots).
+ * the 2D `CopperFillLayer` via the shared `buildCopperFillPourShapes`. Net-aware
+ * off the projection's persisted view state: the poured net per layer
+ * (`board.viewState.copperFillPourNetIds`) drives same-net merge, and the same
+ * `buildPadNetIds` mapping the 2D scene uses resolves pad nets — so a same-net
+ * plane reads as merged copper (no moat) here exactly as in 2D. Refreshes on
+ * commit (the projection is re-fetched then). Sits just under the translucent
+ * soldermask → flooded green plane with subtle moats around different-net copper.
  */
 export function CopperPour({
   projection,
@@ -75,26 +79,46 @@ export function CopperPour({
 
   const shapesByLayer = useMemo(() => {
     if (!designRules) return { front: [], back: [] };
+    const viewState = projection.board.viewState;
+    const fillLayers = new Set<PcbCopperLayerId>(
+      viewState?.copperFillLayers ?? DEFAULT_FILL_LAYERS,
+    );
+    const pourNetIds = viewState?.copperFillPourNetIds ?? {};
+    const padNetIds = buildPadNetIds(
+      projection.ratsnest,
+      projection.placements,
+      projection.traces,
+    );
     const common = {
       outline: projection.board.outline,
       placements: projection.placements,
       traces: projection.traces,
       vias: projection.vias,
-      pourNetId: POUR_NET_ID,
-      padNetIds: EMPTY_PAD_NETS,
+      padNetIds,
       clearanceMm: resolveCopperFillClearanceMm(designRules.clearance),
       copperToBoardEdgeMm: designRules.clearance.copperToBoardEdgeMm,
+      cutouts: projection.board.cutouts,
+      freeHoles: projection.freeHoles,
+      freePads: projection.freePads,
     };
-    return {
-      front: buildCopperFillPourShapes({ ...common, layer: "F.Cu" }),
-      back: buildCopperFillPourShapes({ ...common, layer: "B.Cu" }),
-    };
+    const forLayer = (layer: PcbCopperLayerId): THREE.Shape[] =>
+      fillLayers.has(layer)
+        ? buildCopperFillPourShapes({
+            ...common,
+            layer,
+            pourNetId: pourNetIds[layer] ?? null,
+          })
+        : [];
+    return { front: forLayer("F.Cu"), back: forLayer("B.Cu") };
   }, [
     designRules,
     projection.board,
+    projection.ratsnest,
     projection.placements,
     projection.traces,
     projection.vias,
+    projection.freeHoles,
+    projection.freePads,
   ]);
 
   if (!designRules) return null;
