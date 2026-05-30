@@ -21,6 +21,7 @@ import {
   type DesignerHistoryActionResult,
   type DesignerHistorySnapshot,
   type DesignerPcbProjection,
+  type DrcReport,
   type DesignerSchematicPreview,
   type DesignerSchematicProjection,
   type DesignerSearchLibraryParams,
@@ -38,8 +39,15 @@ import {
   readLinkPublic,
 } from "./cloud-sync";
 import {
+  getDrcResult,
+  saveDrcResult,
+  type SaveDrcOptions,
+  type StoredDrcResult,
+} from "./drc-results";
+import {
   commandLog,
   designHeads,
+  drcResults,
   bomOverrides,
   schematicLabels,
   schematicParts,
@@ -127,6 +135,14 @@ export interface DesignerStore {
   ): Promise<DesignerSchematicProjection | null>;
   getPcbProjection(designId: string): Promise<DesignerPcbProjection | null>;
   getBomProjection(designId: string): Promise<BomProjection | null>;
+  /** Persist the latest DRC report for a design (upsert). */
+  saveDrcResult(
+    designId: string,
+    report: DrcReport,
+    options: SaveDrcOptions,
+  ): Promise<void>;
+  /** Latest persisted DRC report, or null if never run. */
+  getDrcResult(designId: string): Promise<StoredDrcResult | null>;
   listBomOverrides(designId: string): Promise<BomOverride[]>;
   updateBomOverride(
     designId: string,
@@ -336,8 +352,15 @@ export function createDesignerStore(
         .from(designHeads)
         .orderBy(asc(designHeads.createdAt))
         .all();
+      const drcByDesign = new Map(
+        db
+          .select()
+          .from(drcResults)
+          .all()
+          .map((r) => [r.designId, r] as const),
+      );
       return rows.map((row) => ({
-        ...mapDesignSummary(row),
+        ...mapDesignSummary(row, drcByDesign.get(row.id)),
         schematicPreview: readOrRefreshPreview(row),
       }));
     },
@@ -357,7 +380,15 @@ export function createDesignerStore(
         return null;
       }
 
-      return toDesignRecordFromProjection(mapDesignSummary(head), projection);
+      const drcRow = db
+        .select()
+        .from(drcResults)
+        .where(eq(drcResults.designId, designId))
+        .get();
+      return toDesignRecordFromProjection(
+        mapDesignSummary(head, drcRow ?? null),
+        projection,
+      );
     },
 
     async updateDesign(designId, input) {
@@ -446,6 +477,14 @@ export function createDesignerStore(
         timestamp: nowIso(),
       });
       return buildBomProjection(pcb, schematic, listBomOverrides(db, designId));
+    },
+
+    async saveDrcResult(designId, report, options) {
+      saveDrcResult(db, designId, report, options, nowIso());
+    },
+
+    async getDrcResult(designId) {
+      return getDrcResult(db, designId);
     },
 
     async listBomOverrides(designId) {

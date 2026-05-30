@@ -85,6 +85,12 @@ export function DesignerHeader({
           >
             BOM
           </TabsTrigger>
+          <TabsTrigger
+            value="drc"
+            className="cursor-pointer rounded-sm px-3 py-1 text-xs data-[state=active]:bg-slate-200 dark:data-[state=active]:bg-violet-900 dark:data-[state=active]:text-white data-[state=active]:text-black"
+          >
+            DRC
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 

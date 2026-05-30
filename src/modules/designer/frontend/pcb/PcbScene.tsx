@@ -42,6 +42,8 @@ import { ViaLayer } from "./layers/ViaLayer";
 import { DrillHighlightLayer, DrillHoleCutoutLayer } from "./layers/DrillLayer";
 import { FreePadLayer } from "./layers/FreePadLayer";
 import { OverlayLayer } from "./layers/OverlayLayer";
+import { DrcMarkerLayer } from "./layers/DrcMarkerLayer";
+import { DrcSelectionHighlight } from "./layers/DrcSelectionHighlight";
 import { BOARD_HANDLES, handlePointMm } from "./pcb-board-resize";
 import {
   cutoutToPath,
@@ -78,6 +80,8 @@ export interface PcbCameraControls {
   zoomIn(): void;
   zoomOut(): void;
   fit(): void;
+  /** Center the camera on a board-space point (mm), zooming in if too far out. */
+  centerOnMm(point: { x: number; y: number }): void;
 }
 
 /** Stable empty reference so `useMemo` deps don't churn on absent cutouts. */
@@ -160,6 +164,13 @@ function CameraControlsBridge({
       },
       fit() {
         fitCameraToOutline(camera, gl, outlineRef.current);
+        invalidate();
+      },
+      centerOnMm(point) {
+        camera.position.set(point.x, point.y, camera.position.z);
+        // Zoom in to a comfortable level if the user is far out, but never zoom out.
+        camera.zoom = Math.min(Math.max(camera.zoom, 60), 500);
+        camera.updateProjectionMatrix();
         invalidate();
       },
     };
@@ -1704,6 +1715,8 @@ export function PcbScene({
             netClasses={projection.board.netClasses}
           />
         ) : null}
+        <DrcSelectionHighlight traces={projection.traces} />
+        <DrcMarkerLayer />
         {selectedPlacements.map((placement) => (
           <SelectionOutline key={placement.id} placement={placement} />
         ))}

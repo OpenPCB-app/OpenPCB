@@ -23,6 +23,16 @@ function classIdForName(
 export function resolveNetClassId(
   netName: string,
   netClasses: ReadonlyArray<PcbNetClass>,
+  assignments?: Record<string, string>,
+  netId?: string | null,
 ): string {
+  // An explicit per-net assignment wins over the name-pattern heuristic, but
+  // only if it points at a class that still exists.
+  if (netId && assignments) {
+    const assigned = assignments[netId];
+    if (assigned && netClasses.some((c) => c.id === assigned)) {
+      return assigned;
+    }
+  }
   return classIdForName(netName, netClasses);
 }

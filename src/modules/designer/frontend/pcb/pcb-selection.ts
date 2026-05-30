@@ -49,6 +49,18 @@ export function clonePcbSelection(s: PcbSelection): PcbSelection {
   };
 }
 
+/** Total number of selected primitives across all buckets. */
+export function pcbSelectionCount(s: PcbSelection): number {
+  return (
+    s.placementIds.size +
+    s.traceIds.size +
+    s.viaIds.size +
+    holeIds(s).size +
+    padIds(s).size +
+    textIds(s).size
+  );
+}
+
 export function isPcbSelectionEmpty(s: PcbSelection): boolean {
   return (
     s.placementIds.size === 0 &&

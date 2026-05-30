@@ -22,7 +22,10 @@ import { DesignerEmptyState } from "./components/DesignerEmptyState";
 import { KicadProjectImportWizard } from "./components/KicadProjectImportWizard";
 import { DesignerPlaceholderView } from "./components/DesignerPlaceholderView";
 import { DesignerBomView } from "./components/DesignerBomView";
+import { DesignerDrcView } from "./components/DesignerDrcView";
+import { DesignerStatusBar } from "./components/DesignerStatusBar";
 import { DesignerSidebar } from "./components/DesignerSidebar";
+import { useDrcStore } from "./pcb/drc/drc-store";
 import {
   SchematicCanvas,
   type SchematicCanvasHandle,
@@ -52,6 +55,9 @@ const MIN_LEFT = 240;
 const MAX_LEFT = 520;
 const MIN_CHAT = 320;
 const MAX_CHAT = 560;
+// Placeholder grid spacing for the PCB/DRC status bar (50 mil). The PCB editor
+// has no grid-snap state yet; surface a sensible default until one exists.
+const PCB_STATUS_GRID_MM = 1.27;
 const MIN_INSPECTOR = 260;
 const MAX_INSPECTOR = 440;
 const CHAT_OPEN_KEY = "openpcb:designer:chat-open";
@@ -344,6 +350,9 @@ function DesignerSpaceInner({
   const [gridVisible, setGridVisible] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [pcbDrcCount, setPcbDrcCount] = useState(0);
+  const [pcbSelectionCount, setPcbSelectionCount] = useState(0);
+  // Batch-DRC summary (errors + warnings) for the DRC view's status bar.
+  const drcSummary = useDrcStore((s) => s.report?.summary);
   const [schematicSelectionRequest, setSchematicSelectionRequest] = useState<{
     partIds?: string[];
     wireIds?: string[];
@@ -952,7 +961,7 @@ function DesignerSpaceInner({
       ) : null}
 
       <div className="relative flex min-h-0 flex-1">
-        {state.activeView !== "bom" ? (
+        {state.activeView !== "bom" && state.activeView !== "drc" ? (
           <>
             <div style={{ width: leftWidth }} className="shrink-0">
               <DesignerSidebar
@@ -995,25 +1004,43 @@ function DesignerSpaceInner({
           ) : state.activeView === "schem" ? (
             canvasContent()
           ) : state.activeView === "pcb" ? (
-            <PcbCanvas
-              backendURL={backendURL}
-              moduleId={moduleId}
-              designId={state.selectedDesignId}
-              gridVisible={gridVisible}
-              dispatchCommand={actions.dispatchCommand}
-              notifyExternalRevisionBump={actions.notifyExternalRevisionBump}
-              onDrcCountChange={setPcbDrcCount}
-              boardPanelTarget={pcbBoardSlot}
-              layersPanelTarget={pcbLayersSlot}
-              selectionRequest={pcbSelectionRequest}
-              initialViewport={
-                state.selectedDesignId
-                  ? (viewportRef.current.get(`pcb:${state.selectedDesignId}`) ??
-                    null)
-                  : null
-              }
-              onViewportChange={onPcbViewportChange}
-            />
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="relative min-h-0 flex-1">
+                <PcbCanvas
+                  backendURL={backendURL}
+                  moduleId={moduleId}
+                  designId={state.selectedDesignId}
+                  gridVisible={gridVisible}
+                  dispatchCommand={actions.dispatchCommand}
+                  notifyExternalRevisionBump={
+                    actions.notifyExternalRevisionBump
+                  }
+                  onDrcCountChange={setPcbDrcCount}
+                  onSelectionCountChange={setPcbSelectionCount}
+                  boardPanelTarget={pcbBoardSlot}
+                  layersPanelTarget={pcbLayersSlot}
+                  selectionRequest={pcbSelectionRequest}
+                  initialViewport={
+                    state.selectedDesignId
+                      ? (viewportRef.current.get(
+                          `pcb:${state.selectedDesignId}`,
+                        ) ?? null)
+                      : null
+                  }
+                  onViewportChange={onPcbViewportChange}
+                />
+              </div>
+              <DesignerStatusBar
+                gridMm={PCB_STATUS_GRID_MM}
+                zoom={zoomPercent}
+                selection={
+                  pcbSelectionCount > 0
+                    ? `${pcbSelectionCount} selected`
+                    : "No selection"
+                }
+                drcCount={pcbDrcCount}
+              />
+            </div>
           ) : state.activeView === "3d" ? (
             <Board3DCanvas
               backendURL={backendURL}
@@ -1031,6 +1058,26 @@ function DesignerSpaceInner({
               onShowSchematic={handleBomShowSchematic}
               onShowPcb={handleBomShowPcb}
             />
+          ) : state.activeView === "drc" ? (
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <DesignerDrcView
+                  backendURL={backendURL}
+                  moduleId={moduleId}
+                  designId={state.selectedDesignId}
+                  revision={state.projection?.revision ?? null}
+                  onShowViolation={() => actions.setActiveView("pcb")}
+                />
+              </div>
+              <DesignerStatusBar
+                gridMm={PCB_STATUS_GRID_MM}
+                zoom={zoomPercent}
+                selection="—"
+                drcCount={
+                  drcSummary ? drcSummary.errors + drcSummary.warnings : 0
+                }
+              />
+            </div>
           ) : (
             <DesignerPlaceholderView view={state.activeView} />
           )}

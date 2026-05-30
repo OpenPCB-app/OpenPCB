@@ -60,7 +60,7 @@ function padKey(pad: PadRef): string {
  * Returns a map from net id → array of pad-component-representatives (one PadRef per component).
  * If a net has 0 routed connections, every pad is its own component.
  */
-function groupPadsByConnectivity(
+export function groupPadsByConnectivity(
   netId: string,
   pads: PadRef[],
   traces: PcbTrace[],
@@ -216,6 +216,8 @@ export interface ComputeRatsnestContext {
   netNames: Map<string, string>;
   /** Net classes available on the board (drives color routing). */
   netClasses: ReadonlyArray<PcbNetClass>;
+  /** Explicit per-net → net-class overrides (netId → netClassId). */
+  perNetClassAssignments?: Record<string, string>;
   /** Routed traces; ratsnest hides airwires already covered by routing. */
   traces?: ReadonlyArray<PcbTrace>;
   /** Routed vias; chain trace segments across layers when computing connectivity. */
@@ -231,7 +233,12 @@ export function computeRatsnest(
   const result: RatsnestSegment[] = [];
   for (const [netId, pads] of correlation.netPads) {
     const netName = ctx.netNames.get(netId) ?? "";
-    const classId = resolveNetClassId(netName, ctx.netClasses);
+    const classId = resolveNetClassId(
+      netName,
+      ctx.netClasses,
+      ctx.perNetClassAssignments,
+      netId,
+    );
     const components = groupPadsByConnectivity(netId, pads, traces, vias);
     result.push(...mstForRepresentatives(netId, classId, components));
   }

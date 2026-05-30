@@ -38,6 +38,15 @@ export function PcbExportDialog({
   const [includePnp, setIncludePnp] = useState(true);
   const [includeInner, setIncludeInner] = useState(true);
   const [status, setStatus] = useState<ExportStatus>({ state: "idle" });
+  // Pre-export DRC gate: errors block the download until acknowledged.
+  const [drcGate, setDrcGate] = useState<{
+    state: "running" | "ok" | "error";
+    errors: number;
+    warnings: number;
+    infos: number;
+    message?: string;
+  }>({ state: "running", errors: 0, warnings: 0, infos: 0 });
+  const [ackErrors, setAckErrors] = useState(false);
 
   const api = useMemo(
     () => createDesignerApi({ backendURL, moduleId }),
@@ -52,6 +61,40 @@ export function PcbExportDialog({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
+
+  // Run DRC when the dialog opens (also persists the result → design card).
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setDrcGate({ state: "running", errors: 0, warnings: 0, infos: 0 });
+    setAckErrors(false);
+    void api
+      .runDrc(designId)
+      .then((r) => {
+        if (cancelled) return;
+        setDrcGate({
+          state: "ok",
+          errors: r.summary.errors,
+          warnings: r.summary.warnings,
+          infos: r.summary.infos,
+        });
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setDrcGate({
+          state: "error",
+          errors: 0,
+          warnings: 0,
+          infos: 0,
+          message: e instanceof Error ? e.message : String(e),
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, api, designId]);
+
+  const drcBlocks = drcGate.state === "ok" && drcGate.errors > 0 && !ackErrors;
 
   if (!open) return null;
 
@@ -119,6 +162,46 @@ export function PcbExportDialog({
             CSVs. Output is a ZIP ready for JLCPCB / PCBWay upload.
           </p>
 
+          {drcGate.state === "running" ? (
+            <p className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+              Running DRC…
+            </p>
+          ) : null}
+          {drcGate.state === "error" ? (
+            <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+              DRC could not run ({drcGate.message}). Export is allowed but
+              unverified.
+            </p>
+          ) : null}
+          {drcGate.state === "ok" && drcGate.errors === 0 ? (
+            <p className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
+              DRC passed
+              {drcGate.warnings > 0
+                ? ` with ${drcGate.warnings} warning(s)`
+                : " — no errors"}
+              .
+            </p>
+          ) : null}
+          {drcGate.state === "ok" && drcGate.errors > 0 ? (
+            <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-200">
+              <p className="font-medium">
+                DRC found {drcGate.errors} error(s)
+                {drcGate.warnings > 0
+                  ? ` and ${drcGate.warnings} warning(s)`
+                  : ""}
+                .
+              </p>
+              <label className="mt-1.5 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={ackErrors}
+                  onChange={(e) => setAckErrors(e.target.checked)}
+                />
+                Export anyway (ignore DRC errors)
+              </label>
+            </div>
+          ) : null}
+
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -176,11 +259,20 @@ export function PcbExportDialog({
           <button
             type="button"
             onClick={() => void handleDownload()}
-            disabled={status.state === "running"}
+            disabled={
+              status.state === "running" ||
+              drcGate.state === "running" ||
+              drcBlocks
+            }
+            title={
+              drcBlocks
+                ? "Resolve DRC errors or check “Export anyway”"
+                : undefined
+            }
             className="inline-flex items-center gap-1.5 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download className="h-3.5 w-3.5" />
-            Download ZIP
+            {ackErrors && drcGate.errors > 0 ? "Export anyway" : "Download ZIP"}
           </button>
         </footer>
       </div>

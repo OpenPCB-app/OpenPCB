@@ -9,6 +9,7 @@ import type {
   DesignerPcbProjection,
   DesignerSchematicProjection,
   DesignerSearchLibraryParams,
+  DrcReport,
   ErcReport,
   KicadProjectCommitRequest,
   KicadProjectCommitResult,
@@ -31,6 +32,7 @@ export type {
   DesignerDerivedNet,
   DesignerDesignRecord,
   DesignerDesignSummary,
+  DesignerDrcStatus,
   DesignerDispatchContext,
   DesignerDispatchResult,
   DesignerEntityKind,
@@ -97,6 +99,7 @@ export type {
   DesignerPcbSetBoardSettingsCommand,
   DesignerPcbSetBoardOutlineCommand,
   DesignerPcbSetViewStateCommand,
+  DesignerPcbSetDesignRulesCommand,
   DesignerPcbSetVisibleLayersCommand,
   DesignerPcbUpdateTraceGeometryCommand,
   DesignerPcbDeletePlacementCommand,
@@ -117,6 +120,12 @@ export type {
   ErcReport,
   ErcSeverity,
   ErcViolation,
+  DrcAnchor,
+  DrcReport,
+  DrcRuleClass,
+  DrcRuleCode,
+  DrcSeverity,
+  DrcViolation,
   DesignerPlacePartCommand,
   DesignerPlaceGndPortCommand,
   DesignerPlacePwrPortCommand,
@@ -202,6 +211,8 @@ export interface DesignerSDK {
   ): Promise<DesignerHistoryActionResult>;
   /** Run the ERC engine over the current schematic projection. Returns `null` when the design has no schematic projection (e.g. brand new design). */
   runErc(designId: string): Promise<ErcReport | null>;
+  /** Run the DRC engine over the current PCB projection. Returns `null` when the design has no PCB projection. */
+  runDrc(designId: string): Promise<DrcReport | null>;
   /**
    * Parse a KiCad project ZIP and return an inspect report (no DB writes).
    * The wizard renders this to the user before commit.

@@ -100,6 +100,7 @@ import {
   updatePcbOverlayText,
   updatePcbTrace,
   updatePcbViewState,
+  updatePcbDesignRules,
   updatePcbVisibleLayers,
 } from "./pcb/pcb-store";
 import {
@@ -241,12 +242,35 @@ type PcbViaInput = Omit<DesignerPcbAddViaCommand, "type"> & {
   type?: "pcb_add_via" | "pcb_add_manual_via";
 };
 
+/**
+ * Apply-at-creation safety net: when a trace/via is created on a net that has
+ * an explicit class assignment but the request still carries the board's
+ * default class (no deliberate choice), upgrade it to the assigned class. An
+ * explicit non-default class is honored as-is. The frontend route session sets
+ * this at session start; this guards programmatic inserts.
+ */
+function effectiveNetClassId(
+  board: PcbBoardSettings,
+  netId: string | null,
+  requestedClassId: string,
+): string {
+  if (!netId) return requestedClassId;
+  const assigned = board.perNetClassAssignments?.[netId];
+  if (!assigned) return requestedClassId;
+  const defaultId = board.netClasses[0]?.id ?? "default";
+  if (requestedClassId !== defaultId) return requestedClassId;
+  return board.netClasses.some((nc) => nc.id === assigned)
+    ? assigned
+    : requestedClassId;
+}
+
 function buildPcbTraceForInsert(
   input: PcbTraceInput,
   board: PcbBoardSettings,
 ): { trace: PcbTrace } | { error: DesignerDispatchResult } {
-  const netClass = board.netClasses.find((nc) => nc.id === input.netClassId);
-  if (!netClass) return { error: pcbNetClassNotFound(input.netClassId) };
+  const netClassId = effectiveNetClassId(board, input.netId, input.netClassId);
+  const netClass = board.netClasses.find((nc) => nc.id === netClassId);
+  if (!netClass) return { error: pcbNetClassNotFound(netClassId) };
   const sanitized = sanitizeTracePath(input.pointsNm);
   if (sanitized.length < 2) {
     return {
@@ -255,12 +279,19 @@ function buildPcbTraceForInsert(
   }
   const reason = validateTracePath(sanitized, input.segmentMode);
   if (reason) return { error: invalidPcbTrace(reason) };
+  // If we upgraded an un-chosen (default) class, take the assigned class's
+  // trace width too — but never override a width the caller explicitly set.
+  const defaultWidth = board.netClasses[0]?.traceWidthMm;
+  const widthMm =
+    netClassId !== input.netClassId && input.widthMm === defaultWidth
+      ? netClass.traceWidthMm
+      : input.widthMm;
   const trace: PcbTrace = {
     id: crypto.randomUUID(),
     netId: input.netId,
-    netClassId: input.netClassId,
+    netClassId,
     layer: input.layer,
-    widthMm: input.widthMm,
+    widthMm,
     pointsNm: sanitized,
     segmentMode: input.segmentMode,
   };
@@ -279,8 +310,9 @@ function buildPcbViaForInsert(
   input: PcbViaInput,
   board: PcbBoardSettings,
 ): { via: PcbVia } | { error: DesignerDispatchResult } {
-  const netClass = board.netClasses.find((nc) => nc.id === input.netClassId);
-  if (!netClass) return { error: pcbNetClassNotFound(input.netClassId) };
+  const netClassId = effectiveNetClassId(board, input.netId, input.netClassId);
+  const netClass = board.netClasses.find((nc) => nc.id === netClassId);
+  if (!netClass) return { error: pcbNetClassNotFound(netClassId) };
   const diameterMm = input.diameterMmOverride ?? netClass.viaDiameterMm;
   const drillMm = input.drillMmOverride ?? netClass.viaDrillMm;
   if (!Number.isFinite(diameterMm) || diameterMm <= 0) {
@@ -305,7 +337,7 @@ function buildPcbViaForInsert(
   const via: PcbVia = {
     id: crypto.randomUUID(),
     netId: input.netId,
-    netClassId: input.netClassId,
+    netClassId,
     centerMm: input.centerMm,
     diameterMm,
     drillMm,
@@ -659,6 +691,19 @@ export function executeDesignerCommand({
       db: tx,
       designId,
       patch: command.patch,
+      timestamp,
+    });
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+  }
+
+  if (command.type === "pcb_set_design_rules") {
+    updatePcbDesignRules({
+      db: tx,
+      designId,
+      designRules: command.designRules,
+      netClasses: command.netClasses,
+      boardThicknessMm: command.boardThicknessMm,
+      perNetClassAssignments: command.perNetClassAssignments,
       timestamp,
     });
     return okResult(bumpRevision(tx, designId, revision, timestamp), null);
