@@ -93,9 +93,20 @@ export function loadPcbProjection(params: {
   const ratsnest = computeRatsnest(correlation, {
     netNames,
     netClasses: board.netClasses,
+    perNetClassAssignments: board.perNetClassAssignments,
     traces,
     vias,
   });
+
+  // Flatten the schematic↔PCB pad correlation into a `${placementId}|${padNumber}`
+  // → netId map so a pure consumer (DRC) can resolve a footprint pad's net
+  // without re-running correlation or touching the schematic.
+  const padNets: Record<string, string> = {};
+  for (const [netId, pads] of correlation.netPads) {
+    for (const pad of pads) {
+      padNets[`${pad.placementId}|${pad.padNumber}`] = netId;
+    }
+  }
 
   return {
     designId: params.designId,
@@ -111,6 +122,7 @@ export function loadPcbProjection(params: {
     zones,
     ratsnest,
     netNames: Object.fromEntries(netNames),
+    padNets,
     warnings: correlation.warnings,
   };
 }

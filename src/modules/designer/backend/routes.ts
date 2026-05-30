@@ -38,6 +38,9 @@ import type {
   DesignerPcbSetBoardSettingsCommand,
   DesignerPcbSetBoardOutlineCommand,
   DesignerPcbSetViewStateCommand,
+  DesignerPcbSetDesignRulesCommand,
+  PcbDesignRules,
+  PcbNetClass,
   DesignerPcbSetVisibleLayersCommand,
   DesignerPcbUpdateTraceGeometryCommand,
   DesignerPcbDeletePlacementCommand,
@@ -78,6 +81,7 @@ import type {
 } from "../../../sdks/designer";
 import { buildDesignerSdk } from "./sdk";
 import { createDesignerStore } from "./store";
+import { runDrc } from "./drc/drc-engine";
 import { runErc } from "./erc/erc-engine";
 import { asNumber, asRecord, asString } from "./value-guards";
 
@@ -1115,6 +1119,46 @@ function parsePcbSetViewStateCommand(
   };
 }
 
+function parsePcbSetDesignRulesCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbSetDesignRulesCommand {
+  // Values are re-validated field-by-field in `updatePcbDesignRules`
+  // (parseDesignRules / parseNetClasses) before persisting, so here we only
+  // shape-check and forward. Omitted fields leave that part of the rules
+  // unchanged.
+  const command: DesignerPcbSetDesignRulesCommand = {
+    type: "pcb_set_design_rules",
+  };
+  if (raw.designRules !== undefined) {
+    if (!asRecord(raw.designRules)) {
+      throw new ValidationError("command.designRules must be an object");
+    }
+    command.designRules = raw.designRules as PcbDesignRules;
+  }
+  if (raw.netClasses !== undefined) {
+    if (!Array.isArray(raw.netClasses)) {
+      throw new ValidationError("command.netClasses must be an array");
+    }
+    command.netClasses = raw.netClasses as PcbNetClass[];
+  }
+  if (raw.perNetClassAssignments !== undefined) {
+    if (!asRecord(raw.perNetClassAssignments)) {
+      throw new ValidationError(
+        "command.perNetClassAssignments must be an object",
+      );
+    }
+    // Shape-only forward; updatePcbDesignRules re-validates each entry against
+    // the known class ids before persisting.
+    command.perNetClassAssignments = raw.perNetClassAssignments as Record<
+      string,
+      string
+    >;
+  }
+  const thickness = asNumber(raw.boardThicknessMm);
+  if (thickness !== null) command.boardThicknessMm = thickness;
+  return command;
+}
+
 function parsePcbDeletePlacementCommand(
   raw: Record<string, unknown>,
 ): DesignerPcbDeletePlacementCommand {
@@ -1749,6 +1793,9 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
     case "pcb_set_view_state":
       command = parsePcbSetViewStateCommand(commandRecord);
       break;
+    case "pcb_set_design_rules":
+      command = parsePcbSetDesignRulesCommand(commandRecord);
+      break;
     case "pcb_delete_placement":
       command = parsePcbDeletePlacementCommand(commandRecord);
       break;
@@ -2000,6 +2047,33 @@ export function registerRoutes(
       throw new NotFoundError(`Design '${designId}' not found`);
     }
     return success({ report: runErc(projection) });
+  });
+
+  // Compute DRC over the current PCB projection AND persist the result, so the
+  // design card + a later reopen reflect it. Returns the fresh report.
+  router.post("/designs/:designId/drc/run", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    const projection = await store.getPcbProjection(designId);
+    if (!projection) {
+      throw new NotFoundError(`Design '${designId}' not found`);
+    }
+    const view = projection.board.viewState;
+    const options = {
+      ignoredRuleClasses: view?.drcIgnoredRuleClasses ?? [],
+      waivedIds: view?.drcWaivedViolationIds ?? [],
+    };
+    const report = runDrc(projection, options);
+    await store.saveDrcResult(designId, report, options);
+    return success({ report });
+  });
+
+  // Return the latest *persisted* DRC report (or null if never run). The
+  // report's `revision` is the revision it ran against; the client compares it
+  // to the live projection revision to detect staleness.
+  router.get("/designs/:designId/drc", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    const stored = await store.getDrcResult(designId);
+    return success({ report: stored?.report ?? null });
   });
 
   router.post("/designs/:designId/commands", async ({ params, req }) => {

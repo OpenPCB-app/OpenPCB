@@ -1,8 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
+  DrcRuleClass,
   PcbBoardSettings,
   PcbCopperLayerId,
+  PcbDesignRules,
+  PcbNetClass,
+  PcbViaProtection,
   PcbFreeHole,
   PcbFreePad,
   PcbFreePadShape,
@@ -214,6 +218,138 @@ function parsePerLayerOpacity(
   return out;
 }
 
+const DRC_RULE_CLASSES = new Set<DrcRuleClass>([
+  "clearance",
+  "constraint",
+  "connectivity",
+  "manufacturability",
+  "structural",
+]);
+
+function parseStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const item of value) {
+    if (typeof item === "string") out.push(item);
+  }
+  return out;
+}
+
+function parseDrcRuleClasses(value: unknown): DrcRuleClass[] {
+  if (!Array.isArray(value)) return [];
+  const out: DrcRuleClass[] = [];
+  for (const item of value) {
+    if (
+      typeof item === "string" &&
+      DRC_RULE_CLASSES.has(item as DrcRuleClass)
+    ) {
+      out.push(item as DrcRuleClass);
+    }
+  }
+  return out;
+}
+
+const VIA_PROTECTIONS = new Set<PcbViaProtection>([
+  "none",
+  "tented",
+  "plugged",
+  "filled",
+  "capped",
+]);
+
+function parseViaProtection(value: unknown): PcbViaProtection {
+  return typeof value === "string" &&
+    VIA_PROTECTIONS.has(value as PcbViaProtection)
+    ? (value as PcbViaProtection)
+    : "tented";
+}
+
+/** Validate persisted/edited design rules, falling back per-field. */
+function parseDesignRules(
+  value: unknown,
+  fallback: PcbDesignRules,
+): PcbDesignRules {
+  const r = asRecord(value);
+  if (!r) return fallback;
+  const c = asRecord(r.clearance) ?? {};
+  const m = asRecord(r.minimums) ?? {};
+  const num = (v: unknown, d: number): number => asNumber(v) ?? d;
+  return {
+    clearance: {
+      traceToTraceMm: num(c.traceToTraceMm, fallback.clearance.traceToTraceMm),
+      traceToPadMm: num(c.traceToPadMm, fallback.clearance.traceToPadMm),
+      padToPadMm: num(c.padToPadMm, fallback.clearance.padToPadMm),
+      traceToViaMm: num(c.traceToViaMm, fallback.clearance.traceToViaMm),
+      viaToViaMm: num(c.viaToViaMm, fallback.clearance.viaToViaMm),
+      copperToBoardEdgeMm: num(
+        c.copperToBoardEdgeMm,
+        fallback.clearance.copperToBoardEdgeMm,
+      ),
+    },
+    minimums: {
+      traceWidthMm: num(m.traceWidthMm, fallback.minimums.traceWidthMm),
+      drillSizeMm: num(m.drillSizeMm, fallback.minimums.drillSizeMm),
+      annularRingMm: num(m.annularRingMm, fallback.minimums.annularRingMm),
+      viaDiameterMm: num(m.viaDiameterMm, fallback.minimums.viaDiameterMm),
+      viaDrillMm: num(m.viaDrillMm, fallback.minimums.viaDrillMm),
+      holeToHoleMm: num(m.holeToHoleMm, fallback.minimums.holeToHoleMm ?? 0.25),
+    },
+  };
+}
+
+function parseNetClass(value: unknown): PcbNetClass | null {
+  const r = asRecord(value);
+  if (!r) return null;
+  const id = asString(r.id);
+  const name = asString(r.name);
+  if (!id || !name) return null;
+  return {
+    id,
+    name,
+    traceWidthMm: asNumber(r.traceWidthMm) ?? 0.25,
+    clearanceMm: asNumber(r.clearanceMm) ?? 0.25,
+    viaDiameterMm: asNumber(r.viaDiameterMm) ?? 0.8,
+    viaDrillMm: asNumber(r.viaDrillMm) ?? 0.4,
+    color: asString(r.color) ?? "#d4d4d8",
+    defaultViaProtection: parseViaProtection(r.defaultViaProtection),
+  };
+}
+
+function parseNetClasses(
+  value: unknown,
+  fallback: PcbNetClass[],
+): PcbNetClass[] {
+  if (!Array.isArray(value)) return fallback;
+  const out = value
+    .map(parseNetClass)
+    .filter((c): c is PcbNetClass => c !== null);
+  return out.length > 0 ? out : fallback;
+}
+
+/**
+ * Validate a per-net → net-class override map (netId → netClassId). Keeps only
+ * string net ids that map to a known class id; unknown classes are dropped so a
+ * removed class can never leave a dangling assignment.
+ */
+function parsePerNetClassAssignments(
+  value: unknown,
+  validClassIds: ReadonlySet<string>,
+): Record<string, string> {
+  const record = asRecord(value);
+  if (!record) return {};
+  const out: Record<string, string> = {};
+  for (const [netId, classId] of Object.entries(record)) {
+    if (
+      netId.length > 0 &&
+      typeof classId === "string" &&
+      validClassIds.has(classId)
+    ) {
+      out[netId] = classId;
+    }
+  }
+  return out;
+}
+
 function parseViewState(value: unknown): PcbViewState {
   const record = asRecord(value);
   const defaults = createDefaultPcbViewState();
@@ -231,6 +367,8 @@ function parseViewState(value: unknown): PcbViewState {
         : record.ratsnestVisible === true
           ? true
           : defaults.ratsnestVisible,
+    drcIgnoredRuleClasses: parseDrcRuleClasses(record.drcIgnoredRuleClasses),
+    drcWaivedViolationIds: parseStringArray(record.drcWaivedViolationIds),
   };
 }
 
@@ -255,6 +393,12 @@ function mergeViewState(
       patch.ratsnestVisible !== undefined
         ? patch.ratsnestVisible
         : current.ratsnestVisible,
+    drcIgnoredRuleClasses: patch.drcIgnoredRuleClasses
+      ? parseDrcRuleClasses(patch.drcIgnoredRuleClasses)
+      : (current.drcIgnoredRuleClasses ?? []),
+    drcWaivedViolationIds: patch.drcWaivedViolationIds
+      ? parseStringArray(patch.drcWaivedViolationIds)
+      : (current.drcWaivedViolationIds ?? []),
   };
 }
 
@@ -375,12 +519,26 @@ function parseBoardSettings(value: unknown): PcbBoardSettings | null {
           .map((value) => asNumber(value))
           .filter((value): value is number => value !== null && value > 0);
   const cutouts = parseCutouts(record.cutouts);
+  // Design rules / net classes / thickness were previously dropped on load
+  // (always defaults). Read them so edits + KiCad-imported rules persist.
+  const netClasses = parseNetClasses(record.netClasses, defaults.netClasses);
+  const perNetClassAssignments = parsePerNetClassAssignments(
+    record.perNetClassAssignments,
+    new Set(netClasses.map((c) => c.id)),
+  );
   return {
     ...defaults,
     outline: outlineParsed,
     ...(cutouts !== undefined ? { cutouts } : {}),
     activeLayer,
     visibleLayers: parseVisibleLayers(record.visibleLayers),
+    designRules: parseDesignRules(record.designRules, defaults.designRules),
+    netClasses,
+    ...(Object.keys(perNetClassAssignments).length > 0
+      ? { perNetClassAssignments }
+      : {}),
+    boardThicknessMm:
+      asNumber(record.boardThicknessMm) ?? defaults.boardThicknessMm,
     tracePresets:
       tracePresets.length > 0 ? tracePresets : defaults.tracePresets,
     fabricator: parseFabricator(record.fabricator) ?? defaults.fabricator,
@@ -640,6 +798,49 @@ export function updatePcbViewState(params: {
       ),
     )
     .run();
+  return next;
+}
+
+export function updatePcbDesignRules(params: {
+  db: DbClient;
+  designId: string;
+  designRules?: PcbDesignRules;
+  netClasses?: PcbNetClass[];
+  boardThicknessMm?: number;
+  perNetClassAssignments?: Record<string, string>;
+  timestamp: string;
+}): PcbBoardSettings {
+  const settings = ensurePcbBoardSettings(
+    params.db,
+    params.designId,
+    params.timestamp,
+  );
+  const nextNetClasses = params.netClasses
+    ? parseNetClasses(params.netClasses, settings.netClasses)
+    : settings.netClasses;
+  // Validate any incoming assignment map against the resulting class set (so a
+  // removed class drops its assignments). A full map replaces the existing one.
+  const validClassIds = new Set(nextNetClasses.map((c) => c.id));
+  const next: PcbBoardSettings = {
+    ...settings,
+    designRules: params.designRules
+      ? parseDesignRules(params.designRules, settings.designRules)
+      : settings.designRules,
+    netClasses: nextNetClasses,
+    perNetClassAssignments:
+      params.perNetClassAssignments !== undefined
+        ? parsePerNetClassAssignments(
+            params.perNetClassAssignments,
+            validClassIds,
+          )
+        : settings.perNetClassAssignments,
+    boardThicknessMm:
+      params.boardThicknessMm !== undefined
+        ? params.boardThicknessMm
+        : settings.boardThicknessMm,
+    updatedAt: params.timestamp,
+  };
+  replacePcbBoardSettings(params.db, params.designId, next, params.timestamp);
   return next;
 }
 

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type {
   DesignerCommand,
   DesignerDispatchResult,
+  DrcRuleClass,
   PcbCopperLayerId,
   PcbDisplayMode,
   PcbLayerId,
@@ -40,6 +41,8 @@ const DEFAULT_VIEW_STATE: PcbViewState = {
   perLayerOpacity: {},
   layerPreset: "custom",
   ratsnestVisible: true,
+  drcIgnoredRuleClasses: [],
+  drcWaivedViolationIds: [],
 };
 
 const DEBOUNCE_MS = 200;
@@ -124,6 +127,10 @@ interface PcbViewStoreActions {
   ): void;
   toggleSelectionFilterPanel(): void;
   setCursorMm(point: { x: number; y: number } | null): void;
+  /** Ignore / un-ignore a whole DRC rule-class (persisted on viewState). */
+  setDrcRuleClassIgnored(ruleClass: DrcRuleClass, ignored: boolean): void;
+  /** Toggle a single DRC violation's waiver by its stable id (persisted). */
+  toggleDrcWaived(violationId: string): void;
 }
 
 type Store = PcbViewStoreState & PcbViewStoreActions;
@@ -400,6 +407,28 @@ export const usePcbViewStore = create<Store>((set, get) => ({
 
   setCursorMm(point) {
     set({ cursorMm: point });
+  },
+
+  setDrcRuleClassIgnored(ruleClass, ignored) {
+    const current = get().viewState.drcIgnoredRuleClasses ?? [];
+    const next = ignored
+      ? [...new Set([...current, ruleClass])]
+      : current.filter((c) => c !== ruleClass);
+    set((s) => ({
+      viewState: { ...s.viewState, drcIgnoredRuleClasses: next },
+    }));
+    persistPatch({ drcIgnoredRuleClasses: next });
+  },
+
+  toggleDrcWaived(violationId) {
+    const current = get().viewState.drcWaivedViolationIds ?? [];
+    const next = current.includes(violationId)
+      ? current.filter((id) => id !== violationId)
+      : [...current, violationId];
+    set((s) => ({
+      viewState: { ...s.viewState, drcWaivedViolationIds: next },
+    }));
+    persistPatch({ drcWaivedViolationIds: next });
   },
 }));
 

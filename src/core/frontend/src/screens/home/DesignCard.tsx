@@ -1,6 +1,9 @@
 import {
+  AlertOctagon,
+  AlertTriangle,
   Archive,
   ArchiveRestore,
+  Check,
   CircleDashed,
   Copy,
   Download,
@@ -19,7 +22,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@shared/frontend/ui/dropdown-menu";
-import type { DesignerSchematicPreview } from "@sdks/designer";
+import type {
+  DesignerDrcStatus,
+  DesignerSchematicPreview,
+} from "@sdks/designer";
 import { SchematicThumbnail } from "./SchematicThumbnail";
 import { formatRelativeTime } from "./format";
 
@@ -30,6 +36,7 @@ export interface DesignSummary {
   createdAt: string;
   updatedAt: string;
   schematicPreview?: DesignerSchematicPreview | null;
+  drcStatus?: DesignerDrcStatus | null;
 }
 
 interface DesignCardProps {
@@ -43,11 +50,43 @@ interface DesignCardProps {
   onDelete: () => void;
 }
 
-/** DRC status is a Phase-2-backend stub for now — always "not run". */
-function DrcPill() {
+/** DRC status badge sourced from the latest persisted run on the summary. */
+function DrcPill({ status }: { status?: DesignerDrcStatus | null }) {
+  if (!status) {
+    return (
+      <Pill tone="neutral" icon={<CircleDashed className="h-3 w-3" />}>
+        DRC not run
+      </Pill>
+    );
+  }
+  if (status.stale) {
+    return (
+      <Pill
+        tone="neutral"
+        icon={<CircleDashed className="h-3 w-3" />}
+        title={`DRC last ran at r${status.ranAtRevision}; board has changed`}
+      >
+        DRC stale
+      </Pill>
+    );
+  }
+  if (status.errors > 0) {
+    return (
+      <Pill tone="danger" icon={<AlertOctagon className="h-3 w-3" />}>
+        {status.errors} {status.errors === 1 ? "error" : "errors"}
+      </Pill>
+    );
+  }
+  if (status.warnings > 0) {
+    return (
+      <Pill tone="warning" icon={<AlertTriangle className="h-3 w-3" />}>
+        {status.warnings} {status.warnings === 1 ? "warning" : "warnings"}
+      </Pill>
+    );
+  }
   return (
-    <Pill tone="neutral" icon={<CircleDashed className="h-3 w-3" />}>
-      DRC not run
+    <Pill tone="success" icon={<Check className="h-3 w-3" />}>
+      DRC clean
     </Pill>
   );
 }
@@ -163,7 +202,7 @@ export function DesignCard(props: DesignCardProps) {
             <span>{formatRelativeTime(design.updatedAt)}</span>
           </div>
         </div>
-        <DrcPill />
+        <DrcPill status={design.drcStatus} />
         <StarButton starred={starred} onToggle={onToggleStar} />
         <ActionsMenu {...props} />
       </Card>
@@ -194,7 +233,7 @@ export function DesignCard(props: DesignCardProps) {
           <span>{formatRelativeTime(design.updatedAt)}</span>
         </div>
         <div className="flex items-center justify-between border-t border-slate-100 pt-2 dark:border-slate-800">
-          <DrcPill />
+          <DrcPill status={design.drcStatus} />
           <ActionsMenu {...props} />
         </div>
       </div>

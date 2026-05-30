@@ -246,3 +246,18 @@ export const bomOverrides = sqliteTable(
     ),
   }),
 );
+
+// Latest persisted DRC result per design (one row, upserted on every run).
+// `ranAtRevision` vs `designHeads.revision` drives the stale badge.
+export const drcResults = sqliteTable("designer_drc_results", {
+  designId: text("design_id").primaryKey(),
+  ranAtRevision: integer("ran_at_revision").notNull(),
+  ranAt: text("ran_at").notNull(),
+  errorCount: integer("error_count").notNull(),
+  warningCount: integer("warning_count").notNull(),
+  infoCount: integer("info_count").notNull(),
+  violationsJson: text("violations_json").notNull(),
+  optionsJson: text("options_json").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

@@ -65,6 +65,7 @@ import {
   toggleFreeHole,
   toggleFreePad,
   toggleOverlayText,
+  pcbSelectionCount,
   type PcbSelection,
 } from "./pcb-selection";
 import {
@@ -97,6 +98,7 @@ import {
 } from "./tools/measure-tool-state";
 import { findMeasureSnapTarget } from "./measure-snap";
 import { usePcbWorkspace } from "./usePcbWorkspace";
+import { useDrcStore } from "./drc/drc-store";
 import { usePcbViewStore } from "./pcb-view-store";
 import {
   DEFAULT_PCB_ZOOM,
@@ -208,6 +210,8 @@ interface PcbCanvasProps {
   ) => Promise<DesignerDispatchResult>;
   notifyExternalRevisionBump?: (revision: number) => void;
   onDrcCountChange?: (count: number) => void;
+  /** Reports the number of selected primitives (for the status bar). */
+  onSelectionCountChange?: (count: number) => void;
   boardPanelTarget?: HTMLElement | null;
   layersPanelTarget?: HTMLElement | null;
   selectionRequest?: {
@@ -280,11 +284,38 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     dispatchCommand: props.dispatchCommand,
     notifyExternalRevisionBump: props.notifyExternalRevisionBump,
   });
+  // On design open, clear any stale store state and hydrate the *persisted*
+  // DRC report so reopening restores the markers (the DRC tab does the same).
+  // We deliberately do NOT clear on revision bump — last results stay visible
+  // (marked stale in the tab/card) until the user re-runs DRC.
+  useEffect(() => {
+    let cancelled = false;
+    // Only clear + re-hydrate when the store holds a DIFFERENT design. A
+    // same-design remount (e.g. switching back to the PCB tab, or arriving from
+    // the DRC tab) must NOT clear: doing so wipes the cross-tab center request /
+    // selected violation the DRC tab just set — breaking jump-to-violation —
+    // and drops the markers until the async re-fetch lands. The `centeredSeq`
+    // guard in the centering effect still prevents re-centering on revisit.
+    if (useDrcStore.getState().report?.designId !== props.designId) {
+      useDrcStore.getState().clear();
+      void workspace.getDrcResult().then((r) => {
+        if (!cancelled && r) useDrcStore.getState().setReport(r);
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [props.designId, workspace.getDrcResult]);
   // Per-layer opacity + row solo live in the unified view store. Subscribing
   // here keeps the panel + scene reactive to slider drags and Alt+click
   // gestures without prop drilling through the workspace hook.
   const layerOpacity = usePcbViewStore((s) => s.viewState.perLayerOpacity);
   const soloLayer = usePcbViewStore((s) => s.soloLayer);
+  // Center the camera when the DRC tab requests it (cross-tab via the store).
+  // The board mirror group flips X on bottom view, so flip the target too.
+  const drcCenterRequest = useDrcStore((s) => s.centerRequest);
+  const drcViewSide = usePcbViewStore((s) => s.viewState.viewSide);
+  const drcCenteredSeq = useDrcStore((s) => s.centeredSeq);
   // Selection filter — opt-out per primitive kind. Wired into both click
   // and marquee selection paths so disabling "Vias" stops a via click from
   // ever landing in the selection set.
@@ -341,9 +372,26 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const cursorMmRef = useRef<PcbPointMm | null>(null);
   const cameraControlsRef = useRef<PcbCameraControls | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  // Apply a cross-tab "center on violation" request from the DRC tab once the
+  // camera is ready. Board mirror flips X on bottom view, so flip the target.
+  useEffect(() => {
+    if (!drcCenterRequest || !cameraReady) return;
+    // Guard against re-centering on a request already applied — `centeredSeq`
+    // lives in the store, so this holds across a PCB-tab remount (a component
+    // ref would reset and re-center on the stale request every revisit).
+    if (drcCenterRequest.seq <= drcCenteredSeq) return;
+    useDrcStore.getState().markCentered(drcCenterRequest.seq);
+    const scaleX = drcViewSide === "bottom" ? -1 : 1;
+    cameraControlsRef.current?.centerOnMm({
+      x: scaleX * drcCenterRequest.x,
+      y: drcCenterRequest.y,
+    });
+  }, [drcCenterRequest, cameraReady, drcViewSide, drcCenteredSeq]);
   const handleCameraReady = useCallback(
     (controls: PcbCameraControls | null) => {
       cameraControlsRef.current = controls;
+      setCameraReady(controls != null);
     },
     [],
   );
@@ -1021,6 +1069,16 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           if (!defaultNetClass) return;
           const anchor = resolveAnchor(cursor);
           if (routeState.kind === "idle") {
+            // An explicit per-net assignment overrides the default class (and
+            // its trace width) for the new route session.
+            const board = workspace.projection?.board;
+            const assignedId = anchor.netId
+              ? board?.perNetClassAssignments?.[anchor.netId]
+              : undefined;
+            const sessionClass =
+              (assignedId &&
+                board?.netClasses.find((nc) => nc.id === assignedId)) ||
+              defaultNetClass;
             // Start a new route session at the resolved anchor.
             dispatchRoute({
               kind: "start",
@@ -1028,8 +1086,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               layer: activeCopperLayer,
               segmentMode: "manhattan-45",
               netId: anchor.netId,
-              netClassId: defaultNetClass.id,
-              widthMm: defaultNetClass.traceWidthMm,
+              netClassId: sessionClass.id,
+              widthMm: sessionClass.traceWidthMm,
               ...(anchor.padId !== undefined
                 ? { startPadId: anchor.padId }
                 : {}),
@@ -2294,6 +2352,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   useEffect(() => {
     onDrcCountChange?.(drcViolations.length);
   }, [drcViolations.length, onDrcCountChange]);
+
+  const onSelectionCountChange = props.onSelectionCountChange;
+  const selectionCount = pcbSelectionCount(selection);
+  useEffect(() => {
+    onSelectionCountChange?.(selectionCount);
+  }, [selectionCount, onSelectionCountChange]);
 
   const routeStartPadId =
     routeState.kind === "routing" ? routeState.session.startPadId : undefined;

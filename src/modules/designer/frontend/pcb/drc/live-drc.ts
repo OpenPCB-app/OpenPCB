@@ -6,6 +6,10 @@ import type {
   PcbTrace,
 } from "../../../../../sdks";
 import { placementMirrorX } from "../../../../../sdks/designer/pcb-helpers";
+import {
+  polylineToAabbDistance,
+  segmentToSegmentDistance,
+} from "../../../../../shared/pcb-geometry/pcb-trace-geometry";
 
 type Point = { x: number; y: number };
 
@@ -31,39 +35,6 @@ const NM_TO_MM = 1 / 1_000_000;
 
 function nmToMm(p: { x: number; y: number }): Point {
   return { x: p.x * NM_TO_MM, y: p.y * NM_TO_MM };
-}
-
-function distance(a: Point, b: Point): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return Math.sqrt(dx * dx + dy * dy);
-}
-
-function projectPointToSegment(
-  p: Point,
-  a: Point,
-  b: Point,
-): {
-  closest: Point;
-  distance: number;
-} {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq === 0) return { closest: a, distance: distance(p, a) };
-  const rawT = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
-  const t = Math.max(0, Math.min(1, rawT));
-  const closest = { x: a.x + dx * t, y: a.y + dy * t };
-  return { closest, distance: distance(p, closest) };
-}
-
-function segToSegDistance(s1: PolylineSegment, s2: PolylineSegment): number {
-  return Math.min(
-    projectPointToSegment(s1.a, s2.a, s2.b).distance,
-    projectPointToSegment(s1.b, s2.a, s2.b).distance,
-    projectPointToSegment(s2.a, s1.a, s1.b).distance,
-    projectPointToSegment(s2.b, s1.a, s1.b).distance,
-  );
 }
 
 function transformPadCenter(
@@ -126,46 +97,6 @@ function computePadGeoms(
     }
   }
   return out;
-}
-
-function segmentToAabbDistance(
-  seg: PolylineSegment,
-  bounds: { minX: number; minY: number; maxX: number; maxY: number },
-): number {
-  // Inside test → 0
-  if (
-    seg.a.x >= bounds.minX &&
-    seg.a.x <= bounds.maxX &&
-    seg.a.y >= bounds.minY &&
-    seg.a.y <= bounds.maxY
-  )
-    return 0;
-  if (
-    seg.b.x >= bounds.minX &&
-    seg.b.x <= bounds.maxX &&
-    seg.b.y >= bounds.minY &&
-    seg.b.y <= bounds.maxY
-  )
-    return 0;
-  const corners: Point[] = [
-    { x: bounds.minX, y: bounds.minY },
-    { x: bounds.maxX, y: bounds.minY },
-    { x: bounds.maxX, y: bounds.maxY },
-    { x: bounds.minX, y: bounds.maxY },
-  ];
-  let best = Infinity;
-  for (const c of corners) {
-    const d = projectPointToSegment(c, seg.a, seg.b).distance;
-    if (d < best) best = d;
-  }
-  for (let i = 0; i < 4; i += 1) {
-    const e = segToSegDistance(seg, {
-      a: corners[i]!,
-      b: corners[(i + 1) % 4]!,
-    });
-    if (e < best) best = e;
-  }
-  return best;
 }
 
 export interface RunDrcInput {
@@ -242,7 +173,7 @@ export function runLiveDrc(input: RunDrcInput): DrcViolation[] {
           a: nmToMm(other.pointsNm[j - 1]!),
           b: nmToMm(other.pointsNm[j]!),
         };
-        const edge = segToSegDistance(seg, o);
+        const edge = segmentToSegmentDistance(seg.a, seg.b, o.a, o.b);
         if (edge < required) {
           violations.push({
             segmentIndex: i - 1,
@@ -268,7 +199,7 @@ export function runLiveDrc(input: RunDrcInput): DrcViolation[] {
         continue;
       }
       const required = padClearance + pendingHalf;
-      const edge = segmentToAabbDistance(seg, pad.bounds);
+      const edge = polylineToAabbDistance([seg.a, seg.b], pad.bounds);
       if (edge < required) {
         violations.push({
           segmentIndex: i - 1,

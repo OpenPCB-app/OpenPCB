@@ -14,6 +14,20 @@ export type DesignerEntityKind = "part" | "wire" | "label" | "primitive";
  *  join sub-graphs by portal text. */
 export type DesignerPrimitiveKind = "gnd" | "pwr" | "net_portal";
 
+/**
+ * Compact DRC status for the design card. Sourced from the latest persisted
+ * DRC run. `stale` = the design has been edited since DRC last ran
+ * (`ranAtRevision !== design.revision`). Absent/null = DRC never run.
+ */
+export interface DesignerDrcStatus {
+  ranAtRevision: number;
+  ranAt: string;
+  errors: number;
+  warnings: number;
+  infos: number;
+  stale: boolean;
+}
+
 export interface DesignerDesignSummary {
   id: string;
   name: string;
@@ -23,6 +37,8 @@ export interface DesignerDesignSummary {
   /** Cached schematic preview for Home-screen thumbnails. Populated by
    *  `listDesigns`; omitted from command/create results. */
   schematicPreview?: DesignerSchematicPreview | null;
+  /** Latest DRC status for the card badge. Populated by `listDesigns`. */
+  drcStatus?: DesignerDrcStatus | null;
 }
 
 export interface DesignerEntityRecord {
@@ -180,6 +196,18 @@ export interface PcbViewState {
   perLayerOpacity: Partial<Record<PcbLayerId, number>>;
   layerPreset: PcbLayerPreset;
   ratsnestVisible: boolean;
+  /**
+   * DRC rule-classes the user has chosen to ignore wholesale (panel "ignore
+   * all" toggles). Violations in these classes are not emitted. Additive;
+   * absent = ignore nothing.
+   */
+  drcIgnoredRuleClasses?: DrcRuleClass[];
+  /**
+   * Stable ids of individually waived DRC violations. Waived violations are
+   * still listed (struck-through) but excluded from the active summary counts.
+   * Additive; absent = no waivers.
+   */
+  drcWaivedViolationIds?: string[];
 }
 
 export interface PcbPointMm {
@@ -294,6 +322,12 @@ export interface PcbDesignRules {
     annularRingMm: number;
     viaDiameterMm: number;
     viaDrillMm: number;
+    /**
+     * Minimum edge-to-edge spacing between drilled holes (mm). Optional/additive
+     * — readers default to 0.25 mm (IPC-2222 / typical fab). Drives the
+     * hole-to-hole DRC check.
+     */
+    holeToHoleMm?: number;
   };
 }
 
@@ -322,6 +356,13 @@ export interface PcbBoardSettings {
   designRules: PcbDesignRules;
   netClasses: PcbNetClass[];
   /**
+   * Explicit per-net → net-class overrides (netId → netClassId). Consulted
+   * before the name-pattern heuristic in `resolveNetClassId`, and applied to
+   * new traces/vias at creation. Optional/additive — readers treat an absent
+   * field as no overrides. Unknown class ids are dropped on persist.
+   */
+  perNetClassAssignments?: Record<string, string>;
+  /**
    * Board-level trace-width presets (mm), shown in the route-tool dropdown
    * and cycled with W / Shift+W. The active net class's traceWidthMm is the
    * implicit default at session start.
@@ -338,6 +379,12 @@ export interface PcbBoardSettings {
    * appear in the layer panel.
    */
   layerCount: PcbLayerCount;
+  /**
+   * Finished board thickness (mm). Optional/additive — readers default to
+   * 1.6 mm (standard FR4). Drives the via aspect-ratio DRC check
+   * (thickness / drill ≤ fab max).
+   */
+  boardThicknessMm?: number;
   /** Non-active layer emphasis cycle (Normal/Dim/Solo). Default `normal`. */
   displayMode: PcbDisplayMode;
   /**
@@ -625,6 +672,14 @@ export interface DesignerPcbProjection {
    * (net-trace labels) and tooltips.
    */
   netNames: Record<string, string>;
+  /**
+   * Footprint-pad → net id map, key `` `${placementId}|${padNumber}` ``.
+   * Derived from the schematic↔PCB pad correlation already computed at
+   * projection time. Lets a pure consumer (DRC) resolve which net a footprint
+   * pad belongs to without re-running correlation. Optional / additive: absent
+   * on pre-DRC saves and when there is no schematic.
+   */
+  padNets?: Record<string, string>;
   warnings: string[];
 }
 
@@ -976,6 +1031,20 @@ export interface DesignerPcbSetViewStateCommand {
 }
 
 /**
+ * Edit the board's design rules, net classes, and/or finished thickness.
+ * Non-undoable settings change; bumps the revision so a prior DRC run is
+ * marked stale. Any omitted field is left unchanged.
+ */
+export interface DesignerPcbSetDesignRulesCommand {
+  type: "pcb_set_design_rules";
+  designRules?: PcbDesignRules;
+  netClasses?: PcbNetClass[];
+  boardThicknessMm?: number;
+  /** Per-net → net-class overrides (netId → netClassId). See PcbBoardSettings. */
+  perNetClassAssignments?: Record<string, string>;
+}
+
+/**
  * Delete a placement (component) from the PCB. Schematic-side reference is
  * unaffected — auto-sync will re-create the placement on next projection
  * unless the schematic part is also removed.
@@ -1149,6 +1218,7 @@ export type DesignerCommand =
   | DesignerPcbDeleteViaCommand
   | DesignerPcbUpdateTraceGeometryCommand
   | DesignerPcbSetViewStateCommand
+  | DesignerPcbSetDesignRulesCommand
   | DesignerPcbDeletePlacementCommand
   | DesignerPcbAddFreeHoleCommand
   | DesignerPcbUpdateFreeHoleCommand
@@ -1341,6 +1411,108 @@ export interface ErcReport {
   revision: number;
   violations: ErcViolation[];
   summary: { errors: number; warnings: number; infos: number };
+}
+
+/**
+ * Pointer to a specific PCB entity a DRC violation hangs off of. The canvas
+ * uses these to highlight offending items; each violation also carries a
+ * `locationMm` + `layer` for marker placement (KiCad-style: the marker sits at
+ * the midpoint of the offending pair).
+ */
+export type DrcAnchor =
+  | { kind: "trace"; traceId: string }
+  | { kind: "segment"; traceId: string; index: number }
+  | { kind: "via"; viaId: string }
+  | { kind: "pad"; placementId: string; padNumber: string }
+  | { kind: "freePad"; freePadId: string }
+  | { kind: "freeHole"; freeHoleId: string }
+  | { kind: "placement"; placementId: string }
+  | { kind: "net"; netId: string }
+  | { kind: "boardEdge" };
+
+export type DrcSeverity = "error" | "warning" | "info";
+
+/**
+ * Rule-class groups violations in the panel and drives per-class ignore
+ * toggles (`PcbViewState.drcIgnoredRuleClasses`).
+ */
+export type DrcRuleClass =
+  | "clearance"
+  | "constraint"
+  | "connectivity"
+  | "manufacturability"
+  | "structural";
+
+/**
+ * Stable, machine-readable violation codes. P1 codes are implemented now; P2
+ * codes are declared for forward-compat (panel grouping / i18n) and wired
+ * later. See `src/modules/designer/backend/drc/`.
+ */
+export type DrcRuleCode =
+  // --- P1 ---
+  | "TRACE_WIDTH_MIN"
+  | "VIA_DIAMETER_MIN"
+  | "VIA_DRILL_MIN"
+  | "DRILL_SIZE_MIN"
+  | "ANNULAR_RING_MIN"
+  | "TRACE_TO_TRACE_CLEARANCE"
+  | "TRACE_TO_PAD_CLEARANCE"
+  | "TRACE_TO_VIA_CLEARANCE"
+  | "UNCONNECTED_NET"
+  | "NET_SHORT_CIRCUIT"
+  | "TRACE_LAYER_MISMATCH"
+  | "PLACED_PART_MISSING_FOOTPRINT"
+  | "FAB_TRACE_WIDTH"
+  | "FAB_CLEARANCE"
+  | "FAB_ANNULAR_RING"
+  | "FAB_DRILL"
+  | "FAB_PAD"
+  // --- P2 (declared, not yet implemented) ---
+  | "VIA_TO_VIA_CLEARANCE"
+  | "PAD_TO_PAD_CLEARANCE"
+  | "PAD_TO_VIA_CLEARANCE"
+  | "COPPER_TO_BOARD_EDGE"
+  | "HOLE_TO_HOLE"
+  | "VIA_LAYER_SPAN"
+  | "VIA_ASPECT_RATIO"
+  | "BOARD_OUTLINE_INVALID"
+  | "COPPER_OFF_BOARD";
+
+export interface DrcViolation {
+  /**
+   * Stable id = hash(code + sorted anchor keys). Order-independent and stable
+   * across re-runs so a persisted waiver keeps matching the same violation.
+   */
+  id: string;
+  code: DrcRuleCode;
+  ruleClass: DrcRuleClass;
+  severity: DrcSeverity;
+  message: string;
+  anchors: DrcAnchor[];
+  /** Marker placement (mm, board coords). Absent for non-spatial violations. */
+  locationMm?: PcbPointMm;
+  /** Copper layer the violation lives on, when layer-specific. */
+  layer?: PcbCopperLayerId;
+  /** Measured value that triggered the rule (mm). */
+  measuredMm?: number;
+  /** Required threshold from the rule (mm). */
+  requiredMm?: number;
+  /**
+   * True when the user has waived this violation id. Waived violations are
+   * still listed (panel shows them struck-through) but excluded from
+   * `summary` counts.
+   */
+  waived?: boolean;
+}
+
+export interface DrcReport {
+  designId: string;
+  revision: number;
+  violations: DrcViolation[];
+  /** Active (non-waived) counts. Drives the status bar + panel badges. */
+  summary: { errors: number; warnings: number; infos: number };
+  /** Per-code counts of all emitted violations (incl. waived) for grouping. */
+  countsByCode: Partial<Record<DrcRuleCode, number>>;
 }
 
 export interface DesignerSearchLibraryParams {

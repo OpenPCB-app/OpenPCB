@@ -2,6 +2,7 @@ import type { CoreBackendModuleContext } from "../../../core/contracts/modules/b
 import { MODULE_SDK_TOKENS } from "../../../sdks";
 import type { DesignerSDK } from "../../../sdks/designer";
 import type { LibrarySDK } from "../../../sdks/library";
+import { runDrc } from "./drc/drc-engine";
 import { runErc } from "./erc/erc-engine";
 import {
   commitKicadProjectImport,
@@ -47,6 +48,18 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
       const projection = await store.getSchematicProjection(designId);
       if (!projection) return null;
       return runErc(projection);
+    },
+    runDrc: async (designId) => {
+      const projection = await store.getPcbProjection(designId);
+      if (!projection) return null;
+      const view = projection.board.viewState;
+      const options = {
+        ignoredRuleClasses: view?.drcIgnoredRuleClasses ?? [],
+        waivedIds: view?.drcWaivedViolationIds ?? [],
+      };
+      const report = runDrc(projection, options);
+      await store.saveDrcResult(designId, report, options);
+      return report;
     },
     inspectKicadProject: async (archiveFileName, archiveBytes) => {
       const { report } = await inspectKicadProjectFromBytes(

@@ -1,4 +1,4 @@
-export type DesignerView = "schem" | "pcb" | "3d" | "bom";
+export type DesignerView = "schem" | "pcb" | "3d" | "bom" | "drc";
 
 export type ViewportState = { zoom: number; posX: number; posY: number };
 

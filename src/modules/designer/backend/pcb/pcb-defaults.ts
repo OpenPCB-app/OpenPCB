@@ -25,6 +25,8 @@ export function createDefaultPcbViewState(): PcbViewState {
     perLayerOpacity: {},
     layerPreset: "custom",
     ratsnestVisible: true,
+    drcIgnoredRuleClasses: [],
+    drcWaivedViolationIds: [],
   };
 }
 
@@ -62,6 +64,7 @@ export function createDefaultPcbBoardSettings(
         annularRingMm: 0.2,
         viaDiameterMm: 0.8,
         viaDrillMm: 0.4,
+        holeToHoleMm: 0.25,
       },
     },
     netClasses: [
@@ -99,6 +102,7 @@ export function createDefaultPcbBoardSettings(
     tracePresets: [...DEFAULT_TRACE_PRESETS_MM],
     fabricator: "jlcpcb_2l",
     layerCount: 2,
+    boardThicknessMm: 1.6,
     displayMode: "normal",
     solderMaskExpansionMm: 0.075,
     solderPasteExpansionMm: -0.05,

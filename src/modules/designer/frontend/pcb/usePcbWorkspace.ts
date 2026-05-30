@@ -787,11 +787,23 @@ export function usePcbWorkspace(params: {
     [dispatchCommand, refresh, refreshHistory],
   );
 
+  const runDrc = useCallback(async () => {
+    if (!designId) return null;
+    return api.runDrc(designId);
+  }, [api, designId]);
+
+  const getDrcResult = useCallback(async () => {
+    if (!designId) return null;
+    return api.getDrcResult(designId);
+  }, [api, designId]);
+
   return {
     projection,
     loading,
     saving,
     error,
+    runDrc,
+    getDrcResult,
     canUndo,
     canRedo,
     highlightedNetId,

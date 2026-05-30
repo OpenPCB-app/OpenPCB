@@ -9,6 +9,7 @@ import type {
   DesignerHistorySnapshot,
   DesignerPcbProjection,
   DesignerSchematicProjection,
+  DrcReport,
   KicadProjectCommitResult,
   KicadProjectInspectReport,
   LibraryComponent,
@@ -172,6 +173,31 @@ export function createDesignerApi(params: {
         ),
       );
       return data.projection;
+    },
+
+    /** Compute + persist DRC, returning the fresh report. */
+    async runDrc(designId: string): Promise<DrcReport> {
+      const data = await fetchData<{ report: DrcReport }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/drc/run`,
+        ),
+        { method: "POST" },
+      );
+      return data.report;
+    },
+
+    /** Latest persisted DRC report, or null if never run. */
+    async getDrcResult(designId: string): Promise<DrcReport | null> {
+      const data = await fetchData<{ report: DrcReport | null }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/drc`,
+        ),
+      );
+      return data.report;
     },
 
     async getBom(designId: string): Promise<BomProjection> {
@@ -475,7 +501,10 @@ export function createDesignerApi(params: {
         ),
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      downloadBlob(await res.blob(), `${clientBundleName(designId)}-${kind}.${extension}`);
+      downloadBlob(
+        await res.blob(),
+        `${clientBundleName(designId)}-${kind}.${extension}`,
+      );
     },
   };
 }

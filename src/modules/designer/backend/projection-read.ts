@@ -16,6 +16,7 @@ import { loadPrimitives } from "./primitive-store";
 import { deriveNetsAndJunctions } from "./projection-world";
 import {
   designHeads,
+  drcResults,
   schematicLabels,
   schematicParts,
   schematicPins,
@@ -104,6 +105,7 @@ function mapLabelRow(row: LabelRow): DesignerLabel {
 
 export function mapDesignSummary(
   row: typeof designHeads.$inferSelect,
+  drcRow?: typeof drcResults.$inferSelect | null,
 ): DesignerDesignSummary {
   return {
     id: row.id,
@@ -111,6 +113,16 @@ export function mapDesignSummary(
     revision: row.revision,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    drcStatus: drcRow
+      ? {
+          ranAtRevision: drcRow.ranAtRevision,
+          ranAt: drcRow.ranAt,
+          errors: drcRow.errorCount,
+          warnings: drcRow.warningCount,
+          infos: drcRow.infoCount,
+          stale: drcRow.ranAtRevision !== row.revision,
+        }
+      : null,
   };
 }
 

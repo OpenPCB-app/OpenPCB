@@ -4,6 +4,11 @@ import type {
   LibraryComponentPlacementDetail,
 } from "../../../../sdks";
 import type { PersistedPartPayload } from "../payload-types";
+import { normalizeRotationDeg } from "../../../../shared/pcb-geometry/rotation";
+
+// Re-export so the many backend importers of `normalizeRotationDeg` from this
+// module keep working after the definition moved to shared/pcb-geometry.
+export { normalizeRotationDeg };
 
 const NM_PER_MM = 1_000_000;
 
@@ -35,14 +40,6 @@ function nextReference(parts: DesignerPlacedPart[], prefix: string): string {
     }
   }
   return `${prefix}${max + 1}`;
-}
-
-export function normalizeRotationDeg(value: number): 0 | 90 | 180 | 270 {
-  const normalized = ((Math.round(value / 90) * 90) % 360 + 360) % 360;
-  if (normalized === 90 || normalized === 180 || normalized === 270) {
-    return normalized;
-  }
-  return 0;
 }
 
 export function transformLocalPointNm(
@@ -104,7 +101,11 @@ export function recomputePinWorldPositions(
   mirrored: boolean,
 ): Array<{ x: number; y: number }> {
   return pins.map((pin) => {
-    const transformed = transformLocalPointNm(pin.localPositionNm, rotationDeg, mirrored);
+    const transformed = transformLocalPointNm(
+      pin.localPositionNm,
+      rotationDeg,
+      mirrored,
+    );
     return {
       x: positionNm.x + transformed.x,
       y: positionNm.y + transformed.y,
