@@ -56,11 +56,12 @@ interface ViaGeom {
 export function CopperVias({
   vias,
   boardThicknessMm = DEFAULT_BOARD_THICKNESS_MM,
+  fillColor = COPPER_FILL_GREEN,
 }: {
   vias: readonly PcbVia[];
   boardThicknessMm?: number;
-  /** Accepted for API compatibility; via rings use the fixed copper-fill green. */
-  maskColor?: string;
+  /** Soldermask-over-copper shade for the tented via ring; tracks board colour. */
+  fillColor?: string;
 }): ReactElement | null {
   const inputs = useMemo(() => viasToMeshInputs(vias), [vias]);
 
@@ -80,12 +81,12 @@ export function CopperVias({
   const material = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: COPPER_FILL_GREEN,
+        color: fillColor,
         metalness: 0,
         roughness: COPPER_FILL_ROUGHNESS,
         side: THREE.DoubleSide,
       }),
-    [],
+    [fillColor],
   );
 
   useEffect(

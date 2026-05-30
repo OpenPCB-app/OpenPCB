@@ -19,9 +19,11 @@ import { COPPER_FILL_GREEN, COPPER_FILL_ROUGHNESS } from "./materials";
 function LayerTraces({
   traces,
   zMm,
+  fillColor,
 }: {
   traces: PcbTrace[];
   zMm: number;
+  fillColor: string;
 }): ReactElement | null {
   const geometry = useMemo(() => {
     const parts: THREE.BufferGeometry[] = [];
@@ -45,7 +47,7 @@ function LayerTraces({
   return (
     <mesh geometry={geometry} position={[0, 0, zMm]} castShadow receiveShadow>
       <meshStandardMaterial
-        color={COPPER_FILL_GREEN}
+        color={fillColor}
         metalness={0}
         roughness={COPPER_FILL_ROUGHNESS}
         side={THREE.DoubleSide}
@@ -57,10 +59,12 @@ function LayerTraces({
 export function CopperTraces({
   traces,
   boardThicknessMm = DEFAULT_BOARD_THICKNESS_MM,
+  fillColor = COPPER_FILL_GREEN,
 }: {
   traces: readonly PcbTrace[];
   boardThicknessMm?: number;
   copperThicknessMm?: number;
+  fillColor?: string;
 }): ReactElement | null {
   const { front, back } = useMemo(() => {
     const front: PcbTrace[] = [];
@@ -79,8 +83,8 @@ export function CopperTraces({
 
   return (
     <group>
-      <LayerTraces traces={front} zMm={frontZ} />
-      <LayerTraces traces={back} zMm={backZ} />
+      <LayerTraces traces={front} zMm={frontZ} fillColor={fillColor} />
+      <LayerTraces traces={back} zMm={backZ} fillColor={fillColor} />
     </group>
   );
 }

@@ -19,9 +19,11 @@ import { COPPER_FILL_GREEN, COPPER_FILL_ROUGHNESS } from "./materials";
 function PourLayer({
   shapes,
   zMm,
+  fillColor,
 }: {
   shapes: THREE.Shape[];
   zMm: number;
+  fillColor: string;
 }): ReactElement | null {
   const geometry = useMemo(() => {
     if (shapes.length === 0) return null;
@@ -45,7 +47,7 @@ function PourLayer({
   return (
     <mesh geometry={geometry} position={[0, 0, zMm]} receiveShadow castShadow>
       <meshStandardMaterial
-        color={COPPER_FILL_GREEN}
+        color={fillColor}
         metalness={0}
         roughness={COPPER_FILL_ROUGHNESS}
         side={THREE.DoubleSide}
@@ -67,9 +69,11 @@ function PourLayer({
 export function CopperPour({
   projection,
   boardThicknessMm = DEFAULT_BOARD_THICKNESS_MM,
+  fillColor = COPPER_FILL_GREEN,
 }: {
   projection: DesignerPcbProjection;
   boardThicknessMm?: number;
+  fillColor?: string;
 }): ReactElement | null {
   const designRules = projection.board?.designRules;
 
@@ -125,8 +129,16 @@ export function CopperPour({
 
   return (
     <group data-testid="designer-3d-copper-pour">
-      <PourLayer shapes={shapesByLayer.front} zMm={frontZ} />
-      <PourLayer shapes={shapesByLayer.back} zMm={backZ} />
+      <PourLayer
+        shapes={shapesByLayer.front}
+        zMm={frontZ}
+        fillColor={fillColor}
+      />
+      <PourLayer
+        shapes={shapesByLayer.back}
+        zMm={backZ}
+        fillColor={fillColor}
+      />
     </group>
   );
 }

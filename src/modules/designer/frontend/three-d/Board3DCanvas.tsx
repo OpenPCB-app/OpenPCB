@@ -38,7 +38,7 @@ import { CanvasThemeProvider } from "../../../../shared/frontend/canvas/theme";
 import { createDesignerApi } from "../api";
 import { BoardGeometry } from "./BoardGeometry";
 import { DEFAULT_BOARD_THICKNESS_MM } from "./primitives/geometry-utils";
-import { SOLDERMASK_GREEN } from "./primitives/materials";
+import { SOLDERMASK_GREEN, solderMaskOverCopper } from "./primitives/materials";
 import { ModelCacheProvider } from "./ModelCacheProvider";
 import { createPortal } from "react-dom";
 import {
@@ -511,6 +511,7 @@ function Board3DScene({
   showSilkscreen,
   maskColor,
   maskOpacity,
+  fillColor,
 }: {
   backendURL?: string | null;
   projection: DesignerPcbProjection;
@@ -521,6 +522,7 @@ function Board3DScene({
   showSilkscreen: boolean;
   maskColor: string;
   maskOpacity: number;
+  fillColor: string;
 }): ReactElement {
   const key = sceneKey(projection);
   return (
@@ -568,6 +570,7 @@ function Board3DScene({
               showSilkscreen={showSilkscreen}
               maskColor={maskColor}
               maskOpacity={maskOpacity}
+              fillColor={fillColor}
             />
           </group>
         </CanvasThemeProvider>
@@ -728,6 +731,9 @@ export function Board3DCanvas({
   }
 
   const maskColor = SOLDERMASK_COLOR_BY_ID[boardColor] ?? SOLDERMASK_GREEN;
+  // Soldermask-over-copper shade tracks the board colour so traces/pour/vias
+  // recolour with the mask instead of staying hardcoded green.
+  const fillColor = solderMaskOverCopper(maskColor);
   const maskOpacity = transparencyToMaskOpacity(transparency);
   const background =
     SCENE_BACKGROUND_BY_ID[scene] ?? THREE_D_SCENE_COLORS.background;
@@ -778,6 +784,7 @@ export function Board3DCanvas({
           showSilkscreen={display.silkscreen}
           maskColor={maskColor}
           maskOpacity={maskOpacity}
+          fillColor={fillColor}
         />
         <Board3DInvalidateOnChange
           watch={`${boardColor}:${scene}:${transparency}:${display.components}:${display.silkscreen}`}

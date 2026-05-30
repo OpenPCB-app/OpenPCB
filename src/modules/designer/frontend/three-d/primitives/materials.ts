@@ -19,6 +19,30 @@ export const COPPER_ROUGHNESS = 0.4;
 export const COPPER_FILL_GREEN = "#418262";
 export const COPPER_FILL_ROUGHNESS = 0.85;
 
+// How far the soldermask-over-copper shade is lifted toward white vs the
+// bare-laminate mask colour. Tuned so green (#1e6e4e) lands ≈ COPPER_FILL_GREEN.
+const COPPER_FILL_LIFT = 0.15;
+
+/**
+ * Soldermask-over-copper shade for a bare-laminate mask colour. Copper under the
+ * translucent mask bounces light back, so the mask reads a touch lighter over
+ * copper than over the dark FR4 — that lift is what makes the fills (traces,
+ * pour, tented vias) stand out from empty board. Derived from the chosen mask
+ * colour (not curated per preset) so every board colour — and any future one —
+ * stays consistent: `solderMaskOverCopper(SOLDERMASK_GREEN) ≈ COPPER_FILL_GREEN`.
+ */
+export function solderMaskOverCopper(maskHex: string): string {
+  const hex = maskHex.replace(/^#/, "");
+  if (hex.length !== 6) return COPPER_FILL_GREEN;
+  const lift = (offset: number): string => {
+    const c = parseInt(hex.slice(offset, offset + 2), 16);
+    if (Number.isNaN(c)) return "00";
+    const lit = Math.round(c + (255 - c) * COPPER_FILL_LIFT);
+    return lit.toString(16).padStart(2, "0");
+  };
+  return `#${lift(0)}${lift(2)}${lift(4)}`;
+}
+
 // ENIG gold pad finish (exposed copper at soldermask openings). Kept fairly
 // rough + low env reflection so pads read as matte gold, not mirror-shiny.
 export const ENIG_GOLD_COLOR = "#d9b14a";
