@@ -1,26 +1,46 @@
 import * as THREE from "three";
+import type { PathsD } from "clipper2-ts";
 import type {
+  PcbBoardCutout,
   PcbBoardOutline,
   PcbCopperLayerId,
   PcbDesignRules,
+  PcbFreeHole,
+  PcbFreePad,
   PcbPlacedPart,
   PcbPointMm,
   PcbTrace,
   PcbVia,
 } from "../../../../../sdks";
-import { flattenOutline } from "../../../backend/pcb/outline-geometry";
+import { placementMirrorX } from "../../../../../sdks/designer/pcb-helpers";
+import {
+  flattenCutout,
+  flattenOutline,
+} from "../../../backend/pcb/outline-geometry";
 import { flipLayerSide } from "../../../../../shared/frontend/canvas/scene/layer-side";
 import { padAperturePath } from "../../../../../shared/frontend/canvas/scene/pad-aperture-geometry";
 import type { FootprintRenderSourcePad } from "../../../../../shared/rendering";
+import { collectDrills } from "../pcb-drills";
 import {
+  buildDiscRing,
   buildTraceMaskPolygons,
-  buildViaMaskPolygon,
   isSameNetAsPour,
-  polygonDifference,
-  polygonIntersection,
-  polygonUnion,
   viaCrossesLayer,
+  type ClipperPolygon,
+  type ClipperRing,
 } from "./copper-fill-trace-geometry";
+import {
+  ARC_TOLERANCE_MM,
+  difference,
+  intersection,
+  multiPolyToPathsD,
+  offsetChamfer,
+  offsetRound,
+  polyToPathsD,
+  removeOnlyFillet,
+  splitIslands,
+  union,
+} from "./copper-geometry-kernel";
 
 const ALL_COPPER_LAYERS: ReadonlySet<PcbCopperLayerId> = new Set([
   "F.Cu",
@@ -63,35 +83,25 @@ function resolvePadCopperLayers(
 
 const DEFAULT_COPPER_FILL_CLEARANCE_MM = 0.5;
 const ARC_SEGMENTS = 16;
-// Default minimum pour-island area below which a disconnected pour region is
-// pruned (mirroring KiCad's `min_island_area`). 1.0 mm² catches inter-pad
-// slivers and chevron tips while leaving large QFP-interior pour islands
-// intact. Override via `minIslandAreaMm2` on the spec call.
+// Minimum disconnected pour-island area below which the island is pruned
+// (KiCad `min_island_area`). Connected islands are always kept.
 const DEFAULT_MIN_POUR_ISLAND_AREA_MM2 = 1.0;
-
-type ClipperPoint = [number, number];
-type ClipperRing = ClipperPoint[];
-type ClipperPolygon = ClipperRing[];
-type ClipperMultiPolygon = ClipperPolygon[];
-
-export interface CopperFillRectSpec {
-  center: PcbPointMm;
-  widthMm: number;
-  heightMm: number;
-}
-
-export interface CopperFillMaskSpec {
-  id: string;
-  shape: THREE.Shape;
-  positionMm: PcbPointMm;
-  rotationDeg: number;
-  scaleX: number;
-}
-
-export interface CopperFillGeometrySpec {
-  fill: CopperFillRectSpec | null;
-  masks: CopperFillMaskSpec[];
-}
+// Minimum copper width — necks thinner than this are removed by the min-width
+// open. Sourced from `designRules.minimums.traceWidthMm` at the call site.
+const DEFAULT_MIN_COPPER_THICKNESS_MM = 0.2;
+// Aesthetic convex-corner fillet on the pour boundary (Flux look). Clearance
+// stays safe because the fillet is a remove-only (anti-extensive) open.
+const DEFAULT_POUR_CORNER_RADIUS_MM = 0.4;
+// Slight under-erosion so the chamfer-deflate/round-inflate min-width pass never
+// quite reaches the clearance boundary before the re-clip.
+const MIN_THICKNESS_EPS_MM = 0.001;
+// Polygonal-offset compensation for the different-net clearance halo. The round
+// offset's arc chords lie inside the ideal Minkowski offset (≤ARC_TOLERANCE_MM)
+// and the obstacle discs are inscribed (≤ARC_TOLERANCE_MM), so a bare `clearance`
+// offset can under-cut the true clearance by ~2× the arc error at edge midpoints.
+// Over-clear by that margin so the pour never sits closer than `clearance` to
+// different-net copper. Costs ~10 µm of pour at each gap edge.
+const CLEARANCE_SAFETY_EPS_MM = 2 * ARC_TOLERANCE_MM;
 
 export function resolveCopperFillClearanceMm(
   clearance: PcbDesignRules["clearance"],
@@ -105,41 +115,30 @@ export function resolveCopperFillClearanceMm(
   );
 }
 
+// --- Bare copper polygon construction (mm, world coords) --------------------
+
 function rotatePoint(point: PcbPointMm, rotationDeg: number): PcbPointMm {
   const radians = (rotationDeg * Math.PI) / 180;
   const c = Math.cos(radians);
   const s = Math.sin(radians);
-  return {
-    x: point.x * c - point.y * s,
-    y: point.x * s + point.y * c,
-  };
+  return { x: point.x * c - point.y * s, y: point.x * s + point.y * c };
 }
 
-function padClearancePath(
-  pad: FootprintRenderSourcePad,
-  clearanceMm: number,
-): THREE.Path {
-  if (
-    pad.shape === "rect" ||
-    pad.shape === "trapezoid" ||
-    pad.shape === "custom"
-  ) {
-    return roundedRectPath(
-      pad.widthMm + clearanceMm * 2,
-      pad.heightMm + clearanceMm * 2,
-      clearanceMm,
+function addArc(
+  path: THREE.Path,
+  cx: number,
+  cy: number,
+  radiusMm: number,
+  startAngle: number,
+  endAngle: number,
+): void {
+  for (let i = 1; i <= ARC_SEGMENTS; i += 1) {
+    const angle = startAngle + ((endAngle - startAngle) * i) / ARC_SEGMENTS;
+    path.lineTo(
+      cx + Math.cos(angle) * radiusMm,
+      cy + Math.sin(angle) * radiusMm,
     );
   }
-  if (pad.shape === "roundrect") {
-    const baseRadius =
-      Math.min(pad.widthMm, pad.heightMm) * (pad.roundrectRatio ?? 0.25);
-    return roundedRectPath(
-      pad.widthMm + clearanceMm * 2,
-      pad.heightMm + clearanceMm * 2,
-      baseRadius + clearanceMm,
-    );
-  }
-  return padAperturePath(pad, clearanceMm);
 }
 
 function roundedRectPath(
@@ -172,91 +171,189 @@ function roundedRectPath(
   return path;
 }
 
-function addArc(
-  path: THREE.Path,
-  cx: number,
-  cy: number,
-  radiusMm: number,
-  startAngle: number,
-  endAngle: number,
-): void {
-  for (let i = 1; i <= ARC_SEGMENTS; i += 1) {
-    const angle = startAngle + ((endAngle - startAngle) * i) / ARC_SEGMENTS;
-    path.lineTo(
-      cx + Math.cos(angle) * radiusMm,
-      cy + Math.sin(angle) * radiusMm,
-    );
+/** Bare copper outline of a pad (no clearance), centred at the origin. */
+function padPath(pad: FootprintRenderSourcePad): THREE.Path {
+  if (
+    pad.shape === "rect" ||
+    pad.shape === "trapezoid" ||
+    pad.shape === "custom"
+  ) {
+    return roundedRectPath(pad.widthMm, pad.heightMm, 0);
   }
+  if (pad.shape === "roundrect") {
+    const baseRadius =
+      Math.min(pad.widthMm, pad.heightMm) * (pad.roundrectRatio ?? 0.25);
+    return roundedRectPath(pad.widthMm, pad.heightMm, baseRadius);
+  }
+  return padAperturePath(pad, 0);
 }
 
-function padClearancePolygon(
-  pad: FootprintRenderSourcePad,
-  clearanceMm: number,
-): ClipperPolygon | null {
-  const ring = padClearancePath(pad, clearanceMm)
+/** Bare pad copper ring in footprint-local coords (rotation + offset applied). */
+function padLocalRing(pad: FootprintRenderSourcePad): ClipperPolygon | null {
+  const ring = padPath(pad)
     .getPoints(0)
-    .map((point): ClipperPoint => {
+    .map((point): [number, number] => {
       const rotated = rotatePoint(point, pad.rotationDeg);
       return [rotated.x + pad.centerMm.x, rotated.y + pad.centerMm.y];
     });
-  if (ring.length < 3) return null;
-  return [ring];
-}
-
-function traceRing(target: THREE.Path | THREE.Shape, ring: ClipperRing): void {
-  const first = ring[0]!;
-  target.moveTo(first[0], first[1]);
-  for (let i = 1; i < ring.length; i += 1) {
-    const point = ring[i]!;
-    target.lineTo(point[0], point[1]);
-  }
-  target.closePath();
-}
-
-function polygonToShape(polygon: ClipperPolygon): THREE.Shape {
-  // Outer ring + any inner holes. Holes are areas of the pour that show
-  // through the mask — e.g. the interior of a QFP body large enough to
-  // survive the min-island-area prune. THREE.ShapeGeometry triangulates the
-  // outer ring minus the holes via earcut, which matches the boolean topology
-  // produced by polygon-clipping.
-  const shape = new THREE.Shape();
-  traceRing(shape, polygon[0]!);
-  for (let i = 1; i < polygon.length; i += 1) {
-    const holePath = new THREE.Path();
-    traceRing(holePath, polygon[i]!);
-    shape.holes.push(holePath);
-  }
-  return shape;
-}
-
-function signedArea(ring: ClipperRing): number {
-  // Shoelace formula. Sign tells winding; we use absolute value at the call
-  // site (we just want geometric area).
-  let acc = 0;
-  for (let i = 0, n = ring.length; i < n; i += 1) {
-    const p = ring[i]!;
-    const q = ring[(i + 1) % n]!;
-    acc += p[0] * q[1] - q[0] * p[1];
-  }
-  return acc * 0.5;
-}
-
-function polygonArea(polygon: ClipperPolygon): number {
-  // |outer| − Σ|holes|. polygon-clipping guarantees holes are wound opposite
-  // to the outer ring, but we take absolute values to stay robust against
-  // either-orientation inputs.
-  let total = Math.abs(signedArea(polygon[0]!));
-  for (let i = 1; i < polygon.length; i += 1) {
-    total -= Math.abs(signedArea(polygon[i]!));
-  }
-  return total;
+  return ring.length >= 3 ? [ring] : null;
 }
 
 /**
- * Shrink a board outline inward by `e` mm for the copper-to-board-edge
- * clearance. Parametric kinds (rect/roundrect/circle) inset analytically;
- * polygon/contour outlines fall back to no inset (pour reaches the edge).
+ * Copper layer membership for a free-standing pad — mirrors `FreePadLayer`'s
+ * render predicate so the pour's clearance obstacles match what is drawn:
+ * `std` pads span F.Cu + B.Cu, everything else is single-sided on `pad.layer`.
  */
+function freePadOnLayer(pad: PcbFreePad, layer: PcbCopperLayerId): boolean {
+  return (
+    pad.layer === layer ||
+    (pad.padType === "std" && (layer === "F.Cu" || layer === "B.Cu"))
+  );
+}
+
+/**
+ * Bare copper ring of a free-standing pad in world (board) coords. Free pads
+ * carry no placement transform — `centerMm`/`rotationDeg` are already absolute —
+ * so we reuse `padLocalRing` against a synthetic source pad.
+ */
+function freePadCopperRing(pad: PcbFreePad): ClipperPolygon | null {
+  const synthetic: FootprintRenderSourcePad = {
+    id: pad.id,
+    number: pad.id,
+    shape: pad.shape,
+    centerMm: pad.centerMm,
+    widthMm: pad.widthMm,
+    heightMm: pad.heightMm,
+    rotationDeg: pad.rotationDeg,
+    layer: pad.layer,
+    ...(pad.roundrectRatio !== undefined
+      ? { roundrectRatio: pad.roundrectRatio }
+      : {}),
+  };
+  return padLocalRing(synthetic);
+}
+
+/**
+ * Bake the placement transform into vertex coords: mirror X (mirrored OR B.Cu
+ * side — `placementMirrorX`), rotate by the placement angle, translate. Matches
+ * `FootprintRenderLayer`/`pcb-drills`, so pad copper lines up with the rendered
+ * footprint and drills on the bottom side.
+ */
+function applyPlacementTransform(
+  ring: ClipperRing,
+  placement: PcbPlacedPart,
+): ClipperRing {
+  const radians = (placement.rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const sx = placementMirrorX(placement) ? -1 : 1;
+  const tx = placement.positionMm.x;
+  const ty = placement.positionMm.y;
+  return ring.map(([x, y]) => {
+    const mx = sx * x;
+    return [cos * mx - sin * y + tx, sin * mx + cos * y + ty] as [
+      number,
+      number,
+    ];
+  });
+}
+
+interface BareCopper {
+  /** Different-net / unknown-net bare copper on this layer (→ clearance gap). */
+  diffNet: ClipperPolygon[];
+  /** Same-net bare copper on this layer (pour anchors; merge into pour). */
+  sameNet: ClipperPolygon[];
+}
+
+/** Bare copper of every pad/trace/via/free-pad touching `layer`, by net. */
+function collectBareCopper(
+  layer: PcbCopperLayerId,
+  placements: ReadonlyArray<PcbPlacedPart>,
+  traces: ReadonlyArray<PcbTrace>,
+  vias: ReadonlyArray<PcbVia>,
+  pourNetId: string | null,
+  padNetIds: ReadonlyMap<string, string>,
+  freePads: ReadonlyArray<PcbFreePad>,
+): BareCopper {
+  const diffNet: ClipperPolygon[] = [];
+  const sameNet: ClipperPolygon[] = [];
+
+  for (const placement of placements) {
+    const pads = placement.footprint.preview?.pads ?? [];
+    for (const pad of pads) {
+      if (!resolvePadCopperLayers(pad, placement).has(layer)) continue;
+      const local = padLocalRing(pad);
+      if (!local || !local[0]) continue;
+      const world: ClipperPolygon = [
+        applyPlacementTransform(local[0], placement),
+      ];
+      const net = padNetIds.get(`${placement.id}|${pad.number}`) ?? null;
+      (isSameNetAsPour(net, pourNetId) ? sameNet : diffNet).push(world);
+    }
+  }
+
+  for (const trace of traces) {
+    if (trace.layer !== layer) continue;
+    const bucket = isSameNetAsPour(trace.netId, pourNetId) ? sameNet : diffNet;
+    for (const stadium of buildTraceMaskPolygons(trace, 0))
+      bucket.push(stadium);
+  }
+
+  for (const via of vias) {
+    if (!viaCrossesLayer(via, layer)) continue;
+    const disc: ClipperPolygon = [
+      buildDiscRing(via.centerMm, via.diameterMm / 2),
+    ];
+    (isSameNetAsPour(via.netId, pourNetId) ? sameNet : diffNet).push(disc);
+  }
+
+  for (const pad of freePads) {
+    if (!freePadOnLayer(pad, layer)) continue;
+    const ring = freePadCopperRing(pad);
+    if (!ring) continue;
+    (isSameNetAsPour(pad.netId, pourNetId) ? sameNet : diffNet).push(ring);
+  }
+
+  return { diffNet, sameNet };
+}
+
+/** Drill apertures (real holes) as bare discs — subtracted from every layer. */
+function collectApertures(
+  vias: ReadonlyArray<PcbVia>,
+  placements: ReadonlyArray<PcbPlacedPart>,
+  freeHoles: ReadonlyArray<PcbFreeHole>,
+  freePads: ReadonlyArray<PcbFreePad>,
+): ClipperPolygon[] {
+  return collectDrills(vias, placements, freeHoles, freePads).map((d) => [
+    buildDiscRing(d.centerMm, d.radiusMm),
+  ]);
+}
+
+/**
+ * Non-plated holes (mechanical mounting/tooling holes + free `hole`-type pads).
+ * Unlike plated vias/PTH pads — whose copper plates right to the barrel — a NPTH
+ * needs a hole-to-copper clearance ring so the pour doesn't touch the bare
+ * drilled edge. Returned as bare discs; the caller round-inflates them by the
+ * edge clearance. (Plated apertures stay exact via `collectApertures`.)
+ */
+function collectNonPlatedApertures(
+  freeHoles: ReadonlyArray<PcbFreeHole>,
+  freePads: ReadonlyArray<PcbFreePad>,
+): ClipperPolygon[] {
+  const out: ClipperPolygon[] = [];
+  for (const hole of freeHoles) {
+    if (hole.drillMm > 0)
+      out.push([buildDiscRing(hole.centerMm, hole.drillMm / 2)]);
+  }
+  for (const pad of freePads) {
+    if (pad.padType === "hole" && pad.drillMm !== null && pad.drillMm > 0)
+      out.push([buildDiscRing(pad.centerMm, pad.drillMm / 2)]);
+  }
+  return out;
+}
+
+// --- Board extent (pourable region) ----------------------------------------
+
 function insetOutline(outline: PcbBoardOutline, e: number): PcbBoardOutline {
   if (e <= 0) return outline;
   switch (outline.kind) {
@@ -284,493 +381,199 @@ function insetOutline(outline: PcbBoardOutline, e: number): PcbBoardOutline {
   }
 }
 
-/** Board-outline polygon (inset by edge clearance) as a clipper ring (mm). */
-function outlinePourRing(
+function ringFromPoints(points: ReadonlyArray<PcbPointMm>): ClipperRing {
+  return points.map((p): [number, number] => [p.x, p.y]);
+}
+
+/**
+ * Pourable board region (mm) as a flat Clipper PathsD: board outline inset by
+ * the copper-to-edge clearance, minus each cutout inflated by the same edge
+ * clearance, with an aesthetic convex-corner fillet. Polygon/contour outlines
+ * are offset (not analytically inset) so the edge clearance is honoured for all
+ * board shapes (previously skipped — Codex review).
+ */
+function buildExtent(
   outline: PcbBoardOutline,
+  cutouts: ReadonlyArray<PcbBoardCutout>,
   edgeMm: number,
-): ClipperRing {
-  return flattenOutline(insetOutline(outline, Math.max(0, edgeMm))).map(
-    (p): ClipperPoint => [p.x, p.y],
-  );
-}
-
-function rectPolygonRing(
-  center: PcbPointMm,
-  widthMm: number,
-  heightMm: number,
-): ClipperRing {
-  const hw = widthMm / 2;
-  const hh = heightMm / 2;
-  return [
-    [center.x - hw, center.y - hh],
-    [center.x + hw, center.y - hh],
-    [center.x + hw, center.y + hh],
-    [center.x - hw, center.y + hh],
-  ];
-}
-
-function applyPlacementTransform(
-  ring: ClipperRing,
-  placement: PcbPlacedPart,
-): ClipperRing {
-  // Replicates the matrix `MaskGeometry` used to bake at render time:
-  //   p → scale(scaleX, 1) → rotateZ(rotationDeg) → translate(positionMm)
-  // We bake the transform into vertex coordinates so the post-process boolean
-  // ops (which run in world space) see the true outline of each pad.
-  const radians = (placement.rotationDeg * Math.PI) / 180;
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  const sx = placement.mirrored ? -1 : 1;
-  const tx = placement.positionMm.x;
-  const ty = placement.positionMm.y;
-  return ring.map(([x, y]) => {
-    const mx = sx * x;
-    return [cos * mx - sin * y + tx, sin * mx + cos * y + ty] as ClipperPoint;
-  });
-}
-
-function footprintPadSignature(
-  pads: ReadonlyArray<FootprintRenderSourcePad>,
-): string {
-  return pads
-    .map((pad) =>
-      [
-        pad.id,
-        pad.shape,
-        pad.centerMm.x,
-        pad.centerMm.y,
-        pad.widthMm,
-        pad.heightMm,
-        pad.rotationDeg,
-        pad.roundrectRatio ?? "",
-      ].join(":"),
-    )
-    .join("|");
-}
-
-interface SameNetPadCandidate {
-  /** Bare pad outline (no clearance) in world coords; used for the safety test. */
-  bareWorld: ClipperPolygon;
-  /** Pad outline inflated by clearance, in world coords; the halo we'd emit if unsafe. */
-  haloWorld: ClipperPolygon;
-}
-
-interface PadCollection {
-  /** Polygons that always knock out the pour (different-net or unknown-net pads). */
-  knockouts: ClipperPolygon[];
-  /** Same-net pads. Final decision (merge vs halo) needs the diff-net union. */
-  sameNetCandidates: SameNetPadCandidate[];
-}
-
-/**
- * Pad polygons in WORLD coordinates, partitioned by net relationship with the
- * pour. Per-pad processing replaces the old per-footprint cache so that some
- * pads of a multi-pad component can merge into pour while others halo.
- *
- *   - Different net (incl. null/unknown): emit clearance halo.
- *   - Same net as pour: defer to safety check (see buildCopperFillGeometrySpec).
- *
- * For shape caching we still key by `(clearanceMm, pad signature)` so identical
- * pads across many placements share polygon construction.
- */
-function collectPadPolygons(
-  layer: PcbCopperLayerId,
-  placements: ReadonlyArray<PcbPlacedPart>,
-  clearanceMm: number,
-  pourNetId: string | null,
-  padNetIds: ReadonlyMap<string, string>,
-): PadCollection {
-  const haloCache = new Map<string, ClipperPolygon | null>();
-  const bareCache = new Map<string, ClipperPolygon | null>();
-  const knockouts: ClipperPolygon[] = [];
-  const sameNetCandidates: SameNetPadCandidate[] = [];
-
-  for (const placement of placements) {
-    const pads = placement.footprint.preview?.pads ?? [];
-    if (pads.length === 0) continue;
-
-    // Pre-union the footprint's pad halos to detect enclosed interior. If
-    // the union has any inner hole, the footprint has an IC-body cavity
-    // (perimeter pad ring + central exposed pad on a QFP, BGA, etc.); we
-    // emit the solid outer outline as a single per-footprint knockout and
-    // skip per-pad processing entirely — same-net merge does not apply for
-    // pads inside an IC body (the body mask must always cover them so no
-    // pour leaks through). Footprints with no enclosed interior get the
-    // standard per-pad path with same-net merge available.
-    //
-    // Only pads whose copper actually lands on `layer` participate (SMD pads
-    // on the opposite side stay out of this fill; THT/`*.Cu` pads span all
-    // copper layers).
-    const allHalosLocal: ClipperPolygon[] = [];
-    for (const pad of pads) {
-      if (!resolvePadCopperLayers(pad, placement).has(layer)) continue;
-      const sig = padSignature(pad);
-      let halo = haloCache.get(`${clearanceMm}:${sig}`);
-      if (halo === undefined) {
-        halo = padClearancePolygon(pad, clearanceMm);
-        haloCache.set(`${clearanceMm}:${sig}`, halo);
-      }
-      if (halo) allHalosLocal.push(halo);
-    }
-    if (allHalosLocal.length === 0) continue;
-    const unionedLocal = polygonUnion(...allHalosLocal);
-    const hasEnclosedInterior = unionedLocal.some((poly) => poly.length > 1);
-    if (hasEnclosedInterior) {
-      // Emit one solid silhouette per disjoint outer ring (drops holes).
-      for (const poly of unionedLocal) {
-        const outer = poly[0];
-        if (outer) {
-          knockouts.push([applyPlacementTransform(outer, placement)]);
-        }
-      }
-      continue;
-    }
-
-    // Open footprint — per-pad knockouts / same-net merge candidates.
-    for (const pad of pads) {
-      if (!resolvePadCopperLayers(pad, placement).has(layer)) continue;
-      const sig = padSignature(pad);
-      const halo = haloCache.get(`${clearanceMm}:${sig}`) ?? null;
-      if (!halo) continue;
-      const haloOuter = halo[0];
-      if (!haloOuter) continue;
-      const haloWorld: ClipperPolygon = [
-        applyPlacementTransform(haloOuter, placement),
-      ];
-
-      const padNetId = padNetIds.get(`${placement.id}|${pad.number}`) ?? null;
-      const isSameNet =
-        pourNetId !== null && padNetId !== null && padNetId === pourNetId;
-      if (!isSameNet) {
-        knockouts.push(haloWorld);
-        continue;
-      }
-
-      // Same-net candidate — needs the bare outline too for the safety check.
-      let bare = bareCache.get(sig);
-      if (bare === undefined) {
-        bare = padClearancePolygon(pad, 0);
-        bareCache.set(sig, bare);
-      }
-      const bareOuter = bare?.[0];
-      if (!bareOuter) {
-        // Degenerate pad — fall back to halo so we don't leak pour.
-        knockouts.push(haloWorld);
-        continue;
-      }
-      const bareWorld: ClipperPolygon = [
-        applyPlacementTransform(bareOuter, placement),
-      ];
-      sameNetCandidates.push({ bareWorld, haloWorld });
-    }
-  }
-
-  return { knockouts, sameNetCandidates };
-}
-
-function padSignature(pad: FootprintRenderSourcePad): string {
-  return [
-    pad.id,
-    pad.shape,
-    pad.centerMm.x,
-    pad.centerMm.y,
-    pad.widthMm,
-    pad.heightMm,
-    pad.rotationDeg,
-    pad.roundrectRatio ?? "",
-  ].join(":");
-}
-
-function collectTracePolygons(
-  traces: ReadonlyArray<PcbTrace>,
-  layer: PcbCopperLayerId,
-  pourNetId: string | null,
-  clearanceMm: number,
-): ClipperPolygon[] {
-  if (clearanceMm < 0 || traces.length === 0) return [];
-  const out: ClipperPolygon[] = [];
-  for (const trace of traces) {
-    if (trace.layer !== layer) continue;
-    if (isSameNetAsPour(trace.netId, pourNetId)) continue;
-    const stadia = buildTraceMaskPolygons(trace, clearanceMm);
-    for (const stadium of stadia) out.push(stadium);
-  }
-  return out;
-}
-
-function collectViaPolygons(
-  vias: ReadonlyArray<PcbVia>,
-  layer: PcbCopperLayerId,
-  pourNetId: string | null,
-  clearanceMm: number,
-): ClipperPolygon[] {
-  if (clearanceMm < 0 || vias.length === 0) return [];
-  const out: ClipperPolygon[] = [];
-  for (const via of vias) {
-    if (!viaCrossesLayer(via, layer)) continue;
-    if (isSameNetAsPour(via.netId, pourNetId)) continue;
-    const disc = buildViaMaskPolygon(via, clearanceMm);
-    if (disc) out.push(disc);
-  }
-  return out;
-}
-
-/**
- * Build pour geometry for one copper layer: shrunk fill rect plus a set of
- * board-bg-colored mask polygons that paint over the pour to carve out
- * clearance halos around pads, traces and vias AND to remove isolated pour
- * islands smaller than `minIslandAreaMm2`.
- *
- * Mirrors KiCad `ZONE_FILLER` for the v1 scope:
- *   1. Shrink fill rectangle to `outline ⊖ copperToBoardEdgeMm`.
- *   2. Collect knockout polygons in WORLD coords:
- *        a. Different-net pads → clearance halos.
- *        b. Same-net pads → deferred; processed in step 4.
- *        c. Different-net traces and vias on this layer → clearance halos.
- *   3. Union the different-net knockouts → `diffNetUnion`.
- *   4. For each same-net pad: if its BARE outline (no clearance) intersects
- *      `diffNetUnion`, the pad sits within `clearanceMm` of a different-net
- *      feature. Merging would violate minimum clearance, so we keep the halo
- *      (per user requirement: tight IC pad rows must not merge unsafely; user
- *      can manually route a connection if needed). Otherwise, drop the halo
- *      so pour copper flows up to the pad edge.
- *   5. `pourVisible = pourRect − finalKnockoutUnion`. Each disjoint polygon
- *      is one island of red copper.
- *   6. Drop islands smaller than `minIslandAreaMm2` (KiCad's `min_island_area`
- *      equivalent — catches inter-pad slivers and chevron-interior strips).
- *   7. Final mask = `pourRect − keptIslands`. Emit as one shape per disjoint
- *      mask polygon, with holes preserved (each hole is a pour island that
- *      survives the area filter).
- *
- * v2 backlog: arc traces, footprint graphics, thermal spokes, min-thickness
- * sliver prune, per-item clearance hierarchy, expand `padNetIds` to a full
- * schematic→pad correlation (current source is the ratsnest, so pads with all
- * connections routed away may miss the merge).
- */
-export function buildCopperFillGeometrySpec(params: {
-  layer: PcbCopperLayerId;
-  outline: PcbBoardOutline;
-  placements: ReadonlyArray<PcbPlacedPart>;
-  traces: ReadonlyArray<PcbTrace>;
-  vias: ReadonlyArray<PcbVia>;
-  pourNetId: string | null;
-  /**
-   * Maps `${placementId}|${padNumber}` → netId for every pad whose net is
-   * known. Pads missing from the map are treated as unknown net (always halo).
-   */
-  padNetIds: ReadonlyMap<string, string>;
-  clearanceMm: number;
-  copperToBoardEdgeMm: number;
-  /**
-   * Minimum area (mm²) of a disconnected pour island. Below this, the island
-   * is converted back to a mask so it disappears visually. Default 1.0 mm².
-   */
-  minIslandAreaMm2?: number;
-}): CopperFillGeometrySpec {
-  const edge = Math.max(0, params.copperToBoardEdgeMm);
-  const fillWidth = params.outline.widthMm - edge * 2;
-  const fillHeight = params.outline.heightMm - edge * 2;
-  const fill =
-    fillWidth > 0 && fillHeight > 0
-      ? {
-          center: params.outline.centerMm,
-          widthMm: fillWidth,
-          heightMm: fillHeight,
-        }
-      : null;
-  if (!fill) return { fill: null, masks: [] };
-
-  const clearance = Math.max(0, params.clearanceMm);
-  const minIslandArea = Math.max(
-    0,
-    params.minIslandAreaMm2 ?? DEFAULT_MIN_POUR_ISLAND_AREA_MM2,
-  );
-
-  const padCollection = collectPadPolygons(
-    params.layer,
-    params.placements,
-    clearance,
-    params.pourNetId,
-    params.padNetIds,
-  );
-  const traceKnockouts = collectTracePolygons(
-    params.traces,
-    params.layer,
-    params.pourNetId,
-    clearance,
-  );
-  const viaKnockouts = collectViaPolygons(
-    params.vias,
-    params.layer,
-    params.pourNetId,
-    clearance,
-  );
-
-  // Different-net knockouts: locked in. Same-net pads are checked against
-  // their union to decide merge vs halo per KiCad-style safety rule.
-  const diffNetKnockouts: ClipperPolygon[] = [
-    ...padCollection.knockouts,
-    ...traceKnockouts,
-    ...viaKnockouts,
-  ];
-  const diffNetUnion: ClipperMultiPolygon =
-    diffNetKnockouts.length > 0 ? polygonUnion(...diffNetKnockouts) : [];
-
-  const unsafeMergeHalos: ClipperPolygon[] = [];
-  for (const candidate of padCollection.sameNetCandidates) {
-    if (
-      diffNetUnion.length > 0 &&
-      polygonIntersection(candidate.bareWorld, diffNetUnion).length > 0
-    ) {
-      // Pad sits within `clearance` of a different-net feature; merging would
-      // violate minimum clearance. Keep the halo instead.
-      unsafeMergeHalos.push(candidate.haloWorld);
-    }
-  }
-
-  const knockouts: ClipperPolygon[] = [
-    ...diffNetKnockouts,
-    ...unsafeMergeHalos,
-  ];
-
-  const pourRectPoly: ClipperPolygon = [
-    rectPolygonRing(fill.center, fill.widthMm, fill.heightMm),
-  ];
-
-  // Board area outside the actual (possibly rounded) outline, inset by the edge
-  // clearance. Masking it stops the rectangular fill plane from overhanging
-  // rounded corners. Empty for a plain rect board.
-  const cornerOverhang = polygonDifference(pourRectPoly, [
-    outlinePourRing(params.outline, edge),
-  ]);
-
-  // Clearance-halo masks (unchanged logic; subject = the fill rect).
-  let haloMaskMP: ClipperMultiPolygon;
-  if (knockouts.length === 0) {
-    haloMaskMP =
-      polygonArea(pourRectPoly) >= minIslandArea ? [] : [pourRectPoly];
+  cornerRadiusMm: number,
+) {
+  const parametric =
+    outline.kind === "rect" ||
+    outline.kind === "roundrect" ||
+    outline.kind === "circle";
+  // Offset-based clearances (contour inset, cutout inflation) over-shoot by the
+  // chord-error compensation so the discretized boundary never under-cuts the
+  // edge clearance. Analytic parametric insets are exact and use `edgeMm` as-is.
+  const edgeWithEps = edgeMm > 0 ? edgeMm + CLEARANCE_SAFETY_EPS_MM : edgeMm;
+  let extent: PathsD;
+  if (parametric) {
+    extent = polyToPathsD([
+      ringFromPoints(flattenOutline(insetOutline(outline, edgeMm))),
+    ]);
   } else {
-    const knockoutUnion = polygonUnion(...knockouts);
-    const pourVisible = polygonDifference(pourRectPoly, knockoutUnion);
-    const keptIslands = pourVisible.filter(
-      (poly) => polygonArea(poly) >= minIslandArea,
-    );
-    haloMaskMP =
-      keptIslands.length === pourVisible.length
-        ? knockoutUnion
-        : keptIslands.length === 0
-          ? [pourRectPoly]
-          : polygonDifference(pourRectPoly, keptIslands);
+    // Polygon/contour boards: honour the edge clearance with an inward offset
+    // (an analytic inset isn't defined for arbitrary contours).
+    const rawRing = polyToPathsD([ringFromPoints(flattenOutline(outline))]);
+    extent = edgeMm > 0 ? offsetRound(rawRing, -edgeWithEps) : rawRing;
   }
-
-  return {
-    fill,
-    masks: maskSpecsFromPolygons(
-      [...haloMaskMP, ...cornerOverhang],
-      `pour-mask:${params.layer}`,
-    ),
-  };
+  if (cutouts.length > 0) {
+    const cutPolys: ClipperPolygon[] = cutouts.map((c) => [
+      ringFromPoints(flattenCutout(c.shape)),
+    ]);
+    const cutPaths = multiPolyToPathsD(cutPolys);
+    const inflated = offsetRound(cutPaths, edgeWithEps);
+    // Fail closed: if the edge inflation collapsed (offset threw → []), still
+    // subtract the bare cutout so copper never floods into the physical slot —
+    // we only lose the edge-clearance margin, never the hole itself.
+    extent = difference(extent, inflated.length > 0 ? inflated : cutPaths);
+  }
+  return removeOnlyFillet(extent, cornerRadiusMm);
 }
 
-/**
- * Like {@link buildCopperFillGeometrySpec} but returns the POSITIVE pour copper
- * polygons (the kept islands) as `THREE.Shape[]`, ready for `ShapeGeometry`.
- * The 2D layer paints a solid plane + board-coloured masks (a depth-test trick
- * that doesn't survive a real 3D scene); the 3D board instead needs the actual
- * filled copper geometry. Shares all the clearance/knockout/island logic so the
- * 3D pour matches the 2D fill. Holes (e.g. a QFP-interior island that survives
- * the area filter) are preserved as `shape.holes`.
- */
-export function buildCopperFillPourShapes(params: {
+export interface CopperFillPourParams {
   layer: PcbCopperLayerId;
   outline: PcbBoardOutline;
   placements: ReadonlyArray<PcbPlacedPart>;
   traces: ReadonlyArray<PcbTrace>;
   vias: ReadonlyArray<PcbVia>;
+  /** Net id of the pour on this layer; same-net copper merges (no clearance). */
   pourNetId: string | null;
+  /** `${placementId}|${padNumber}` → netId. Missing pads count as unknown net. */
   padNetIds: ReadonlyMap<string, string>;
   clearanceMm: number;
   copperToBoardEdgeMm: number;
+  cutouts?: ReadonlyArray<PcbBoardCutout>;
+  freeHoles?: ReadonlyArray<PcbFreeHole>;
+  freePads?: ReadonlyArray<PcbFreePad>;
+  /** Min disconnected island area to keep (mm²). Connected islands always kept. */
   minIslandAreaMm2?: number;
-}): THREE.Shape[] {
-  const edge = Math.max(0, params.copperToBoardEdgeMm);
-  const fillWidth = params.outline.widthMm - edge * 2;
-  const fillHeight = params.outline.heightMm - edge * 2;
-  if (fillWidth <= 0 || fillHeight <= 0) return [];
+  /** Minimum copper width (mm) — necks below this are removed. */
+  minThicknessMm?: number;
+  /** Aesthetic convex-corner fillet radius (mm). */
+  cornerRadiusMm?: number;
+}
 
+/**
+ * The single positive-copper pour kernel (2D + 3D). Returns the poured copper
+ * islands as `THREE.Shape[]` (copper up to clearance, smoothed, sliver-free).
+ *
+ * Pipeline (KiCad ZONE_FILLER-equivalent, per the Codex gpt-5.5 review):
+ *   1. extent   = board inset by edge clearance − cutouts, aesthetic fillet.
+ *   2. holes    = round-inflate(different-net copper, clearance) ∪ drill apertures.
+ *                 (Round-inflating the OBSTACLES rounds the gap-side/concave
+ *                  copper corners safely — opening only rounds convex corners.)
+ *   3. raw      = extent − holes.
+ *   4. min-width: chamfer-deflate by r then round-inflate by r (r=minThick/2),
+ *                 then RE-CLIP `∩ raw ∩ extent − holes` so clearance is exact.
+ *   5. islands  = split; keep if area ≥ min OR connected to a same-net anchor.
+ * Same-net copper is never subtracted → the pour flows up to its edge.
+ */
+export function buildCopperFillPourShapes(
+  params: CopperFillPourParams,
+): THREE.Shape[] {
+  const edge = Math.max(0, params.copperToBoardEdgeMm);
   const clearance = Math.max(0, params.clearanceMm);
+  const cornerRadius = Math.max(
+    0,
+    params.cornerRadiusMm ?? DEFAULT_POUR_CORNER_RADIUS_MM,
+  );
+  const minThickness = Math.max(
+    0,
+    params.minThicknessMm ?? DEFAULT_MIN_COPPER_THICKNESS_MM,
+  );
   const minIslandArea = Math.max(
     0,
     params.minIslandAreaMm2 ?? DEFAULT_MIN_POUR_ISLAND_AREA_MM2,
   );
 
-  const padCollection = collectPadPolygons(
+  const extent = buildExtent(
+    params.outline,
+    params.cutouts ?? [],
+    edge,
+    cornerRadius,
+  );
+  if (extent.length === 0) return [];
+
+  const freePads = params.freePads ?? [];
+  const bare = collectBareCopper(
     params.layer,
     params.placements,
-    clearance,
+    params.traces,
+    params.vias,
     params.pourNetId,
     params.padNetIds,
+    freePads,
   );
-  const traceKnockouts = collectTracePolygons(
-    params.traces,
-    params.layer,
-    params.pourNetId,
-    clearance,
-  );
-  const viaKnockouts = collectViaPolygons(
+  const freeHoles = params.freeHoles ?? [];
+  const apertures = collectApertures(
     params.vias,
-    params.layer,
-    params.pourNetId,
-    clearance,
+    params.placements,
+    freeHoles,
+    freePads,
   );
 
-  const diffNetKnockouts: ClipperPolygon[] = [
-    ...padCollection.knockouts,
-    ...traceKnockouts,
-    ...viaKnockouts,
-  ];
-  const diffNetUnion: ClipperMultiPolygon =
-    diffNetKnockouts.length > 0 ? polygonUnion(...diffNetKnockouts) : [];
+  // Fail CLOSED, not open. The kernel returns [] on any internal throw; for the
+  // *obstacle* set [] means "no clearance hole", so a silent collapse here would
+  // let the pour flood different-net copper un-clearanced (a DRC short). If there
+  // WAS different-net copper but its union/offset vanished, bail to empty copper.
+  const diffNetPaths = multiPolyToPathsD(bare.diffNet);
+  const mergedDiffNet = union(diffNetPaths);
+  if (diffNetPaths.length > 0 && mergedDiffNet.length === 0) return [];
+  // Over-clear by the polygonal-offset compensation so the discretized halo
+  // never under-cuts the true `clearance` at edge midpoints.
+  const diffNetHalo = offsetRound(
+    mergedDiffNet,
+    clearance > 0 ? clearance + CLEARANCE_SAFETY_EPS_MM : 0,
+  );
+  if (mergedDiffNet.length > 0 && diffNetHalo.length === 0) return [];
 
-  const unsafeMergeHalos: ClipperPolygon[] = [];
-  for (const candidate of padCollection.sameNetCandidates) {
-    if (
-      diffNetUnion.length > 0 &&
-      polygonIntersection(candidate.bareWorld, diffNetUnion).length > 0
-    ) {
-      unsafeMergeHalos.push(candidate.haloWorld);
-    }
+  // Non-plated holes get a hole-to-copper ring (edge clearance + chord-error
+  // compensation). The bare hole is still subtracted via `apertures`, so a
+  // collapsed inflation only loses the RING, never the hole — an intentional
+  // graceful degrade (copper never floods into the slot, only touches its edge).
+  const npthHalo = offsetRound(
+    multiPolyToPathsD(collectNonPlatedApertures(freeHoles, freePads)),
+    edge > 0 ? edge + CLEARANCE_SAFETY_EPS_MM : 0,
+  );
+
+  const aperturePaths = multiPolyToPathsD(apertures);
+  const clearanceHoles = union(diffNetHalo, aperturePaths, npthHalo);
+  // Fail closed on a TOTAL obstacle collapse: if any obstacle existed but the
+  // whole clip set vanished (union threw), bail to empty copper rather than
+  // flood. (A partial NPTH-only collapse keeps `aperturePaths`, so it degrades
+  // gracefully per above — it does not reach this bail.)
+  if (
+    (diffNetHalo.length > 0 ||
+      aperturePaths.length > 0 ||
+      npthHalo.length > 0) &&
+    clearanceHoles.length === 0
+  )
+    return [];
+
+  const raw = difference(extent, clearanceHoles);
+  if (raw.length === 0) return [];
+
+  let fill = raw;
+  const r = Math.max(0, minThickness / 2 - MIN_THICKNESS_EPS_MM);
+  if (r > 0) {
+    const core = offsetChamfer(raw, -r);
+    const restored = offsetRound(core, r);
+    // Re-clip: round-inflate may bulge past the chamfer-eroded raw, so clamp
+    // back inside raw ∩ extent and re-subtract the holes → clearance exact.
+    fill = difference(
+      intersection(intersection(restored, raw), extent),
+      clearanceHoles,
+    );
   }
+  if (fill.length === 0) return [];
 
-  const knockouts: ClipperPolygon[] = [
-    ...diffNetKnockouts,
-    ...unsafeMergeHalos,
-  ];
-  // Follow the actual (possibly rounded) board outline inset by the edge
-  // clearance, not a bare rectangle — so the pour respects rounded corners.
-  const pourSubject: ClipperPolygon = [
-    outlinePourRing(params.outline, params.copperToBoardEdgeMm),
-  ];
-
-  const islands: ClipperMultiPolygon =
-    knockouts.length === 0
-      ? [pourSubject]
-      : polygonDifference(pourSubject, polygonUnion(...knockouts));
-
-  return islands
-    .filter((poly) => polygonArea(poly) >= minIslandArea)
-    .map(polygonToShape);
-}
-
-function maskSpecsFromPolygons(
-  polygons: ClipperMultiPolygon,
-  idPrefix: string,
-): CopperFillMaskSpec[] {
-  return polygons.map((poly, index) => ({
-    id: `${idPrefix}:${index}`,
-    shape: polygonToShape(poly),
-    positionMm: { x: 0, y: 0 },
-    rotationDeg: 0,
-    scaleX: 1,
-  }));
+  const islands = splitIslands(fill);
+  const anchors = union(multiPolyToPathsD(bare.sameNet));
+  const kept = islands.filter(
+    (island) =>
+      island.areaMm2 >= minIslandArea ||
+      (anchors.length > 0 && intersection(island.paths, anchors).length > 0),
+  );
+  return kept.map((island) => island.shape);
 }

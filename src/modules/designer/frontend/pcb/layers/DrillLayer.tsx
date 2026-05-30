@@ -24,39 +24,75 @@ const MOUNTING_RING_THICKNESS_MM = 0.4;
 const PCB_DRILL_FILL_RENDER_ORDER = RENDER_ORDER.F_COPPER + 0.6;
 const PCB_DRILL_RING_RENDER_ORDER = RENDER_ORDER.F_COPPER + 0.7;
 
-interface DrillLayerProps {
+interface DrillCommonProps {
   vias: ReadonlyArray<PcbVia>;
   placements: ReadonlyArray<PcbPlacedPart>;
   freeHoles?: ReadonlyArray<PcbFreeHole>;
   freePads?: ReadonlyArray<PcbFreePad>;
+}
+
+/**
+ * DrillHoleCutoutLayer — the board-colored fill discs that turn each solid
+ * footprint-pad / via copper disc into an annulus by painting the hole back in
+ * board background. A plated hole is INTRINSIC pad/via geometry (it reads as a
+ * hole on every copper layer), so PcbScene renders this UNCONDITIONALLY —
+ * independent of the "Drill" layer toggle, which must gate only the drill
+ * *highlights* (DrillHighlightLayer) below.
+ */
+export function DrillHoleCutoutLayer({
+  vias,
+  placements,
+  freeHoles,
+  freePads,
+  renderOrder,
+}: DrillCommonProps & {
+  /**
+   * Override the cutout render order. Defaults to just above the top copper
+   * (covers pads/traces/pour). PcbScene mounts a second pass at a higher order
+   * to occlude selected traces / ratsnest / labels that would otherwise render
+   * inside a plated hole (they sort above the default copper-level cutout).
+   */
+  renderOrder?: number;
+}): ReactElement | null {
+  const { theme } = useCanvasTheme();
+  const drills = useMemo(
+    () => collectDrills(vias, placements, freeHoles, freePads),
+    [vias, placements, freeHoles, freePads],
+  );
+  if (drills.length === 0) return null;
+  return (
+    <DrillHoleFills
+      drills={drills}
+      color={theme.pcbCanvas.boardFill}
+      renderOrder={renderOrder}
+    />
+  );
+}
+
+interface DrillHighlightLayerProps extends DrillCommonProps {
   selectedFreeHoleIds?: ReadonlySet<string>;
   /**
    * When true, draw a magenta annular ring on the silkscreen render order
    * around any drill larger than `MOUNTING_HOLE_THRESHOLD_MM`. Matches Flux's
-   * "Top Overlay" mounting-hole halo convention (screenshot 16.39.34).
+   * "Top Overlay" mounting-hole halo convention.
    */
   showMountingHoleRing?: boolean;
 }
 
 /**
- * DrillLayer — paints every PTH pad + via drill on top of the copper so the
- * hole reads. Footprint pad copper is a solid disc (the shared renderer has no
- * annular cutout), so we draw a board-colored fill disc + a thin lime outline
- * ring just above the top copper. Vias (drawn as a `RingGeometry`) get the same
- * treatment for a consistent hole look across pads / vias / free holes.
- *
- * Mounting holes (drill ≥ 1.5 mm) additionally get a magenta annulus on the
- * top silkscreen render order to mark non-electrical mechanical holes.
+ * DrillHighlightLayer — the drill *highlights*: lime hole-edge outline rings,
+ * magenta mounting-hole annuli (drill ≥ 1.5 mm), and selection rings. These are
+ * annotations, not geometry, so PcbScene gates them behind the "Drill" layer
+ * visibility toggle. The actual holes are drawn by DrillHoleCutoutLayer.
  */
-export function DrillLayer({
+export function DrillHighlightLayer({
   vias,
   placements,
   freeHoles,
   freePads,
   selectedFreeHoleIds,
   showMountingHoleRing = true,
-}: DrillLayerProps): ReactElement | null {
-  const { theme } = useCanvasTheme();
+}: DrillHighlightLayerProps): ReactElement | null {
   const drills = useMemo(
     () => collectDrills(vias, placements, freeHoles, freePads),
     [vias, placements, freeHoles, freePads],
@@ -81,7 +117,6 @@ export function DrillLayer({
   if (drills.length === 0) return null;
   return (
     <>
-      <DrillHoleFills drills={drills} color={theme.pcbCanvas.boardFill} />
       <DrillOutlineRings drills={drills} />
       {mountingHoles.length > 0 ? (
         <MountingHoleRings holes={mountingHoles} />
@@ -100,14 +135,21 @@ export function DrillLayer({
 function DrillHoleFills({
   drills,
   color,
+  renderOrder = PCB_DRILL_FILL_RENDER_ORDER,
 }: {
   drills: ReadonlyArray<DrillInstance>;
   color: string;
+  renderOrder?: number;
 }): ReactElement {
   return (
-    <group renderOrder={PCB_DRILL_FILL_RENDER_ORDER}>
+    <group renderOrder={renderOrder}>
       {drills.map((drill, i) => (
-        <DrillHoleFill key={i} drill={drill} color={color} />
+        <DrillHoleFill
+          key={i}
+          drill={drill}
+          color={color}
+          renderOrder={renderOrder}
+        />
       ))}
     </group>
   );
@@ -116,9 +158,11 @@ function DrillHoleFills({
 function DrillHoleFill({
   drill,
   color,
+  renderOrder,
 }: {
   drill: DrillInstance;
   color: string;
+  renderOrder: number;
 }): ReactElement {
   const geom = useMemo(
     () => new THREE.CircleGeometry(drill.radiusMm, 32),
@@ -129,7 +173,7 @@ function DrillHoleFill({
     <mesh
       geometry={geom}
       position={[drill.centerMm.x, drill.centerMm.y, 0]}
-      renderOrder={PCB_DRILL_FILL_RENDER_ORDER}
+      renderOrder={renderOrder}
     >
       {/* `transparent` so this shares the transparent render pass with the
           footprint pad copper (which is transparent because the PCB canvas runs

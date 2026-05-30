@@ -1,4 +1,3 @@
-import polygonClipping from "polygon-clipping";
 import type {
   PcbCopperLayerId,
   PcbPointMm,
@@ -10,9 +9,6 @@ export type ClipperPoint = [number, number];
 export type ClipperRing = ClipperPoint[];
 export type ClipperPolygon = ClipperRing[];
 export type ClipperMultiPolygon = ClipperPolygon[];
-export type PolygonUnion = (
-  ...polygons: ClipperPolygon[]
-) => ClipperMultiPolygon;
 
 // Cap-segment count for trace stadium tips. Matches ARC_SEGMENTS used for pad
 // corners (copper-fill-geometry.ts) so the two halo styles look identical.
@@ -135,21 +131,6 @@ export function buildTraceMaskPolygons(
 }
 
 /**
- * Inflated disc polygon for a via barrel. The drill hole is intentionally
- * ignored: the pour mask must cover the full outer copper annulus so that the
- * via's own pad/ring mesh (drawn on top) paints back the copper area while
- * leaving only the clearance halo visible as board-bg.
- */
-export function buildViaMaskPolygon(
-  via: PcbVia,
-  clearanceMm: number,
-): ClipperPolygon | null {
-  const radius = via.diameterMm / 2 + clearanceMm;
-  if (radius <= 0) return null;
-  return [buildDiscRing(via.centerMm, radius)];
-}
-
-/**
  * Does the via barrel cross `layer`? Uses the stackup-order index; tolerates
  * `fromLayer` and `toLayer` being in either order (KiCad never normalises
  * direction). v1 vias are always through (F.Cu↔B.Cu), so this always returns
@@ -173,95 +154,3 @@ export function isSameNetAsPour(
 ): boolean {
   return itemNetId !== null && pourNetId !== null && itemNetId === pourNetId;
 }
-
-// --- Robust boolean ops -----------------------------------------------------
-// `polygon-clipping` is numerically fragile: on certain board geometry its
-// sweep-line throws "Unable to complete output ring", which (uncaught) tears
-// down the WebGL context. We (a) quantize inputs to a 0.1 µm grid to collapse
-// the near-coincident vertices that trigger it, and (b) wrap each op so a
-// failure degrades gracefully instead of crashing the renderer.
-
-type ClipperGeom = ClipperPolygon | ClipperMultiPolygon;
-type PolygonBinaryOp = (
-  subject: ClipperGeom,
-  ...clippers: ClipperGeom[]
-) => ClipperMultiPolygon;
-
-const CLIP_QUANT = 1e4; // mm → 0.1 µm grid
-
-function roundDeep<T>(node: T): T {
-  if (!Array.isArray(node)) return node;
-  if (
-    node.length === 2 &&
-    typeof node[0] === "number" &&
-    typeof node[1] === "number"
-  ) {
-    return [
-      Math.round(node[0] * CLIP_QUANT) / CLIP_QUANT,
-      Math.round(node[1] * CLIP_QUANT) / CLIP_QUANT,
-    ] as unknown as T;
-  }
-  return node.map((child) => roundDeep(child)) as unknown as T;
-}
-
-function normalizeToMulti(geom: ClipperGeom): ClipperMultiPolygon {
-  // MultiPolygon iff the leaf at depth-3 is a point ([number,number]).
-  return Array.isArray(geom[0]?.[0]?.[0])
-    ? (geom as ClipperMultiPolygon)
-    : [geom as ClipperPolygon];
-}
-
-let warnedClipFailure = false;
-function warnClipFailure(op: string, error: unknown): void {
-  if (warnedClipFailure) return;
-  warnedClipFailure = true;
-  console.warn(
-    `[copper-fill] polygon ${op} failed; using fallback geometry`,
-    error,
-  );
-}
-
-// polygon-clipping's published types don't expose a clean rest signature, so we
-// re-type the ops to accept variadic clippers (matching their runtime shape).
-const clipUnion = polygonClipping.union as unknown as (
-  ...polygons: ClipperGeom[]
-) => ClipperMultiPolygon;
-const clipDifference = polygonClipping.difference as unknown as PolygonBinaryOp;
-const clipIntersection =
-  polygonClipping.intersection as unknown as PolygonBinaryOp;
-
-/** Union of polygons. Falls back to the (un-unioned) inputs on failure — still
- *  a valid MultiPolygon for downstream difference (which re-unions clippers). */
-export const polygonUnion: PolygonUnion = (...polygons) => {
-  const rounded = polygons.map((p) => roundDeep(p));
-  try {
-    return clipUnion(...rounded);
-  } catch (error) {
-    warnClipFailure("union", error);
-    return rounded as ClipperMultiPolygon;
-  }
-};
-
-/** subject − clippers. Falls back to the subject (no subtraction) on failure. */
-export const polygonDifference: PolygonBinaryOp = (subject, ...clippers) => {
-  const s = roundDeep(subject);
-  const c = clippers.map((x) => roundDeep(x));
-  try {
-    return clipDifference(s, ...c);
-  } catch (error) {
-    warnClipFailure("difference", error);
-    return normalizeToMulti(s);
-  }
-};
-
-/** subject ∩ clippers. Falls back to empty (treat as "no overlap") on failure. */
-export const polygonIntersection: PolygonBinaryOp = (subject, ...clippers) => {
-  const s = roundDeep(subject);
-  const c = clippers.map((x) => roundDeep(x));
-  try {
-    return clipIntersection(s, ...c);
-  } catch (error) {
-    warnClipFailure("intersection", error);
-    return [];
-  }
-};

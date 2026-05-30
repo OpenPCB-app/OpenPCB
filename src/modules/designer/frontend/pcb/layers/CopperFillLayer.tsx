@@ -2,21 +2,24 @@ import { useEffect, useMemo, type ReactElement } from "react";
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import type {
+  PcbBoardCutout,
   PcbBoardOutline,
   PcbCopperLayerId,
   PcbDesignRules,
+  PcbFreeHole,
+  PcbFreePad,
   PcbPlacedPart,
   PcbTrace,
   PcbVia,
+  PcbViewSide,
 } from "../../../../../sdks";
 import {
   PCB_TRACE_COLORS,
   RENDER_ORDER,
 } from "../../../../../shared/frontend/canvas/layers";
-import type { PcbViewSide } from "../../../../../sdks";
 import { useCanvasTheme } from "../../../../../shared/frontend/canvas/theme";
 import {
-  buildCopperFillGeometrySpec,
+  buildCopperFillPourShapes,
   resolveCopperFillClearanceMm,
 } from "./copper-fill-geometry";
 
@@ -24,54 +27,33 @@ interface CopperFillLayerProps {
   layer: PcbCopperLayerId;
   outline: PcbBoardOutline;
   placements: ReadonlyArray<PcbPlacedPart>;
-  /**
-   * Traces on this layer. Items on the same net as `pourNetId` are merged
-   * silently into the pour; everything else gets a clearance halo.
-   */
+  /** Traces on this layer. Same-net traces merge into the pour silently. */
   traces: ReadonlyArray<PcbTrace>;
-  /**
-   * Vias whose barrel crosses this layer. Same-net merge applies.
-   */
+  /** Vias whose barrel crosses this layer. Same-net merge applies. */
   vias: ReadonlyArray<PcbVia>;
-  /**
-   * Net id of the pour on this layer (e.g. `"GND"`). `null` disables same-net
-   * merging — every copper object renders with a halo. Read from
-   * `viewState.copperFillPourNetIds[layer] ?? null` at the call site.
-   */
+  /** Net id of the pour on this layer (e.g. `"GND"`); `null` disables merge. */
   pourNetId: string | null;
-  /**
-   * Per-pad net resolution map keyed by `"<placementId>|<padNumber>"`. Used
-   * for same-net pad merge (pads on the pour net skip the clearance halo
-   * unless merging would violate minimum clearance).
-   */
+  /** `"<placementId>|<padNumber>"` → netId for same-net pad merge. */
   padNetIds: ReadonlyMap<string, string>;
   designRules: PcbDesignRules;
+  /** Board cutouts + free holes/pads — subtracted (apertures) from the pour. */
+  cutouts?: ReadonlyArray<PcbBoardCutout>;
+  freeHoles?: ReadonlyArray<PcbFreeHole>;
+  freePads?: ReadonlyArray<PcbFreePad>;
   opacity?: number;
-  /**
-   * Side-flip indicator. Drives render-order reversal so bottom-view shows
-   * B.Cu on top of F.Cu (spec §5.2). Defaults to "top" for back-compat.
-   */
+  /** Side-flip indicator; reverses render order so bottom-view shows B over F. */
   viewSide?: PcbViewSide;
 }
-
-// Dev-only diagnostic: when set to "1", mask polygons render in bright yellow
-// instead of the board background. Makes the three-second sanity check
-// described in the spec trivial — if no yellow appears around a trace, the
-// trace was not fed into the zone filler.
-const DEBUG_COPPER_FILL =
-  typeof import.meta !== "undefined" &&
-  import.meta.env?.VITE_DEBUG_COPPER_FILL === "1";
 
 function copperFillRenderOrder(
   layer: PcbCopperLayerId,
   viewSide: PcbViewSide,
 ): number {
-  // The pour must sit BELOW its layer's pads, traces and vias — otherwise
-  // the flood paints over the very objects whose halos define it. For F.Cu
-  // we anchor at PINS - 0.35 (legacy) so SMT pads (which render at PINS)
-  // stay readable; bottom and inner layers anchor at their own object slot
-  // minus the same bias. Side flip swaps F ↔ B so bottom-view rendering
-  // keeps B.Cu's pour in the foreground.
+  // The pour must sit BELOW its layer's pads / traces / vias (which render at
+  // the copper object slot) so it never paints over the objects whose clearance
+  // defines it. Anchored at the object slot − 0.35. (A full migration to the
+  // dedicated fill slot is deferred to the Phase 6 render-order cleanup, which
+  // also bumps vias to the object slot.)
   const sourceLayer: PcbCopperLayerId =
     viewSide === "bottom"
       ? layer === "F.Cu"
@@ -98,51 +80,13 @@ function blendedCopperFillColor(
   return `#${color.getHexString()}`;
 }
 
-function MaskGeometry({
-  geometry,
-  color,
-  renderOrder,
-}: {
-  geometry: THREE.BufferGeometry;
-  color: string;
-  renderOrder: number;
-}): ReactElement {
-  return (
-    <mesh geometry={geometry} renderOrder={renderOrder} frustumCulled={false}>
-      <meshBasicMaterial
-        color={color}
-        depthTest={false}
-        depthWrite={false}
-        side={THREE.DoubleSide}
-        transparent
-        opacity={1}
-      />
-    </mesh>
-  );
-}
-
-function buildMergedMaskGeometry(
-  masks: ReturnType<typeof buildCopperFillGeometrySpec>["masks"],
-): THREE.BufferGeometry | null {
-  const geometries = masks.map((mask) => {
-    const geometry = new THREE.ShapeGeometry(mask.shape);
-    const matrix = new THREE.Matrix4().compose(
-      new THREE.Vector3(mask.positionMm.x, mask.positionMm.y, 0),
-      new THREE.Quaternion().setFromEuler(
-        new THREE.Euler(0, 0, (mask.rotationDeg * Math.PI) / 180),
-      ),
-      new THREE.Vector3(mask.scaleX, 1, 1),
-    );
-    geometry.applyMatrix4(matrix);
-    return geometry;
-  });
-  if (geometries.length === 0) return null;
-  if (geometries.length === 1) return geometries[0]!;
-  const merged = mergeGeometries(geometries, false);
-  geometries.forEach((geometry) => geometry.dispose());
-  return merged;
-}
-
+/**
+ * Copper pour for one layer, rendered as the actual positive copper islands
+ * (smoothed, sliver-free, clearance-correct) produced by the shared pour kernel
+ * — the same geometry the 3D board extrudes. Replaces the old fill-rect +
+ * board-color-mask trick, which couldn't express rounded copper and hid lower
+ * layers through its clearance gaps.
+ */
 export function CopperFillLayer({
   layer,
   outline,
@@ -152,13 +96,16 @@ export function CopperFillLayer({
   pourNetId,
   padNetIds,
   designRules,
+  cutouts,
+  freeHoles,
+  freePads,
   opacity = 0.95,
   viewSide = "top",
 }: CopperFillLayerProps): ReactElement | null {
   const { theme } = useCanvasTheme();
-  const spec = useMemo(
+  const shapes = useMemo(
     () =>
-      buildCopperFillGeometrySpec({
+      buildCopperFillPourShapes({
         layer,
         outline,
         placements,
@@ -168,9 +115,12 @@ export function CopperFillLayer({
         padNetIds,
         clearanceMm: resolveCopperFillClearanceMm(designRules.clearance),
         copperToBoardEdgeMm: designRules.clearance.copperToBoardEdgeMm,
+        cutouts,
+        freeHoles,
+        freePads,
+        minThicknessMm: designRules.minimums.traceWidthMm,
       }),
     [
-      designRules,
       layer,
       outline,
       placements,
@@ -178,47 +128,40 @@ export function CopperFillLayer({
       vias,
       pourNetId,
       padNetIds,
+      designRules,
+      cutouts,
+      freeHoles,
+      freePads,
     ],
   );
+
+  const geometry = useMemo(() => {
+    if (shapes.length === 0) return null;
+    const parts = shapes.map((shape) => new THREE.ShapeGeometry(shape));
+    if (parts.length === 1) return parts[0]!;
+    const merged = mergeGeometries(parts, false);
+    parts.forEach((part) => part.dispose());
+    return merged;
+  }, [shapes]);
+  useEffect(() => () => geometry?.dispose(), [geometry]);
 
   const renderOrder = copperFillRenderOrder(layer, viewSide);
   const fillColor = useMemo(
     () => blendedCopperFillColor(layer, opacity, theme.pcbCanvas.boardFill),
     [layer, opacity, theme.pcbCanvas.boardFill],
   );
-  const maskGeometry = useMemo(
-    () => buildMergedMaskGeometry(spec.masks),
-    [spec.masks],
-  );
-  useEffect(() => () => maskGeometry?.dispose(), [maskGeometry]);
-  if (!spec.fill) return null;
 
-  const maskColor = DEBUG_COPPER_FILL ? "#ffea00" : theme.pcbCanvas.boardFill;
-
+  if (!geometry) return null;
   return (
-    <group>
-      <mesh
-        position={[spec.fill.center.x, spec.fill.center.y, 0]}
-        renderOrder={renderOrder}
-        frustumCulled={false}
-      >
-        <planeGeometry args={[spec.fill.widthMm, spec.fill.heightMm]} />
-        <meshBasicMaterial
-          color={fillColor}
-          depthTest={false}
-          depthWrite={false}
-          side={THREE.DoubleSide}
-          transparent
-          opacity={1}
-        />
-      </mesh>
-      {maskGeometry ? (
-        <MaskGeometry
-          geometry={maskGeometry}
-          color={maskColor}
-          renderOrder={renderOrder + 0.05}
-        />
-      ) : null}
-    </group>
+    <mesh geometry={geometry} renderOrder={renderOrder} frustumCulled={false}>
+      <meshBasicMaterial
+        color={fillColor}
+        depthTest={false}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+        transparent
+        opacity={1}
+      />
+    </mesh>
   );
 }

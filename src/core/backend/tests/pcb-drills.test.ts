@@ -118,7 +118,24 @@ describe("collectDrills", () => {
       pads: [pad("1", { x: 2, y: 1 }, 1)],
     });
     const drills = collectDrills([], [pl]);
-    expect(drills[0]).toEqual({ centerMm: { x: -1, y: 2 }, radiusMm: 0.5 });
+    // Exact trig leaves sub-femtometer FP noise at orthogonal angles; the value
+    // is -1 within float precision (and far below the 0.1 µm fill grid).
+    expect(drills[0]!.centerMm.x).toBeCloseTo(-1, 9);
+    expect(drills[0]!.centerMm.y).toBeCloseTo(2, 9);
+    expect(drills[0]!.radiusMm).toBe(0.5);
+  });
+
+  test("arbitrary (non-orthogonal) rotation places the drill exactly", () => {
+    // Regression: the old `Math.round(deg/90)*90` snapped this to 0° and put the
+    // hole at (2,0). Pad at (2,0) rotated 45° → (2cos45, 2sin45) = (√2, √2).
+    const pl = placement({
+      positionMm: { x: 0, y: 0 },
+      rotationDeg: 45,
+      pads: [pad("1", { x: 2, y: 0 }, 1)],
+    });
+    const drills = collectDrills([], [pl]);
+    expect(drills[0]!.centerMm.x).toBeCloseTo(Math.SQRT2, 6);
+    expect(drills[0]!.centerMm.y).toBeCloseTo(Math.SQRT2, 6);
   });
 
   test("mirrored placement flips X", () => {

@@ -39,7 +39,7 @@ import { TracePreviewLayer } from "./layers/TracePreviewLayer";
 import { CopperFillLayer } from "./layers/CopperFillLayer";
 import { viaCrossesLayer } from "./layers/copper-fill-trace-geometry";
 import { ViaLayer } from "./layers/ViaLayer";
-import { DrillLayer } from "./layers/DrillLayer";
+import { DrillHighlightLayer, DrillHoleCutoutLayer } from "./layers/DrillLayer";
 import { FreePadLayer } from "./layers/FreePadLayer";
 import { OverlayLayer } from "./layers/OverlayLayer";
 import { BOARD_HANDLES, handlePointMm } from "./pcb-board-resize";
@@ -49,6 +49,7 @@ import {
   outlineToShape,
 } from "./pcb-outline-three";
 import { collectDrills } from "./pcb-drills";
+import { buildPadNetIds } from "./pcb-pad-nets";
 import { SolderMaskLayer } from "./layers/SolderMaskLayer";
 import { SolderPasteLayer } from "./layers/SolderPasteLayer";
 import { NetTraceLabels } from "./layers/NetTraceLabels";
@@ -635,9 +636,20 @@ function PlacementRender({
     !model ||
     ((model.pads?.length ?? 0) === 0 && (model.graphics?.length ?? 0) === 0);
 
-  // KiCad-style flip: when on B.Cu, every footprint child layer remaps F.* ↔ B.*
-  // (pads, silk, mask, paste, courtyard, fab). `*.Cu` (through-hole) untouched.
-  const layerRemap = isBackLayer ? flipLayerSide : undefined;
+  // KiCad-style flip: a B.Cu placement remaps F.* ↔ B.* (silk, mask, paste,
+  // courtyard, fab). Through-hole (`*.Cu`) pad copper spans every layer; in the
+  // 2D view it must read in the FOREGROUND copper color (red top / blue bottom),
+  // not the generic copper-gold — so map `*.Cu` → the viewed copper layer for
+  // color/dim resolution. SMD layers still flip F↔B for back placements.
+  const layerRemap = useMemo(() => {
+    const viewedCopper = viewSide === "bottom" ? "B.Cu" : "F.Cu";
+    return (layer: string | undefined): string | undefined =>
+      layer === "*.Cu"
+        ? viewedCopper
+        : isBackLayer
+          ? flipLayerSide(layer)
+          : layer;
+  }, [isBackLayer, viewSide]);
 
   // Dim every layer the placement contributes only while a PCB layer/net focus
   // is active. With no focused layer, all visible layers render undimmed even
@@ -1349,47 +1361,15 @@ export function PcbScene({
       routePreview?.layer,
     ],
   );
-  const padNetIds = useMemo(() => {
-    const map = new Map<string, string>();
-    // Source 1 — ratsnest. Each airwire endpoint carries its netId; covers
-    // every pad with at least one unrouted same-net connection.
-    for (const seg of projection.ratsnest) {
-      map.set(`${seg.fromPlacementId}|${seg.fromPadNumber}`, seg.netId);
-      map.set(`${seg.toPlacementId}|${seg.toPadNumber}`, seg.netId);
-    }
-    // Source 2 — trace endpoints landing on pad world-centres. Fills in
-    // pads whose airwires have all been routed away (so they're absent from
-    // the ratsnest). Backend net-pad correlation would give 100% coverage,
-    // but exposing that needs an API change — handle in v2.
-    const padPosIndex = new Map<string, string>();
-    for (const placement of projection.placements) {
-      const pads = placement.footprint.preview?.pads ?? [];
-      if (pads.length === 0) continue;
-      const radians = (placement.rotationDeg * Math.PI) / 180;
-      const cos = Math.cos(radians);
-      const sin = Math.sin(radians);
-      const sx = placement.mirrored ? -1 : 1;
-      for (const pad of pads) {
-        const mx = sx * pad.centerMm.x;
-        const wx = cos * mx - sin * pad.centerMm.y + placement.positionMm.x;
-        const wy = sin * mx + cos * pad.centerMm.y + placement.positionMm.y;
-        // Quantise to nm to match trace endpoint coordinates exactly.
-        const xnm = Math.round(wx * 1_000_000);
-        const ynm = Math.round(wy * 1_000_000);
-        padPosIndex.set(`${xnm}|${ynm}`, `${placement.id}|${pad.number}`);
-      }
-    }
-    for (const trace of projection.traces) {
-      if (!trace.netId || trace.pointsNm.length < 2) continue;
-      const head = trace.pointsNm[0]!;
-      const tail = trace.pointsNm[trace.pointsNm.length - 1]!;
-      for (const end of [head, tail]) {
-        const padKey = padPosIndex.get(`${end.x}|${end.y}`);
-        if (padKey) map.set(padKey, trace.netId);
-      }
-    }
-    return map;
-  }, [projection.ratsnest, projection.placements, projection.traces]);
+  const padNetIds = useMemo(
+    () =>
+      buildPadNetIds(
+        projection.ratsnest,
+        projection.placements,
+        projection.traces,
+      ),
+    [projection.ratsnest, projection.placements, projection.traces],
+  );
   // Per-layer opacity overrides from the panel's slider. Multiplied against
   // the layer's display-mode opacity so dim + per-layer attenuation compose.
   const perLayerOpacity = usePcbViewStore((s) => s.viewState.perLayerOpacity);
@@ -1440,6 +1420,26 @@ export function PcbScene({
     }
     return map;
   }, [projection.vias]);
+  // Vias whose net matches a rendered same-net pour they cross. Such a via's
+  // copper ring would otherwise be invisible (same color as the pour it merges
+  // into), so ViaLayer draws a presentation-only board-color separator ring
+  // around it (Flux look). The pour fill itself keeps the electrical merge.
+  const samePourViaIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (copperFillSet.size === 0) return ids;
+    for (const via of projection.vias) {
+      if (via.netId === null) continue;
+      for (const layer of ["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"] as const) {
+        if (!copperFillSet.has(layer)) continue;
+        if ((copperFillPourNetIds[layer] ?? null) !== via.netId) continue;
+        if (viaCrossesLayer(via, layer)) {
+          ids.add(via.id);
+          break;
+        }
+      }
+    }
+    return ids;
+  }, [projection.vias, copperFillSet, copperFillPourNetIds]);
   const effectiveHighlightedNetId = visualState.routeFocusActive
     ? visualState.activeNetId
     : visualState.activeLayer === null
@@ -1526,12 +1526,20 @@ export function PcbScene({
               key={`fill:${layer}`}
               layer={layer}
               outline={projection.board.outline}
-              placements={renderPlacements}
+              // Feed the pour COMMITTED geometry, not the per-frame drag
+              // overrides: the Clipper pour is expensive and would otherwise
+              // rebuild every frame (×N copper layers) while dragging a part /
+              // free primitive. The moat refreshes once on commit — standard
+              // EDA "pour is stale during edit" behavior.
+              placements={projection.placements}
               traces={tracesByLayer[layer]}
               vias={viasByLayer[layer]}
               pourNetId={copperFillPourNetIds[layer] ?? null}
               padNetIds={padNetIds}
               designRules={projection.board.designRules}
+              cutouts={projection.board.cutouts}
+              freeHoles={projection.freeHoles}
+              freePads={projection.freePads}
               opacity={
                 layerOpacity(visualState, layer) * layerOpacityFor(layer)
               }
@@ -1557,10 +1565,21 @@ export function PcbScene({
             selectedViaIds={selection?.viaIds}
             activeLayer={projection.board.activeLayer}
             focusNetAcrossLayers={visualState.routeFocusActive}
+            samePourViaIds={samePourViaIds}
           />
         ) : null}
+        {/* Hole cutouts are intrinsic pad/via geometry — always rendered so a
+            plated hole reads as a hole even with the "Drill" layer hidden. */}
+        <DrillHoleCutoutLayer
+          vias={projection.vias}
+          placements={renderPlacements}
+          freeHoles={renderFreeHoles}
+          freePads={renderFreePads}
+        />
+        {/* Drill highlights (lime outline, mounting/selection rings) are
+            annotations — gated by the "Drill" layer toggle. */}
         {isPcbLayerVisible(visibleLayers, "Drill") ? (
-          <DrillLayer
+          <DrillHighlightLayer
             vias={projection.vias}
             placements={renderPlacements}
             freeHoles={renderFreeHoles}
@@ -1569,6 +1588,18 @@ export function PcbScene({
             showMountingHoleRing={isPcbLayerVisible(visibleLayers, "F.SilkS")}
           />
         ) : null}
+        {/* Occlusion pass: re-assert plated holes ABOVE selected traces /
+            ratsnest / net labels (which sort above the copper-level cutout), so
+            no copper ever reads inside a hole — the robust fix for a trace
+            crossing a pad/via hole (Codex review). Kept below snap
+            (SELECTION+0.5) and measurement (SELECTION+1) so those stay on top. */}
+        <DrillHoleCutoutLayer
+          vias={projection.vias}
+          placements={renderPlacements}
+          freeHoles={renderFreeHoles}
+          freePads={renderFreePads}
+          renderOrder={RENDER_ORDER.SELECTION + 0.25}
+        />
         {(["B.Cu", "In2.Cu", "In1.Cu", "F.Cu"] as const).map((layer) =>
           isCopperLayerVisible(visibleLayers, layer) &&
           shouldRenderCopperLayer(visualState, layer) ? (

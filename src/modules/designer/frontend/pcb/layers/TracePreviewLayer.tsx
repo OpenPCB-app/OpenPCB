@@ -82,7 +82,11 @@ function PreviewSegmentGroup({
       color: new THREE.Color(color).getHex(),
       linewidth: widthMm,
       worldUnits: true,
-      transparent: opacity < 1,
+      // Always transparent so the preview sorts with the rest of the copper by
+      // renderOrder. An opaque preview renders in three's earlier opaque pass,
+      // after which every transparent copper mesh (pour/traces/mask) would
+      // paint over it regardless of its higher renderOrder.
+      transparent: true,
       opacity,
       depthTest: false,
       depthWrite: false,

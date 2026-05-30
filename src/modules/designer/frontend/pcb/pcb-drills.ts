@@ -17,18 +17,19 @@ function transformLocal(
   rotationDeg: number,
   mirrored: boolean,
 ): PcbPointMm {
-  const r = (((Math.round(rotationDeg / 90) * 90) % 360) + 360) % 360;
+  // Mirror X then rotate CCW by the EXACT angle — must match
+  // `applyPlacementTransform` (copper-fill-geometry.ts) and the 3D mirror
+  // formula. The previous `Math.round(rotationDeg/90)*90` snapped every
+  // placement to an orthogonal angle, misplacing drills on parts rotated to
+  // e.g. 45°. Orthogonal angles are unchanged (cos/sin collapse to ±1/0).
   const mx = mirrored ? -localMm.x : localMm.x;
-  switch (r) {
-    case 90:
-      return { x: -localMm.y, y: mx };
-    case 180:
-      return { x: -mx, y: -localMm.y };
-    case 270:
-      return { x: localMm.y, y: -mx };
-    default:
-      return { x: mx, y: localMm.y };
-  }
+  const rad = (rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return {
+    x: cos * mx - sin * localMm.y,
+    y: sin * mx + cos * localMm.y,
+  };
 }
 
 /**

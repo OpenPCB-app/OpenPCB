@@ -4,7 +4,6 @@ import {
   buildDiscRing,
   buildTraceMaskPolygons,
   buildTraceSegmentStadium,
-  buildViaMaskPolygon,
   isSameNetAsPour,
   viaCrossesLayer,
   type ClipperRing,
@@ -191,21 +190,6 @@ describe("buildTraceMaskPolygons", () => {
   test("non-positive effective radius returns empty", () => {
     const trace = makeTrace({ widthMm: 0 });
     expect(buildTraceMaskPolygons(trace, 0)).toHaveLength(0);
-  });
-});
-
-describe("buildViaMaskPolygon", () => {
-  test("emits disc with radius = diameter/2 + clearance", () => {
-    const polygon = buildViaMaskPolygon(makeVia({ diameterMm: 0.6 }), 0.2);
-    expect(polygon).not.toBeNull();
-    const bounds = ringBounds(polygon![0]!);
-    // r = 0.5 mm → polygon inscribed in circle: maxX ∈ (r − chordError, r].
-    expect(bounds.maxX).toBeGreaterThan(0.495);
-    expect(bounds.maxX).toBeLessThanOrEqual(0.5);
-  });
-
-  test("null when clearance + radius is non-positive", () => {
-    expect(buildViaMaskPolygon(makeVia({ diameterMm: 0 }), 0)).toBeNull();
   });
 });
 
