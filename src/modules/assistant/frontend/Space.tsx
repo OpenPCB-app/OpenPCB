@@ -665,6 +665,34 @@ export function AssistantSpace({
       setModel(firstModel.modelId);
   }, [model, models]);
 
+  // Heal a chat pinned to a disabled/removed provider (e.g. an old chat on
+  // OpenAI before a key was added). The picker only lists enabled providers, so
+  // a controlled <select> with no matching option would silently keep the stale
+  // id and every send would fail with "Provider disabled". Fall back to the
+  // default (or first) enabled provider.
+  useEffect(() => {
+    if (providers.length === 0) return;
+    const current = providers.find((entry) => entry.id === providerId);
+    if (current?.enabled) return;
+    const fallback =
+      providers.find(
+        (entry) => entry.id === settings?.defaultProviderId && entry.enabled,
+      ) ?? providers.find((entry) => entry.enabled);
+    if (fallback && fallback.id !== providerId) {
+      setProviderId(fallback.id);
+      setModel(fallback.defaultModel);
+    }
+  }, [providers, providerId, settings?.defaultProviderId]);
+
+  const refreshChatModels = useCallback(async () => {
+    if (!base || !providerId) return;
+    const next = await api<AssistantProviderModel[]>(
+      `${base}/providers/${providerId}/models/refresh`,
+      { method: "POST", headers: headers() },
+    );
+    setModels(next);
+  }, [base, providerId]);
+
   useEffect(() => {
     if (!contextMenu) return;
     const close = () => setContextMenu(null);
@@ -1271,6 +1299,11 @@ export function AssistantSpace({
               model={model}
               onModelChange={setModel}
               models={models}
+              onRefreshModels={() =>
+                void refreshChatModels().catch((err: unknown) =>
+                  setError(err instanceof Error ? err.message : String(err)),
+                )
+              }
               presets={presets}
               promptPresetId={promptPresetId}
               onPresetChange={setPromptPresetId}

@@ -56,6 +56,7 @@ function rowToCapabilities(
 
 const VALID_KINDS: AiProviderKind[] = [
   "openai",
+  "openrouter",
   "openai-compatible",
   "lmstudio",
   "omlx",
@@ -64,7 +65,28 @@ const VALID_KINDS: AiProviderKind[] = [
 // Curated built-ins seeded on first run. `openai-compatible` is intentionally
 // excluded — it stays a valid kind so users can add their own custom endpoint
 // via "Add provider", but we don't ship it as a default preset.
-const SEEDED_BUILTIN_KINDS: AiProviderKind[] = ["openai", "lmstudio", "omlx"];
+const SEEDED_BUILTIN_KINDS: AiProviderKind[] = [
+  "openai",
+  "openrouter",
+  "lmstudio",
+  "omlx",
+];
+
+// Cloud providers seeded from env: paste-key flow, enabled only once a key exists.
+const CLOUD_ENV: Partial<
+  Record<AiProviderKind, { key: string; base: string; model: string }>
+> = {
+  openai: {
+    key: "OPENAI_API_KEY",
+    base: "OPENAI_BASE_URL",
+    model: "OPENAI_MODEL",
+  },
+  openrouter: {
+    key: "OPENROUTER_API_KEY",
+    base: "OPENROUTER_BASE_URL",
+    model: "OPENROUTER_MODEL",
+  },
+};
 
 export class ProviderStore {
   private readonly rawSql: RawSqlFn;
@@ -84,17 +106,16 @@ export class ProviderStore {
         [presetId],
       )[0];
       if (existing) continue;
-      const apiKey =
-        preset.kind === "openai" ? (process.env.OPENAI_API_KEY ?? null) : null;
-      const baseUrl =
-        preset.kind === "openai"
-          ? (process.env.OPENAI_BASE_URL ?? preset.defaultBaseUrl)
-          : preset.defaultBaseUrl;
-      const defaultModel =
-        preset.kind === "openai"
-          ? (process.env.OPENAI_MODEL ?? preset.defaultModel)
-          : preset.defaultModel;
-      const enabled = preset.kind === "openai" ? (apiKey ? 1 : 0) : 0;
+      const env = CLOUD_ENV[preset.kind];
+      const apiKey = env ? (process.env[env.key] ?? null) : null;
+      const baseUrl = env
+        ? (process.env[env.base] ?? preset.defaultBaseUrl)
+        : preset.defaultBaseUrl;
+      const defaultModel = env
+        ? (process.env[env.model] ?? preset.defaultModel)
+        : preset.defaultModel;
+      // Cloud providers activate once a key exists; local providers stay disabled until configured.
+      const enabled = env ? (apiKey ? 1 : 0) : 0;
       this.rawSql(
         "INSERT INTO assistant_provider_config (id,label,kind,base_url,api_key,default_model,enabled,is_builtin,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [

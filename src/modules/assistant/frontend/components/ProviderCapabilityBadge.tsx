@@ -11,7 +11,9 @@ export function ProviderCapabilityBadge({
     return <Dot color="bg-slate-500" title={`${provider.label} disabled`} />;
   const caps = provider.capabilities;
   // Heuristic: providers without API key requirement (lmstudio / omlx / openai-compatible) are OK without a key.
-  const needsKey = provider.kind === "openai" && !provider.hasApiKey;
+  const needsKey =
+    (provider.kind === "openai" || provider.kind === "openrouter") &&
+    !provider.hasApiKey;
   if (needsKey) return <Dot color="bg-red-500" title="API key required" />;
   if (caps) {
     if (caps.toolCalling && caps.streaming) {

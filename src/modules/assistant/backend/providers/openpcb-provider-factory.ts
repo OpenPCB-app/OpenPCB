@@ -1,6 +1,7 @@
 import { ValidationError } from "../../../../core/contracts/errors";
 import {
   OpenAiCompatibleClient,
+  getPresetByKind,
   type AiProviderClient,
 } from "@openpcb/ai-core";
 import type { InternalProviderConfig } from "../provider-store";
@@ -27,11 +28,11 @@ export function buildAiProviderClient(
 
 /**
  * Determine whether a provider needs an API key to run.
- * OpenAI requires one (with dev-mode bypass). LM Studio / oMLX / custom OpenAI-compatible do not.
+ * Cloud presets (OpenAI, OpenRouter) require one; LM Studio / oMLX / custom
+ * OpenAI-compatible endpoints do not. Driven by the preset's `requiresApiKey`.
  */
 export function providerRequiresApiKey(
   provider: InternalProviderConfig,
 ): boolean {
-  if (provider.kind === "openai") return true;
-  return false;
+  return getPresetByKind(provider.kind)?.requiresApiKey ?? false;
 }

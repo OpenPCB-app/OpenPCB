@@ -5,7 +5,10 @@ import path from "node:path";
 import { resetAssistantServiceForTesting } from "../../../modules/assistant/backend/assistant-service";
 import { getAssistantService } from "../../../modules/assistant/backend/assistant-service";
 import { resetTaskRuntimeForTesting } from "../../../modules/tasks/backend/runtime-singleton";
-import { getSharedSqlite, resetSharedSqliteForTesting } from "../db/sqlite-client";
+import {
+  getSharedSqlite,
+  resetSharedSqliteForTesting,
+} from "../db/sqlite-client";
 import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
@@ -457,13 +460,15 @@ describe("assistant module", () => {
       effect: string;
     }>;
     expect(Array.isArray(tools)).toBe(true);
-    expect(tools.some((tool) => tool.name === "designer_place_components")).toBe(
-      true,
-    );
+    expect(
+      tools.some((tool) => tool.name === "designer_place_components"),
+    ).toBe(true);
     expect(tools.some((tool) => tool.name === "designer_create_design")).toBe(
       true,
     );
-    expect(tools.some((tool) => tool.name === "library_resolve_bom")).toBe(true);
+    expect(tools.some((tool) => tool.name === "library_resolve_bom")).toBe(
+      true,
+    );
   });
 
   test("providers endpoint returns defaults", async () => {
@@ -475,14 +480,27 @@ describe("assistant module", () => {
     expect(response.status).toBe(200);
     const providers = (await response.json()) as Array<{
       id: string;
+      kind: string;
+      baseUrl: string;
       defaultModel: string;
       isBuiltin: boolean;
+      enabled: boolean;
       hasApiKey: boolean;
     }>;
     expect(providers.length).toBeGreaterThanOrEqual(1);
     const openai = providers.find((p) => p.id === "openai");
     expect(openai?.defaultModel).toBe("gpt-4o-mini");
     expect(openai?.isBuiltin).toBe(true);
+
+    // OpenRouter is seeded as a key-requiring cloud builtin, disabled until a
+    // key is provided (no OPENROUTER_API_KEY in the test env).
+    const openrouter = providers.find((p) => p.id === "openrouter");
+    expect(openrouter?.kind).toBe("openrouter");
+    expect(openrouter?.isBuiltin).toBe(true);
+    expect(openrouter?.baseUrl).toBe("https://openrouter.ai/api/v1");
+    expect(openrouter?.defaultModel).toBe("anthropic/claude-3.5-sonnet");
+    expect(openrouter?.hasApiKey).toBe(false);
+    expect(openrouter?.enabled).toBe(false);
   });
 
   test("settings endpoint returns assistant defaults", async () => {
@@ -517,7 +535,9 @@ describe("assistant module", () => {
     await bootAssistantWorkspace();
 
     const columns = getSharedSqlite()
-      .query<{ name: string }, []>("PRAGMA table_info(assistant_write_proposal)")
+      .query<{ name: string }, []>(
+        "PRAGMA table_info(assistant_write_proposal)",
+      )
       .all()
       .map((column) => column.name);
 

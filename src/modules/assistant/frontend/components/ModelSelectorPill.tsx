@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
-import { ChevronDown, Settings } from "lucide-react";
+import { ChevronDown, RefreshCw, Settings } from "lucide-react";
 import type {
   AssistantPromptPreset,
   AssistantPromptPresetId,
@@ -21,7 +21,10 @@ function dotColor(provider: AssistantProviderConfig | null): {
   if (!provider) return { cls: "bg-slate-500", title: "No provider" };
   if (!provider.enabled)
     return { cls: "bg-slate-500", title: `${provider.label} disabled` };
-  if (provider.kind === "openai" && !provider.hasApiKey)
+  if (
+    (provider.kind === "openai" || provider.kind === "openrouter") &&
+    !provider.hasApiKey
+  )
     return { cls: "bg-red-500", title: "API key required" };
   const caps = provider.capabilities;
   if (caps)
@@ -43,6 +46,8 @@ export interface ModelSelectorPillProps {
   model: string;
   onModelChange: (model: string) => void;
   models: AssistantProviderModel[];
+  /** Fetch the live model list for the selected provider (populates the dropdown). */
+  onRefreshModels?: () => void | Promise<void>;
   presets: AssistantPromptPreset[];
   promptPresetId: AssistantPromptPresetId;
   onPresetChange: (id: AssistantPromptPresetId) => void;
@@ -63,6 +68,7 @@ export function ModelSelectorPill({
   model,
   onModelChange,
   models,
+  onRefreshModels,
   presets,
   promptPresetId,
   onPresetChange,
@@ -71,8 +77,15 @@ export function ModelSelectorPill({
   onOpenSettings,
 }: ModelSelectorPillProps): ReactElement {
   const [open, setOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   const dot = dotColor(selectedProvider);
+
+  const refreshModels = () => {
+    if (!onRefreshModels || refreshing) return;
+    setRefreshing(true);
+    void Promise.resolve(onRefreshModels()).finally(() => setRefreshing(false));
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -82,6 +95,15 @@ export function ModelSelectorPill({
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  // When the popover opens for an enabled provider whose model cache is empty,
+  // fetch the live list once so the user gets a dropdown instead of a text box.
+  useEffect(() => {
+    if (!open || models.length > 0 || !onRefreshModels) return;
+    if (!selectedProvider?.enabled) return;
+    refreshModels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   return (
@@ -129,9 +151,24 @@ export function ModelSelectorPill({
               ))}
           </select>
 
-          <label className="mt-2.5 block text-[10px] uppercase tracking-wide text-slate-500">
-            Model
-          </label>
+          <div className="mt-2.5 flex items-center justify-between">
+            <label className="block text-[10px] uppercase tracking-wide text-slate-500">
+              Model
+            </label>
+            {onRefreshModels ? (
+              <button
+                type="button"
+                onClick={refreshModels}
+                disabled={refreshing}
+                className="inline-flex items-center gap-1 text-[10px] text-accent-text hover:underline disabled:opacity-50"
+              >
+                <RefreshCw
+                  className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`}
+                />
+                {refreshing ? "Loading…" : "Refresh"}
+              </button>
+            ) : null}
+          </div>
           {models.length > 0 ? (
             <select
               value={

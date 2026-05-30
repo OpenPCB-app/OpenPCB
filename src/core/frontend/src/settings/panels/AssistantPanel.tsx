@@ -49,13 +49,15 @@ const emptyProvider: ProviderInput = {
 };
 
 const LOCAL_KINDS: AiProviderKind[] = ["lmstudio", "omlx"];
+// Cloud presets that require a pasted API key to activate.
+const CLOUD_KINDS: AiProviderKind[] = ["openai", "openrouter"];
 
 function isLocal(kind: AiProviderKind): boolean {
   return LOCAL_KINDS.includes(kind);
 }
 
 function needsKey(provider: AssistantProviderConfig): boolean {
-  return provider.kind === "openai" && !provider.hasApiKey;
+  return CLOUD_KINDS.includes(provider.kind) && !provider.hasApiKey;
 }
 
 function maskedKey(provider: AssistantProviderConfig): {
@@ -635,6 +637,7 @@ function ProviderForm({
             }
           >
             <option value="openai">OpenAI official</option>
+            <option value="openrouter">OpenRouter</option>
             <option value="openai-compatible">OpenAI-compatible</option>
             <option value="lmstudio">LM Studio (local)</option>
             <option value="omlx">oMLX (local, Apple Silicon)</option>

@@ -447,6 +447,32 @@ export function DesignerChatDock({
       .catch(() => setModels([]));
   }, [assistantBase, providerId]);
 
+  // Heal a chat pinned to a disabled/removed provider (mirrors Space.tsx): the
+  // picker only lists enabled providers, so a stale id would otherwise stick and
+  // every send would fail with "Provider disabled".
+  useEffect(() => {
+    if (providers.length === 0) return;
+    const current = providers.find((entry) => entry.id === providerId);
+    if (current?.enabled) return;
+    const fallback =
+      providers.find(
+        (entry) => entry.id === settings?.defaultProviderId && entry.enabled,
+      ) ?? providers.find((entry) => entry.enabled);
+    if (fallback && fallback.id !== providerId) {
+      setProviderId(fallback.id);
+      setModel(fallback.defaultModel);
+    }
+  }, [providers, providerId, settings?.defaultProviderId]);
+
+  const refreshChatModels = async (): Promise<void> => {
+    if (!assistantBase || !providerId) return;
+    const next = await api<AssistantProviderModel[]>(
+      `${assistantBase}/providers/${providerId}/models/refresh`,
+      { method: "POST", headers: headers() },
+    );
+    setModels(next);
+  };
+
   useEffect(() => {
     const root = scroll.scrollRef.current;
     const target = topSentinelRef.current;
@@ -716,6 +742,11 @@ export function DesignerChatDock({
             model={model}
             onModelChange={setModel}
             models={models}
+            onRefreshModels={() =>
+              void refreshChatModels().catch((err: unknown) =>
+                setError(err instanceof Error ? err.message : String(err)),
+              )
+            }
             presets={[]}
             promptPresetId={promptPresetId}
             onPresetChange={setPromptPresetId}
