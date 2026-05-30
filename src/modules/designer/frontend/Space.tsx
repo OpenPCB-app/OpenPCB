@@ -60,10 +60,13 @@ const MAX_CHAT = 560;
 const PCB_STATUS_GRID_MM = 1.27;
 const MIN_INSPECTOR = 260;
 const MAX_INSPECTOR = 440;
+const MIN_DRC = 280;
+const MAX_DRC = 560;
 const CHAT_OPEN_KEY = "openpcb:designer:chat-open";
 const CHAT_WIDTH_KEY = "openpcb:designer:chat-width";
 const INSPECTOR_OPEN_KEY = "openpcb:designer:inspector-open";
 const INSPECTOR_WIDTH_KEY = "openpcb:designer:inspector-width";
+const DRC_WIDTH_KEY = "openpcb:designer:drc-width";
 const DEFAULT_COMPONENT_LIMIT = 8;
 const RECENT_PLACEMENTS_KEY = "openpcb:designer:recents";
 const RECENT_PLACEMENTS_CAP = 20;
@@ -346,13 +349,22 @@ function DesignerSpaceInner({
       MAX_INSPECTOR,
     ),
   );
+  const [drcWidth, setDrcWidth] = useState(() =>
+    clamp(readPersistedNumber(DRC_WIDTH_KEY, 360), MIN_DRC, MAX_DRC),
+  );
   const [zoomPercent, setZoomPercent] = useState(20);
   const [gridVisible, setGridVisible] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [pcbDrcCount, setPcbDrcCount] = useState(0);
+  // Live in-progress-trace DRC conflict count while routing; `null` when idle so
+  // the PCB status-bar chip falls back to the full-board batch count.
+  const [pcbLiveDrc, setPcbLiveDrc] = useState<number | null>(null);
   const [pcbSelectionCount, setPcbSelectionCount] = useState(0);
-  // Batch-DRC summary (errors + warnings) for the DRC view's status bar.
+  // Batch-DRC summary (errors + warnings) for the status bars + dock chip.
   const drcSummary = useDrcStore((s) => s.report?.summary);
+  // DRC dock open-state lives in the shared store (toggled from the PCB toolbar
+  // inside PcbCanvas + the status-bar chip here). Session-only, default closed.
+  const drcPanelOpen = useDrcStore((s) => s.panelOpen);
+  const setDrcPanelOpen = useDrcStore((s) => s.setPanelOpen);
   const [schematicSelectionRequest, setSchematicSelectionRequest] = useState<{
     partIds?: string[];
     wireIds?: string[];
@@ -769,6 +781,10 @@ function DesignerSpaceInner({
   }, [inspectorWidth]);
 
   useEffect(() => {
+    window.localStorage.setItem(DRC_WIDTH_KEY, String(drcWidth));
+  }, [drcWidth]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isEditableShortcutTarget(event.target)) return;
       if (!(event.metaKey || event.ctrlKey)) return;
@@ -812,6 +828,24 @@ function DesignerSpaceInner({
       setInspectorWidth(
         clamp(startWidth + delta, MIN_INSPECTOR, MAX_INSPECTOR),
       );
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  };
+
+  const startDrcResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = drcWidth;
+    const onMove = (moveEvent: PointerEvent) => {
+      const delta = startX - moveEvent.clientX;
+      setDrcWidth(clamp(startWidth + delta, MIN_DRC, MAX_DRC));
     };
     const stop = () => {
       window.removeEventListener("pointermove", onMove);
@@ -1015,7 +1049,7 @@ function DesignerSpaceInner({
                   notifyExternalRevisionBump={
                     actions.notifyExternalRevisionBump
                   }
-                  onDrcCountChange={setPcbDrcCount}
+                  onDrcCountChange={setPcbLiveDrc}
                   onSelectionCountChange={setPcbSelectionCount}
                   boardPanelTarget={pcbBoardSlot}
                   layersPanelTarget={pcbLayersSlot}
@@ -1038,7 +1072,11 @@ function DesignerSpaceInner({
                     ? `${pcbSelectionCount} selected`
                     : "No selection"
                 }
-                drcCount={pcbDrcCount}
+                drcCount={
+                  pcbLiveDrc ??
+                  (drcSummary ? drcSummary.errors + drcSummary.warnings : 0)
+                }
+                onDrcClick={() => setDrcPanelOpen(true)}
               />
             </div>
           ) : state.activeView === "3d" ? (
@@ -1076,6 +1114,10 @@ function DesignerSpaceInner({
                 drcCount={
                   drcSummary ? drcSummary.errors + drcSummary.warnings : 0
                 }
+                onDrcClick={() => {
+                  actions.setActiveView("pcb");
+                  setDrcPanelOpen(true);
+                }}
               />
             </div>
           ) : (
@@ -1152,6 +1194,30 @@ function DesignerSpaceInner({
                   actions.setSelectedPinId(null);
                 }}
                 onOpenInLibrary={() => navigateToModule("library")}
+              />
+            </div>
+          </>
+        ) : null}
+
+        {!noTabsOpen && state.activeView === "pcb" && drcPanelOpen ? (
+          <>
+            <div
+              className="group relative w-1 shrink-0 cursor-col-resize bg-slate-200/70 hover:bg-violet-600/60 dark:bg-slate-800/20"
+              onPointerDown={startDrcResize}
+            >
+              <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
+              <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-slate-300 group-hover:bg-violet-400 dark:bg-slate-700" />
+            </div>
+            <div style={{ width: drcWidth }} className="min-h-0 shrink-0">
+              <DesignerDrcView
+                backendURL={backendURL}
+                moduleId={moduleId}
+                designId={state.selectedDesignId}
+                revision={state.projection?.revision ?? null}
+                onShowViolation={() => {
+                  /* already on PCB — centering flows through the DRC store */
+                }}
+                onClose={() => setDrcPanelOpen(false)}
               />
             </div>
           </>

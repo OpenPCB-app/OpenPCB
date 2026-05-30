@@ -362,6 +362,32 @@ export function hitAll(input: HitAllInput): PcbHitCandidate[] {
   return out;
 }
 
+/**
+ * Hit-test DRC violation markers. Markers render at a constant on-screen size,
+ * so the caller passes a `toleranceMm` derived from the live zoom
+ * (`(hitPx/2)/zoom`). Returns the closest marker within tolerance (circular,
+ * forgiving) or null. Generic over the marker shape so it works directly with
+ * the shared `DrcMarker` list (waived already excluded by the builder).
+ */
+export function hitDrcMarker<M extends { x: number; y: number }>(
+  markers: readonly M[],
+  cursorMm: PcbPointMm,
+  toleranceMm: number,
+): M | null {
+  let best: M | null = null;
+  let bestSq = toleranceMm * toleranceMm;
+  for (const m of markers) {
+    const dx = cursorMm.x - m.x;
+    const dy = cursorMm.y - m.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 <= bestSq) {
+      bestSq = d2;
+      best = m;
+    }
+  }
+  return best;
+}
+
 export function hitPlacement(
   placements: readonly PcbPlacedPart[],
   cursorMm: PcbPointMm,

@@ -25,6 +25,7 @@ import type {
 import { sceneMmToNm } from "../../../../shared/frontend/canvas/coords";
 import {
   hitAll,
+  hitDrcMarker,
   hitFreeHole,
   hitFreePad,
   hitOverlayText,
@@ -35,6 +36,9 @@ import {
   type PcbHitCandidate,
   type TraceHit,
 } from "./pcb-hit";
+
+/** Click/hover grab radius (px) for DRC markers; → mm via the live zoom. */
+const DRC_HIT_PX = 18;
 import {
   applyHandleDrag,
   countOutsideBoard,
@@ -99,6 +103,12 @@ import {
 import { findMeasureSnapTarget } from "./measure-snap";
 import { usePcbWorkspace } from "./usePcbWorkspace";
 import { useDrcStore } from "./drc/drc-store";
+import { DRC_SEVERITY } from "./drc/drc-colors";
+import {
+  buildDrcMarkers,
+  CODE_LABEL,
+  resolveAnchorLabel,
+} from "./drc/drc-labels";
 import { usePcbViewStore } from "./pcb-view-store";
 import {
   DEFAULT_PCB_ZOOM,
@@ -209,7 +219,11 @@ interface PcbCanvasProps {
     command: DesignerCommand,
   ) => Promise<DesignerDispatchResult>;
   notifyExternalRevisionBump?: (revision: number) => void;
-  onDrcCountChange?: (count: number) => void;
+  /**
+   * Live in-progress-trace DRC conflict count while a route session is active;
+   * `null` when idle (so the status bar can fall back to the batch count).
+   */
+  onDrcCountChange?: (count: number | null) => void;
   /** Reports the number of selected primitives (for the status bar). */
   onSelectionCountChange?: (count: number) => void;
   boardPanelTarget?: HTMLElement | null;
@@ -311,6 +325,16 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   // gestures without prop drilling through the workspace hook.
   const layerOpacity = usePcbViewStore((s) => s.viewState.perLayerOpacity);
   const soloLayer = usePcbViewStore((s) => s.soloLayer);
+  // DRC dock open-state + toolbar badge source (shared store, so the toolbar
+  // here and the dock/status-bar in Space stay in sync without prop-drilling).
+  const drcPanelOpen = useDrcStore((s) => s.panelOpen);
+  const toggleDrcPanel = useDrcStore((s) => s.togglePanel);
+  const drcErrorCount = useDrcStore((s) => s.report?.summary.errors ?? 0);
+  // Full report + hover id drive the canvas marker hit-test + hover tooltip.
+  const drcReport = useDrcStore((s) => s.report);
+  const drcHoveredId = useDrcStore((s) => s.hoveredId);
+  const drcMarkersVisible = useDrcStore((s) => s.markersVisible);
+  const toggleDrcMarkers = useDrcStore((s) => s.toggleMarkersVisible);
   // Center the camera when the DRC tab requests it (cross-tab via the store).
   // The board mirror group flips X on bottom view, so flip the target too.
   const drcCenterRequest = useDrcStore((s) => s.centerRequest);
@@ -482,6 +506,30 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   freePadsRef.current = workspace.projection?.freePads ?? [];
   const overlayTextsRef = useRef(workspace.projection?.overlayTexts ?? []);
   overlayTextsRef.current = workspace.projection?.overlayTexts ?? [];
+  // DRC markers for hover/click hit-testing — positions only (selected/hovered
+  // flags irrelevant here), waived excluded by the shared builder. A ref keeps
+  // the pointer handlers' closure current without re-creating the handler memo.
+  const drcWaivedIds = usePcbViewStore(
+    (s) => s.viewState.drcWaivedViolationIds,
+  );
+  const drcHitMarkers = useMemo(
+    () =>
+      drcMarkersVisible
+        ? buildDrcMarkers(drcReport, null, null, drcWaivedIds)
+        : [],
+    [drcMarkersVisible, drcReport, drcWaivedIds],
+  );
+  const drcMarkersRef = useRef(drcHitMarkers);
+  drcMarkersRef.current = drcHitMarkers;
+  const drcHoverRef = useRef<string | null>(null);
+  const drcZoomRef = useRef(props.initialViewport?.zoom ?? 50);
+  // Drop a lingering hover (tooltip + trace highlight) when markers are hidden.
+  useEffect(() => {
+    if (!drcMarkersVisible && drcHoverRef.current !== null) {
+      drcHoverRef.current = null;
+      useDrcStore.getState().setHovered(null);
+    }
+  }, [drcMarkersVisible]);
 
   const visibleLayers = useMemo(
     () => visibleLayerSet(workspace.projection?.board.visibleLayers ?? []),
@@ -1183,6 +1231,18 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           }
         }
 
+        // DRC violation markers take click priority over the copper beneath:
+        // clicking one selects that violation (syncing the DRC dock/list) and
+        // leaves the existing part/trace selection untouched.
+        {
+          const tolMm = DRC_HIT_PX / 2 / drcZoomRef.current;
+          const drcHit = hitDrcMarker(drcMarkersRef.current, cursor, tolMm);
+          if (drcHit) {
+            useDrcStore.getState().select(drcHit.id);
+            return;
+          }
+        }
+
         // Select mode: click trace/via/freeHole/freePad/overlayText first, then placement.
         const shift = event.modifiers.shift;
         const current = selectionRef.current;
@@ -1439,6 +1499,18 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             ? (padToNet.get(`${pad.placementId}|${pad.padNumber}`) ?? null)
             : null;
           workspace.hoverNet(netId);
+
+          // DRC marker hover → marker emphasis + offending-trace highlight +
+          // tooltip. Guarded by drcHoverRef so the store is written only when
+          // the hovered violation changes (no churn on every pointer move; the
+          // tooltip follows the cursor via cursorClientPx, set above).
+          const tolMm = DRC_HIT_PX / 2 / drcZoomRef.current;
+          const drcHit = hitDrcMarker(drcMarkersRef.current, cursor, tolMm);
+          const drcId = drcHit?.id ?? null;
+          if (drcId !== drcHoverRef.current) {
+            drcHoverRef.current = drcId;
+            useDrcStore.getState().setHovered(drcId);
+          }
         }
         setFreePrimitiveDragSession((prev) => {
           if (!prev) return prev;
@@ -1544,6 +1616,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         setDragSession(null);
       },
       onPointerLeave() {
+        // Drop any DRC marker hover when the cursor leaves the canvas.
+        if (drcHoverRef.current !== null) {
+          drcHoverRef.current = null;
+          useDrcStore.getState().setHovered(null);
+        }
         // Keep the last board cursor during active routing so toolbar/context
         // layer switches can still drop a smart via at the last route point.
         if (toolMode === "measure") {
@@ -2348,10 +2425,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     });
   }, [padToNet, routePreview, routeState, workspace.projection]);
 
+  // Emit the live in-progress-trace conflict count only while routing; `null`
+  // when idle so the status bar falls back to the full-board batch count.
   const onDrcCountChange = props.onDrcCountChange;
+  const routing = routeState.kind === "routing";
   useEffect(() => {
-    onDrcCountChange?.(drcViolations.length);
-  }, [drcViolations.length, onDrcCountChange]);
+    onDrcCountChange?.(routing ? drcViolations.length : null);
+  }, [routing, drcViolations.length, onDrcCountChange]);
 
   const onSelectionCountChange = props.onSelectionCountChange;
   const selectionCount = pcbSelectionCount(selection);
@@ -2520,7 +2600,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             measurement={sceneMeasurement}
             snapTarget={snapTarget}
             initialViewport={props.initialViewport}
-            onViewportChange={props.onViewportChange}
+            onViewportChange={(zoom, posX, posY) => {
+              // Capture live zoom for DOM-side DRC marker hit-test tolerance.
+              drcZoomRef.current = zoom;
+              props.onViewportChange?.(zoom, posX, posY);
+            }}
             onCameraReady={handleCameraReady}
           />
         </EdaCanvas>
@@ -2627,6 +2711,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               }}
               ratsnestVisible={workspace.ratsnestVisible}
               onToggleRatsnest={workspace.toggleRatsnestVisible}
+              drcPanelOpen={drcPanelOpen}
+              onToggleDrcPanel={toggleDrcPanel}
+              drcErrorCount={drcErrorCount}
+              drcMarkersVisible={drcMarkersVisible}
+              onToggleDrcMarkers={toggleDrcMarkers}
               canUndo={workspace.canUndo}
               canRedo={workspace.canRedo}
               onUndo={() => void workspace.undo()}
@@ -2754,7 +2843,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             onClick={() => setExportDialogOpen(true)}
             title="Export manufacturing files (Gerber + Drill + BOM + PnP)"
             data-testid="pcb-export-button"
-            className="absolute right-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white/95 px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm backdrop-blur hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="absolute bottom-3 right-3 z-20 inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white/95 px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm backdrop-blur hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             Export…
           </button>
@@ -2822,6 +2911,51 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                 : "Bottom"}
         </div>
       ) : null}
+
+      {drcHoveredId && cursorClientPx
+        ? (() => {
+            const v = drcReport?.violations.find((x) => x.id === drcHoveredId);
+            if (!v) return null;
+            const sev = DRC_SEVERITY[v.severity];
+            return (
+              <div
+                className="pointer-events-none fixed z-40 max-w-[280px] rounded-md border border-slate-700 bg-slate-950/95 px-2.5 py-1.5 text-[11px] text-slate-100 shadow-lg backdrop-blur"
+                style={{
+                  left: cursorClientPx.x + 14,
+                  top: cursorClientPx.y + 14,
+                }}
+              >
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <span
+                    aria-hidden
+                    className="inline-block h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: sev.core }}
+                  />
+                  {CODE_LABEL[v.code] ?? v.code}
+                </div>
+                <div className="mt-0.5 text-slate-300">
+                  {v.anchors
+                    .map((a) =>
+                      resolveAnchorLabel(a, workspace.projection ?? null),
+                    )
+                    .join(" ↔ ")}
+                </div>
+                {v.layer ||
+                (v.measuredMm !== undefined && v.requiredMm !== undefined) ? (
+                  <div className="mt-0.5 text-[10px] text-slate-400">
+                    {v.layer ? <span className="mr-2">{v.layer}</span> : null}
+                    {v.measuredMm !== undefined && v.requiredMm !== undefined
+                      ? `${v.measuredMm.toFixed(3)} / ${v.requiredMm.toFixed(3)} mm`
+                      : null}
+                  </div>
+                ) : null}
+                <div className="mt-1 text-[10px] leading-snug text-slate-400">
+                  {v.message}
+                </div>
+              </div>
+            );
+          })()
+        : null}
 
       {toolMode === "route" ? (
         <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">

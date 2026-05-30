@@ -1,9 +1,8 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { type ReactElement, useEffect, useMemo, useState } from "react";
 import type {
   DesignerCommandEnvelope,
   DesignerPcbProjection,
-  DrcAnchor,
   DrcRuleCode,
   DrcSeverity,
   PcbDesignRules,
@@ -11,6 +10,7 @@ import type {
 } from "../../../../sdks";
 import { createDesignerApi } from "../api";
 import { useDrcStore } from "../pcb/drc/drc-store";
+import { CODE_LABEL, resolveAnchorLabel } from "../pcb/drc/drc-labels";
 import { usePcbViewStore } from "../pcb/pcb-view-store";
 import { PcbDesignRulesDialog } from "./PcbDesignRulesDialog";
 
@@ -24,36 +24,12 @@ interface DesignerDrcViewProps {
   revision: number | null;
   /** Jump to the PCB view centered on a violation location (mm). */
   onShowViolation: (locationMm: { x: number; y: number }) => void;
+  /**
+   * When provided, the header shows a close (×) button. Used by the in-PCB-tab
+   * dock; omitted by the standalone full-screen DRC tab.
+   */
+  onClose?: () => void;
 }
-
-const CODE_LABEL: Record<DrcRuleCode, string> = {
-  TRACE_WIDTH_MIN: "Trace width below minimum",
-  VIA_DIAMETER_MIN: "Via diameter below minimum",
-  VIA_DRILL_MIN: "Via drill below minimum",
-  DRILL_SIZE_MIN: "Drill size below minimum",
-  ANNULAR_RING_MIN: "Annular ring below minimum",
-  TRACE_TO_TRACE_CLEARANCE: "Trace-to-trace clearance",
-  TRACE_TO_PAD_CLEARANCE: "Trace-to-pad clearance",
-  TRACE_TO_VIA_CLEARANCE: "Trace-to-via clearance",
-  UNCONNECTED_NET: "Unconnected net",
-  NET_SHORT_CIRCUIT: "Short circuit",
-  TRACE_LAYER_MISMATCH: "Trace on invalid layer",
-  PLACED_PART_MISSING_FOOTPRINT: "Missing footprint",
-  FAB_TRACE_WIDTH: "Trace below fab minimum",
-  FAB_CLEARANCE: "Clearance below fab minimum",
-  FAB_ANNULAR_RING: "Annular below fab minimum",
-  FAB_DRILL: "Drill below fab minimum",
-  FAB_PAD: "Via pad below fab minimum",
-  VIA_TO_VIA_CLEARANCE: "Via-to-via clearance",
-  PAD_TO_PAD_CLEARANCE: "Pad-to-pad clearance",
-  PAD_TO_VIA_CLEARANCE: "Pad-to-via clearance",
-  COPPER_TO_BOARD_EDGE: "Copper too close to board edge",
-  HOLE_TO_HOLE: "Hole-to-hole spacing",
-  VIA_LAYER_SPAN: "Invalid via layer span",
-  VIA_ASPECT_RATIO: "Via aspect ratio too high",
-  BOARD_OUTLINE_INVALID: "Invalid board outline",
-  COPPER_OFF_BOARD: "Copper outside board",
-};
 
 const SEVERITY_DOT: Record<DrcSeverity, string> = {
   error: "bg-red-500",
@@ -66,47 +42,13 @@ const SEVERITY_RANK: Record<DrcSeverity, number> = {
   info: 2,
 };
 
-function resolveAnchorLabel(
-  anchor: DrcAnchor,
-  projection: DesignerPcbProjection | null,
-): string {
-  switch (anchor.kind) {
-    case "trace":
-      return `trace ${anchor.traceId.slice(0, 6)}`;
-    case "segment":
-      return `trace ${anchor.traceId.slice(0, 6)}·${anchor.index}`;
-    case "via":
-      return `via ${anchor.viaId.slice(0, 6)}`;
-    case "pad": {
-      const ref = projection?.placements.find(
-        (p) => p.id === anchor.placementId,
-      )?.reference;
-      return `${ref ?? "?"}.${anchor.padNumber}`;
-    }
-    case "freePad":
-      return `pad ${anchor.freePadId.slice(0, 6)}`;
-    case "freeHole":
-      return `hole ${anchor.freeHoleId.slice(0, 6)}`;
-    case "placement":
-      return (
-        projection?.placements.find((p) => p.id === anchor.placementId)
-          ?.reference ?? "part"
-      );
-    case "net":
-      return (
-        projection?.netNames[anchor.netId] ?? `net ${anchor.netId.slice(0, 6)}`
-      );
-    case "boardEdge":
-      return "board edge";
-  }
-}
-
 export function DesignerDrcView({
   backendURL,
   moduleId,
   designId,
   revision,
   onShowViolation,
+  onClose,
 }: DesignerDrcViewProps): ReactElement {
   const api = useMemo(
     () => createDesignerApi({ backendURL, moduleId }),
@@ -287,15 +229,30 @@ export function DesignerDrcView({
             Run DRC to validate the board.
           </span>
         )}
-        {report && [...waivedSet].length > 0 ? (
-          <label className="ml-auto flex cursor-pointer items-center gap-1 text-xs text-slate-500">
-            <input
-              type="checkbox"
-              checked={showWaived}
-              onChange={(e) => setShowWaived(e.target.checked)}
-            />
-            Show waived
-          </label>
+        {onClose || (report && [...waivedSet].length > 0) ? (
+          <div className="ml-auto flex items-center gap-3">
+            {report && [...waivedSet].length > 0 ? (
+              <label className="flex cursor-pointer items-center gap-1 text-xs text-slate-500">
+                <input
+                  type="checkbox"
+                  checked={showWaived}
+                  onChange={(e) => setShowWaived(e.target.checked)}
+                />
+                Show waived
+              </label>
+            ) : null}
+            {onClose ? (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close DRC panel"
+                title="Close DRC panel"
+                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
 

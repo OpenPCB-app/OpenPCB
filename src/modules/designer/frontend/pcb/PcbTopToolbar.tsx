@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type ReactElement } from "react";
 import {
   Cable,
   CircleDot,
+  Eye,
+  EyeOff,
   FlipHorizontal2,
   Minus,
   Network,
@@ -9,6 +11,7 @@ import {
   Redo2,
   Ruler,
   ScanSearch,
+  ShieldAlert,
   Square,
   Type,
   Undo2,
@@ -22,6 +25,14 @@ interface PcbTopToolbarProps {
   onFlipSelection: () => void;
   ratsnestVisible: boolean;
   onToggleRatsnest: () => void;
+  /** Whether the in-PCB-tab DRC results dock is open. */
+  drcPanelOpen: boolean;
+  onToggleDrcPanel: () => void;
+  /** Active batch-DRC error count; drives the red alarm dot on the button. */
+  drcErrorCount?: number;
+  /** Whether DRC violation markers are drawn on the canvas. */
+  drcMarkersVisible: boolean;
+  onToggleDrcMarkers: () => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -351,11 +362,139 @@ function ViaPresetDropdown({
   );
 }
 
+function AddDropdown({
+  holeMode,
+  onToggleHoleMode,
+  padMode,
+  onTogglePadMode,
+  textMode,
+  onToggleTextMode,
+}: {
+  holeMode: boolean;
+  onToggleHoleMode: () => void;
+  padMode: boolean;
+  onTogglePadMode: () => void;
+  textMode: boolean;
+  onToggleTextMode: () => void;
+}): ReactElement {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const items = [
+    {
+      key: "hole",
+      label: "Hole",
+      hotkey: "H",
+      title:
+        "Drop mounting hole (H) — click on the board to place a 3.2 mm hole",
+      Icon: CircleDot,
+      active: holeMode,
+      onToggle: onToggleHoleMode,
+      activeClass:
+        "border-lime-500 bg-lime-100 text-lime-700 dark:bg-lime-900/40 dark:text-lime-300",
+    },
+    {
+      key: "pad",
+      label: "Pad",
+      hotkey: "P",
+      title:
+        "Drop free pad (P) — click on the board to place a free SMD pad on the active copper layer",
+      Icon: Square,
+      active: padMode,
+      onToggle: onTogglePadMode,
+      activeClass:
+        "border-amber-500 bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+    },
+    {
+      key: "text",
+      label: "Text",
+      hotkey: "T",
+      title:
+        "Add silkscreen text (T) — click on the board, then type the label",
+      Icon: Type,
+      active: textMode,
+      onToggle: onToggleTextMode,
+      activeClass:
+        "border-cyan-500 bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300",
+    },
+  ] as const;
+
+  const activeItem = items.find((it) => it.active);
+  const ButtonIcon = activeItem ? activeItem.Icon : Plus;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        title={
+          activeItem ? activeItem.title : "Add hole, pad, or silkscreen text"
+        }
+        aria-pressed={Boolean(activeItem)}
+        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+          activeItem
+            ? activeItem.activeClass
+            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        }`}
+      >
+        <ButtonIcon className="h-3.5 w-3.5" />
+        {activeItem ? activeItem.label : "Add"}
+        <span aria-hidden className="text-slate-400">
+          ▾
+        </span>
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-full z-30 mt-1 min-w-[160px] overflow-hidden rounded-md border border-slate-200 bg-white text-xs shadow-xl dark:border-slate-700 dark:bg-slate-950">
+          {items.map((it) => (
+            <button
+              key={it.key}
+              type="button"
+              title={it.title}
+              onClick={() => {
+                it.onToggle();
+                setOpen(false);
+              }}
+              className={`flex w-full items-center gap-2 px-3 py-1.5 text-left ${
+                it.active
+                  ? "bg-violet-600 text-white"
+                  : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+              }`}
+            >
+              <it.Icon className="h-3.5 w-3.5" />
+              <span className="flex-1">{it.label}</span>
+              <span
+                className={`font-mono ${it.active ? "text-violet-100" : "text-slate-400"}`}
+              >
+                {it.hotkey}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function PcbTopToolbar({
   selectedPlacementCount,
   onFlipSelection,
   ratsnestVisible,
   onToggleRatsnest,
+  drcPanelOpen,
+  onToggleDrcPanel,
+  drcErrorCount,
+  drcMarkersVisible,
+  onToggleDrcMarkers,
   canUndo,
   canRedo,
   onUndo,
@@ -546,50 +685,14 @@ export function PcbTopToolbar({
 
       <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
 
-      <button
-        type="button"
-        onClick={onToggleHoleMode}
-        title="Drop mounting hole (H) — click on the board to place a 3.2 mm hole"
-        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
-          holeMode
-            ? "border-lime-500 bg-lime-100 text-lime-700 dark:bg-lime-900/40 dark:text-lime-300"
-            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-        }`}
-        aria-pressed={holeMode}
-      >
-        <CircleDot className="h-3.5 w-3.5" />
-        Hole (H)
-      </button>
-
-      <button
-        type="button"
-        onClick={onTogglePadMode}
-        title="Drop free pad (P) — click on the board to place a free SMD pad on the active copper layer"
-        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
-          padMode
-            ? "border-amber-500 bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-        }`}
-        aria-pressed={padMode}
-      >
-        <Square className="h-3.5 w-3.5" />
-        Pad (P)
-      </button>
-
-      <button
-        type="button"
-        onClick={onToggleTextMode}
-        title="Add silkscreen text (T) — click on the board, then type the label"
-        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
-          textMode
-            ? "border-cyan-500 bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300"
-            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-        }`}
-        aria-pressed={textMode}
-      >
-        <Type className="h-3.5 w-3.5" />
-        Text (T)
-      </button>
+      <AddDropdown
+        holeMode={holeMode}
+        onToggleHoleMode={onToggleHoleMode}
+        padMode={padMode}
+        onTogglePadMode={onTogglePadMode}
+        textMode={textMode}
+        onToggleTextMode={onToggleTextMode}
+      />
 
       <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
 
@@ -606,6 +709,50 @@ export function PcbTopToolbar({
       >
         <Network className="h-3.5 w-3.5" />
         Ratsnest
+      </button>
+
+      <button
+        type="button"
+        onClick={onToggleDrcPanel}
+        title="Toggle DRC panel"
+        className={`relative inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+          drcPanelOpen
+            ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        }`}
+        aria-pressed={drcPanelOpen}
+      >
+        <ShieldAlert className="h-3.5 w-3.5" />
+        DRC
+        {drcErrorCount !== undefined && drcErrorCount > 0 ? (
+          <span
+            aria-hidden
+            className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900"
+          />
+        ) : null}
+      </button>
+
+      <button
+        type="button"
+        onClick={onToggleDrcMarkers}
+        title={
+          drcMarkersVisible
+            ? "Hide DRC markers on the board"
+            : "Show DRC markers on the board"
+        }
+        aria-label={drcMarkersVisible ? "Hide DRC markers" : "Show DRC markers"}
+        aria-pressed={!drcMarkersVisible}
+        className={`inline-flex h-7 w-7 items-center justify-center rounded-md border text-xs transition-colors ${
+          drcMarkersVisible
+            ? "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            : "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+        }`}
+      >
+        {drcMarkersVisible ? (
+          <Eye className="h-3.5 w-3.5" />
+        ) : (
+          <EyeOff className="h-3.5 w-3.5" />
+        )}
       </button>
 
       <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
