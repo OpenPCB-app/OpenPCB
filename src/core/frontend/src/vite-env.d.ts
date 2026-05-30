@@ -53,6 +53,12 @@ declare global {
     openUserDataFolder?: () => Promise<FolderOpenResult>;
     secureStorage?: ElectronSecureStorage;
     preferences?: ElectronPreferences;
+    window?: {
+      setOverlayTheme: (theme: {
+        color: string;
+        symbolColor: string;
+      }) => Promise<void>;
+    };
   }
 
   // Mirrors UpdaterState in electron/src/main/updater.ts.

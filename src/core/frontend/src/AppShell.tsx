@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useBootstrap } from "./providers/BootstrapProvider";
 import { LeftSidebar } from "./components/LeftSidebar";
+import { TitleBar } from "./components/TitleBar";
 import { AppRouter } from "./AppRouter";
 import { AppContextMenu } from "./components/AppContextMenu";
 import { useNavigationStore } from "./stores/navigation-store";
@@ -55,35 +56,38 @@ export function AppShell() {
 
   return (
     <>
-      <div
-        className="grid h-full w-full grid-cols-[80px_1fr]"
-        onContextMenu={(event) => {
-          event.preventDefault();
-          openContextMenu({
-            scope: "app",
-            position: { x: event.clientX, y: event.clientY },
-            title: "OpenPCB",
-            groups: [
-              {
-                id: "app",
-                items: [
-                  {
-                    kind: "action",
-                    id: "settings",
-                    label: "Settings",
-                    shortcut: "Ctrl+,",
-                    onSelect: () => openSettings(),
-                  },
-                ],
-              },
-            ],
-          });
-        }}
-      >
-        <LeftSidebar onSettingsClick={() => openSettings()} />
-        <main className="h-full min-h-0 min-w-0">
-          <AppRouter />
-        </main>
+      <div className="flex h-full w-full flex-col">
+        <TitleBar />
+        <div
+          className="grid min-h-0 flex-1 grid-cols-[80px_1fr]"
+          onContextMenu={(event) => {
+            event.preventDefault();
+            openContextMenu({
+              scope: "app",
+              position: { x: event.clientX, y: event.clientY },
+              title: "OpenPCB",
+              groups: [
+                {
+                  id: "app",
+                  items: [
+                    {
+                      kind: "action",
+                      id: "settings",
+                      label: "Settings",
+                      shortcut: "Ctrl+,",
+                      onSelect: () => openSettings(),
+                    },
+                  ],
+                },
+              ],
+            });
+          }}
+        >
+          <LeftSidebar onSettingsClick={() => openSettings()} />
+          <main className="h-full min-h-0 min-w-0">
+            <AppRouter />
+          </main>
+        </div>
       </div>
       <AppContextMenu />
     </>

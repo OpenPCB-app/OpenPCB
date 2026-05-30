@@ -74,6 +74,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     setTelemetryOptIn: (value: boolean): Promise<void> =>
       ipcRenderer.invoke("prefs:set-telemetry-opt-in", value),
   },
+  window: {
+    setOverlayTheme: (theme: {
+      color: string;
+      symbolColor: string;
+    }): Promise<void> => ipcRenderer.invoke("window:set-overlay-theme", theme),
+  },
 });
 
 contextBridge.exposeInMainWorld("updater", {

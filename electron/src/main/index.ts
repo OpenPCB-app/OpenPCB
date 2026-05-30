@@ -109,15 +109,35 @@ function isAllowedAppUrl(url: string): boolean {
   }
 }
 
+const TITLEBAR_HEIGHT = 36;
+
 function createWindow(): void {
+  const isMac = process.platform === "darwin";
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1100,
     minHeight: 720,
     title: "OpenPCB",
-    backgroundColor: "#f8fafc",
+    // Dark --surface-app: avoids a white flash before React paints (a brief
+    // dark frame is far less jarring than white on a dark-default app).
+    backgroundColor: "#0f1520",
     show: false,
+    // Themed custom title bar: hide the native strip. macOS keeps native
+    // traffic lights (positioned to center in the 36px strip); Windows/Linux
+    // get the Window Controls Overlay (native min/max/close drawn over the
+    // bar), re-themed at runtime via "window:set-overlay-theme".
+    titleBarStyle: "hidden",
+    ...(isMac
+      ? { trafficLightPosition: { x: 12, y: 11 } }
+      : {
+          titleBarOverlay: {
+            color: "#0b1018",
+            symbolColor: "#f3f4f6",
+            height: TITLEBAR_HEIGHT,
+          },
+        }),
     webPreferences: {
       preload: join(__dirname, "..", "preload", "index.js"),
       contextIsolation: true,
@@ -247,6 +267,25 @@ ipcMain.handle("secure-storage:remove", (_e, key: string) =>
 ipcMain.handle("prefs:get-telemetry-opt-in", () => getTelemetryOptIn());
 ipcMain.handle("prefs:set-telemetry-opt-in", (_e, value: boolean) =>
   setTelemetryOptIn(value),
+);
+
+// Re-theme the Window Controls Overlay (min/max/close) when the renderer
+// switches light/dark. No-op on macOS (native traffic lights aren't
+// recolorable this way); Windows/Linux only.
+ipcMain.handle(
+  "window:set-overlay-theme",
+  (_e, theme: { color: string; symbolColor: string }) => {
+    if (process.platform === "darwin" || !mainWindow) return;
+    try {
+      mainWindow.setTitleBarOverlay({
+        color: theme.color,
+        symbolColor: theme.symbolColor,
+        height: TITLEBAR_HEIGHT,
+      });
+    } catch {
+      // setTitleBarOverlay throws if titleBarOverlay wasn't enabled; ignore.
+    }
+  },
 );
 
 app.whenReady().then(async () => {
