@@ -52,6 +52,7 @@ src/core/backend/dev-data/
 # Claude Code / agent scratch outside repo source
 .claude/plans/
 .claude/skills/
+.claude/scheduled_tasks.lock
 
 # Local Playwright artifacts
 .playwright-mcp/
