@@ -945,7 +945,182 @@ describe("designer commands hardening", () => {
     expect(movedWire?.pointsNm[0]?.y).toBe(movedSource?.worldPositionNm.y);
   });
 
-  test("rejects non-Manhattan wire paths", async () => {
+  test("auto_arrange_schematic groups connected parts, preserves connectivity, one undo step", async () => {
+    isolateTestDb("designer-auto-arrange");
+    const { moduleRuntime, server } = await createRuntimeAndServer();
+    const componentId = await importDrawnWireableComponent(server);
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const design = await designerSdk.createDesign({ name: "Arrange" });
+    await designerSdk.dispatchCommand(design.id, {
+      commandId: crypto.randomUUID(),
+      sessionId: "arrange",
+      aggregateId: design.id,
+      baseRevision: 0,
+      issuedAt: Date.now(),
+      command: { type: "place_part", componentId, positionNm: { x: 0, y: 0 } },
+    });
+    await designerSdk.dispatchCommand(design.id, {
+      commandId: crypto.randomUUID(),
+      sessionId: "arrange",
+      aggregateId: design.id,
+      baseRevision: 1,
+      issuedAt: Date.now(),
+      command: {
+        type: "place_part",
+        componentId,
+        positionNm: { x: 100_000_000, y: 50_000_000 },
+      },
+    });
+    const placed = await designerSdk.getSchematicProjection(design.id);
+    const source = placed?.parts[0]?.pins[0];
+    const target = placed?.parts[1]?.pins[0];
+    if (!source || !target) throw new Error("Expected two placed parts");
+    await designerSdk.dispatchCommand(design.id, {
+      commandId: crypto.randomUUID(),
+      sessionId: "arrange",
+      aggregateId: design.id,
+      baseRevision: 2,
+      issuedAt: Date.now(),
+      command: {
+        type: "create_wire",
+        sourcePinId: source.id,
+        targetPinId: target.id,
+      },
+    });
+
+    const before = await designerSdk.getSchematicProjection(design.id);
+    const beforePos = new Map(
+      before!.parts.map((p) => [p.id, { ...p.positionNm }]),
+    );
+
+    const arrange = await designerSdk.dispatchCommand(design.id, {
+      commandId: crypto.randomUUID(),
+      sessionId: "arrange",
+      aggregateId: design.id,
+      baseRevision: 3,
+      issuedAt: Date.now(),
+      command: { type: "auto_arrange_schematic" },
+    });
+    expect(arrange.ok).toBe(true);
+    if (!arrange.ok) throw new Error("arrange failed");
+    expect(arrange.revision).toBe(4); // single revision bump
+
+    const after = await designerSdk.getSchematicProjection(design.id);
+    const a = after!.parts[0]!;
+    const b = after!.parts[1]!;
+    // Connected pair grouped within a couple of cells.
+    const groupDist =
+      Math.abs(a.positionNm.x - b.positionNm.x) +
+      Math.abs(a.positionNm.y - b.positionNm.y);
+    expect(groupDist).toBeLessThan(60_000_000);
+    // At least one part actually moved from its scattered start.
+    const moved = after!.parts.some((p) => {
+      const prev = beforePos.get(p.id)!;
+      return prev.x !== p.positionNm.x || prev.y !== p.positionNm.y;
+    });
+    expect(moved).toBe(true);
+    // Connectivity preserved: wire endpoints still sit on the pins.
+    const wire = after!.wires[0]!;
+    const srcPin = after!.parts
+      .flatMap((p) => p.pins)
+      .find((pin) => pin.id === wire.sourcePinId)!;
+    expect(wire.pointsNm[0]!.x).toBe(srcPin.worldPositionNm.x);
+    expect(wire.pointsNm[0]!.y).toBe(srcPin.worldPositionNm.y);
+
+    // One undo restores the pre-arrange positions.
+    const undo = await designerSdk.undo(design.id, "arrange");
+    expect(undo.ok).toBe(true);
+    const restored = await designerSdk.getSchematicProjection(design.id);
+    for (const p of restored!.parts) {
+      expect(p.positionNm).toEqual(beforePos.get(p.id)!);
+    }
+  });
+
+  test("auto_arrange_schematic slides a connected GND flag with its pin", async () => {
+    isolateTestDb("designer-arrange-flag-follow");
+    const { moduleRuntime, server } = await createRuntimeAndServer();
+    const componentId = await importDrawnWireableComponent(server);
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const design = await designerSdk.createDesign({ name: "Flag follow" });
+    let rev = 0;
+    const dispatch = async (command: DesignerCommandEnvelope["command"]) => {
+      const res = await designerSdk.dispatchCommand(design.id, {
+        commandId: crypto.randomUUID(),
+        sessionId: "flag",
+        aggregateId: design.id,
+        baseRevision: rev,
+        issuedAt: Date.now(),
+        command,
+      });
+      if (!res.ok) throw new Error(`dispatch failed: ${res.code}`);
+      rev = res.revision;
+      return res;
+    };
+
+    await dispatch({
+      type: "place_part",
+      componentId,
+      positionNm: { x: 0, y: 0 },
+    });
+    await dispatch({
+      type: "place_part",
+      componentId,
+      positionNm: { x: 120_000_000, y: 60_000_000 },
+    });
+    const placed = await designerSdk.getSchematicProjection(design.id);
+    const a = placed!.parts[0]!;
+    const b = placed!.parts[1]!;
+    // Signal wire so A + B cluster and arrange actually moves A.
+    await dispatch({
+      type: "create_wire",
+      sourcePinId: a.pins[1]!.id,
+      targetPinId: b.pins[0]!.id,
+    });
+    // GND flag on A.pin0, offset 8mm below, then wire pin → flag.
+    const pin0 = a.pins[0]!;
+    const gnd = await dispatch({
+      type: "place_gnd_port",
+      positionNm: {
+        x: pin0.worldPositionNm.x,
+        y: pin0.worldPositionNm.y + 8_000_000,
+      },
+    });
+    const gndId = gnd.createdEntityId!;
+    await dispatch({
+      type: "create_wire",
+      sourcePinId: pin0.id,
+      targetPinId: `primitive:${gndId}`,
+    });
+
+    const before = await designerSdk.getSchematicProjection(design.id);
+    const pinBefore = before!.parts
+      .flatMap((p) => p.pins)
+      .find((p) => p.id === pin0.id)!.worldPositionNm;
+    const gndBefore = before!.primitives.find(
+      (p) => p.id === gndId,
+    )!.positionNm;
+
+    await dispatch({ type: "auto_arrange_schematic" });
+
+    const after = await designerSdk.getSchematicProjection(design.id);
+    const pinAfter = after!.parts
+      .flatMap((p) => p.pins)
+      .find((p) => p.id === pin0.id)!.worldPositionNm;
+    const gndAfter = after!.primitives.find((p) => p.id === gndId)!.positionNm;
+
+    // The pin moved, and the flag moved by the SAME delta (stayed glued to it).
+    expect(pinAfter.x !== pinBefore.x || pinAfter.y !== pinBefore.y).toBe(true);
+    expect(gndAfter.x - gndBefore.x).toBe(pinAfter.x - pinBefore.x);
+    expect(gndAfter.y - gndBefore.y).toBe(pinAfter.y - pinBefore.y);
+  });
+
+  test("repairs non-Manhattan wire paths into orthogonal geometry", async () => {
     isolateTestDb("designer-hardening-invalid-wire-path");
     const { moduleRuntime, server } = await createRuntimeAndServer();
     const componentId = await importDrawnWireableComponent(server);
@@ -990,7 +1165,7 @@ describe("designer commands hardening", () => {
       throw new Error("Expected pin data for invalid path test");
     }
 
-    const invalid = await designerSdk.dispatchCommand(design.id, {
+    const repaired = await designerSdk.dispatchCommand(design.id, {
       commandId: crypto.randomUUID(),
       sessionId: "invalid-wire",
       aggregateId: design.id,
@@ -1011,9 +1186,20 @@ describe("designer commands hardening", () => {
       },
     });
 
-    expect(invalid.ok).toBe(false);
-    if (!invalid.ok) {
-      expect(invalid.code).toBe("INVALID_WIRE_PATH");
+    // Non-orthogonal caller paths are now repaired (not rejected).
+    expect(repaired.ok).toBe(true);
+    if (repaired.ok && repaired.createdEntityId) {
+      const proj = await designerSdk.getSchematicProjection(design.id);
+      const wire = proj?.wires.find((w) => w.id === repaired.createdEntityId);
+      const pts = wire?.pointsNm ?? [];
+      expect(pts.length).toBeGreaterThanOrEqual(2);
+      for (let i = 1; i < pts.length; i += 1) {
+        const a = pts[i - 1]!;
+        const b = pts[i]!;
+        expect(a.x === b.x || a.y === b.y).toBe(true);
+      }
+      expect(pts[0]).toEqual(pinA.worldPositionNm);
+      expect(pts[pts.length - 1]).toEqual(pinB.worldPositionNm);
     }
   });
 });

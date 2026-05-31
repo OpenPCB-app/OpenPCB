@@ -22,7 +22,9 @@ import { applyAssistantWriteProposal } from "../../../modules/assistant/backend/
 import type { ConversationStore } from "../../../modules/assistant/backend/conversation-store";
 import { AssistantWriteSessionPolicy } from "../../../modules/assistant/backend/write-session-policy";
 
-function proposal(overrides: Partial<AssistantPlacementProposal> = {}): AssistantPlacementProposal {
+function proposal(
+  overrides: Partial<AssistantPlacementProposal> = {},
+): AssistantPlacementProposal {
   return {
     proposalId: "proposal-1",
     status: "pending_approval",
@@ -67,9 +69,13 @@ function mockDesigner(currentRevision = 7): DesignerSDK {
         pcb: null,
       };
     },
-    async dispatchCommand(_designId: string, envelope: DesignerCommandEnvelope) {
+    async dispatchCommand(
+      _designId: string,
+      envelope: DesignerCommandEnvelope,
+    ) {
       nextRevision += 1;
-      if (envelope.command.type !== "place_part") throw new Error("unexpected command");
+      if (envelope.command.type !== "place_part")
+        throw new Error("unexpected command");
       return {
         ok: true,
         revision: nextRevision,
@@ -196,7 +202,10 @@ describe("assistant placement proposal apply", () => {
           pcb: null,
         };
       },
-      async dispatchCommand(_designId: string, envelope: DesignerCommandEnvelope) {
+      async dispatchCommand(
+        _designId: string,
+        envelope: DesignerCommandEnvelope,
+      ) {
         commands.push(envelope.command);
         nextRevision += 1;
         return {
@@ -262,10 +271,17 @@ describe("assistant placement proposal apply", () => {
           pcb: null,
         };
       },
-      async dispatchCommand(_designId: string, envelope: DesignerCommandEnvelope) {
+      async dispatchCommand(
+        _designId: string,
+        envelope: DesignerCommandEnvelope,
+      ) {
         calls += 1;
         if (calls === 2) {
-          return { ok: false, code: "VALIDATION_FAILED", message: "bad placement" };
+          return {
+            ok: false,
+            code: "VALIDATION_FAILED",
+            message: "bad placement",
+          };
         }
         return {
           ok: true,
@@ -455,11 +471,15 @@ describe("assistant placement proposal tool", () => {
       (storedEnvelope as { operations?: Array<{ kind: string }> }).operations,
     ).toHaveLength(3);
     expect(
-      (storedEnvelope as { operations?: Array<{ kind: string }> }).operations?.[0]
-        ?.kind,
+      (storedEnvelope as { operations?: Array<{ kind: string }> })
+        .operations?.[0]?.kind,
     ).toBe("designer.place_part");
-    expect(result.sources.some((source) => source.kind === "design")).toBe(true);
-    expect(result.sources.filter((source) => source.kind === "library-component")).toHaveLength(3);
+    expect(result.sources.some((source) => source.kind === "design")).toBe(
+      true,
+    );
+    expect(
+      result.sources.filter((source) => source.kind === "library-component"),
+    ).toHaveLength(3);
   });
 
   test("auto-applies placement proposal when session policy allows it", async () => {
@@ -562,7 +582,9 @@ describe("assistant placement proposal tool", () => {
 
     expect(result.ok).toBe(true);
     expect(statuses[0]?.status).toBe("applied");
-    expect((statuses[0]?.applyResult as { applied?: unknown[] }).applied).toHaveLength(1);
+    expect(
+      (statuses[0]?.applyResult as { applied?: unknown[] }).applied,
+    ).toHaveLength(1);
   });
 
   test("does not create a pending proposal when every component is skipped", async () => {
@@ -706,17 +728,21 @@ describe("assistant schematic edit proposal tool", () => {
         summary: "Place an LED indicator with a VCC label.",
         parts: [{ componentId: "cmp-led", positionNm: { x: 1, y: 1 } }],
         labels: [{ text: "LED_IN", positionNm: { x: 2_000_001, y: 0 } }],
-        powerPorts: [{ kind: "pwr", text: "+5V", positionNm: { x: 0, y: -2_000_001 } }],
+        powerPorts: [
+          { kind: "pwr", text: "+5V", positionNm: { x: 0, y: -2_000_001 } },
+        ],
       },
     );
 
     expect(result.ok).toBe(true);
     expect(result.data?.kind).toBe("designer_schematic_edits");
-    expect(result.data?.operations).toHaveLength(3);
+    // Placing a part appends a trailing auto-arrange op (clean AI layout).
+    expect(result.data?.operations).toHaveLength(4);
     expect(result.data?.operations.map((operation) => operation.kind)).toEqual([
       "designer.place_part",
       "designer.upsert_label",
       "designer.place_pwr_port",
+      "designer.auto_arrange_schematic",
     ]);
     expect(storedEnvelope).toEqual(result.data);
   });
@@ -768,7 +794,9 @@ describe("assistant schematic edit proposal tool", () => {
         return null;
       },
     } as unknown as ContextResolver;
-    const conversation = { createWriteProposal() {} } as unknown as ConversationStore;
+    const conversation = {
+      createWriteProposal() {},
+    } as unknown as ConversationStore;
     const tool = makeDesignerProposeSchematicEditsTool(
       mockToolContext(designer),
       contextResolver,
@@ -785,12 +813,14 @@ describe("assistant schematic edit proposal tool", () => {
       {
         title: "Wire invalid pins",
         summary: "Should not create invalid wire commands.",
-        wires: [{ sourcePinId: "missing-a", targetPinId: "missing-b" }],
+        wires: [
+          { source: { pinId: "missing-a" }, target: { pinId: "missing-b" } },
+        ],
       },
     );
 
     expect(result.ok).toBe(false);
-    expect(result.warnings.join("\n")).toContain("pin IDs must already exist");
+    expect(result.warnings.join("\n")).toContain("Skipped wire");
   });
 
   test("auto-applies schematic proposal when session policy allows it", async () => {
@@ -822,7 +852,10 @@ describe("assistant schematic edit proposal tool", () => {
           footprint: { id: `${componentId}.fp`, name: "Footprint", data: {} },
         };
       },
-      async dispatchCommand(_designId: string, envelope: DesignerCommandEnvelope) {
+      async dispatchCommand(
+        _designId: string,
+        envelope: DesignerCommandEnvelope,
+      ) {
         return {
           ok: true,
           revision: envelope.command.type === "place_part" ? 6 : 7,
@@ -890,6 +923,8 @@ describe("assistant schematic edit proposal tool", () => {
 
     expect(result.ok).toBe(true);
     expect(statuses[0]?.status).toBe("applied");
+    // Placement-only (no wires/flags) does NOT append arrange — it would only
+    // scatter parts with no connectivity. So just place_part + upsert_label.
     expect(
       (statuses[0]?.applyResult as { appliedCount?: number }).appliedCount,
     ).toBe(2);
@@ -909,9 +944,16 @@ describe("assistant schematic edit proposal tool", () => {
           },
         };
       },
-      async dispatchCommand(_designId: string, envelope: DesignerCommandEnvelope) {
+      async dispatchCommand(
+        _designId: string,
+        envelope: DesignerCommandEnvelope,
+      ) {
         commands.push(envelope.command.type);
-        return { ok: true, revision: 5 + commands.length, createdEntityId: null };
+        return {
+          ok: true,
+          revision: 5 + commands.length,
+          createdEntityId: null,
+        };
       },
     } as unknown as DesignerSDK;
     const record = {
@@ -941,7 +983,10 @@ describe("assistant schematic edit proposal tool", () => {
             kind: "designer.place_gnd_port",
             title: "GND",
             summary: "GND",
-            payload: { type: "place_gnd_port", positionNm: { x: 0, y: 2_000_000 } },
+            payload: {
+              type: "place_gnd_port",
+              positionNm: { x: 0, y: 2_000_000 },
+            },
           },
         ],
       },
@@ -995,14 +1040,22 @@ describe("assistant schematic edit proposal tool", () => {
             kind: "designer.upsert_label",
             title: "Label",
             summary: "Label",
-            payload: { type: "upsert_label", text: "A", positionNm: { x: 0, y: 0 } },
+            payload: {
+              type: "upsert_label",
+              text: "A",
+              positionNm: { x: 0, y: 0 },
+            },
           },
           {
             id: "op-2",
             kind: "designer.upsert_label",
             title: "Label B",
             summary: "Label B",
-            payload: { type: "upsert_label", text: "B", positionNm: { x: 1, y: 0 } },
+            payload: {
+              type: "upsert_label",
+              text: "B",
+              positionNm: { x: 1, y: 0 },
+            },
           },
         ],
       },
@@ -1033,12 +1086,16 @@ describe("assistant schematic edit proposal tool", () => {
           },
         };
       },
-      async dispatchCommand(_designId: string, envelope: DesignerCommandEnvelope) {
+      async dispatchCommand(
+        _designId: string,
+        envelope: DesignerCommandEnvelope,
+      ) {
         commands.push(envelope.command);
         return {
           ok: true,
           revision: 5 + commands.length,
-          createdEntityId: envelope.command.type === "place_part" ? "created-part" : null,
+          createdEntityId:
+            envelope.command.type === "place_part" ? "created-part" : null,
         };
       },
     } as unknown as DesignerSDK;
@@ -1059,18 +1116,33 @@ describe("assistant schematic edit proposal tool", () => {
             kind: "designer.place_part",
             title: "Place LED",
             summary: "Place LED",
-            payload: { type: "place_part", componentId: "cmp-led", positionNm: { x: 0, y: 0 } },
-            updatePartAfterCreate: { value: "red", propertiesJson: { role: "indicator" } },
+            payload: {
+              type: "place_part",
+              componentId: "cmp-led",
+              positionNm: { x: 0, y: 0 },
+            },
+            updatePartAfterCreate: {
+              value: "red",
+              propertiesJson: { role: "indicator" },
+            },
           },
         ],
       },
     } as never;
 
-    const result = await applyAssistantWriteProposal({ designer, record, allowPartial: false });
+    const result = await applyAssistantWriteProposal({
+      designer,
+      record,
+      allowPartial: false,
+    });
 
     expect((result as { status: string }).status).toBe("applied");
     expect(commands).toEqual([
-      { type: "place_part", componentId: "cmp-led", positionNm: { x: 0, y: 0 } },
+      {
+        type: "place_part",
+        componentId: "cmp-led",
+        positionNm: { x: 0, y: 0 },
+      },
       {
         type: "update_part_properties",
         partId: "created-part",
@@ -1079,14 +1151,29 @@ describe("assistant schematic edit proposal tool", () => {
       },
     ]);
     expect(
-      (result as { operations: Array<{ createdEntityId?: string | null; revisionAfter?: number }> }).operations[0]?.createdEntityId,
+      (
+        result as {
+          operations: Array<{
+            createdEntityId?: string | null;
+            revisionAfter?: number;
+          }>;
+        }
+      ).operations[0]?.createdEntityId,
     ).toBe("created-part");
     expect(
-      (result as { operations: Array<{ createdEntityId?: string | null; revisionAfter?: number }> }).operations[0]?.revisionAfter,
+      (
+        result as {
+          operations: Array<{
+            createdEntityId?: string | null;
+            revisionAfter?: number;
+          }>;
+        }
+      ).operations[0]?.revisionAfter,
     ).toBe(7);
   });
 
-  test("schematic apply requires partial confirmation when proposal has warnings", async () => {
+  test("schematic apply: non-destructive warned proposal applies the valid ops (partial) without confirmation", async () => {
+    let dispatched = 0;
     const designer = {
       async getDesign() {
         return {
@@ -1099,6 +1186,10 @@ describe("assistant schematic edit proposal tool", () => {
           },
         };
       },
+      async dispatchCommand() {
+        dispatched += 1;
+        return { ok: true, revision: 6, createdEntityId: "label-1" };
+      },
     } as unknown as DesignerSDK;
     const record = {
       id: "proposal-1",
@@ -1108,16 +1199,136 @@ describe("assistant schematic edit proposal tool", () => {
       envelope: {
         id: "proposal-1",
         kind: "designer_schematic_edits",
+        toolName: "designer_propose_schematic_edits",
+        riskLevel: "high",
         designId: "design-1",
         baseRevision: 5,
-        warnings: ["Skipped invalid wire"],
+        warnings: ["Skipped wire: No pin RST on U1"],
         operations: [
           {
             id: "op-1",
             kind: "designer.upsert_label",
             title: "Label",
             summary: "Label",
-            payload: { type: "upsert_label", text: "A", positionNm: { x: 0, y: 0 } },
+            payload: {
+              type: "upsert_label",
+              text: "A",
+              positionNm: { x: 0, y: 0 },
+            },
+          },
+        ],
+      },
+    } as never;
+
+    const result = (await applyAssistantWriteProposal({
+      designer,
+      record,
+      allowPartial: false,
+    })) as { status: string; appliedCount: number; skippedCount: number };
+    expect(dispatched).toBe(1);
+    expect(result.appliedCount).toBe(1);
+    // One wire was dropped at build time → status is partial, not applied.
+    expect(result.status).toBe("partial");
+    expect(result.skippedCount).toBeGreaterThanOrEqual(1);
+  });
+
+  test("schematic apply: a truncated proposal applies its prefix as 'partial', never 'applied'", async () => {
+    const designer = {
+      async getDesign() {
+        return {
+          head: {
+            id: "design-1",
+            name: "Demo",
+            revision: 5,
+            createdAt: "created",
+            updatedAt: "updated",
+          },
+        };
+      },
+      async dispatchCommand() {
+        return { ok: true, revision: 6, createdEntityId: "label-1" };
+      },
+    } as unknown as DesignerSDK;
+    const record = {
+      id: "proposal-1",
+      kind: "designer_schematic_edits",
+      designId: "design-1",
+      baseRevision: 5,
+      envelope: {
+        id: "proposal-1",
+        kind: "designer_schematic_edits",
+        toolName: "designer_propose_schematic_edits",
+        riskLevel: "medium",
+        designId: "design-1",
+        baseRevision: 5,
+        // Truncation notice only — the dropped tail must keep status incomplete.
+        warnings: ["Only the first 40 wire operation(s) were included."],
+        operations: [
+          {
+            id: "op-1",
+            kind: "designer.upsert_label",
+            title: "Label",
+            summary: "Label",
+            payload: {
+              type: "upsert_label",
+              text: "A",
+              positionNm: { x: 0, y: 0 },
+            },
+          },
+        ],
+      },
+    } as never;
+
+    const result = (await applyAssistantWriteProposal({
+      designer,
+      record,
+      allowPartial: false,
+    })) as { status: string; appliedCount: number };
+    expect(result.appliedCount).toBe(1);
+    expect(result.status).toBe("partial");
+  });
+
+  test("schematic apply: destructive warned proposal still requires partial confirmation", async () => {
+    const designer = {
+      async getDesign() {
+        return {
+          head: {
+            id: "design-1",
+            name: "Demo",
+            revision: 5,
+            createdAt: "created",
+            updatedAt: "updated",
+          },
+        };
+      },
+      async dispatchCommand() {
+        return { ok: true, revision: 6 };
+      },
+    } as unknown as DesignerSDK;
+    const record = {
+      id: "proposal-1",
+      kind: "designer_schematic_deletions",
+      designId: "design-1",
+      baseRevision: 5,
+      envelope: {
+        id: "proposal-1",
+        kind: "designer_schematic_deletions",
+        toolName: "designer_propose_schematic_deletions",
+        riskLevel: "destructive",
+        designId: "design-1",
+        baseRevision: 5,
+        warnings: ["Skipped delete: entity does not exist"],
+        operations: [
+          {
+            id: "op-1",
+            kind: "designer.delete_entity",
+            title: "Delete",
+            summary: "Delete",
+            payload: {
+              type: "delete_entity",
+              entityId: "x",
+              entityKind: "wire",
+            },
           },
         ],
       },
@@ -1174,13 +1385,29 @@ describe("assistant schematic connectivity and wiring tools", () => {
         id: "wire-1",
         sourcePinId: "part-r1:1",
         targetPinId: "primitive:gnd-1",
-        pointsNm: [{ x: 0, y: 0 }, { x: 0, y: -10_000_000 }],
+        pointsNm: [
+          { x: 0, y: 0 },
+          { x: 0, y: -10_000_000 },
+        ],
       },
     ],
-    labels: [{ id: "label-1", text: "OLD", positionNm: { x: 4_000_000, y: 0 } }],
+    labels: [
+      { id: "label-1", text: "OLD", positionNm: { x: 4_000_000, y: 0 } },
+    ],
     primitives: [
-      { id: "gnd-1", kind: "gnd", positionNm: { x: 0, y: -10_000_000 }, rotationDeg: 0 },
-      { id: "pwr-1", kind: "pwr", railText: "VCC", positionNm: { x: 2_000_000, y: 10_000_000 }, rotationDeg: 0 },
+      {
+        id: "gnd-1",
+        kind: "gnd",
+        positionNm: { x: 0, y: -10_000_000 },
+        rotationDeg: 0,
+      },
+      {
+        id: "pwr-1",
+        kind: "pwr",
+        railText: "VCC",
+        positionNm: { x: 2_000_000, y: 10_000_000 },
+        rotationDeg: 0,
+      },
     ],
     junctions: [],
     nets: [
@@ -1219,16 +1446,32 @@ describe("assistant schematic connectivity and wiring tools", () => {
   test("connectivity tool returns pins with net names", async () => {
     const designer = {
       async getDesign() {
-        return { head: { id: "design-1", name: "Demo", revision: 8, createdAt: "created", updatedAt: "updated" } };
+        return {
+          head: {
+            id: "design-1",
+            name: "Demo",
+            revision: 8,
+            createdAt: "created",
+            updatedAt: "updated",
+          },
+        };
       },
       async getSchematicProjection() {
         return projection;
       },
     } as unknown as DesignerSDK;
-    const tool = makeDesignerGetSchematicConnectivityTool(mockToolContext(designer), boundResolver());
+    const tool = makeDesignerGetSchematicConnectivityTool(
+      mockToolContext(designer),
+      boundResolver(),
+    );
 
     const result = await tool.execute(
-      { runId: "run-1", chatId: "chat-1", bindings: [], limits: { profile: "small", maxBytes: 1024, maxItems: 10 } },
+      {
+        runId: "run-1",
+        chatId: "chat-1",
+        bindings: [],
+        limits: { profile: "small", maxBytes: 1024, maxItems: 10 },
+      },
       { includePins: true, includeNets: true, includeWires: true },
     );
 
@@ -1242,7 +1485,15 @@ describe("assistant schematic connectivity and wiring tools", () => {
     let storedEnvelope: unknown = null;
     const designer = {
       async getDesign() {
-        return { head: { id: "design-1", name: "Demo", revision: 8, createdAt: "created", updatedAt: "updated" } };
+        return {
+          head: {
+            id: "design-1",
+            name: "Demo",
+            revision: 8,
+            createdAt: "created",
+            updatedAt: "updated",
+          },
+        };
       },
       async getSchematicProjection() {
         return projection;
@@ -1261,28 +1512,54 @@ describe("assistant schematic connectivity and wiring tools", () => {
     );
 
     const result = await tool.execute(
-      { runId: "run-1", chatId: "chat-1", bindings: [], limits: { profile: "small", maxBytes: 1024, maxItems: 10 } },
+      {
+        runId: "run-1",
+        chatId: "chat-1",
+        bindings: [],
+        limits: { profile: "small", maxBytes: 1024, maxItems: 10 },
+      },
       {
         title: "Wire R1",
         summary: "Add a wire and a junction.",
-        wires: [{ sourcePinId: "part-r1:2", targetPinId: "primitive:gnd-1" }],
-        junctions: [{ sourcePinId: "part-r1:2", wireId: "wire-1", targetPointNm: { x: 0, y: -4_000_000 } }],
+        wires: [
+          {
+            source: { pinId: "part-r1:2" },
+            target: { pinId: "primitive:gnd-1" },
+          },
+        ],
+        junctions: [
+          {
+            source: { pinId: "part-r1:2" },
+            wireId: "wire-1",
+            targetPointNm: { x: 0, y: -4_000_000 },
+          },
+        ],
       },
     );
 
     expect(result.ok).toBe(true);
     expect(result.data?.kind).toBe("designer_schematic_wires");
+    // Wiring appends a trailing auto-arrange op (moves parts for clean wiring).
     expect(result.data?.operations.map((operation) => operation.kind)).toEqual([
       "designer.create_wire",
       "designer.create_wire_junction",
+      "designer.auto_arrange_schematic",
     ]);
     expect(storedEnvelope).toEqual(result.data);
   });
 
-  test("wiring tool rejects invalid pin ids and non-Manhattan paths", async () => {
+  test("wiring tool skips wires with unresolvable pins", async () => {
     const designer = {
       async getDesign() {
-        return { head: { id: "design-1", name: "Demo", revision: 8, createdAt: "created", updatedAt: "updated" } };
+        return {
+          head: {
+            id: "design-1",
+            name: "Demo",
+            revision: 8,
+            createdAt: "created",
+            updatedAt: "updated",
+          },
+        };
       },
       async getSchematicProjection() {
         return projection;
@@ -1295,26 +1572,38 @@ describe("assistant schematic connectivity and wiring tools", () => {
     );
 
     const result = await tool.execute(
-      { runId: "run-1", chatId: "chat-1", bindings: [], limits: { profile: "small", maxBytes: 1024, maxItems: 10 } },
+      {
+        runId: "run-1",
+        chatId: "chat-1",
+        bindings: [],
+        limits: { profile: "small", maxBytes: 1024, maxItems: 10 },
+      },
       {
         title: "Bad wires",
         summary: "Should skip invalid wires.",
         wires: [
-          { sourcePinId: "missing", targetPinId: "part-r1:1" },
-          { sourcePinId: "part-r1:1", targetPinId: "part-r1:2", pointsNm: [{ x: 0, y: 0 }, { x: 2_000_000, y: 2_000_000 }] },
+          { source: { pinId: "missing" }, target: { pinId: "part-r1:1" } },
+          { source: { ref: "R9", pin: "1" }, target: { pinId: "part-r1:2" } },
         ],
       },
     );
 
     expect(result.ok).toBe(false);
-    expect(result.warnings.join("\n")).toContain("pin IDs must already exist");
-    expect(result.warnings.join("\n")).toContain("Manhattan");
+    expect(result.warnings.join("\n")).toContain("Skipped wire");
   });
 
-  test("schematic edits tool validates existing primitive pins and Manhattan wire paths", async () => {
+  test("schematic edits tool wires existing pins and skips unresolvable ones", async () => {
     const designer = {
       async getDesign() {
-        return { head: { id: "design-1", name: "Demo", revision: 8, createdAt: "created", updatedAt: "updated" } };
+        return {
+          head: {
+            id: "design-1",
+            name: "Demo",
+            revision: 8,
+            createdAt: "created",
+            updatedAt: "updated",
+          },
+        };
       },
       async getSchematicProjection() {
         return projection;
@@ -1340,11 +1629,21 @@ describe("assistant schematic connectivity and wiring tools", () => {
     );
 
     const valid = await tool.execute(
-      { runId: "run-1", chatId: "chat-1", bindings: [], limits: { profile: "small", maxBytes: 1024, maxItems: 10 } },
+      {
+        runId: "run-1",
+        chatId: "chat-1",
+        bindings: [],
+        limits: { profile: "small", maxBytes: 1024, maxItems: 10 },
+      },
       {
         title: "Wire primitive",
         summary: "Wire R1 to GND primitive.",
-        wires: [{ sourcePinId: "part-r1:2", targetPinId: "primitive:gnd-1" }],
+        wires: [
+          {
+            source: { pinId: "part-r1:2" },
+            target: { pinId: "primitive:gnd-1" },
+          },
+        ],
       },
     );
 
@@ -1357,16 +1656,23 @@ describe("assistant schematic connectivity and wiring tools", () => {
     expect(bindCount).toBe(1);
 
     const invalid = await tool.execute(
-      { runId: "run-2", chatId: "chat-1", bindings: [], limits: { profile: "small", maxBytes: 1024, maxItems: 10 } },
+      {
+        runId: "run-2",
+        chatId: "chat-1",
+        bindings: [],
+        limits: { profile: "small", maxBytes: 1024, maxItems: 10 },
+      },
       {
         title: "Bad wire",
-        summary: "Should reject non-Manhattan path.",
-        wires: [{ sourcePinId: "part-r1:1", targetPinId: "part-r1:2", pointsNm: [{ x: 0, y: 0 }, { x: 2_000_000, y: 2_000_000 }] }],
+        summary: "Should skip unresolvable wire.",
+        wires: [
+          { source: { ref: "R9", pin: "1" }, target: { pinId: "part-r1:2" } },
+        ],
       },
     );
 
     expect(invalid.ok).toBe(false);
-    expect(invalid.warnings.join("\n")).toContain("Manhattan");
+    expect(invalid.warnings.join("\n")).toContain("Skipped wire");
     expect(bindCount).toBe(1);
   });
 
@@ -1374,7 +1680,15 @@ describe("assistant schematic connectivity and wiring tools", () => {
     let storedEnvelope: unknown = null;
     const designer = {
       async getDesign() {
-        return { head: { id: "design-1", name: "Demo", revision: 8, createdAt: "created", updatedAt: "updated" } };
+        return {
+          head: {
+            id: "design-1",
+            name: "Demo",
+            revision: 8,
+            createdAt: "created",
+            updatedAt: "updated",
+          },
+        };
       },
       async getSchematicProjection() {
         return projection;
@@ -1393,19 +1707,36 @@ describe("assistant schematic connectivity and wiring tools", () => {
     );
 
     const result = await tool.execute(
-      { runId: "run-1", chatId: "chat-1", bindings: [], limits: { profile: "small", maxBytes: 1024, maxItems: 10 } },
+      {
+        runId: "run-1",
+        chatId: "chat-1",
+        bindings: [],
+        limits: { profile: "small", maxBytes: 1024, maxItems: 10 },
+      },
       {
         title: "Tidy schematic",
         summary: "Move R1, update label, and rename power rail.",
-        partUpdates: [{ partId: "part-r1", positionNm: { x: 2_000_001, y: 0 }, value: "22k" }],
-        labelUpdates: [{ labelId: "label-1", positionNm: { x: 6_000_001, y: 0 } }],
-        primitiveUpdates: [{ primitiveId: "pwr-1", text: "+5V", rotationDeg: 90 }],
+        partUpdates: [
+          {
+            partId: "part-r1",
+            positionNm: { x: 2_000_001, y: 0 },
+            value: "22k",
+          },
+        ],
+        labelUpdates: [
+          { labelId: "label-1", positionNm: { x: 6_000_001, y: 0 } },
+        ],
+        primitiveUpdates: [
+          { primitiveId: "pwr-1", text: "+5V", rotationDeg: 90 },
+        ],
       },
     );
 
     expect(result.ok).toBe(true);
     expect(result.data?.kind).toBe("designer_schematic_updates");
-    expect(result.data?.operations.map((operation) => operation.payload.type)).toEqual([
+    expect(
+      result.data?.operations.map((operation) => operation.payload.type),
+    ).toEqual([
       "move_part",
       "update_part_properties",
       "upsert_label",
@@ -1424,7 +1755,15 @@ describe("assistant schematic connectivity and wiring tools", () => {
   test("schematic updates tool skips invalid and immutable primitive text updates", async () => {
     const designer = {
       async getDesign() {
-        return { head: { id: "design-1", name: "Demo", revision: 8, createdAt: "created", updatedAt: "updated" } };
+        return {
+          head: {
+            id: "design-1",
+            name: "Demo",
+            revision: 8,
+            createdAt: "created",
+            updatedAt: "updated",
+          },
+        };
       },
       async getSchematicProjection() {
         return projection;
@@ -1437,7 +1776,12 @@ describe("assistant schematic connectivity and wiring tools", () => {
     );
 
     const result = await tool.execute(
-      { runId: "run-1", chatId: "chat-1", bindings: [], limits: { profile: "small", maxBytes: 1024, maxItems: 10 } },
+      {
+        runId: "run-1",
+        chatId: "chat-1",
+        bindings: [],
+        limits: { profile: "small", maxBytes: 1024, maxItems: 10 },
+      },
       {
         title: "Bad updates",
         summary: "Should skip.",
@@ -1447,7 +1791,7 @@ describe("assistant schematic connectivity and wiring tools", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.warnings.join("\n")).toContain("part does not exist");
+    expect(result.warnings.join("\n")).toContain("Skipped part update");
     expect(result.warnings.join("\n")).toContain("GND text is fixed");
   });
 
@@ -1455,7 +1799,15 @@ describe("assistant schematic connectivity and wiring tools", () => {
     let storedEnvelope: unknown = null;
     const designer = {
       async getDesign() {
-        return { head: { id: "design-1", name: "Demo", revision: 8, createdAt: "created", updatedAt: "updated" } };
+        return {
+          head: {
+            id: "design-1",
+            name: "Demo",
+            revision: 8,
+            createdAt: "created",
+            updatedAt: "updated",
+          },
+        };
       },
       async getSchematicProjection() {
         return projection;
@@ -1474,18 +1826,33 @@ describe("assistant schematic connectivity and wiring tools", () => {
     );
 
     const result = await tool.execute(
-      { runId: "run-1", chatId: "chat-1", bindings: [], limits: { profile: "small", maxBytes: 1024, maxItems: 10 } },
+      {
+        runId: "run-1",
+        chatId: "chat-1",
+        bindings: [],
+        limits: { profile: "small", maxBytes: 1024, maxItems: 10 },
+      },
       {
         title: "Delete stale wire",
         summary: "Remove an old wire.",
-        entities: [{ entityId: "wire-1", entityKind: "wire", reason: "Wire is obsolete." }],
+        entities: [
+          {
+            entityId: "wire-1",
+            entityKind: "wire",
+            reason: "Wire is obsolete.",
+          },
+        ],
       },
     );
 
     expect(result.ok).toBe(true);
     expect(result.data?.kind).toBe("designer_schematic_deletions");
     expect(result.data?.riskLevel).toBe("destructive");
-    expect(result.data?.operations[0]?.payload).toEqual({ type: "delete_entity", entityId: "wire-1", entityKind: "wire" });
+    expect(result.data?.operations[0]?.payload).toEqual({
+      type: "delete_entity",
+      entityId: "wire-1",
+      entityKind: "wire",
+    });
     expect(storedEnvelope).toEqual(result.data);
   });
 });

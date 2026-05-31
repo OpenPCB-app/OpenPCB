@@ -439,9 +439,11 @@ function powerSymbolToPrimitive(
 ): DesignerPrimitive | null {
   const positionNm = mmPointToNm(power.at);
   const rotationDeg = normalizeRotationDeg(power.rotationDeg);
-  const isGnd =
-    power.netName.toLowerCase() === "gnd" ||
-    power.netName.toLowerCase().startsWith("gnd");
+  // Canonical ground only. Variants like GND1 / GNDA / GNDREF stay distinct
+  // nets (they fall through to a named PWR rail), since the projection now
+  // globally unions every "GND" port into a single net.
+  const lowerName = power.netName.trim().toLowerCase();
+  const isGnd = lowerName === "gnd" || lowerName === "ground";
   if (isGnd) {
     return {
       id: crypto.randomUUID(),

@@ -49,16 +49,22 @@ export function applyFailureResult(err: unknown): unknown | null {
 async function applyDesignerSchematicEditsProposal(
   input: ApplyAssistantWriteProposalInput,
 ): Promise<SchematicApplyResult> {
-  const envelope = (input.record as AssistantWriteProposalDto & { envelope?: unknown })
-    .envelope as SchematicProposalEnvelope | null;
+  const envelope = (
+    input.record as AssistantWriteProposalDto & { envelope?: unknown }
+  ).envelope as SchematicProposalEnvelope | null;
   if (!envelope || !Array.isArray(envelope.operations)) {
     throw new Error("Schematic proposal envelope is missing operations.");
   }
+  // Authorize partial apply from the PERSISTED envelope, not the client: a
+  // non-destructive proposal always applies its valid ops (skips reported);
+  // destructive proposals require the explicit client confirm (`allowPartial`).
+  const allowPartial =
+    input.allowPartial || envelope.riskLevel !== "destructive";
   return applySchematicProposalOperations({
     designer: input.designer,
     designId: input.record.designId,
     baseRevision: input.record.baseRevision,
     envelope,
-    allowPartial: input.allowPartial,
+    allowPartial,
   });
 }

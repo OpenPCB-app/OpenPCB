@@ -66,10 +66,15 @@ export function loadPcbProjection(params: {
   // net ids. Built once per projection; native traces / vias with no netName
   // hint are unaffected. When a hint exists but no schematic net matches,
   // leave netId null — pad-alignment heuristics elsewhere remain the fallback.
+  // Case-insensitive, matching the schematic's case-insensitive named-net union
+  // (so a "VCC" trace hint binds to a "vcc"-named net). First writer wins on a
+  // case collision (rare; the union already collapses same-name nets).
   const netIdByName = new Map<string, string>();
   if (schematic) {
     for (const net of schematic.nets) {
-      if (net.name) netIdByName.set(net.name, net.id);
+      if (!net.name) continue;
+      const key = net.name.trim().toUpperCase();
+      if (!netIdByName.has(key)) netIdByName.set(key, net.id);
     }
   }
   const bindNetName = <
@@ -78,7 +83,7 @@ export function loadPcbProjection(params: {
     entity: T,
   ): T => {
     if (entity.netId || !entity.netName) return entity;
-    const resolved = netIdByName.get(entity.netName);
+    const resolved = netIdByName.get(entity.netName.trim().toUpperCase());
     if (!resolved) return entity;
     return { ...entity, netId: resolved };
   };

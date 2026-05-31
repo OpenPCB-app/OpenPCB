@@ -24,6 +24,8 @@ import {
   serializePrimitivePayload,
 } from "./primitive-store";
 import { buildCreateWirePayload } from "./commands/create-wire";
+import { autoRouteWirePoints } from "./routing/wire-obstacles";
+import { applyAutoArrange } from "./layout/arrange-schematic";
 import {
   buildPlacePartPayload,
   normalizeRotationDeg,
@@ -1187,11 +1189,12 @@ export function executeDesignerCommand({
     if (!sourcePin) return pinNotFound(command.sourcePinId);
     const targetPin = resolvePinAny(tx, designId, command.targetPinId);
     if (!targetPin) return pinNotFound(command.targetPinId);
-    const built = buildCreateWirePayload(
-      sourcePin,
-      targetPin,
-      command.pointsNm,
-    );
+    // No explicit geometry (undefined or empty) → obstacle-aware auto-route.
+    const pointsNm =
+      command.pointsNm && command.pointsNm.length > 0
+        ? command.pointsNm
+        : autoRouteWirePoints(projection, sourcePin, targetPin);
+    const built = buildCreateWirePayload(sourcePin, targetPin, pointsNm);
     if (!built.payload)
       return invalidWirePath(built.invalidReason ?? "wire path is invalid");
     insertWire(tx, designId, built.payload, timestamp);
@@ -1285,6 +1288,17 @@ export function executeDesignerCommand({
       bumpRevision(tx, designId, revision, timestamp),
       finalBuild.payload.id,
     );
+  }
+
+  if (command.type === "auto_arrange_schematic") {
+    applyAutoArrange({
+      tx,
+      designId,
+      projection,
+      timestamp,
+      originNm: command.originNm,
+    });
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
   }
 
   if (

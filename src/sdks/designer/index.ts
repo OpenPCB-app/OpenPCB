@@ -23,6 +23,7 @@ import type {
 
 export type {
   CreateDesignerDesignInput,
+  DesignerAutoArrangeSchematicCommand,
   DesignerCommand,
   DesignerCommandEnvelope,
   DesignerCommandOkResult,

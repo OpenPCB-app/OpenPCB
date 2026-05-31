@@ -98,53 +98,35 @@ function modelRefFromManifest(
  * shim: when the manifest entry already carries the values, the fallback
  * is ignored. Keyed by footprint id (the PK on `library_footprint_models`).
  *
- * Values derived empirically from inspecting the loaded GLB scenes:
- *
- * - KiCad LED_SMD STEPs render with body extending in the GLB's −Y direction
- *   (chip height is along Y, not Z). A −90° rotation about X tips the
- *   height into world +Y after the canvas Rx(−π/2) tilt is applied.
- *
- * - KiCad PinHeader/PinSocket vertical STEPs render with pin direction
- *   along GLB −X (not +Z as the raw position-accessor max suggested), pin
- *   column along GLB −Y, and pin row (1→4) along GLB +Z. A +90° rotation
- *   about Y maps the pin direction to world +Y (vertical), and a
- *   `scale.y = -1` mirror swaps the pin column direction so pin 2/3 lands
- *   at footprint +Y instead of −Y.
+ * Empty by design. The CoreLibrary `.model.json` sidecars now declare the
+ * correct (identity) orientation for every KiCad-derived STEP and bake it
+ * into the shipped GLB (`transformBaked`). The previous LED (−90° X) and
+ * PinHeader/PinSocket (+90° Y + y-mirror) entries were WRONG: those STEPs are
+ * authored Z-up — KiCad's own `(model)` block is `rotate 0 0 0`, identical to
+ * the resistor that always rendered correctly — and the spurious rotations
+ * were being applied a SECOND time on top of the (already mis-baked) GLB,
+ * tipping the parts through/below the board. Render-time correction must stay
+ * empty for transform-baked models; see STALE_OVERRIDE_FOOTPRINT_IDS for the
+ * cleanup of `model_ref_json` rows on existing DBs.
  */
 const MODEL_REF_OVERRIDES_BY_FOOTPRINT: Readonly<
   Record<string, ModelRefOverride>
-> = {
-  "openpcb.core.footprint.opto.led-0603-1608metric": {
-    rotation: { x: -90, y: 0, z: 0 },
-  },
-  "openpcb.core.footprint.opto.led-0805-2012metric": {
-    rotation: { x: -90, y: 0, z: 0 },
-  },
-  "openpcb.core.footprint.opto.led-1206-3216metric": {
-    rotation: { x: -90, y: 0, z: 0 },
-  },
-  "openpcb.core.footprint.connector.pin-header-1x02-p2-54mm-vertical": {
-    rotation: { x: 0, y: 90, z: 0 },
-    scale: { x: 1, y: -1, z: 1 },
-  },
-  "openpcb.core.footprint.connector.pin-header-2x03-p2-54mm-vertical": {
-    rotation: { x: 0, y: 90, z: 0 },
-    scale: { x: 1, y: -1, z: 1 },
-  },
-  "openpcb.core.footprint.connector.pin-socket-1x02-p2-54mm-vertical": {
-    rotation: { x: 0, y: 90, z: 0 },
-    scale: { x: 1, y: -1, z: 1 },
-  },
-  "openpcb.core.footprint.connector.pin-socket-2x03-p2-54mm-vertical": {
-    rotation: { x: 0, y: 90, z: 0 },
-    scale: { x: 1, y: -1, z: 1 },
-  },
-};
+> = {};
 
-/** Footprints that historically had a now-stale override — left here so
- * `backfillModelRefOverrides` can null-out rows on existing DBs. Empty
- * once all the iteration history has cycled through. */
-const STALE_OVERRIDE_FOOTPRINT_IDS: readonly string[] = [];
+/** Footprints that historically carried a now-removed override — listed here
+ * so `backfillModelRefOverrides` nulls out their `model_ref_json` on existing
+ * DBs (the GLBs ship `transformBaked`, so the render-time transform must be
+ * empty). Keep an id here until every DB in the wild has cycled past the bad
+ * override. */
+const STALE_OVERRIDE_FOOTPRINT_IDS: readonly string[] = [
+  "openpcb.core.footprint.opto.led-0603-1608metric",
+  "openpcb.core.footprint.opto.led-0805-2012metric",
+  "openpcb.core.footprint.opto.led-1206-3216metric",
+  "openpcb.core.footprint.connector.pin-header-1x02-p2-54mm-vertical",
+  "openpcb.core.footprint.connector.pin-header-2x03-p2-54mm-vertical",
+  "openpcb.core.footprint.connector.pin-socket-1x02-p2-54mm-vertical",
+  "openpcb.core.footprint.connector.pin-socket-2x03-p2-54mm-vertical",
+];
 
 function resolveModelRefOverride(footprintId: string): string | null {
   const override = MODEL_REF_OVERRIDES_BY_FOOTPRINT[footprintId];
@@ -790,9 +772,7 @@ function upsertFootprintModelMetadata(
   // doesn't declare the optional transform fields yet (they were added in a
   // local edit and are read structurally here).
   const primaryTransform = primary as unknown as OpclibModel3dTransformFields;
-  const manifestModelRef = modelRefFromManifest(
-    primaryTransform,
-  );
+  const manifestModelRef = modelRefFromManifest(primaryTransform);
   const modelRefJson = primaryTransform.transformBaked
     ? null
     : manifestModelRef

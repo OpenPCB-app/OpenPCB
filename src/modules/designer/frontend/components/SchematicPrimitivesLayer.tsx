@@ -247,10 +247,13 @@ function SinglePrimitive({
       )}
       {labelText ? (
         <EDAText
-          position={primitive.kind === "pwr" ? [0, 3.18, 0] : [-2.641, 0, 0]}
+          // Net-portal body spans x ∈ [-4.47, 0]; anchor the label just left of
+          // the back edge (right-anchored) so it clears the body + outline
+          // instead of rendering inside it.
+          position={primitive.kind === "pwr" ? [0, 3.18, 0] : [-5.0, 0, 0]}
           color={baseColor}
-          fontSize={primitive.kind === "pwr" ? 1.27 : 1.27}
-          anchorX="center"
+          fontSize={1.27}
+          anchorX={primitive.kind === "pwr" ? "center" : "right"}
           anchorY={primitive.kind === "pwr" ? "bottom" : "middle"}
         >
           {labelText}

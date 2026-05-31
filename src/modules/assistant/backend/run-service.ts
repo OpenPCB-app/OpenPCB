@@ -189,7 +189,10 @@ export class RunService {
         bindings,
         limits,
         chatId: payload.chatId,
-        maxToolIterations: 4,
+        // Higher budget so a whole build completes in ONE run: resolve BOM →
+        // create design → place → re-read connectivity → wire (+ retry skips).
+        // Each non-destructive edit auto-applies, so the model chains these.
+        maxToolIterations: 12,
         signal: taskCtx.signal,
       })) {
         if (event.type === "run.failed") failedEvent = event;

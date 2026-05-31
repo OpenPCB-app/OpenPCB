@@ -78,7 +78,12 @@ export class AssistantService {
         buildOpenpcbToolRegistry(ctx, this.contextResolver, this.conversation, {
           allowRawToolData,
           designerTools: {
+            // Non-destructive schematic edits (place / wire / move / update)
+            // auto-apply immediately — they are revertible via designer undo.
+            // Destructive proposals (deletions) still require an explicit
+            // per-session allowance.
             isSessionAutoApplyAllowed: (input) =>
+              input.riskLevel !== "destructive" ||
               this.writeSessionPolicy.isAllowed(input),
           },
         }),
@@ -113,7 +118,8 @@ export class AssistantService {
   }): Promise<AssistantChat> {
     const design = await this.requireDesign(input.designId);
     const settings = this.settings.getSettings();
-    const providerConfigId = input.providerConfigId ?? settings.defaultProviderId;
+    const providerConfigId =
+      input.providerConfigId ?? settings.defaultProviderId;
     const provider = this.requireProvider(providerConfigId);
     const chat = this.conversation.createChat({
       title: input.title ?? `${design.name} chat`,
@@ -230,7 +236,8 @@ export class AssistantService {
   ): Promise<AssistantPlacementApplyResult | SchematicApplyResult> {
     this.assertValidChatId(chatId);
     const record = this.conversation.getWriteProposal(chatId, proposalId);
-    if (!record) throw new NotFoundError(`Write proposal not found: ${proposalId}`);
+    if (!record)
+      throw new NotFoundError(`Write proposal not found: ${proposalId}`);
     if (record.status !== "pending") {
       throw new ValidationError(`Write proposal is already ${record.status}`);
     }
@@ -263,7 +270,9 @@ export class AssistantService {
         failureResult ?? { message },
       );
       if (failureResult) {
-        return failureResult as AssistantPlacementApplyResult | SchematicApplyResult;
+        return failureResult as
+          | AssistantPlacementApplyResult
+          | SchematicApplyResult;
       }
       throw new ValidationError(message);
     }
@@ -275,7 +284,8 @@ export class AssistantService {
   ): AssistantWriteProposalDto {
     this.assertValidChatId(chatId);
     const record = this.conversation.getWriteProposal(chatId, proposalId);
-    if (!record) throw new NotFoundError(`Write proposal not found: ${proposalId}`);
+    if (!record)
+      throw new NotFoundError(`Write proposal not found: ${proposalId}`);
     if (record.status !== "pending") {
       throw new ValidationError(`Write proposal is already ${record.status}`);
     }
@@ -296,7 +306,8 @@ export class AssistantService {
     input: { toolName?: unknown; proposalKind?: unknown; riskLevel?: unknown },
   ): AssistantSessionWriteAllowance {
     this.assertValidChatId(chatId);
-    const toolName = typeof input.toolName === "string" ? input.toolName.trim() : "";
+    const toolName =
+      typeof input.toolName === "string" ? input.toolName.trim() : "";
     const proposalKind =
       typeof input.proposalKind === "string" ? input.proposalKind.trim() : "";
     if (!toolName) throw new ValidationError("Tool name is required");

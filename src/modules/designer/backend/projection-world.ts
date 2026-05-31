@@ -507,6 +507,11 @@ export function deriveNetsAndJunctions(
   primitives: DesignerPrimitive[] = [],
 ): NetDerivationResult {
   const unionFind = new UnionFind();
+  // Count wire segment-ends ("stubs") meeting at each point. A junction dot is
+  // shown where >= 3 stubs coincide (T, cross, or a branch tapping a wire — even
+  // a collinear branch). A single corner or a straight pass-through vertex has
+  // exactly 2 stubs and is not a junction; clean paths never carry redundant
+  // collinear vertices (simplifyCollinearPath removes them).
   const incidentCount = new Map<string, number>();
   const pinKeyById = new Map<string, string>();
 
@@ -547,21 +552,28 @@ export function deriveNetsAndJunctions(
     if (targetKey && last) unionFind.union(targetKey, pointKey(last));
   }
 
-  // Cross-region join: NET_PORTALs sharing portalText merge.
-  const portalsByText = new Map<string, string[]>();
+  // Global named-net union: every primitive that names a net merges with all
+  // others sharing that name, even without a physical wire — across GND ports
+  // (canonical "GND"), PWR rails (railText) and net portals (portalText) in ONE
+  // namespace, so e.g. a pwr("+5V") and a net_portal("+5V") form a single net.
+  // The grouping key is case-insensitive (VCC == vcc); display names are still
+  // taken from the original primitive text downstream.
+  const keysByNetName = new Map<string, string[]>();
   for (const prim of primitives) {
-    if (prim.kind !== "net_portal") continue;
-    const text = prim.portalText.trim();
-    if (text.length === 0) continue;
-    const arr = portalsByText.get(text) ?? [];
+    let netName: string | null = null;
+    if (prim.kind === "gnd") netName = "GND";
+    else if (prim.kind === "pwr") netName = prim.railText.trim() || null;
+    else if (prim.kind === "net_portal")
+      netName = prim.portalText.trim() || null;
+    if (!netName) continue;
+    const groupKey = netName.toUpperCase();
+    const arr = keysByNetName.get(groupKey) ?? [];
     arr.push(pointKey(prim.positionNm));
-    portalsByText.set(text, arr);
+    keysByNetName.set(groupKey, arr);
   }
-  for (const keys of portalsByText.values()) {
+  for (const keys of keysByNetName.values()) {
     for (let index = 1; index < keys.length; index += 1) {
-      const head = keys[0];
-      const next = keys[index];
-      if (head && next) unionFind.union(head, next);
+      unionFind.union(keys[0]!, keys[index]!);
     }
   }
 
@@ -643,16 +655,21 @@ export function deriveNetsAndJunctions(
             break;
           }
         }
-      } else if (net.pwrRails.size === 1) {
-        name = [...net.pwrRails][0] ?? `Net_${unnamedIndex++}`;
-      } else if (net.pwrRails.size > 1) {
-        const sorted = [...net.pwrRails].sort((a, b) => a.localeCompare(b));
-        name = sorted[0] ?? `Net_${unnamedIndex++}`;
-        warnings.push({
-          code: "PWR_RAIL_CONFLICT",
-          netRoot: root,
-          detail: `Multiple power rails on one net: ${sorted.join(", ")}`,
-        });
+      } else if (net.pwrRails.size >= 1) {
+        const sortedRails = [...net.pwrRails].sort((a, b) =>
+          a.localeCompare(b),
+        );
+        name = sortedRails[0] ?? `Net_${unnamedIndex++}`;
+        // Only a genuine conflict when the rails differ case-insensitively
+        // (the global union already merges "VCC" and "vcc" into one net).
+        const distinctRails = new Set(sortedRails.map((r) => r.toUpperCase()));
+        if (distinctRails.size > 1) {
+          warnings.push({
+            code: "PWR_RAIL_CONFLICT",
+            netRoot: root,
+            detail: `Multiple power rails on one net: ${sortedRails.join(", ")}`,
+          });
+        }
       } else if (net.portalTexts.size > 0) {
         const sorted = [...net.portalTexts].sort((a, b) => a.localeCompare(b));
         name = sorted[0] ?? `Net_${unnamedIndex++}`;

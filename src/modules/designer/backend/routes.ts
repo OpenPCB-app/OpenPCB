@@ -17,6 +17,7 @@ import type {
   GerberExportOptions,
 } from "../../../sdks/designer/types";
 import type {
+  DesignerAutoArrangeSchematicCommand,
   DesignerCommandEnvelope,
   DesignerCreateWireCommand,
   DesignerCreateWireJunctionCommand,
@@ -536,6 +537,19 @@ function parseUpdatePrimitiveTextCommand(
     throw new ValidationError("command.text must be a string");
   }
   return { type: "update_primitive_text", primitiveId, text };
+}
+
+function parseAutoArrangeSchematicCommand(
+  raw: Record<string, unknown>,
+): DesignerAutoArrangeSchematicCommand {
+  const command: DesignerAutoArrangeSchematicCommand = {
+    type: "auto_arrange_schematic",
+  };
+  if (raw.originNm !== undefined) {
+    command.originNm = parsePointNm(raw.originNm, "command.originNm");
+  }
+  if (raw.scope === "all") command.scope = "all";
+  return command;
 }
 
 function parseUpsertLabelCommand(
@@ -1744,6 +1758,9 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
       break;
     case "update_primitive_text":
       command = parseUpdatePrimitiveTextCommand(commandRecord);
+      break;
+    case "auto_arrange_schematic":
+      command = parseAutoArrangeSchematicCommand(commandRecord);
       break;
     case "pcb_set_board_settings":
       command = parsePcbSetBoardSettingsCommand(commandRecord);

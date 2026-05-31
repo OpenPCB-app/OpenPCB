@@ -74,7 +74,13 @@ function ComponentModel({
   const [fetchedModel, setFetchedModel] = useState<ModelDescriptor | null>(
     null,
   );
-  const model = hasReadyGlb(placementModel) ? placementModel : fetchedModel;
+  // The 3D model — including its `modelRef` orientation correction — is a
+  // *library* asset, not frozen board data. Prefer the live library descriptor
+  // so corrected orientations (and re-converted GLBs) reach already-placed
+  // parts whose snapshot froze a stale modelRef. Fall back to the frozen
+  // snapshot only until the live fetch resolves.
+  const model =
+    fetchedModel ?? (hasReadyGlb(placementModel) ? placementModel : null);
   const glbUrl = resolveGlbUrl(backendURL, model?.glbUrl ?? null);
   const glbSha256 = model?.glbSha256 ?? null;
 
@@ -91,7 +97,7 @@ function ComponentModel({
   const [scene, setScene] = useState(initialScene);
 
   useEffect(() => {
-    if (hasReadyGlb(placementModel) || !backendURL) {
+    if (!backendURL) {
       setFetchedModel(null);
       return undefined;
     }
@@ -123,7 +129,7 @@ function ComponentModel({
       });
 
     return () => controller.abort();
-  }, [backendURL, invalidate, placement.footprint.footprintId, placementModel]);
+  }, [backendURL, invalidate, placement.footprint.footprintId]);
 
   useEffect(() => {
     setScene(null);

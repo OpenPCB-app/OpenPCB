@@ -17,6 +17,15 @@ import {
 } from "../../../../sdks";
 import type { ContextResolver } from "../context-resolver";
 import type { ConversationStore } from "../conversation-store";
+import {
+  buildProjectionIndex,
+  planNetConnect,
+  resolvePartTarget,
+  resolvePinTarget,
+  resolveWireEndpoint,
+  type PinTarget,
+  type WireEndpoint,
+} from "./schematic-targeting";
 
 const AI_DESIGNER_SESSION_ID = "designer-ui-session";
 const SCHEMATIC_GRID_NM = 2_000_000;
@@ -68,7 +77,8 @@ export interface SchematicProposalEnvelope {
     | "designer_propose_schematic_edits"
     | "designer_propose_schematic_wires"
     | "designer_propose_schematic_updates"
-    | "designer_propose_schematic_deletions";
+    | "designer_propose_schematic_deletions"
+    | "designer_arrange_schematic";
   title: string;
   summary: string;
   riskLevel: "medium" | "high" | "destructive";
@@ -84,6 +94,11 @@ export interface SchematicProposalEnvelope {
     updatePartAfterCreate?: {
       value?: string;
       propertiesJson?: Record<string, string>;
+    };
+    /** Net-connect: after this primitive is created, wire `sourcePinId` to the
+     *  newly-created primitive's pin (`primitive:<createdEntityId>`). */
+    linkWireToCreatedPrimitive?: {
+      sourcePinId: string;
     };
     sources: AiSourceRef[];
     warnings: string[];
@@ -346,17 +361,24 @@ function resolveDesignForTool(input: {
   chatId?: string;
   requestedDesignId?: string;
   contextResolver: ContextResolver;
-}): { ok: true; designId: string; label?: string } | { ok: false; warning: string } {
+}):
+  | { ok: true; designId: string; label?: string }
+  | { ok: false; warning: string } {
   const primary = input.chatId
     ? input.contextResolver.getPrimaryDesign(input.chatId)
     : undefined;
   if (primary?.status === "missing") {
     return {
       ok: false,
-      warning: "The bound design is missing. Choose another design before continuing.",
+      warning:
+        "The bound design is missing. Choose another design before continuing.",
     };
   }
-  if (primary && input.requestedDesignId && input.requestedDesignId !== primary.refId) {
+  if (
+    primary &&
+    input.requestedDesignId &&
+    input.requestedDesignId !== primary.refId
+  ) {
     return {
       ok: false,
       warning:
@@ -367,7 +389,8 @@ function resolveDesignForTool(input: {
   if (!designId) {
     return {
       ok: false,
-      warning: "No design specified. Resolve a design first via designer_resolve_design.",
+      warning:
+        "No design specified. Resolve a design first via designer_resolve_design.",
     };
   }
   return { ok: true, designId, label: primary?.label };
@@ -873,7 +896,9 @@ function normalizeDesignName(raw: string | undefined): string {
   return trimmed.length > 120 ? trimmed.slice(0, 120).trim() : trimmed;
 }
 
-function summarizeCreatedDesign(created: DesignerDesignSummary): DesignerCreateDesignOutput["design"] {
+function summarizeCreatedDesign(
+  created: DesignerDesignSummary,
+): DesignerCreateDesignOutput["design"] {
   return {
     id: created.id,
     name: created.name,
@@ -906,17 +931,23 @@ function resolvePlacementStart(projection: DesignerSchematicProjection): {
   y: number;
 } {
   if (projection.parts.length === 0) return { x: 0, y: 0 };
-  const xs = projection.parts.map((part) => part.positionNm.x);
-  const ys = projection.parts.map((part) => part.positionNm.y);
+  // Start to the right of every existing part's actual right edge (pin extent),
+  // not just its origin — otherwise a wide part can overlap new placements.
+  let rightEdge = -Infinity;
+  let topEdge = Infinity;
+  for (const part of projection.parts) {
+    const xs = part.pins.map((pin) => pin.worldPositionNm.x);
+    const ys = part.pins.map((pin) => pin.worldPositionNm.y);
+    rightEdge = Math.max(rightEdge, part.positionNm.x, ...xs);
+    topEdge = Math.min(topEdge, part.positionNm.y, ...ys);
+  }
   return {
-    x: snapNm(Math.max(...xs) + DEFAULT_GRID_SPACING_X_NM),
-    y: snapNm(Math.min(...ys)),
+    x: snapNm(rightEdge + DEFAULT_GRID_SPACING_X_NM),
+    y: snapNm(Number.isFinite(topEdge) ? topEdge : 0),
   };
 }
 
-function expandPlacementInputs(
-  input: DesignerPlaceComponentsInput,
-): Array<{
+function expandPlacementInputs(input: DesignerPlaceComponentsInput): Array<{
   componentId: string;
   rotationDeg: 0 | 90 | 180 | 270;
   mirrored: boolean;
@@ -971,7 +1002,7 @@ export function makeDesignerPlaceComponentsTool(
       effect: "write",
       capability: "designer.write.schematic.place_components",
       description:
-        "Create a pending approval proposal to place installed library components onto the bound design's schematic canvas. Does not mutate the design until the user clicks Apply.",
+        "Place installed library components onto the bound design's schematic canvas. Non-destructive: auto-applies immediately and is undoable. Prefer designer_propose_schematic_edits for placement (it also adds labels/power ports and wires in one batch); use this only for a plain quantity-based drop.",
       inputSchema: {
         type: "object",
         properties: {
@@ -987,11 +1018,13 @@ export function makeDesignerPlaceComponentsTool(
                 mirrored: { type: "boolean" },
                 value: {
                   type: "string",
-                  description: "Optional displayed part value/intended value, e.g. 330Ω, 10k, 10µF, red LED.",
+                  description:
+                    "Optional displayed part value/intended value, e.g. 330Ω, 10k, 10µF, red LED.",
                 },
                 properties: {
                   type: "object",
-                  description: "Optional string metadata such as color, role, tolerance, voltage, current, or package intent.",
+                  description:
+                    "Optional string metadata such as color, role, tolerance, voltage, current, or package intent.",
                 },
                 note: { type: "string" },
               },
@@ -1024,24 +1057,35 @@ export function makeDesignerPlaceComponentsTool(
         requestedDesignId: input.designId,
         contextResolver,
       });
-      if (!resolvedDesign.ok) return failedTool(resolvedDesign.warning, execCtx.limits);
+      if (!resolvedDesign.ok)
+        return failedTool(resolvedDesign.warning, execCtx.limits);
       const designId = resolvedDesign.designId;
       const [designRecord, projection] = await Promise.all([
         designer.getDesign(designId),
         designer.getSchematicProjection(designId),
       ]);
       if (!designRecord || !projection) {
-        return failedTool(`Design not found or unavailable: ${designId}`, execCtx.limits);
+        return failedTool(
+          `Design not found or unavailable: ${designId}`,
+          execCtx.limits,
+        );
       }
 
       const requested = expandPlacementInputs(input);
-      const placementInputTruncated = countRequestedPlacements(input) > MAX_PLACEMENTS_PER_PROPOSAL;
+      const placementInputTruncated =
+        countRequestedPlacements(input) > MAX_PLACEMENTS_PER_PROPOSAL;
       if (requested.length === 0) {
-        return failedTool("No components requested for placement.", execCtx.limits);
+        return failedTool(
+          "No components requested for placement.",
+          execCtx.limits,
+        );
       }
       const columns = Math.max(
         1,
-        Math.min(input.layout?.columns ?? Math.ceil(Math.sqrt(requested.length)), 8),
+        Math.min(
+          input.layout?.columns ?? Math.ceil(Math.sqrt(requested.length)),
+          8,
+        ),
       );
       const start = resolvePlacementStart(projection);
       const placements: AssistantPlacementProposal["placements"] = [];
@@ -1064,7 +1108,9 @@ export function makeDesignerPlaceComponentsTool(
           componentName: detail.component.name,
           positionNm: {
             x: snapNm(start.x + (idx % columns) * DEFAULT_GRID_SPACING_X_NM),
-            y: snapNm(start.y + Math.floor(idx / columns) * DEFAULT_GRID_SPACING_Y_NM),
+            y: snapNm(
+              start.y + Math.floor(idx / columns) * DEFAULT_GRID_SPACING_Y_NM,
+            ),
           },
           rotationDeg: item.rotationDeg,
           mirrored: item.mirrored,
@@ -1079,9 +1125,10 @@ export function makeDesignerPlaceComponentsTool(
           ok: false,
           data: null,
           sources: [],
-          warnings: skipped.length > 0
-            ? skipped.map((item) => `${item.componentId}: ${item.reason}`)
-            : ["No valid installed components were resolved for placement."],
+          warnings:
+            skipped.length > 0
+              ? skipped.map((item) => `${item.componentId}: ${item.reason}`)
+              : ["No valid installed components were resolved for placement."],
           truncated: placementInputTruncated,
           limits: execCtx.limits,
         };
@@ -1090,9 +1137,13 @@ export function makeDesignerPlaceComponentsTool(
       await contextResolver.maybeAutoBindDesign(chatId, designId);
 
       const proposalId = crypto.randomUUID();
-      const proposalWarnings = skipped.map((item) => `${item.componentId}: ${item.reason}`);
+      const proposalWarnings = skipped.map(
+        (item) => `${item.componentId}: ${item.reason}`,
+      );
       if (placementInputTruncated) {
-        proposalWarnings.push(`Only the first ${MAX_PLACEMENTS_PER_PROPOSAL} requested placement(s) were included.`);
+        proposalWarnings.push(
+          `Only the first ${MAX_PLACEMENTS_PER_PROPOSAL} requested placement(s) were included.`,
+        );
       }
       const proposal: AssistantPlacementProposal = {
         proposalId,
@@ -1104,7 +1155,8 @@ export function makeDesignerPlaceComponentsTool(
         },
         placements,
         skipped,
-        requiresPartialConfirmation: skipped.length > 0 || placementInputTruncated,
+        requiresPartialConfirmation:
+          skipped.length > 0 || placementInputTruncated,
       };
       const sources: AiSourceRef[] = [
         {
@@ -1230,7 +1282,10 @@ function buildPlacementProposalEnvelope(input: {
   };
 }
 
-function failedTool<T>(message: string, limits: AiToolResult<T>["limits"]): AiToolResult<T | null> {
+function failedTool<T>(
+  message: string,
+  limits: AiToolResult<T>["limits"],
+): AiToolResult<T | null> {
   return {
     ok: false,
     data: null,
@@ -1241,7 +1296,9 @@ function failedTool<T>(message: string, limits: AiToolResult<T>["limits"]): AiTo
   };
 }
 
-function writeProposalTerminalStatus(result: unknown): "applied" | "partial" | "failed" {
+function writeProposalTerminalStatus(
+  result: unknown,
+): "applied" | "partial" | "failed" {
   if (result && typeof result === "object" && "status" in result) {
     const status = (result as { status?: unknown }).status;
     if (status === "applied" || status === "partial") return status;
@@ -1249,29 +1306,14 @@ function writeProposalTerminalStatus(result: unknown): "applied" | "partial" | "
   return "failed";
 }
 
-function netNameByPinId(projection: DesignerSchematicProjection): Map<string, string> {
+function netNameByPinId(
+  projection: DesignerSchematicProjection,
+): Map<string, string> {
   const map = new Map<string, string>();
   for (const net of projection.nets) {
     for (const pinId of net.pinIds) map.set(pinId, net.name);
   }
   return map;
-}
-
-function allExistingPinIds(projection: DesignerSchematicProjection): Set<string> {
-  return new Set([
-    ...projection.parts.flatMap((part) => part.pins.map((pin) => pin.id)),
-    ...projection.primitives.map((primitive) => `primitive:${primitive.id}`),
-  ]);
-}
-
-function isManhattanPath(points: Array<{ x: number; y: number }>): boolean {
-  if (points.length < 2) return true;
-  for (let i = 1; i < points.length; i += 1) {
-    const prev = points[i - 1]!;
-    const next = points[i]!;
-    if (prev.x !== next.x && prev.y !== next.y) return false;
-  }
-  return true;
 }
 
 function pointOnWire(
@@ -1348,7 +1390,10 @@ interface DesignerGetSchematicConnectivityOutput {
 export function makeDesignerGetSchematicConnectivityTool(
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
-): AiTool<DesignerGetSchematicConnectivityInput, DesignerGetSchematicConnectivityOutput | null> {
+): AiTool<
+  DesignerGetSchematicConnectivityInput,
+  DesignerGetSchematicConnectivityOutput | null
+> {
   return {
     definition: {
       name: "designer_get_schematic_connectivity",
@@ -1369,17 +1414,29 @@ export function makeDesignerGetSchematicConnectivityTool(
     },
     async execute(execCtx, input) {
       const designer = ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
-      if (!designer) return failedTool("Designer module not available.", execCtx.limits);
+      if (!designer)
+        return failedTool("Designer module not available.", execCtx.limits);
       const resolvedDesign = resolveDesignForTool({
         chatId: execCtx.chatId,
         requestedDesignId: input.designId,
         contextResolver,
       });
-      if (!resolvedDesign.ok) return failedTool(resolvedDesign.warning, execCtx.limits);
+      if (!resolvedDesign.ok)
+        return failedTool(resolvedDesign.warning, execCtx.limits);
       const design = await designer.getDesign(resolvedDesign.designId);
-      if (!design) return failedTool(`Design not found: ${resolvedDesign.designId}`, execCtx.limits);
-      const projection = await designer.getSchematicProjection(resolvedDesign.designId);
-      if (!projection) return failedTool(`Schematic projection not found: ${resolvedDesign.designId}`, execCtx.limits);
+      if (!design)
+        return failedTool(
+          `Design not found: ${resolvedDesign.designId}`,
+          execCtx.limits,
+        );
+      const projection = await designer.getSchematicProjection(
+        resolvedDesign.designId,
+      );
+      if (!projection)
+        return failedTool(
+          `Schematic projection not found: ${resolvedDesign.designId}`,
+          execCtx.limits,
+        );
       const maxItems = execCtx.limits.maxItems ?? 50;
       const pinToNet = netNameByPinId(projection);
       const includePins = input.includePins !== false;
@@ -1449,7 +1506,14 @@ export function makeDesignerGetSchematicConnectivityTool(
       return {
         ok: true,
         data: output,
-        sources: [{ id: `design_${design.head.id}`, kind: "design", refId: design.head.id, label: design.head.name }],
+        sources: [
+          {
+            id: `design_${design.head.id}`,
+            kind: "design",
+            refId: design.head.id,
+            label: design.head.name,
+          },
+        ],
         warnings: [],
         truncated: partsTruncated || netsTruncated || wiresTruncated,
         limits: execCtx.limits,
@@ -1467,7 +1531,7 @@ interface DesignerProposeSchematicEditsInput {
   parts?: Array<{
     componentId: string;
     value?: string;
-    positionNm: { x: number; y: number };
+    positionNm?: { x: number; y: number };
     rotationDeg?: 0 | 90 | 180 | 270;
     mirrored?: boolean;
     properties?: Record<string, string>;
@@ -1480,9 +1544,10 @@ interface DesignerProposeSchematicEditsInput {
     rotationDeg?: 0 | 90 | 180 | 270;
   }>;
   wires?: Array<{
-    sourcePinId: string;
-    targetPinId: string;
-    pointsNm?: Array<{ x: number; y: number }>;
+    source: WireEndpoint;
+    target: WireEndpoint;
+    netName?: string;
+    reason?: string;
   }>;
 }
 
@@ -1491,7 +1556,10 @@ export function makeDesignerProposeSchematicEditsTool(
   contextResolver: ContextResolver,
   conversation: ConversationStore,
   options: DesignerToolOptions = {},
-): AiTool<DesignerProposeSchematicEditsInput, SchematicProposalEnvelope | null> {
+): AiTool<
+  DesignerProposeSchematicEditsInput,
+  SchematicProposalEnvelope | null
+> {
   return {
     definition: {
       name: "designer_propose_schematic_edits",
@@ -1499,24 +1567,97 @@ export function makeDesignerProposeSchematicEditsTool(
       effect: "write",
       capability: "designer.write.schematic.propose_edits",
       description:
-        "Create a pending proposal for small schematic edits: place parts, add labels/power ports/net portals, and optionally wire existing pins. Does not mutate unless session auto-apply is enabled or user applies it.",
+        "Batch small schematic edits: place library parts, add net labels / power ports / net portals, and wire existing pins. Do NOT pass coordinates — omit positionNm and wire geometry; the layout is auto-arranged from connectivity and wires are auto-routed when this proposal applies. Just choose components and how their pins connect. Non-destructive, so it auto-applies. To wire freshly-placed parts, run this once to place them, then call designer_get_schematic_connectivity and wire by REF.PIN.",
       inputSchema: {
         type: "object",
         properties: {
           designId: { type: "string" },
           title: { type: "string" },
           summary: { type: "string" },
-          parts: { type: "array", items: { type: "object" } },
-          labels: { type: "array", items: { type: "object" } },
-          powerPorts: { type: "array", items: { type: "object" } },
-          wires: { type: "array", items: { type: "object" } },
+          parts: {
+            type: "array",
+            description: "Library components to place.",
+            items: {
+              type: "object",
+              properties: {
+                componentId: { type: "string" },
+                value: { type: "string" },
+                positionNm: {
+                  type: "object",
+                  description:
+                    "Optional. Omit it — placement is auto-arranged from connectivity after this proposal applies. Only pass coordinates to pin a specific part.",
+                  properties: { x: { type: "number" }, y: { type: "number" } },
+                  required: ["x", "y"],
+                },
+                rotationDeg: { type: "integer", enum: [0, 90, 180, 270] },
+                mirrored: { type: "boolean" },
+                properties: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+              },
+              required: ["componentId"],
+            },
+          },
+          labels: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                text: { type: "string" },
+                positionNm: {
+                  type: "object",
+                  properties: { x: { type: "number" }, y: { type: "number" } },
+                  required: ["x", "y"],
+                },
+              },
+              required: ["text", "positionNm"],
+            },
+          },
+          powerPorts: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                kind: { type: "string", enum: ["gnd", "pwr", "net_portal"] },
+                text: {
+                  type: "string",
+                  description:
+                    'Rail/portal name (e.g. "+5V", "SDA"); ignored for gnd.',
+                },
+                positionNm: {
+                  type: "object",
+                  properties: { x: { type: "number" }, y: { type: "number" } },
+                  required: ["x", "y"],
+                },
+                rotationDeg: { type: "integer", enum: [0, 90, 180, 270] },
+              },
+              required: ["kind", "positionNm"],
+            },
+          },
+          wires: {
+            type: "array",
+            description:
+              "Connect existing pins (or a pin to a named net). Geometry is auto-routed.",
+            items: {
+              type: "object",
+              properties: {
+                source: ENDPOINT_SCHEMA,
+                target: ENDPOINT_SCHEMA,
+                netName: { type: "string" },
+                reason: { type: "string" },
+              },
+              required: ["source", "target"],
+            },
+          },
         },
         required: ["title", "summary"],
       },
     },
     async execute(execCtx, input) {
       const designer = ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
-      if (!designer) return failedTool("Designer module not available.", execCtx.limits);
+      if (!designer)
+        return failedTool("Designer module not available.", execCtx.limits);
       const chatId = execCtx.chatId;
       if (!chatId) return failedTool("Chat context missing.", execCtx.limits);
       const resolvedDesign = resolveDesignForTool({
@@ -1524,17 +1665,39 @@ export function makeDesignerProposeSchematicEditsTool(
         requestedDesignId: input.designId,
         contextResolver,
       });
-      if (!resolvedDesign.ok) return failedTool(resolvedDesign.warning, execCtx.limits);
+      if (!resolvedDesign.ok)
+        return failedTool(resolvedDesign.warning, execCtx.limits);
       const designId = resolvedDesign.designId;
       const designRecord = await designer.getDesign(designId);
-      if (!designRecord) return failedTool(`Design not found: ${designId}`, execCtx.limits);
-      const schematic = input.wires?.length
+      if (!designRecord)
+        return failedTool(`Design not found: ${designId}`, execCtx.limits);
+      // Need the projection to wire pins and to pick a non-overlapping start
+      // for parts that omit positionNm (the common case — placement is then
+      // auto-arranged from connectivity by the appended arrange op).
+      const needsProjection =
+        (input.wires?.length ?? 0) > 0 ||
+        (input.parts ?? []).some((part) => !part.positionNm);
+      const schematic = needsProjection
         ? await designer.getSchematicProjection(designId)
         : null;
       if (input.wires?.length && !schematic) {
-        return failedTool(`Schematic projection not found: ${designId}`, execCtx.limits);
+        return failedTool(
+          `Schematic projection not found: ${designId}`,
+          execCtx.limits,
+        );
       }
-      const existingPinIds = schematic ? allExistingPinIds(schematic) : new Set<string>();
+      const index = schematic ? buildProjectionIndex(schematic) : null;
+      const placementStart = schematic
+        ? resolvePlacementStart(schematic)
+        : { x: 0, y: 0 };
+      const autoPlaceCount = (input.parts ?? [])
+        .slice(0, 20)
+        .filter((part) => !part.positionNm).length;
+      const autoPlaceCols = Math.max(
+        1,
+        Math.min(8, Math.ceil(Math.sqrt(Math.max(1, autoPlaceCount)))),
+      );
+      let autoPlaceIndex = 0;
 
       const proposalId = crypto.randomUUID();
       const sources: AiSourceRef[] = [
@@ -1547,21 +1710,50 @@ export function makeDesignerProposeSchematicEditsTool(
       ];
       const warnings: string[] = [];
       const operations: SchematicProposalEnvelope["operations"] = [];
-      if ((input.parts?.length ?? 0) > 20) warnings.push("Only the first 20 part operation(s) were included.");
-      if ((input.labels?.length ?? 0) > 20) warnings.push("Only the first 20 label operation(s) were included.");
-      if ((input.powerPorts?.length ?? 0) > 20) warnings.push("Only the first 20 power/portal operation(s) were included.");
-      if ((input.wires?.length ?? 0) > 20) warnings.push("Only the first 20 wire operation(s) were included.");
+      if ((input.parts?.length ?? 0) > 20)
+        warnings.push("Only the first 20 part operation(s) were included.");
+      if ((input.labels?.length ?? 0) > 20)
+        warnings.push("Only the first 20 label operation(s) were included.");
+      if ((input.powerPorts?.length ?? 0) > 20)
+        warnings.push(
+          "Only the first 20 power/portal operation(s) were included.",
+        );
+      if ((input.wires?.length ?? 0) > 20)
+        warnings.push("Only the first 20 wire operation(s) were included.");
 
       for (const part of (input.parts ?? []).slice(0, 20)) {
-        const detail = await designer.resolveLibraryComponentForPlacement(part.componentId);
+        const detail = await designer.resolveLibraryComponentForPlacement(
+          part.componentId,
+        );
         if (!detail) {
-          warnings.push(`${part.componentId}: Installed library component not found.`);
+          warnings.push(
+            `${part.componentId}: Installed library component not found.`,
+          );
           continue;
+        }
+        // Use the model's coordinates only if given; otherwise drop the part on
+        // a temporary non-overlapping grid (the arrange pass relays it anyway).
+        let positionNm: { x: number; y: number };
+        if (part.positionNm) {
+          positionNm = snapPoint(part.positionNm);
+        } else {
+          positionNm = {
+            x: snapNm(
+              placementStart.x +
+                (autoPlaceIndex % autoPlaceCols) * DEFAULT_GRID_SPACING_X_NM,
+            ),
+            y: snapNm(
+              placementStart.y +
+                Math.floor(autoPlaceIndex / autoPlaceCols) *
+                  DEFAULT_GRID_SPACING_Y_NM,
+            ),
+          };
+          autoPlaceIndex += 1;
         }
         const placeCommand: DesignerCommandEnvelope["command"] = {
           type: "place_part",
           componentId: part.componentId,
-          positionNm: snapPoint(part.positionNm),
+          positionNm,
           rotationDeg: part.rotationDeg ?? 0,
           mirrored: part.mirrored === true,
         };
@@ -1572,16 +1764,31 @@ export function makeDesignerProposeSchematicEditsTool(
           summary: `Place ${detail.component.name} at ${placeCommand.positionNm.x}, ${placeCommand.positionNm.y} nm.`,
           riskLevel: "medium",
           payload: placeCommand,
-          updatePartAfterCreate: part.value !== undefined || part.properties !== undefined
-            ? {
-                ...(part.value !== undefined ? { value: part.value } : {}),
-                ...(part.properties !== undefined ? { propertiesJson: part.properties } : {}),
-              }
-            : undefined,
-          sources: [{ id: `library_component_${part.componentId}`, kind: "library-component", refId: part.componentId, label: detail.component.name }],
+          updatePartAfterCreate:
+            part.value !== undefined || part.properties !== undefined
+              ? {
+                  ...(part.value !== undefined ? { value: part.value } : {}),
+                  ...(part.properties !== undefined
+                    ? { propertiesJson: part.properties }
+                    : {}),
+                }
+              : undefined,
+          sources: [
+            {
+              id: `library_component_${part.componentId}`,
+              kind: "library-component",
+              refId: part.componentId,
+              label: detail.component.name,
+            },
+          ],
           warnings: [],
         });
-        sources.push({ id: `library_component_${part.componentId}`, kind: "library-component", refId: part.componentId, label: detail.component.name });
+        sources.push({
+          id: `library_component_${part.componentId}`,
+          kind: "library-component",
+          refId: part.componentId,
+          label: detail.component.name,
+        });
       }
 
       for (const label of (input.labels ?? []).slice(0, 20)) {
@@ -1610,15 +1817,32 @@ export function makeDesignerProposeSchematicEditsTool(
       for (const port of (input.powerPorts ?? []).slice(0, 20)) {
         const positionNm = snapPoint(port.positionNm);
         const rotationDeg = port.rotationDeg ?? 0;
-        if (port.kind !== "gnd" && port.kind !== "pwr" && port.kind !== "net_portal") {
-          warnings.push(`Skipped power/portal: unsupported kind ${String(port.kind)}.`);
+        if (
+          port.kind !== "gnd" &&
+          port.kind !== "pwr" &&
+          port.kind !== "net_portal"
+        ) {
+          warnings.push(
+            `Skipped power/portal: unsupported kind ${String(port.kind)}.`,
+          );
           continue;
         }
-        const command: DesignerCommandEnvelope["command"] = port.kind === "gnd"
-          ? { type: "place_gnd_port", positionNm, rotationDeg }
-          : port.kind === "pwr"
-            ? { type: "place_pwr_port", positionNm, rotationDeg, railText: port.text?.trim() || "VCC" }
-            : { type: "place_net_portal", positionNm, rotationDeg, portalText: port.text?.trim() || "NET" };
+        const command: DesignerCommandEnvelope["command"] =
+          port.kind === "gnd"
+            ? { type: "place_gnd_port", positionNm, rotationDeg }
+            : port.kind === "pwr"
+              ? {
+                  type: "place_pwr_port",
+                  positionNm,
+                  rotationDeg,
+                  railText: port.text?.trim() || "VCC",
+                }
+              : {
+                  type: "place_net_portal",
+                  positionNm,
+                  rotationDeg,
+                  portalText: port.text?.trim() || "NET",
+                };
         operations.push({
           id: `${proposalId}:port:${operations.length}`,
           kind: `designer.${command.type}`,
@@ -1632,35 +1856,97 @@ export function makeDesignerProposeSchematicEditsTool(
       }
 
       for (const wire of (input.wires ?? []).slice(0, 20)) {
-        if (
-          !existingPinIds.has(wire.sourcePinId) ||
-          !existingPinIds.has(wire.targetPinId)
-        ) {
+        if (!schematic || !index) {
+          warnings.push("Skipped wire: schematic projection unavailable.");
+          continue;
+        }
+        const src = resolveWireEndpoint(schematic, wire.source, index);
+        if (!src.ok) {
+          warnings.push(`Skipped wire: ${src.error}`);
+          continue;
+        }
+        const tgt = resolveWireEndpoint(schematic, wire.target, index);
+        if (!tgt.ok) {
+          warnings.push(`Skipped wire: ${tgt.error}`);
+          continue;
+        }
+        if (src.kind === "net" && tgt.kind === "net") {
           warnings.push(
-            `Skipped wire ${wire.sourcePinId} -> ${wire.targetPinId}: pin IDs must already exist in the current schematic projection.`,
+            `Skipped wire: cannot connect two nets ("${src.net}" and "${tgt.net}").`,
           );
           continue;
         }
-        const pointsNm = wire.pointsNm?.map(snapPoint);
-        if (pointsNm && !isManhattanPath(pointsNm)) {
-          warnings.push(
-            `Skipped wire ${wire.sourcePinId} -> ${wire.targetPinId}: pointsNm must be Manhattan/orthogonal.`,
-          );
+        if (src.kind === "net" || tgt.kind === "net") {
+          const pinId =
+            src.kind === "pin"
+              ? src.pinId
+              : tgt.kind === "pin"
+                ? tgt.pinId
+                : null;
+          const netName =
+            src.kind === "net" ? src.net : tgt.kind === "net" ? tgt.net : null;
+          if (!pinId || !netName) {
+            warnings.push(
+              "Skipped net connect: need exactly one pin and one net.",
+            );
+            continue;
+          }
+          const plan = planNetConnect(schematic, pinId, netName, index);
+          if (!plan.ok) {
+            warnings.push(`Skipped net connect: ${plan.error}`);
+            continue;
+          }
+          operations.push({
+            id: `${proposalId}:net:${operations.length}`,
+            kind: `designer.${plan.plan.primitiveCommand.type}`,
+            title: `Connect ${netName}`,
+            summary: wire.reason ?? `Connect ${pinId} to net ${netName}.`,
+            riskLevel: "high",
+            payload: plan.plan.primitiveCommand,
+            linkWireToCreatedPrimitive: { sourcePinId: plan.plan.sourcePinId },
+            sources: [],
+            warnings: [],
+          });
           continue;
         }
-        const command: DesignerCommandEnvelope["command"] = {
-          type: "create_wire",
-          sourcePinId: wire.sourcePinId,
-          targetPinId: wire.targetPinId,
-          ...(pointsNm && pointsNm.length > 0 ? { pointsNm } : {}),
-        };
         operations.push({
           id: `${proposalId}:wire:${operations.length}`,
           kind: "designer.create_wire",
           title: "Create wire",
-          summary: `Wire ${wire.sourcePinId} to ${wire.targetPinId}.`,
+          summary: wire.reason ?? `Wire ${src.pinId} to ${tgt.pinId}.`,
           riskLevel: "high",
-          payload: command,
+          payload: {
+            type: "create_wire",
+            sourcePinId: src.pinId,
+            targetPinId: tgt.pinId,
+          },
+          sources: [],
+          warnings: [],
+        });
+      }
+
+      // Append a deterministic arrange pass ONLY when this proposal adds
+      // connectivity (wires or power/ground/portal flags). Arrange groups
+      // net-connected parts and re-routes wires — but with NO connectivity it
+      // would scatter every part into its own singleton block and flatten a
+      // clean placement grid into one long row. So bare placement is left as
+      // placed; arrange kicks in once there are nets to lay out around.
+      const addedConnectivity = operations.some(
+        (op) =>
+          op.kind === "designer.create_wire" ||
+          op.kind === "designer.place_gnd_port" ||
+          op.kind === "designer.place_pwr_port" ||
+          op.kind === "designer.place_net_portal",
+      );
+      if (addedConnectivity) {
+        operations.push({
+          id: `${proposalId}:arrange:${operations.length}`,
+          kind: "designer.auto_arrange_schematic",
+          title: "Auto-arrange schematic",
+          summary:
+            "Group connected parts and re-route wires for a clean layout.",
+          riskLevel: "medium",
+          payload: { type: "auto_arrange_schematic" },
           sources: [],
           warnings: [],
         });
@@ -1671,10 +1957,13 @@ export function makeDesignerProposeSchematicEditsTool(
           ok: false,
           data: null,
           sources,
-          warnings: warnings.length > 0
-            ? [...warnings, "No valid schematic operations were proposed."]
-            : ["No valid schematic operations were proposed."],
-          truncated: warnings.some((warning) => warning.startsWith("Only the first")),
+          warnings:
+            warnings.length > 0
+              ? [...warnings, "No valid schematic operations were proposed."]
+              : ["No valid schematic operations were proposed."],
+          truncated: warnings.some((warning) =>
+            warning.startsWith("Only the first"),
+          ),
           limits: execCtx.limits,
         };
       }
@@ -1686,8 +1975,14 @@ export function makeDesignerProposeSchematicEditsTool(
         kind: "designer_schematic_edits",
         toolName: "designer_propose_schematic_edits",
         title: input.title.trim() || "Schematic edit proposal",
-        summary: input.summary.trim() || `Propose ${operations.length} schematic operation(s).`,
-        riskLevel: operations.some((operation) => operation.riskLevel === "high") ? "high" : "medium",
+        summary:
+          input.summary.trim() ||
+          `Propose ${operations.length} schematic operation(s).`,
+        riskLevel: operations.some(
+          (operation) => operation.riskLevel === "high",
+        )
+          ? "high"
+          : "medium",
         designId,
         baseRevision: designRecord.head.revision,
         operations,
@@ -1695,39 +1990,113 @@ export function makeDesignerProposeSchematicEditsTool(
         sources,
         warnings,
       };
-      conversation.createWriteProposal({
-        id: proposalId,
+      return finalizeAndMaybeApply({
+        designer,
+        conversation,
         chatId,
-        kind: "designer_schematic_edits",
         designId,
         baseRevision: designRecord.head.revision,
-        proposal: envelope,
         envelope,
+        warnings,
+        sources,
+        limits: execCtx.limits,
+        options,
       });
-      if (
-        warnings.length === 0 &&
-        options.isSessionAutoApplyAllowed?.({
-          chatId,
-          toolName: "designer_propose_schematic_edits",
-          proposalKind: "designer_schematic_edits",
-          riskLevel: envelope.riskLevel,
-        }) === true
-      ) {
-        const applyResult = await applySchematicProposalOperations({
-          designer,
-          designId,
-          baseRevision: designRecord.head.revision,
-          envelope,
-          allowPartial: false,
-        });
-        conversation.updateWriteProposalStatus(
-          chatId,
-          proposalId,
-          writeProposalTerminalStatus(applyResult),
-          applyResult,
-        );
-      }
-      return { ok: true, data: envelope, sources, warnings, truncated: warnings.some((warning) => warning.startsWith("Only the first")), limits: execCtx.limits };
+    },
+  };
+}
+
+// ─── designer_arrange_schematic ────────────────────────────────────────
+
+interface DesignerArrangeSchematicInput {
+  designId?: string;
+}
+
+export function makeDesignerArrangeSchematicTool(
+  ctx: CoreBackendModuleContext,
+  contextResolver: ContextResolver,
+  conversation: ConversationStore,
+  options: DesignerToolOptions = {},
+): AiTool<DesignerArrangeSchematicInput, SchematicProposalEnvelope | null> {
+  return {
+    definition: {
+      name: "designer_arrange_schematic",
+      version: "1",
+      effect: "write",
+      capability: "designer.write.schematic.arrange",
+      description:
+        "Tidy the whole schematic: deterministically group net-connected parts with routing channels, slide power/ground flags with their pins, and re-route every wire around bodies, flags and other wires. Non-destructive, auto-applies, single undo step. Use when the layout looks messy or overlapping.",
+      inputSchema: {
+        type: "object",
+        properties: { designId: { type: "string" } },
+      },
+    },
+    async execute(execCtx, input) {
+      const designer = ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+      if (!designer)
+        return failedTool("Designer module not available.", execCtx.limits);
+      const chatId = execCtx.chatId;
+      if (!chatId) return failedTool("Chat context missing.", execCtx.limits);
+      const resolvedDesign = resolveDesignForTool({
+        chatId,
+        requestedDesignId: input.designId,
+        contextResolver,
+      });
+      if (!resolvedDesign.ok)
+        return failedTool(resolvedDesign.warning, execCtx.limits);
+      const designId = resolvedDesign.designId;
+      const designRecord = await designer.getDesign(designId);
+      if (!designRecord)
+        return failedTool(`Design not found: ${designId}`, execCtx.limits);
+
+      const proposalId = crypto.randomUUID();
+      const sources: AiSourceRef[] = [
+        {
+          id: `design_${designId}`,
+          kind: "design",
+          refId: designId,
+          label: designRecord.head.name,
+        },
+      ];
+      const envelope: SchematicProposalEnvelope = {
+        id: proposalId,
+        kind: "designer_schematic_edits",
+        toolName: "designer_arrange_schematic",
+        title: "Arrange schematic",
+        summary: "Re-group parts and re-route wires for a clean layout.",
+        riskLevel: "medium",
+        designId,
+        baseRevision: designRecord.head.revision,
+        operations: [
+          {
+            id: `${proposalId}:arrange:0`,
+            kind: "designer.auto_arrange_schematic",
+            title: "Auto-arrange schematic",
+            summary:
+              "Group connected parts and re-route wires for a clean layout.",
+            riskLevel: "medium",
+            payload: { type: "auto_arrange_schematic" },
+            sources: [],
+            warnings: [],
+          },
+        ],
+        payload: input,
+        sources,
+        warnings: [],
+      };
+      await contextResolver.maybeAutoBindDesign(chatId, designId);
+      return finalizeAndMaybeApply({
+        designer,
+        conversation,
+        chatId,
+        designId,
+        baseRevision: designRecord.head.revision,
+        envelope,
+        warnings: [],
+        sources,
+        limits: execCtx.limits,
+        options,
+      });
     },
   };
 }
@@ -1739,17 +2108,15 @@ interface DesignerProposeSchematicWiresInput {
   title: string;
   summary: string;
   wires?: Array<{
-    sourcePinId: string;
-    targetPinId: string;
+    source: WireEndpoint;
+    target: WireEndpoint;
     netName?: string;
-    pointsNm?: Array<{ x: number; y: number }>;
     reason?: string;
   }>;
   junctions?: Array<{
-    sourcePinId: string;
+    source: PinTarget;
     wireId: string;
     targetPointNm: { x: number; y: number };
-    pointsNm?: Array<{ x: number; y: number }>;
     reason?: string;
   }>;
 }
@@ -1759,7 +2126,10 @@ export function makeDesignerProposeSchematicWiresTool(
   contextResolver: ContextResolver,
   conversation: ConversationStore,
   options: DesignerToolOptions = {},
-): AiTool<DesignerProposeSchematicWiresInput, SchematicProposalEnvelope | null> {
+): AiTool<
+  DesignerProposeSchematicWiresInput,
+  SchematicProposalEnvelope | null
+> {
   return {
     definition: {
       name: "designer_propose_schematic_wires",
@@ -1767,22 +2137,63 @@ export function makeDesignerProposeSchematicWiresTool(
       effect: "write",
       capability: "designer.write.schematic.propose_wires",
       description:
-        "Create a pending proposal to wire existing schematic pins or add junction wires using exact pin IDs from designer_get_schematic_connectivity. Does not mutate until applied unless session auto-apply is enabled.",
+        'Wire schematic pins together, or connect a pin to a named net. Address pins by "REF.PIN" (e.g. "U1.VCC", "R1.2") — call designer_get_schematic_connectivity first to learn references and pin names. Do NOT pass coordinates: routing is automatic and obstacle-aware. After wiring, the whole sheet is auto-arranged — components are MOVED to group what is now connected and wires re-routed cleanly. Non-destructive, so it auto-applies.',
       inputSchema: {
         type: "object",
         properties: {
           designId: { type: "string" },
           title: { type: "string" },
           summary: { type: "string" },
-          wires: { type: "array", items: { type: "object" } },
-          junctions: { type: "array", items: { type: "object" } },
+          wires: {
+            type: "array",
+            description:
+              "Connections to make. Each joins a source to a target; geometry is auto-routed.",
+            items: {
+              type: "object",
+              properties: {
+                source: ENDPOINT_SCHEMA,
+                target: ENDPOINT_SCHEMA,
+                netName: {
+                  type: "string",
+                  description: "Optional display label for the resulting net.",
+                },
+                reason: { type: "string" },
+              },
+              required: ["source", "target"],
+            },
+          },
+          junctions: {
+            type: "array",
+            description:
+              "Tap a pin onto an existing wire at an exact on-wire point (creates a junction).",
+            items: {
+              type: "object",
+              properties: {
+                source: PIN_TARGET_SCHEMA,
+                wireId: {
+                  type: "string",
+                  description:
+                    "ID of the existing wire to tap (from connectivity).",
+                },
+                targetPointNm: {
+                  type: "object",
+                  properties: { x: { type: "number" }, y: { type: "number" } },
+                  required: ["x", "y"],
+                  description: "A point lying on the target wire (nanometers).",
+                },
+                reason: { type: "string" },
+              },
+              required: ["source", "wireId", "targetPointNm"],
+            },
+          },
         },
         required: ["title", "summary"],
       },
     },
     async execute(execCtx, input) {
       const designer = ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
-      if (!designer) return failedTool("Designer module not available.", execCtx.limits);
+      if (!designer)
+        return failedTool("Designer module not available.", execCtx.limits);
       const chatId = execCtx.chatId;
       if (!chatId) return failedTool("Chat context missing.", execCtx.limits);
       const resolvedDesign = resolveDesignForTool({
@@ -1790,88 +2201,164 @@ export function makeDesignerProposeSchematicWiresTool(
         requestedDesignId: input.designId,
         contextResolver,
       });
-      if (!resolvedDesign.ok) return failedTool(resolvedDesign.warning, execCtx.limits);
+      if (!resolvedDesign.ok)
+        return failedTool(resolvedDesign.warning, execCtx.limits);
       const designId = resolvedDesign.designId;
       const designRecord = await designer.getDesign(designId);
-      if (!designRecord) return failedTool(`Design not found: ${designId}`, execCtx.limits);
+      if (!designRecord)
+        return failedTool(`Design not found: ${designId}`, execCtx.limits);
       const schematic = await designer.getSchematicProjection(designId);
-      if (!schematic) return failedTool(`Schematic projection not found: ${designId}`, execCtx.limits);
+      if (!schematic)
+        return failedTool(
+          `Schematic projection not found: ${designId}`,
+          execCtx.limits,
+        );
 
       const proposalId = crypto.randomUUID();
       const warnings: string[] = [];
       const operations: SchematicProposalEnvelope["operations"] = [];
-      if ((input.wires?.length ?? 0) > 40) warnings.push("Only the first 40 wire operation(s) were included.");
-      if ((input.junctions?.length ?? 0) > 40) warnings.push("Only the first 40 junction operation(s) were included.");
-      const existingPinIds = allExistingPinIds(schematic);
+      if ((input.wires?.length ?? 0) > 40)
+        warnings.push("Only the first 40 wire operation(s) were included.");
+      if ((input.junctions?.length ?? 0) > 40)
+        warnings.push("Only the first 40 junction operation(s) were included.");
+      const index = buildProjectionIndex(schematic);
       const wireById = new Map(schematic.wires.map((wire) => [wire.id, wire]));
       const sources: AiSourceRef[] = [
-        { id: `design_${designId}`, kind: "design", refId: designId, label: designRecord.head.name },
-        { id: `schematic_${designId}`, kind: "schematic", refId: designId, label: `${designRecord.head.name} schematic` },
+        {
+          id: `design_${designId}`,
+          kind: "design",
+          refId: designId,
+          label: designRecord.head.name,
+        },
+        {
+          id: `schematic_${designId}`,
+          kind: "schematic",
+          refId: designId,
+          label: `${designRecord.head.name} schematic`,
+        },
       ];
 
       for (const wire of (input.wires ?? []).slice(0, 40)) {
-        if (!existingPinIds.has(wire.sourcePinId) || !existingPinIds.has(wire.targetPinId)) {
-          warnings.push(`Skipped wire ${wire.sourcePinId} -> ${wire.targetPinId}: pin IDs must already exist in the current schematic projection.`);
+        const src = resolveWireEndpoint(schematic, wire.source, index);
+        if (!src.ok) {
+          warnings.push(
+            `Skipped wire: ${src.error}${src.candidates ? ` Candidates: ${src.candidates.join(", ")}` : ""}`,
+          );
           continue;
         }
-        const pointsNm = wire.pointsNm?.map(snapPoint);
-        if (pointsNm && !isManhattanPath(pointsNm)) {
-          warnings.push(`Skipped wire ${wire.sourcePinId} -> ${wire.targetPinId}: pointsNm must be Manhattan/orthogonal.`);
+        const tgt = resolveWireEndpoint(schematic, wire.target, index);
+        if (!tgt.ok) {
+          warnings.push(
+            `Skipped wire: ${tgt.error}${tgt.candidates ? ` Candidates: ${tgt.candidates.join(", ")}` : ""}`,
+          );
           continue;
         }
-        const command: DesignerCommandEnvelope["command"] = {
-          type: "create_wire",
-          sourcePinId: wire.sourcePinId,
-          targetPinId: wire.targetPinId,
-          ...(pointsNm && pointsNm.length > 0 ? { pointsNm } : {}),
-        };
+        if (src.kind === "net" && tgt.kind === "net") {
+          warnings.push(
+            `Skipped wire: cannot connect two nets ("${src.net}" and "${tgt.net}") without a pin.`,
+          );
+          continue;
+        }
+        if (src.kind === "net" || tgt.kind === "net") {
+          const pinId =
+            src.kind === "pin"
+              ? src.pinId
+              : tgt.kind === "pin"
+                ? tgt.pinId
+                : null;
+          const netName =
+            src.kind === "net" ? src.net : tgt.kind === "net" ? tgt.net : null;
+          if (!pinId || !netName) {
+            warnings.push(
+              "Skipped net connect: need exactly one pin and one net.",
+            );
+            continue;
+          }
+          const plan = planNetConnect(schematic, pinId, netName, index);
+          if (!plan.ok) {
+            warnings.push(`Skipped net connect: ${plan.error}`);
+            continue;
+          }
+          operations.push({
+            id: `${proposalId}:net:${operations.length}`,
+            kind: `designer.${plan.plan.primitiveCommand.type}`,
+            title: `Connect ${netName}`,
+            summary: wire.reason ?? `Connect ${pinId} to net ${netName}.`,
+            riskLevel: "high",
+            payload: plan.plan.primitiveCommand,
+            linkWireToCreatedPrimitive: { sourcePinId: plan.plan.sourcePinId },
+            sources,
+            warnings: [],
+          });
+          continue;
+        }
         operations.push({
           id: `${proposalId}:wire:${operations.length}`,
           kind: "designer.create_wire",
           title: wire.netName ? `Wire ${wire.netName}` : "Create wire",
-          summary: wire.reason ?? `Wire ${wire.sourcePinId} to ${wire.targetPinId}.`,
+          summary: wire.reason ?? `Wire ${src.pinId} to ${tgt.pinId}.`,
           riskLevel: "high",
-          payload: command,
+          payload: {
+            type: "create_wire",
+            sourcePinId: src.pinId,
+            targetPinId: tgt.pinId,
+          },
           sources,
           warnings: [],
         });
       }
 
       for (const junction of (input.junctions ?? []).slice(0, 40)) {
-        const targetPointNm = snapPoint(junction.targetPointNm);
+        const src = resolvePinTarget(schematic, junction.source, index);
+        if (!src.ok) {
+          warnings.push(
+            `Skipped junction: ${src.error}${src.candidates ? ` Candidates: ${src.candidates.join(", ")}` : ""}`,
+          );
+          continue;
+        }
         const existingWire = wireById.get(junction.wireId);
-        if (!existingPinIds.has(junction.sourcePinId)) {
-          warnings.push(`Skipped junction wire from ${junction.sourcePinId}: source pin ID must already exist.`);
-          continue;
-        }
         if (!existingWire) {
-          warnings.push(`Skipped junction wire to ${junction.wireId}: target wire ID does not exist.`);
+          warnings.push(
+            `Skipped junction: wire ${junction.wireId} does not exist.`,
+          );
           continue;
         }
-        if (!pointOnWire(targetPointNm, existingWire)) {
-          warnings.push(`Skipped junction wire to ${junction.wireId}: target point is not on that wire.`);
+        if (!pointOnWire(junction.targetPointNm, existingWire)) {
+          warnings.push(
+            `Skipped junction: target point is not on wire ${junction.wireId}.`,
+          );
           continue;
         }
-        const pointsNm = junction.pointsNm?.map(snapPoint);
-        if (pointsNm && !isManhattanPath(pointsNm)) {
-          warnings.push(`Skipped junction wire to ${junction.wireId}: pointsNm must be Manhattan/orthogonal.`);
-          continue;
-        }
-        const command: DesignerCommandEnvelope["command"] = {
-          type: "create_wire_junction",
-          sourcePinId: junction.sourcePinId,
-          wireId: junction.wireId,
-          targetPointNm,
-          ...(pointsNm && pointsNm.length > 0 ? { pointsNm } : {}),
-        };
         operations.push({
           id: `${proposalId}:junction:${operations.length}`,
           kind: "designer.create_wire_junction",
           title: "Create junction wire",
-          summary: junction.reason ?? `Wire ${junction.sourcePinId} to junction on ${junction.wireId}.`,
+          summary:
+            junction.reason ?? `Tap ${src.pinId} onto wire ${junction.wireId}.`,
           riskLevel: "high",
-          payload: command,
+          payload: {
+            type: "create_wire_junction",
+            sourcePinId: src.pinId,
+            wireId: junction.wireId,
+            targetPointNm: junction.targetPointNm,
+          },
           sources,
+          warnings: [],
+        });
+      }
+
+      // Wiring changes connectivity, so re-arrange the whole sheet afterward:
+      // the layout engine MOVES components to group what's now connected and
+      // re-routes every wire cleanly. Runs last, seeing all the new wires.
+      if (operations.length > 0) {
+        operations.push({
+          id: `${proposalId}:arrange:${operations.length}`,
+          kind: "designer.auto_arrange_schematic",
+          title: "Auto-arrange schematic",
+          summary: "Move connected parts together and re-route wires cleanly.",
+          riskLevel: "medium",
+          payload: { type: "auto_arrange_schematic" },
+          sources: [],
           warnings: [],
         });
       }
@@ -1881,10 +2368,16 @@ export function makeDesignerProposeSchematicWiresTool(
           ok: false,
           data: null,
           sources,
-          warnings: warnings.length > 0
-            ? [...warnings, "No valid schematic wire operations were proposed."]
-            : ["No valid schematic wire operations were proposed."],
-          truncated: warnings.some((warning) => warning.startsWith("Only the first")),
+          warnings:
+            warnings.length > 0
+              ? [
+                  ...warnings,
+                  "No valid schematic wire operations were proposed.",
+                ]
+              : ["No valid schematic wire operations were proposed."],
+          truncated: warnings.some((warning) =>
+            warning.startsWith("Only the first"),
+          ),
           limits: execCtx.limits,
         };
       }
@@ -1896,7 +2389,9 @@ export function makeDesignerProposeSchematicWiresTool(
         kind: "designer_schematic_wires",
         toolName: "designer_propose_schematic_wires",
         title: input.title.trim() || "Schematic wiring proposal",
-        summary: input.summary.trim() || `Propose ${operations.length} schematic wire operation(s).`,
+        summary:
+          input.summary.trim() ||
+          `Propose ${operations.length} schematic wire operation(s).`,
         riskLevel: "high",
         designId,
         baseRevision: designRecord.head.revision,
@@ -1905,39 +2400,18 @@ export function makeDesignerProposeSchematicWiresTool(
         sources,
         warnings,
       };
-      conversation.createWriteProposal({
-        id: proposalId,
+      return finalizeAndMaybeApply({
+        designer,
+        conversation,
         chatId,
-        kind: "designer_schematic_wires",
         designId,
         baseRevision: designRecord.head.revision,
-        proposal: envelope,
         envelope,
+        warnings,
+        sources,
+        limits: execCtx.limits,
+        options,
       });
-      if (
-        warnings.length === 0 &&
-        options.isSessionAutoApplyAllowed?.({
-          chatId,
-          toolName: "designer_propose_schematic_wires",
-          proposalKind: "designer_schematic_wires",
-          riskLevel: envelope.riskLevel,
-        }) === true
-      ) {
-        const applyResult = await applySchematicProposalOperations({
-          designer,
-          designId,
-          baseRevision: designRecord.head.revision,
-          envelope,
-          allowPartial: false,
-        });
-        conversation.updateWriteProposalStatus(
-          chatId,
-          proposalId,
-          writeProposalTerminalStatus(applyResult),
-          applyResult,
-        );
-      }
-      return { ok: true, data: envelope, sources, warnings, truncated: warnings.some((warning) => warning.startsWith("Only the first")), limits: execCtx.limits };
     },
   };
 }
@@ -1949,7 +2423,9 @@ interface DesignerProposeSchematicUpdatesInput {
   title: string;
   summary: string;
   partUpdates?: Array<{
-    partId: string;
+    /** Part to update, addressed by UUID (`partId`) or reference (`ref`, e.g. "U1"). */
+    partId?: string;
+    ref?: string;
     positionNm?: { x: number; y: number };
     rotationDeg?: 0 | 90 | 180 | 270;
     mirrored?: boolean;
@@ -1978,7 +2454,10 @@ export function makeDesignerProposeSchematicUpdatesTool(
   contextResolver: ContextResolver,
   conversation: ConversationStore,
   options: DesignerToolOptions = {},
-): AiTool<DesignerProposeSchematicUpdatesInput, SchematicProposalEnvelope | null> {
+): AiTool<
+  DesignerProposeSchematicUpdatesInput,
+  SchematicProposalEnvelope | null
+> {
   return {
     definition: {
       name: "designer_propose_schematic_updates",
@@ -1986,47 +2465,155 @@ export function makeDesignerProposeSchematicUpdatesTool(
       effect: "write",
       capability: "designer.write.schematic.propose_updates",
       description:
-        "Create a pending proposal to move/rotate/mirror schematic parts, edit part values/properties, move/update labels, or move/rotate/update power/net portal primitives.",
+        'Move/rotate/mirror schematic parts, edit part value/reference/properties, move/rename labels, or move/rotate/retext power & net-portal primitives. Address parts by "partId" or reference "ref" (e.g. "U1"). Connected wires reflow automatically on move/rotate/mirror. Non-destructive, so it auto-applies.',
       inputSchema: {
         type: "object",
         properties: {
           designId: { type: "string" },
           title: { type: "string" },
           summary: { type: "string" },
-          partUpdates: { type: "array", items: { type: "object" } },
-          labelUpdates: { type: "array", items: { type: "object" } },
-          primitiveUpdates: { type: "array", items: { type: "object" } },
+          partUpdates: {
+            type: "array",
+            description:
+              "Changes to existing parts. Each entry needs partId or ref.",
+            items: {
+              type: "object",
+              properties: {
+                partId: {
+                  type: "string",
+                  description: "Part UUID (from connectivity).",
+                },
+                ref: {
+                  type: "string",
+                  description:
+                    'Reference designator, e.g. "U1". Alternative to partId.',
+                },
+                positionNm: {
+                  type: "object",
+                  properties: { x: { type: "number" }, y: { type: "number" } },
+                  required: ["x", "y"],
+                  description:
+                    "New position (nanometers). Connected wires reflow automatically.",
+                },
+                rotationDeg: { type: "integer", enum: [0, 90, 180, 270] },
+                mirrored: { type: "boolean" },
+                reference: {
+                  type: "string",
+                  description: "New reference designator.",
+                },
+                value: { type: "string" },
+                properties: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+                reason: { type: "string" },
+              },
+            },
+          },
+          labelUpdates: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                labelId: { type: "string" },
+                text: { type: "string" },
+                positionNm: {
+                  type: "object",
+                  properties: { x: { type: "number" }, y: { type: "number" } },
+                  required: ["x", "y"],
+                },
+                reason: { type: "string" },
+              },
+              required: ["labelId"],
+            },
+          },
+          primitiveUpdates: {
+            type: "array",
+            description: "Changes to gnd/pwr/net-portal primitives.",
+            items: {
+              type: "object",
+              properties: {
+                primitiveId: { type: "string" },
+                positionNm: {
+                  type: "object",
+                  properties: { x: { type: "number" }, y: { type: "number" } },
+                  required: ["x", "y"],
+                },
+                rotationDeg: { type: "integer", enum: [0, 90, 180, 270] },
+                text: {
+                  type: "string",
+                  description: "Rail/portal text (ignored for gnd).",
+                },
+                reason: { type: "string" },
+              },
+              required: ["primitiveId"],
+            },
+          },
         },
         required: ["title", "summary"],
       },
     },
     async execute(execCtx, input) {
       const designer = ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
-      if (!designer) return failedTool("Designer module not available.", execCtx.limits);
+      if (!designer)
+        return failedTool("Designer module not available.", execCtx.limits);
       const chatId = execCtx.chatId;
       if (!chatId) return failedTool("Chat context missing.", execCtx.limits);
-      const resolvedDesign = resolveDesignForTool({ chatId, requestedDesignId: input.designId, contextResolver });
-      if (!resolvedDesign.ok) return failedTool(resolvedDesign.warning, execCtx.limits);
+      const resolvedDesign = resolveDesignForTool({
+        chatId,
+        requestedDesignId: input.designId,
+        contextResolver,
+      });
+      if (!resolvedDesign.ok)
+        return failedTool(resolvedDesign.warning, execCtx.limits);
       const designId = resolvedDesign.designId;
       const designRecord = await designer.getDesign(designId);
-      if (!designRecord) return failedTool(`Design not found: ${designId}`, execCtx.limits);
+      if (!designRecord)
+        return failedTool(`Design not found: ${designId}`, execCtx.limits);
       const schematic = await designer.getSchematicProjection(designId);
-      if (!schematic) return failedTool(`Schematic projection not found: ${designId}`, execCtx.limits);
+      if (!schematic)
+        return failedTool(
+          `Schematic projection not found: ${designId}`,
+          execCtx.limits,
+        );
 
       const proposalId = crypto.randomUUID();
       const warnings: string[] = [];
       const operations: SchematicProposalEnvelope["operations"] = [];
-      if ((input.partUpdates?.length ?? 0) > 40) warnings.push("Only the first 40 part update operation(s) were included.");
-      if ((input.labelUpdates?.length ?? 0) > 40) warnings.push("Only the first 40 label update operation(s) were included.");
-      if ((input.primitiveUpdates?.length ?? 0) > 40) warnings.push("Only the first 40 primitive update operation(s) were included.");
+      if ((input.partUpdates?.length ?? 0) > 40)
+        warnings.push(
+          "Only the first 40 part update operation(s) were included.",
+        );
+      if ((input.labelUpdates?.length ?? 0) > 40)
+        warnings.push(
+          "Only the first 40 label update operation(s) were included.",
+        );
+      if ((input.primitiveUpdates?.length ?? 0) > 40)
+        warnings.push(
+          "Only the first 40 primitive update operation(s) were included.",
+        );
+      const index = buildProjectionIndex(schematic);
       const partById = new Map(schematic.parts.map((part) => [part.id, part]));
-      const labelById = new Map(schematic.labels.map((label) => [label.id, label]));
-      const primitiveById = new Map(schematic.primitives.map((primitive) => [primitive.id, primitive]));
+      const labelById = new Map(
+        schematic.labels.map((label) => [label.id, label]),
+      );
+      const primitiveById = new Map(
+        schematic.primitives.map((primitive) => [primitive.id, primitive]),
+      );
       const sources: AiSourceRef[] = [
-        { id: `design_${designId}`, kind: "design", refId: designId, label: designRecord.head.name },
+        {
+          id: `design_${designId}`,
+          kind: "design",
+          refId: designId,
+          label: designRecord.head.name,
+        },
       ];
 
-      const pushOperation = (command: DesignerCommandEnvelope["command"], title: string, summary: string): void => {
+      const pushOperation = (
+        command: DesignerCommandEnvelope["command"],
+        title: string,
+        summary: string,
+      ): void => {
         operations.push({
           id: `${proposalId}:update:${operations.length}`,
           kind: `designer.${command.type}`,
@@ -2040,40 +2627,71 @@ export function makeDesignerProposeSchematicUpdatesTool(
       };
 
       for (const update of (input.partUpdates ?? []).slice(0, 40)) {
-        const part = partById.get(update.partId);
-        if (!part) {
-          warnings.push(`Skipped part update ${update.partId}: part does not exist.`);
+        const target = update.partId ?? update.ref;
+        if (!target) {
+          warnings.push("Skipped part update: provide partId or ref.");
           continue;
         }
+        const resolved = resolvePartTarget(schematic, target, index);
+        if (!resolved.ok) {
+          warnings.push(
+            `Skipped part update: ${resolved.error}${resolved.candidates ? ` Candidates: ${resolved.candidates.join(", ")}` : ""}`,
+          );
+          continue;
+        }
+        const partId = resolved.partId;
+        const part = partById.get(partId)!;
         if (update.positionNm) {
           pushOperation(
-            { type: "move_part", partId: update.partId, positionNm: snapPoint(update.positionNm) },
+            {
+              type: "move_part",
+              partId,
+              positionNm: snapPoint(update.positionNm),
+            },
             `Move ${part.reference}`,
             update.reason ?? `Move ${part.reference}.`,
           );
         }
         if (update.rotationDeg !== undefined) {
           pushOperation(
-            { type: "rotate_part", partId: update.partId, rotationDeg: update.rotationDeg },
+            {
+              type: "rotate_part",
+              partId,
+              rotationDeg: update.rotationDeg,
+            },
             `Rotate ${part.reference}`,
-            update.reason ?? `Rotate ${part.reference} to ${update.rotationDeg}°.` ,
+            update.reason ??
+              `Rotate ${part.reference} to ${update.rotationDeg}°.`,
           );
         }
         if (update.mirrored !== undefined) {
           pushOperation(
-            { type: "mirror_part", partId: update.partId, mirrored: update.mirrored },
+            {
+              type: "mirror_part",
+              partId,
+              mirrored: update.mirrored,
+            },
             `${update.mirrored ? "Mirror" : "Unmirror"} ${part.reference}`,
-            update.reason ?? `${update.mirrored ? "Mirror" : "Unmirror"} ${part.reference}.`,
+            update.reason ??
+              `${update.mirrored ? "Mirror" : "Unmirror"} ${part.reference}.`,
           );
         }
-        if (update.reference !== undefined || update.value !== undefined || update.properties !== undefined) {
+        if (
+          update.reference !== undefined ||
+          update.value !== undefined ||
+          update.properties !== undefined
+        ) {
           pushOperation(
             {
               type: "update_part_properties",
-              partId: update.partId,
-              ...(update.reference !== undefined ? { reference: update.reference } : {}),
+              partId,
+              ...(update.reference !== undefined
+                ? { reference: update.reference }
+                : {}),
               ...(update.value !== undefined ? { value: update.value } : {}),
-              ...(update.properties !== undefined ? { propertiesJson: update.properties } : {}),
+              ...(update.properties !== undefined
+                ? { propertiesJson: update.properties }
+                : {}),
             },
             `Update ${part.reference}`,
             update.reason ?? `Update ${part.reference} properties.`,
@@ -2084,12 +2702,17 @@ export function makeDesignerProposeSchematicUpdatesTool(
       for (const update of (input.labelUpdates ?? []).slice(0, 40)) {
         const label = labelById.get(update.labelId);
         if (!label) {
-          warnings.push(`Skipped label update ${update.labelId}: label does not exist.`);
+          warnings.push(
+            `Skipped label update ${update.labelId}: label does not exist.`,
+          );
           continue;
         }
-        const text = update.text === undefined ? label.text : update.text.trim();
+        const text =
+          update.text === undefined ? label.text : update.text.trim();
         if (!text) {
-          warnings.push(`Skipped label update ${update.labelId}: text must not be empty.`);
+          warnings.push(
+            `Skipped label update ${update.labelId}: text must not be empty.`,
+          );
           continue;
         }
         pushOperation(
@@ -2097,7 +2720,9 @@ export function makeDesignerProposeSchematicUpdatesTool(
             type: "upsert_label",
             labelId: update.labelId,
             text,
-            positionNm: update.positionNm ? snapPoint(update.positionNm) : label.positionNm,
+            positionNm: update.positionNm
+              ? snapPoint(update.positionNm)
+              : label.positionNm,
           },
           `Update label ${label.text}`,
           update.reason ?? `Update label ${label.text} to ${text}.`,
@@ -2107,32 +2732,51 @@ export function makeDesignerProposeSchematicUpdatesTool(
       for (const update of (input.primitiveUpdates ?? []).slice(0, 40)) {
         const primitive = primitiveById.get(update.primitiveId);
         if (!primitive) {
-          warnings.push(`Skipped primitive update ${update.primitiveId}: primitive does not exist.`);
+          warnings.push(
+            `Skipped primitive update ${update.primitiveId}: primitive does not exist.`,
+          );
           continue;
         }
         if (update.positionNm) {
           pushOperation(
-            { type: "move_primitive", primitiveId: update.primitiveId, positionNm: snapPoint(update.positionNm) },
+            {
+              type: "move_primitive",
+              primitiveId: update.primitiveId,
+              positionNm: snapPoint(update.positionNm),
+            },
             `Move ${primitive.kind} port`,
             update.reason ?? `Move ${primitive.kind} port.`,
           );
         }
         if (update.rotationDeg !== undefined) {
           pushOperation(
-            { type: "rotate_primitive", primitiveId: update.primitiveId, rotationDeg: update.rotationDeg },
+            {
+              type: "rotate_primitive",
+              primitiveId: update.primitiveId,
+              rotationDeg: update.rotationDeg,
+            },
             `Rotate ${primitive.kind} port`,
-            update.reason ?? `Rotate ${primitive.kind} port to ${update.rotationDeg}°.` ,
+            update.reason ??
+              `Rotate ${primitive.kind} port to ${update.rotationDeg}°.`,
           );
         }
         if (update.text !== undefined) {
           const text = update.text.trim();
           if (primitive.kind === "gnd") {
-            warnings.push(`Skipped primitive text update ${update.primitiveId}: GND text is fixed.`);
+            warnings.push(
+              `Skipped primitive text update ${update.primitiveId}: GND text is fixed.`,
+            );
           } else if (!text) {
-            warnings.push(`Skipped primitive text update ${update.primitiveId}: text must not be empty.`);
+            warnings.push(
+              `Skipped primitive text update ${update.primitiveId}: text must not be empty.`,
+            );
           } else {
             pushOperation(
-              { type: "update_primitive_text", primitiveId: update.primitiveId, text },
+              {
+                type: "update_primitive_text",
+                primitiveId: update.primitiveId,
+                text,
+              },
               `Update ${primitive.kind} text`,
               update.reason ?? `Update ${primitive.kind} text to ${text}.`,
             );
@@ -2145,10 +2789,16 @@ export function makeDesignerProposeSchematicUpdatesTool(
           ok: false,
           data: null,
           sources,
-          warnings: warnings.length > 0
-            ? [...warnings, "No valid schematic update operations were proposed."]
-            : ["No valid schematic update operations were proposed."],
-          truncated: warnings.some((warning) => warning.startsWith("Only the first")),
+          warnings:
+            warnings.length > 0
+              ? [
+                  ...warnings,
+                  "No valid schematic update operations were proposed.",
+                ]
+              : ["No valid schematic update operations were proposed."],
+          truncated: warnings.some((warning) =>
+            warning.startsWith("Only the first"),
+          ),
           limits: execCtx.limits,
         };
       }
@@ -2160,7 +2810,9 @@ export function makeDesignerProposeSchematicUpdatesTool(
         kind: "designer_schematic_updates",
         toolName: "designer_propose_schematic_updates",
         title: input.title.trim() || "Schematic update proposal",
-        summary: input.summary.trim() || `Propose ${operations.length} schematic update operation(s).`,
+        summary:
+          input.summary.trim() ||
+          `Propose ${operations.length} schematic update operation(s).`,
         riskLevel: "medium",
         designId,
         baseRevision: designRecord.head.revision,
@@ -2169,12 +2821,18 @@ export function makeDesignerProposeSchematicUpdatesTool(
         sources,
         warnings,
       };
-      conversation.createWriteProposal({ id: proposalId, chatId, kind: envelope.kind, designId, baseRevision: designRecord.head.revision, proposal: envelope, envelope });
-      if (warnings.length === 0 && options.isSessionAutoApplyAllowed?.({ chatId, toolName: envelope.toolName, proposalKind: envelope.kind, riskLevel: envelope.riskLevel }) === true) {
-        const applyResult = await applySchematicProposalOperations({ designer, designId, baseRevision: designRecord.head.revision, envelope, allowPartial: false });
-        conversation.updateWriteProposalStatus(chatId, proposalId, writeProposalTerminalStatus(applyResult), applyResult);
-      }
-      return { ok: true, data: envelope, sources, warnings, truncated: warnings.some((warning) => warning.startsWith("Only the first")), limits: execCtx.limits };
+      return finalizeAndMaybeApply({
+        designer,
+        conversation,
+        chatId,
+        designId,
+        baseRevision: designRecord.head.revision,
+        envelope,
+        warnings,
+        sources,
+        limits: execCtx.limits,
+        options,
+      });
     },
   };
 }
@@ -2197,7 +2855,10 @@ export function makeDesignerProposeSchematicDeletionsTool(
   contextResolver: ContextResolver,
   conversation: ConversationStore,
   options: DesignerToolOptions = {},
-): AiTool<DesignerProposeSchematicDeletionsInput, SchematicProposalEnvelope | null> {
+): AiTool<
+  DesignerProposeSchematicDeletionsInput,
+  SchematicProposalEnvelope | null
+> {
   return {
     definition: {
       name: "designer_propose_schematic_deletions",
@@ -2205,31 +2866,61 @@ export function makeDesignerProposeSchematicDeletionsTool(
       effect: "write",
       capability: "designer.write.schematic.propose_deletions",
       description:
-        "Create a destructive pending proposal to delete existing schematic parts, wires, labels, or primitives. Use only after explicit user confirmation.",
+        'Delete existing schematic parts, wires, labels, or primitives. Destructive: stays pending for explicit user confirmation (does NOT auto-apply). Parts may be addressed by reference (e.g. "U1") or ID; wires/labels/primitives by ID.',
       inputSchema: {
         type: "object",
         properties: {
           designId: { type: "string" },
           title: { type: "string" },
           summary: { type: "string" },
-          entities: { type: "array", items: { type: "object" } },
+          entities: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                entityId: {
+                  type: "string",
+                  description:
+                    'Entity ID; for parts a reference like "U1" is also accepted.',
+                },
+                entityKind: {
+                  type: "string",
+                  enum: ["part", "wire", "label", "primitive"],
+                },
+                reason: { type: "string" },
+              },
+              required: ["entityId", "entityKind"],
+            },
+          },
         },
         required: ["title", "summary", "entities"],
       },
     },
     async execute(execCtx, input) {
       const designer = ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
-      if (!designer) return failedTool("Designer module not available.", execCtx.limits);
+      if (!designer)
+        return failedTool("Designer module not available.", execCtx.limits);
       const chatId = execCtx.chatId;
       if (!chatId) return failedTool("Chat context missing.", execCtx.limits);
-      const resolvedDesign = resolveDesignForTool({ chatId, requestedDesignId: input.designId, contextResolver });
-      if (!resolvedDesign.ok) return failedTool(resolvedDesign.warning, execCtx.limits);
+      const resolvedDesign = resolveDesignForTool({
+        chatId,
+        requestedDesignId: input.designId,
+        contextResolver,
+      });
+      if (!resolvedDesign.ok)
+        return failedTool(resolvedDesign.warning, execCtx.limits);
       const designId = resolvedDesign.designId;
       const designRecord = await designer.getDesign(designId);
-      if (!designRecord) return failedTool(`Design not found: ${designId}`, execCtx.limits);
+      if (!designRecord)
+        return failedTool(`Design not found: ${designId}`, execCtx.limits);
       const schematic = await designer.getSchematicProjection(designId);
-      if (!schematic) return failedTool(`Schematic projection not found: ${designId}`, execCtx.limits);
+      if (!schematic)
+        return failedTool(
+          `Schematic projection not found: ${designId}`,
+          execCtx.limits,
+        );
 
+      const index = buildProjectionIndex(schematic);
       const exists = new Set([
         ...schematic.parts.map((entity) => `part:${entity.id}`),
         ...schematic.wires.map((entity) => `wire:${entity.id}`),
@@ -2237,12 +2928,32 @@ export function makeDesignerProposeSchematicDeletionsTool(
         ...schematic.primitives.map((entity) => `primitive:${entity.id}`),
       ]);
       const proposalId = crypto.randomUUID();
-      const sources: AiSourceRef[] = [{ id: `design_${designId}`, kind: "design", refId: designId, label: designRecord.head.name }];
+      const sources: AiSourceRef[] = [
+        {
+          id: `design_${designId}`,
+          kind: "design",
+          refId: designId,
+          label: designRecord.head.name,
+        },
+      ];
       const warnings: string[] = [];
       const operations: SchematicProposalEnvelope["operations"] = [];
-      if ((input.entities?.length ?? 0) > 40) warnings.push("Only the first 40 delete operation(s) were included.");
+      if ((input.entities?.length ?? 0) > 40)
+        warnings.push("Only the first 40 delete operation(s) were included.");
       for (const entity of (input.entities ?? []).slice(0, 40)) {
-        const key = `${entity.entityKind}:${entity.entityId}`;
+        // Parts may be addressed by reference; resolve to the real ID.
+        let entityId = entity.entityId;
+        if (entity.entityKind === "part") {
+          const resolved = resolvePartTarget(schematic, entity.entityId, index);
+          if (!resolved.ok) {
+            warnings.push(
+              `Skipped delete part ${entity.entityId}: ${resolved.error}`,
+            );
+            continue;
+          }
+          entityId = resolved.partId;
+        }
+        const key = `${entity.entityKind}:${entityId}`;
         if (!exists.has(key)) {
           warnings.push(`Skipped delete ${key}: entity does not exist.`);
           continue;
@@ -2251,9 +2962,13 @@ export function makeDesignerProposeSchematicDeletionsTool(
           id: `${proposalId}:delete:${operations.length}`,
           kind: "designer.delete_entity",
           title: `Delete ${entity.entityKind}`,
-          summary: entity.reason ?? `Delete ${entity.entityKind} ${entity.entityId}.`,
+          summary: entity.reason ?? `Delete ${entity.entityKind} ${entityId}.`,
           riskLevel: "destructive",
-          payload: { type: "delete_entity", entityId: entity.entityId, entityKind: entity.entityKind },
+          payload: {
+            type: "delete_entity",
+            entityId,
+            entityKind: entity.entityKind,
+          },
           sources,
           warnings: [],
         });
@@ -2263,10 +2978,16 @@ export function makeDesignerProposeSchematicDeletionsTool(
           ok: false,
           data: null,
           sources,
-          warnings: warnings.length > 0
-            ? [...warnings, "No valid schematic delete operations were proposed."]
-            : ["No valid schematic delete operations were proposed."],
-          truncated: warnings.some((warning) => warning.startsWith("Only the first")),
+          warnings:
+            warnings.length > 0
+              ? [
+                  ...warnings,
+                  "No valid schematic delete operations were proposed.",
+                ]
+              : ["No valid schematic delete operations were proposed."],
+          truncated: warnings.some((warning) =>
+            warning.startsWith("Only the first"),
+          ),
           limits: execCtx.limits,
         };
       }
@@ -2277,7 +2998,9 @@ export function makeDesignerProposeSchematicDeletionsTool(
         kind: "designer_schematic_deletions",
         toolName: "designer_propose_schematic_deletions",
         title: input.title.trim() || "Schematic deletion proposal",
-        summary: input.summary.trim() || `Delete ${operations.length} schematic entity/entities.`,
+        summary:
+          input.summary.trim() ||
+          `Delete ${operations.length} schematic entity/entities.`,
         riskLevel: "destructive",
         designId,
         baseRevision: designRecord.head.revision,
@@ -2286,18 +3009,170 @@ export function makeDesignerProposeSchematicDeletionsTool(
         sources,
         warnings,
       };
-      conversation.createWriteProposal({ id: proposalId, chatId, kind: envelope.kind, designId, baseRevision: designRecord.head.revision, proposal: envelope, envelope });
-      if (warnings.length === 0 && options.isSessionAutoApplyAllowed?.({ chatId, toolName: envelope.toolName, proposalKind: envelope.kind, riskLevel: envelope.riskLevel }) === true) {
-        const applyResult = await applySchematicProposalOperations({ designer, designId, baseRevision: designRecord.head.revision, envelope, allowPartial: false });
-        conversation.updateWriteProposalStatus(chatId, proposalId, writeProposalTerminalStatus(applyResult), applyResult);
-      }
-      return { ok: true, data: envelope, sources, warnings, truncated: warnings.some((warning) => warning.startsWith("Only the first")), limits: execCtx.limits };
+      return finalizeAndMaybeApply({
+        designer,
+        conversation,
+        chatId,
+        designId,
+        baseRevision: designRecord.head.revision,
+        envelope,
+        warnings,
+        sources,
+        limits: execCtx.limits,
+        options,
+      });
     },
   };
 }
 
 function snapPoint(point: { x: number; y: number }): { x: number; y: number } {
   return { x: snapNm(point.x), y: snapNm(point.y) };
+}
+
+/** JSON Schema fragment for a wire endpoint (pin or named net). */
+const ENDPOINT_SCHEMA = {
+  description:
+    'Pin or net. A pin: "U1.VCC" / "U1.1", or { ref, pin }, or { pinId }. A net: { net: "GND" } (auto-places a power/ground/net-portal primitive and wires to it).',
+  oneOf: [
+    { type: "string" },
+    {
+      type: "object",
+      properties: { ref: { type: "string" }, pin: { type: "string" } },
+      required: ["ref", "pin"],
+    },
+    {
+      type: "object",
+      properties: { pinId: { type: "string" } },
+      required: ["pinId"],
+    },
+    {
+      type: "object",
+      properties: { net: { type: "string" } },
+      required: ["net"],
+    },
+  ],
+} as const;
+
+/** JSON Schema fragment for a pin-only target. */
+const PIN_TARGET_SCHEMA = {
+  description: 'A pin: "U1.VCC" / "U1.1", or { ref, pin }, or { pinId }.',
+  oneOf: [
+    { type: "string" },
+    {
+      type: "object",
+      properties: { ref: { type: "string" }, pin: { type: "string" } },
+      required: ["ref", "pin"],
+    },
+    {
+      type: "object",
+      properties: { pinId: { type: "string" } },
+      required: ["pinId"],
+    },
+  ],
+} as const;
+
+/**
+ * Persist a schematic proposal and (for non-destructive proposals with no
+ * warnings) auto-apply it immediately so AI edits land like direct actions
+ * (revertible via designer undo). Destructive proposals stay pending unless a
+ * session policy opts them in. Centralizes the create+apply boilerplate shared
+ * by all four schematic-write tools.
+ */
+async function finalizeAndMaybeApply(params: {
+  designer: DesignerSDK;
+  conversation: ConversationStore;
+  chatId: string;
+  designId: string;
+  baseRevision: number;
+  envelope: SchematicProposalEnvelope;
+  warnings: string[];
+  sources: AiSourceRef[];
+  limits: AiToolResult["limits"];
+  options: DesignerToolOptions;
+}): Promise<AiToolResult<SchematicProposalEnvelope | null>> {
+  const {
+    designer,
+    conversation,
+    chatId,
+    designId,
+    baseRevision,
+    envelope,
+    warnings,
+    sources,
+    limits,
+    options,
+  } = params;
+  conversation.createWriteProposal({
+    id: envelope.id,
+    chatId,
+    kind: envelope.kind,
+    designId,
+    baseRevision,
+    proposal: envelope,
+    envelope,
+  });
+  // Auto-apply is decided by the session policy callback. Production wiring
+  // (assistant-service) allows non-destructive schematic proposals by default
+  // and gates destructive ones behind an explicit allowance.
+  //
+  // Per-item skips (an unresolvable wire/part) must NOT block the rest: a
+  // non-destructive proposal auto-applies its valid ops via allowPartial. But a
+  // TRUNCATED proposal (">40 included") stays pending so the model/user resends
+  // the dropped tail rather than silently committing a partial circuit, and a
+  // destructive proposal with any warning stays pending (explicit confirm).
+  const isDestructive = envelope.riskLevel === "destructive";
+  const truncated = warnings.some((w) => w.startsWith("Only the first"));
+  const autoApply =
+    envelope.operations.length > 0 &&
+    !truncated &&
+    (!isDestructive || warnings.length === 0) &&
+    options.isSessionAutoApplyAllowed?.({
+      chatId,
+      toolName: envelope.toolName,
+      proposalKind: envelope.kind,
+      riskLevel: envelope.riskLevel,
+    }) === true;
+  const finalWarnings = [...warnings];
+  if (autoApply) {
+    // applySchematicProposalOperations can throw (e.g. revision race). Never let
+    // that crash the tool call: record the proposal as failed and surface it.
+    try {
+      const applyResult = await applySchematicProposalOperations({
+        designer,
+        designId,
+        baseRevision,
+        envelope,
+        allowPartial: !isDestructive,
+      });
+      conversation.updateWriteProposalStatus(
+        chatId,
+        envelope.id,
+        writeProposalTerminalStatus(applyResult),
+        applyResult,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      conversation.updateWriteProposalStatus(chatId, envelope.id, "failed", {
+        proposalId: envelope.id,
+        status: "failed",
+        designId,
+        appliedCount: 0,
+        skippedCount: 0,
+        failedCount: envelope.operations.length,
+        operations: [],
+        message,
+      });
+      finalWarnings.push(`Auto-apply failed: ${message}`);
+    }
+  }
+  return {
+    ok: true,
+    data: envelope,
+    sources,
+    warnings: finalWarnings,
+    truncated: finalWarnings.some((w) => w.startsWith("Only the first")),
+    limits,
+  };
 }
 
 export async function applySchematicProposalOperations(input: {
@@ -2317,101 +3192,158 @@ export async function applySchematicProposalOperations(input: {
       `Design changed since proposal was created (expected revision ${input.baseRevision}, current ${design.head.revision}). Regenerate the proposal.`,
     );
   }
-  if ((input.envelope.warnings?.length ?? 0) > 0 && input.allowPartial !== true) {
-    throw new Error("Proposal has warnings or skipped items. Confirm partial apply first.");
+  if (
+    (input.envelope.warnings?.length ?? 0) > 0 &&
+    input.allowPartial !== true
+  ) {
+    throw new Error(
+      "Proposal has warnings or skipped items. Confirm partial apply first.",
+    );
   }
   let baseRevision = input.baseRevision;
   const operations: SchematicApplyResult["operations"] = [];
-  const failResult = (
-    operation: SchematicProposalEnvelope["operations"][number],
-    commandId: string,
-    revisionBefore: number | null,
-    error: string,
-    result?: unknown,
-  ): SchematicApplyResult => {
-    operations.push({
-      operationId: operation.id,
-      status: "failed",
-      commandId,
-      revisionBefore,
-      error,
-      result,
-    });
-    const appliedCount = operations.filter((entry) => entry.status === "applied").length;
-    return {
-      proposalId: input.envelope.id,
-      status: appliedCount > 0 ? "partial" : "failed",
-      designId: input.designId,
-      appliedCount,
-      skippedCount: 0,
-      failedCount: 1,
-      stoppedAtOperationId: operation.id,
-      operations,
-      message: `Stopped after ${operation.title} failed: ${error}`,
-    };
-  };
-  for (const operation of input.envelope.operations) {
-    const commandId = crypto.randomUUID();
-    const revisionBefore = baseRevision;
-    const result = await input.designer.dispatchCommand(input.designId, {
-      commandId,
+  // Destructive proposals are all-or-nothing; non-destructive proposals
+  // skip-and-continue so one bad operation does not block the rest.
+  const stopOnError = input.envelope.riskLevel === "destructive";
+  let stoppedAtOperationId: string | undefined;
+
+  const dispatch = (command: DesignerCommandEnvelope["command"]) =>
+    input.designer.dispatchCommand(input.designId, {
+      commandId: crypto.randomUUID(),
       sessionId: AI_DESIGNER_SESSION_ID,
       aggregateId: input.designId,
       baseRevision,
       issuedAt: Date.now(),
-      command: operation.payload,
+      command,
     });
+
+  for (const operation of input.envelope.operations) {
+    const revisionBefore = baseRevision;
+    const result = await dispatch(operation.payload);
     if (result.ok !== true) {
-      return failResult(operation, commandId, revisionBefore, result.code, result);
+      operations.push({
+        operationId: operation.id,
+        status: "failed",
+        revisionBefore,
+        error: result.code,
+        result,
+      });
+      // A revision conflict invalidates `baseRevision` for every remaining op,
+      // so always stop (continuing would just fail the whole tail identically).
+      if (stopOnError || result.code === "REVISION_CONFLICT") {
+        stoppedAtOperationId = operation.id;
+        break;
+      }
+      continue;
     }
     baseRevision = result.revision;
     let revisionAfter = result.revision;
+    let failedFollowUp: { error: string; result: unknown } | null = null;
+
+    // place_part → optional value/properties update.
     if (
       operation.payload.type === "place_part" &&
       operation.updatePartAfterCreate &&
       result.createdEntityId
     ) {
-      const updateCommandId = crypto.randomUUID();
-      const updateResult = await input.designer.dispatchCommand(input.designId, {
-        commandId: updateCommandId,
-        sessionId: AI_DESIGNER_SESSION_ID,
-        aggregateId: input.designId,
-        baseRevision,
-        issuedAt: Date.now(),
-        command: {
-          type: "update_part_properties",
-          partId: result.createdEntityId,
-          ...(operation.updatePartAfterCreate.value !== undefined ? { value: operation.updatePartAfterCreate.value } : {}),
-          ...(operation.updatePartAfterCreate.propertiesJson !== undefined
-            ? { propertiesJson: operation.updatePartAfterCreate.propertiesJson }
-            : {}),
-        },
+      const updateResult = await dispatch({
+        type: "update_part_properties",
+        partId: result.createdEntityId,
+        ...(operation.updatePartAfterCreate.value !== undefined
+          ? { value: operation.updatePartAfterCreate.value }
+          : {}),
+        ...(operation.updatePartAfterCreate.propertiesJson !== undefined
+          ? { propertiesJson: operation.updatePartAfterCreate.propertiesJson }
+          : {}),
       });
       if (updateResult.ok !== true) {
-        return failResult(operation, updateCommandId, baseRevision, updateResult.code, updateResult);
+        failedFollowUp = { error: updateResult.code, result: updateResult };
+      } else {
+        baseRevision = updateResult.revision;
+        revisionAfter = updateResult.revision;
       }
-      baseRevision = updateResult.revision;
-      revisionAfter = updateResult.revision;
     }
+
+    // net-connect → wire the source pin to the just-created primitive's pin.
+    if (
+      !failedFollowUp &&
+      operation.linkWireToCreatedPrimitive &&
+      result.createdEntityId
+    ) {
+      const wireResult = await dispatch({
+        type: "create_wire",
+        sourcePinId: operation.linkWireToCreatedPrimitive.sourcePinId,
+        targetPinId: `primitive:${result.createdEntityId}`,
+      });
+      if (wireResult.ok !== true) {
+        failedFollowUp = { error: wireResult.code, result: wireResult };
+      } else {
+        baseRevision = wireResult.revision;
+        revisionAfter = wireResult.revision;
+      }
+    }
+
+    if (failedFollowUp) {
+      operations.push({
+        operationId: operation.id,
+        status: "failed",
+        revisionBefore,
+        error: failedFollowUp.error,
+        result: failedFollowUp.result,
+      });
+      if (stopOnError) {
+        stoppedAtOperationId = operation.id;
+        break;
+      }
+      continue;
+    }
+
     operations.push({
       operationId: operation.id,
       status: "applied",
-      commandId,
       revisionBefore,
       revisionAfter,
       createdEntityId: result.createdEntityId,
       result,
     });
   }
+
+  const appliedCount = operations.filter(
+    (entry) => entry.status === "applied",
+  ).length;
+  const failedCount = operations.filter(
+    (entry) => entry.status === "failed",
+  ).length;
+  // Operations not reached after an early stop, PLUS items dropped at
+  // proposal-build time (which never enter `operations[]`). ANY build warning —
+  // a per-item skip OR a truncation ("Only the first …") — means the proposal
+  // is incomplete, so the status must never read "applied".
+  const warningList = input.envelope.warnings ?? [];
+  const buildSkipped = warningList.filter(
+    (w) => !w.startsWith("Only the first"),
+  ).length;
+  const loopSkipped = input.envelope.operations.length - operations.length;
+  const skippedCount = loopSkipped + buildSkipped;
+  const incomplete =
+    failedCount > 0 || skippedCount > 0 || warningList.length > 0;
+  const status: SchematicApplyResult["status"] = !incomplete
+    ? "applied"
+    : appliedCount > 0
+      ? "partial"
+      : "failed";
   return {
     proposalId: input.envelope.id,
-    status: "applied",
+    status,
     designId: input.designId,
-    appliedCount: operations.length,
-    skippedCount: 0,
-    failedCount: 0,
+    appliedCount,
+    skippedCount,
+    failedCount,
+    ...(stoppedAtOperationId ? { stoppedAtOperationId } : {}),
     operations,
-    message: `Applied ${operations.length} schematic operation(s).`,
+    message:
+      status === "applied"
+        ? `Applied ${appliedCount} schematic operation(s).`
+        : `Applied ${appliedCount}, failed ${failedCount}, skipped ${skippedCount} schematic operation(s).`,
   };
 }
 
@@ -2435,7 +3367,9 @@ export async function applyDesignerPlaceComponentsProposal(input: {
   results: Awaited<ReturnType<DesignerSDK["dispatchCommand"]>>[];
 }> {
   if (input.proposal.skipped.length > 0 && !input.allowPartial) {
-    throw new Error("Proposal has skipped components. Confirm partial apply first.");
+    throw new Error(
+      "Proposal has skipped components. Confirm partial apply first.",
+    );
   }
   const design = await input.designer.getDesign(input.designId);
   if (!design) throw new Error(`Design not found: ${input.designId}`);
@@ -2482,10 +3416,15 @@ export async function applyDesignerPlaceComponentsProposal(input: {
         mirrored: placement.mirrored,
       },
     };
-    const result = await input.designer.dispatchCommand(input.designId, envelope);
+    const result = await input.designer.dispatchCommand(
+      input.designId,
+      envelope,
+    );
     results.push(result);
     if (result.ok !== true) {
-      failWithPartial(`Failed to place ${placement.componentName}: ${result.code}`);
+      failWithPartial(
+        `Failed to place ${placement.componentName}: ${result.code}`,
+      );
     }
     const placedResult = result as {
       ok: true;
@@ -2498,14 +3437,17 @@ export async function applyDesignerPlaceComponentsProposal(input: {
       placedResult.createdEntityId &&
       (placement.value !== undefined || placement.properties !== undefined)
     ) {
-      const propertiesJson = placement.properties !== undefined
-        ? {
-            ...placement.properties,
-            ...(placement.value !== undefined ? { intendedValue: placement.value } : {}),
-          }
-        : placement.value !== undefined
-          ? { intendedValue: placement.value }
-          : undefined;
+      const propertiesJson =
+        placement.properties !== undefined
+          ? {
+              ...placement.properties,
+              ...(placement.value !== undefined
+                ? { intendedValue: placement.value }
+                : {}),
+            }
+          : placement.value !== undefined
+            ? { intendedValue: placement.value }
+            : undefined;
       const updateEnvelope: DesignerCommandEnvelope = {
         commandId: crypto.randomUUID(),
         sessionId: AI_DESIGNER_SESSION_ID,
@@ -2589,7 +3531,10 @@ export function registerDesignerTools(
     makeDesignerGetPartDetailTool(ctx, contextResolver) as unknown as AiTool,
   );
   registry.register(
-    makeDesignerGetSchematicConnectivityTool(ctx, contextResolver) as unknown as AiTool,
+    makeDesignerGetSchematicConnectivityTool(
+      ctx,
+      contextResolver,
+    ) as unknown as AiTool,
   );
   registry.register(
     makeDesignerCreateDesignTool(ctx, contextResolver) as unknown as AiTool,
@@ -2604,6 +3549,14 @@ export function registerDesignerTools(
   );
   registry.register(
     makeDesignerProposeSchematicWiresTool(
+      ctx,
+      contextResolver,
+      conversation,
+      options,
+    ) as unknown as AiTool,
+  );
+  registry.register(
+    makeDesignerArrangeSchematicTool(
       ctx,
       contextResolver,
       conversation,

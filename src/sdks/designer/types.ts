@@ -917,6 +917,21 @@ export interface DesignerUpdatePrimitiveTextCommand {
   text: string;
 }
 
+/**
+ * Re-layout the whole schematic deterministically from the netlist: group
+ * net-connected parts into blocks with routing channels, then re-route every
+ * wire around bodies / primitives / other wires. Non-destructive; one undo
+ * step. Intended to be appended by AI placement/wiring proposals — manual
+ * `move_part` never triggers it, so hand-placed layouts are not reshuffled.
+ */
+export interface DesignerAutoArrangeSchematicCommand {
+  type: "auto_arrange_schematic";
+  /** Optional top-left anchor for the layout. Defaults to the origin. */
+  originNm?: { x: number; y: number };
+  /** Reserved for a future selection-scoped arrange. v1 always re-lays all. */
+  scope?: "all";
+}
+
 export interface DesignerPcbSetBoardSettingsCommand {
   type: "pcb_set_board_settings";
   widthMm: number;
@@ -1202,6 +1217,7 @@ export type DesignerCommand =
   | DesignerMovePrimitiveCommand
   | DesignerRotatePrimitiveCommand
   | DesignerUpdatePrimitiveTextCommand
+  | DesignerAutoArrangeSchematicCommand
   | DesignerPcbSetBoardSettingsCommand
   | DesignerPcbSetBoardOutlineCommand
   | DesignerPcbMovePlacementCommand
