@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactElement } from "react";
+import { ExternalLink } from "lucide-react";
 import type { AssistantWriteProposalDto } from "../../../../sdks/assistant";
+import { useNavigationStore } from "../../../../core/frontend/src/stores/navigation-store";
 
 type GenericRiskLevel = "low" | "medium" | "high" | "destructive" | string;
 
@@ -57,6 +59,8 @@ export function GenericProposalCard({
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [confirmPartial, setConfirmPartial] = useState(false);
   const [localStatus, setLocalStatus] = useState(proposal.status);
+  const navigateToModule = useNavigationStore((s) => s.navigateToModule);
+  const designId = proposal.designId || null;
   useEffect(() => {
     setLocalStatus(proposal.status);
   }, [proposal.status]);
@@ -218,6 +222,16 @@ export function GenericProposalCard({
           {localStatus}
         </span>
         <span className={riskClass(risk)}>{risk}</span>
+        {designId ? (
+          <button
+            type="button"
+            onClick={() => navigateToModule("designer", designId)}
+            title="Open this design in the editor"
+            className="ml-auto inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <ExternalLink className="h-3 w-3" /> Open design
+          </button>
+        ) : null}
       </div>
       <div className="break-words text-[11px] text-slate-600 dark:text-slate-300">
         {summary}
