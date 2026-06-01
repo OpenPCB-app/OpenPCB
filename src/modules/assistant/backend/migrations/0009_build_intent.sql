@@ -9,7 +9,7 @@
 
 CREATE TABLE IF NOT EXISTS assistant_build_intent (
   id TEXT PRIMARY KEY,
-  chat_id TEXT NOT NULL,
+  chat_id TEXT NOT NULL REFERENCES assistant_chat(id) ON DELETE CASCADE,
   task_id TEXT NOT NULL,
   goal TEXT NOT NULL,
   created_at TEXT NOT NULL,
@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS assistant_build_intent (
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_build_intent_chat_task
   ON assistant_build_intent(chat_id, task_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_assistant_build_intent_chat
+  ON assistant_build_intent(chat_id);
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS assistant_build_intent_item (
   id TEXT PRIMARY KEY,

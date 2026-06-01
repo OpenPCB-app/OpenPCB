@@ -49,6 +49,13 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
       if (!projection) return null;
       return runErc(projection);
     },
+    getProjectionAndErc: async (designId) => {
+      // Fetch ONCE so the returned projection and ERC report describe the same
+      // revision; the pure runErc closes over this exact object.
+      const projection = await store.getSchematicProjection(designId);
+      if (!projection) return null;
+      return { projection, erc: runErc(projection) };
+    },
     runDrc: async (designId) => {
       const projection = await store.getPcbProjection(designId);
       if (!projection) return null;

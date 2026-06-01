@@ -76,6 +76,8 @@ function fakeDesigner(opts: {
   schematic: DesignerSchematicProjection | null;
   erc?: ErcReport | null;
   pcbPlacements?: Array<{ partId: string }>;
+  /** When true, getProjectionAndErc throws (read failure). */
+  projectionAndErcThrows?: boolean;
 }): DesignerSDK {
   return {
     getDesign: async () =>
@@ -86,6 +88,13 @@ function fakeDesigner(opts: {
         ? ({ placements: opts.pcbPlacements, ratsnest: [] } as never)
         : null,
     runErc: async () => opts.erc ?? ercClean(),
+    // C2: same-revision snapshot. Returns null when there is no schematic
+    // projection; otherwise pairs the projection with the (possibly clean) ERC.
+    getProjectionAndErc: async () => {
+      if (opts.projectionAndErcThrows) throw new Error("read failed");
+      if (!opts.schematic) return null;
+      return { projection: opts.schematic, erc: opts.erc ?? ercClean() };
+    },
   } as unknown as DesignerSDK;
 }
 
@@ -205,19 +214,28 @@ describe("runDefinitionOfDone", () => {
     expect(check.affectedIds).toContain("GND");
   });
 
-  test("ERC errors → erc_clean fails and surfaces anchors", async () => {
+  test("ERC errors (real UNCONNECTED_INPUT_PIN/power_in) → erc_clean + no_dangling_power fail with anchors", async () => {
+    // Mirrors erc-engine.ts: a floating power_in pin emits UNCONNECTED_INPUT_PIN
+    // at severity "error". A floating signal input emits the same code at
+    // severity "warning" — which must NOT count as a dangling power pin.
     const erc: ErcReport = {
       designId: "d1",
       revision: 1,
       violations: [
         {
-          code: "POWER_PIN_NOT_DRIVEN",
+          code: "UNCONNECTED_INPUT_PIN",
           severity: "error",
-          message: "U1 VCC not driven",
+          message: "U1 VCC (power_in) is unconnected",
           anchors: [{ kind: "pin", pinId: "pin-vcc" }],
         },
+        {
+          code: "UNCONNECTED_INPUT_PIN",
+          severity: "warning",
+          message: "U1 D0 (input) is unconnected",
+          anchors: [{ kind: "pin", pinId: "pin-d0" }],
+        },
       ],
-      summary: { errors: 1, warnings: 0, infos: 0 },
+      summary: { errors: 1, warnings: 1, infos: 0 },
     };
     const report = await runDefinitionOfDone({
       ...baseInput,
@@ -229,6 +247,86 @@ describe("runDefinitionOfDone", () => {
     expect(report.failing).toContain("no_dangling_power");
     const power = report.checks.find((c) => c.id === "no_dangling_power")!;
     expect(power.affectedIds).toContain("pin-vcc");
+    // The warning-severity input pin is NOT a dangling power pin.
+    expect(power.affectedIds).not.toContain("pin-d0");
+  });
+
+  const buildIntent = (overrides: Partial<BuildIntent> = {}): BuildIntent => ({
+    chatId: "chat1",
+    taskId: "task1",
+    goal: "build something",
+    items: [
+      {
+        role: "resistor",
+        componentId: "comp-R",
+        quantity: 1,
+        requiredNets: ["GND"],
+      },
+    ],
+    ...overrides,
+  });
+
+  test("F3: snapshot returns null while a build intent exists → dependent checks FAIL (not pass)", async () => {
+    const report = await runDefinitionOfDone({
+      ...baseInput,
+      // No schematic ⇒ getProjectionAndErc returns null.
+      designer: fakeDesigner({ schematic: null }),
+      buildIntents: memoryBuildIntents(buildIntent()),
+    });
+    expect(report.status).toBe("partial");
+    expect(report.failing).toContain("bom_placed");
+    expect(report.failing).toContain("nets_wired");
+    expect(report.failing).toContain("no_dangling_power");
+    expect(report.failing).toContain("erc_clean");
+  });
+
+  test("F3: getProjectionAndErc throws while a build intent exists → checks FAIL", async () => {
+    const report = await runDefinitionOfDone({
+      ...baseInput,
+      designer: fakeDesigner({
+        schematic: schematic(),
+        projectionAndErcThrows: true,
+      }),
+      buildIntents: memoryBuildIntents(buildIntent()),
+    });
+    expect(report.status).toBe("partial");
+    expect(report.failing).toContain("bom_placed");
+    expect(report.failing).toContain("erc_clean");
+    expect(report.failing).toContain("no_dangling_power");
+  });
+
+  test("no intent + no projection → pass (genuinely nothing to verify)", async () => {
+    const report = await runDefinitionOfDone({
+      ...baseInput,
+      designer: fakeDesigner({ schematic: null }),
+      buildIntents: memoryBuildIntents(null),
+    });
+    expect(report.status).toBe("pass");
+    expect(report.failing).toEqual([]);
+  });
+
+  test("F7b: intent has items but ZERO required nets → nets_wired fails (not vacuous pass)", async () => {
+    const intent = buildIntent({
+      items: [
+        {
+          role: "resistor",
+          componentId: "comp-R",
+          quantity: 1,
+          requiredNets: [],
+        },
+      ],
+    });
+    const report = await runDefinitionOfDone({
+      ...baseInput,
+      designer: fakeDesigner({
+        schematic: schematic({ parts: [part("p1", "R1", "comp-R")] }),
+      }),
+      buildIntents: memoryBuildIntents(intent),
+    });
+    expect(report.status).toBe("partial");
+    expect(report.failing).toContain("nets_wired");
+    const nets = report.checks.find((c) => c.id === "nets_wired")!;
+    expect(nets.passed).toBe(false);
   });
 });
 

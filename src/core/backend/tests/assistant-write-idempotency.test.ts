@@ -237,6 +237,46 @@ describe("write-tool idempotency (action_id)", () => {
     expect(dispatchLog.length).toBe(dispatchesAfterFirst);
   });
 
+  test("same action_id while first is still pending (in-flight) -> blocked, no duplicate dispatch", async () => {
+    const dispatchLog: DispatchRecord[] = [];
+    const conversation = makeConversation();
+    // Auto-apply disallowed: the first proposal stays `pending` (awaiting a
+    // user confirm) — a duplicate same-action_id call must NOT re-dispatch.
+    const tool = makeDesignerPlaceComponentsTool(
+      makeCtx(makeDesigner({ dispatchLog })),
+      makeContextResolver(),
+      conversation,
+      { isSessionAutoApplyAllowed: () => false },
+    );
+
+    const first = await tool.execute(makeExecCtx(), {
+      action_id: ACTION_ID,
+      components: [{ componentId: COMPONENT_ID }],
+    });
+    // Staged pending, nothing dispatched yet.
+    expect((first.modelData as { status: string }).status).toBe("pending");
+    expect(dispatchLog.length).toBe(0);
+    const proposalsAfterFirst =
+      conversation.listWriteProposals("chat-1").length;
+    expect(proposalsAfterFirst).toBe(1);
+
+    const second = await tool.execute(makeExecCtx(), {
+      action_id: ACTION_ID,
+      components: [{ componentId: COMPONENT_ID }],
+    });
+    // Blocked duplicate: ok:false, no new proposal, no dispatch.
+    expect(second.ok).toBe(false);
+    expect(second.status).toBe("partial");
+    expect((second.modelData as { status: string }).status).toBe(
+      "already_applied",
+    );
+    expect(second.summary).toContain("duplicate_blocked");
+    expect(dispatchLog.length).toBe(0);
+    expect(conversation.listWriteProposals("chat-1").length).toBe(
+      proposalsAfterFirst,
+    );
+  });
+
   test("malformed action_id falls back to normal (non-idempotent) apply", async () => {
     const tool = makeDesignerPlaceComponentsTool(
       makeCtx(makeDesigner()),
@@ -303,6 +343,8 @@ describe("write-tool failure surfacing", () => {
       skipped: Array<{ id: string; reason: string }>;
       status: string;
     };
+    // A partial apply (one good op, one skip) is NOT a success.
+    expect(result.ok).toBe(false);
     expect(result.status).toBe("partial");
     expect(modelData.appliedCount).toBeGreaterThan(0);
     expect(modelData.skipped.length).toBeGreaterThan(0);

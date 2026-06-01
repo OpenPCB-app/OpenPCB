@@ -55,6 +55,12 @@ interface AssistantTurnState {
   reasoning?: string;
   finishReason?: string;
   truncated?: boolean;
+  /**
+   * Cumulative: a write tool succeeded at some point this run. NEVER cleared by a
+   * chat-only retry or a correction pass, so DoD still runs after a provider
+   * failure that followed successful writes (F4).
+   */
+  hadWriteWork?: boolean;
 }
 
 /**
@@ -73,6 +79,21 @@ const UNBOUND_TOOL_NAMES = new Set<string>([
 
 /** Tool that binds the chat to a fresh design mid-run, unlocking the writers. */
 const CREATE_DESIGN_TOOL = "designer_create_design";
+
+/**
+ * Designer tools that mutate the design (schematic/PCB). A successful call to any
+ * of these means real write work was applied, so the Definition-of-Done verifier
+ * must run regardless of a later provider failure or chat-only retry (F4).
+ */
+const WRITE_TOOL_NAMES = new Set<string>([
+  "designer_create_design",
+  "designer_place_components",
+  "designer_propose_schematic_edits",
+  "designer_propose_schematic_wires",
+  "designer_propose_schematic_updates",
+  "designer_propose_schematic_deletions",
+  "designer_arrange_schematic",
+]);
 
 /**
  * Stage the registry for the model.
@@ -121,16 +142,53 @@ interface BomResultShape {
 }
 
 /**
- * Deterministically derive the nets a BOM item is expected to participate in
- * from its role keyword. Used by the DoD `nets_wired` check. Conservative: only
- * power/ground rails are inferred, since those are the connections a build is
- * most likely to leave dangling.
+ * Canonical power-rail net name for a single voltage token. Keeps distinct rails
+ * distinct: +5V → "+5V", 3V3/3.3V → "+3V3", 12V → "+12V". Returns null for tokens
+ * that are not a recognisable rail. F7a: do NOT collapse every rail to "VCC" —
+ * a multi-rail build (e.g. +5V and +3V3) must keep them separate so the DoD
+ * `nets_wired` check is meaningful.
  */
-function requiredNetsForRole(role: string): string[] {
+function railNetName(token: string): string | null {
+  // Accept 5V, +5V, 3.3V, 3V3, 1V8, 12V. `whole` digits, optional fractional
+  // digits separated by "." or "v" (either before or after the trailing V).
+  const m = /^[+]?(\d+)(?:\.(\d+)v|v(\d+)|v)$/i.exec(token.replace(/\s+/g, ""));
+  if (!m) return null;
+  const whole = m[1]!;
+  const frac = m[2] ?? m[3];
+  return frac ? `+${whole}V${frac}` : `+${whole}V`;
+}
+
+/**
+ * Deterministically derive the nets a BOM item is expected to participate in
+ * from its role keyword plus any explicit voltage in its value/role text. Used by
+ * the DoD `nets_wired` check. Conservative: only power/ground rails are inferred,
+ * since those are the connections a build is most likely to leave dangling.
+ *
+ * F7a: explicit rails keep their REAL names (+5V, +3V3, +12V); only a bare,
+ * voltage-less power role falls back to the generic "VCC".
+ */
+function requiredNetsForItem(
+  role: string,
+  value: string | undefined,
+): string[] {
   const r = role.toLowerCase();
   const nets = new Set<string>();
   if (/(gnd|ground|return)/.test(r)) nets.add("GND");
-  if (/(vcc|vdd|\+?5v|\+?3v3|3\.3v|power|supply|rail)/.test(r)) nets.add("VCC");
+  const isPower = /(vcc|vdd|\+?\d+v|3\.3v|power|supply|rail)/.test(r);
+  if (isPower) {
+    // Pull explicit rail tokens out of the role text and the item value.
+    const haystack = `${role} ${value ?? ""}`;
+    const tokens = haystack.match(/[+]?\d+(?:\.\d+v|v\d+|v)\b/gi) ?? [];
+    let added = false;
+    for (const token of tokens) {
+      const rail = railNetName(token);
+      if (rail) {
+        nets.add(rail);
+        added = true;
+      }
+    }
+    if (!added) nets.add("VCC");
+  }
   return [...nets];
 }
 
@@ -184,8 +242,9 @@ export class RunService {
             ? Math.floor(item.quantity!)
             : 1,
         value: typeof item.value === "string" ? item.value : undefined,
-        requiredNets: requiredNetsForRole(
+        requiredNets: requiredNetsForItem(
           typeof item.role === "string" ? item.role : "",
+          typeof item.value === "string" ? item.value : undefined,
         ),
       }));
     if (intentItems.length === 0) return;
@@ -458,7 +517,9 @@ export class RunService {
         !isBlank(
           this.options.conversation.getMessage(payload.assistantMessageId)
             ?.content,
-        ) || callSummaries.size > 0;
+        ) ||
+        callSummaries.size > 0 ||
+        runState.hadWriteWork === true;
       if (!answeredOrToolWork() && !failedEvent) {
         for await (const event of runChat({
           client,
@@ -496,11 +557,14 @@ export class RunService {
         });
       }
 
-      // P4b: Definition-of-Done verification + dynamic correction. Only runs
-      // when the chat is bound to a design and the model did real tool work —
-      // a chat-only answer has nothing to verify.
+      // P4b: Definition-of-Done verification + dynamic correction. Runs when the
+      // model did real tool work in the live summaries OR a write was applied at
+      // any point this run (`hadWriteWork`) — the latter survives a chat-only
+      // retry that clears `callSummaries`, so a provider failure AFTER successful
+      // writes is still verified (F4). A pure chat-only answer has nothing to
+      // verify.
       const deficiency =
-        callSummaries.size > 0
+        callSummaries.size > 0 || runState.hadWriteWork === true
           ? await this.runCorrectionHarness(
               payload,
               taskCtx,
@@ -590,6 +654,32 @@ export class RunService {
             taskId: taskCtx.task.id,
             metadata: { ai: { internal: true } },
           });
+          // F8: non-streaming/completed-only providers carry the tool calls (with
+          // real args) only on this event — no preceding `run.tool.requested`.
+          // Seed the summary + tool-event here so DoD runs and the persisted
+          // tool-event args are the real arguments, not "{}".
+          for (const call of event.data.toolCalls ?? []) {
+            if (callSummaries.has(call.id)) continue;
+            callSummaries.set(call.id, {
+              toolCallId: call.id,
+              toolName: call.name,
+              status: "requested",
+              sourceCount: 0,
+              truncated: false,
+              warnings: [],
+            });
+            const dto = this.options.conversation.upsertToolEvent({
+              id: toolEventsByCall.get(call.id)?.id,
+              chatId: payload.chatId,
+              taskId: taskCtx.task.id,
+              messageId: payload.assistantMessageId,
+              toolCallId: call.id,
+              toolName: call.name,
+              status: "requested",
+              argumentsJson: call.argumentsJson,
+            });
+            toolEventsByCall.set(call.id, dto);
+          }
         }
         await this.emitAiEvent(taskCtx, event);
         break;
@@ -647,6 +737,8 @@ export class RunService {
           summary.truncated = event.data.truncated;
           summary.warnings = event.data.warnings;
         }
+        if (WRITE_TOOL_NAMES.has(event.data.toolName))
+          runState.hadWriteWork = true;
         const argsJson =
           toolEventsByCall.get(event.data.toolCallId)?.argumentsJson ?? "{}";
         const dto = this.options.conversation.upsertToolEvent({
@@ -662,10 +754,13 @@ export class RunService {
           sources: event.data.sources,
         });
         toolEventsByCall.set(event.data.toolCallId, dto);
+        // F9: the persisted tool message is what history replays to the model on
+        // later turns, so it must carry the SLIM model-facing envelope, not the
+        // full payload. The full `resultJson` lives only on the tool-event/UI DTO.
         this.options.conversation.createMessage({
           chatId: payload.chatId,
           role: "tool",
-          content: event.data.resultJson,
+          content: event.data.modelResultJson ?? event.data.resultJson,
           toolCallId: event.data.toolCallId,
           toolName: event.data.toolName,
           taskId: taskCtx.task.id,

@@ -33,10 +33,25 @@ const ALL_TOOL_NAMES = [
   "designer_propose_schematic_deletions",
 ];
 
+interface FakeToolCall {
+  id: string;
+  name: string;
+  argumentsJson: string;
+  /** Slim model-facing envelope; falls back to resultJson when omitted. */
+  modelResultJson?: string;
+  resultJson?: string;
+}
+
 interface FakeTurn {
   content?: string;
   reasoning?: string;
   finishReason?: string;
+  /** Tool calls reported ONLY on run.message.completed (non-streaming provider). */
+  completedToolCalls?: FakeToolCall[];
+  /** Emit run.tool.succeeded events for the completedToolCalls after completion. */
+  emitToolSucceeded?: boolean;
+  /** Terminate this turn with run.failed instead of completing cleanly. */
+  fail?: boolean;
 }
 
 class FakeClient implements AiProviderClient {
@@ -75,17 +90,49 @@ class FakeClient implements AiProviderClient {
         timestamp: "t",
         data: { delta: content },
       };
+    const toolCalls = turn.completedToolCalls ?? [];
     yield {
       type: "run.message.completed",
       runId,
       timestamp: "t",
       data: {
         content,
-        toolCallCount: 0,
+        toolCallCount: toolCalls.length,
+        toolCalls: toolCalls.map((c) => ({
+          id: c.id,
+          name: c.name,
+          argumentsJson: c.argumentsJson,
+        })),
         reasoningContent: turn.reasoning,
         finishReason: turn.finishReason,
       },
     };
+    if (turn.emitToolSucceeded) {
+      for (const c of toolCalls) {
+        yield {
+          type: "run.tool.succeeded",
+          runId,
+          timestamp: "t",
+          data: {
+            toolCallId: c.id,
+            toolName: c.name,
+            resultJson: c.resultJson ?? "{}",
+            modelResultJson: c.modelResultJson,
+            sources: [],
+            truncated: false,
+            warnings: [],
+          },
+        };
+      }
+    }
+    if (turn.fail) {
+      yield {
+        type: "run.failed",
+        runId,
+        timestamp: "t",
+        data: { errorMessage: "provider exploded" },
+      };
+    }
   }
 }
 
@@ -128,7 +175,19 @@ interface Harness {
   emitted: { kind: string; content: string }[];
   metadataOf: () => Record<string, unknown> | null;
   contentOf: () => string;
+  /** All persisted role:"tool" messages (model-facing content + name). */
+  toolMessages: () => Array<{ content: string; toolName: string | null }>;
   run: () => Promise<void>;
+}
+
+/** Minimal designer SDK stub: a clean same-revision projection+ERC snapshot. */
+function makeDesignerStub() {
+  return {
+    getProjectionAndErc: async () => ({
+      projection: { parts: [], nets: [] },
+      erc: { violations: [], summary: { errors: 0, warnings: 0 } },
+    }),
+  };
 }
 
 function makeHarness(opts: {
@@ -136,6 +195,8 @@ function makeHarness(opts: {
   bound?: boolean;
   toolCalling?: boolean;
   withoutCreateTool?: boolean;
+  /** Provide a designer SDK + primary-design binding so DoD can run. */
+  withDesigner?: boolean;
 }): Harness {
   const chatId = "chat1";
   const assistantMessageId = "asst1";
@@ -191,7 +252,10 @@ function makeHarness(opts: {
       ...input,
       id: (input.id as string) ?? `te_${messages.size}`,
     }),
+    listWriteProposals: () => [],
   };
+
+  const designerSdk = opts.withDesigner ? makeDesignerStub() : null;
 
   const bindings = opts.bound
     ? [
@@ -215,9 +279,13 @@ function makeHarness(opts: {
 
   const options = {
     ctx: {
+      db: { rawSql: () => [] },
       sdk: {
-        get: (token: string) =>
-          token === MODULE_SDK_TOKENS.TASKS ? tasksSdk : null,
+        get: (token: string) => {
+          if (token === MODULE_SDK_TOKENS.TASKS) return tasksSdk;
+          if (token === MODULE_SDK_TOKENS.DESIGNER) return designerSdk;
+          return null;
+        },
       },
     },
     conversation,
@@ -238,6 +306,8 @@ function makeHarness(opts: {
     contextResolver: {
       refreshBindingHealth: async () => {},
       listBindings: () => bindings,
+      getPrimaryDesign: () =>
+        opts.withDesigner ? { refId: "d1", status: "active" as const } : null,
     },
     buildRegistry: () =>
       fullRegistry({ withoutCreateTool: opts.withoutCreateTool }),
@@ -274,6 +344,13 @@ function makeHarness(opts: {
         unknown
       > | null) ?? null,
     contentOf: () => messages.get(assistantMessageId)?.content as string,
+    toolMessages: () =>
+      [...messages.values()]
+        .filter((m) => m.role === "tool")
+        .map((m) => ({
+          content: m.content as string,
+          toolName: (m.toolName as string | null) ?? null,
+        })),
     run: async () => {
       if (!captured) throw new Error("executor not registered");
       await captured.execute(
@@ -380,5 +457,115 @@ describe("RunService bind-gated tool staging", () => {
     });
     await h.run();
     expect(h.client.toolCounts[0]).toBe(0);
+  });
+});
+
+describe("RunService DoD gating + tool-turn persistence", () => {
+  test("DoD runs after a provider failure that followed successful writes (F4)", async () => {
+    // Turn 1 applies a write (designer_place_components → run.tool.succeeded),
+    // turn 2 fails. The chat-only retry clears callSummaries, but hadWriteWork
+    // survives, so the Definition-of-Done verifier must still run.
+    const h = makeHarness({
+      bound: true,
+      withDesigner: true,
+      turns: [
+        {
+          completedToolCalls: [
+            {
+              id: "c1",
+              name: "designer_place_components",
+              argumentsJson: '{"x":1}',
+            },
+          ],
+        },
+        { fail: true },
+      ],
+    });
+    await h.run();
+
+    const ai = (h.metadataOf()?.ai ?? {}) as {
+      definitionOfDone?: { status: string };
+    };
+    expect(ai.definitionOfDone).toBeDefined();
+    expect(ai.definitionOfDone?.status).toBe("pass");
+  });
+
+  test("DoD does NOT run for a pure chat-only answer (no write work)", async () => {
+    const h = makeHarness({
+      bound: true,
+      withDesigner: true,
+      turns: [{ content: "Just a chat answer, no tools." }],
+    });
+    await h.run();
+
+    const ai = (h.metadataOf()?.ai ?? {}) as {
+      definitionOfDone?: unknown;
+    };
+    expect(ai.definitionOfDone).toBeUndefined();
+  });
+
+  test("completed-only provider seeds tool-call summaries with real args (F8)", async () => {
+    // The tool calls are reported ONLY on run.message.completed. The orchestrator
+    // must seed a tool-event from them so the persisted args are real, not "{}".
+    const h = makeHarness({
+      bound: true,
+      withDesigner: true,
+      turns: [
+        {
+          completedToolCalls: [
+            {
+              id: "c1",
+              name: "designer_place_components",
+              argumentsJson: '{"ref":"R1"}',
+            },
+          ],
+        },
+        { content: "done" },
+      ],
+    });
+    await h.run();
+
+    // hadWriteWork seeded from the completed turn → DoD ran.
+    const ai = (h.metadataOf()?.ai ?? {}) as {
+      definitionOfDone?: unknown;
+      toolCallSummaries?: Array<{ toolName: string }>;
+    };
+    expect(ai.definitionOfDone).toBeDefined();
+    expect(
+      ai.toolCallSummaries?.some(
+        (s) => s.toolName === "designer_place_components",
+      ),
+    ).toBe(true);
+  });
+
+  test("persisted tool message uses the slim model-facing envelope (F9)", async () => {
+    const h = makeHarness({
+      bound: true,
+      withDesigner: true,
+      turns: [
+        {
+          completedToolCalls: [
+            {
+              id: "c1",
+              name: "designer_place_components",
+              argumentsJson: "{}",
+            },
+          ],
+        },
+        { content: "done" },
+      ],
+    });
+    await h.run();
+
+    const toolMsg = h
+      .toolMessages()
+      .find((m) => m.toolName === "designer_place_components");
+    expect(toolMsg).toBeDefined();
+    // The slim envelope is the wrapper { ok, status, warnings, truncated, data },
+    // NOT the bare tool data ("{}"). History replays this to the model.
+    const parsed = JSON.parse(toolMsg!.content) as Record<string, unknown>;
+    expect(parsed).toHaveProperty("ok");
+    expect(parsed).toHaveProperty("status");
+    expect(parsed).toHaveProperty("data");
   });
 });

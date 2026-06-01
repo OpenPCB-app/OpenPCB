@@ -146,25 +146,60 @@ interface WriteToolModelData {
 
 /**
  * Look for a prior write proposal in this chat that carries the same
- * `actionId` for the same design and already landed (applied or partial).
- * Used to make write tools idempotent: re-issuing the same action_id is a
- * safe no-op instead of duplicating placements/wires.
+ * `actionId` for the same design — regardless of status. Used to make write
+ * tools idempotent and to block duplicate in-flight dispatches: re-issuing the
+ * same action_id must never duplicate placements/wires.
+ *
+ * Returns the most recent matching record (proposals are listed created-at
+ * ASC) so the dedup decision reflects the latest known state of that action.
  */
-function findAppliedByActionId(
+function findPriorByActionId(
   conversation: ConversationStore,
   chatId: string,
   designId: string,
   actionId: string,
 ): AssistantWriteProposalDto | null {
+  let match: AssistantWriteProposalDto | null = null;
   for (const record of conversation.listWriteProposals(chatId)) {
     if (record.designId !== designId) continue;
-    if (record.status !== "applied" && record.status !== "partial") continue;
     const envelope = (record as { envelope?: unknown }).envelope as
       | { actionId?: unknown }
       | null
       | undefined;
-    if (envelope && envelope.actionId === actionId) return record;
+    if (envelope && envelope.actionId === actionId) match = record;
   }
+  return match;
+}
+
+/**
+ * Idempotency / duplicate guard for write tools. Returns a terminal tool
+ * result when a prior proposal for the same (designId + actionId) means we must
+ * NOT dispatch again, or null when this action is fresh and may proceed:
+ *  - applied / partial → already landed; replay its persisted apply result.
+ *  - pending           → an earlier identical action is still in-flight (auto-
+ *                        apply gated or concurrent); block to avoid a duplicate
+ *                        write.
+ *  - failed            → a prior identical action errored; a blind re-dispatch
+ *                        could double-write whatever partially landed. Block
+ *                        and report so correction goes through a fresh action.
+ *  - rejected          → user declined; allow a fresh attempt (returns null).
+ */
+function dedupByActionId<T>(
+  conversation: ConversationStore,
+  chatId: string,
+  designId: string,
+  actionId: string,
+  limits: AiToolResult<T>["limits"],
+): AiToolResult<T | null> | null {
+  const prior = findPriorByActionId(conversation, chatId, designId, actionId);
+  if (!prior) return null;
+  if (prior.status === "applied" || prior.status === "partial") {
+    return alreadyAppliedResult<T>(prior, actionId, limits);
+  }
+  if (prior.status === "pending" || prior.status === "failed") {
+    return duplicateInFlightResult<T>(prior, actionId, limits);
+  }
+  // rejected (or any future non-blocking status): allow a fresh attempt.
   return null;
 }
 
@@ -210,6 +245,41 @@ function alreadyAppliedResult<T>(
     modelData,
     sources: [],
     warnings: [],
+    truncated: false,
+    limits,
+  };
+}
+
+/**
+ * Blocked-duplicate result: a prior proposal with the same action_id is still
+ * pending (in-flight) or previously failed, so we refuse to dispatch again to
+ * avoid duplicate writes. Reported as ok:false so the loop does not treat the
+ * blocked call as progress, but carries no data mutation.
+ */
+function duplicateInFlightResult<T>(
+  record: AssistantWriteProposalDto,
+  actionId: string,
+  limits: AiToolResult<T>["limits"],
+): AiToolResult<T | null> {
+  const reason =
+    record.status === "failed"
+      ? `action_id "${actionId}" already attempted and failed; do not re-issue it. Inspect the design state and use a new action_id only for the parts that still need fixing.`
+      : `action_id "${actionId}" is already in-flight (pending). Wait for it to settle instead of re-issuing the same write.`;
+  const modelData: WriteToolModelData = {
+    appliedCount: 0,
+    skipped: [{ id: actionId, reason }],
+    status: "already_applied",
+  };
+  const data =
+    ((record as { envelope?: unknown }).envelope as T | undefined) ?? null;
+  return {
+    ok: false,
+    status: "partial",
+    summary: `duplicate_blocked: ${actionId}`,
+    data,
+    modelData,
+    sources: [],
+    warnings: [reason],
     truncated: false,
     limits,
   };
@@ -1161,13 +1231,14 @@ export function makeDesignerPlaceComponentsTool(
       const idempotencyWarnings: string[] = [];
       const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
       if (actionId) {
-        const prior = findAppliedByActionId(
+        const dedup = dedupByActionId<AssistantPlacementProposal>(
           conversation,
           chatId,
           designId,
           actionId,
+          execCtx.limits,
         );
-        if (prior) return alreadyAppliedResult(prior, actionId, execCtx.limits);
+        if (dedup) return dedup;
       }
 
       const requested = expandPlacementInputs(input);
@@ -1365,7 +1436,9 @@ export function makeDesignerPlaceComponentsTool(
             skipped: [...buildSkipped, { id: "apply", reason: message }],
             status: "partial",
           };
-          toolOk = appliedCount > 0;
+          // A failed/partial auto-apply is not a success even if some ops
+          // landed — return ok:false so the loop sees a deficiency.
+          toolOk = false;
           toolStatus = "partial";
           summary = `Auto-apply failed: ${message}`;
           proposalWarnings.push(`Auto-apply failed: ${message}`);
@@ -1828,13 +1901,14 @@ export function makeDesignerProposeSchematicEditsTool(
       const idempotencyWarnings: string[] = [];
       const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
       if (actionId) {
-        const prior = findAppliedByActionId(
+        const dedup = dedupByActionId<SchematicProposalEnvelope>(
           conversation,
           chatId,
           designId,
           actionId,
+          execCtx.limits,
         );
-        if (prior) return alreadyAppliedResult(prior, actionId, execCtx.limits);
+        if (dedup) return dedup;
       }
       // Need the projection to wire pins and to pick a non-overlapping start
       // for parts that omit positionNm (the common case — placement is then
@@ -2221,13 +2295,14 @@ export function makeDesignerArrangeSchematicTool(
       const idempotencyWarnings: string[] = [];
       const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
       if (actionId) {
-        const prior = findAppliedByActionId(
+        const dedup = dedupByActionId<SchematicProposalEnvelope>(
           conversation,
           chatId,
           designId,
           actionId,
+          execCtx.limits,
         );
-        if (prior) return alreadyAppliedResult(prior, actionId, execCtx.limits);
+        if (dedup) return dedup;
       }
 
       const proposalId = crypto.randomUUID();
@@ -2401,13 +2476,14 @@ export function makeDesignerProposeSchematicWiresTool(
       const idempotencyWarnings: string[] = [];
       const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
       if (actionId) {
-        const prior = findAppliedByActionId(
+        const dedup = dedupByActionId<SchematicProposalEnvelope>(
           conversation,
           chatId,
           designId,
           actionId,
+          execCtx.limits,
         );
-        if (prior) return alreadyAppliedResult(prior, actionId, execCtx.limits);
+        if (dedup) return dedup;
       }
       const proposalId = crypto.randomUUID();
       const warnings: string[] = [...idempotencyWarnings];
@@ -2778,13 +2854,14 @@ export function makeDesignerProposeSchematicUpdatesTool(
       const idempotencyWarnings: string[] = [];
       const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
       if (actionId) {
-        const prior = findAppliedByActionId(
+        const dedup = dedupByActionId<SchematicProposalEnvelope>(
           conversation,
           chatId,
           designId,
           actionId,
+          execCtx.limits,
         );
-        if (prior) return alreadyAppliedResult(prior, actionId, execCtx.limits);
+        if (dedup) return dedup;
       }
       const proposalId = crypto.randomUUID();
       const warnings: string[] = [...idempotencyWarnings];
@@ -3151,13 +3228,14 @@ export function makeDesignerProposeSchematicDeletionsTool(
       const idempotencyWarnings: string[] = [];
       const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
       if (actionId) {
-        const prior = findAppliedByActionId(
+        const dedup = dedupByActionId<SchematicProposalEnvelope>(
           conversation,
           chatId,
           designId,
           actionId,
+          execCtx.limits,
         );
-        if (prior) return alreadyAppliedResult(prior, actionId, execCtx.limits);
+        if (dedup) return dedup;
       }
       const warnings: string[] = [...idempotencyWarnings];
       const operations: SchematicProposalEnvelope["operations"] = [];
@@ -3402,7 +3480,9 @@ async function finalizeAndMaybeApply(params: {
         };
         summary = `Applied ${applyResult.appliedCount} operation(s).`;
       } else {
-        toolOk = applyResult.appliedCount > 0;
+        // A partial apply (some ops failed/skipped) is NOT a success: surface
+        // ok:false so the model/loop treats it as a deficiency to correct.
+        toolOk = false;
         toolStatus = "partial";
         modelData = {
           appliedCount: applyResult.appliedCount,

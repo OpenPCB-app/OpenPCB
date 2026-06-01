@@ -212,6 +212,17 @@ export interface DesignerSDK {
   ): Promise<DesignerHistoryActionResult>;
   /** Run the ERC engine over the current schematic projection. Returns `null` when the design has no schematic projection (e.g. brand new design). */
   runErc(designId: string): Promise<ErcReport | null>;
+  /**
+   * Fetch the schematic projection ONCE and run ERC over that same object,
+   * returning both at a single revision. Prefer this over calling
+   * `getSchematicProjection` + `runErc` separately (which double-fetches and
+   * can interleave a mutation between the two reads). Returns `null` when the
+   * design has no schematic projection.
+   */
+  getProjectionAndErc(designId: string): Promise<{
+    projection: DesignerSchematicProjection;
+    erc: ErcReport;
+  } | null>;
   /** Run the DRC engine over the current PCB projection. Returns `null` when the design has no PCB projection. */
   runDrc(designId: string): Promise<DrcReport | null>;
   /**

@@ -2,6 +2,7 @@ import type {
   DesignerSDK,
   DesignerSchematicProjection,
   ErcReport,
+  ErcViolation,
 } from "../../../../sdks";
 import type { ConversationStore } from "../conversation-store";
 import type { BuildIntentStore } from "./build-intent-store";
@@ -22,22 +23,27 @@ export interface RunDefinitionOfDoneInput {
   designId: string | null;
 }
 
-/** ERC violation codes that indicate a floating power / driven input pin. */
-const DANGLING_POWER_CODES = new Set<string>([
-  "POWER_PIN_NOT_DRIVEN",
-  "PIN_NOT_CONNECTED",
-  "INPUT_PIN_NOT_DRIVEN",
-  "FLOATING_POWER",
-  "FLOATING_INPUT",
-]);
+/**
+ * The single ERC code the engine emits for a floating power-input pin
+ * (`erc-engine.ts` → `UNCONNECTED_INPUT_PIN`, severity `"error"` only when the
+ * pin is `power_in`). A `warning`-severity occurrence is an unconnected signal
+ * input, not a dangling power pin, so we gate on severity too.
+ */
+const DANGLING_POWER_CODE = "UNCONNECTED_INPUT_PIN";
+
+function isDanglingPower(violation: ErcViolation): boolean {
+  return (
+    violation.code === DANGLING_POWER_CODE && violation.severity === "error"
+  );
+}
 
 function anchorIds(
   report: ErcReport,
-  predicate: (code: string) => boolean,
+  predicate: (violation: ErcViolation) => boolean,
 ): string[] {
   const ids = new Set<string>();
   for (const violation of report.violations) {
-    if (!predicate(violation.code)) continue;
+    if (!predicate(violation)) continue;
     for (const anchor of violation.anchors) {
       if (anchor.kind === "pin") ids.add(anchor.pinId);
       else if (anchor.kind === "net") ids.add(anchor.netId);
@@ -80,7 +86,7 @@ function wiredNetNames(schematic: DesignerSchematicProjection): Set<string> {
 
 function checkBomPlaced(
   intent: BuildIntent | null,
-  schematic: DesignerSchematicProjection,
+  schematic: DesignerSchematicProjection | null,
 ): CheckResult {
   if (!intent || intent.items.length === 0) {
     return {
@@ -88,6 +94,16 @@ function checkBomPlaced(
       passed: true,
       message: "No build intent recorded; skipping BOM-placement check.",
       affectedIds: [],
+    };
+  }
+  // Intent exists but the projection can't be read — verification is
+  // unavailable, which is NOT a pass for a build task (F3).
+  if (!schematic) {
+    return {
+      id: "bom_placed",
+      passed: false,
+      message: "Schematic projection unavailable; cannot verify BOM placement.",
+      affectedIds: intent.items.map((i) => i.componentId),
     };
   }
   const placed = placedCountByComponent(schematic);
@@ -115,18 +131,41 @@ function checkBomPlaced(
 
 function checkNetsWired(
   intent: BuildIntent | null,
-  schematic: DesignerSchematicProjection,
+  schematic: DesignerSchematicProjection | null,
 ): CheckResult {
+  const hasItems = (intent?.items.length ?? 0) > 0;
   const required = new Set<string>();
   for (const item of intent?.items ?? []) {
     for (const net of item.requiredNets) required.add(net);
   }
   if (required.size === 0) {
+    // F7b: a build task with items but ZERO captured required nets is NOT
+    // verifiable — do not vacuously pass. Fail closed. Only a genuinely
+    // net-free intent (no items at all) skips the check.
+    if (hasItems) {
+      return {
+        id: "nets_wired",
+        passed: false,
+        message:
+          "Build intent has items but no required nets were captured; net wiring is not verifiable.",
+        affectedIds: [],
+      };
+    }
     return {
       id: "nets_wired",
       passed: true,
       message: "No required nets recorded; skipping net-wiring check.",
       affectedIds: [],
+    };
+  }
+  // Intent requires nets but the projection can't be read — unavailable, not a
+  // pass (F3).
+  if (!schematic) {
+    return {
+      id: "nets_wired",
+      passed: false,
+      message: "Schematic projection unavailable; cannot verify net wiring.",
+      affectedIds: [...required],
     };
   }
   const wired = wiredNetNames(schematic);
@@ -142,16 +181,23 @@ function checkNetsWired(
   };
 }
 
-function checkNoDanglingPower(erc: ErcReport | null): CheckResult {
+function checkNoDanglingPower(
+  erc: ErcReport | null,
+  intentExists: boolean,
+): CheckResult {
   if (!erc) {
+    // F3: ERC unavailable while a build intent exists must FAIL — verification
+    // unavailable is not a pass. Absent any intent there is nothing to verify.
     return {
       id: "no_dangling_power",
-      passed: true,
-      message: "ERC unavailable; skipping dangling-power check.",
+      passed: !intentExists,
+      message: intentExists
+        ? "ERC unavailable; cannot verify dangling power pins."
+        : "ERC unavailable; skipping dangling-power check.",
       affectedIds: [],
     };
   }
-  const affected = anchorIds(erc, (code) => DANGLING_POWER_CODES.has(code));
+  const affected = anchorIds(erc, isDanglingPower);
   return {
     id: "no_dangling_power",
     passed: affected.length === 0,
@@ -163,12 +209,18 @@ function checkNoDanglingPower(erc: ErcReport | null): CheckResult {
   };
 }
 
-function checkErcClean(erc: ErcReport | null): CheckResult {
+function checkErcClean(
+  erc: ErcReport | null,
+  intentExists: boolean,
+): CheckResult {
   if (!erc) {
+    // F3: ERC unavailable with an intent present is a fail, not a pass.
     return {
       id: "erc_clean",
-      passed: true,
-      message: "ERC unavailable; skipping ERC-clean check.",
+      passed: !intentExists,
+      message: intentExists
+        ? "ERC unavailable; cannot verify ERC cleanliness."
+        : "ERC unavailable; skipping ERC-clean check.",
       affectedIds: [],
     };
   }
@@ -196,10 +248,12 @@ function checkErcClean(erc: ErcReport | null): CheckResult {
 }
 
 /**
- * Run the Definition-of-Done verifier (P4b). Takes a SINGLE schematic-projection
- * snapshot and runs ERC against the same revision (no racing two SDK reads), then
- * applies four hard-fail checks: every BOM item placed, every required net wired,
- * no dangling power/gnd, ERC errors == 0.
+ * Run the Definition-of-Done verifier (P4b). Reads a SINGLE same-revision
+ * snapshot of the schematic projection + ERC via `getProjectionAndErc` (no
+ * racing two SDK reads), then applies four hard-fail checks: every BOM item
+ * placed, every required net wired, no dangling power/gnd, ERC errors == 0.
+ * When a build intent exists but the snapshot/ERC is unavailable, the dependent
+ * checks fail (verification-unavailable is never a pass).
  *
  * Apply status is read from persisted write proposals (not tool `ok`) so the
  * report reflects what actually landed in the design.
@@ -225,12 +279,23 @@ export async function runDefinitionOfDone(
   }
 
   const intent = input.buildIntents.get(input.chatId, input.taskId);
-  // One snapshot of the schematic; ERC runs against the current revision too.
-  const schematic = await input.designer.getSchematicProjection(input.designId);
-  if (!schematic) {
+  const intentExists = (intent?.items.length ?? 0) > 0;
+
+  // C2: one same-revision snapshot of projection + ERC (never two interleaved
+  // reads). `null` means the design has no schematic projection, or the read
+  // failed — either way verification is UNAVAILABLE, not a pass (F3).
+  const snapshot = await input.designer
+    .getProjectionAndErc(input.designId)
+    .catch(() => null);
+  const schematic = snapshot?.projection ?? null;
+  const erc = snapshot?.erc ?? null;
+
+  // With no build intent and no projection there is genuinely nothing to
+  // verify. With an intent present, a missing snapshot must fall through so the
+  // individual checks fail closed.
+  if (!schematic && !intentExists) {
     return passReport("No schematic projection; nothing to verify.");
   }
-  const erc = await input.designer.runErc(input.designId).catch(() => null);
 
   // Surface whether the last writes actually applied (informational; the checks
   // below assert on real projection state, which already reflects applied ops).
@@ -242,8 +307,8 @@ export async function runDefinitionOfDone(
   const checks: CheckResult[] = [
     checkBomPlaced(intent, schematic),
     checkNetsWired(intent, schematic),
-    checkNoDanglingPower(erc),
-    checkErcClean(erc),
+    checkNoDanglingPower(erc, intentExists),
+    checkErcClean(erc, intentExists),
   ];
   if (lastFailedApply) {
     const bom = checks[0]!;
