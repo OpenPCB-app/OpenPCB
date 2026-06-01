@@ -112,9 +112,14 @@ function makeTool(name: string): AiTool {
   } as unknown as AiTool;
 }
 
-function fullRegistry(): AiToolRegistry {
+function fullRegistry(
+  opts: { withoutCreateTool?: boolean } = {},
+): AiToolRegistry {
   const reg = new AiToolRegistry();
-  for (const name of ALL_TOOL_NAMES) reg.register(makeTool(name));
+  for (const name of ALL_TOOL_NAMES) {
+    if (opts.withoutCreateTool && name === "designer_create_design") continue;
+    reg.register(makeTool(name));
+  }
   return reg;
 }
 
@@ -130,6 +135,7 @@ function makeHarness(opts: {
   turns: FakeTurn[];
   bound?: boolean;
   toolCalling?: boolean;
+  withoutCreateTool?: boolean;
 }): Harness {
   const chatId = "chat1";
   const assistantMessageId = "asst1";
@@ -233,7 +239,8 @@ function makeHarness(opts: {
       refreshBindingHealth: async () => {},
       listBindings: () => bindings,
     },
-    buildRegistry: () => fullRegistry(),
+    buildRegistry: () =>
+      fullRegistry({ withoutCreateTool: opts.withoutCreateTool }),
     buildClient: () => client,
   } as unknown as RunServiceOptions;
 
@@ -340,10 +347,24 @@ describe("RunService empty-completed handling", () => {
 });
 
 describe("RunService bind-gated tool staging", () => {
-  test("unbound chat receives only the library + entry-point tools", async () => {
+  test("unbound chat that can create a design receives the full tool set", async () => {
+    // The full registry includes designer_create_design, so an unbound chat is
+    // create-capable: the write tools must be advertised up front because
+    // runChat snapshots the tool list once and a mid-run bind can't add them.
     const h = makeHarness({ turns: [{ content: "ok" }], bound: false });
     await h.run();
-    expect(h.client.toolCounts[0]).toBe(5);
+    expect(h.client.toolCounts[0]).toBe(13);
+  });
+
+  test("unbound read-only chat (no create tool) receives only the lean set", async () => {
+    const h = makeHarness({
+      turns: [{ content: "ok" }],
+      bound: false,
+      withoutCreateTool: true,
+    });
+    await h.run();
+    // library reads (3) + designer_resolve_design (1); create tool absent.
+    expect(h.client.toolCounts[0]).toBe(4);
   });
 
   test("bound chat receives the full designer tool set", async () => {

@@ -81,6 +81,62 @@ describe("3D component transform helpers", () => {
     expect(transform.scale).toEqual([-1, 1, 1]);
   });
 
+  function placementWithFrozenModelRef(modelRef: unknown): PcbPlacedPart {
+    const base = fixturePlacement({ positionMm: { x: 0, y: 0 } });
+    return {
+      ...base,
+      footprint: {
+        ...base.footprint,
+        model3d: {
+          status: "ready",
+          glbUrl: "/model",
+          glbSha256: "sha",
+          sourceStepSha256: null,
+          sourceFilename: null,
+          modelRef,
+          converterVersion: null,
+        },
+      },
+    };
+  }
+
+  test("applies the frozen snapshot modelRef when no override is supplied", () => {
+    const group = new THREE.Group();
+    applyPlacementTransform(
+      group,
+      placementWithFrozenModelRef({ rotation: { x: -90, y: 0, z: 0 } }),
+      1.6,
+    );
+    expect(group.rotation.x).toBeCloseTo(-Math.PI / 2);
+  });
+
+  test("an explicit null override ignores a stale frozen snapshot modelRef", () => {
+    // The live library descriptor declares no correction (modelRef cleared);
+    // the stale frozen {x:-90} must NOT be applied.
+    const group = new THREE.Group();
+    applyPlacementTransform(
+      group,
+      placementWithFrozenModelRef({ rotation: { x: -90, y: 0, z: 0 } }),
+      1.6,
+      null,
+    );
+    expect(group.rotation.x).toBeCloseTo(0);
+    expect(group.rotation.y).toBeCloseTo(0);
+    expect(group.rotation.z).toBeCloseTo(0);
+  });
+
+  test("an explicit override modelRef wins over the frozen snapshot", () => {
+    const group = new THREE.Group();
+    applyPlacementTransform(
+      group,
+      placementWithFrozenModelRef({ rotation: { x: -90, y: 0, z: 0 } }),
+      1.6,
+      { rotation: { x: 0, y: 0, z: 45 } },
+    );
+    expect(group.rotation.x).toBeCloseTo(0);
+    expect(group.rotation.z).toBeCloseTo(Math.PI / 4);
+  });
+
   test("derives fallback box size from footprint bounds", () => {
     expect(getFallbackBoxSize(fixturePlacement())).toEqual({
       widthMm: 4,

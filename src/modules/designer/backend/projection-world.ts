@@ -607,6 +607,14 @@ export function deriveNetsAndJunctions(
     return created;
   };
 
+  // NOTE: every pin is folded into a net — an electrically-isolated pin lands
+  // in a *standalone* net whose only endpoint is that single pinId. These
+  // single-endpoint nets are kept on purpose so the renderer can still colour
+  // an unwired pin's net, but "has a net" must NOT be read as "is connected".
+  // Connectivity consumers (ERC, DoD) must check the net's endpoint count:
+  // a pin is genuinely connected only when its net has ≥2 pins, OR a wire, OR
+  // a label, OR a power/gnd/net-portal primitive (see `netIsConnected` in
+  // `erc/erc-engine.ts`).
   for (const part of parts)
     for (const pin of part.pins)
       ensureNet(unionFind.find(pointKey(pin.worldPositionNm))).pinIds.add(

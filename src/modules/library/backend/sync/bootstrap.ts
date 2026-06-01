@@ -158,7 +158,7 @@ function pickLatestSemver(versions: string[]): ParsedSemver | null {
   return latest;
 }
 
-function shouldImportBundledRelease(
+export function shouldImportBundledRelease(
   installed: InstalledRelease[],
   pkg: OpclibPackage,
 ): boolean {
@@ -176,7 +176,14 @@ function shouldImportBundledRelease(
   }
 
   if (isDevCoreLibraryVersion(installed.map((row) => row.version))) {
-    return !isDevCoreLibraryVersion([bundledVersion]);
+    // A non-dev *release* always supersedes a dev install — even when the dev
+    // version was inflated (e.g. 999.x) to win during local development.
+    if (!isDevCoreLibraryVersion([bundledVersion])) return true;
+    // dev → dev: version ordering between dev packs is still meaningful here
+    // (e.g. 999.0.2-dev > 999.0.0-dev). Fall through to the semver comparison
+    // so a corrected dev pack (e.g. fixed 3D-model orientation) actually
+    // replaces an older one. Identical content already returned false above
+    // via the exact version+sha check, so this can't churn on every boot.
   }
 
   const bundledParsed = parseSemver(bundledVersion);

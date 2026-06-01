@@ -21,6 +21,17 @@ export interface ApplyAssistantWriteProposalInput {
 export async function applyAssistantWriteProposal(
   input: ApplyAssistantWriteProposalInput,
 ): Promise<AssistantPlacementApplyResult | SchematicApplyResult> {
+  // Idempotency: a proposal that already landed (applied/partial) must not be
+  // re-dispatched — return its persisted apply result so a forced re-run keyed
+  // by the same `action_id` is a safe no-op rather than duplicating writes.
+  if (
+    (input.record.status === "applied" || input.record.status === "partial") &&
+    input.record.applyResult != null
+  ) {
+    return input.record.applyResult as
+      | AssistantPlacementApplyResult
+      | SchematicApplyResult;
+  }
   const kind = String(input.record.kind);
   if (
     kind === "designer_schematic_edits" ||

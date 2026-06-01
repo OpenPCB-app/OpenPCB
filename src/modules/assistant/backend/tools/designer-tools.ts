@@ -9,6 +9,7 @@ import type { CoreBackendModuleContext } from "../../../../core/contracts/module
 import {
   MODULE_SDK_TOKENS,
   type AssistantPlacementProposal,
+  type AssistantWriteProposalDto,
   type DesignerDesignSummary,
   type DesignerSDK,
   type DesignerCommandEnvelope,
@@ -17,6 +18,7 @@ import {
 } from "../../../../sdks";
 import type { ContextResolver } from "../context-resolver";
 import type { ConversationStore } from "../conversation-store";
+import { ACTION_ID_DESC, isValidActionId } from "./action-id";
 import {
   buildProjectionIndex,
   planNetConnect,
@@ -46,6 +48,8 @@ interface PlacementProposalEnvelope {
   id: string;
   kind: "designer_place_components";
   toolName: "designer_place_components";
+  /** Idempotency key from the model (Track D); dedup re-runs by design + key. */
+  actionId?: string;
   title: string;
   summary: string;
   riskLevel: "medium";
@@ -79,6 +83,8 @@ export interface SchematicProposalEnvelope {
     | "designer_propose_schematic_updates"
     | "designer_propose_schematic_deletions"
     | "designer_arrange_schematic";
+  /** Idempotency key from the model (Track D); dedup re-runs by design + key. */
+  actionId?: string;
   title: string;
   summary: string;
   riskLevel: "medium" | "high" | "destructive";
@@ -127,6 +133,86 @@ export interface SchematicApplyResult {
     result?: unknown;
   }>;
   message: string;
+}
+
+// ─── idempotency + slim model-facing result helpers (Track D) ──────────
+
+/** Slim, truthful view the model sees instead of the full envelope. */
+interface WriteToolModelData {
+  appliedCount: number;
+  skipped: Array<{ id: string; reason: string }>;
+  status: "ok" | "partial" | "pending" | "already_applied";
+}
+
+/**
+ * Look for a prior write proposal in this chat that carries the same
+ * `actionId` for the same design and already landed (applied or partial).
+ * Used to make write tools idempotent: re-issuing the same action_id is a
+ * safe no-op instead of duplicating placements/wires.
+ */
+function findAppliedByActionId(
+  conversation: ConversationStore,
+  chatId: string,
+  designId: string,
+  actionId: string,
+): AssistantWriteProposalDto | null {
+  for (const record of conversation.listWriteProposals(chatId)) {
+    if (record.designId !== designId) continue;
+    if (record.status !== "applied" && record.status !== "partial") continue;
+    const envelope = (record as { envelope?: unknown }).envelope as
+      | { actionId?: unknown }
+      | null
+      | undefined;
+    if (envelope && envelope.actionId === actionId) return record;
+  }
+  return null;
+}
+
+/**
+ * Validate a model-supplied `action_id`. Returns the trimmed id when usable,
+ * or null (with a pushed warning) when malformed — malformed ids fall back to
+ * non-idempotent behavior rather than failing the tool call.
+ */
+function normalizeActionId(
+  raw: string | undefined,
+  warnings: string[],
+): string | null {
+  if (raw === undefined) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (!isValidActionId(trimmed)) {
+    warnings.push(
+      `Ignored malformed action_id "${trimmed}" (expected <verb>_<key>_<designId>).`,
+    );
+    return null;
+  }
+  return trimmed;
+}
+
+/** Build the slim already-applied result returned on an idempotent re-run. */
+function alreadyAppliedResult<T>(
+  record: AssistantWriteProposalDto,
+  actionId: string,
+  limits: AiToolResult<T>["limits"],
+): AiToolResult<T | null> {
+  const modelData: WriteToolModelData = {
+    appliedCount: 0,
+    skipped: [],
+    status: "already_applied",
+  };
+  const data =
+    ((record as { envelope?: unknown }).envelope as T | undefined) ?? null;
+  return {
+    ok: true,
+    status: "ok",
+    summary: `already_applied: ${actionId}`,
+    data,
+    modelData,
+    sources: [],
+    warnings: [],
+    truncated: false,
+    limits,
+  };
 }
 
 // ─── designer_resolve_design ───────────────────────────────────────────
@@ -910,6 +996,7 @@ function summarizeCreatedDesign(
 
 interface DesignerPlaceComponentsInput {
   designId?: string;
+  action_id?: string;
   components: Array<{
     componentId: string;
     quantity?: number;
@@ -1007,6 +1094,7 @@ export function makeDesignerPlaceComponentsTool(
         type: "object",
         properties: {
           designId: { type: "string" },
+          action_id: { type: "string", description: ACTION_ID_DESC },
           components: {
             type: "array",
             items: {
@@ -1069,6 +1157,17 @@ export function makeDesignerPlaceComponentsTool(
           `Design not found or unavailable: ${designId}`,
           execCtx.limits,
         );
+      }
+      const idempotencyWarnings: string[] = [];
+      const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
+      if (actionId) {
+        const prior = findAppliedByActionId(
+          conversation,
+          chatId,
+          designId,
+          actionId,
+        );
+        if (prior) return alreadyAppliedResult(prior, actionId, execCtx.limits);
       }
 
       const requested = expandPlacementInputs(input);
@@ -1137,9 +1236,10 @@ export function makeDesignerPlaceComponentsTool(
       await contextResolver.maybeAutoBindDesign(chatId, designId);
 
       const proposalId = crypto.randomUUID();
-      const proposalWarnings = skipped.map(
-        (item) => `${item.componentId}: ${item.reason}`,
-      );
+      const proposalWarnings = [
+        ...idempotencyWarnings,
+        ...skipped.map((item) => `${item.componentId}: ${item.reason}`),
+      ];
       if (placementInputTruncated) {
         proposalWarnings.push(
           `Only the first ${MAX_PLACEMENTS_PER_PROPOSAL} requested placement(s) were included.`,
@@ -1178,6 +1278,7 @@ export function makeDesignerPlaceComponentsTool(
         baseRevision: designRecord.head.revision,
         sources,
         warnings: proposalWarnings,
+        actionId,
       });
       conversation.createWriteProposal({
         id: proposalId,
@@ -1188,6 +1289,28 @@ export function makeDesignerPlaceComponentsTool(
         proposal,
         envelope,
       });
+      // Build-time skips (unresolved components, truncation). These never reach
+      // the apply path, so they are reported as skipped regardless of apply.
+      const buildSkipped: WriteToolModelData["skipped"] = skipped.map(
+        (item) => ({ id: item.componentId, reason: item.reason }),
+      );
+      if (placementInputTruncated)
+        buildSkipped.push({
+          id: "placements",
+          reason: `Only the first ${MAX_PLACEMENTS_PER_PROPOSAL} placement(s) were included.`,
+        });
+
+      // Slim, truthful model-facing view. Defaults to the staged (pending)
+      // state; overwritten below once auto-apply runs.
+      let modelData: WriteToolModelData = {
+        appliedCount: 0,
+        skipped: buildSkipped,
+        status: buildSkipped.length > 0 ? "partial" : "pending",
+      };
+      let toolOk = placements.length > 0;
+      let toolStatus: "ok" | "partial" = "ok";
+      let summary = `Staged ${placements.length} placement(s) on ${designRecord.head.name}.`;
+
       if (
         proposalWarnings.length === 0 &&
         options.isSessionAutoApplyAllowed?.({
@@ -1211,22 +1334,49 @@ export function makeDesignerPlaceComponentsTool(
             writeProposalTerminalStatus(applyResult),
             applyResult,
           );
+          modelData = {
+            appliedCount: applyResult.applied.length,
+            skipped: buildSkipped,
+            status: "ok",
+          };
+          toolOk = true;
+          toolStatus = "ok";
+          summary = `Placed ${applyResult.applied.length} component(s) on ${designRecord.head.name}.`;
         } catch (err) {
+          // CRITICAL: a failed auto-apply must surface ok:false / partial — not
+          // ok:true with warnings. Pull the applied count from the partial
+          // result envelope when present.
+          const applyResult = isAssistantProposalApplyError(err)
+            ? (err.applyResult as {
+                status?: string;
+                applied?: unknown[];
+              })
+            : null;
+          const message = err instanceof Error ? err.message : String(err);
           conversation.updateWriteProposalStatus(
             chatId,
             proposalId,
-            writeProposalTerminalStatus(
-              isAssistantProposalApplyError(err) ? err.applyResult : null,
-            ),
-            isAssistantProposalApplyError(err)
-              ? err.applyResult
-              : { message: err instanceof Error ? err.message : String(err) },
+            writeProposalTerminalStatus(applyResult),
+            applyResult ?? { message },
           );
+          const appliedCount = applyResult?.applied?.length ?? 0;
+          modelData = {
+            appliedCount,
+            skipped: [...buildSkipped, { id: "apply", reason: message }],
+            status: "partial",
+          };
+          toolOk = appliedCount > 0;
+          toolStatus = "partial";
+          summary = `Auto-apply failed: ${message}`;
+          proposalWarnings.push(`Auto-apply failed: ${message}`);
         }
       }
       return {
-        ok: placements.length > 0,
+        ok: toolOk,
+        status: toolStatus,
+        summary,
         data: proposal,
+        modelData,
         sources,
         warnings: proposalWarnings,
         truncated: placementInputTruncated,
@@ -1242,11 +1392,13 @@ function buildPlacementProposalEnvelope(input: {
   baseRevision: number;
   sources: AiSourceRef[];
   warnings: string[];
+  actionId?: string | null;
 }): PlacementProposalEnvelope {
   return {
     id: input.proposal.proposalId,
     kind: "designer_place_components",
     toolName: "designer_place_components",
+    ...(input.actionId ? { actionId: input.actionId } : {}),
     title: `Place ${input.proposal.placements.length} component(s)`,
     summary: `Place ${input.proposal.placements.length} component(s) on ${input.proposal.design.name}.`,
     riskLevel: "medium",
@@ -1526,6 +1678,7 @@ export function makeDesignerGetSchematicConnectivityTool(
 
 interface DesignerProposeSchematicEditsInput {
   designId?: string;
+  action_id?: string;
   title: string;
   summary: string;
   parts?: Array<{
@@ -1572,6 +1725,7 @@ export function makeDesignerProposeSchematicEditsTool(
         type: "object",
         properties: {
           designId: { type: "string" },
+          action_id: { type: "string", description: ACTION_ID_DESC },
           title: { type: "string" },
           summary: { type: "string" },
           parts: {
@@ -1671,6 +1825,17 @@ export function makeDesignerProposeSchematicEditsTool(
       const designRecord = await designer.getDesign(designId);
       if (!designRecord)
         return failedTool(`Design not found: ${designId}`, execCtx.limits);
+      const idempotencyWarnings: string[] = [];
+      const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
+      if (actionId) {
+        const prior = findAppliedByActionId(
+          conversation,
+          chatId,
+          designId,
+          actionId,
+        );
+        if (prior) return alreadyAppliedResult(prior, actionId, execCtx.limits);
+      }
       // Need the projection to wire pins and to pick a non-overlapping start
       // for parts that omit positionNm (the common case — placement is then
       // auto-arranged from connectivity by the appended arrange op).
@@ -1708,7 +1873,7 @@ export function makeDesignerProposeSchematicEditsTool(
           label: designRecord.head.name,
         },
       ];
-      const warnings: string[] = [];
+      const warnings: string[] = [...idempotencyWarnings];
       const operations: SchematicProposalEnvelope["operations"] = [];
       if ((input.parts?.length ?? 0) > 20)
         warnings.push("Only the first 20 part operation(s) were included.");
@@ -1974,6 +2139,7 @@ export function makeDesignerProposeSchematicEditsTool(
         id: proposalId,
         kind: "designer_schematic_edits",
         toolName: "designer_propose_schematic_edits",
+        ...(actionId ? { actionId } : {}),
         title: input.title.trim() || "Schematic edit proposal",
         summary:
           input.summary.trim() ||
@@ -2010,6 +2176,7 @@ export function makeDesignerProposeSchematicEditsTool(
 
 interface DesignerArrangeSchematicInput {
   designId?: string;
+  action_id?: string;
 }
 
 export function makeDesignerArrangeSchematicTool(
@@ -2028,7 +2195,10 @@ export function makeDesignerArrangeSchematicTool(
         "Tidy the whole schematic: deterministically group net-connected parts with routing channels, slide power/ground flags with their pins, and re-route every wire around bodies, flags and other wires. Non-destructive, auto-applies, single undo step. Use when the layout looks messy or overlapping.",
       inputSchema: {
         type: "object",
-        properties: { designId: { type: "string" } },
+        properties: {
+          designId: { type: "string" },
+          action_id: { type: "string", description: ACTION_ID_DESC },
+        },
       },
     },
     async execute(execCtx, input) {
@@ -2048,6 +2218,17 @@ export function makeDesignerArrangeSchematicTool(
       const designRecord = await designer.getDesign(designId);
       if (!designRecord)
         return failedTool(`Design not found: ${designId}`, execCtx.limits);
+      const idempotencyWarnings: string[] = [];
+      const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
+      if (actionId) {
+        const prior = findAppliedByActionId(
+          conversation,
+          chatId,
+          designId,
+          actionId,
+        );
+        if (prior) return alreadyAppliedResult(prior, actionId, execCtx.limits);
+      }
 
       const proposalId = crypto.randomUUID();
       const sources: AiSourceRef[] = [
@@ -2062,6 +2243,7 @@ export function makeDesignerArrangeSchematicTool(
         id: proposalId,
         kind: "designer_schematic_edits",
         toolName: "designer_arrange_schematic",
+        ...(actionId ? { actionId } : {}),
         title: "Arrange schematic",
         summary: "Re-group parts and re-route wires for a clean layout.",
         riskLevel: "medium",
@@ -2082,7 +2264,7 @@ export function makeDesignerArrangeSchematicTool(
         ],
         payload: input,
         sources,
-        warnings: [],
+        warnings: idempotencyWarnings,
       };
       await contextResolver.maybeAutoBindDesign(chatId, designId);
       return finalizeAndMaybeApply({
@@ -2092,7 +2274,7 @@ export function makeDesignerArrangeSchematicTool(
         designId,
         baseRevision: designRecord.head.revision,
         envelope,
-        warnings: [],
+        warnings: idempotencyWarnings,
         sources,
         limits: execCtx.limits,
         options,
@@ -2105,6 +2287,7 @@ export function makeDesignerArrangeSchematicTool(
 
 interface DesignerProposeSchematicWiresInput {
   designId?: string;
+  action_id?: string;
   title: string;
   summary: string;
   wires?: Array<{
@@ -2142,6 +2325,7 @@ export function makeDesignerProposeSchematicWiresTool(
         type: "object",
         properties: {
           designId: { type: "string" },
+          action_id: { type: "string", description: ACTION_ID_DESC },
           title: { type: "string" },
           summary: { type: "string" },
           wires: {
@@ -2214,8 +2398,19 @@ export function makeDesignerProposeSchematicWiresTool(
           execCtx.limits,
         );
 
+      const idempotencyWarnings: string[] = [];
+      const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
+      if (actionId) {
+        const prior = findAppliedByActionId(
+          conversation,
+          chatId,
+          designId,
+          actionId,
+        );
+        if (prior) return alreadyAppliedResult(prior, actionId, execCtx.limits);
+      }
       const proposalId = crypto.randomUUID();
-      const warnings: string[] = [];
+      const warnings: string[] = [...idempotencyWarnings];
       const operations: SchematicProposalEnvelope["operations"] = [];
       if ((input.wires?.length ?? 0) > 40)
         warnings.push("Only the first 40 wire operation(s) were included.");
@@ -2388,6 +2583,7 @@ export function makeDesignerProposeSchematicWiresTool(
         id: proposalId,
         kind: "designer_schematic_wires",
         toolName: "designer_propose_schematic_wires",
+        ...(actionId ? { actionId } : {}),
         title: input.title.trim() || "Schematic wiring proposal",
         summary:
           input.summary.trim() ||
@@ -2420,6 +2616,7 @@ export function makeDesignerProposeSchematicWiresTool(
 
 interface DesignerProposeSchematicUpdatesInput {
   designId?: string;
+  action_id?: string;
   title: string;
   summary: string;
   partUpdates?: Array<{
@@ -2470,6 +2667,7 @@ export function makeDesignerProposeSchematicUpdatesTool(
         type: "object",
         properties: {
           designId: { type: "string" },
+          action_id: { type: "string", description: ACTION_ID_DESC },
           title: { type: "string" },
           summary: { type: "string" },
           partUpdates: {
@@ -2577,8 +2775,19 @@ export function makeDesignerProposeSchematicUpdatesTool(
           execCtx.limits,
         );
 
+      const idempotencyWarnings: string[] = [];
+      const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
+      if (actionId) {
+        const prior = findAppliedByActionId(
+          conversation,
+          chatId,
+          designId,
+          actionId,
+        );
+        if (prior) return alreadyAppliedResult(prior, actionId, execCtx.limits);
+      }
       const proposalId = crypto.randomUUID();
-      const warnings: string[] = [];
+      const warnings: string[] = [...idempotencyWarnings];
       const operations: SchematicProposalEnvelope["operations"] = [];
       if ((input.partUpdates?.length ?? 0) > 40)
         warnings.push(
@@ -2809,6 +3018,7 @@ export function makeDesignerProposeSchematicUpdatesTool(
         id: proposalId,
         kind: "designer_schematic_updates",
         toolName: "designer_propose_schematic_updates",
+        ...(actionId ? { actionId } : {}),
         title: input.title.trim() || "Schematic update proposal",
         summary:
           input.summary.trim() ||
@@ -2841,6 +3051,7 @@ export function makeDesignerProposeSchematicUpdatesTool(
 
 interface DesignerProposeSchematicDeletionsInput {
   designId?: string;
+  action_id?: string;
   title: string;
   summary: string;
   entities: Array<{
@@ -2871,6 +3082,7 @@ export function makeDesignerProposeSchematicDeletionsTool(
         type: "object",
         properties: {
           designId: { type: "string" },
+          action_id: { type: "string", description: ACTION_ID_DESC },
           title: { type: "string" },
           summary: { type: "string" },
           entities: {
@@ -2936,7 +3148,18 @@ export function makeDesignerProposeSchematicDeletionsTool(
           label: designRecord.head.name,
         },
       ];
-      const warnings: string[] = [];
+      const idempotencyWarnings: string[] = [];
+      const actionId = normalizeActionId(input.action_id, idempotencyWarnings);
+      if (actionId) {
+        const prior = findAppliedByActionId(
+          conversation,
+          chatId,
+          designId,
+          actionId,
+        );
+        if (prior) return alreadyAppliedResult(prior, actionId, execCtx.limits);
+      }
+      const warnings: string[] = [...idempotencyWarnings];
       const operations: SchematicProposalEnvelope["operations"] = [];
       if ((input.entities?.length ?? 0) > 40)
         warnings.push("Only the first 40 delete operation(s) were included.");
@@ -2997,6 +3220,7 @@ export function makeDesignerProposeSchematicDeletionsTool(
         id: proposalId,
         kind: "designer_schematic_deletions",
         toolName: "designer_propose_schematic_deletions",
+        ...(actionId ? { actionId } : {}),
         title: input.title.trim() || "Schematic deletion proposal",
         summary:
           input.summary.trim() ||
@@ -3133,6 +3357,19 @@ async function finalizeAndMaybeApply(params: {
       riskLevel: envelope.riskLevel,
     }) === true;
   const finalWarnings = [...warnings];
+  // Build-time skips/truncation reported to the model even when nothing applies.
+  const buildSkipped: WriteToolModelData["skipped"] = warnings.map((w) => ({
+    id: "build",
+    reason: w,
+  }));
+  let toolOk = true;
+  let toolStatus: "ok" | "partial" = "ok";
+  let modelData: WriteToolModelData = {
+    appliedCount: 0,
+    skipped: buildSkipped,
+    status: buildSkipped.length > 0 ? "partial" : "pending",
+  };
+  let summary = `Staged ${envelope.operations.length} operation(s) on ${envelope.title}.`;
   if (autoApply) {
     // applySchematicProposalOperations can throw (e.g. revision race). Never let
     // that crash the tool call: record the proposal as failed and surface it.
@@ -3150,6 +3387,30 @@ async function finalizeAndMaybeApply(params: {
         writeProposalTerminalStatus(applyResult),
         applyResult,
       );
+      const failedSkips: WriteToolModelData["skipped"] = applyResult.operations
+        .filter((op) => op.status === "failed")
+        .map((op) => ({ id: op.operationId, reason: op.error ?? "failed" }));
+      const skipped = [...buildSkipped, ...failedSkips];
+      // A failed/partial apply must surface ok:false/partial — never ok:true.
+      if (applyResult.status === "applied") {
+        toolOk = true;
+        toolStatus = "ok";
+        modelData = {
+          appliedCount: applyResult.appliedCount,
+          skipped,
+          status: "ok",
+        };
+        summary = `Applied ${applyResult.appliedCount} operation(s).`;
+      } else {
+        toolOk = applyResult.appliedCount > 0;
+        toolStatus = "partial";
+        modelData = {
+          appliedCount: applyResult.appliedCount,
+          skipped,
+          status: "partial",
+        };
+        summary = `Applied ${applyResult.appliedCount}, failed ${applyResult.failedCount}, skipped ${applyResult.skippedCount} operation(s).`;
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       conversation.updateWriteProposalStatus(chatId, envelope.id, "failed", {
@@ -3163,11 +3424,22 @@ async function finalizeAndMaybeApply(params: {
         message,
       });
       finalWarnings.push(`Auto-apply failed: ${message}`);
+      toolOk = false;
+      toolStatus = "partial";
+      modelData = {
+        appliedCount: 0,
+        skipped: [...buildSkipped, { id: "apply", reason: message }],
+        status: "partial",
+      };
+      summary = `Auto-apply failed: ${message}`;
     }
   }
   return {
-    ok: true,
+    ok: toolOk,
+    status: toolStatus,
+    summary,
     data: envelope,
+    modelData,
     sources,
     warnings: finalWarnings,
     truncated: finalWarnings.some((w) => w.startsWith("Only the first")),

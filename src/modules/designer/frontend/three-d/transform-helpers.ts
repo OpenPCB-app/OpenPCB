@@ -82,10 +82,21 @@ export function applyPlacementTransform(
   group: THREE.Group,
   placement: PcbPlacedPart,
   boardThicknessMm: number,
+  modelRefOverride?: unknown,
 ): void {
   // Per-model author-time correction (offset + rotation + scale) is applied
   // first in model-space, then the per-instance placement transform on top.
-  const modelRef = parseModelRef(placement.footprint.model3d?.modelRef);
+  //
+  // The correction is a *library* asset. Prefer an explicitly supplied
+  // `modelRefOverride` (the live library descriptor) over the placement
+  // snapshot, which may have frozen a now-stale correction at place-time.
+  // `undefined` means "not supplied — fall back to the snapshot"; an explicit
+  // `null` means "the library declares no correction" and must NOT fall back.
+  const rawModelRef =
+    modelRefOverride !== undefined
+      ? modelRefOverride
+      : placement.footprint.model3d?.modelRef;
+  const modelRef = parseModelRef(rawModelRef);
   if (modelRef) {
     multiplyGroupTransform(group, buildModelRefMatrix(modelRef));
   }

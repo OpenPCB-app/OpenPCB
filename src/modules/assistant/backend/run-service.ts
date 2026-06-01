@@ -15,6 +15,7 @@ import {
   type AssistantMessage,
   type TasksSDK,
   type TaskExecutionContext,
+  type DesignerSDK,
 } from "../../../sdks";
 import type { ConversationStore } from "./conversation-store";
 import type { ProviderStore } from "./provider-store";
@@ -22,6 +23,13 @@ import type { SettingsStore } from "./settings-store";
 import type { PromptService } from "./prompt-service";
 import type { ContextResolver } from "./context-resolver";
 import { buildAiProviderClient } from "./providers/openpcb-provider-factory";
+import { BuildIntentStore } from "./verification/build-intent-store";
+import { runDefinitionOfDone } from "./verification/run-dod";
+import { buildDesignContextSummary } from "./context-summary";
+import type {
+  DeficiencyReport,
+  DesignContextSummary,
+} from "./verification/types";
 
 export interface SubmitPayload {
   chatId: string;
@@ -63,11 +71,33 @@ const UNBOUND_TOOL_NAMES = new Set<string>([
   "designer_create_design",
 ]);
 
+/** Tool that binds the chat to a fresh design mid-run, unlocking the writers. */
+const CREATE_DESIGN_TOOL = "designer_create_design";
+
+/**
+ * Stage the registry for the model.
+ *
+ * `runChat` snapshots `registry.listDefinitions()` ONCE at the start of a run
+ * and reuses that list for every iteration, so a registry mutated mid-loop
+ * never re-advertises new tools to the provider. That broke the "create →
+ * place → wire in one run" path: an unbound chat was locked to the 5
+ * `UNBOUND_TOOL_NAMES` for the whole run, so after `designer_create_design`
+ * bound a design the write tools were never exposed.
+ *
+ * Fix: when the unbound chat CAN create a design this run (the create tool is
+ * registered), expose the full set up front. The write tools are then already
+ * advertised when the bind appears mid-run. A truly read-only unbound chat
+ * (no create tool) keeps the lean payload.
+ */
 function stageRegistryForBindings(
   full: AiToolRegistry,
   hasBoundDesign: boolean,
 ): AiToolRegistry {
   if (hasBoundDesign) return full;
+  const canCreateThisRun = full
+    .list()
+    .some((tool) => tool.definition.name === CREATE_DESIGN_TOOL);
+  if (canCreateThisRun) return full;
   const staged = new AiToolRegistry();
   for (const tool of full.list()) {
     if (UNBOUND_TOOL_NAMES.has(tool.definition.name)) staged.register(tool);
@@ -79,17 +109,196 @@ function isBlank(text: string | null | undefined): boolean {
   return !text || text.trim().length === 0;
 }
 
+/** Minimal shape of the library_resolve_bom result we read for BuildIntent. */
+interface BomResultShape {
+  goal?: unknown;
+  items?: Array<{
+    role?: unknown;
+    quantity?: number;
+    value?: unknown;
+    selected?: { componentId: string } | null;
+  }>;
+}
+
+/**
+ * Deterministically derive the nets a BOM item is expected to participate in
+ * from its role keyword. Used by the DoD `nets_wired` check. Conservative: only
+ * power/ground rails are inferred, since those are the connections a build is
+ * most likely to leave dangling.
+ */
+function requiredNetsForRole(role: string): string[] {
+  const r = role.toLowerCase();
+  const nets = new Set<string>();
+  if (/(gnd|ground|return)/.test(r)) nets.add("GND");
+  if (/(vcc|vdd|\+?5v|\+?3v3|3\.3v|power|supply|rail)/.test(r)) nets.add("VCC");
+  return [...nets];
+}
+
+/** Max correction passes after the main run; each pass re-primes + re-runs. */
+const MAX_DOD_CORRECTION_PASSES = 3;
+
 export class RunService {
   private readonly tasks: TasksSDK;
+  private readonly buildIntents: BuildIntentStore;
 
   constructor(private readonly options: RunServiceOptions) {
     const tasks = options.ctx.sdk.get<TasksSDK>(MODULE_SDK_TOKENS.TASKS);
     if (!tasks) throw new Error("TasksSDK not registered");
     this.tasks = tasks;
+    this.buildIntents = new BuildIntentStore(options.ctx);
     this.tasks.registerExecutor("assistant.chat", {
       execute: (taskCtx) =>
         this.execute(taskCtx as TaskExecutionContext<SubmitPayload>),
     });
+  }
+
+  private designerSdk(): DesignerSDK | null {
+    return this.options.ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+  }
+
+  private boundDesignId(chatId: string): string | null {
+    const primary = this.options.contextResolver.getPrimaryDesign(chatId);
+    return primary && primary.status === "active" ? primary.refId : null;
+  }
+
+  /** Parse a library_resolve_bom result and persist it as a BuildIntent row. */
+  private captureBuildIntent(
+    chatId: string,
+    taskId: string,
+    resultJson: string,
+  ): void {
+    let parsed: BomResultShape;
+    try {
+      parsed = JSON.parse(resultJson) as BomResultShape;
+    } catch {
+      return;
+    }
+    const items = Array.isArray(parsed.items) ? parsed.items : [];
+    const intentItems = items
+      .filter((item) => item.selected?.componentId)
+      .map((item) => ({
+        role: typeof item.role === "string" ? item.role : "part",
+        componentId: item.selected!.componentId,
+        quantity:
+          Number.isFinite(item.quantity) && (item.quantity ?? 0) > 0
+            ? Math.floor(item.quantity!)
+            : 1,
+        value: typeof item.value === "string" ? item.value : undefined,
+        requiredNets: requiredNetsForRole(
+          typeof item.role === "string" ? item.role : "",
+        ),
+      }));
+    if (intentItems.length === 0) return;
+    try {
+      this.buildIntents.save({
+        chatId,
+        taskId,
+        goal: typeof parsed.goal === "string" ? parsed.goal : "",
+        items: intentItems,
+      });
+    } catch {
+      // Persisting intent is best-effort; never fail the run over it.
+    }
+  }
+
+  /**
+   * Run DoD, then dynamically correct: while the failing-check set keeps
+   * shrinking, re-prime the model with a FRESH minimal context (goal + current
+   * design summary + structured deficiencies) and re-run. Stop on pass, on stall
+   * (no shrink between two passes), or on the pass budget. On stop with
+   * remaining deficiencies, mark the answer partial and append written
+   * suggested-next-steps; no further auto-action. Idempotent re-runs rely on the
+   * write tools' `action_id` (Track D).
+   *
+   * Returns the final DeficiencyReport, or null when there is nothing to verify
+   * (no bound design / no projection).
+   */
+  private async runCorrectionHarness(
+    payload: SubmitPayload,
+    taskCtx: TaskExecutionContext<SubmitPayload>,
+    callSummaries: Map<string, AssistantToolCallSummary>,
+    toolEventsByCall: Map<string, AssistantToolEventDto>,
+    runState: AssistantTurnState,
+  ): Promise<DeficiencyReport | null> {
+    const designer = this.designerSdk();
+    if (!designer) return null;
+    const designId = this.boundDesignId(payload.chatId);
+    if (!designId) return null;
+
+    const verify = (): Promise<DeficiencyReport> =>
+      runDefinitionOfDone({
+        designer,
+        conversation: this.options.conversation,
+        buildIntents: this.buildIntents,
+        chatId: payload.chatId,
+        taskId: taskCtx.task.id,
+        designId,
+      });
+
+    let report = await verify();
+    let prevFailing = new Set(report.failing);
+    const intent = this.buildIntents.get(payload.chatId, taskCtx.task.id);
+    const goal = intent?.goal ?? "";
+
+    for (
+      let pass = 0;
+      pass < MAX_DOD_CORRECTION_PASSES && report.status !== "pass";
+      pass++
+    ) {
+      if (taskCtx.signal.aborted) break;
+      const summary = await buildDesignContextSummary(designer, designId);
+      const correctionMessages = buildCorrectionMessages(goal, summary, report);
+      callSummaries.clear();
+      toolEventsByCall.clear();
+      for await (const event of runChat({
+        client: (this.options.buildClient ?? buildAiProviderClient)(
+          this.options.providers.getProviderInternal(payload.providerConfigId)!,
+        ),
+        registry: this.options.buildRegistry(
+          this.options.settings.getSettings().allowRawToolData,
+        ),
+        model: payload.model,
+        messages: correctionMessages,
+        bindings: this.options.contextResolver.listBindings(payload.chatId),
+        limits: resolveToolLimits({
+          preference: this.options.settings.getSettings().contextSizePreference,
+          modelContextTokens: this.options.providers.getProviderInternal(
+            payload.providerConfigId,
+          )?.capabilities?.maxContextTokens,
+        }),
+        chatId: payload.chatId,
+        maxToolIterations: 8,
+        signal: taskCtx.signal,
+      })) {
+        await this.handleEvent(
+          event,
+          payload,
+          taskCtx,
+          callSummaries,
+          toolEventsByCall,
+          runState,
+        );
+      }
+
+      report = await verify();
+      const failing = new Set(report.failing);
+      const shrank =
+        failing.size < prevFailing.size &&
+        [...failing].every((id) => prevFailing.has(id));
+      prevFailing = failing;
+      if (report.status === "pass") break;
+      if (!shrank) break; // stall — same or non-shrinking failing set.
+    }
+
+    if (report.status !== "pass") {
+      const message = buildDeficiencyMessage(report);
+      this.options.conversation.appendMessageContent(
+        payload.assistantMessageId,
+        message,
+      );
+      await taskCtx.emitChunk({ kind: "text", content: message });
+    }
+    return report;
   }
 
   private async execute(
@@ -287,18 +496,42 @@ export class RunService {
         });
       }
 
+      // P4b: Definition-of-Done verification + dynamic correction. Only runs
+      // when the chat is bound to a design and the model did real tool work —
+      // a chat-only answer has nothing to verify.
+      const deficiency =
+        callSummaries.size > 0
+          ? await this.runCorrectionHarness(
+              payload,
+              taskCtx,
+              callSummaries,
+              toolEventsByCall,
+              runState,
+            )
+          : null;
+
       // Persist final summaries + reasoning/diagnostics onto the assistant message metadata.
       const summaries = Array.from(callSummaries.values());
       const totalSources = summaries.reduce((acc, s) => acc + s.sourceCount, 0);
-      const metadata: AssistantMessageMetadata = {
-        ai: {
-          toolCallSummaries: summaries,
-          totalSources,
-          ...(runState.reasoning ? { reasoning: runState.reasoning } : {}),
-          ...(runState.truncated ? { truncated: true } : {}),
-          ...(emptyResponse ? { emptyResponse: true } : {}),
-        },
+      // `definitionOfDone` is an additive diagnostic field not in the published
+      // AssistantMessageMetadata shape; attach it via a widened ai object.
+      const ai: Record<string, unknown> = {
+        toolCallSummaries: summaries,
+        totalSources,
+        ...(runState.reasoning ? { reasoning: runState.reasoning } : {}),
+        ...(runState.truncated ? { truncated: true } : {}),
+        ...(emptyResponse ? { emptyResponse: true } : {}),
+        ...(deficiency
+          ? {
+              definitionOfDone: {
+                status: deficiency.status,
+                failing: deficiency.failing,
+                checks: deficiency.checks,
+              },
+            }
+          : {}),
       };
+      const metadata = { ai } as unknown as AssistantMessageMetadata;
       this.options.conversation.setMessageMetadata(
         payload.assistantMessageId,
         metadata,
@@ -438,6 +671,16 @@ export class RunService {
           taskId: taskCtx.task.id,
           metadata: { ai: { internal: true } },
         });
+        // P4: capture BuildIntent from a resolved BOM. The tool execute context
+        // carries chatId but not taskId, so the intent is persisted here where
+        // both keys are in scope.
+        if (event.data.toolName === "library_resolve_bom") {
+          this.captureBuildIntent(
+            payload.chatId,
+            taskCtx.task.id,
+            event.data.resultJson,
+          );
+        }
         await taskCtx.emitChunk({
           kind: "json",
           content: JSON.stringify({ _aiEvent: event }),
@@ -506,6 +749,61 @@ function safeParseArray<T>(json: string): T[] | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Build a fresh minimal correction context: a system instruction to fix only the
+ * listed deficiencies, plus the goal, the current design summary, and the
+ * structured failing checks. Deliberately omits prior tool/assistant turns so a
+ * reasoning model isn't drowned in history.
+ */
+function buildCorrectionMessages(
+  goal: string,
+  summary: DesignContextSummary | null,
+  report: DeficiencyReport,
+): AiChatMessage[] {
+  const failing = report.checks.filter((c) => !c.passed);
+  const deficiencyLines = failing
+    .map((c) => `- [${c.id}] ${c.message}`)
+    .join("\n");
+  const summaryBlock = summary
+    ? [
+        `Design "${summary.name}" (id=${summary.designId}):`,
+        `- schematic: ${summary.schematic.componentCount} component(s), ${summary.schematic.netCount} net(s)`,
+        summary.schematic.unplaced.length > 0
+          ? `- unplaced on PCB: ${summary.schematic.unplaced.join(", ")}`
+          : null,
+        summary.schematic.openNets.length > 0
+          ? `- open nets: ${summary.schematic.openNets.join(", ")}`
+          : null,
+        `- PCB: ${summary.pcb.placed} placed, ${summary.pcb.unrouted} unrouted net(s)`,
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "Design summary unavailable.";
+  const system =
+    "You are continuing an autonomous PCB build. The design is NOT yet complete. " +
+    "Fix ONLY the deficiencies listed below using the designer write tools. " +
+    "Do not touch parts of the design that are already correct. Reuse stable " +
+    "action_id keys so repeated operations are safe no-ops. When every " +
+    "deficiency is resolved, stop.";
+  const user =
+    (goal ? `Goal: ${goal}\n\n` : "") +
+    `${summaryBlock}\n\nRemaining deficiencies:\n${deficiencyLines}`;
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+}
+
+/** A user-facing, written suggested-next-steps block for an unfinished build. */
+function buildDeficiencyMessage(report: DeficiencyReport): string {
+  const failing = report.checks.filter((c) => !c.passed);
+  const lines = failing.map((c) => `- ${c.message}`).join("\n");
+  return (
+    `\n\n---\n**Build incomplete** — ${failing.length} check(s) still failing:\n` +
+    `${lines}\n\n_Suggested next steps: resolve the items above, then ask me to verify again._`
+  );
 }
 
 function orderMessagesForProvider(

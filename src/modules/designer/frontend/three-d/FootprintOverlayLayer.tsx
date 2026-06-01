@@ -9,7 +9,13 @@ const PCB_HIDDEN_LAYERS: ReadonlySet<string> = new Set([
   "F.Fabrication",
   "B.Fabrication",
 ]);
-const FOOTPRINT_OVERLAY_Z_OFFSET_MM = 0.06;
+// Silkscreen / refdes sit just ABOVE the soldermask + copper traces (≈0.04mm)
+// but just BELOW the exposed pad surface (`PAD_SURFACE_Z_MM` = 0.05mm in
+// CopperPads). The pads render opaque and write depth, so placing silk beneath
+// them lets the gold pad occlude any silk that overlaps it — matching real fab,
+// where silkscreen is clipped out of soldermask openings — while silk between
+// and around pads still shows. Avoids costly per-pad boolean clipping.
+const FOOTPRINT_OVERLAY_Z_OFFSET_MM = 0.045;
 
 // Pad copper is rendered by `CopperPads` (so through-hole pads can be annular
 // and see-through). The shared layer can't hide pads via `hiddenLayers`, but

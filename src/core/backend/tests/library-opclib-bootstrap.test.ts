@@ -32,7 +32,8 @@ function isolateTestDb(label: string): void {
 const REPO_ROOT = path.resolve(import.meta.dir, "../../..");
 
 afterEach(async () => {
-  if (prevBundleEnv === undefined) delete process.env.OPENPCB_BUNDLED_LIBRARY_PATH;
+  if (prevBundleEnv === undefined)
+    delete process.env.OPENPCB_BUNDLED_LIBRARY_PATH;
   else process.env.OPENPCB_BUNDLED_LIBRARY_PATH = prevBundleEnv;
   prevBundleEnv = undefined;
   while (tempRoots.length > 0) {
@@ -61,7 +62,9 @@ function buildCorePackage(version: string, componentId: string): Uint8Array {
   const footprintId = `openpcb.core.footprint.${slug}`;
   const symBytes = new TextEncoder().encode(JSON.stringify({ id: symbolId }));
   const fpBytes = new TextEncoder().encode(JSON.stringify({ id: footprintId }));
-  const compBytes = new TextEncoder().encode(JSON.stringify({ id: componentId }));
+  const compBytes = new TextEncoder().encode(
+    JSON.stringify({ id: componentId }),
+  );
   return packOpclib({
     library: {
       id: "openpcb.core",
@@ -131,7 +134,9 @@ function buildPackageWithModel(input: {
   const modelId = `${input.libraryId}.3d.${slug}`;
   const symBytes = new TextEncoder().encode(JSON.stringify({ id: symbolId }));
   const fpBytes = new TextEncoder().encode(JSON.stringify({ id: footprintId }));
-  const compBytes = new TextEncoder().encode(JSON.stringify({ id: input.componentId }));
+  const compBytes = new TextEncoder().encode(
+    JSON.stringify({ id: input.componentId }),
+  );
   const stepBytes = new TextEncoder().encode("ISO-10303-21; END-ISO-10303-21;");
   const glbBytes = new Uint8Array([0x67, 0x6c, 0x54, 0x46, 2, 0, 0, 0]);
   return packOpclib({
@@ -271,8 +276,14 @@ describe("core library .opclib bootstrap", () => {
     tempRoots.push(root);
     const devPath = path.join(root, "openpcb-core-library-999.0.0-dev.opclib");
     const releasePath = path.join(root, "openpcb-core-library-1.0.0.opclib");
-    await writeFile(devPath, buildCorePackage("999.0.0-dev", "openpcb.core.test.dev-only"));
-    await writeFile(releasePath, buildCorePackage("1.0.0", "openpcb.core.test.release-only"));
+    await writeFile(
+      devPath,
+      buildCorePackage("999.0.0-dev", "openpcb.core.test.dev-only"),
+    );
+    await writeFile(
+      releasePath,
+      buildCorePackage("1.0.0", "openpcb.core.test.release-only"),
+    );
 
     process.env.OPENPCB_BUNDLED_LIBRARY_PATH = devPath;
     await bootRuntime();
@@ -282,7 +293,9 @@ describe("core library .opclib bootstrap", () => {
     const sdk = runtime
       .getSdkRegistry()
       .resolve<LibrarySDK>(MODULE_SDK_TOKENS.LIBRARY);
-    const ids = (await sdk.searchComponents({})).map((component) => component.id);
+    const ids = (await sdk.searchComponents({})).map(
+      (component) => component.id,
+    );
     expect(ids).toContain("openpcb.core.test.release-only");
     expect(ids).not.toContain("openpcb.core.test.dev-only");
 
@@ -307,6 +320,88 @@ describe("core library .opclib bootstrap", () => {
     expect(footprintIds).not.toContain("openpcb.core.footprint.test.dev-only");
   });
 
+  test("upgrades a dev DB to a newer dev package (corrected assets land)", async () => {
+    // Regression: the dev→dev gate short-circuited before the semver compare,
+    // so a corrected dev pack (e.g. fixed 3D-model orientation) never replaced
+    // an older one — leaving stale baked GLBs in the store.
+    isolateTestDb("opclib-bootstrap-dev-to-dev");
+    prevBundleEnv = process.env.OPENPCB_BUNDLED_LIBRARY_PATH;
+    const root = await mkdtemp(path.join(os.tmpdir(), "opclib-dev-dev-"));
+    tempRoots.push(root);
+    const oldDevPath = path.join(
+      root,
+      "openpcb-core-library-999.0.0-dev.opclib",
+    );
+    const newDevPath = path.join(
+      root,
+      "openpcb-core-library-999.0.2-dev.opclib",
+    );
+    await writeFile(
+      oldDevPath,
+      buildCorePackage("999.0.0-dev", "openpcb.core.test.dev-v0"),
+    );
+    await writeFile(
+      newDevPath,
+      buildCorePackage("999.0.2-dev", "openpcb.core.test.dev-v2"),
+    );
+
+    process.env.OPENPCB_BUNDLED_LIBRARY_PATH = oldDevPath;
+    await bootRuntime();
+
+    process.env.OPENPCB_BUNDLED_LIBRARY_PATH = newDevPath;
+    const runtime = await bootRuntime();
+    const sdk = runtime
+      .getSdkRegistry()
+      .resolve<LibrarySDK>(MODULE_SDK_TOKENS.LIBRARY);
+    const ids = (await sdk.searchComponents({})).map(
+      (component) => component.id,
+    );
+    expect(ids).toContain("openpcb.core.test.dev-v2");
+    expect(ids).not.toContain("openpcb.core.test.dev-v0");
+
+    const ctx = (runtime as unknown as MapBackedRuntime).loaded.get("library")!
+      .context as Parameters<typeof getDb>[0];
+    const releaseRows = getDb(ctx).select().from(releases).all();
+    expect(releaseRows.map((row) => row.version)).toContain("999.0.2-dev");
+  });
+
+  test("does not downgrade a dev DB to an older dev package", async () => {
+    isolateTestDb("opclib-bootstrap-dev-no-downgrade");
+    prevBundleEnv = process.env.OPENPCB_BUNDLED_LIBRARY_PATH;
+    const root = await mkdtemp(path.join(os.tmpdir(), "opclib-dev-down-"));
+    tempRoots.push(root);
+    const newDevPath = path.join(
+      root,
+      "openpcb-core-library-999.0.2-dev.opclib",
+    );
+    const oldDevPath = path.join(
+      root,
+      "openpcb-core-library-999.0.0-dev.opclib",
+    );
+    await writeFile(
+      newDevPath,
+      buildCorePackage("999.0.2-dev", "openpcb.core.test.dev-v2"),
+    );
+    await writeFile(
+      oldDevPath,
+      buildCorePackage("999.0.0-dev", "openpcb.core.test.dev-v0"),
+    );
+
+    process.env.OPENPCB_BUNDLED_LIBRARY_PATH = newDevPath;
+    await bootRuntime();
+
+    process.env.OPENPCB_BUNDLED_LIBRARY_PATH = oldDevPath;
+    const runtime = await bootRuntime();
+    const sdk = runtime
+      .getSdkRegistry()
+      .resolve<LibrarySDK>(MODULE_SDK_TOKENS.LIBRARY);
+    const ids = (await sdk.searchComponents({})).map(
+      (component) => component.id,
+    );
+    expect(ids).toContain("openpcb.core.test.dev-v2");
+    expect(ids).not.toContain("openpcb.core.test.dev-v0");
+  });
+
   test("keeps stale core assets when user components still reference them", async () => {
     isolateTestDb("opclib-bootstrap-dev-switch-user-ref");
     prevBundleEnv = process.env.OPENPCB_BUNDLED_LIBRARY_PATH;
@@ -314,8 +409,14 @@ describe("core library .opclib bootstrap", () => {
     tempRoots.push(root);
     const devPath = path.join(root, "openpcb-core-library-999.0.0-dev.opclib");
     const releasePath = path.join(root, "openpcb-core-library-1.0.0.opclib");
-    await writeFile(devPath, buildCorePackage("999.0.0-dev", "openpcb.core.test.dev-only"));
-    await writeFile(releasePath, buildCorePackage("1.0.0", "openpcb.core.test.release-only"));
+    await writeFile(
+      devPath,
+      buildCorePackage("999.0.0-dev", "openpcb.core.test.dev-only"),
+    );
+    await writeFile(
+      releasePath,
+      buildCorePackage("1.0.0", "openpcb.core.test.release-only"),
+    );
 
     process.env.OPENPCB_BUNDLED_LIBRARY_PATH = devPath;
     const firstRuntime = await bootRuntime();
@@ -382,7 +483,12 @@ describe("core library .opclib bootstrap", () => {
     const row = getDb(ctx)
       .select()
       .from(footprintModels)
-      .where(eq(footprintModels.footprintId, "openpcb.core.footprint.test.with-model"))
+      .where(
+        eq(
+          footprintModels.footprintId,
+          "openpcb.core.footprint.test.with-model",
+        ),
+      )
       .get();
     expect(row?.status).toBe("ready");
     expect(row?.glbPath).toMatch(/^models\/glb\//);
@@ -411,7 +517,9 @@ describe("core library .opclib bootstrap", () => {
     const sdk = runtime
       .getSdkRegistry()
       .resolve<LibrarySDK>(MODULE_SDK_TOKENS.LIBRARY);
-    const ids = (await sdk.searchComponents({})).map((component) => component.id);
+    const ids = (await sdk.searchComponents({})).map(
+      (component) => component.id,
+    );
     expect(ids).not.toContain("openpcb.core.test.step-only");
   });
 
@@ -436,7 +544,9 @@ describe("core library .opclib bootstrap", () => {
     const sdk = runtime
       .getSdkRegistry()
       .resolve<LibrarySDK>(MODULE_SDK_TOKENS.LIBRARY);
-    const ids = (await sdk.searchComponents({})).map((component) => component.id);
+    const ids = (await sdk.searchComponents({})).map(
+      (component) => component.id,
+    );
     expect(ids).toContain("user.local.test.step-only");
   });
 });

@@ -83,9 +83,16 @@ function ComponentModel({
     fetchedModel ?? (hasReadyGlb(placementModel) ? placementModel : null);
   const glbUrl = resolveGlbUrl(backendURL, model?.glbUrl ?? null);
   const glbSha256 = model?.glbSha256 ?? null;
+  // Use the orientation correction from the *resolved* descriptor (live when
+  // fetched, frozen snapshot only until then) — never the snapshot directly.
+  // `null` => library declares no correction (do not fall back to snapshot).
+  const modelRef = model?.modelRef ?? null;
+  // The GLB sha can be identical across a frozen→live swap (same asset, stale
+  // modelRef); key the scene on the correction too so the transform re-applies.
+  const modelRefKey = JSON.stringify(modelRef);
 
   const prepareScene = (loadedScene: THREE.Group): THREE.Group => {
-    applyPlacementTransform(loadedScene, placement, boardThicknessMm);
+    applyPlacementTransform(loadedScene, placement, boardThicknessMm, modelRef);
     return loadedScene;
   };
 
@@ -93,7 +100,8 @@ function ComponentModel({
     if (!glbSha256) return null;
     const cached = modelCache.peekModel(glbSha256);
     return cached ? prepareScene(cached) : null;
-  }, [boardThicknessMm, glbSha256, modelCache, placement]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardThicknessMm, glbSha256, modelRefKey, modelCache, placement]);
   const [scene, setScene] = useState(initialScene);
 
   useEffect(() => {
@@ -163,7 +171,16 @@ function ComponentModel({
     return () => {
       cancelled = true;
     };
-  }, [boardThicknessMm, glbSha256, glbUrl, invalidate, modelCache, placement]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    boardThicknessMm,
+    glbSha256,
+    glbUrl,
+    modelRefKey,
+    invalidate,
+    modelCache,
+    placement,
+  ]);
 
   useEffect(() => {
     if (!scene) return undefined;
