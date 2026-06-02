@@ -820,20 +820,23 @@ export class RunService {
         this.options.conversation.createMessage({
           chatId: payload.chatId,
           role: "tool",
-          // NEW:808 — mirror the ai-core balanced envelope on the failure path
-          // so replayed history is consistent with the success path (F9/F10),
-          // not the legacy {ok,error} shape.
-          content: JSON.stringify({
-            ok: false,
-            status: "error",
-            summary: event.data.errorMessage,
-            warnings: [],
-            truncated: false,
-            data: {
-              errorCode: event.data.errorCode,
-              errorMessage: event.data.errorMessage,
-            },
-          }),
+          // NEW:808 / #3 — replay the ai-core balanced envelope. When the tool
+          // RAN and reported failure (esp. status:"partial"), ai-core carries
+          // the real envelope (modelResultJson) so the model sees the same
+          // partial result on replay; otherwise synthesize a balanced error.
+          content:
+            event.data.modelResultJson ??
+            JSON.stringify({
+              ok: false,
+              status: "error",
+              summary: event.data.errorMessage,
+              warnings: [],
+              truncated: false,
+              data: {
+                errorCode: event.data.errorCode,
+                errorMessage: event.data.errorMessage,
+              },
+            }),
           toolCallId: event.data.toolCallId,
           toolName: event.data.toolName,
           taskId: taskCtx.task.id,

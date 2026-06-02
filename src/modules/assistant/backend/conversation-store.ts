@@ -166,12 +166,14 @@ function rowToWriteProposal(
       row.base_revision === null || row.base_revision === undefined
         ? null
         : Number(row.base_revision),
-    toolName: row.tool_name ? String(row.tool_name) : envelope?.toolName ?? null,
-    title: row.title ? String(row.title) : envelope?.title ?? null,
-    summary: row.summary ? String(row.summary) : envelope?.summary ?? null,
+    toolName: row.tool_name
+      ? String(row.tool_name)
+      : (envelope?.toolName ?? null),
+    title: row.title ? String(row.title) : (envelope?.title ?? null),
+    summary: row.summary ? String(row.summary) : (envelope?.summary ?? null),
     riskLevel: row.risk_level
       ? (String(row.risk_level) as AssistantWriteRiskLevel)
-      : envelope?.riskLevel ?? null,
+      : (envelope?.riskLevel ?? null),
     operations: decodeJson<AssistantWriteOperationLike[]>(
       row.operations_json,
       envelope?.operations ?? [],
@@ -335,7 +337,8 @@ export class ConversationStore {
       model: patch.model ?? current.model,
       promptPresetId: patch.promptPresetId ?? current.promptPresetId,
       title: patch.title ?? current.title,
-      metadata: patch.metadata === undefined ? current.metadata : patch.metadata,
+      metadata:
+        patch.metadata === undefined ? current.metadata : patch.metadata,
     };
     this.rawSql(
       "UPDATE assistant_chat SET provider_config_id=?, model=?, prompt_preset_id=?, title=?, metadata=?, updated_at=? WHERE id=?",
@@ -378,7 +381,13 @@ export class ConversationStore {
     const rows = cursor
       ? this.rawSql(
           "SELECT * FROM assistant_message WHERE chat_id=? AND (message_index < ? OR (message_index = ? AND id < ?)) ORDER BY message_index DESC, id DESC LIMIT ?",
-          [chatId, cursor.messageIndex, cursor.messageIndex, cursor.id, limit + 1],
+          [
+            chatId,
+            cursor.messageIndex,
+            cursor.messageIndex,
+            cursor.id,
+            limit + 1,
+          ],
         )
       : this.rawSql(
           "SELECT * FROM assistant_message WHERE chat_id=? ORDER BY message_index DESC, id DESC LIMIT ?",
@@ -513,10 +522,10 @@ export class ConversationStore {
   }
 
   deleteBinding(chatId: string, bindingId: string): void {
-    this.rawSql("DELETE FROM assistant_context_binding WHERE chat_id=? AND id=?", [
-      chatId,
-      bindingId,
-    ]);
+    this.rawSql(
+      "DELETE FROM assistant_context_binding WHERE chat_id=? AND id=?",
+      [chatId, bindingId],
+    );
   }
 
   // ---------- tool events ----------
@@ -595,38 +604,67 @@ export class ConversationStore {
   }
 
   // ---------- write proposals ----------
-  createWriteProposal(input: CreateWriteProposalInput): AssistantWriteProposalDto {
+  createWriteProposal(
+    input: CreateWriteProposalInput,
+  ): AssistantWriteProposalDto {
     const timestamp = now();
     const proposalId = input.id ?? id();
     const envelope = input.envelope ?? null;
     const operations = input.operations ?? envelope?.operations ?? [];
     const sources = input.sources ?? envelope?.sources ?? [];
     const warnings = input.warnings ?? envelope?.warnings ?? [];
-    this.rawSql(
-      "INSERT INTO assistant_write_proposal (id,chat_id,tool_event_id,kind,status,design_id,base_revision,proposal_json,apply_result_json,tool_name,title,summary,risk_level,operations_json,sources_json,warnings_json,envelope_json,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        proposalId,
-        input.chatId,
-        input.toolEventId ?? null,
-        input.kind,
-        "pending",
-        input.designId,
-        input.baseRevision,
-        encode(input.proposal),
-        null,
-        input.toolName ?? envelope?.toolName ?? null,
-        input.title ?? envelope?.title ?? null,
-        input.summary ?? envelope?.summary ?? null,
-        input.riskLevel ?? envelope?.riskLevel ?? null,
-        encode(operations),
-        encode(sources),
-        encode(warnings),
-        envelope ? encode(envelope) : null,
-        timestamp,
-        timestamp,
-      ],
-    );
+    const actionId =
+      (envelope as { actionId?: string } | null)?.actionId ?? null;
+    try {
+      this.rawSql(
+        "INSERT INTO assistant_write_proposal (id,chat_id,tool_event_id,kind,status,design_id,base_revision,proposal_json,apply_result_json,tool_name,title,summary,risk_level,operations_json,sources_json,warnings_json,envelope_json,action_id,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          proposalId,
+          input.chatId,
+          input.toolEventId ?? null,
+          input.kind,
+          "pending",
+          input.designId,
+          input.baseRevision,
+          encode(input.proposal),
+          null,
+          input.toolName ?? envelope?.toolName ?? null,
+          input.title ?? envelope?.title ?? null,
+          input.summary ?? envelope?.summary ?? null,
+          input.riskLevel ?? envelope?.riskLevel ?? null,
+          encode(operations),
+          encode(sources),
+          encode(warnings),
+          envelope ? encode(envelope) : null,
+          actionId,
+          timestamp,
+          timestamp,
+        ],
+      );
+    } catch (err) {
+      // F6: a concurrent submit already inserted a proposal for the same
+      // (design_id, action_id) — the UNIQUE index rejects this one. Return the
+      // existing proposal so the caller reuses it instead of duplicating writes.
+      const existing =
+        actionId && /unique|constraint/i.test(String(err))
+          ? this.getWriteProposalByActionId(input.designId, actionId)
+          : null;
+      if (existing) return existing;
+      throw err;
+    }
     return this.getWriteProposal(input.chatId, proposalId)!;
+  }
+
+  /** F6: look up a proposal by its idempotency key (design + action_id). */
+  getWriteProposalByActionId(
+    designId: string,
+    actionId: string,
+  ): AssistantWriteProposalDto | null {
+    const row = this.rawSql(
+      "SELECT * FROM assistant_write_proposal WHERE design_id=? AND action_id=? LIMIT 1",
+      [designId, actionId],
+    )[0];
+    return row ? rowToWriteProposal(row) : null;
   }
 
   getWriteProposal(
@@ -655,7 +693,13 @@ export class ConversationStore {
   ): AssistantWriteProposalDto {
     this.rawSql(
       "UPDATE assistant_write_proposal SET status=?, apply_result_json=?, updated_at=? WHERE chat_id=? AND id=?",
-      [status, applyResult === null ? null : encode(applyResult), now(), chatId, proposalId],
+      [
+        status,
+        applyResult === null ? null : encode(applyResult),
+        now(),
+        chatId,
+        proposalId,
+      ],
     );
     const next = this.getWriteProposal(chatId, proposalId);
     if (!next) throw new Error(`Write proposal not found: ${proposalId}`);
