@@ -788,6 +788,18 @@ export class RunService {
           summary.status = "failed";
           summary.warnings = [event.data.errorMessage];
         }
+        // F4: a write tool that actually EXECUTED but failed may have partially
+        // applied (auto-apply landed a placement, then a follow-up wire threw),
+        // so count it as write work → the DoD verifier still runs even if the
+        // run later fails / retries chat-only. But pre-execution failures
+        // (tool_missing/bad_args/schema_invalid/cap) and cancellation never
+        // touched the design, so they must NOT trigger verification.
+        if (
+          WRITE_TOOL_NAMES.has(event.data.toolName) &&
+          (event.data.errorCode === "tool_failed" ||
+            event.data.errorCode === "exec_failed")
+        )
+          runState.hadWriteWork = true;
         const argsJson =
           toolEventsByCall.get(event.data.toolCallId)?.argumentsJson ?? "{}";
         const dto = this.options.conversation.upsertToolEvent({
@@ -808,9 +820,19 @@ export class RunService {
         this.options.conversation.createMessage({
           chatId: payload.chatId,
           role: "tool",
+          // NEW:808 — mirror the ai-core balanced envelope on the failure path
+          // so replayed history is consistent with the success path (F9/F10),
+          // not the legacy {ok,error} shape.
           content: JSON.stringify({
             ok: false,
-            error: event.data.errorMessage,
+            status: "error",
+            summary: event.data.errorMessage,
+            warnings: [],
+            truncated: false,
+            data: {
+              errorCode: event.data.errorCode,
+              errorMessage: event.data.errorMessage,
+            },
           }),
           toolCallId: event.data.toolCallId,
           toolName: event.data.toolName,

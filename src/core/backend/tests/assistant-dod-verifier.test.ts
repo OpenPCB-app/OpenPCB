@@ -188,6 +188,36 @@ describe("runDefinitionOfDone", () => {
     expect(report.failing).toEqual([]);
   });
 
+  test("F7: required rail '+3V3' matches a wired net named '3V3' → nets_wired passes", async () => {
+    // Capture normalizes rails to a leading-`+` form (+3V3) while the derived
+    // net keeps the model's token (3V3). canonicalNet must fold them together so
+    // a correctly-wired rail does not false-fail.
+    const intent: BuildIntent = {
+      chatId: "chat1",
+      taskId: "task1",
+      goal: "regulator",
+      items: [
+        {
+          role: "ic",
+          componentId: "comp-IC",
+          quantity: 1,
+          requiredNets: ["+3V3"],
+        },
+      ],
+    };
+    const report = await runDefinitionOfDone({
+      ...baseInput,
+      designer: fakeDesigner({
+        schematic: schematic({
+          parts: [part("p1", "U1", "comp-IC")],
+          nets: [net("n1", "3V3", ["pa"], { primitiveIds: ["pwr1"] })],
+        }),
+      }),
+      buildIntents: memoryBuildIntents(intent),
+    });
+    expect(report.checks.find((c) => c.id === "nets_wired")!.passed).toBe(true);
+  });
+
   test("required net not wired → nets_wired fails", async () => {
     const intent: BuildIntent = {
       chatId: "chat1",

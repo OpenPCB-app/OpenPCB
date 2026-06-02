@@ -3465,8 +3465,15 @@ async function finalizeAndMaybeApply(params: {
         writeProposalTerminalStatus(applyResult),
         applyResult,
       );
+      // Surface BOTH outright failures AND F5a partial ops (primary landed but
+      // follow-up wiring failed — recorded as applied + error) so the model
+      // actually sees the deficiency instead of a misleading clean count.
       const failedSkips: WriteToolModelData["skipped"] = applyResult.operations
-        .filter((op) => op.status === "failed")
+        .filter(
+          (op) =>
+            op.status === "failed" ||
+            (op.status === "applied" && op.error != null),
+        )
         .map((op) => ({ id: op.operationId, reason: op.error ?? "failed" }));
       const skipped = [...buildSkipped, ...failedSkips];
       // A failed/partial apply must surface ok:false/partial — never ok:true.
@@ -3489,7 +3496,10 @@ async function finalizeAndMaybeApply(params: {
           skipped,
           status: "partial",
         };
-        summary = `Applied ${applyResult.appliedCount}, failed ${applyResult.failedCount}, skipped ${applyResult.skippedCount} operation(s).`;
+        const followUpFailed = applyResult.operations.filter(
+          (op) => op.status === "applied" && op.error != null,
+        ).length;
+        summary = `Applied ${applyResult.appliedCount} op(s); failed ${applyResult.failedCount}, skipped ${applyResult.skippedCount}${followUpFailed ? `, ${followUpFailed} with failed follow-up wiring` : ""}.`;
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -3636,10 +3646,17 @@ export async function applySchematicProposalOperations(input: {
     }
 
     if (failedFollowUp) {
+      // F5a: the PRIMARY mutation already landed (createdEntityId exists); only
+      // the follow-up wire failed. Report the op as applied — so the created
+      // entity is counted (truthful) and not re-created on a correction re-run —
+      // but keep the follow-up `error`; `followUpFailedCount` below forces the
+      // overall result to "partial" (ok:false), so this is never a clean success.
       operations.push({
         operationId: operation.id,
-        status: "failed",
+        status: "applied",
         revisionBefore,
+        revisionAfter,
+        createdEntityId: result.createdEntityId,
         error: failedFollowUp.error,
         result: failedFollowUp.result,
       });
@@ -3666,6 +3683,12 @@ export async function applySchematicProposalOperations(input: {
   const failedCount = operations.filter(
     (entry) => entry.status === "failed",
   ).length;
+  // F5a: an op whose primary landed but whose follow-up failed is recorded as
+  // applied + carries an `error`. It counts toward appliedCount (entity exists)
+  // yet must drop the result out of clean "applied" into "partial".
+  const followUpFailedCount = operations.filter(
+    (entry) => entry.status === "applied" && entry.error != null,
+  ).length;
   // Operations not reached after an early stop, PLUS items dropped at
   // proposal-build time (which never enter `operations[]`). ANY build warning —
   // a per-item skip OR a truncation ("Only the first …") — means the proposal
@@ -3677,7 +3700,10 @@ export async function applySchematicProposalOperations(input: {
   const loopSkipped = input.envelope.operations.length - operations.length;
   const skippedCount = loopSkipped + buildSkipped;
   const incomplete =
-    failedCount > 0 || skippedCount > 0 || warningList.length > 0;
+    failedCount > 0 ||
+    followUpFailedCount > 0 ||
+    skippedCount > 0 ||
+    warningList.length > 0;
   const status: SchematicApplyResult["status"] = !incomplete
     ? "applied"
     : appliedCount > 0
@@ -3695,7 +3721,7 @@ export async function applySchematicProposalOperations(input: {
     message:
       status === "applied"
         ? `Applied ${appliedCount} schematic operation(s).`
-        : `Applied ${appliedCount}, failed ${failedCount}, skipped ${skippedCount} schematic operation(s).`,
+        : `Applied ${appliedCount}, failed ${failedCount}, skipped ${skippedCount}${followUpFailedCount ? `, ${followUpFailedCount} with failed follow-up wiring` : ""} schematic operation(s).`,
   };
 }
 

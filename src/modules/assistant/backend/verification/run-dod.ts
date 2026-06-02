@@ -84,6 +84,19 @@ function wiredNetNames(schematic: DesignerSchematicProjection): Set<string> {
   return names;
 }
 
+/**
+ * Canonicalize a net name for comparison so the DoD required-net set (which
+ * normalizes rails to a leading-`+` form, e.g. `+3V3`) matches the actual
+ * derived net names from wiring (which preserve the token the model used, e.g.
+ * `3V3`). F7: capture and targeting disagreed on the `+` prefix, causing
+ * correctly-wired rails to false-fail `nets_wired`. Strip a leading `+`,
+ * upper-case, and fold GROUND→GND.
+ */
+function canonicalNet(name: string): string {
+  const s = name.trim().toUpperCase().replace(/^\+/, "");
+  return s === "GROUND" ? "GND" : s;
+}
+
 function checkBomPlaced(
   intent: BuildIntent | null,
   schematic: DesignerSchematicProjection | null,
@@ -169,7 +182,10 @@ function checkNetsWired(
     };
   }
   const wired = wiredNetNames(schematic);
-  const unwired = [...required].filter((net) => !wired.has(net));
+  const wiredCanon = new Set([...wired].map(canonicalNet));
+  const unwired = [...required].filter(
+    (net) => !wiredCanon.has(canonicalNet(net)),
+  );
   return {
     id: "nets_wired",
     passed: unwired.length === 0,
