@@ -779,6 +779,17 @@ function upsertFootprintModelMetadata(
       ? JSON.stringify(manifestModelRef)
       : resolveModelRefOverride(fp.id);
 
+  // Double-apply tripwire: a transform-baked GLB already contains its
+  // offset/rotation/scale, so it must never also carry a render-time model-ref.
+  // Applying both is exactly the bug that tipped LEDs/pin-headers through the
+  // board. The ternary above guarantees null here; this asserts the invariant so
+  // a future re-introduced override map entry fails loudly at import instead.
+  if (primaryTransform.transformBaked && modelRefJson !== null) {
+    throw new Error(
+      `opclib import: footprint ${fp.id} is transform-baked but resolved a non-null model_ref_json — refusing to double-apply the model transform`,
+    );
+  }
+
   tx.insert(footprintModels)
     .values({
       footprintId: fp.id,
