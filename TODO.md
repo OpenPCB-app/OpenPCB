@@ -340,13 +340,19 @@ Audit + deep standards research (Ucamco Gerber X2/X3 2024.05, Excellon/XNC, JLCP
 - [x] Shared `exportBundleName` (`sdks/designer/pcb-helpers`, barrel-exported) — removed the duplicated backend `makeBundleName` / frontend `clientBundleName`.
 - [x] Export dialog surfaces preflight **warnings + file count** — new `?format=summary` route (light: names + warnings, no file text) + `api.fetchExportSummary` + `ExportSummary`; dialog refetches on open/option-change. Playwright-verified on a real board.
 
+### Shipped — follow-up wave (2026-06-02, commits 604e8cf + fa8ccdc)
+
+- [x] **Architectural cleanup — copper-fill kernel relocated to `shared/`** (`604e8cf`). Moved the pure compute closure to `src/shared/rendering/copper-fill/` (kernel trio) + `src/shared/rendering/pcb/` (`outline-geometry`, `pcb-drills`); 5 re-export shims at the old paths keep canvas/3D/DRC/test consumers untouched; backend writer/job-file repoint to `shared`; scene helpers import from `@openpcb/r3f-eda-canvas` directly. Backend no longer imports across the frontend boundary. THREE kept (Bun-safe) — purifying to a THREE-free point kernel is a follow-up.
+- [x] **Library→BOM MPN/LCSC inheritance — plumbing** (`fa8ccdc`). `library_components` gains manufacturer/manufacturer_part_number/lcsc_part_number/supplier (migration `0008`) + `LibraryComponent` fields + `mapComponent`; `buildPlacePartPayload` seeds the placement's `propertiesJson` from `detail.component` (BOM already reads those keys). Activates the moment a path writes the columns.
+- [x] **Drill slots / oblong holes — free-entity read + export path** (`fa8ccdc`). `PcbDrillSlot {lengthMm,widthMm,angleDeg}` + optional `drillSlot` on `PcbFreeHole`/`PcbFreePad` (rides the JSON blob — no migration), parsed by the loaders; Excellon emits `G85` canned slots (tool = slot width) instead of a round hit. Chose `G85` over rout-mode `M15/M16` (JLCPCB-documented, stays in drill mode).
+
 ### Remaining
 
-- [ ] **Library→BOM MPN/LCSC inheritance** — add manufacturer/MPN/LCSC/supplier to `LibraryComponent` (`sdks/library`) + library schema/import population, then seed `propertiesJson` in `buildPlacePartPayload` (`place-part.ts` has `detail.component`). Inert until the library carries the data; per-part `propertiesJson`→BOM path already works.
+- [ ] **MPN data sources for #9 inheritance**: map MPN/LCSC from KiCad symbol fields on import (lives in `@openpcb/kicad-import` — shared pkg) + a component-editor sourcing UI + optional CoreLibrary `.opclib` sourcing. (Columns + inheritance plumbing are in place; this populates them.)
+- [ ] **Drill slot authoring + full coverage**: write-side (create-command + `routes.ts` parser [HTTP-parser gotcha] + inspector UI for free hole/pad slots) + canvas slot rendering; then footprint-pad slots + KiCad `(drill oval W H)` import — both need shared pkgs (`@openpcb/rendering-core` `FootprintRenderSourcePad`, KiCad parser).
+- [ ] **THREE-free copper-fill kernel**: replace `THREE.Path` in the relocated kernel with plain point-array arc math so `shared/rendering/copper-fill` carries zero THREE dep.
 - [ ] **Export dialog — rest of overhaul**: fab-preset selector, per-layer / per-artifact selection, individual-file downloads (extend `GerberExportOptions` + `parseExportOptions` — new fields must be added to the parser or they're silently dropped over HTTP).
-- [ ] **Drill slots / oblong holes** — needs upstream W×H/elongation drill fields on `PcbVia` / `PcbFreeHole` / `PcbFreePad` (only scalar `drillMm` today), then route-mode (`G00/M15/G01/M16`) Excellon emission.
 - [ ] **Visual verification before production**: render a board WITH copper pours + silk text in gerbv / JLCPCB online viewer (confirm clearances, thermals, glyph shapes); validate bottom-side CPL rotation against JLCPCB's 3D assembly preview (top-side is solid).
-- [ ] **Architectural cleanup**: relocate the pure copper-fill kernel from `modules/designer/frontend/pcb/layers/` to `shared/` so the backend exporter no longer imports across the frontend boundary (works + Bun-safe today, but it's a layering smell).
 
 ### Explicitly NOT doing (rationale)
 
