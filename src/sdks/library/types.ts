@@ -11,6 +11,11 @@ export interface LibraryComponent {
   footprintId: string;
   tags: string[];
   isBuiltin: boolean;
+  /** Assembly sourcing, inherited onto a placement's BOM data. Null when unknown. */
+  manufacturer?: string | null;
+  manufacturerPartNumber?: string | null;
+  lcscPartNumber?: string | null;
+  supplier?: string | null;
 }
 
 export interface LibraryPinMapEntry {

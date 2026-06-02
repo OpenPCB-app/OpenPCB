@@ -510,10 +510,25 @@ export interface PcbVia {
  * Free holes are invisible to nets, ratsnest, and electrical DRC. Mechanical
  * DRC (drill-to-trace clearance) is applied separately via the design rules.
  */
+/**
+ * Oblong / slotted drill. When present on a free hole/pad, the drill is a
+ * rounded slot (e.g. USB shield, edge connector) rather than a round hole:
+ * Excellon emits it as a `G85` routed slot (tool diameter = `widthMm`) instead
+ * of a single round hit. `lengthMm` is the overall long dimension along
+ * `angleDeg` (0 = +X); `lengthMm === widthMm` degenerates to a round hole.
+ */
+export interface PcbDrillSlot {
+  lengthMm: number;
+  widthMm: number;
+  angleDeg: number;
+}
+
 export interface PcbFreeHole {
   id: string;
   centerMm: PcbPointMm;
   drillMm: number;
+  /** Oblong drill. When set, the hole is a routed slot of width `drillMm`. */
+  drillSlot?: PcbDrillSlot | null;
   /** When true, the hole is read-only in the editor until unlocked. */
   lockedAt: string | null;
 }
@@ -626,6 +641,8 @@ export interface PcbFreePad {
   roundrectRatio?: number;
   /** Required for `hole` and `std`. Ignored / undefined otherwise. */
   drillMm: number | null;
+  /** Oblong drill for `hole`/`std` pads. When set, the drill is a routed slot of width `drillMm`. */
+  drillSlot?: PcbDrillSlot | null;
   /** Copper layer the pad lives on. `std` pads span F.Cu + B.Cu and only set this for fab-order purposes. */
   layer: PcbCopperLayerId;
   /** Net assignment. `null` = isolated pad. */

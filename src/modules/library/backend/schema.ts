@@ -115,6 +115,14 @@ export const components = sqliteTable(
     uuid: text("uuid"),
     contentSha256: text("content_sha256"),
     originJson: text("origin_json"),
+    // Assembly sourcing. Populated by import paths (KiCad symbol fields,
+    // future .opclib sourcing) or the component editor; inherited onto a
+    // placement's propertiesJson at place time so the BOM is sourced without
+    // a manual override. Null when unknown.
+    manufacturer: text("manufacturer"),
+    manufacturerPartNumber: text("manufacturer_part_number"),
+    lcscPartNumber: text("lcsc_part_number"),
+    supplier: text("supplier"),
   },
   (table) => ({
     nameIdx: index("library_components_name_idx").on(table.name),

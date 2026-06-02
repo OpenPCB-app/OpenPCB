@@ -7,6 +7,7 @@ import type {
   PcbDesignRules,
   PcbNetClass,
   PcbViaProtection,
+  PcbDrillSlot,
   PcbFreeHole,
   PcbFreePad,
   PcbFreePadShape,
@@ -1479,6 +1480,25 @@ export function replacePcbVias(
 
 // ─────────────────────── Free holes (F5) ───────────────────────
 
+/** Parse an optional oblong-drill descriptor; null when absent or degenerate. */
+function parseDrillSlot(value: unknown): PcbDrillSlot | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const lengthMm = asNumber(record.lengthMm);
+  const widthMm = asNumber(record.widthMm);
+  const angleDeg = asNumber(record.angleDeg);
+  if (
+    lengthMm === null ||
+    widthMm === null ||
+    angleDeg === null ||
+    widthMm <= 0 ||
+    lengthMm < widthMm
+  ) {
+    return null;
+  }
+  return { lengthMm, widthMm, angleDeg };
+}
+
 function parseFreeHole(value: unknown): PcbFreeHole | null {
   const record = asRecord(value);
   if (!record) return null;
@@ -1495,6 +1515,7 @@ function parseFreeHole(value: unknown): PcbFreeHole | null {
     id,
     centerMm: { x: cx, y: cy },
     drillMm,
+    drillSlot: parseDrillSlot(record.drillSlot),
     lockedAt: lockedAtRaw ?? null,
   };
 }
@@ -1629,6 +1650,7 @@ function parseFreePad(value: unknown): PcbFreePad | null {
     heightMm,
     ...(roundrectRatio !== null ? { roundrectRatio } : {}),
     drillMm: drillMm !== null && drillMm > 0 ? drillMm : null,
+    drillSlot: parseDrillSlot(record.drillSlot),
     layer,
     netId: netId ?? null,
     solderMaskExpansionMm,

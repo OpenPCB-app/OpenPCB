@@ -582,6 +582,10 @@ export function mapComponent(row: ComponentRow): LibraryComponent {
     footprintId: row.footprintId,
     tags: parseJsonStringArray(row.tagsJson),
     isBuiltin: Boolean(row.isBuiltin),
+    manufacturer: row.manufacturer,
+    manufacturerPartNumber: row.manufacturerPartNumber,
+    lcscPartNumber: row.lcscPartNumber,
+    supplier: row.supplier,
   };
 }
 
@@ -678,11 +682,14 @@ export async function searchComponents(
   let rows: ComponentRow[];
   if (query.length > 0) {
     const phraseNeedle = `%${escapeLikeNeedle(query)}%`;
-    const tokenNeedles = queryTokens.map((token) => `%${escapeLikeNeedle(token)}%`);
+    const tokenNeedles = queryTokens.map(
+      (token) => `%${escapeLikeNeedle(token)}%`,
+    );
     const searchableText = sql<string>`lower(${components.name} || ' ' || ${components.description} || ' ' || ${components.tagsJson} || ' ' || coalesce(${components.sourceId}, ''))`;
-    const tokenPredicate = tokenNeedles.length > 0
-      ? and(...tokenNeedles.map((needle) => like(searchableText, needle)))
-      : undefined;
+    const tokenPredicate =
+      tokenNeedles.length > 0
+        ? and(...tokenNeedles.map((needle) => like(searchableText, needle)))
+        : undefined;
     const baseQuery = db
       .select()
       .from(components)
@@ -728,7 +735,9 @@ function tokenizeSearchQuery(query: string): string[] {
     .replace(/[^a-z0-9.+-]+/g, " ")
     .split(/\s+/)
     .map((token) => token.trim())
-    .filter((token, index, all) => token.length > 0 && all.indexOf(token) === index);
+    .filter(
+      (token, index, all) => token.length > 0 && all.indexOf(token) === index,
+    );
 }
 
 function escapeLikeNeedle(value: string): string {

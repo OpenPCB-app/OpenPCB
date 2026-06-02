@@ -76,6 +76,7 @@ export type {
   PcbViaType,
   PcbViaProvenance,
   PcbZone,
+  PcbDrillSlot,
   PcbFreeHole,
   PcbFreePad,
   PcbFreePadShape,

@@ -517,6 +517,24 @@ describe("Excellon drill writer", () => {
     );
   });
 
+  test("oblong free hole emits a G85 routed slot (tool = slot width)", () => {
+    const proj = fixtureProjection();
+    // Replace the round mounting hole with a 5×3 mm slot along +X at (2,2):
+    // half = (5-3)/2 = 1 → endpoints (1,2)→(3,2), tool diameter = width 3 mm.
+    proj.freeHoles = [
+      {
+        id: "slot1",
+        centerMm: { x: 2, y: 2 },
+        drillMm: 3,
+        drillSlot: { lengthMm: 5, widthMm: 3, angleDeg: 0 },
+        lockedAt: null,
+      },
+    ];
+    const out = buildExcellonDrill(proj, [], "NPTH");
+    expect(out).toContain("T1C3.000");
+    expect(out).toContain("X1.0000Y2.0000G85X3.0000Y2.0000");
+  });
+
   test("PTH file groups plated drills (vias + plated pads)", () => {
     const out = buildExcellonDrill(fixtureProjection(), [], "PTH");
     // Two plated diameters: via 0.3 mm + DIP pad 0.8 mm.

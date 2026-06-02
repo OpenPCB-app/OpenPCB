@@ -113,6 +113,24 @@ export function recomputePinWorldPositions(
   });
 }
 
+/**
+ * Seed a placement's `propertiesJson` with the library component's sourcing so
+ * the BOM is populated without a manual override. Only non-empty fields are
+ * written (keys match what the BOM writer reads); returns `"{}"` when the
+ * component carries no sourcing.
+ */
+export function buildSourcingPropertiesJson(
+  component: LibraryComponentPlacementDetail["component"],
+): string {
+  const props: Record<string, string> = {};
+  if (component.manufacturer) props.manufacturer = component.manufacturer;
+  if (component.manufacturerPartNumber)
+    props.manufacturerPartNumber = component.manufacturerPartNumber;
+  if (component.lcscPartNumber) props.lcscPartNumber = component.lcscPartNumber;
+  if (component.supplier) props.supplier = component.supplier;
+  return JSON.stringify(props);
+}
+
 export function buildPlacePartPayload(
   detail: LibraryComponentPlacementDetail,
   positionNm: { x: number; y: number },
@@ -136,6 +154,6 @@ export function buildPlacePartPayload(
     symbol: detail.symbol,
     footprint: detail.footprint,
     pins: buildPins(partId, detail, positionNm, normalizedRotation, mirrored),
-    propertiesJson: "{}",
+    propertiesJson: buildSourcingPropertiesJson(detail.component),
   };
 }

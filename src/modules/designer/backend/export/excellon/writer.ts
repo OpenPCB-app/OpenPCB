@@ -1,5 +1,6 @@
 import type {
   DesignerPcbProjection,
+  PcbDrillSlot,
   PcbPointMm,
 } from "../../../../../sdks/designer/types";
 import { projectLocal } from "../transform";
@@ -33,6 +34,34 @@ interface DrillHit {
   centerMm: PcbPointMm;
   diameterMm: number;
   plated: boolean;
+  /**
+   * When set, the hit is a routed slot from `centerMm` to `slotEndMm` cut with
+   * a `diameterMm`-wide tool (emitted as a `G85` canned slot). Round hits leave
+   * this undefined.
+   */
+  slotEndMm?: PcbPointMm;
+}
+
+/**
+ * Slot endpoints from an oblong-drill descriptor: a `widthMm`-wide tool routed
+ * between two centers `(lengthMm − widthMm)` apart along `angleDeg`. Tool
+ * diameter is the slot width; round-end caps come from the tool radius.
+ */
+function slotHit(
+  center: PcbPointMm,
+  slot: PcbDrillSlot,
+  plated: boolean,
+): DrillHit {
+  const half = Math.max(0, (slot.lengthMm - slot.widthMm) / 2);
+  const a = (slot.angleDeg * Math.PI) / 180;
+  const dx = half * Math.cos(a);
+  const dy = half * Math.sin(a);
+  return {
+    centerMm: { x: center.x - dx, y: center.y - dy },
+    slotEndMm: { x: center.x + dx, y: center.y + dy },
+    diameterMm: slot.widthMm,
+    plated,
+  };
 }
 
 /**
@@ -103,7 +132,16 @@ export function buildExcellonDrill(
     lines.push(`; ${kind} ${tool.diameterMm.toFixed(3)} mm`);
     lines.push(`T${tool.code}`);
     for (const hit of tool.hits) {
-      lines.push(`X${coord(hit.centerMm.x)}Y${coord(hit.centerMm.y)}`);
+      if (hit.slotEndMm) {
+        // G85 canned slot: route from start to end with the current tool.
+        lines.push(
+          `X${coord(hit.centerMm.x)}Y${coord(hit.centerMm.y)}G85X${coord(
+            hit.slotEndMm.x,
+          )}Y${coord(hit.slotEndMm.y)}`,
+        );
+      } else {
+        lines.push(`X${coord(hit.centerMm.x)}Y${coord(hit.centerMm.y)}`);
+      }
     }
   }
   lines.push("T0");
@@ -144,8 +182,10 @@ function collectDrillHits(proj: DesignerPcbProjection): DrillHit[] {
   }
 
   for (const hole of proj.freeHoles) {
-    if (hole.drillMm > 0) {
-      // Free holes (F5 mounting holes) are NPTH by convention.
+    // Free holes (F5 mounting holes) are NPTH by convention.
+    if (hole.drillSlot) {
+      hits.push(slotHit(hole.centerMm, hole.drillSlot, false));
+    } else if (hole.drillMm > 0) {
       hits.push({
         centerMm: hole.centerMm,
         diameterMm: hole.drillMm,
@@ -155,11 +195,14 @@ function collectDrillHits(proj: DesignerPcbProjection): DrillHit[] {
   }
 
   for (const pad of proj.freePads) {
-    if (pad.drillMm !== null && pad.drillMm > 0) {
+    const plated = pad.padType === "std";
+    if (pad.drillSlot) {
+      hits.push(slotHit(pad.centerMm, pad.drillSlot, plated));
+    } else if (pad.drillMm !== null && pad.drillMm > 0) {
       hits.push({
         centerMm: pad.centerMm,
         diameterMm: pad.drillMm,
-        plated: pad.padType === "std",
+        plated,
       });
     }
   }
