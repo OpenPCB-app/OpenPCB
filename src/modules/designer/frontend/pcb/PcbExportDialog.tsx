@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactElement } from "react";
-import { Download, X } from "lucide-react";
-import { createDesignerApi } from "../api";
+import { AlertTriangle, Download, X } from "lucide-react";
+import { createDesignerApi, type ExportSummary } from "../api";
 
 interface PcbExportDialogProps {
   backendURL: string | null | undefined;
@@ -47,6 +47,13 @@ export function PcbExportDialog({
     message?: string;
   }>({ state: "running", errors: 0, warnings: 0, infos: 0 });
   const [ackErrors, setAckErrors] = useState(false);
+  // Export preview: file list + preflight warnings, refreshed whenever the
+  // options change. Surfaces the backend export preflight (fab minimums,
+  // missing outline, unsourced assembly parts) before the user downloads.
+  const [summary, setSummary] = useState<ExportSummary | null>(null);
+  const [summaryState, setSummaryState] = useState<"loading" | "ok" | "error">(
+    "loading",
+  );
 
   const api = useMemo(
     () => createDesignerApi({ backendURL, moduleId }),
@@ -93,6 +100,31 @@ export function PcbExportDialog({
       cancelled = true;
     };
   }, [open, api, designId]);
+
+  // Refresh the export preview whenever the dialog opens or the options change.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setSummaryState("loading");
+    void api
+      .fetchExportSummary(designId, {
+        includeBom,
+        includePickAndPlace: includePnp,
+        includeInnerLayers: includeInner,
+      })
+      .then((s) => {
+        if (cancelled) return;
+        setSummary(s);
+        setSummaryState("ok");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSummaryState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, api, designId, includeBom, includePnp, includeInner]);
 
   const drcBlocks = drcGate.state === "ok" && drcGate.errors > 0 && !ackErrors;
 
@@ -226,6 +258,33 @@ export function PcbExportDialog({
             />
             Include inner copper layers (4-layer boards only)
           </label>
+
+          {summaryState === "loading" ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Preparing export preview…
+            </p>
+          ) : null}
+          {summaryState === "ok" && summary && summary.warnings.length > 0 ? (
+            <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+              <p className="flex items-center gap-1.5 font-medium">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {summary.warnings.length} export warning
+                {summary.warnings.length === 1 ? "" : "s"}
+              </p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {summary.warnings.map((warning, i) => (
+                  <li key={i}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {summaryState === "ok" && summary ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {summary.files.length} files ·{" "}
+              <span className="font-mono">{summary.bundleName}.zip</span>
+              {summary.warnings.length === 0 ? " · no warnings" : null}
+            </p>
+          ) : null}
 
           {status.state === "running" ? (
             <p className="text-xs text-violet-600 dark:text-violet-300">

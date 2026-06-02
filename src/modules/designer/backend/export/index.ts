@@ -9,8 +9,16 @@ import type {
 } from "../../../../sdks/designer/types";
 import { buildBomCsv } from "./bom/writer";
 import { buildExcellonDrill } from "./excellon/writer";
-import { buildGerberLayer, type GerberLayerKind } from "./gerber/writer";
+import {
+  buildGerberLayer,
+  gerberFileFunctionAttr,
+  gerberPolarityAttr,
+  type GerberLayerKind,
+} from "./gerber/writer";
+import { buildGerberJobFile, type GerberJobFileAttr } from "./gerber/job-file";
 import { buildPnpCsv } from "./pnp/writer";
+import { runExportPreflight } from "./preflight";
+import { exportBundleName } from "../../../../sdks/designer/pcb-helpers";
 import { correlateNetPads } from "../pcb/net-pad-correlation";
 
 /**
@@ -36,11 +44,12 @@ export function buildExportBundle(
   schematic: DesignerSchematicProjection | null,
   options: GerberExportOptions = {},
   bomOverrides: readonly BomOverride[] = [],
+  createdAt: string = new Date().toISOString(),
 ): GerberExportResult {
   const warnings: string[] = [];
   const artifacts: GerberArtifact[] = [];
 
-  const bundleName = makeBundleName(pcb.designId);
+  const bundleName = exportBundleName(pcb.designId);
   const includeInner =
     options.includeInnerLayers !== false && pcb.board.layerCount === 4;
   const includeBom = options.includeBom !== false;
@@ -102,28 +111,66 @@ export function buildExportBundle(
   // spec-valid without it.
   const padNetIds = schematic ? buildPadNetIdMap(schematic, pcb) : undefined;
 
+  // Collected alongside the artifacts to populate the .gbrjob FilesAttributes.
+  const jobFiles: GerberJobFileAttr[] = [];
+
   for (const emission of layerEmissions) {
-    const text = buildGerberLayer(pcb, emission.layer, warnings, padNetIds);
+    const fileName = `${bundleName}-${emission.fileSuffix}`;
     artifacts.push({
       kind: emission.kind,
-      fileName: `${bundleName}-${emission.fileSuffix}`,
-      text,
+      fileName,
+      text: buildGerberLayer(
+        pcb,
+        emission.layer,
+        warnings,
+        padNetIds,
+        createdAt,
+      ),
+    });
+    jobFiles.push({
+      Path: fileName,
+      FileFunction: gerberFileFunctionAttr(
+        emission.layer,
+        pcb.board.layerCount,
+      ),
+      FilePolarity: gerberPolarityAttr(emission.layer),
     });
   }
 
+  const lastLayer = Math.max(2, pcb.board.layerCount);
+  const pthName = `${bundleName}-PTH.drl`;
   artifacts.push({
     kind: "excellon.drills_pth",
-    fileName: `${bundleName}-PTH.drl`,
+    fileName: pthName,
     text: buildExcellonDrill(pcb, warnings, "PTH"),
+  });
+  jobFiles.push({
+    Path: pthName,
+    FileFunction: `Plated,1,${lastLayer},PTH,Drill`,
+    FilePolarity: "Positive",
   });
   // NPTH (mounting holes, etc.) — emitted unconditionally even when empty
   // so fabs that auto-detect file roles don't silently assume "no NPTH" =
   // "treat as PTH". File contains only header/trailer when there are no
   // unplated holes; fab parsers handle that fine.
+  const npthName = `${bundleName}-NPTH.drl`;
   artifacts.push({
     kind: "excellon.drills_npth",
-    fileName: `${bundleName}-NPTH.drl`,
+    fileName: npthName,
     text: buildExcellonDrill(pcb, warnings, "NPTH"),
+  });
+  jobFiles.push({
+    Path: npthName,
+    FileFunction: `NonPlated,1,${lastLayer},NPTH,Drill`,
+    FilePolarity: "Positive",
+  });
+
+  // Gerber Job File — lists the layer set + stackup so fabs can validate the
+  // bundle is complete. Built from the collected per-file attributes above.
+  artifacts.push({
+    kind: "gerber.job",
+    fileName: `${bundleName}.gbrjob`,
+    text: buildGerberJobFile({ pcb, files: jobFiles, createdAt }),
   });
 
   if (includeBom) {
@@ -137,9 +184,13 @@ export function buildExportBundle(
     artifacts.push({
       kind: "csv.pnp",
       fileName: `${bundleName}-PnP.csv`,
-      text: buildPnpCsv(pcb, schematic),
+      text: buildPnpCsv(pcb, schematic, bomOverrides),
     });
   }
+
+  // Export-time preflight (fab minimums, missing outline, unsourced assembly
+  // parts) — appended after the writers' own warnings.
+  warnings.push(...runExportPreflight(pcb, schematic, bomOverrides));
 
   return {
     designId: pcb.designId,
@@ -147,13 +198,6 @@ export function buildExportBundle(
     artifacts,
     warnings,
   };
-}
-
-function makeBundleName(designId: string): string {
-  // Keep IDs filesystem-safe: alphanum + dash. Long IDs are truncated
-  // for usability without losing uniqueness for a single export.
-  const safe = designId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 32);
-  return `openpcb-${safe}`;
 }
 
 /**

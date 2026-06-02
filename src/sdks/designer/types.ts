@@ -1680,6 +1680,7 @@ export type GerberArtifactKind =
   | "gerber.top_silk"
   | "gerber.bottom_silk"
   | "gerber.edge_cuts"
+  | "gerber.job"
   | "excellon.drills_pth"
   | "excellon.drills_npth"
   | "csv.bom"

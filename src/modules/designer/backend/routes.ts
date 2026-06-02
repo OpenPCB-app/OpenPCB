@@ -2015,8 +2015,9 @@ export function registerRoutes(
     const pcb = await store.getPcbProjection(designId);
     if (!pcb) throw new NotFoundError(`Design '${designId}' not found`);
     const schematic = await store.getSchematicProjection(designId);
+    const overrides = await store.listBomOverrides(designId);
     return textResponse(
-      buildPnpCsv(pcb, schematic),
+      buildPnpCsv(pcb, schematic, overrides),
       "text/csv; charset=utf-8",
       `openpcb-${designId}-PnP.csv`,
     );
@@ -2038,8 +2039,10 @@ export function registerRoutes(
 
       const bundle = buildExportBundle(pcb, schematic, options, overrides);
 
-      // `?format=zip` returns ZIP bytes; default returns JSON manifest so
-      // E2E + frontend can inspect contents without re-parsing the archive.
+      // `?format=zip` returns ZIP bytes; `?format=summary` returns a light
+      // manifest (names + sizes + preflight warnings, no file text) for the
+      // export dialog's preview; default JSON manifest carries full text so
+      // E2E can inspect contents without re-parsing the archive.
       const format = (query.get("format") ?? "json").toLowerCase();
       if (format === "zip") {
         const zip = packZip(bundle.artifacts);
@@ -2051,6 +2054,17 @@ export function registerRoutes(
             "X-OpenPCB-Bundle-Name": bundle.bundleName,
             "X-OpenPCB-Warnings": bundle.warnings.length.toString(),
           },
+        });
+      }
+      if (format === "summary") {
+        return success({
+          bundleName: bundle.bundleName,
+          warnings: bundle.warnings,
+          files: bundle.artifacts.map((artifact) => ({
+            kind: artifact.kind,
+            fileName: artifact.fileName,
+            bytes: artifact.text.length,
+          })),
         });
       }
       return success({ bundle });

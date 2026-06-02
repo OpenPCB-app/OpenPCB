@@ -18,6 +18,15 @@ import {
 } from "../transform";
 import { gerberDim, xyOperand } from "../units";
 import { flattenOutline } from "../../pcb/outline-geometry";
+import { textToStrokes } from "../text/stroke-font";
+// Single source of truth for poured copper: the SAME kernel the canvas renders,
+// so the manufactured plane matches the on-screen copper exactly. The kernel is
+// pure geometry (clipper2 + math; no React/R3F) and runs under Bun. (Lives under
+// frontend/ today; a future cleanup may relocate the pure kernel to shared/.)
+import {
+  buildCopperFillPourPaths,
+  resolveCopperFillClearanceMm,
+} from "../../../frontend/pcb/layers/copper-fill-geometry";
 
 /**
  * Build a complete Gerber X2 file for one fabrication layer.
@@ -69,6 +78,7 @@ export function buildGerberLayer(
   layerKind: GerberLayerKind,
   warnings: string[],
   padNetIds?: Map<string, string>,
+  createdAt: string = new Date().toISOString(),
 ): string {
   const ctx: BuildContext = { proj, warnings, padNetIds };
   const aperTable = new ApertureTable();
@@ -112,7 +122,7 @@ export function buildGerberLayer(
 
   // Header lines emitted after body collection (so apertures are complete).
   const header: string[] = [];
-  emitHeader(header, layerKind);
+  emitHeader(header, layerKind, proj.board.layerCount, createdAt);
   for (const macro of aperTable.emitMacros()) header.push(macro);
   for (const def of aperTable.emitDefinitions()) header.push(def);
   // LP D — polarity dark (positive) is the default and applies to the
@@ -126,13 +136,18 @@ export function buildGerberLayer(
 // Header
 // =========================================================================
 
-function emitHeader(out: string[], layer: GerberLayerKind): void {
+function emitHeader(
+  out: string[],
+  layer: GerberLayerKind,
+  layerCount: number,
+  createdAt: string,
+): void {
   out.push(`G04 ${SOFTWARE_NAME} v${SOFTWARE_VERSION}*`);
   out.push(
     `%TF.GenerationSoftware,${SOFTWARE_VENDOR},${SOFTWARE_NAME},${SOFTWARE_VERSION}*%`,
   );
-  out.push(`%TF.CreationDate,${new Date().toISOString()}*%`);
-  out.push(`%TF.FileFunction,${gerberFileFunctionAttr(layer)}*%`);
+  out.push(`%TF.CreationDate,${createdAt}*%`);
+  out.push(`%TF.FileFunction,${gerberFileFunctionAttr(layer, layerCount)}*%`);
   out.push(`%TF.FilePolarity,${gerberPolarityAttr(layer)}*%`);
   out.push(`%TF.SameCoordinates,Original*%`);
   // Coordinate format and units. Must precede any coordinate command.
@@ -140,16 +155,24 @@ function emitHeader(out: string[], layer: GerberLayerKind): void {
   out.push("%MOMM*%");
 }
 
-function gerberFileFunctionAttr(layer: GerberLayerKind): string {
+export function gerberFileFunctionAttr(
+  layer: GerberLayerKind,
+  layerCount: number,
+): string {
   switch (layer) {
+    // Copper layers carry a 1-based physical L-code (top=L1, bottom=L<count>)
+    // and the layer-type qualifier `,Signal`. Both are required for JLCPCB /
+    // PCBWay X2 layer auto-identification (filenames are non-Protel, so the
+    // attribute is the only signal). Bottom was previously hardcoded `L2`,
+    // which mislabels B.Cu as inner L2 on a 4-layer stackup.
     case "copper.top":
-      return "Copper,L1,Top";
+      return "Copper,L1,Top,Signal";
     case "copper.bottom":
-      return "Copper,L2,Bot";
+      return `Copper,L${layerCount},Bot,Signal`;
     case "copper.inner1":
-      return "Copper,L2,Inr";
+      return "Copper,L2,Inr,Signal";
     case "copper.inner2":
-      return "Copper,L3,Inr";
+      return "Copper,L3,Inr,Signal";
     case "mask.top":
       return "Soldermask,Top";
     case "mask.bottom":
@@ -167,7 +190,9 @@ function gerberFileFunctionAttr(layer: GerberLayerKind): string {
   }
 }
 
-function gerberPolarityAttr(layer: GerberLayerKind): "Positive" | "Negative" {
+export function gerberPolarityAttr(
+  layer: GerberLayerKind,
+): "Positive" | "Negative" {
   // Mask layers are conventionally negative in Gerber X2 (the file
   // describes where mask is *removed*). All others are positive.
   if (layer === "mask.top" || layer === "mask.bottom") return "Negative";
@@ -186,6 +211,11 @@ function emitCopper(
   _stackLabel: string,
 ): void {
   const { proj } = ctx;
+
+  // 0. Copper pour FIRST: pads/traces/vias paint on top, so the pour's clear
+  //    (LPC) antipad holes never erase them (KiCad's zone-then-objects order).
+  //    No-op on layers without a configured pour.
+  emitCopperPour(ctx, out, layer);
 
   // 1. Vias — annulus on every copper layer the via spans.
   for (const via of proj.vias) {
@@ -267,6 +297,88 @@ function emitCopper(
     }
     emitClearAttr(out);
   }
+}
+
+// =========================================================================
+// Copper pour (filled zones / planes)
+// =========================================================================
+
+/**
+ * Emit the layer's copper pour as positive `G36/G37` regions, using the SAME
+ * fill kernel the canvas renders so the manufactured plane is byte-identical to
+ * the on-screen copper (clearance halos, thermal necks, island pruning included).
+ *
+ * Each island's outer contour is a dark (LPD) region; its antipad/clearance
+ * holes are clear (LPC) regions — the spec-preferred "polarity" method for holes
+ * over cut-ins. Pours are configured per layer in the design's persisted view
+ * state (`copperFillLayers` / `copperFillPourNetIds`); absent → no pour, which
+ * is spec-valid. Must run before pads/traces/vias (they paint over the holes).
+ */
+function emitCopperPour(
+  ctx: BuildContext,
+  out: string[],
+  layer: PcbCopperLayerId,
+): void {
+  const view = ctx.proj.board.viewState;
+  if (!view || !view.copperFillLayers.includes(layer)) return;
+  const dr = ctx.proj.board.designRules;
+  const pourNetId = view.copperFillPourNetIds[layer] ?? null;
+  const islands = buildCopperFillPourPaths({
+    layer,
+    outline: ctx.proj.board.outline,
+    placements: ctx.proj.placements,
+    traces: ctx.proj.traces,
+    vias: ctx.proj.vias,
+    pourNetId,
+    padNetIds: ctx.padNetIds ?? new Map<string, string>(),
+    clearanceMm: resolveCopperFillClearanceMm(dr.clearance),
+    copperToBoardEdgeMm: dr.clearance.copperToBoardEdgeMm,
+    cutouts: ctx.proj.board.cutouts,
+    freeHoles: ctx.proj.freeHoles,
+    freePads: ctx.proj.freePads,
+    minThicknessMm: dr.minimums.traceWidthMm,
+  });
+  if (islands.length === 0) return;
+
+  const netName = resolveNetName(ctx, pourNetId, null);
+  for (const island of islands) {
+    const outer = island[0];
+    if (!outer || outer.length < 3) continue;
+    emitNetAttr(out, netName);
+    emitRegion(out, outer);
+    if (island.length > 1) {
+      // Clear (LPC) regions cut the antipads/clearance gaps back out of the
+      // pour, then restore dark for the next island.
+      out.push("%LPC*%");
+      for (let h = 1; h < island.length; h++) {
+        const hole = island[h]!;
+        if (hole.length >= 3) emitRegion(out, hole);
+      }
+      out.push("%LPD*%");
+    }
+    emitClearAttr(out);
+  }
+}
+
+/** One `G36 … G37` filled region from a closed ring of `{x, y}` mm points. */
+function emitRegion(
+  out: string[],
+  ring: ReadonlyArray<{ x: number; y: number }>,
+): void {
+  out.push("G36*");
+  out.push("G01*");
+  for (let i = 0; i < ring.length; i++) {
+    const p = ring[i]!;
+    out.push(`${xyOperand(p.x, p.y)}${i === 0 ? "D02*" : "D01*"}`);
+  }
+  // A region contour must be closed; add the closing segment if the kernel
+  // didn't already repeat the first vertex.
+  const first = ring[0]!;
+  const last = ring[ring.length - 1]!;
+  if (!pointsEqual(first, last)) {
+    out.push(`${xyOperand(first.x, first.y)}D01*`);
+  }
+  out.push("G37*");
 }
 
 // Stackup order used to determine which copper layers a via spans.
@@ -419,7 +531,9 @@ function emitMask(
   side: "top" | "bottom",
 ): void {
   const layer: PcbCopperLayerId = side === "top" ? "F.Cu" : "B.Cu";
-  const expansionDefault = 0.05; // mm — typical 50 µm mask expansion.
+  // Board-level mask expansion drives every pad/via opening (per-free-pad
+  // overrides still win below); falls back to the typical 50 µm default.
+  const expansionDefault = ctx.proj.board.solderMaskExpansionMm ?? 0.05;
 
   for (const placement of ctx.proj.placements) {
     const pads = placement.footprint.preview?.pads ?? [];
@@ -496,13 +610,18 @@ function emitPaste(
   side: "top" | "bottom",
 ): void {
   const layer: PcbCopperLayerId = side === "top" ? "F.Cu" : "B.Cu";
+  // Solder-paste stencil apertures: the board paste expansion (usually 0, or a
+  // small NEGATIVE inset that shrinks the stencil opening) is applied per pad.
+  const pasteExpansion = ctx.proj.board.solderPasteExpansionMm ?? 0;
   // Paste applies to SMD pads only — THT pads get no paste aperture.
   for (const placement of ctx.proj.placements) {
     const pads = placement.footprint.preview?.pads ?? [];
     for (const pad of pads) {
       if ((pad.drillDiameterMm ?? 0) > 0) continue;
       if (!padTouchesCopperLayer(pad, placement, layer)) continue;
-      const aperShape = padApertureShape(pad, placement);
+      const base = padApertureShape(pad, placement);
+      if (!base) continue;
+      const aperShape = expandPaste(base, pasteExpansion);
       if (!aperShape) continue;
       const code = apers.allocate(aperShape, "SolderPaste");
       const center = projectLocal(placement, pad.centerMm);
@@ -513,11 +632,38 @@ function emitPaste(
   for (const pad of ctx.proj.freePads) {
     if (pad.padType !== "smd") continue;
     if (pad.layer !== layer) continue;
-    const aperShape = freePadApertureShape(pad);
+    const base = freePadApertureShape(pad);
+    if (!base) continue;
+    const aperShape = expandPaste(base, pasteExpansion);
     if (!aperShape) continue;
     const code = apers.allocate(aperShape, "SolderPaste");
     out.push(`D${code}*`);
     out.push(`${xyOperand(pad.centerMm.x, pad.centerMm.y)}D03*`);
+  }
+}
+
+/**
+ * Apply a paste expansion (usually 0 or negative) to a pad aperture, returning
+ * null when the inset collapses the opening to non-positive size (that pad then
+ * gets no paste — the correct result for an over-large negative expansion).
+ */
+function expandPaste(
+  shape: ApertureShape,
+  expansionMm: number,
+): ApertureShape | null {
+  if (expansionMm === 0) return shape;
+  const expanded = inflateShape(shape, expansionMm);
+  return shapeMinDim(expanded) > 0 ? expanded : null;
+}
+
+function shapeMinDim(shape: ApertureShape): number {
+  switch (shape.kind) {
+    case "circle":
+      return shape.diameterMm;
+    case "rect":
+    case "obround":
+    case "roundrect":
+      return Math.min(shape.widthMm, shape.heightMm);
   }
 }
 
@@ -545,11 +691,32 @@ function emitSilk(
     emitShapeStrokes(out, shape, code);
   }
 
-  // Overlay text is rasterized to polylines in a future pass. For v0 we
-  // emit a placeholder comment so importers see the layer exists; fab
-  // houses accept silk files with no graphics.
-  if (ctx.proj.overlayTexts.some((t) => t.layer === silkLayer)) {
-    out.push(`G04 silkscreen text rasterization deferred to v0.1*`);
+  // Overlay text → single-stroke polylines drawn with a round NonConductor
+  // aperture (stroke width ~15% of cap height, floored at 0.1 mm).
+  for (const overlay of ctx.proj.overlayTexts) {
+    if (overlay.layer !== silkLayer) continue;
+    if (!overlay.text) continue;
+    const strokeWidth = Math.max(0.1, overlay.fontSizeMm * 0.15);
+    const code = apers.allocate(
+      { kind: "circle", diameterMm: strokeWidth },
+      "NonConductor",
+    );
+    const polylines = textToStrokes(overlay.text, {
+      originMm: overlay.positionMm,
+      sizeMm: overlay.fontSizeMm,
+      rotationDeg: overlay.rotationDeg,
+      mirror: overlay.mirror,
+      justify: overlay.justify,
+    });
+    for (const poly of polylines) {
+      if (poly.length < 2) continue;
+      out.push(`D${code}*`);
+      out.push("G01*");
+      for (let i = 0; i < poly.length; i++) {
+        const p = poly[i]!;
+        out.push(`${xyOperand(p.x, p.y)}${i === 0 ? "D02*" : "D01*"}`);
+      }
+    }
   }
 }
 

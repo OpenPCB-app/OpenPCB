@@ -16,6 +16,26 @@ import type {
   LibraryComponentPlacementDetail,
   LibraryTagStat,
 } from "../../../sdks";
+import { exportBundleName } from "../../../sdks";
+
+export interface ExportSummaryFile {
+  kind: string;
+  fileName: string;
+  bytes: number;
+}
+
+/** Lightweight export preview: file list + preflight warnings, no file text. */
+export interface ExportSummary {
+  bundleName: string;
+  warnings: string[];
+  files: ExportSummaryFile[];
+}
+
+export interface GerberExportRequestOptions {
+  includeBom?: boolean;
+  includePickAndPlace?: boolean;
+  includeInnerLayers?: boolean;
+}
 
 function buildModuleUrl(
   backendURL: string | null | undefined,
@@ -26,16 +46,6 @@ function buildModuleUrl(
     throw new Error("Backend URL unavailable");
   }
   return `${backendURL}/api/modules/${moduleId}${path}`;
-}
-
-/**
- * Filesystem-safe export bundle name. Must stay byte-for-byte identical to
- * `makeBundleName` in `src/modules/designer/backend/export/index.ts` so the
- * client-saved filename matches the contents of the ZIP's internal paths.
- */
-function clientBundleName(designId: string): string {
-  const safe = designId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 32);
-  return `openpcb-${safe}`;
 }
 
 function downloadBlob(blob: Blob, fileName: string): void {
@@ -472,13 +482,36 @@ export function createDesignerApi(params: {
       // The X-OpenPCB-* response headers are *not* exposed by default
       // cross-origin (no `Access-Control-Expose-Headers`), so always derive
       // the bundle name client-side mirroring the backend sanitizer.
-      const bundleName = clientBundleName(designId);
+      const bundleName = exportBundleName(designId);
       const warnings = Number.parseInt(
         res.headers.get("X-OpenPCB-Warnings") ?? "0",
         10,
       );
       const blob = await res.blob();
       return { bundleName, warnings, blob };
+    },
+
+    /**
+     * Lightweight export preview — builds the bundle server-side and returns
+     * the file list + preflight warnings (no file text). Used by the export
+     * dialog to surface warnings and the exact output set before download.
+     */
+    async fetchExportSummary(
+      designId: string,
+      options?: GerberExportRequestOptions,
+    ): Promise<ExportSummary> {
+      return fetchData<ExportSummary>(
+        `${buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/exports/gerber`,
+        )}?format=summary`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(options ?? {}),
+        },
+      );
     },
 
     async downloadBomArtifact(
@@ -503,7 +536,7 @@ export function createDesignerApi(params: {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       downloadBlob(
         await res.blob(),
-        `${clientBundleName(designId)}-${kind}.${extension}`,
+        `${exportBundleName(designId)}-${kind}.${extension}`,
       );
     },
   };

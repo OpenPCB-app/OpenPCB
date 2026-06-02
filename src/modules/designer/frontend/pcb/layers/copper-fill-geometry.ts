@@ -31,6 +31,7 @@ import {
 } from "./copper-fill-trace-geometry";
 import {
   ARC_TOLERANCE_MM,
+  type CopperIsland,
   difference,
   intersection,
   multiPolyToPathsD,
@@ -455,8 +456,33 @@ export interface CopperFillPourParams {
 }
 
 /**
+ * Poured copper islands as `THREE.Shape[]` for the canvas / 3D extrude — the
+ * THREE view onto the shared pour kernel (`buildCopperFillPourIslands`).
+ */
+export function buildCopperFillPourShapes(
+  params: CopperFillPourParams,
+): THREE.Shape[] {
+  return buildCopperFillPourIslands(params).map((island) => island.shape);
+}
+
+/**
+ * Pour islands as flat Clipper `PathsD` — `[outer, ...holes]` rings of `{x, y}`
+ * mm — instead of `THREE.Shape`. The Gerber exporter consumes this to emit the
+ * pour as positive `G36/G37` regions (outer) with clear (`%LPC%`) hole regions,
+ * so the manufactured copper plane is byte-identical to what the canvas draws.
+ * (Same kernel, no THREE — backend-safe.)
+ */
+export function buildCopperFillPourPaths(
+  params: CopperFillPourParams,
+): CopperIsland["paths"][] {
+  return buildCopperFillPourIslands(params).map((island) => island.paths);
+}
+
+/**
  * The single positive-copper pour kernel (2D + 3D). Returns the poured copper
- * islands as `THREE.Shape[]` (copper up to clearance, smoothed, sliver-free).
+ * islands ({outer+holes paths, THREE.Shape, area}, copper up to clearance,
+ * smoothed, sliver-free); `buildCopperFillPourShapes` / `buildCopperFillPourPaths`
+ * are the THREE / Gerber views onto it.
  *
  * Pipeline (KiCad ZONE_FILLER-equivalent, per the Codex gpt-5.5 review):
  *   1. extent   = board inset by edge clearance − cutouts, aesthetic fillet.
@@ -469,9 +495,9 @@ export interface CopperFillPourParams {
  *   5. islands  = split; keep if area ≥ min OR connected to a same-net anchor.
  * Same-net copper is never subtracted → the pour flows up to its edge.
  */
-export function buildCopperFillPourShapes(
+function buildCopperFillPourIslands(
   params: CopperFillPourParams,
-): THREE.Shape[] {
+): CopperIsland[] {
   const edge = Math.max(0, params.copperToBoardEdgeMm);
   const clearance = Math.max(0, params.clearanceMm);
   const cornerRadius = Math.max(
@@ -575,5 +601,5 @@ export function buildCopperFillPourShapes(
       island.areaMm2 >= minIslandArea ||
       (anchors.length > 0 && intersection(island.paths, anchors).length > 0),
   );
-  return kept.map((island) => island.shape);
+  return kept;
 }

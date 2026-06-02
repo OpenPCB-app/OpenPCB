@@ -13,8 +13,59 @@
 - Branch `aggresive-cleanup` merged to `master`. Phases 1–3 complete; Phase 4 partially shipped (trace routing, vias, layer switching, live DRC, ratsnest).
 - F4 drill cutouts + lime outline + unified drill selector: **shipped** (`pcb-drills.ts:collectDrills`, `BoardFill` ShapeGeometry holes, `DrillLayer` RingGeometry).
 - F5 Part B free entities (free hole / free pad / manual smart via): **shipped** (commands `pcb_add_free_hole/pad`, `pcb_add_manual_via`, migration `0008_pcb_free_entities.sql`, `FreePadLayer`, toolbar tools, `PcbCanvas.placeSmartVia`).
-- Manufacturing export (Gerber X2 + Excellon + BOM + PnP + ZIP + Export dialog): **shipped 2026-05-17** — see "Manufacturing Export (v0)" section below. **First fab-able beta is unblocked.**
+- Manufacturing export (Gerber X2 + Excellon + BOM + PnP + ZIP + Export dialog): **shipped 2026-05-17**; **overhauled 2026-06-02** (P0 correctness — copper FileFunction L-code/`,Signal`, CPL rotation, copper-pour `G36/G37`; plus Excellon decimals, `.gbrjob`, export preflight, silk-text rasterization, determinism, dialog warnings) — see "Manufacturing Export Overhaul (2026-06-02)" section below. **First fab-able beta is unblocked.**
 - Active sprint: post-merge cleanup + dead-code removal (see plan in `.claude/plans/act-as-senior-software-resilient-meadow.md`).
+
+## Agentic Loop Upgrade (Phases 0–4) — LANDED 2026-06-02
+
+Full record: `~/.claude/plans/act-as-senior-ts-foamy-treasure.md` + handoff
+`docs/assistant/agentic-loop-upgrade.md`. Verified by 3-round Codex (gpt-5.5) review
+(FAIL→FAIL→CONCERNS) + live E2E (OpenRouter Sonnet-4.5 built a 555 blinker, ERC 0/0/0).
+Shipped on `master` @ `6443b69` (release v0.1.0-beta.7); shared `ai-core-v0.3.0` +
+`contracts-v0.2.4` released; off-link gate green (typecheck 0, backend 609/0, ai-core 69/0).
+
+**Implemented:**
+
+- P0 loop correctness (ai-core run-loop): honor tool-own `ok:false`→`run.tool.failed`;
+  build turn from `run.message.completed` (non-streaming providers); terminal event for
+  every requested/capped/cancelled call (no orphan `tool_call_id`s); balanced model
+  envelope `{ok,status,summary,warnings,truncated,data}` + `modelResultJson`/`modelData`
+  split; `max_completion_tokens` fallback; abort-after-exec persists the completed result.
+- P1 Ajv validation: `validateToolInput` compiled once at registration; called before exec.
+- P2 tool staging: unbound `create→place→wire` exposed up-front in one run.
+- P3 ERC connected-semantics: pin connected only with a real second endpoint/NC
+  (`netIsConnected`); single-pin nets no longer false-"connected"; electrical-type gating.
+- P4 DoD verifier + correction harness: BOM-intent table (`0009`), `getProjectionAndErc`
+  single snapshot, 4 hard-fail checks, dynamic shrink-or-stall re-run, partial+proposed-fixes.
+- Idempotency: `action_id` on write tools; UNIQUE index (`0010`) backstop (F6).
+- Truthful results: partial/failed auto-apply → `ok:false`/`partial`; failed-event carries
+  the balanced envelope for faithful replay (#3); deduped no-call warning (#4).
+
+## Agentic Loop — Remaining / Deferred (follow-ups)
+
+Not blocking; intentionally out of the Phases 0–4 scope.
+
+- [ ] **P5 — Prompt + context engineering** (assistant backend `prompt-service.ts` +
+      `run-service.ts`): agentic-mode triad (persistence / tool-first / principled-stop),
+      two-register by capability-probe (drop plan-then-reflect for reasoning models),
+      inject live design summary into the system prompt (`buildDesignContextSummary` already
+      exists — reuse), lean read-tool envelopes (connectivity/summary diffs), additive presets.
+- [ ] **P6 — Loop robustness heuristics** (ai-core `run-loop.ts`): fingerprint dedup keyed on
+      `{tool, normalizedArgs, designRevision}` + outcome; no-progress/stall detection via
+      design-revision signal; per-tool call caps; wall-clock timeout (warning codes already
+      reserved in `events.ts`).
+- [ ] **Emulated-tool-call guard**: weak/distilled local models (e.g. oMLX
+      `Qwen3.5-27B-Distilled`) emit tool-call-shaped ```json in assistant *content* instead of
+real `tool_calls` → narrate fake progress, no build, DoD never runs. Detect the pattern
+      and surface it (don't let the model claim a build it didn't do). Surfaced during E2E.
+- [ ] **Reconcile shared `package-lock.json`** (dirty from the 0.3.0/0.2.4 version bumps):
+      `cd ../shared && npm install` then commit, or leave as workspace state. Not part of the
+      released subtrees, so it doesn't affect consumers.
+- [ ] **Clean up** local merged branch `fix/library-model-double-apply-guard` (FF-merged into
+      master; local-only) — optional.
+- [ ] **CI / clean-clone check**: the off-link gate proved beta.7 builds from the tags
+      locally; confirm on a fresh CI runner. (Note: plain `npm install` can keep a stale git
+      dep — force with `npm install @openpcb/ai-core@github:…#ai-core-v0.3.0 …` if needed.)
 
 ## Active Assistant Release-Readiness (P0→P2 fixes + hardening)
 
@@ -267,6 +318,42 @@ Decisions:
 - [x] Frontend export dialog (`pcb/PcbExportDialog.tsx`) + toolbar button on PcbCanvas.
 - [x] 23 Bun unit tests covering Ucamco X2 compliance, Excellon spec, BOM grouping, PnP rows, ZIP signature + CRC-32 reference vector.
 
+## Manufacturing Export Overhaul (2026-06-02)
+
+Audit + deep standards research (Ucamco Gerber X2/X3 2024.05, Excellon/XNC, JLCPCB/PCBWay CPL+BOM) → fixed correctness bugs that silently corrupted fab data, then added assembly + robustness. Full record: `~/.claude/plans/act-as-senior-ts-tingly-sunset.md` + memory `manufacturing-export-overhaul`. Target fabs: **JLCPCB + PCBWay + spec-clean universal bundle**. Verified: **51 export + 625 backend Bun tests green**, modules + frontend typecheck clean, and **Playwright-verified live** on the "Dual LED Blinker" board.
+
+### Shipped — P0 correctness (was manufacturing/assembly-blocking)
+
+- [x] Copper FileFunction L-code from `board.layerCount` — B.Cu was hardcoded `Copper,L2,Bot` (wrong; must be `L4` on a 4-layer board) + missing `,Signal`. JLCPCB/PCBWay read X2 attributes first, so this misidentified the stackup. (`gerber/writer.ts`)
+- [x] **Soldermask `FilePolarity,Negative` verified CORRECT** (KiCad-standard; the research pass flagged it a "P0 bug" — a false positive, conflating soldermask polarity with deprecated negative copper-plane files). No change made.
+- [x] CPL rotation rewrite (`pnp/writer.ts` + new `pnp/rotation-db.ts`, canonical matthewlai/JLCKicadTools DB): footprint-family offset, bottom-side `(180−rot)`, SMD-only filter, DNP exclusion, `Top`/`Bottom` casing, per-part `propertiesJson.pnpRotation` override. `buildPnpCsv` now takes overrides (threaded via orchestrator + `pnp.csv` route). Store is Cartesian Y-up → no Y-flip needed.
+- [x] Copper pours → positive `G36/G37` regions, using the canvas's OWN clipper fill kernel (`buildCopperFillPourPaths` added to `frontend/pcb/layers/copper-fill-geometry.ts`; backend reuses it — clipper2-ts + THREE proven Bun-safe). Outer dark region + `%LPC%` antipad holes (spec-preferred over cut-ins); pour emitted before pads/traces/vias. Config read from `board.viewState.copperFillLayers` / `copperFillPourNetIds`.
+
+### Shipped — P1 / P2
+
+- [x] Excellon: explicit-decimal coords (eliminates zero-suppression ambiguity, the #1 drill-rejection cause) + `; #@! TF.FileFunction,Plated/NonPlated,1,N,…,Drill*` CAM comment + `G05`.
+- [x] `.gbrjob` Gerber Job File (`export/gerber/job-file.ts` + `gerber.job` artifact kind) — GeneralSpecs (size from outline bbox, layer count, thickness) + FilesAttributes; deterministic project GUID.
+- [x] Export preflight (`export/preflight.ts`) populates bundle `warnings[]` — fab-preset min-drill/min-trace (`FAB_PRESETS`), missing outline, unsourced assembly parts.
+- [x] **Silkscreen text rasterization** — new monospace single-stroke font `export/text/stroke-font.ts` + `textToStrokes` (matches canvas anchor: justify + vertical-middle; rotation/mirror); `emitSilk` emits overlayTexts as NonConductor stroke polylines. (Closes the v0 backlog item.)
+- [x] Determinism — `createdAt` threaded through Gerber `%TF.CreationDate%` + `.gbrjob` → byte-identical bundles for identical inputs.
+- [x] Mask/paste expansion honored from `board.solderMaskExpansionMm` / `solderPasteExpansionMm` (was hardcoded 0.05 / none); collapsed paste openings dropped.
+- [x] Shared `exportBundleName` (`sdks/designer/pcb-helpers`, barrel-exported) — removed the duplicated backend `makeBundleName` / frontend `clientBundleName`.
+- [x] Export dialog surfaces preflight **warnings + file count** — new `?format=summary` route (light: names + warnings, no file text) + `api.fetchExportSummary` + `ExportSummary`; dialog refetches on open/option-change. Playwright-verified on a real board.
+
+### Remaining
+
+- [ ] **Library→BOM MPN/LCSC inheritance** — add manufacturer/MPN/LCSC/supplier to `LibraryComponent` (`sdks/library`) + library schema/import population, then seed `propertiesJson` in `buildPlacePartPayload` (`place-part.ts` has `detail.component`). Inert until the library carries the data; per-part `propertiesJson`→BOM path already works.
+- [ ] **Export dialog — rest of overhaul**: fab-preset selector, per-layer / per-artifact selection, individual-file downloads (extend `GerberExportOptions` + `parseExportOptions` — new fields must be added to the parser or they're silently dropped over HTTP).
+- [ ] **Drill slots / oblong holes** — needs upstream W×H/elongation drill fields on `PcbVia` / `PcbFreeHole` / `PcbFreePad` (only scalar `drillMm` today), then route-mode (`G00/M15/G01/M16`) Excellon emission.
+- [ ] **Visual verification before production**: render a board WITH copper pours + silk text in gerbv / JLCPCB online viewer (confirm clearances, thermals, glyph shapes); validate bottom-side CPL rotation against JLCPCB's 3D assembly preview (top-side is solid).
+- [ ] **Architectural cleanup**: relocate the pure copper-fill kernel from `modules/designer/frontend/pcb/layers/` to `shared/` so the backend exporter no longer imports across the frontend boundary (works + Bun-safe today, but it's a layering smell).
+
+### Explicitly NOT doing (rationale)
+
+- N-layer >4 — impossible: `PcbLayerCount = 2 | 4`, copper caps at In1/In2; the 2/4 handling is already complete.
+- Protel filenames / BOM UTF-8 BOM / mixed-side split — both target fabs accept X2 filenames; a UTF-8 BOM risks JLC's column auto-mapper; mixed-side is informational. Low value / real downside.
+- IPC-2581 / ODB++ / Gerber X3 component layers — backlog (X3 is the best-ROI "intelligent format" when revisited, but depends on MPN inheritance landing first).
+
 ## Phase 4 — PCB routing + DRC (partially shipped)
 
 Shipped:
@@ -297,11 +384,11 @@ Backlog:
 - [ ] ESLint + `eslint-plugin-boundaries` for compile-time `core ← shared ← sdks ← modules` enforcement
 - [x] Manufacturing export — Gerber X2, Excellon drill, BOM CSV, pick-and-place CSV (writers + route + ZIP packager + Export dialog; 23 Bun tests)
   - [ ] E2E with 555-blinker fixture + manual JLCPCB DFM check (deferred to first real fab attempt)
-  - [ ] Silkscreen text rasterization (overlay text → polylines on silk Gerber)
-  - [ ] Per-pad net-attribute (.TO.N) emission via projection net-pad correlation
+  - [x] Silkscreen text rasterization (overlay text → polylines on silk Gerber) — shipped in the 2026-06-02 overhaul (`export/text/stroke-font.ts`)
+  - [x] Per-pad net-attribute (.TO.N) emission via projection net-pad correlation
 - [ ] Library variants / families / presets / provenance
 - [ ] Differential pair rules + length tuning
-- [ ] Copper pours / zones / keepouts
+- [ ] Copper pours / zones / keepouts — pour fill renders (clipper kernel) **and exports to Gerber `G36/G37`** (2026-06-02); KiCad-imported zones are outline-only; keepouts still pending
 - [ ] Symbol/footprint editor expansion (multi-unit, alt graphical body styles)
 - [ ] OpenAPI codegen pipeline (revisit `gen:openapi` if/when frontend SDK regen is needed)
 - [ ] E2E test expansion (currently smoke only)

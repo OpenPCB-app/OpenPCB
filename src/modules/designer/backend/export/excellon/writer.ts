@@ -27,7 +27,6 @@ import { projectLocal } from "../transform";
  * Coordinates are scaled to 6 decimal places (matches Gerber FS X4.6).
  */
 
-const COORD_SCALE = 1_000_000;
 const NL = "\r\n";
 
 interface DrillHit {
@@ -76,9 +75,19 @@ export function buildExcellonDrill(
   // Header
   lines.push("M48");
   lines.push(`; OpenPCB Excellon drill file — ${kind}`);
-  lines.push(";FILE_FORMAT=4:6");
+  // X2 FileFunction attribute embedded as a CAM-readable comment (KiCad-style
+  // `#@!` marker). Span = layer 1 → bottom; plated flag matches the file kind.
+  const lastLayer = Math.max(2, proj.board.layerCount ?? 2);
+  lines.push(
+    kind === "PTH"
+      ? `; #@! TF.FileFunction,Plated,1,${lastLayer},PTH,Drill*`
+      : `; #@! TF.FileFunction,NonPlated,1,${lastLayer},NPTH,Drill*`,
+  );
+  // Explicit-decimal coordinate format eliminates the leading/trailing-zero
+  // ambiguity that is the single most common drill-file rejection cause.
+  lines.push(";FORMAT={-:-/ absolute / metric / decimal}");
   lines.push("FMAT,2");
-  lines.push("METRIC,LZ");
+  lines.push("METRIC");
   // Tool definitions
   const sortedTools = Array.from(tools.values()).sort(
     (a, b) => a.code - b.code,
@@ -88,8 +97,8 @@ export function buildExcellonDrill(
   }
   lines.push("%");
   // Body
-  lines.push("G90"); // absolute mode
-  lines.push("M71"); // metric measure
+  lines.push("G90"); // absolute coordinates
+  lines.push("G05"); // drill mode
   for (const tool of sortedTools) {
     lines.push(`; ${kind} ${tool.diameterMm.toFixed(3)} mm`);
     lines.push(`T${tool.code}`);
@@ -106,10 +115,9 @@ function coord(mm: number): string {
   if (!Number.isFinite(mm)) {
     throw new Error(`Excellon coord: non-finite ${mm}`);
   }
-  // Excellon LZ format with 4 integer + 6 decimal digits; sign preserved.
-  const scaled = Math.round(mm * COORD_SCALE);
-  const sign = scaled < 0 ? "-" : "";
-  return `${sign}${Math.abs(scaled).toString().padStart(10, "0")}`;
+  // Explicit decimal point (4 dp = 0.1 µm), sign preserved. With a literal
+  // decimal point the format is unambiguous regardless of zero-suppression.
+  return mm.toFixed(4);
 }
 
 function collectDrillHits(proj: DesignerPcbProjection): DrillHit[] {

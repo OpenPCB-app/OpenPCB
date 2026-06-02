@@ -172,7 +172,7 @@ export type {
   CentroidRow,
 } from "./types";
 export type { DesignerInvalidatedEvent } from "./events";
-export { placementMirrorX } from "./pcb-helpers";
+export { placementMirrorX, exportBundleName } from "./pcb-helpers";
 
 export interface DesignerSDK {
   createDesign(
