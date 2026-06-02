@@ -2,7 +2,7 @@ import type {
   DesignerPcbProjection,
   PcbBoardOutline,
 } from "../../../../../sdks/designer/types";
-import { flattenOutline } from "../../pcb/outline-geometry";
+import { flattenOutline } from "../../../../../shared/rendering/pcb/outline-geometry";
 
 /**
  * One entry in the Gerber Job File's `FilesAttributes` array — a manufacturing

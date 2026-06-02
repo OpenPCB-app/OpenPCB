@@ -17,16 +17,16 @@ import {
   projectLocal,
 } from "../transform";
 import { gerberDim, xyOperand } from "../units";
-import { flattenOutline } from "../../pcb/outline-geometry";
+import { flattenOutline } from "../../../../../shared/rendering/pcb/outline-geometry";
 import { textToStrokes } from "../text/stroke-font";
 // Single source of truth for poured copper: the SAME kernel the canvas renders,
 // so the manufactured plane matches the on-screen copper exactly. The kernel is
-// pure geometry (clipper2 + math; no React/R3F) and runs under Bun. (Lives under
-// frontend/ today; a future cleanup may relocate the pure kernel to shared/.)
+// pure geometry (clipper2 + math; no React/R3F) and runs under Bun. Lives in
+// shared/ so backend and canvas import one implementation.
 import {
   buildCopperFillPourPaths,
   resolveCopperFillClearanceMm,
-} from "../../../frontend/pcb/layers/copper-fill-geometry";
+} from "../../../../../shared/rendering/copper-fill/copper-fill-geometry";
 
 /**
  * Build a complete Gerber X2 file for one fabrication layer.
