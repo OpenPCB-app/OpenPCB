@@ -18,6 +18,14 @@ export type FootprintEditorTool = SharedEditorTool<FootprintEditorToolId>;
 
 export type PadShape = "rect" | "circle" | "oval" | "roundrect";
 
+/** How a shape drawn on a copper layer is committed. */
+export type CopperDrawMode = "pad" | "graphic";
+
+/** Copper layers where a drawn Rect/Circle becomes a pad by default. */
+export function isCopperLayer(layer: string): boolean {
+  return layer === "F.Cu" || layer === "B.Cu" || layer === "*.Cu";
+}
+
 export interface EditorPadElement {
   readonly id: string;
   readonly number: string;

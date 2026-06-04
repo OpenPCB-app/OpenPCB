@@ -1,5 +1,6 @@
 import type { InteractionEvent } from "../../../../../../shared/frontend/canvas/interaction/types";
 import type {
+  BoundsMm,
   PointMm,
   PreviewGraphic,
 } from "../../../../../../shared/rendering/types";
@@ -10,22 +11,44 @@ import {
   isGraphicFullyInsideAabb,
   isPointInAabb,
 } from "../../../../../../shared/frontend/canvas/selection/rubber-band";
+import {
+  computeAlignmentGuides,
+  translateBBox,
+  SNAP_THRESHOLD_PX,
+  type AlignmentIndex,
+} from "../../../../../../shared/frontend/canvas/guides";
 import type { EditorTool } from "../types";
-import { useSymbolEditorStore } from "../useSymbolEditorStore";
+import {
+  useSymbolEditorStore,
+  type SymbolEditorState,
+} from "../useSymbolEditorStore";
+import {
+  buildSymbolAlignmentIndex,
+  selectionBBox,
+} from "../guides/symbol-alignment";
+import { symbolViewZoom, pxToMm } from "../symbol-view-zoom";
 import {
   eventToMmRaw,
-  snapToGrid,
+  snapPointToGrid,
   translateGraphic,
 } from "../../../../../../shared/frontend/canvas/tools/tool-utils";
 
-const HIT_RADIUS_MM = 0.8;
+/** Screen-pixel hit tolerance (converted to mm at the live zoom). */
+const HIT_PX = 7;
+/** Screen-pixel dead-zone before a selecting click turns into a drag. */
+const DEAD_ZONE_PX = 3;
 const DOUBLE_CLICK_MS = 400;
 
 interface DragState {
   startPoint: PointMm;
+  startScreen: { x: number; y: number };
+  anchorMm: PointMm;
   originalGraphics: Map<string, PreviewGraphic>;
   originalPins: Map<string, PointMm>;
   originalLabels: Map<string, PointMm>;
+  index: AlignmentIndex | null;
+  baseBBox: BoundsMm | null;
+  moved: boolean;
   snapshotPushed: boolean;
 }
 
@@ -41,18 +64,22 @@ interface LastClick {
 }
 
 /** Approximate label hit radius based on text width. */
-function labelHitRadius(text: string, fontSizeMm: number): number {
+function labelHitRadius(text: string, fontSizeMm: number, tol: number): number {
   const width = Math.max(text.length * fontSizeMm * 0.62, fontSizeMm * 0.5);
-  return Math.max(width / 2, HIT_RADIUS_MM);
+  return Math.max(width / 2, tol);
 }
 
-function hitTestGraphic(graphic: PreviewGraphic, point: PointMm): boolean {
+function hitTestGraphic(
+  graphic: PreviewGraphic,
+  point: PointMm,
+  tol: number,
+): boolean {
   if (graphic.kind === "rect") {
     return (
-      point.x >= graphic.x - HIT_RADIUS_MM &&
-      point.x <= graphic.x + graphic.width + HIT_RADIUS_MM &&
-      point.y >= graphic.y - HIT_RADIUS_MM &&
-      point.y <= graphic.y + graphic.height + HIT_RADIUS_MM
+      point.x >= graphic.x - tol &&
+      point.x <= graphic.x + graphic.width + tol &&
+      point.y >= graphic.y - tol &&
+      point.y <= graphic.y + graphic.height + tol
     );
   }
   if (graphic.kind === "line") {
@@ -70,15 +97,53 @@ function hitTestGraphic(graphic: PreviewGraphic, point: PointMm): boolean {
     const px = graphic.a.x + t * dx;
     const py = graphic.a.y + t * dy;
     const dist = Math.sqrt((point.x - px) ** 2 + (point.y - py) ** 2);
-    return dist < HIT_RADIUS_MM;
+    return dist < tol;
   }
   if (graphic.kind === "circle") {
     const dist = Math.sqrt(
       (point.x - graphic.center.x) ** 2 + (point.y - graphic.center.y) ** 2,
     );
-    return Math.abs(dist - graphic.radiusMm) < HIT_RADIUS_MM;
+    // Clickable across the whole disc (interior), not just the ring.
+    return dist <= graphic.radiusMm + tol;
   }
   return false;
+}
+
+/** First element under `point`: graphics → pins → labels. */
+function pickAt(
+  store: SymbolEditorState,
+  point: PointMm,
+  tol: number,
+): string | null {
+  for (const element of store.graphics) {
+    if (hitTestGraphic(element.graphic, point, tol)) return element.id;
+  }
+  for (const pin of store.pins) {
+    const dist = Math.sqrt(
+      (point.x - pin.positionMm.x) ** 2 + (point.y - pin.positionMm.y) ** 2,
+    );
+    if (dist < tol) return pin.id;
+  }
+  for (const element of store.labels) {
+    const l = element.label;
+    const r = labelHitRadius(l.text, l.fontSizeMm, tol);
+    const dist = Math.sqrt((point.x - l.at.x) ** 2 + (point.y - l.at.y) ** 2);
+    if (dist < r) return element.id;
+  }
+  return null;
+}
+
+/** Reference point of the grabbed element, used as the grid-snap anchor. */
+function anchorOf(
+  store: SymbolEditorState,
+  id: string,
+  fallback: PointMm,
+): PointMm {
+  const pin = store.pins.find((p) => p.id === id);
+  if (pin) return pin.positionMm;
+  const label = store.labels.find((l) => l.id === id);
+  if (label) return label.label.at;
+  return fallback;
 }
 
 export function createSelectTool(): EditorTool {
@@ -96,46 +161,17 @@ export function createSelectTool(): EditorTool {
       lastClick = null;
       const store = useSymbolEditorStore.getState();
       store.setSelectionRect(null);
+      store.setHoveredId(null);
+      store.clearAlignmentGuides();
       store.cancelTextEdit();
     },
 
     onPointerDown(event: InteractionEvent) {
       const store = useSymbolEditorStore.getState();
       const point = eventToMmRaw(event);
+      const tol = pxToMm(HIT_PX);
 
-      // Hit test — first match wins; graphics → pins → labels
-      let hitId: string | null = null;
-      for (const element of store.graphics) {
-        if (hitTestGraphic(element.graphic, point)) {
-          hitId = element.id;
-          break;
-        }
-      }
-      if (!hitId) {
-        for (const pin of store.pins) {
-          const dist = Math.sqrt(
-            (point.x - pin.positionMm.x) ** 2 +
-              (point.y - pin.positionMm.y) ** 2,
-          );
-          if (dist < HIT_RADIUS_MM) {
-            hitId = pin.id;
-            break;
-          }
-        }
-      }
-      if (!hitId) {
-        for (const element of store.labels) {
-          const l = element.label;
-          const r = labelHitRadius(l.text, l.fontSizeMm);
-          const dist = Math.sqrt(
-            (point.x - l.at.x) ** 2 + (point.y - l.at.y) ** 2,
-          );
-          if (dist < r) {
-            hitId = element.id;
-            break;
-          }
-        }
-      }
+      const hitId = pickAt(store, point, tol);
 
       if (!hitId) {
         // Start rect-select. Shift preserves existing selection.
@@ -198,9 +234,7 @@ export function createSelectTool(): EditorTool {
         }
       }
       for (const pin of store.pins) {
-        if (selection.has(pin.id)) {
-          originalPins.set(pin.id, pin.positionMm);
-        }
+        if (selection.has(pin.id)) originalPins.set(pin.id, pin.positionMm);
       }
       for (const element of store.labels) {
         if (selection.has(element.id)) {
@@ -210,9 +244,23 @@ export function createSelectTool(): EditorTool {
 
       dragState = {
         startPoint: point,
+        startScreen: { x: event.screenPoint.x, y: event.screenPoint.y },
+        anchorMm: anchorOf(store, hitId, point),
         originalGraphics,
         originalPins,
         originalLabels,
+        index: buildSymbolAlignmentIndex({
+          graphics: store.graphics,
+          pins: store.pins,
+          excludeIds: selection,
+        }),
+        baseBBox: selectionBBox({
+          graphics: store.graphics,
+          pins: store.pins,
+          labels: store.labels,
+          ids: selection,
+        }),
+        moved: false,
         snapshotPushed: false,
       };
     },
@@ -226,17 +274,53 @@ export function createSelectTool(): EditorTool {
         return;
       }
 
-      if (!dragState) return;
-      let dx = current.x - dragState.startPoint.x;
-      let dy = current.y - dragState.startPoint.y;
-      if (store.gridVisible) {
-        dx = snapToGrid(dx, store.gridSizeMm);
-        dy = snapToGrid(dy, store.gridSizeMm);
+      if (!dragState) {
+        const tol = pxToMm(HIT_PX);
+        const hit = pickAt(store, current, tol);
+        if (store.hoveredId !== hit) store.setHoveredId(hit);
+        return;
       }
 
-      if (dx === 0 && dy === 0) return;
+      if (!dragState.moved) {
+        const movedPx = Math.hypot(
+          event.screenPoint.x - dragState.startScreen.x,
+          event.screenPoint.y - dragState.startScreen.y,
+        );
+        if (movedPx < DEAD_ZONE_PX) return;
+        dragState.moved = true;
+      }
+
+      const rawDx = current.x - dragState.startPoint.x;
+      const rawDy = current.y - dragState.startPoint.y;
+
+      let dx = rawDx;
+      let dy = rawDy;
+      if (store.gridVisible) {
+        const snapped = snapPointToGrid(
+          { x: dragState.anchorMm.x + rawDx, y: dragState.anchorMm.y + rawDy },
+          store.gridSizeMm,
+        );
+        dx = snapped.x - dragState.anchorMm.x;
+        dy = snapped.y - dragState.anchorMm.y;
+      }
+
+      if (store.alignmentGuidesVisible && dragState.index && dragState.baseBBox) {
+        const result = computeAlignmentGuides({
+          index: dragState.index,
+          draggedBBoxMm: translateBBox(dragState.baseBBox, dx, dy),
+          toleranceMm: SNAP_THRESHOLD_PX / symbolViewZoom.current,
+        });
+        store.setAlignmentGuides(result.guides, result.spacing);
+        if (!event.modifiers.alt) {
+          dx += result.snap.dx;
+          dy += result.snap.dy;
+        }
+      } else {
+        store.clearAlignmentGuides();
+      }
 
       if (!dragState.snapshotPushed) {
+        if (dx === 0 && dy === 0) return;
         store.pushSnapshot();
         dragState.snapshotPushed = true;
       }
@@ -258,10 +342,6 @@ export function createSelectTool(): EditorTool {
     },
 
     onPointerUp(event: InteractionEvent) {
-      // A drag consumes its starting click — invalidate the double-click
-      // window so the next click-on-same-element doesn't spuriously open
-      // the inline text editor. (Rect-select isn't a "click on element" so
-      // doesn't need to touch lastClick either way.)
       if (dragState?.snapshotPushed) {
         lastClick = null;
       }
@@ -292,7 +372,10 @@ export function createSelectTool(): EditorTool {
         return;
       }
 
-      dragState = null;
+      if (dragState) {
+        useSymbolEditorStore.getState().clearAlignmentGuides();
+        dragState = null;
+      }
     },
 
     onKeyDown(event: KeyboardEvent) {

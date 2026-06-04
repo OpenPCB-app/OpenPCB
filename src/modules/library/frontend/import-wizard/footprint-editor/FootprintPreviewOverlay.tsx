@@ -1,14 +1,39 @@
 import { useMemo, type ReactElement } from "react";
+import * as THREE from "three";
 import type { PreviewGraphic } from "../../../../../shared/rendering/types";
 import { RENDER_ORDER } from "../../../../../shared/frontend/canvas/layers";
 
 const PREVIEW_COLOR = "#60a5fa"; // blue-400
+
+/** Filled THREE.Shape for a solid rect/circle preview (pad / filled copper). */
+function buildFillShape(graphic: PreviewGraphic): THREE.Shape | null {
+  if (graphic.kind === "rect" && graphic.fill === "solid") {
+    const { x, y, width, height } = graphic;
+    if (width <= 0 || height <= 0) return null;
+    const shape = new THREE.Shape();
+    shape.moveTo(x, y);
+    shape.lineTo(x + width, y);
+    shape.lineTo(x + width, y + height);
+    shape.lineTo(x, y + height);
+    shape.closePath();
+    return shape;
+  }
+  if (graphic.kind === "circle" && graphic.fill === "solid") {
+    if (graphic.radiusMm <= 0) return null;
+    const shape = new THREE.Shape();
+    shape.absarc(graphic.center.x, graphic.center.y, graphic.radiusMm, 0, Math.PI * 2, false);
+    return shape;
+  }
+  return null;
+}
 
 export function FootprintPreviewOverlay({
   graphic,
 }: {
   graphic: PreviewGraphic;
 }): ReactElement | null {
+  const fillShape = useMemo(() => buildFillShape(graphic), [graphic]);
+
   const positions = useMemo(() => {
     const segments: number[] = [];
 
@@ -79,20 +104,36 @@ export function FootprintPreviewOverlay({
     return new Float32Array(segments);
   }, [graphic]);
 
-  if (!positions) return null;
+  if (!positions && !fillShape) return null;
 
   return (
-    <lineSegments renderOrder={RENDER_ORDER.PREVIEW} frustumCulled={false}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-      </bufferGeometry>
-      <lineBasicMaterial
-        color={PREVIEW_COLOR}
-        depthTest={false}
-        depthWrite={false}
-        transparent
-        opacity={0.8}
-      />
-    </lineSegments>
+    <>
+      {fillShape && (
+        <mesh renderOrder={RENDER_ORDER.PREVIEW - 0.1} frustumCulled={false}>
+          <shapeGeometry args={[fillShape]} />
+          <meshBasicMaterial
+            color={PREVIEW_COLOR}
+            depthTest={false}
+            depthWrite={false}
+            transparent
+            opacity={0.3}
+          />
+        </mesh>
+      )}
+      {positions && (
+        <lineSegments renderOrder={RENDER_ORDER.PREVIEW} frustumCulled={false}>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+          </bufferGeometry>
+          <lineBasicMaterial
+            color={PREVIEW_COLOR}
+            depthTest={false}
+            depthWrite={false}
+            transparent
+            opacity={0.8}
+          />
+        </lineSegments>
+      )}
+    </>
   );
 }

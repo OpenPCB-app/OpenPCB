@@ -79,14 +79,29 @@ export function createPadTool(): FootprintEditorTool {
     onPointerMove(event: InteractionEvent) {
       const store = useFootprintEditorStore.getState();
       const point = eventToMm(event, store.gridSizeMm, store.gridVisible);
-      // Show preview dot at cursor
-      store.setPreviewGraphic({
-        kind: "circle",
-        center: point,
-        radiusMm: 0.2,
-        fill: "solid",
-        strokeWidthMm: 0,
-      });
+      const d = store.padDefaults;
+      // Preview the actual pad footprint at the cursor.
+      if (d.shape === "circle") {
+        store.setPreviewGraphic({
+          kind: "circle",
+          center: point,
+          radiusMm: Math.max(d.widthMm / 2, 0.1),
+          fill: "solid",
+          strokeWidthMm: 0.1,
+        });
+      } else {
+        const w = Math.max(d.widthMm, 0.1);
+        const h = Math.max(d.heightMm, 0.1);
+        store.setPreviewGraphic({
+          kind: "rect",
+          x: point.x - w / 2,
+          y: point.y - h / 2,
+          width: w,
+          height: h,
+          fill: "solid",
+          strokeWidthMm: 0.1,
+        });
+      }
     },
 
     onKeyDown(event: KeyboardEvent) {

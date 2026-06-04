@@ -48,7 +48,8 @@ export const PadPropertyPanel = memo(function PadPropertyPanel(): ReactElement {
       </div>
       {pads.length === 0 ? (
         <div className="text-xs text-slate-400 dark:text-slate-500">
-          Use the Pad tool (D) to place pads.
+          Use the Pad tool (D), or draw a Rect/Circle on F.Cu / B.Cu — copper
+          shapes become pads.
         </div>
       ) : (
         <div className="max-h-[28rem] space-y-1.5 overflow-auto">

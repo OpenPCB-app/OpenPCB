@@ -2,6 +2,7 @@ import type { InteractionEvent } from "../../../../../../shared/frontend/canvas/
 import type { PointMm } from "../../../../../../shared/rendering/types";
 import { eventToMm } from "../../../../../../shared/frontend/canvas/tools/tool-utils";
 import type { FootprintEditorTool } from "../types";
+import { isCopperLayer } from "../types";
 import { useFootprintEditorStore } from "../useFootprintEditorStore";
 
 export function createRectTool(): FootprintEditorTool {
@@ -35,19 +36,41 @@ export function createRectTool(): FootprintEditorTool {
       const height = Math.abs(point.y - startPoint.y);
 
       if (width > 0 && height > 0) {
+        // On copper, a rectangle becomes a pad by default; the ⌘/Ctrl modifier
+        // (or the sidebar toggle) flips to a filled copper graphic instead.
+        const isCopper = isCopperLayer(store.activeLayer);
+        const modifier = event.modifiers.meta || event.modifiers.ctrl;
+        const makePad =
+          isCopper &&
+          (modifier
+            ? store.copperDrawMode === "graphic"
+            : store.copperDrawMode === "pad");
+
         store.pushSnapshot();
-        store.addGraphic(
-          {
-            kind: "rect",
-            x,
-            y,
-            width,
-            height,
-            fill: "none",
-            strokeWidthMm: 0.15,
-          },
-          store.activeLayer,
-        );
+        if (makePad) {
+          store.addPad({
+            number: store.nextPadNumber(),
+            shape: "rect",
+            centerMm: { x: x + width / 2, y: y + height / 2 },
+            widthMm: width,
+            heightMm: height,
+            rotationDeg: 0,
+            layer: store.activeLayer,
+          });
+        } else {
+          store.addGraphic(
+            {
+              kind: "rect",
+              x,
+              y,
+              width,
+              height,
+              fill: isCopper ? "solid" : "none",
+              strokeWidthMm: 0.15,
+            },
+            store.activeLayer,
+          );
+        }
       }
       store.setPreviewGraphic(null);
       startPoint = null;
@@ -67,7 +90,7 @@ export function createRectTool(): FootprintEditorTool {
         y,
         width,
         height,
-        fill: "none",
+        fill: isCopperLayer(store.activeLayer) ? "solid" : "none",
         strokeWidthMm: 0.15,
       });
     },

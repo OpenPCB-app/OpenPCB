@@ -1,17 +1,20 @@
 import { memo, type ReactElement } from "react";
 import {
   Circle,
-  Grid3X3,
+  Magnet,
   Minus,
   MousePointer2,
   Redo2,
   RotateCcw,
   RotateCw,
+  Ruler,
   Spline,
   Square,
+  SquareDot,
   Type,
   Undo2,
 } from "lucide-react";
+// Magnet → alignment-guides toggle; Ruler → dimensions toggle.
 import type { LucideIcon } from "lucide-react";
 import {
   PCB_LAYER_COLORS,
@@ -29,14 +32,13 @@ interface ToolDef {
   shortcut: string;
 }
 
-// Pad icon: a simple square with a dot (using Square for now)
 const TOOLS: ToolDef[] = [
   { id: "select", icon: MousePointer2, label: "Select", shortcut: "V" },
   { id: "line", icon: Minus, label: "Line", shortcut: "L" },
   { id: "rect", icon: Square, label: "Rect", shortcut: "R" },
   { id: "circle", icon: Circle, label: "Circle", shortcut: "C" },
   { id: "arc", icon: Spline, label: "Arc", shortcut: "A" },
-  { id: "pad", icon: Grid3X3, label: "Pad", shortcut: "D" },
+  { id: "pad", icon: SquareDot, label: "Pad", shortcut: "D" },
   { id: "text", icon: Type, label: "Text", shortcut: "T" },
 ];
 
@@ -78,6 +80,8 @@ export const FootprintEditorToolbar = memo(
     const undoStack = useFootprintEditorStore((s) => s.undoStack);
     const redoStack = useFootprintEditorStore((s) => s.redoStack);
     const gridVisible = useFootprintEditorStore((s) => s.gridVisible);
+    const guidesVisible = useFootprintEditorStore((s) => s.alignmentGuidesVisible);
+    const dimensionsVisible = useFootprintEditorStore((s) => s.dimensionsVisible);
     const selectionSize = useFootprintEditorStore((s) => s.selectedIds.size);
     const activeLayer = useFootprintEditorStore((s) => s.activeLayer);
     const rotateDisabled = selectionSize === 0;
@@ -176,11 +180,41 @@ export const FootprintEditorToolbar = memo(
         <button
           type="button"
           onClick={() =>
+            useFootprintEditorStore.getState().toggleAlignmentGuidesVisible()
+          }
+          title="Alignment guides + magnetic snap (Shift+G)"
+          className={`inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition-colors ${
+            guidesVisible
+              ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+              : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+          }`}
+        >
+          <Magnet className="h-3.5 w-3.5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() =>
+            useFootprintEditorStore.getState().toggleDimensionsVisible()
+          }
+          title="Show dimensions + distances"
+          className={`inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition-colors ${
+            dimensionsVisible
+              ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+              : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+          }`}
+        >
+          <Ruler className="h-3.5 w-3.5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() =>
             useFootprintEditorStore
               .getState()
               .setGridVisible(!useFootprintEditorStore.getState().gridVisible)
           }
-          className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+          className={`inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
             gridVisible
               ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
               : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"

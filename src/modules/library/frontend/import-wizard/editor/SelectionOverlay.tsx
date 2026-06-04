@@ -17,11 +17,15 @@ export function SelectionOverlay({
   graphics,
   pins,
   labels,
+  color = SELECTION_COLOR,
+  opacity = 0.7,
 }: {
   selectedIds: Set<string>;
   graphics: readonly EditorGraphicElement[];
   pins: readonly EditorPinElement[];
   labels: readonly EditorLabelElement[];
+  color?: string;
+  opacity?: number;
 }): ReactElement | null {
   const positions = useMemo(() => {
     if (selectedIds.size === 0) return null;
@@ -188,11 +192,11 @@ export function SelectionOverlay({
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
       <lineBasicMaterial
-        color={SELECTION_COLOR}
+        color={color}
         depthTest={false}
         depthWrite={false}
         transparent
-        opacity={0.7}
+        opacity={opacity}
       />
     </lineSegments>
   );

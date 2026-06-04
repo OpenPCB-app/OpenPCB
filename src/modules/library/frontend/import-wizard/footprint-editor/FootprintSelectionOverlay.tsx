@@ -14,11 +14,15 @@ export function FootprintSelectionOverlay({
   pads,
   graphics,
   labels,
+  color = SELECTION_COLOR,
+  opacity = 0.7,
 }: {
   selectedIds: Set<string>;
   pads: readonly EditorPadElement[];
   graphics: readonly EditorFootprintGraphic[];
   labels: readonly EditorFootprintLabel[];
+  color?: string;
+  opacity?: number;
 }): ReactElement | null {
   const positions = useMemo(() => {
     if (selectedIds.size === 0) return null;
@@ -185,11 +189,11 @@ export function FootprintSelectionOverlay({
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
       <lineBasicMaterial
-        color={SELECTION_COLOR}
+        color={color}
         depthTest={false}
         depthWrite={false}
         transparent
-        opacity={0.7}
+        opacity={opacity}
       />
     </lineSegments>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, type ReactElement } from "react";
-import { useThree } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
+import type { OrthographicCamera } from "three";
 import { buildSymbolRenderModel } from "../../../../../shared/rendering/symbol-preview-builder";
 import { DEFAULT_SCHEMATIC_ZOOM } from "../../../../../shared/frontend/canvas/defaults";
 import { EdaCanvas } from "../../../../../shared/frontend/canvas/interaction";
@@ -9,10 +10,22 @@ import { SelectionRectOverlay } from "../../../../../shared/frontend/canvas/sele
 import { eventToMmRaw } from "../../../../../shared/frontend/canvas/tools/tool-utils";
 import type { InteractionHandler } from "../../../../../shared/frontend/canvas/interaction/types";
 import { useSymbolEditorStore } from "./useSymbolEditorStore";
+import { symbolViewZoom } from "./symbol-view-zoom";
 import { useEditorToolHandler } from "./use-editor-tool";
 import { PreviewGraphicOverlay } from "./PreviewGraphicOverlay";
 import { SelectionOverlay } from "./SelectionOverlay";
+import { SymbolAlignmentOverlay } from "./SymbolAlignmentOverlay";
 import { TextEditorOverlay } from "./TextEditorOverlay";
+
+/** Capture live camera zoom (px-per-mm) for screen-pixel hit/snap tolerances. */
+function ZoomTracker(): null {
+  const camera = useThree((s) => s.camera);
+  useFrame(() => {
+    const z = (camera as OrthographicCamera).zoom;
+    if (z && z !== symbolViewZoom.current) symbolViewZoom.current = z;
+  });
+  return null;
+}
 
 /** Kicks invalidate whenever store-driven props change inside the Canvas. */
 function InvalidateOnChange() {
@@ -23,6 +36,9 @@ function InvalidateOnChange() {
   const previewGraphic = useSymbolEditorStore((s) => s.previewGraphic);
   const selectedIds = useSymbolEditorStore((s) => s.selectedIds);
   const selectionRect = useSymbolEditorStore((s) => s.selectionRect);
+  const hoveredId = useSymbolEditorStore((s) => s.hoveredId);
+  const alignmentGuides = useSymbolEditorStore((s) => s.alignmentGuides);
+  const alignmentSpacing = useSymbolEditorStore((s) => s.alignmentSpacing);
 
   useEffect(() => {
     invalidate();
@@ -34,6 +50,9 @@ function InvalidateOnChange() {
     previewGraphic,
     selectedIds,
     selectionRect,
+    hoveredId,
+    alignmentGuides,
+    alignmentSpacing,
   ]);
 
   return null;
@@ -52,7 +71,16 @@ function EditorCanvasContent({
   const previewGraphic = useSymbolEditorStore((s) => s.previewGraphic);
   const selectedIds = useSymbolEditorStore((s) => s.selectedIds);
   const selectionRect = useSymbolEditorStore((s) => s.selectionRect);
+  const hoveredId = useSymbolEditorStore((s) => s.hoveredId);
   const referencePrefix = useSymbolEditorStore((s) => s.referencePrefix);
+
+  const hoverSet = useMemo(
+    () =>
+      hoveredId && !selectedIds.has(hoveredId)
+        ? new Set<string>([hoveredId])
+        : null,
+    [hoveredId, selectedIds],
+  );
 
   const renderSource = useMemo(
     () => useSymbolEditorStore.getState().toSymbolRenderSource(),
@@ -75,11 +103,22 @@ function EditorCanvasContent({
       themeMode="dark"
     >
       <InvalidateOnChange />
+      <ZoomTracker />
       <GridShader gridSize={gridSizeMm} visible={gridVisible} alpha={0.18} />
       {(graphics.length > 0 || pins.length > 0 || labels.length > 0) && (
         <SymbolRenderLayer model={model} />
       )}
       {previewGraphic && <PreviewGraphicOverlay graphic={previewGraphic} />}
+      {hoverSet && (
+        <SelectionOverlay
+          selectedIds={hoverSet}
+          graphics={graphics}
+          pins={pins}
+          labels={labels}
+          color="#94a3b8"
+          opacity={0.45}
+        />
+      )}
       <SelectionOverlay
         selectedIds={selectedIds}
         graphics={graphics}
@@ -90,6 +129,7 @@ function EditorCanvasContent({
         a={selectionRect?.a ?? null}
         b={selectionRect?.b ?? null}
       />
+      <SymbolAlignmentOverlay />
     </EdaCanvas>
   );
 }
@@ -116,7 +156,9 @@ export function SymbolEditorCanvas({
         toolHandler.onPointerUp?.(event);
       },
       onPointerLeave() {
-        useSymbolEditorStore.getState().setCursorMm(null);
+        const store = useSymbolEditorStore.getState();
+        store.setCursorMm(null);
+        store.setHoveredId(null);
         toolHandler.onPointerLeave?.();
       },
     }),

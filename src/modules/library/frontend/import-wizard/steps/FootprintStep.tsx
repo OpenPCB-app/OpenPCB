@@ -13,6 +13,7 @@ import {
   PadPropertyPanel,
   useFootprintEditorStore,
 } from "../footprint-editor";
+import { isCopperLayer } from "../footprint-editor/types";
 
 export const FootprintStep = memo(function FootprintStep(): ReactElement {
   const inputId = useId();
@@ -467,6 +468,8 @@ function ImportRightSidebar({
 
 function DrawFootprintSidebar(): ReactElement {
   const footprintName = useFootprintEditorStore((s) => s.footprintName);
+  const activeLayer = useFootprintEditorStore((s) => s.activeLayer);
+  const copperDrawMode = useFootprintEditorStore((s) => s.copperDrawMode);
 
   return (
     <>
@@ -489,6 +492,37 @@ function DrawFootprintSidebar(): ReactElement {
             className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           />
         </label>
+
+        {isCopperLayer(activeLayer) && (
+          <div className="space-y-1">
+            <span className="text-xs text-slate-600 dark:text-slate-300">
+              Copper shapes
+            </span>
+            <div className="inline-flex w-full overflow-hidden rounded-md border border-slate-300 dark:border-slate-700">
+              {(["pad", "graphic"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() =>
+                    useFootprintEditorStore.getState().setCopperDrawMode(mode)
+                  }
+                  className={`flex-1 cursor-pointer px-2 py-1 text-[11px] font-medium transition-colors ${
+                    copperDrawMode === mode
+                      ? "bg-violet-600 text-white"
+                      : "bg-white text-slate-600 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {mode === "pad" ? "Pads" : "Graphics"}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] leading-tight text-slate-400 dark:text-slate-500">
+              Rect/Circle on {activeLayer} →{" "}
+              {copperDrawMode === "pad" ? "numbered pads" : "filled copper"}.
+              Hold ⌘/Ctrl while drawing to flip.
+            </p>
+          </div>
+        )}
       </section>
 
       <LayerPanel />

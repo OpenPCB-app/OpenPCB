@@ -17,6 +17,11 @@ import {
   translateGraphic,
 } from "../../../../../shared/frontend/canvas/tools/tool-utils";
 import type {
+  AlignmentGuide,
+  SpacingGuide,
+} from "../../../../../shared/frontend/canvas/guides";
+import type {
+  CopperDrawMode,
   EditorPadElement,
   EditorFootprintGraphic,
   EditorFootprintLabel,
@@ -97,6 +102,7 @@ export interface FootprintEditorState {
   // Selection
   selectedIds: Set<string>;
   selectionRect: SelectionRect | null;
+  hoveredId: string | null;
 
   // Preview
   previewGraphic: PreviewGraphic | null;
@@ -112,11 +118,24 @@ export interface FootprintEditorState {
   gridSizeMm: number;
   gridVisible: boolean;
 
+  // Alignment guides (Figma-style; updated live during a drag)
+  alignmentGuidesVisible: boolean;
+  alignmentGuides: AlignmentGuide[];
+  alignmentSpacing: SpacingGuide[];
+
+  // Dimension annotations (pad sizes + center-to-center distances)
+  dimensionsVisible: boolean;
+
   // Pad defaults
   padDefaults: PadDefaults;
 
+  // Copper draw mode (shapes on F.Cu/B.Cu become pads or filled graphics)
+  copperDrawMode: CopperDrawMode;
+
   // Actions — document
   addPad: (pad: Omit<EditorPadElement, "id">) => void;
+  /** Next sequential pad number (max numeric pad + 1). */
+  nextPadNumber: () => string;
   updatePad: (id: string, patch: Partial<Omit<EditorPadElement, "id">>) => void;
   setPadPosition: (id: string, centerMm: PointMm) => void;
   addGraphic: (graphic: PreviewGraphic, layer: string) => void;
@@ -138,6 +157,7 @@ export interface FootprintEditorState {
   clearSelection: () => void;
   selectAll: () => void;
   setSelectionRect: (rect: SelectionRect | null) => void;
+  setHoveredId: (id: string | null) => void;
 
   // Actions — preview
   setPreviewGraphic: (graphic: PreviewGraphic | null) => void;
@@ -165,8 +185,20 @@ export interface FootprintEditorState {
   setGridSizeMm: (size: number) => void;
   setGridVisible: (visible: boolean) => void;
 
+  // Actions — alignment guides
+  toggleAlignmentGuidesVisible: () => void;
+  setAlignmentGuides: (
+    guides: AlignmentGuide[],
+    spacing: SpacingGuide[],
+  ) => void;
+  clearAlignmentGuides: () => void;
+
+  // Actions — dimensions
+  toggleDimensionsVisible: () => void;
+
   // Actions — pad defaults
   setPadDefaults: (patch: Partial<PadDefaults>) => void;
+  setCopperDrawMode: (mode: CopperDrawMode) => void;
 
   // Actions — undo/redo
   pushSnapshot: () => void;
@@ -196,13 +228,19 @@ const INITIAL_STATE = {
   layerVisibility: new Set<string>(ALL_LAYERS),
   selectedIds: new Set<string>(),
   selectionRect: null as SelectionRect | null,
+  hoveredId: null as string | null,
   previewGraphic: null as PreviewGraphic | null,
   clipboard: null as ClipboardPayload | null,
   cursorMm: null as PointMm | null,
   textEditor: null as FootprintEditorTextEditorState | null,
   gridSizeMm: 0.635,
   gridVisible: true,
+  alignmentGuidesVisible: true,
+  alignmentGuides: [] as AlignmentGuide[],
+  alignmentSpacing: [] as SpacingGuide[],
+  dimensionsVisible: true,
   padDefaults: { ...DEFAULT_PAD_DEFAULTS } as PadDefaults,
+  copperDrawMode: "pad" as CopperDrawMode,
 };
 
 function snapshotOf(state: FootprintEditorState): EditorFootprintSnapshot {
@@ -222,6 +260,15 @@ export const useFootprintEditorStore = create<FootprintEditorState>(
         pads: [...state.pads, { ...pad, id }],
         redoStack: [],
       });
+    },
+
+    nextPadNumber: () => {
+      let max = 0;
+      for (const p of get().pads) {
+        const n = Number.parseInt(p.number, 10);
+        if (Number.isFinite(n) && n > max) max = n;
+      }
+      return String(max + 1);
     },
 
     updatePad: (id, patch) => {
@@ -315,6 +362,7 @@ export const useFootprintEditorStore = create<FootprintEditorState>(
       set({ selectedIds: ids });
     },
     setSelectionRect: (rect) => set({ selectionRect: rect }),
+    setHoveredId: (id) => set({ hoveredId: id }),
 
     // ── Preview ───────────────────────────────────────────────────────
 
@@ -466,10 +514,32 @@ export const useFootprintEditorStore = create<FootprintEditorState>(
     setGridSizeMm: (size) => set({ gridSizeMm: size }),
     setGridVisible: (visible) => set({ gridVisible: visible }),
 
+    // ── Alignment guides ──────────────────────────────────────────────
+
+    toggleAlignmentGuidesVisible: () =>
+      set((state) => ({
+        alignmentGuidesVisible: !state.alignmentGuidesVisible,
+        alignmentGuides: [],
+        alignmentSpacing: [],
+      })),
+    setAlignmentGuides: (guides, spacing) =>
+      set({ alignmentGuides: guides, alignmentSpacing: spacing }),
+    clearAlignmentGuides: () => {
+      const state = get();
+      if (state.alignmentGuides.length === 0 && state.alignmentSpacing.length === 0)
+        return;
+      set({ alignmentGuides: [], alignmentSpacing: [] });
+    },
+
+    toggleDimensionsVisible: () =>
+      set((state) => ({ dimensionsVisible: !state.dimensionsVisible })),
+
     // ── Pad defaults ──────────────────────────────────────────────────
 
     setPadDefaults: (patch) =>
       set((state) => ({ padDefaults: { ...state.padDefaults, ...patch } })),
+
+    setCopperDrawMode: (mode) => set({ copperDrawMode: mode }),
 
     // ── Undo/Redo ─────────────────────────────────────────────────────
 

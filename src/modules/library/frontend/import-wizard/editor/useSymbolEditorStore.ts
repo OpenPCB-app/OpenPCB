@@ -19,6 +19,10 @@ import {
   translateGraphic,
 } from "../../../../../shared/frontend/canvas/tools/tool-utils";
 import type {
+  AlignmentGuide,
+  SpacingGuide,
+} from "../../../../../shared/frontend/canvas/guides";
+import type {
   EditorGraphicElement,
   EditorLabelElement,
   EditorPinElement,
@@ -76,6 +80,12 @@ export interface SymbolEditorState {
   // Selection
   selectedIds: Set<string>;
   selectionRect: SelectionRect | null;
+  hoveredId: string | null;
+
+  // Alignment guides (Figma-style; updated live during a drag)
+  alignmentGuidesVisible: boolean;
+  alignmentGuides: AlignmentGuide[];
+  alignmentSpacing: SpacingGuide[];
 
   // Preview (rubber-band during drawing)
   previewGraphic: PreviewGraphic | null;
@@ -112,6 +122,15 @@ export interface SymbolEditorState {
   clearSelection: () => void;
   selectAll: () => void;
   setSelectionRect: (rect: SelectionRect | null) => void;
+  setHoveredId: (id: string | null) => void;
+
+  // Actions — alignment guides
+  toggleAlignmentGuidesVisible: () => void;
+  setAlignmentGuides: (
+    guides: AlignmentGuide[],
+    spacing: SpacingGuide[],
+  ) => void;
+  clearAlignmentGuides: () => void;
 
   // Actions — preview
   setPreviewGraphic: (graphic: PreviewGraphic | null) => void;
@@ -164,6 +183,10 @@ const INITIAL_STATE = {
   activeTool: "select" as EditorToolId,
   selectedIds: new Set<string>(),
   selectionRect: null as SelectionRect | null,
+  hoveredId: null as string | null,
+  alignmentGuidesVisible: true,
+  alignmentGuides: [] as AlignmentGuide[],
+  alignmentSpacing: [] as SpacingGuide[],
   previewGraphic: null as PreviewGraphic | null,
   clipboard: null as ClipboardPayload | null,
   cursorMm: null as PointMm | null,
@@ -278,6 +301,25 @@ export const useSymbolEditorStore = create<SymbolEditorState>((set, get) => ({
     set({ selectedIds: ids });
   },
   setSelectionRect: (rect) => set({ selectionRect: rect }),
+  setHoveredId: (id) => set({ hoveredId: id }),
+
+  toggleAlignmentGuidesVisible: () =>
+    set((state) => ({
+      alignmentGuidesVisible: !state.alignmentGuidesVisible,
+      alignmentGuides: [],
+      alignmentSpacing: [],
+    })),
+  setAlignmentGuides: (guides, spacing) =>
+    set({ alignmentGuides: guides, alignmentSpacing: spacing }),
+  clearAlignmentGuides: () => {
+    const state = get();
+    if (
+      state.alignmentGuides.length === 0 &&
+      state.alignmentSpacing.length === 0
+    )
+      return;
+    set({ alignmentGuides: [], alignmentSpacing: [] });
+  },
 
   setPreviewGraphic: (graphic) => set({ previewGraphic: graphic }),
 

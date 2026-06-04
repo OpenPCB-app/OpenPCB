@@ -61,6 +61,19 @@ export function useEditorToolHandler(): InteractionHandler {
   );
 
   const onContextualKey = useCallback((event: KeyboardEvent): boolean => {
+    // Shift+G toggles Figma-style alignment guides + magnetic snap.
+    if (
+      (event.key === "g" || event.key === "G") &&
+      event.shiftKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      event.preventDefault();
+      useSymbolEditorStore.getState().toggleAlignmentGuidesVisible();
+      return true;
+    }
+
     // Clipboard + select-all: Cmd/Ctrl+A/C/V/D
     if ((event.ctrlKey || event.metaKey) && !event.altKey) {
       if (matchesKey(event, "a") && !event.shiftKey) {

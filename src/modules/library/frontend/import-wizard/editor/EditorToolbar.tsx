@@ -2,6 +2,7 @@ import { memo, type ReactElement } from "react";
 import {
   Circle,
   Grid3X3,
+  Magnet,
   Minus,
   MousePointer2,
   Redo2,
@@ -66,6 +67,7 @@ export const EditorToolbar = memo(function EditorToolbar(): ReactElement {
   const undoStack = useSymbolEditorStore((s) => s.undoStack);
   const redoStack = useSymbolEditorStore((s) => s.redoStack);
   const gridVisible = useSymbolEditorStore((s) => s.gridVisible);
+  const guidesVisible = useSymbolEditorStore((s) => s.alignmentGuidesVisible);
   const selectionSize = useSymbolEditorStore((s) => s.selectedIds.size);
   const rotateDisabled = selectionSize === 0;
 
@@ -127,11 +129,26 @@ export const EditorToolbar = memo(function EditorToolbar(): ReactElement {
       <button
         type="button"
         onClick={() =>
+          useSymbolEditorStore.getState().toggleAlignmentGuidesVisible()
+        }
+        title="Alignment guides + magnetic snap (Shift+G)"
+        className={`inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border transition-colors ${
+          guidesVisible
+            ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        }`}
+      >
+        <Magnet className="h-3.5 w-3.5" />
+      </button>
+
+      <button
+        type="button"
+        onClick={() =>
           useSymbolEditorStore
             .getState()
             .setGridVisible(!useSymbolEditorStore.getState().gridVisible)
         }
-        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+        className={`inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
           gridVisible
             ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
             : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"

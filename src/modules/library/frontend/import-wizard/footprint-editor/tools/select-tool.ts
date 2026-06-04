@@ -10,22 +10,47 @@ import {
   isGraphicFullyInsideAabb,
   isPointInAabb,
 } from "../../../../../../shared/frontend/canvas/selection/rubber-band";
+import { boundsFromGraphics } from "../../../../../../shared/rendering/geometry";
+import type { BoundsMm } from "../../../../../../shared/rendering/types";
+import {
+  computeAlignmentGuides,
+  translateBBox,
+  SNAP_THRESHOLD_PX,
+  type AlignmentIndex,
+} from "../../../../../../shared/frontend/canvas/guides";
 import type { FootprintEditorTool, EditorPadElement } from "../types";
-import { useFootprintEditorStore } from "../useFootprintEditorStore";
+import {
+  useFootprintEditorStore,
+  type FootprintEditorState,
+} from "../useFootprintEditorStore";
+import {
+  buildFootprintAlignmentIndex,
+  selectionBBox,
+} from "../guides/footprint-alignment";
+import { footprintViewZoom, pxToMm } from "../footprint-view-zoom";
 import {
   eventToMmRaw,
-  snapToGrid,
+  rotatePoint,
+  snapPointToGrid,
   translateGraphic,
 } from "../../../../../../shared/frontend/canvas/tools/tool-utils";
 
-const HIT_RADIUS_MM = 0.8;
+/** Screen-pixel hit tolerance (converted to mm at the live zoom). */
+const HIT_PX = 7;
+/** Screen-pixel dead-zone before a selecting click turns into a drag. */
+const DEAD_ZONE_PX = 3;
 const DOUBLE_CLICK_MS = 400;
 
 interface DragState {
   startPoint: PointMm;
+  startScreen: { x: number; y: number };
+  anchorMm: PointMm;
   originalPads: Map<string, PointMm>;
   originalGraphics: Map<string, PreviewGraphic>;
   originalLabels: Map<string, PointMm>;
+  index: AlignmentIndex | null;
+  baseBBox: BoundsMm | null;
+  moved: boolean;
   snapshotPushed: boolean;
 }
 
@@ -40,22 +65,34 @@ interface LastClick {
   timeMs: number;
 }
 
-function hitTestPad(pad: EditorPadElement, point: PointMm): boolean {
-  const halfW = pad.widthMm / 2 + HIT_RADIUS_MM;
-  const halfH = pad.heightMm / 2 + HIT_RADIUS_MM;
+function hitTestPad(
+  pad: EditorPadElement,
+  point: PointMm,
+  tol: number,
+): boolean {
+  // Transform the click into the pad's local (unrotated) frame.
+  const local = pad.rotationDeg
+    ? rotatePoint(point, pad.centerMm, -pad.rotationDeg)
+    : point;
+  const halfW = pad.widthMm / 2 + tol;
+  const halfH = pad.heightMm / 2 + tol;
   return (
-    Math.abs(point.x - pad.centerMm.x) < halfW &&
-    Math.abs(point.y - pad.centerMm.y) < halfH
+    Math.abs(local.x - pad.centerMm.x) < halfW &&
+    Math.abs(local.y - pad.centerMm.y) < halfH
   );
 }
 
-function hitTestGraphic(graphic: PreviewGraphic, point: PointMm): boolean {
+function hitTestGraphic(
+  graphic: PreviewGraphic,
+  point: PointMm,
+  tol: number,
+): boolean {
   if (graphic.kind === "rect") {
     return (
-      point.x >= graphic.x - HIT_RADIUS_MM &&
-      point.x <= graphic.x + graphic.width + HIT_RADIUS_MM &&
-      point.y >= graphic.y - HIT_RADIUS_MM &&
-      point.y <= graphic.y + graphic.height + HIT_RADIUS_MM
+      point.x >= graphic.x - tol &&
+      point.x <= graphic.x + graphic.width + tol &&
+      point.y >= graphic.y - tol &&
+      point.y <= graphic.y + graphic.height + tol
     );
   }
   if (graphic.kind === "line") {
@@ -72,23 +109,66 @@ function hitTestGraphic(graphic: PreviewGraphic, point: PointMm): boolean {
     );
     const px = graphic.a.x + t * dx;
     const py = graphic.a.y + t * dy;
-    return Math.sqrt((point.x - px) ** 2 + (point.y - py) ** 2) < HIT_RADIUS_MM;
+    return Math.sqrt((point.x - px) ** 2 + (point.y - py) ** 2) < tol;
   }
   if (graphic.kind === "circle") {
     const dist = Math.sqrt(
       (point.x - graphic.center.x) ** 2 + (point.y - graphic.center.y) ** 2,
     );
-    return Math.abs(dist - graphic.radiusMm) < HIT_RADIUS_MM;
+    // Clickable across the whole disc (interior), not just the ring.
+    return dist <= graphic.radiusMm + tol;
   }
   return false;
 }
 
-function labelHitRadius(text: string, fontSizeMm: number): number {
-  return Math.max(
-    text.length * fontSizeMm * 0.62,
-    fontSizeMm * 0.5,
-    HIT_RADIUS_MM,
-  );
+function labelHitRadius(
+  text: string,
+  fontSizeMm: number,
+  tol: number,
+): number {
+  return Math.max(text.length * fontSizeMm * 0.62, fontSizeMm * 0.5, tol);
+}
+
+/** First element under `point` honoring layer visibility: pads → graphics → labels. */
+function pickAt(
+  store: FootprintEditorState,
+  point: PointMm,
+  tol: number,
+): string | null {
+  const vis = store.layerVisibility;
+  for (const pad of store.pads) {
+    if (!vis.has(pad.layer) && pad.layer !== "*.Cu") continue;
+    if (pad.layer === "*.Cu" && !vis.has("F.Cu") && !vis.has("B.Cu")) continue;
+    if (hitTestPad(pad, point, tol)) return pad.id;
+  }
+  for (const g of store.graphics) {
+    if (!vis.has(g.layer)) continue;
+    if (hitTestGraphic(g.graphic, point, tol)) return g.id;
+  }
+  for (const l of store.labels) {
+    const layer = l.label.layer;
+    if (layer && !vis.has(layer)) continue;
+    const r = labelHitRadius(l.label.text, l.label.fontSizeMm, tol);
+    const dist = Math.sqrt(
+      (point.x - l.label.at.x) ** 2 + (point.y - l.label.at.y) ** 2,
+    );
+    if (dist < r) return l.id;
+  }
+  return null;
+}
+
+/** Reference point of the grabbed element, used as the grid-snap anchor. */
+function anchorOf(store: FootprintEditorState, id: string, fallback: PointMm): PointMm {
+  const pad = store.pads.find((p) => p.id === id);
+  if (pad) return pad.centerMm;
+  const g = store.graphics.find((el) => el.id === id);
+  if (g) {
+    const b = boundsFromGraphics([g.graphic]);
+    if (b) return { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 };
+  }
+  const label = store.labels.find((l) => l.id === id);
+  if (label) return label.label.at;
+  return fallback;
 }
 
 export function createSelectTool(): FootprintEditorTool {
@@ -106,48 +186,17 @@ export function createSelectTool(): FootprintEditorTool {
       lastClick = null;
       const store = useFootprintEditorStore.getState();
       store.setSelectionRect(null);
+      store.setHoveredId(null);
+      store.clearAlignmentGuides();
       store.cancelTextEdit();
     },
 
     onPointerDown(event: InteractionEvent) {
       const store = useFootprintEditorStore.getState();
       const point = eventToMmRaw(event);
-      const vis = store.layerVisibility;
+      const tol = pxToMm(HIT_PX);
 
-      // Hit test: pads → graphics → labels (respect layer visibility)
-      let hitId: string | null = null;
-      for (const pad of store.pads) {
-        if (!vis.has(pad.layer) && pad.layer !== "*.Cu") continue;
-        if (pad.layer === "*.Cu" && !vis.has("F.Cu") && !vis.has("B.Cu"))
-          continue;
-        if (hitTestPad(pad, point)) {
-          hitId = pad.id;
-          break;
-        }
-      }
-      if (!hitId) {
-        for (const g of store.graphics) {
-          if (!vis.has(g.layer)) continue;
-          if (hitTestGraphic(g.graphic, point)) {
-            hitId = g.id;
-            break;
-          }
-        }
-      }
-      if (!hitId) {
-        for (const l of store.labels) {
-          const layer = l.label.layer;
-          if (layer && !vis.has(layer)) continue;
-          const r = labelHitRadius(l.label.text, l.label.fontSizeMm);
-          const dist = Math.sqrt(
-            (point.x - l.label.at.x) ** 2 + (point.y - l.label.at.y) ** 2,
-          );
-          if (dist < r) {
-            hitId = l.id;
-            break;
-          }
-        }
-      }
+      const hitId = pickAt(store, point, tol);
 
       if (!hitId) {
         rectSelectState = {
@@ -214,9 +263,23 @@ export function createSelectTool(): FootprintEditorTool {
 
       dragState = {
         startPoint: point,
+        startScreen: { x: event.screenPoint.x, y: event.screenPoint.y },
+        anchorMm: anchorOf(store, hitId, point),
         originalPads,
         originalGraphics,
         originalLabels,
+        index: buildFootprintAlignmentIndex({
+          pads: store.pads,
+          graphics: store.graphics,
+          excludeIds: selection,
+        }),
+        baseBBox: selectionBBox({
+          pads: store.pads,
+          graphics: store.graphics,
+          labels: store.labels,
+          ids: selection,
+        }),
+        moved: false,
         snapshotPushed: false,
       };
     },
@@ -230,16 +293,58 @@ export function createSelectTool(): FootprintEditorTool {
         return;
       }
 
-      if (!dragState) return;
-      let dx = current.x - dragState.startPoint.x;
-      let dy = current.y - dragState.startPoint.y;
-      if (store.gridVisible) {
-        dx = snapToGrid(dx, store.gridSizeMm);
-        dy = snapToGrid(dy, store.gridSizeMm);
+      if (!dragState) {
+        // Idle hover affordance.
+        const tol = pxToMm(HIT_PX);
+        const hit = pickAt(store, current, tol);
+        if (store.hoveredId !== hit) store.setHoveredId(hit);
+        return;
       }
-      if (dx === 0 && dy === 0) return;
+
+      // Dead-zone: a selecting click shouldn't nudge the element.
+      if (!dragState.moved) {
+        const movedPx = Math.hypot(
+          event.screenPoint.x - dragState.startScreen.x,
+          event.screenPoint.y - dragState.startScreen.y,
+        );
+        if (movedPx < DEAD_ZONE_PX) return;
+        dragState.moved = true;
+      }
+
+      const rawDx = current.x - dragState.startPoint.x;
+      const rawDy = current.y - dragState.startPoint.y;
+
+      // Snap the grabbed element's resulting position to grid (absolute), so the
+      // group moves rigidly and the anchor lands on-grid — fine moves still work.
+      let dx = rawDx;
+      let dy = rawDy;
+      if (store.gridVisible) {
+        const snapped = snapPointToGrid(
+          { x: dragState.anchorMm.x + rawDx, y: dragState.anchorMm.y + rawDy },
+          store.gridSizeMm,
+        );
+        dx = snapped.x - dragState.anchorMm.x;
+        dy = snapped.y - dragState.anchorMm.y;
+      }
+
+      // Figma-style alignment guides + magnetic snap (Alt suppresses the snap).
+      if (store.alignmentGuidesVisible && dragState.index && dragState.baseBBox) {
+        const result = computeAlignmentGuides({
+          index: dragState.index,
+          draggedBBoxMm: translateBBox(dragState.baseBBox, dx, dy),
+          toleranceMm: SNAP_THRESHOLD_PX / footprintViewZoom.current,
+        });
+        store.setAlignmentGuides(result.guides, result.spacing);
+        if (!event.modifiers.alt) {
+          dx += result.snap.dx;
+          dy += result.snap.dy;
+        }
+      } else {
+        store.clearAlignmentGuides();
+      }
 
       if (!dragState.snapshotPushed) {
+        if (dx === 0 && dy === 0) return; // wait for the first real grid step
         store.pushSnapshot();
         dragState.snapshotPushed = true;
       }
@@ -293,7 +398,10 @@ export function createSelectTool(): FootprintEditorTool {
         return;
       }
 
-      dragState = null;
+      if (dragState) {
+        useFootprintEditorStore.getState().clearAlignmentGuides();
+        dragState = null;
+      }
     },
 
     onKeyDown(event: KeyboardEvent) {
