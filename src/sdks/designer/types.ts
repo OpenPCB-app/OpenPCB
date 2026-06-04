@@ -197,6 +197,12 @@ export interface PcbViewState {
   layerPreset: PcbLayerPreset;
   ratsnestVisible: boolean;
   /**
+   * Figma-style placement/routing alignment guides + magnetic snapping.
+   * Optional so board_settings rows saved before this feature hydrate to the
+   * default-on behavior. Absent = enabled.
+   */
+  alignmentGuidesVisible?: boolean;
+  /**
    * DRC rule-classes the user has chosen to ignore wholesale (panel "ignore
    * all" toggles). Violations in these classes are not emitted. Additive;
    * absent = ignore nothing.

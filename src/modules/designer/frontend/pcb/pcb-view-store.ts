@@ -41,6 +41,7 @@ const DEFAULT_VIEW_STATE: PcbViewState = {
   perLayerOpacity: {},
   layerPreset: "custom",
   ratsnestVisible: true,
+  alignmentGuidesVisible: true,
   drcIgnoredRuleClasses: [],
   drcWaivedViolationIds: [],
 };
@@ -107,6 +108,8 @@ interface PcbViewStoreActions {
   cycleDisplayMode(): void;
   setRatsnestVisible(visible: boolean): void;
   toggleRatsnestVisible(): void;
+  setAlignmentGuidesVisible(visible: boolean): void;
+  toggleAlignmentGuidesVisible(): void;
   setCopperFillLayers(layers: ReadonlyArray<PcbCopperLayerId>): void;
   toggleCopperFillLayer(layer: PcbCopperLayerId): void;
   setCopperFillPourNet(layer: PcbCopperLayerId, netId: string | null): void;
@@ -275,6 +278,20 @@ export const usePcbViewStore = create<Store>((set, get) => ({
 
   toggleRatsnestVisible() {
     get().setRatsnestVisible(!get().viewState.ratsnestVisible);
+  },
+
+  setAlignmentGuidesVisible(visible) {
+    if ((get().viewState.alignmentGuidesVisible ?? true) === visible) return;
+    set((s) => ({
+      viewState: { ...s.viewState, alignmentGuidesVisible: visible },
+    }));
+    persistPatch({ alignmentGuidesVisible: visible });
+  },
+
+  toggleAlignmentGuidesVisible() {
+    get().setAlignmentGuidesVisible(
+      !(get().viewState.alignmentGuidesVisible ?? true),
+    );
   },
 
   setCopperFillLayers(layers) {

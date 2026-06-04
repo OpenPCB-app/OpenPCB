@@ -5,6 +5,7 @@ import {
   Eye,
   EyeOff,
   FlipHorizontal2,
+  Magnet,
   Minus,
   Network,
   Plus,
@@ -25,6 +26,9 @@ interface PcbTopToolbarProps {
   onFlipSelection: () => void;
   ratsnestVisible: boolean;
   onToggleRatsnest: () => void;
+  /** Figma-style alignment guides + magnetic snap (Shift+G). */
+  alignmentGuidesVisible: boolean;
+  onToggleAlignmentGuides: () => void;
   /** Whether the in-PCB-tab DRC results dock is open. */
   drcPanelOpen: boolean;
   onToggleDrcPanel: () => void;
@@ -490,6 +494,8 @@ export function PcbTopToolbar({
   onFlipSelection,
   ratsnestVisible,
   onToggleRatsnest,
+  alignmentGuidesVisible,
+  onToggleAlignmentGuides,
   drcPanelOpen,
   onToggleDrcPanel,
   drcErrorCount,
@@ -709,6 +715,21 @@ export function PcbTopToolbar({
       >
         <Network className="h-3.5 w-3.5" />
         Ratsnest
+      </button>
+
+      <button
+        type="button"
+        onClick={onToggleAlignmentGuides}
+        title="Toggle alignment guides + snap (Shift+G)"
+        className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+          alignmentGuidesVisible
+            ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+            : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        }`}
+        aria-pressed={alignmentGuidesVisible}
+      >
+        <Magnet className="h-3.5 w-3.5" />
+        Guides
       </button>
 
       <button

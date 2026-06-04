@@ -56,6 +56,13 @@ import { SolderMaskLayer } from "./layers/SolderMaskLayer";
 import { SolderPasteLayer } from "./layers/SolderPasteLayer";
 import { NetTraceLabels } from "./layers/NetTraceLabels";
 import { SnapTargetIndicator } from "./layers/SnapTargetIndicator";
+import { AlignmentGuideLayer } from "./layers/AlignmentGuideLayer";
+import { RoutingGuideLayer } from "./layers/RoutingGuideLayer";
+import type {
+  AlignmentGuide,
+  RouteGuide,
+  SpacingGuide,
+} from "./guides/guide-types";
 import { MeasureOverlayLayer } from "./layers/MeasureOverlayLayer";
 import { usePcbViewStore } from "./pcb-view-store";
 import { SelectionRectOverlay } from "../../../../shared/frontend/canvas/selection";
@@ -1218,6 +1225,12 @@ interface PcbSceneProps {
     kind: "pad-center" | "trace-endpoint" | "trace-segment-end" | "via-center";
     pointMm: PcbPointMm;
   } | null;
+  /** Figma-style placement-alignment guides (drawn while dragging). */
+  alignmentGuides?: AlignmentGuide[];
+  /** Equal-spacing/distribution indicators (drawn while dragging). */
+  alignmentSpacing?: SpacingGuide[];
+  /** Routing assist guides (angle/extend rays + collinear-pad lines). */
+  routeGuides?: RouteGuide[];
   initialViewport?: ViewportState | null;
   onViewportChange?: (zoom: number, posX: number, posY: number) => void;
   /** Called once the R3F camera is ready; pass `null` on unmount. */
@@ -1244,6 +1257,9 @@ export function PcbScene({
   marqueeOverlay = null,
   measurement = null,
   snapTarget = null,
+  alignmentGuides = [],
+  alignmentSpacing = [],
+  routeGuides = [],
   initialViewport,
   onViewportChange,
   onCameraReady,
@@ -1270,6 +1286,9 @@ export function PcbScene({
     copperFillLayers,
     marqueeOverlay,
     measurement,
+    alignmentGuides,
+    alignmentSpacing,
+    routeGuides,
     invalidate,
   ]);
 
@@ -1714,6 +1733,17 @@ export function PcbScene({
             excludePadIds={routeGuide.excludePadIds}
             netClasses={projection.board.netClasses}
           />
+        ) : null}
+        {(alignmentGuides.length > 0 || alignmentSpacing.length > 0) &&
+        isPcbLayerVisible(visibleLayers, "Metadata") ? (
+          <AlignmentGuideLayer
+            guides={alignmentGuides}
+            spacing={alignmentSpacing}
+          />
+        ) : null}
+        {routeGuides.length > 0 &&
+        isPcbLayerVisible(visibleLayers, "Metadata") ? (
+          <RoutingGuideLayer guides={routeGuides} />
         ) : null}
         <DrcSelectionHighlight traces={projection.traces} />
         <DrcMarkerLayer />

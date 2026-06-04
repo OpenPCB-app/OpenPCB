@@ -86,6 +86,21 @@ import { PcbLayersPanel } from "./PcbLayersPanel";
 import { PcbActiveLayerPill } from "./PcbActiveLayerPill";
 import { PcbSelectionFilter } from "./PcbSelectionFilter";
 import { findSnapTarget, type SnapTarget } from "./snap";
+import {
+  buildAlignmentIndex,
+  computeAlignmentGuides,
+  translateBBox,
+  unionBBox,
+  type AlignmentIndex,
+} from "./guides/alignment-engine";
+import {
+  SNAP_THRESHOLD_PX,
+  type AlignmentGuide,
+  type RouteGuide,
+  type SpacingGuide,
+} from "./guides/guide-types";
+import { computeRouteGuides } from "./guides/routing-engine";
+import type { BoundsMm } from "../../../../shared/rendering/types";
 import { runLiveDrc, type DrcViolation } from "./drc/live-drc";
 import {
   initialRouteToolState,
@@ -395,6 +410,18 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const [cursorMm, setCursorMmState] = useState<PcbPointMm | null>(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const cursorMmRef = useRef<PcbPointMm | null>(null);
+  // Figma-style alignment guides shown while dragging placements. The index
+  // + group bbox are captured once at drag-start; each move queries them.
+  const [alignmentGuides, setAlignmentGuides] = useState<AlignmentGuide[]>([]);
+  const [alignmentSpacing, setAlignmentSpacing] = useState<SpacingGuide[]>([]);
+  const alignmentIndexRef = useRef<AlignmentIndex | null>(null);
+  const draggedInitialBBoxRef = useRef<BoundsMm | null>(null);
+  const altHeldRef = useRef(false);
+  const alignmentGuidesEnabled = usePcbViewStore(
+    (s) => s.viewState.alignmentGuidesVisible ?? true,
+  );
+  const alignmentGuidesEnabledRef = useRef(alignmentGuidesEnabled);
+  alignmentGuidesEnabledRef.current = alignmentGuidesEnabled;
   const cameraControlsRef = useRef<PcbCameraControls | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   // Apply a cross-tab "center on violation" request from the DRC tab once the
@@ -779,6 +806,47 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     [padToNet, visiblePlacements, snapTarget, traceToNet, viaToNet],
   );
 
+  // Route-time anchor resolution = object snap (pad/endpoint/via, via
+  // resolveAnchor) with routing-guide snapping layered underneath. Object snap
+  // always wins; only an otherwise-free anchor is pulled onto the nearest
+  // routing guide. Alt or the disabled toggle skips the guide snap. Used by
+  // both the live preview and the committed waypoint/endpoint so they agree.
+  const resolveRouteAnchor = useCallback(
+    (cursor: PcbPointMm) => {
+      const base = resolveAnchor(cursor);
+      if (
+        routeState.kind !== "routing" ||
+        base.onPad ||
+        snapTarget !== null ||
+        altHeldRef.current ||
+        !alignmentGuidesEnabledRef.current ||
+        !workspace.projection
+      ) {
+        return base;
+      }
+      const session = routeState.session;
+      const anchors = sessionAnchors(session);
+      const last = anchors[anchors.length - 1]!;
+      const prior = anchors[anchors.length - 2];
+      const { snapPointMm } = computeRouteGuides({
+        anchorMm: { x: last.x / NM_PER_MM, y: last.y / NM_PER_MM },
+        ...(prior
+          ? { priorMm: { x: prior.x / NM_PER_MM, y: prior.y / NM_PER_MM } }
+          : {}),
+        cursorMm: cursor,
+        posture: session.posture,
+        placements: workspace.projection.placements,
+        traces: workspace.projection.traces,
+        vias: workspace.projection.vias,
+        activeLayer: session.layer,
+        netId: session.netId,
+        toleranceMm: SNAP_THRESHOLD_PX / drcZoomRef.current,
+      });
+      return snapPointMm ? { ...base, pointMm: snapPointMm } : base;
+    },
+    [resolveAnchor, routeState, snapTarget, workspace.projection],
+  );
+
   // Commit the current routing session as a `pcb_add_trace` command. Anchors
   // are resolved through the corner-mode + posture-aware preview builder so
   // the path matches what the user sees as the ghost.
@@ -1115,7 +1183,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         // Route mode takes the click first.
         if (toolMode === "route") {
           if (!defaultNetClass) return;
-          const anchor = resolveAnchor(cursor);
+          const anchor = resolveRouteAnchor(cursor);
           if (routeState.kind === "idle") {
             // An explicit per-net assignment overrides the default class (and
             // its trace width) for the new route session.
@@ -1420,6 +1488,30 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             initialPositionsByPlacementId: initial,
             moved: false,
           });
+          // Build the alignment index ONCE over the non-dragged visible
+          // placements; each pointer move reuses it (Phase 1 guides).
+          if (alignmentGuidesEnabledRef.current) {
+            const bo = workspace.projection?.board.outline;
+            alignmentIndexRef.current = buildAlignmentIndex({
+              placements: placementsRef.current,
+              excludeIds: groupIds,
+              visibleLayers,
+              boardBoundsMm: bo
+                ? {
+                    minX: bo.centerMm.x - bo.widthMm / 2,
+                    maxX: bo.centerMm.x + bo.widthMm / 2,
+                    minY: bo.centerMm.y - bo.heightMm / 2,
+                    maxY: bo.centerMm.y + bo.heightMm / 2,
+                  }
+                : null,
+            });
+            draggedInitialBBoxRef.current = unionBBox(
+              placementsRef.current.filter((p) => groupIds.has(p.id)),
+            );
+          } else {
+            alignmentIndexRef.current = null;
+            draggedInitialBBoxRef.current = null;
+          }
           return;
         }
         // Empty space → start marquee (no drag).
@@ -1525,20 +1617,43 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             return prev;
           return { ...prev, currentPositionMm: next, moved: true };
         });
-        setDragSession((prev) => {
-          if (!prev) return prev;
-          const next = {
-            x: snap(cursor.x - prev.pointerOffsetMm.x),
-            y: snap(cursor.y - prev.pointerOffsetMm.y),
-          };
-          if (
-            next.x === prev.currentPrimaryMm.x &&
-            next.y === prev.currentPrimaryMm.y
-          ) {
-            return prev;
+        if (dragSession) {
+          let nx = snap(cursor.x - dragSession.pointerOffsetMm.x);
+          let ny = snap(cursor.y - dragSession.pointerOffsetMm.y);
+          // Alignment guides + magnetic snap. Alt suppresses the snap (hints
+          // still show). Guide coord wins over grid on a matched axis.
+          let guides: AlignmentGuide[] = [];
+          let spacing: SpacingGuide[] = [];
+          const index = alignmentIndexRef.current;
+          const baseBBox = draggedInitialBBoxRef.current;
+          if (alignmentGuidesEnabledRef.current && index && baseBBox) {
+            const dx = nx - dragSession.initialPrimaryMm.x;
+            const dy = ny - dragSession.initialPrimaryMm.y;
+            const result = computeAlignmentGuides({
+              index,
+              draggedBBoxMm: translateBBox(baseBBox, dx, dy),
+              toleranceMm: SNAP_THRESHOLD_PX / drcZoomRef.current,
+            });
+            guides = result.guides;
+            spacing = result.spacing;
+            if (!altHeldRef.current) {
+              nx += result.snap.dx;
+              ny += result.snap.dy;
+            }
           }
-          return { ...prev, currentPrimaryMm: next, moved: true };
-        });
+          setAlignmentGuides(guides);
+          setAlignmentSpacing(spacing);
+          setDragSession((prev) => {
+            if (!prev) return prev;
+            if (
+              nx === prev.currentPrimaryMm.x &&
+              ny === prev.currentPrimaryMm.y
+            ) {
+              return prev;
+            }
+            return { ...prev, currentPrimaryMm: { x: nx, y: ny }, moved: true };
+          });
+        }
       },
       onPointerUp() {
         // Commit a board resize. The command writes ONLY the outline — no
@@ -1614,6 +1729,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           }
         }
         setDragSession(null);
+        setAlignmentGuides([]);
+        setAlignmentSpacing([]);
+        alignmentIndexRef.current = null;
+        draggedInitialBBoxRef.current = null;
       },
       onPointerLeave() {
         // Drop any DRC marker hover when the cursor leaves the canvas.
@@ -1655,7 +1774,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                 id: "commit-waypoint",
                 label: "Commit waypoint",
                 onSelect: () => {
-                  const anchor = resolveAnchor(cursor);
+                  const anchor = resolveRouteAnchor(cursor);
                   dispatchRoute({
                     kind: "commit-waypoint",
                     pointNm: pointMmToNm(anchor.pointMm),
@@ -1922,7 +2041,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     marquee,
     padToNet,
     resolveMeasureAnchor,
-    resolveAnchor,
+    resolveRouteAnchor,
     routeState,
     selection,
     setActiveCopperLayer,
@@ -1938,6 +2057,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   useEffect(() => {
     const onShiftKey = (event: KeyboardEvent): void => {
       if (event.key === "Shift") setMeasureShowDeltas(event.type === "keydown");
+      // Track Alt to let the user suppress guide snapping mid-drag/route.
+      if (event.key === "Alt") altHeldRef.current = event.type === "keydown";
     };
     window.addEventListener("keydown", onShiftKey);
     window.addEventListener("keyup", onShiftKey);
@@ -2012,6 +2133,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           return "measure";
         });
         dispatchRoute({ kind: "cancel" });
+        return;
+      }
+      // Shift+G toggles alignment guides (visual + magnetic snap).
+      if ((event.key === "g" || event.key === "G") && event.shiftKey) {
+        event.preventDefault();
+        usePcbViewStore.getState().toggleAlignmentGuidesVisible();
         return;
       }
       if (event.key === "r" || event.key === "R") {
@@ -2392,7 +2519,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const routePreview = useMemo(() => {
     if (routeState.kind !== "routing" || !cursorMm) return null;
     const session = routeState.session;
-    const cursorAnchor = resolveAnchor(cursorMm);
+    const cursorAnchor = resolveRouteAnchor(cursorMm);
     const committedAnchors = sessionAnchors(session);
     const anchors = [...committedAnchors, pointMmToNm(cursorAnchor.pointMm)];
     const path = buildPreviewPath(
@@ -2405,7 +2532,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       pointsNm: path,
       layer: session.layer,
     };
-  }, [cursorMm, resolveAnchor, routeState]);
+  }, [cursorMm, resolveRouteAnchor, routeState]);
 
   // Live DRC for the in-progress trace.
   const drcViolations: DrcViolation[] = useMemo(() => {
@@ -2463,6 +2590,38 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         : {}),
     };
   }, [cursorMm, routeGuideExcludePadIds, routeState]);
+
+  // Routing alignment guides (cyan angle/extend rays + yellow collinear-pad
+  // lines) rendered while a trace is in progress. Same engine the route-snap
+  // helper uses; recomputed on the same cadence as the preview.
+  const sceneRouteGuides = useMemo<RouteGuide[]>(() => {
+    if (
+      !alignmentGuidesEnabled ||
+      routeState.kind !== "routing" ||
+      !cursorMm ||
+      !workspace.projection
+    ) {
+      return [];
+    }
+    const session = routeState.session;
+    const anchors = sessionAnchors(session);
+    const last = anchors[anchors.length - 1]!;
+    const prior = anchors[anchors.length - 2];
+    return computeRouteGuides({
+      anchorMm: { x: last.x / NM_PER_MM, y: last.y / NM_PER_MM },
+      ...(prior
+        ? { priorMm: { x: prior.x / NM_PER_MM, y: prior.y / NM_PER_MM } }
+        : {}),
+      cursorMm,
+      posture: session.posture,
+      placements: workspace.projection.placements,
+      traces: workspace.projection.traces,
+      vias: workspace.projection.vias,
+      activeLayer: session.layer,
+      netId: session.netId,
+      toleranceMm: SNAP_THRESHOLD_PX / drcZoomRef.current,
+    }).guides;
+  }, [alignmentGuidesEnabled, cursorMm, routeState, workspace.projection]);
 
   const sceneRoutePreview = useMemo(() => {
     if (!routePreview) return null;
@@ -2587,6 +2746,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             viewSide={workspace.viewSide}
             displayMode={workspace.displayMode}
             routeGuide={sceneRouteGuide}
+            routeGuides={sceneRouteGuides}
             routePreview={sceneRoutePreview}
             routeFocusActive={routeState.kind === "routing"}
             routeFocusLayer={
@@ -2599,6 +2759,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             marqueeOverlay={sceneMarqueeOverlay}
             measurement={sceneMeasurement}
             snapTarget={snapTarget}
+            alignmentGuides={alignmentGuides}
+            alignmentSpacing={alignmentSpacing}
             initialViewport={props.initialViewport}
             onViewportChange={(zoom, posX, posY) => {
               // Capture live zoom for DOM-side DRC marker hit-test tolerance.
@@ -2711,6 +2873,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               }}
               ratsnestVisible={workspace.ratsnestVisible}
               onToggleRatsnest={workspace.toggleRatsnestVisible}
+              alignmentGuidesVisible={alignmentGuidesEnabled}
+              onToggleAlignmentGuides={() =>
+                usePcbViewStore.getState().toggleAlignmentGuidesVisible()
+              }
               drcPanelOpen={drcPanelOpen}
               onToggleDrcPanel={toggleDrcPanel}
               drcErrorCount={drcErrorCount}
