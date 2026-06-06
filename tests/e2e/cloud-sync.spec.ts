@@ -9,8 +9,8 @@
 //   OPENPCB_E2E_NO_WEBSERVER=1 npx playwright test --project=electron
 //
 // Required env (see .env.e2e.example):
-//   E2E_CLOUD_API_URL          https://api.openpcb.app
-//   E2E_CLOUD_SUPABASE_URL     https://supabase.openpcb.app
+//   E2E_CLOUD_API_URL          https://api.cloud.openpcb.app
+//   E2E_CLOUD_SUPABASE_URL     https://supabase.cloud.openpcb.app
 //   E2E_CLOUD_ANON_KEY         Supabase anon JWT
 //   E2E_CLOUD_TEST_EMAIL       pre-provisioned Pro test account
 //   E2E_CLOUD_TEST_PASSWORD

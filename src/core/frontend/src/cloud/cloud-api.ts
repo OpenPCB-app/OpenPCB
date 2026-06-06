@@ -1,4 +1,4 @@
-// Thin HTTP client for the Hono backend (api.openpcb.app).
+// Thin HTTP client for the Hono backend (api.cloud.openpcb.app).
 // Writes (commands), AI invocations, library sync, admin invites.
 // Reads go directly through Supabase JS (PostgREST) — not this client.
 import { getSupabase } from "./supabase";
