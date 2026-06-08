@@ -36,7 +36,9 @@ async function pathExists(candidate: string): Promise<boolean> {
   }
 }
 
-async function launchDesktopApp(userDataDir: string): Promise<ElectronApplication> {
+async function launchDesktopApp(
+  userDataDir: string,
+): Promise<ElectronApplication> {
   const executablePath = process.env.OPENPCB_ELECTRON_EXECUTABLE;
   const launchArgs = [`--user-data-dir=${userDataDir}`];
   const env = {
@@ -74,11 +76,15 @@ async function firstReadyWindow(app: ElectronApplication): Promise<Page> {
 }
 
 async function resolveBackendPayload(page: Page): Promise<BackendPayload> {
-  const payload = await page.waitForFunction(async () => {
-    const electronApi = window.electronAPI;
-    if (!electronApi?.getBackendUrl) return null;
-    return electronApi.getBackendUrl();
-  }, null, { timeout: 60_000 });
+  const payload = await page.waitForFunction(
+    async () => {
+      const electronApi = window.electronAPI;
+      if (!electronApi?.getBackendUrl) return null;
+      return electronApi.getBackendUrl();
+    },
+    null,
+    { timeout: 60_000 },
+  );
 
   const value = await payload.jsonValue();
   if (!value || typeof value !== "object") {
@@ -116,7 +122,9 @@ async function expectBackendHealthy(payload: BackendPayload): Promise<void> {
   }
 }
 
-async function getDiagnosticsPaths(page: Page): Promise<DiagnosticsPaths | null> {
+async function getDiagnosticsPaths(
+  page: Page,
+): Promise<DiagnosticsPaths | null> {
   return page.evaluate(async () => {
     if (!window.electronAPI?.getDiagnosticsPaths) return null;
     return window.electronAPI.getDiagnosticsPaths();
@@ -226,7 +234,12 @@ test.describe.serial("Electron desktop release smoke", () => {
       expect(diagnostics?.appVersion).toBe(appState.version);
 
       await page.getByLabel("Settings").click();
-      await expect(page.getByText("General Settings")).toBeVisible();
+      // Settings screen header (the General tab renders by default). Was
+      // "General Settings"; the panel was restructured to a "Settings" header
+      // + a "General" panel heading.
+      await expect(
+        page.getByRole("heading", { name: "Settings" }),
+      ).toBeVisible();
       await page.keyboard.press("Escape");
 
       const createResponse = await fetch(
@@ -247,7 +260,9 @@ test.describe.serial("Electron desktop release smoke", () => {
         timeout: 30_000,
       });
 
-      const designsAfterCreate = await fetch(`${backendPayload.url}/api/modules/designer/designs`);
+      const designsAfterCreate = await fetch(
+        `${backendPayload.url}/api/modules/designer/designs`,
+      );
       expect(designsAfterCreate.ok).toBeTruthy();
       const createdPayload = (await designsAfterCreate.json()) as {
         data?: { designs?: Array<{ id: string; name: string }> };
