@@ -1,0 +1,50 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- macOS app-icon grid: 824x824 rounded square inset in a 1024 canvas (100px margin) -->
+    <radialGradient id="vbg" cx="32%" cy="26%" r="92%">
+      <stop offset="0" stop-color="#9168f7"/>
+      <stop offset="55%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#6d28d9"/>
+    </radialGradient>
+    <!-- subtle top-light sheen for depth -->
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.12"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- soft ambient shadow under the icon body, macOS-style -->
+    <filter id="bgShadow" x="-8%" y="-8%" width="116%" height="118%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#2e1065" flood-opacity="0.30"/>
+    </filter>
+    <!-- gentle shadow lifting the glyph off the surface -->
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#3b1d80" flood-opacity="0.45"/>
+    </filter>
+    <clipPath id="bodyClip">
+      <rect x="100" y="100" width="824" height="824" rx="180"/>
+    </clipPath>
+  </defs>
+
+  <!-- icon body (rounded square + ambient shadow) -->
+  <g filter="url(#bgShadow)">
+    <rect x="100" y="100" width="824" height="824" rx="180" fill="url(#vbg)"/>
+  </g>
+
+  <!-- blueprint grid, clipped to the rounded body -->
+  <g clip-path="url(#bodyClip)" stroke="#ffffff" stroke-width="2" opacity="0.06">
+    <path d="M100 203 H924 M100 306 H924 M100 409 H924 M100 512 H924 M100 615 H924 M100 718 H924 M100 821 H924"/>
+    <path d="M203 100 V924 M306 100 V924 M409 100 V924 M512 100 V924 M615 100 V924 M718 100 V924 M821 100 V924"/>
+  </g>
+
+  <!-- top sheen -->
+  <rect x="100" y="100" width="824" height="824" rx="180" fill="url(#sheen)"/>
+
+  <!-- glyph: PCB net node, enlarged to ~58% of the body -->
+  <g filter="url(#soft)"><g transform="translate(192,192) scale(26.6667)">
+      <rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="#ffffff" stroke-width="2"/>
+      <line x1="8" y1="8" x2="16" y2="16" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="8" cy="8" r="1.5" fill="#ffffff"/>
+      <circle cx="16" cy="8" r="1.5" fill="#ffffff"/>
+      <circle cx="8" cy="16" r="1.5" fill="#ffffff"/>
+      <circle cx="16" cy="16" r="1.5" fill="#ffffff"/>
+    </g></g>
+</svg>

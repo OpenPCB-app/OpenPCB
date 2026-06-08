@@ -131,9 +131,11 @@ module.exports = {
   // Targets listed without arch so CLI `--arm64` / `--x64` filters per matrix
   // job; otherwise electron-builder builds both archs in each job and the
   // upload step collides on duplicate filenames.
+  // Bundle the dark-mode icon for both appearances for now (no runtime
+  // light/dark swap yet). Light set stays as icon.{icns,ico,png} for later.
   mac: {
     category: "public.app-category.developer-tools",
-    icon: "icon.icns",
+    icon: "icon-dark.icns",
     target: ["dmg", "zip"],
     identity: null,
     gatekeeperAssess: false,
@@ -147,7 +149,7 @@ module.exports = {
 
   // -------- Windows --------
   win: {
-    icon: "icon.ico",
+    icon: "icon-dark.ico",
     target: ["nsis", "portable"],
     artifactName: `\${productName}-${versionToken}-\${arch}.\${ext}`,
   },
@@ -166,7 +168,7 @@ module.exports = {
 
   // -------- Linux --------
   linux: {
-    icon: "icon.png",
+    icon: "icon-dark.png",
     // Drives the binary name in /usr/bin and the AppImage executable; keeps
     // mac/win bundles named "OpenPCB" while linux gets lowercase "openpcb".
     executableName: "openpcb",
