@@ -1,5 +1,7 @@
-// Inbound sync queries: read designs + projections from Cloud Hono backend.
-// All authed via the Supabase session bearer token (set on every request).
+// Inbound sync queries: read designs + projections from the Cloud Hono backend
+// (cloud-api). Reads go through cloud-api HTTP endpoints (authz enforced in app
+// code), NOT PostgREST — this keeps the desktop independent of Supabase's data
+// API. The Supabase client is still used only to mint the session bearer token.
 import { getSupabase } from "./supabase";
 import { readCloudConfig } from "./config";
 
@@ -46,35 +48,6 @@ export interface CloudProjection {
   labels: CloudProjectionLabel[];
 }
 
-export interface CloudPubComponentRow {
-  id: string;
-  slug: string;
-  name: string;
-  category: string | null;
-  tags: string[];
-}
-
-export interface CloudPubComponentVersionRow {
-  id: string;
-  componentId: string;
-  channel: string;
-  version: string;
-  manifest: Record<string, unknown>;
-}
-
-export interface CloudCommandLogEntry {
-  commandId: string;
-  designId: string;
-  sessionId: string;
-  userId: string;
-  appliedRevision: number;
-  commandType: string;
-  commandJson: unknown;
-  forwardPatches: unknown;
-  issuedAt: string;
-  appliedAt: string;
-}
-
 async function authHeader(): Promise<Record<string, string>> {
   const sb = getSupabase();
   if (!sb) return {};
@@ -112,79 +85,20 @@ export async function getCloudDesign(
   return get<CloudDesignDetail>(`/v1/designs/${designId}`);
 }
 
-// Read projection_json + command log directly from PostgREST (RLS-gated).
+// Read the live projection from cloud-api (GET /v1/designs/:id/projection).
+// Ownership is enforced server-side in app code; no PostgREST/RLS dependency.
 export async function getCloudProjection(
   designId: string,
 ): Promise<{ projection: CloudProjection; revision: number; name: string }> {
-  const sb = getSupabase();
-  if (!sb) throw new Error("Cloud not configured");
-  const { data, error } = await sb
-    .from("design")
-    .select("id, name, revision, projection_json")
-    .eq("id", designId)
-    .single();
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error(`Cloud design ${designId} not found`);
-  const row = data as unknown as {
+  const out = await get<{
     id: string;
     name: string;
     revision: number;
-    projection_json: CloudProjection;
-  };
+    projection: CloudProjection | null;
+  }>(`/v1/designs/${designId}/projection`);
   return {
-    projection: row.projection_json ?? { parts: [], wires: [], labels: [] },
-    revision: row.revision,
-    name: row.name,
+    projection: out.projection ?? { parts: [], wires: [], labels: [] },
+    revision: out.revision,
+    name: out.name,
   };
-}
-
-// Fetch a single cloud library component-version by component id. Used by the
-// import-from-cloud flow to auto-pull missing components into the local
-// library before placing them.
-export async function fetchCloudComponentVersion(
-  componentId: string,
-  channel = "stable",
-  version = "1.0.0",
-): Promise<CloudPubComponentVersionRow | null> {
-  const sb = getSupabase();
-  if (!sb) throw new Error("Cloud not configured");
-  const { data, error } = await sb
-    .from("pub_component_version")
-    .select("id, componentId:component_id, channel, version, manifest")
-    .eq("component_id", componentId)
-    .eq("channel", channel)
-    .eq("version", version)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return (data as unknown as CloudPubComponentVersionRow) ?? null;
-}
-
-export async function getCloudCommandLog(
-  designId: string,
-  sinceRevision = 0,
-): Promise<CloudCommandLogEntry[]> {
-  const sb = getSupabase();
-  if (!sb) throw new Error("Cloud not configured");
-  const { data, error } = await sb
-    .from("design_command")
-    .select(
-      "command_id, design_id, session_id, user_id, applied_revision, command_type, command_json, forward_patches, issued_at, applied_at",
-    )
-    .eq("design_id", designId)
-    .gt("applied_revision", sinceRevision)
-    .order("applied_revision", { ascending: true });
-  if (error) throw new Error(error.message);
-  if (!data) return [];
-  return (data as unknown as Record<string, unknown>[]).map((r) => ({
-    commandId: String(r.command_id),
-    designId: String(r.design_id),
-    sessionId: String(r.session_id),
-    userId: String(r.user_id),
-    appliedRevision: Number(r.applied_revision),
-    commandType: String(r.command_type),
-    commandJson: r.command_json,
-    forwardPatches: r.forward_patches,
-    issuedAt: String(r.issued_at),
-    appliedAt: String(r.applied_at),
-  }));
 }
