@@ -204,14 +204,15 @@ jobs:
         run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --config electron-builder.cjs --publish never
 
       - name: Verify packaged .opclib
-        # Re-validates the embedded library in the produced installer.
-        # Skipped on Windows: NSIS .exe + portable .exe can't be unwrapped
-        # without 7z+ and macOS/Linux already cover the verification surface
-        # (same electron-builder config, same input). The point of this step
-        # is to catch electron-builder shipping a stub — confirming on any
-        # one platform is sufficient since the extraResources logic is
-        # platform-agnostic.
-        if: matrix.platform != 'win'
+        # Re-validates the embedded library for EVERY platform — including
+        # Windows. The verifier reads the per-platform unpacked staging dir
+        # (win-unpacked / linux-unpacked / mac-<arch>/OpenPCB.app), which is
+        # exactly what gets packed into every installer, so no .exe/.dmg
+        # unwrapping is needed. It enforces id, component count, AND 3D
+        # GLB-completeness — the last guard catches a STEP-only CoreLibrary
+        # pack (e.g. v0.1.0-beta.0) that would otherwise import as an EMPTY
+        # library at runtime. Runs on all targets so no platform ships an
+        # unverified bundle.
         run: bun scripts/verify-packaged-opclib.ts electron/out
 
       - name: Resolve packaged desktop executable

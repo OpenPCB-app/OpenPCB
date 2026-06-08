@@ -496,10 +496,15 @@ describe("core library .opclib bootstrap", () => {
     expect(row?.sourceStepPath).toMatch(/^models\/source\//);
   });
 
-  test("core opclib rejects referenced STEP-only 3D models", async () => {
-    isolateTestDb("opclib-bootstrap-3d-reject-core");
+  test("core opclib with a STEP-only 3D model still imports (degrades 3D)", async () => {
+    // Regression: a single footprint whose referenced 3D model has no GLB must
+    // NOT abort the whole import. The shipped v0.1.0-beta.0 CoreLibrary was
+    // STEP-only and previously imported as a completely EMPTY library because
+    // the up-front validation threw. The component must now import; only its
+    // 3D model is dropped.
+    isolateTestDb("opclib-bootstrap-3d-degrade-core");
     prevBundleEnv = process.env.OPENPCB_BUNDLED_LIBRARY_PATH;
-    const root = await mkdtemp(path.join(os.tmpdir(), "opclib-3d-reject-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "opclib-3d-degrade-"));
     tempRoots.push(root);
     const packagePath = path.join(root, "openpcb-core-library-1.2.4.opclib");
     await writeFile(
@@ -520,7 +525,23 @@ describe("core library .opclib bootstrap", () => {
     const ids = (await sdk.searchComponents({})).map(
       (component) => component.id,
     );
-    expect(ids).not.toContain("openpcb.core.test.step-only");
+    // Component imports despite the incomplete 3D model.
+    expect(ids).toContain("openpcb.core.test.step-only");
+
+    // …but the GLB-less footprint gets no 3D model row.
+    const ctx = (runtime as unknown as MapBackedRuntime).loaded.get("library")!
+      .context as Parameters<typeof getDb>[0];
+    const modelRow = getDb(ctx)
+      .select()
+      .from(footprintModels)
+      .where(
+        eq(
+          footprintModels.footprintId,
+          "openpcb.core.footprint.test.step-only",
+        ),
+      )
+      .get();
+    expect(modelRow).toBeUndefined();
   });
 
   test("non-core opclib keeps STEP-only 3D policy permissive", async () => {

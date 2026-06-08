@@ -192,30 +192,53 @@ function requiresRenderable3d(libraryId: string): boolean {
   return libraryId === "openpcb.core";
 }
 
-function validateReferencedModels(pkg: OpclibPackage): void {
-  if (!requiresRenderable3d(pkg.manifest.library.id)) return;
+/**
+ * Collect — but do NOT throw on — 3D-model defects in a core `.opclib`:
+ * footprints referencing a dangling model id, referencing more than one model
+ * (only the first is rendered), or referencing a model with no GLB format.
+ *
+ * These used to be hard failures that aborted the entire import — which left
+ * the whole library EMPTY (no symbols/footprints/components) when a single
+ * footprint's 3D model was incomplete. That is exactly how a STEP-only
+ * CoreLibrary pack (e.g. the v0.1.0-beta.0 release, which predated pre-baked
+ * GLBs) shipped a bundle that imported as an empty library. The downstream
+ * `upsertFootprintModelMetadata` already degrades gracefully (skips the 3D
+ * model for that footprint), so import can proceed; we surface the defects as
+ * warnings instead. Release CI enforces GLB-completeness up front
+ * (`scripts/verify-packaged-opclib.ts`) so a defective core pack fails the
+ * build rather than bricking a user's library at runtime.
+ */
+function collectModelDefects(pkg: OpclibPackage): string[] {
+  if (!requiresRenderable3d(pkg.manifest.library.id)) return [];
+  const libId = pkg.manifest.library.id;
   const modelsById = new Map(pkg.manifest.models3d.map((m) => [m.id, m]));
+  const defects: string[] = [];
   for (const fp of pkg.manifest.footprints) {
     const modelIds = fp.models3d ?? [];
     if (modelIds.length > 1) {
-      throw new Error(
-        `opclib ${pkg.manifest.library.id}: footprint ${fp.id} references ${modelIds.length} 3D models; exactly one renderable GLB model is supported`,
+      defects.push(
+        `footprint ${fp.id} references ${modelIds.length} 3D models; only the first is rendered`,
       );
     }
     for (const modelId of modelIds) {
       const model = modelsById.get(modelId);
       if (!model) {
-        throw new Error(
-          `opclib ${pkg.manifest.library.id}: footprint ${fp.id} references missing 3D model ${modelId}`,
+        defects.push(
+          `footprint ${fp.id} references missing 3D model ${modelId}`,
         );
+        continue;
       }
       if (!model.formats.glb) {
-        throw new Error(
-          `opclib ${pkg.manifest.library.id}: footprint ${fp.id} references 3D model ${modelId} without GLB format`,
+        defects.push(
+          `footprint ${fp.id} references 3D model ${modelId} without GLB format`,
         );
       }
     }
   }
+  if (defects.length > 0) {
+    defects.unshift(`opclib ${libId}: ${defects.length} 3D-model defect(s)`);
+  }
+  return defects;
 }
 
 /**
@@ -266,7 +289,18 @@ export async function importOpclib(
     await migrateLegacyAliases(ctx, pkg);
   }
 
-  validateReferencedModels(pkg);
+  const modelDefects = collectModelDefects(pkg);
+  if (modelDefects.length > 0) {
+    const [summary, ...details] = modelDefects;
+    const shown = details.slice(0, 3);
+    const more =
+      details.length > shown.length
+        ? ` (+${details.length - shown.length} more)`
+        : "";
+    ctx.logger.warn(
+      `core-library: importing with incomplete 3D models — ${summary}; affected footprints render without a 3D model. ${shown.join("; ")}${more}`,
+    );
+  }
 
   // Model writes are content-addressed (sha256 → <userData>/models/{glb,source})
   // and run BEFORE the DB transaction because better-sqlite3 is sync. If a
