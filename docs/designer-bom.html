@@ -1,0 +1,2512 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenPCB · Designer · BOM</title>
+    <style>
+      :root,
+      :root[data-theme="dark"] {
+        --surface-0: #07090f;
+        --surface-1: #0b1220;
+        --surface-2: #0f1726;
+        --surface-3: #151e30;
+        --surface-4: #1a2438;
+        --surface-5: #243049;
+        --border-subtle: #1f2a3f;
+        --border-strong: #2c3a55;
+        --border-focus: #8b5cf6;
+        --text-primary: #e6ebf5;
+        --text-secondary: #94a3b8;
+        --text-muted: #64748b;
+        --text-disabled: #475569;
+        --text-inverse: #0b1220;
+        --accent: #8b5cf6;
+        --accent-hover: #7c3aed;
+        --accent-pressed: #6d28d9;
+        --accent-tint: #1e1638;
+        --accent-fg: #ffffff;
+        --info: #38bdf8;
+        --info-tint: #0b2740;
+        --success: #10b981;
+        --success-tint: #0a2e23;
+        --warning: #f59e0b;
+        --warning-tint: #3a2607;
+        --danger: #ef4444;
+        --danger-tint: #3a0f12;
+        --net-label-signal: #22d3ee;
+        --net-label-power: #ef4444;
+        --net-label-ground: #94a3b8;
+
+        --font-display:
+          Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          system-ui, sans-serif;
+        --font-body:
+          Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          system-ui, sans-serif;
+        --font-mono:
+          "JetBrains Mono", "IBM Plex Mono", "SF Mono", ui-monospace, Menlo,
+          Consolas, monospace;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+
+        --radius-2: 4px;
+        --radius-3: 6px;
+        --radius-4: 8px;
+        --radius-pill: 999px;
+
+        --elev-2: 0 8px 24px -8px #0000007a, 0 0 0 1px #1f2a3f;
+        --elev-3: 0 24px 48px -12px #000000a6, 0 0 0 1px #1f2a3f;
+
+        --dur-fast: 100ms;
+        --dur-base: 150ms;
+        --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      :root[data-theme="light"] {
+        --surface-0: #ffffff;
+        --surface-1: #f0f4fb;
+        --surface-2: #f8fafc;
+        --surface-3: #ffffff;
+        --surface-4: #e4eaf4;
+        --surface-5: #d2dded;
+        --border-subtle: #e4eaf4;
+        --border-strong: #c5d2e6;
+        --border-focus: #7c3aed;
+        --text-primary: #0f172a;
+        --text-secondary: #475569;
+        --text-muted: #64748b;
+        --text-disabled: #94a3b8;
+        --accent: #7c3aed;
+        --accent-hover: #6d28d9;
+        --accent-pressed: #5b21b6;
+        --accent-tint: #ede9fe;
+        --info: #0284c7;
+        --info-tint: #e0f2fe;
+        --success: #047857;
+        --success-tint: #d1fae5;
+        --warning: #b45309;
+        --warning-tint: #fef3c7;
+        --danger: #b91c1c;
+        --danger-tint: #fee2e2;
+        --net-label-signal: #0e7490;
+        --net-label-power: #b91c1c;
+        --net-label-ground: #475569;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--surface-1);
+        color: var(--text-primary);
+        font: 400 13px/20px var(--font-body);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        overflow: hidden;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+      }
+      input[type="checkbox"] {
+        accent-color: var(--accent);
+      }
+
+      /* ============ APP SHELL ============ */
+      .app {
+        height: 100vh;
+        display: grid;
+        grid-template-rows: 28px 1fr 24px;
+        grid-template-columns: 64px 1fr;
+        grid-template-areas:
+          "title  title"
+          "side   work"
+          "status status";
+      }
+
+      /* Titlebar */
+      .titlebar {
+        grid-area: title;
+        background: var(--surface-0);
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: 0 var(--space-3);
+        -webkit-app-region: drag;
+      }
+      .traffic {
+        display: flex;
+        gap: 6px;
+        margin-right: var(--space-2);
+      }
+      .traffic span {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: var(--surface-4);
+      }
+      .traffic span:nth-child(1) {
+        background: #ed6a5e;
+      }
+      .traffic span:nth-child(2) {
+        background: #f5bf4f;
+      }
+      .traffic span:nth-child(3) {
+        background: #62c554;
+      }
+      .titlebar__crumb {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-secondary);
+        font: 500 12px/1 var(--font-body);
+      }
+      .titlebar__crumb .sep {
+        color: var(--text-disabled);
+      }
+      .titlebar__crumb .file {
+        color: var(--text-primary);
+      }
+      .titlebar__crumb .dirty {
+        color: var(--accent);
+      }
+      .titlebar__spacer {
+        flex: 1;
+      }
+      .titlebar__theme {
+        display: flex;
+        gap: 0;
+        padding: 2px;
+        background: var(--surface-2);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-2);
+        -webkit-app-region: no-drag;
+      }
+      .titlebar__theme button {
+        background: transparent;
+        border: 0;
+        color: var(--text-muted);
+        padding: 2px 8px;
+        font: 500 11px/1 var(--font-body);
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      .titlebar__theme button[aria-pressed="true"] {
+        background: var(--surface-4);
+        color: var(--text-primary);
+      }
+
+      /* Sidebar */
+      .sidenav {
+        grid-area: side;
+        background: var(--surface-2);
+        border-right: 1px solid var(--border-subtle);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: var(--space-3) 0;
+        gap: var(--space-2);
+      }
+      .sidenav__brand {
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-3);
+        background: linear-gradient(135deg, #200d39 0%, #030816 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: var(--space-2);
+      }
+      .sidenav__item {
+        width: 48px;
+        height: 56px;
+        border-radius: 10px;
+        background: transparent;
+        border: 0;
+        color: var(--text-secondary);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        cursor: pointer;
+        transition:
+          background var(--dur-fast) var(--ease-out),
+          color var(--dur-fast) var(--ease-out);
+      }
+      .sidenav__item:hover {
+        background: var(--surface-3);
+        color: var(--text-primary);
+      }
+      .sidenav__item[aria-current="page"] {
+        background: var(--accent-tint);
+        color: var(--accent);
+      }
+      .sidenav__label {
+        font: 500 10px/1 var(--font-body);
+        letter-spacing: 0.02em;
+      }
+      .sidenav__sep {
+        flex: 1;
+      }
+
+      /* Workspace */
+      .work {
+        grid-area: work;
+        display: grid;
+        grid-template-rows: 40px 1fr;
+        min-height: 0;
+        background: var(--surface-1);
+      }
+
+      /* Workspace toolbar */
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: 0 var(--space-3);
+        background: var(--surface-2);
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      .toolbar__title {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        color: var(--text-secondary);
+        font: 500 12px/1 var(--font-body);
+      }
+      .toolbar__title .board {
+        color: var(--text-primary);
+        font-weight: 600;
+      }
+      .toolbar__title .rev {
+        font-family: var(--font-mono);
+        color: var(--text-muted);
+      }
+      .toolbar__spacer {
+        flex: 1;
+      }
+
+      /* Tabs */
+      .tabs {
+        display: inline-flex;
+        padding: 2px;
+        gap: 2px;
+        background: var(--surface-3);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-3);
+      }
+      .tabs__tab {
+        height: 26px;
+        padding: 0 var(--space-3);
+        border-radius: var(--radius-2);
+        color: var(--text-secondary);
+        background: transparent;
+        border: 0;
+        cursor: pointer;
+        font: 600 12px/1 var(--font-body);
+        transition:
+          background var(--dur-fast) var(--ease-out),
+          color var(--dur-fast) var(--ease-out);
+      }
+      .tabs__tab:hover {
+        color: var(--text-primary);
+        background: var(--surface-4);
+      }
+      .tabs__tab[aria-selected="true"] {
+        background: var(--accent);
+        color: var(--accent-fg);
+      }
+
+      /* Buttons */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 28px;
+        padding: 0 12px;
+        border-radius: var(--radius-3);
+        font: 600 12px/1 var(--font-body);
+        background: var(--surface-3);
+        color: var(--text-primary);
+        border: 1px solid var(--border-subtle);
+        cursor: pointer;
+        transition:
+          background var(--dur-fast) var(--ease-out),
+          border-color var(--dur-fast) var(--ease-out);
+      }
+      .btn:hover {
+        background: var(--surface-4);
+        border-color: var(--border-strong);
+      }
+      .btn:active {
+        background: var(--surface-5);
+      }
+      .btn:focus-visible {
+        outline: 2px solid var(--border-focus);
+        outline-offset: 2px;
+      }
+      .btn--primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-fg);
+      }
+      .btn--primary:hover {
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+      }
+      .btn--ghost {
+        background: transparent;
+        border-color: transparent;
+        color: var(--text-secondary);
+      }
+      .btn--ghost:hover {
+        background: var(--surface-3);
+        color: var(--text-primary);
+      }
+      .btn--icon {
+        width: 28px;
+        padding: 0;
+        justify-content: center;
+      }
+      .btn .caret {
+        opacity: 0.6;
+      }
+
+      /* Inputs */
+      .input {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 28px;
+        padding: 0 10px;
+        border-radius: var(--radius-3);
+        background: var(--surface-3);
+        border: 1px solid var(--border-subtle);
+        color: var(--text-primary);
+      }
+      .input:hover {
+        border-color: var(--border-strong);
+      }
+      .input:focus-within {
+        border-color: var(--border-focus);
+        outline: 1px solid var(--border-focus);
+      }
+      .input input {
+        background: transparent;
+        border: 0;
+        outline: 0;
+        color: inherit;
+        font: 400 13px/1 var(--font-body);
+        width: 100%;
+        min-width: 0;
+      }
+      .input input::placeholder {
+        color: var(--text-muted);
+      }
+      .kbd {
+        font: 500 10px/1 var(--font-mono);
+        color: var(--text-muted);
+        background: var(--surface-4);
+        border: 1px solid var(--border-subtle);
+        border-radius: 3px;
+        padding: 2px 5px;
+      }
+
+      /* Pills */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 20px;
+        padding: 0 8px;
+        border-radius: var(--radius-pill);
+        font: 600 11px/1 var(--font-body);
+        background: var(--surface-4);
+        color: var(--text-primary);
+        border: 1px solid var(--border-subtle);
+      }
+      .pill--success {
+        background: var(--success-tint);
+        color: var(--success);
+        border-color: var(--success-tint);
+      }
+      .pill--info {
+        background: var(--info-tint);
+        color: var(--info);
+        border-color: var(--info-tint);
+      }
+      .pill--warning {
+        background: var(--warning-tint);
+        color: var(--warning);
+        border-color: var(--warning-tint);
+      }
+      .pill--accent {
+        background: var(--accent);
+        color: var(--accent-fg);
+        border-color: var(--accent);
+      }
+      .pill .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      .mono {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+      .caption {
+        font: 500 11px/1 var(--font-body);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      /* ============ BOM LAYOUT ============ */
+      .bom {
+        display: grid;
+        grid-template-columns: 1fr 360px;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .bom__main {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        min-height: 0;
+        min-width: 0;
+      }
+      .bom__inspector {
+        background: var(--surface-2);
+        border-left: 1px solid var(--border-subtle);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      /* Filter bar */
+      .filterbar {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        border-bottom: 1px solid var(--border-subtle);
+        background: var(--surface-1);
+      }
+      .filterbar .input {
+        flex: 1;
+        min-width: 240px;
+        max-width: 420px;
+      }
+      .filterbar .icon {
+        color: var(--text-muted);
+      }
+      .filterbar__counts {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        margin-left: var(--space-2);
+        color: var(--text-secondary);
+        font: 500 12px/1 var(--font-body);
+      }
+      .filterbar__counts b {
+        font-family: var(--font-mono);
+        color: var(--text-primary);
+        font-weight: 500;
+      }
+      .filterbar__sep {
+        width: 1px;
+        height: 16px;
+        background: var(--border-subtle);
+      }
+
+      /* Bulk action bar */
+      .bulkbar {
+        display: none;
+        align-items: center;
+        gap: var(--space-3);
+        padding: 8px var(--space-3);
+        border-bottom: 1px solid var(--border-subtle);
+        background: var(--accent-tint);
+        color: var(--text-primary);
+        font: 500 12px/1 var(--font-body);
+      }
+      .bulkbar.is-active {
+        display: flex;
+      }
+      .bulkbar__count {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .bulkbar .btn {
+        height: 24px;
+        padding: 0 10px;
+        font-size: 11px;
+      }
+      .bulkbar__spacer {
+        flex: 1;
+      }
+
+      /* Table */
+      .table-wrap {
+        overflow: auto;
+        min-height: 0;
+      }
+      table.bom-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        font: 400 13px/18px var(--font-body);
+      }
+      .bom-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        text-align: left;
+        font: 500 11px/1 var(--font-body);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        padding: 10px 12px;
+        background: var(--surface-2);
+        border-bottom: 1px solid var(--border-subtle);
+        white-space: nowrap;
+        user-select: none;
+      }
+      .bom-table thead th.sortable {
+        cursor: pointer;
+      }
+      .bom-table thead th.sortable:hover {
+        color: var(--text-primary);
+      }
+      .bom-table thead th .sort-ind {
+        display: inline-block;
+        width: 8px;
+        margin-left: 4px;
+        color: var(--accent);
+        opacity: 0;
+      }
+      .bom-table thead th[aria-sort] .sort-ind {
+        opacity: 1;
+      }
+      .bom-table thead th.num,
+      .bom-table tbody td.num {
+        text-align: right;
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+      .bom-table thead th.center,
+      .bom-table tbody td.center {
+        text-align: center;
+      }
+      .bom-table tbody td {
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border-subtle);
+        color: var(--text-primary);
+        vertical-align: middle;
+      }
+      .bom-table tbody tr.row {
+        cursor: pointer;
+      }
+      .bom-table tbody tr.row:hover td {
+        background: var(--surface-3);
+      }
+      .bom-table tbody tr.row[aria-selected="true"] td {
+        background: var(--accent-tint);
+        border-bottom-color: transparent;
+      }
+      .bom-table td.mono {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+      }
+      .bom-table td.refs {
+        color: var(--text-secondary);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        max-width: 240px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .bom-table td.refs b {
+        color: var(--text-primary);
+        font-weight: 500;
+      }
+      .bom-table td .name {
+        color: var(--text-primary);
+        font-weight: 500;
+      }
+      .bom-table td .mfg {
+        color: var(--text-muted);
+        font: 400 11px/1.3 var(--font-body);
+        margin-top: 2px;
+      }
+      .chev {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        color: var(--text-muted);
+        transition: transform var(--dur-fast) var(--ease-out);
+      }
+      tr.row.is-expanded .chev {
+        transform: rotate(90deg);
+        color: var(--accent);
+      }
+      .col-check {
+        width: 28px;
+        padding-left: 12px !important;
+        padding-right: 0 !important;
+      }
+      .col-chev {
+        width: 22px;
+        padding: 0 !important;
+        text-align: center;
+      }
+      .col-qty {
+        width: 56px;
+      }
+
+      /* Expansion row */
+      tr.alt {
+        background: var(--surface-2);
+      }
+      tr.alt td {
+        padding: 0 !important;
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      .alt__panel {
+        padding: 10px 12px 12px 50px;
+        display: grid;
+        gap: 8px;
+      }
+      .alt__head {
+        font: 500 11px/1 var(--font-body);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin-bottom: 2px;
+      }
+      .alt__list {
+        display: grid;
+        grid-template-columns: 1fr auto auto auto auto;
+        gap: 0;
+        background: var(--surface-3);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-3);
+        overflow: hidden;
+      }
+      .alt__list > div {
+        padding: 7px 12px;
+        border-bottom: 1px solid var(--border-subtle);
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .alt__list > div.h {
+        background: var(--surface-2);
+        color: var(--text-muted);
+        font: 500 10px/1 var(--font-body);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 6px 12px;
+      }
+      .alt__list > div:nth-last-child(-n + 5) {
+        border-bottom: 0;
+      }
+      .alt__list .mono {
+        font-size: 11px;
+      }
+      .alt__list .alt-btn {
+        background: transparent;
+        border: 1px solid var(--border-subtle);
+        color: var(--text-secondary);
+        height: 22px;
+        padding: 0 8px;
+        border-radius: var(--radius-2);
+        font: 600 10px/1 var(--font-body);
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .alt__list .alt-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      /* Sticky footer */
+      .bom-footer {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        background: var(--surface-2);
+        border-top: 1px solid var(--border-subtle);
+      }
+      .bom-footer__cell {
+        padding: 10px 16px;
+        border-right: 1px solid var(--border-subtle);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .bom-footer__cell:last-child {
+        border-right: 0;
+      }
+      .bom-footer__label {
+        font: 500 10px/1 var(--font-body);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+      .bom-footer__value {
+        font: 600 16px/1 var(--font-mono);
+        font-variant-numeric: tabular-nums;
+        color: var(--text-primary);
+      }
+      .bom-footer__value .unit {
+        color: var(--text-muted);
+        font-weight: 400;
+        font-size: 11px;
+        margin-left: 4px;
+      }
+
+      /* Inspector */
+      .ins__head {
+        padding: var(--space-4);
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      .ins__eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+      .ins__title {
+        font: 600 15px/20px var(--font-display);
+        color: var(--text-primary);
+        margin: 0 0 4px;
+        letter-spacing: -0.005em;
+      }
+      .ins__sub {
+        color: var(--text-muted);
+        font: 400 12px/16px var(--font-body);
+      }
+      .ins__sub .mono {
+        color: var(--text-secondary);
+      }
+      .ins__refs {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .ref-chip {
+        font: 500 11px/1 var(--font-mono);
+        background: var(--surface-3);
+        border: 1px solid var(--border-subtle);
+        color: var(--text-primary);
+        padding: 3px 7px;
+        border-radius: 3px;
+      }
+
+      .ins__body {
+        flex: 1;
+        overflow: auto;
+        padding: var(--space-4);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-5);
+      }
+      .ins__section .caption {
+        margin-bottom: 8px;
+        display: block;
+      }
+      .prop {
+        display: grid;
+        grid-template-columns: 110px 1fr;
+        gap: 8px;
+        padding: 6px 0;
+        border-bottom: 1px dashed var(--border-subtle);
+      }
+      .prop:last-child {
+        border-bottom: 0;
+      }
+      .prop__k {
+        color: var(--text-muted);
+        font: 400 12px/16px var(--font-body);
+      }
+      .prop__v {
+        color: var(--text-primary);
+        font: 500 12px/16px var(--font-mono);
+        font-variant-numeric: tabular-nums;
+        word-break: break-all;
+      }
+      .prop__v.flat {
+        font-family: var(--font-body);
+        font-weight: 400;
+      }
+
+      /* Supplier grid */
+      .suppliers {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .supplier {
+        background: var(--surface-3);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-3);
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .supplier__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .supplier__name {
+        font: 600 11px/1 var(--font-body);
+        letter-spacing: 0.02em;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+      }
+      .supplier__mpn {
+        font: 500 11px/1.3 var(--font-mono);
+        color: var(--text-primary);
+        word-break: break-all;
+      }
+      .supplier__row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .supplier__price {
+        font: 600 13px/1 var(--font-mono);
+        color: var(--text-primary);
+      }
+      .supplier__stock {
+        font: 500 11px/1 var(--font-mono);
+        color: var(--success);
+      }
+
+      /* JLC assembly */
+      .jlc-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      .jlc-cell {
+        background: var(--surface-3);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-3);
+        padding: 8px 10px;
+      }
+      .jlc-cell .k {
+        font: 500 10px/1 var(--font-body);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
+        margin-bottom: 4px;
+      }
+      .jlc-cell .v {
+        font: 600 13px/1 var(--font-mono);
+        color: var(--text-primary);
+      }
+
+      /* Status bar */
+      .statusbar {
+        grid-area: status;
+        background: var(--surface-0);
+        border-top: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: 0 var(--space-3);
+        color: var(--text-secondary);
+        font: 500 11px/1 var(--font-mono);
+      }
+      .statusbar .sep {
+        width: 1px;
+        height: 12px;
+        background: var(--border-subtle);
+      }
+      .statusbar .ok {
+        color: var(--success);
+      }
+      .statusbar .accent {
+        color: var(--accent);
+      }
+      .statusbar__spacer {
+        flex: 1;
+      }
+
+      /* Dropdown menu */
+      .menu {
+        position: absolute;
+        background: var(--surface-4);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-4);
+        padding: 4px;
+        box-shadow: var(--elev-2);
+        min-width: 220px;
+        z-index: 30;
+      }
+      .menu[hidden] {
+        display: none;
+      }
+      .menu-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: var(--radius-2);
+        color: var(--text-primary);
+        font: 400 13px/1 var(--font-body);
+        cursor: pointer;
+      }
+      .menu-item:hover {
+        background: var(--surface-5);
+      }
+      .menu-item .kbd {
+        margin-left: auto;
+      }
+      .menu-item small {
+        display: block;
+        color: var(--text-muted);
+        font: 400 11px/1 var(--font-body);
+        margin-top: 3px;
+      }
+      .menu-item .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .menu-sep {
+        height: 1px;
+        background: var(--border-subtle);
+        margin: 4px 0;
+      }
+
+      /* Icon */
+      .icon {
+        width: 14px;
+        height: 14px;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex-shrink: 0;
+      }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--surface-4);
+        border: 2px solid transparent;
+        background-clip: content-box;
+        border-radius: 6px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--surface-5);
+        background-clip: content-box;
+        border: 2px solid transparent;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition-duration: 1ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <!-- ================ TITLEBAR ================ -->
+      <header class="titlebar">
+        <div class="traffic" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="titlebar__crumb">
+          <span>OpenPCB</span>
+          <span class="sep">›</span>
+          <span>sensor-hub</span>
+          <span class="sep">›</span>
+          <span class="file">sensor-hub.opcb</span>
+          <span class="dirty" title="Unsaved changes">●</span>
+        </div>
+        <div class="titlebar__spacer"></div>
+        <div class="titlebar__theme" role="tablist" aria-label="Theme">
+          <button data-theme-set="dark" aria-pressed="true">Dark</button>
+          <button data-theme-set="light" aria-pressed="false">Light</button>
+        </div>
+      </header>
+
+      <!-- ================ SIDEBAR ================ -->
+      <nav class="sidenav" aria-label="Workspaces">
+        <div class="sidenav__brand" aria-label="OpenPCB">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <rect
+              x="3"
+              y="3"
+              width="18"
+              height="18"
+              rx="3"
+              stroke="#fff"
+              stroke-width="2"
+            />
+            <line
+              x1="8"
+              y1="8"
+              x2="16"
+              y2="16"
+              stroke="#fff"
+              stroke-width="1.5"
+            />
+            <circle cx="8" cy="8" r="1.5" fill="#fff" />
+            <circle cx="16" cy="8" r="1.5" fill="#fff" />
+            <circle cx="8" cy="16" r="1.5" fill="#fff" />
+            <circle cx="16" cy="16" r="1.5" fill="#fff" />
+          </svg>
+        </div>
+        <button class="sidenav__item" title="Home">
+          <svg class="icon" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="7" height="7" />
+            <rect x="14" y="3" width="7" height="7" />
+            <rect x="3" y="14" width="7" height="7" />
+            <rect x="14" y="14" width="7" height="7" />
+          </svg>
+          <span class="sidenav__label">Home</span>
+        </button>
+        <button class="sidenav__item" aria-current="page" title="Designer">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="m12 19 7-7 3 3-7 7-3-3z" />
+            <path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+            <path d="m2 2 7.586 7.586" />
+            <circle cx="11" cy="11" r="2" />
+          </svg>
+          <span class="sidenav__label">Designer</span>
+        </button>
+        <button class="sidenav__item" title="Library">
+          <svg class="icon" viewBox="0 0 24 24">
+            <path
+              d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"
+            />
+          </svg>
+          <span class="sidenav__label">Library</span>
+        </button>
+        <button class="sidenav__item" title="Assistant">
+          <svg class="icon" viewBox="0 0 24 24">
+            <rect x="3" y="8" width="18" height="12" rx="2" />
+            <path d="M8 8V6a4 4 0 0 1 8 0v2" />
+          </svg>
+          <span class="sidenav__label">Assistant</span>
+        </button>
+        <div class="sidenav__sep"></div>
+        <button class="sidenav__item" title="Settings">
+          <svg class="icon" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+            />
+          </svg>
+        </button>
+      </nav>
+
+      <!-- ================ WORKSPACE ================ -->
+      <main class="work">
+        <!-- Workspace toolbar -->
+        <div class="toolbar">
+          <div class="toolbar__title">
+            <svg class="icon" viewBox="0 0 24 24" style="color: var(--accent)">
+              <path d="M3 3h18v4H3z" />
+              <path d="M3 11h18v4H3z" />
+              <path d="M3 19h18v2H3z" />
+            </svg>
+            <span class="board">Sensor Hub</span>
+            <span class="rev">/ rev A · 2 layer · 38×52 mm</span>
+          </div>
+
+          <div class="toolbar__spacer"></div>
+
+          <div class="tabs" role="tablist" aria-label="Workspace">
+            <button class="tabs__tab" role="tab" aria-selected="false">
+              Schem
+            </button>
+            <button class="tabs__tab" role="tab" aria-selected="false">
+              PCB
+            </button>
+            <button class="tabs__tab" role="tab" aria-selected="false">
+              3D
+            </button>
+            <button class="tabs__tab" role="tab" aria-selected="true">
+              BOM
+            </button>
+          </div>
+
+          <div class="toolbar__spacer"></div>
+
+          <button
+            class="btn btn--ghost"
+            id="refresh-btn"
+            title="Refresh supplier data"
+          >
+            <svg class="icon" viewBox="0 0 24 24">
+              <path d="M21 12a9 9 0 1 1-3.46-7.1" />
+              <polyline points="21 4 21 10 15 10" />
+            </svg>
+            Refresh
+          </button>
+          <div style="position: relative">
+            <button class="btn" id="export-btn" aria-haspopup="menu">
+              <svg class="icon" viewBox="0 0 24 24">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Export
+              <svg
+                class="icon caret"
+                viewBox="0 0 24 24"
+                style="width: 10px; height: 10px"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            <div class="menu" id="export-menu" role="menu" hidden>
+              <div class="menu-item" data-export="csv">
+                <svg class="icon" viewBox="0 0 24 24">
+                  <path
+                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                  />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                <div class="stack">
+                  <span>Export CSV</span>
+                  <small>Universal — refdes, MPN, qty, value</small>
+                </div>
+              </div>
+              <div class="menu-item" data-export="jlc">
+                <svg class="icon" viewBox="0 0 24 24">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <path d="M7 12h10" />
+                  <path d="M12 7v10" />
+                </svg>
+                <div class="stack">
+                  <span>Export JLC CPL</span>
+                  <small>Assembly BOM + placement, JLCPCB SMT format</small>
+                </div>
+              </div>
+              <div class="menu-item" data-export="kicad">
+                <svg class="icon" viewBox="0 0 24 24">
+                  <path
+                    d="M9 12l2 2 4-4M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"
+                  />
+                </svg>
+                <div class="stack">
+                  <span>Export KiCad BOM</span>
+                  <small>XML grouped BOM via interactive_bom hooks</small>
+                </div>
+              </div>
+              <div class="menu-sep"></div>
+              <div class="menu-item" data-export="clipboard">
+                <svg class="icon" viewBox="0 0 24 24">
+                  <rect x="8" y="2" width="8" height="4" rx="1" />
+                  <path
+                    d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"
+                  />
+                </svg>
+                <div class="stack">
+                  <span>Copy as TSV</span>
+                  <small>Paste into Sheets, Numbers, Excel</small>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn--primary" id="order-btn">
+            <svg class="icon" viewBox="0 0 24 24">
+              <circle cx="9" cy="21" r="1" />
+              <circle cx="20" cy="21" r="1" />
+              <path
+                d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"
+              />
+            </svg>
+            Order at JLCPCB
+          </button>
+        </div>
+
+        <!-- BOM body -->
+        <div class="bom">
+          <section class="bom__main" aria-label="Bill of Materials">
+            <!-- Filter / count bar -->
+            <div class="filterbar">
+              <label class="input">
+                <svg class="icon" viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m21 21-4.3-4.3" />
+                </svg>
+                <input
+                  id="bom-search"
+                  placeholder="Filter by refdes, value, MPN, footprint…"
+                />
+                <span class="kbd">⌘F</span>
+              </label>
+              <div class="filterbar__counts">
+                <span><b id="count-lines">25</b> lines</span>
+                <span class="filterbar__sep"></span>
+                <span><b id="count-parts">63</b> parts</span>
+                <span class="filterbar__sep"></span>
+                <span><b id="count-unique">23</b> unique MPN</span>
+                <span class="filterbar__sep"></span>
+                <span class="pill pill--success">
+                  <span class="dot"></span>All resolved
+                </span>
+              </div>
+            </div>
+
+            <!-- Bulk action bar (appears when rows are checked) -->
+            <div
+              class="bulkbar"
+              id="bulkbar"
+              role="region"
+              aria-label="Bulk actions"
+            >
+              <span
+                ><span class="bulkbar__count" id="bulk-count">0</span>
+                selected</span
+              >
+              <span class="filterbar__sep"></span>
+              <button class="btn">Mark DNP</button>
+              <button class="btn">Set supplier…</button>
+              <button class="btn">Group →</button>
+              <button class="btn">Find alternatives</button>
+              <div class="bulkbar__spacer"></div>
+              <button class="btn btn--ghost" id="bulk-clear">Clear</button>
+            </div>
+
+            <!-- Table -->
+            <div class="table-wrap">
+              <table class="bom-table" id="bom-table">
+                <colgroup>
+                  <col style="width: 28px" />
+                  <col style="width: 22px" />
+                  <col />
+                  <col style="width: 220px" />
+                  <col style="width: 120px" />
+                  <col style="width: 120px" />
+                  <col style="width: 60px" />
+                  <col style="width: 105px" />
+                  <col style="width: 95px" />
+                  <col style="width: 90px" />
+                  <col style="width: 80px" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th class="col-check">
+                      <input
+                        type="checkbox"
+                        id="check-all"
+                        aria-label="Select all"
+                      />
+                    </th>
+                    <th class="col-chev"></th>
+                    <th class="sortable" data-sort="refs">
+                      Designators<span class="sort-ind">↑</span>
+                    </th>
+                    <th class="sortable" data-sort="mpn">
+                      Part / MPN<span class="sort-ind">↑</span>
+                    </th>
+                    <th class="sortable" data-sort="value">Value</th>
+                    <th class="sortable" data-sort="footprint">Footprint</th>
+                    <th
+                      class="sortable num col-qty"
+                      data-sort="qty"
+                      aria-sort="ascending"
+                    >
+                      Qty<span class="sort-ind">↑</span>
+                    </th>
+                    <th class="sortable" data-sort="jlc">JLC P/N</th>
+                    <th class="sortable center" data-sort="basic">JLC Type</th>
+                    <th class="sortable num" data-sort="unit">Unit</th>
+                    <th class="sortable num" data-sort="ext">Ext.</th>
+                  </tr>
+                </thead>
+                <tbody id="bom-tbody"></tbody>
+              </table>
+            </div>
+
+            <!-- Sticky totals footer -->
+            <div class="bom-footer" aria-label="Totals">
+              <div class="bom-footer__cell">
+                <span class="bom-footer__label">Lines</span>
+                <span class="bom-footer__value" id="ft-lines"
+                  >25<span class="unit">grouped</span></span
+                >
+              </div>
+              <div class="bom-footer__cell">
+                <span class="bom-footer__label">Total Qty</span>
+                <span class="bom-footer__value" id="ft-qty"
+                  >63<span class="unit">parts</span></span
+                >
+              </div>
+              <div class="bom-footer__cell">
+                <span class="bom-footer__label">BOM Cost · 1 board</span>
+                <span class="bom-footer__value" id="ft-cost-1"
+                  >$12.84<span class="unit">USD</span></span
+                >
+              </div>
+              <div class="bom-footer__cell">
+                <span class="bom-footer__label">BOM Cost · 100 boards</span>
+                <span class="bom-footer__value" id="ft-cost-100"
+                  >$847.10<span class="unit">USD</span></span
+                >
+              </div>
+            </div>
+          </section>
+
+          <!-- ================ INSPECTOR ================ -->
+          <aside
+            class="bom__inspector"
+            id="inspector"
+            aria-label="Selected part"
+          >
+            <!-- populated via JS -->
+          </aside>
+        </div>
+      </main>
+
+      <!-- ================ STATUS BAR ================ -->
+      <footer class="statusbar">
+        <span class="ok">● BOM in sync</span>
+        <span class="sep"></span>
+        <span
+          >Suppliers: <span class="accent">live</span> · refreshed 4m ago</span
+        >
+        <span class="sep"></span>
+        <span>JLC SMT: 100% basic-eligible</span>
+        <span class="sep"></span>
+        <span id="status-sel">0 selected</span>
+        <div class="statusbar__spacer"></div>
+        <span>sensor-hub · rev A</span>
+        <span class="sep"></span>
+        <span>git · main · clean</span>
+      </footer>
+    </div>
+
+    <script>
+      // ============ BOM DATA ============
+      // Realistic seed for Sensor Hub Rev A (STM32G4 + LIS2DH + USB-C).
+      // Supplier prices/stock are representative — verify before ordering.
+      const BOM = [
+        {
+          id: 1,
+          refs: ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"],
+          qty: 8,
+          name: "Cap MLCC",
+          value: "100nF",
+          footprint: "0402",
+          mfg: "Murata",
+          mpn: "GRM155R71C104KA88D",
+          jlc: "C1525",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "10V X7R ±10%, decoupling on every IC rail",
+          suppliers: {
+            lcsc: { mpn: "C1525", price: 0.0014, stock: 1238500 },
+            jlcpcb: { mpn: "C1525", price: 0.0011, stock: 1238500 },
+            mouser: { mpn: "81-GRMR71C104KA8D", price: 0.024, stock: 412000 },
+            digikey: { mpn: "490-3261-1-ND", price: 0.027, stock: 287643 },
+          },
+          alts: [
+            {
+              mpn: "CL10B104KB8NNNC",
+              mfg: "Samsung",
+              lcsc: "C1591",
+              price: 0.0012,
+              stock: 982000,
+            },
+            {
+              mpn: "CC0402KRX7R7BB104",
+              mfg: "Yageo",
+              lcsc: "C14855",
+              price: 0.0013,
+              stock: 540000,
+            },
+          ],
+        },
+        {
+          id: 2,
+          refs: ["C9", "C10"],
+          qty: 2,
+          name: "Cap MLCC",
+          value: "10µF",
+          footprint: "0805",
+          mfg: "Samsung",
+          mpn: "CL21A106KAYNNNE",
+          jlc: "C15850",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "Bulk decoupling, 3V3 + VBUS regulator input",
+          suppliers: {
+            lcsc: { mpn: "C15850", price: 0.011, stock: 432000 },
+            jlcpcb: { mpn: "C15850", price: 0.008, stock: 432000 },
+            mouser: { mpn: "187-CL21A106KAYNNNE", price: 0.039, stock: 96320 },
+            digikey: { mpn: "1276-2412-1-ND", price: 0.042, stock: 41200 },
+          },
+          alts: [
+            {
+              mpn: "GRM21BR61A106KE19L",
+              mfg: "Murata",
+              lcsc: "C45783",
+              price: 0.014,
+              stock: 320000,
+            },
+          ],
+        },
+        {
+          id: 3,
+          refs: ["C11", "C12"],
+          qty: 2,
+          name: "Cap MLCC",
+          value: "22pF",
+          footprint: "0402",
+          mfg: "Murata",
+          mpn: "GRM1555C1H220JA01D",
+          jlc: "C1654",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "Crystal load capacitor pair, NP0",
+          suppliers: {
+            lcsc: { mpn: "C1654", price: 0.0019, stock: 814000 },
+            jlcpcb: { mpn: "C1654", price: 0.0014, stock: 814000 },
+            mouser: {
+              mpn: "81-GRM1555C1H220JA1D",
+              price: 0.028,
+              stock: 198200,
+            },
+            digikey: { mpn: "490-1280-1-ND", price: 0.031, stock: 165040 },
+          },
+          alts: [
+            {
+              mpn: "CL05C220JB5NNNC",
+              mfg: "Samsung",
+              lcsc: "C1635",
+              price: 0.0017,
+              stock: 612000,
+            },
+          ],
+        },
+        {
+          id: 4,
+          refs: ["C13"],
+          qty: 1,
+          name: "Cap MLCC",
+          value: "1µF",
+          footprint: "0402",
+          mfg: "Murata",
+          mpn: "GRM155R61A105KE15D",
+          jlc: "C52923",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "VDDA filter cap (analog)",
+          suppliers: {
+            lcsc: { mpn: "C52923", price: 0.0048, stock: 285000 },
+            jlcpcb: { mpn: "C52923", price: 0.0036, stock: 285000 },
+            mouser: { mpn: "81-GRM155R61A105KE5D", price: 0.034, stock: 78000 },
+            digikey: { mpn: "490-3897-1-ND", price: 0.036, stock: 52100 },
+          },
+          alts: [],
+        },
+        {
+          id: 5,
+          refs: ["R1", "R2", "R3", "R4"],
+          qty: 4,
+          name: "Resistor",
+          value: "10kΩ",
+          footprint: "0402",
+          mfg: "Yageo",
+          mpn: "RC0402FR-0710KL",
+          jlc: "C25744",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "1% ±100ppm, generic pull-ups (NRST, NSS, INT1, INT2)",
+          suppliers: {
+            lcsc: { mpn: "C25744", price: 0.001, stock: 2940000 },
+            jlcpcb: { mpn: "C25744", price: 0.0008, stock: 2940000 },
+            mouser: { mpn: "603-RC0402FR-0710KL", price: 0.012, stock: 928000 },
+            digikey: { mpn: "311-10.0KLRCT-ND", price: 0.014, stock: 612000 },
+          },
+          alts: [
+            {
+              mpn: "RC0402JR-0710KL",
+              mfg: "Yageo",
+              lcsc: "C25741",
+              price: 0.0007,
+              stock: 1800000,
+            },
+          ],
+        },
+        {
+          id: 6,
+          refs: ["R5", "R6"],
+          qty: 2,
+          name: "Resistor",
+          value: "4.7kΩ",
+          footprint: "0402",
+          mfg: "Yageo",
+          mpn: "RC0402FR-074K7L",
+          jlc: "C25900",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "I²C bus pull-ups (SDA, SCL → 3V3)",
+          suppliers: {
+            lcsc: { mpn: "C25900", price: 0.001, stock: 1820000 },
+            jlcpcb: { mpn: "C25900", price: 0.0008, stock: 1820000 },
+            mouser: { mpn: "603-RC0402FR-074K7L", price: 0.012, stock: 540000 },
+            digikey: { mpn: "311-4.70KLRCT-ND", price: 0.014, stock: 392000 },
+          },
+          alts: [],
+        },
+        {
+          id: 7,
+          refs: ["R7"],
+          qty: 1,
+          name: "Resistor",
+          value: "1kΩ",
+          footprint: "0402",
+          mfg: "Yageo",
+          mpn: "RC0402FR-071KL",
+          jlc: "C11702",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "LED current limit (D3, green status)",
+          suppliers: {
+            lcsc: { mpn: "C11702", price: 0.001, stock: 2100000 },
+            jlcpcb: { mpn: "C11702", price: 0.0008, stock: 2100000 },
+            mouser: { mpn: "603-RC0402FR-071KL", price: 0.012, stock: 480000 },
+            digikey: { mpn: "311-1.00KLRCT-ND", price: 0.014, stock: 318000 },
+          },
+          alts: [],
+        },
+        {
+          id: 8,
+          refs: ["R8", "R9"],
+          qty: 2,
+          name: "Resistor",
+          value: "22Ω",
+          footprint: "0402",
+          mfg: "Yageo",
+          mpn: "RC0402FR-0722RL",
+          jlc: "C25092",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "USB D+/D− series termination",
+          suppliers: {
+            lcsc: { mpn: "C25092", price: 0.001, stock: 1480000 },
+            jlcpcb: { mpn: "C25092", price: 0.0008, stock: 1480000 },
+            mouser: { mpn: "603-RC0402FR-0722RL", price: 0.012, stock: 392000 },
+            digikey: { mpn: "311-22.0LRCT-ND", price: 0.014, stock: 286000 },
+          },
+          alts: [],
+        },
+        {
+          id: 9,
+          refs: ["R10"],
+          qty: 1,
+          name: "Resistor",
+          value: "0Ω",
+          footprint: "0402",
+          mfg: "Yageo",
+          mpn: "RC0402JR-070RL",
+          jlc: "C17168",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "Jumper on BOOT0 trace (factory bridge)",
+          suppliers: {
+            lcsc: { mpn: "C17168", price: 0.0008, stock: 3200000 },
+            jlcpcb: { mpn: "C17168", price: 0.0006, stock: 3200000 },
+            mouser: { mpn: "603-RC0402JR-070RL", price: 0.011, stock: 1140000 },
+            digikey: { mpn: "311-0.0JRCT-ND", price: 0.013, stock: 824000 },
+          },
+          alts: [],
+        },
+        {
+          id: 10,
+          refs: ["R11", "R12", "R13"],
+          qty: 3,
+          name: "Resistor",
+          value: "5.1kΩ",
+          footprint: "0402",
+          mfg: "Yageo",
+          mpn: "RC0402FR-075K1L",
+          jlc: "C98220",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "USB-C CC1/CC2 + ID pull-downs (UFP sink role)",
+          suppliers: {
+            lcsc: { mpn: "C98220", price: 0.0011, stock: 920000 },
+            jlcpcb: { mpn: "C98220", price: 0.0009, stock: 920000 },
+            mouser: { mpn: "603-RC0402FR-075K1L", price: 0.013, stock: 264000 },
+            digikey: { mpn: "311-5.10KLRCT-ND", price: 0.015, stock: 192000 },
+          },
+          alts: [],
+        },
+        {
+          id: 11,
+          refs: ["L1"],
+          qty: 1,
+          name: "Inductor",
+          value: "10µH",
+          footprint: "0805",
+          mfg: "Murata",
+          mpn: "LQH2MCN100K02L",
+          jlc: "C16415",
+          jlcType: "Extended",
+          side: "Top",
+          rotation: 0,
+          desc: "Boost converter inductor for TPS62840",
+          suppliers: {
+            lcsc: { mpn: "C16415", price: 0.082, stock: 38400 },
+            jlcpcb: { mpn: "C16415", price: 0.061, stock: 38400 },
+            mouser: { mpn: "81-LQH2MCN100K02L", price: 0.18, stock: 12400 },
+            digikey: { mpn: "490-3267-1-ND", price: 0.192, stock: 8420 },
+          },
+          alts: [
+            {
+              mpn: "744043100",
+              mfg: "Würth",
+              lcsc: "C82451",
+              price: 0.094,
+              stock: 24200,
+            },
+          ],
+        },
+        {
+          id: 12,
+          refs: ["FB1", "FB2"],
+          qty: 2,
+          name: "Ferrite bead",
+          value: "600Ω@100MHz",
+          footprint: "0603",
+          mfg: "Murata",
+          mpn: "BLM18AG601SN1D",
+          jlc: "C1017",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "VDDA / USB shield bead, 200mA",
+          suppliers: {
+            lcsc: { mpn: "C1017", price: 0.006, stock: 614000 },
+            jlcpcb: { mpn: "C1017", price: 0.004, stock: 614000 },
+            mouser: { mpn: "81-BLM18AG601SN1D", price: 0.035, stock: 142000 },
+            digikey: { mpn: "490-1051-1-ND", price: 0.038, stock: 98400 },
+          },
+          alts: [],
+        },
+        {
+          id: 13,
+          refs: ["U1"],
+          qty: 1,
+          name: "MCU · Cortex-M4",
+          value: "STM32G431CBT6",
+          footprint: "LQFP-48",
+          mfg: "STMicroelectronics",
+          mpn: "STM32G431CBT6",
+          jlc: "C2040671",
+          jlcType: "Extended",
+          side: "Top",
+          rotation: 0,
+          desc: "170MHz, 128KB flash · main MCU",
+          suppliers: {
+            lcsc: { mpn: "C2040671", price: 3.42, stock: 8420 },
+            jlcpcb: { mpn: "C2040671", price: 3.18, stock: 8420 },
+            mouser: { mpn: "511-STM32G431CBT6", price: 4.18, stock: 2840 },
+            digikey: { mpn: "497-STM32G431CBT6-ND", price: 4.31, stock: 1842 },
+          },
+          alts: [
+            {
+              mpn: "STM32G431C8T6",
+              mfg: "ST",
+              lcsc: "C2040672",
+              price: 2.78,
+              stock: 6120,
+            },
+            {
+              mpn: "STM32G474CBT6",
+              mfg: "ST",
+              lcsc: "C2040675",
+              price: 4.92,
+              stock: 3240,
+            },
+          ],
+        },
+        {
+          id: 14,
+          refs: ["U2"],
+          qty: 1,
+          name: "Buck-boost regulator",
+          value: "TPS62840",
+          footprint: "SOT-563-8",
+          mfg: "Texas Instruments",
+          mpn: "TPS62840DLCR",
+          jlc: "C2872113",
+          jlcType: "Extended",
+          side: "Top",
+          rotation: 0,
+          desc: "750mA · 60nA Iq · 1.8–6.5V in → 3V3 out",
+          suppliers: {
+            lcsc: { mpn: "C2872113", price: 0.86, stock: 18420 },
+            jlcpcb: { mpn: "C2872113", price: 0.79, stock: 18420 },
+            mouser: { mpn: "595-TPS62840DLCR", price: 1.14, stock: 5240 },
+            digikey: { mpn: "296-TPS62840DLCRCT-ND", price: 1.21, stock: 3820 },
+          },
+          alts: [
+            {
+              mpn: "TPS62840DLCT",
+              mfg: "TI",
+              lcsc: "C2872115",
+              price: 0.92,
+              stock: 9400,
+            },
+          ],
+        },
+        {
+          id: 15,
+          refs: ["U3"],
+          qty: 1,
+          name: "Accelerometer · 3-axis",
+          value: "LIS2DH12TR",
+          footprint: "LGA-12",
+          mfg: "STMicroelectronics",
+          mpn: "LIS2DH12TR",
+          jlc: "C110293",
+          jlcType: "Extended",
+          side: "Top",
+          rotation: 0,
+          desc: "±2/4/8/16g · 14-bit · I²C + SPI",
+          suppliers: {
+            lcsc: { mpn: "C110293", price: 1.08, stock: 14200 },
+            jlcpcb: { mpn: "C110293", price: 0.98, stock: 14200 },
+            mouser: { mpn: "511-LIS2DH12TR", price: 1.42, stock: 4820 },
+            digikey: { mpn: "497-15602-1-ND", price: 1.54, stock: 3140 },
+          },
+          alts: [
+            {
+              mpn: "LIS3DHTR",
+              mfg: "ST",
+              lcsc: "C115560",
+              price: 1.42,
+              stock: 12400,
+            },
+            {
+              mpn: "ADXL345BCCZ",
+              mfg: "ADI",
+              lcsc: "C50764",
+              price: 4.2,
+              stock: 5240,
+            },
+          ],
+        },
+        {
+          id: 16,
+          refs: ["U4"],
+          qty: 1,
+          name: "Temp sensor · linear",
+          value: "MCP9700T-E/TT",
+          footprint: "SOT-23-3",
+          mfg: "Microchip",
+          mpn: "MCP9700T-E/TT",
+          jlc: "C18549",
+          jlcType: "Extended",
+          side: "Top",
+          rotation: 0,
+          desc: "10mV/°C, −40 to +125°C, ±2°C accuracy",
+          suppliers: {
+            lcsc: { mpn: "C18549", price: 0.32, stock: 26400 },
+            jlcpcb: { mpn: "C18549", price: 0.28, stock: 26400 },
+            mouser: { mpn: "579-MCP9700T-E/TT", price: 0.47, stock: 8240 },
+            digikey: { mpn: "MCP9700T-E/TTCT-ND", price: 0.51, stock: 5240 },
+          },
+          alts: [],
+        },
+        {
+          id: 17,
+          refs: ["U5"],
+          qty: 1,
+          name: "Level translator 8-bit",
+          value: "TXS0108EPWR",
+          footprint: "TSSOP-20",
+          mfg: "Texas Instruments",
+          mpn: "TXS0108EPWR",
+          jlc: "C53406",
+          jlcType: "Extended",
+          side: "Top",
+          rotation: 0,
+          desc: "1.2–3.6V ↔ 1.65–5.5V, bidirectional",
+          suppliers: {
+            lcsc: { mpn: "C53406", price: 0.92, stock: 9840 },
+            jlcpcb: { mpn: "C53406", price: 0.84, stock: 9840 },
+            mouser: { mpn: "595-TXS0108EPWR", price: 1.42, stock: 3140 },
+            digikey: { mpn: "296-23187-1-ND", price: 1.54, stock: 1842 },
+          },
+          alts: [],
+        },
+        {
+          id: 18,
+          refs: ["Q1", "Q2"],
+          qty: 2,
+          name: "MOSFET · P-CH",
+          value: "DMP3056LSN-7",
+          footprint: "SOT-23",
+          mfg: "Diodes Inc",
+          mpn: "DMP3056LSN-7",
+          jlc: "C129293",
+          jlcType: "Extended",
+          side: "Top",
+          rotation: 0,
+          desc: "−30V/−4.7A, load-switch / reverse polarity",
+          suppliers: {
+            lcsc: { mpn: "C129293", price: 0.18, stock: 38400 },
+            jlcpcb: { mpn: "C129293", price: 0.15, stock: 38400 },
+            mouser: { mpn: "621-DMP3056LSN-7", price: 0.28, stock: 9420 },
+            digikey: { mpn: "DMP3056LSN-7DICT-ND", price: 0.31, stock: 6240 },
+          },
+          alts: [
+            {
+              mpn: "SI2301CDS-T1-GE3",
+              mfg: "Vishay",
+              lcsc: "C10487",
+              price: 0.14,
+              stock: 184000,
+            },
+          ],
+        },
+        {
+          id: 19,
+          refs: ["D1"],
+          qty: 1,
+          name: "TVS diode",
+          value: "SMAJ5.0CA",
+          footprint: "SMA",
+          mfg: "Littelfuse",
+          mpn: "SMAJ5.0CA",
+          jlc: "C95800",
+          jlcType: "Extended",
+          side: "Top",
+          rotation: 0,
+          desc: "5V bidirectional TVS on VBUS",
+          suppliers: {
+            lcsc: { mpn: "C95800", price: 0.082, stock: 42800 },
+            jlcpcb: { mpn: "C95800", price: 0.071, stock: 42800 },
+            mouser: { mpn: "576-SMAJ5.0CA", price: 0.21, stock: 12400 },
+            digikey: { mpn: "SMAJ5.0CA-FDICT-ND", price: 0.24, stock: 8240 },
+          },
+          alts: [],
+        },
+        {
+          id: 20,
+          refs: ["D2"],
+          qty: 1,
+          name: "Schottky diode",
+          value: "SS14",
+          footprint: "SMA",
+          mfg: "MDD",
+          mpn: "SS14",
+          jlc: "C2480",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "40V / 1A · OR-ing on VIN",
+          suppliers: {
+            lcsc: { mpn: "C2480", price: 0.024, stock: 482000 },
+            jlcpcb: { mpn: "C2480", price: 0.018, stock: 482000 },
+            mouser: { mpn: "844-SS14", price: 0.12, stock: 84200 },
+            digikey: { mpn: "SS14FSCT-ND", price: 0.13, stock: 62400 },
+          },
+          alts: [],
+        },
+        {
+          id: 21,
+          refs: ["D3", "D4"],
+          qty: 2,
+          name: "LED · green",
+          value: "0603 525nm",
+          footprint: "0603",
+          mfg: "Kingbright",
+          mpn: "KP-1608SGC",
+          jlc: "C72043",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "Status (PWR) + heartbeat (USR1)",
+          suppliers: {
+            lcsc: { mpn: "C72043", price: 0.018, stock: 286000 },
+            jlcpcb: { mpn: "C72043", price: 0.014, stock: 286000 },
+            mouser: { mpn: "604-KP-1608SGC", price: 0.12, stock: 42800 },
+            digikey: { mpn: "754-1124-1-ND", price: 0.14, stock: 28200 },
+          },
+          alts: [
+            {
+              mpn: "19-217/GHC-YR1S2/3T",
+              mfg: "Everlight",
+              lcsc: "C2296",
+              price: 0.022,
+              stock: 184000,
+            },
+          ],
+        },
+        {
+          id: 22,
+          refs: ["Y1"],
+          qty: 1,
+          name: "Crystal · HSE",
+          value: "8.000MHz",
+          footprint: "SMD-3225-4P",
+          mfg: "Abracon",
+          mpn: "ABM3B-8.000MHZ-B2T",
+          jlc: "C115962",
+          jlcType: "Extended",
+          side: "Top",
+          rotation: 0,
+          desc: "±20ppm · 18pF load (paired with C11/C12)",
+          suppliers: {
+            lcsc: { mpn: "C115962", price: 0.36, stock: 18400 },
+            jlcpcb: { mpn: "C115962", price: 0.31, stock: 18400 },
+            mouser: { mpn: "815-ABM3B-8.000-B2T", price: 0.62, stock: 5240 },
+            digikey: { mpn: "535-9837-1-ND", price: 0.68, stock: 3140 },
+          },
+          alts: [],
+        },
+        {
+          id: 23,
+          refs: ["J1"],
+          qty: 1,
+          name: "USB-C receptacle",
+          value: "16P SMD",
+          footprint: "TYPE-C-31-M-12",
+          mfg: "Korean Hroparts",
+          mpn: "TYPE-C-31-M-12",
+          jlc: "C165948",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 90,
+          desc: "USB 2.0 only, no SuperSpeed pins routed",
+          suppliers: {
+            lcsc: { mpn: "C165948", price: 0.184, stock: 84200 },
+            jlcpcb: { mpn: "C165948", price: 0.142, stock: 84200 },
+            mouser: { mpn: "—", price: null, stock: null },
+            digikey: { mpn: "—", price: null, stock: null },
+          },
+          alts: [
+            {
+              mpn: "TYPE-C-31-M-14",
+              mfg: "Korean Hroparts",
+              lcsc: "C165949",
+              price: 0.198,
+              stock: 62400,
+            },
+          ],
+        },
+        {
+          id: 24,
+          refs: ["J2"],
+          qty: 1,
+          name: "Connector · JST-SH 4P",
+          value: "1mm pitch",
+          footprint: "SM04B-SRSS",
+          mfg: "JST Sales America",
+          mpn: "SM04B-SRSS-TB(LF)(SN)",
+          jlc: "C160404",
+          jlcType: "Extended",
+          side: "Top",
+          rotation: 180,
+          desc: "Qwiic / Stemma-QT compatible side-entry",
+          suppliers: {
+            lcsc: { mpn: "C160404", price: 0.28, stock: 28400 },
+            jlcpcb: { mpn: "C160404", price: 0.24, stock: 28400 },
+            mouser: { mpn: "455-SM04B-SRSS-TB-LF", price: 0.42, stock: 9420 },
+            digikey: { mpn: "455-1806-1-ND", price: 0.46, stock: 6240 },
+          },
+          alts: [],
+        },
+        {
+          id: 25,
+          refs: ["SW1"],
+          qty: 1,
+          name: "Tactile switch",
+          value: "6×6mm SMD",
+          footprint: "TS-1187A-B-A",
+          mfg: "XKB Connection",
+          mpn: "TS-1187A-B-A-B",
+          jlc: "C318884",
+          jlcType: "Basic",
+          side: "Top",
+          rotation: 0,
+          desc: "User push button (BOOT0 / NRST hold)",
+          suppliers: {
+            lcsc: { mpn: "C318884", price: 0.038, stock: 184000 },
+            jlcpcb: { mpn: "C318884", price: 0.029, stock: 184000 },
+            mouser: { mpn: "—", price: null, stock: null },
+            digikey: { mpn: "—", price: null, stock: null },
+          },
+          alts: [],
+        },
+      ];
+
+      const BOARDS = 1;
+      const fmtUSD = (n) =>
+        n == null
+          ? "—"
+          : "$" + (n < 0.01 ? n.toFixed(4) : n.toFixed(n < 1 ? 3 : 2));
+      const fmtStock = (n) =>
+        n == null ? "—" : n >= 1000 ? Math.round(n / 1000) + "k" : String(n);
+
+      // ============ STATE ============
+      let state = {
+        sort: { key: "id", dir: 1 },
+        filter: "",
+        selected: new Set(),
+        expanded: new Set(),
+        focus: 13, // U1 STM32G431 — opens with the hero IC
+      };
+
+      // ============ RENDER TABLE ============
+      function unitPrice(row) {
+        return row.suppliers.jlcpcb.price;
+      }
+      function extPrice(row) {
+        return (unitPrice(row) ?? 0) * row.qty;
+      }
+
+      function filterRows() {
+        const q = state.filter.trim().toLowerCase();
+        let rows = BOM.filter((r) => {
+          if (!q) return true;
+          return (
+            r.refs.join(",").toLowerCase().includes(q) ||
+            r.mpn.toLowerCase().includes(q) ||
+            r.value.toLowerCase().includes(q) ||
+            r.footprint.toLowerCase().includes(q) ||
+            r.name.toLowerCase().includes(q) ||
+            r.jlc.toLowerCase().includes(q) ||
+            r.mfg.toLowerCase().includes(q)
+          );
+        });
+        const k = state.sort.key,
+          d = state.sort.dir;
+        rows.sort((a, b) => {
+          let av, bv;
+          switch (k) {
+            case "refs":
+              av = a.refs[0];
+              bv = b.refs[0];
+              break;
+            case "mpn":
+              av = a.mpn;
+              bv = b.mpn;
+              break;
+            case "value":
+              av = a.value;
+              bv = b.value;
+              break;
+            case "footprint":
+              av = a.footprint;
+              bv = b.footprint;
+              break;
+            case "qty":
+              av = a.qty;
+              bv = b.qty;
+              break;
+            case "jlc":
+              av = a.jlc;
+              bv = b.jlc;
+              break;
+            case "basic":
+              av = a.jlcType;
+              bv = b.jlcType;
+              break;
+            case "unit":
+              av = unitPrice(a);
+              bv = unitPrice(b);
+              break;
+            case "ext":
+              av = extPrice(a);
+              bv = extPrice(b);
+              break;
+            default:
+              av = a.id;
+              bv = b.id;
+          }
+          if (typeof av === "number") return (av - bv) * d;
+          return (
+            String(av).localeCompare(String(bv), undefined, { numeric: true }) *
+            d
+          );
+        });
+        return rows;
+      }
+
+      function renderTable() {
+        const tbody = document.getElementById("bom-tbody");
+        const rows = filterRows();
+        const html = rows
+          .map((r) => {
+            const isSel = state.selected.has(r.id);
+            const isExp = state.expanded.has(r.id);
+            const isFocus = state.focus === r.id;
+            const refsStr = r.refs.map((x) => `<b>${x}</b>`).join(", ");
+            const typePill =
+              r.jlcType === "Basic"
+                ? `<span class="pill pill--success" style="height:18px"><span class="dot"></span>Basic</span>`
+                : `<span class="pill pill--info" style="height:18px"><span class="dot"></span>Extended</span>`;
+            let main = `
+            <tr class="row ${isExp ? "is-expanded" : ""}" data-id="${r.id}" aria-selected="${isFocus ? "true" : "false"}">
+              <td class="col-check" onclick="event.stopPropagation()">
+                <input type="checkbox" data-check="${r.id}" ${isSel ? "checked" : ""} aria-label="Select line ${r.id}" />
+              </td>
+              <td class="col-chev" data-toggle="${r.id}">
+                <svg class="chev icon" viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18" /></svg>
+              </td>
+              <td class="refs" title="${r.refs.join(", ")}">${refsStr}</td>
+              <td>
+                <div class="name">${r.name}</div>
+                <div class="mfg">${r.mfg} · <span class="mono">${r.mpn}</span></div>
+              </td>
+              <td class="mono">${r.value}</td>
+              <td class="mono">${r.footprint}</td>
+              <td class="num">${r.qty}</td>
+              <td class="mono">${r.jlc}</td>
+              <td class="center">${typePill}</td>
+              <td class="num">${fmtUSD(unitPrice(r))}</td>
+              <td class="num">${fmtUSD(extPrice(r))}</td>
+            </tr>`;
+            if (isExp) {
+              const altRows = (r.alts.length ? r.alts : [])
+                .map(
+                  (a) => `
+              <div><span class="mono">${a.mpn}</span></div>
+              <div style="color:var(--text-muted)">${a.mfg}</div>
+              <div class="mono">${a.lcsc}</div>
+              <div class="mono" style="text-align:right">${fmtUSD(a.price)}</div>
+              <div style="justify-content:flex-end"><button class="alt-btn">Use</button></div>
+            `,
+                )
+                .join("");
+              const noAlts =
+                r.alts.length === 0
+                  ? `<div style="grid-column: 1/-1; color: var(--text-muted); font-style: italic; padding: 8px 12px">No alternatives indexed. Right-click → Find equivalents.</div>`
+                  : "";
+              main += `
+              <tr class="alt">
+                <td colspan="11">
+                  <div class="alt__panel">
+                    <div class="alt__head">Drop-in alternatives · same value &amp; footprint</div>
+                    <div class="alt__list">
+                      <div class="h">MPN</div>
+                      <div class="h">Mfg</div>
+                      <div class="h">LCSC</div>
+                      <div class="h" style="text-align:right">Unit</div>
+                      <div class="h" style="text-align:right">Action</div>
+                      ${altRows}
+                      ${noAlts}
+                    </div>
+                  </div>
+                </td>
+              </tr>`;
+            }
+            return main;
+          })
+          .join("");
+        tbody.innerHTML = html;
+        wireRows();
+        updateBulk();
+        updateCounts();
+        renderInspector();
+      }
+
+      function wireRows() {
+        document.querySelectorAll("tr.row").forEach((tr) => {
+          tr.addEventListener("click", () => {
+            const id = +tr.dataset.id;
+            state.focus = id;
+            renderTable();
+          });
+        });
+        document.querySelectorAll("[data-toggle]").forEach((el) => {
+          el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const id = +el.dataset.toggle;
+            if (state.expanded.has(id)) state.expanded.delete(id);
+            else state.expanded.add(id);
+            renderTable();
+          });
+        });
+        document.querySelectorAll("[data-check]").forEach((el) => {
+          el.addEventListener("change", () => {
+            const id = +el.dataset.check;
+            if (el.checked) state.selected.add(id);
+            else state.selected.delete(id);
+            updateBulk();
+          });
+        });
+      }
+
+      function updateBulk() {
+        const n = state.selected.size;
+        const bar = document.getElementById("bulkbar");
+        bar.classList.toggle("is-active", n > 0);
+        document.getElementById("bulk-count").textContent = n;
+        document.getElementById("status-sel").textContent = `${n} selected`;
+        const all = document.getElementById("check-all");
+        all.checked = n > 0 && n === filterRows().length;
+        all.indeterminate = n > 0 && n < filterRows().length;
+      }
+
+      function updateCounts() {
+        const rows = filterRows();
+        const totalQty = rows.reduce((s, r) => s + r.qty, 0);
+        const totalCost1 = rows.reduce((s, r) => s + extPrice(r), 0);
+        const totalCost100 = totalCost1 * 100 * 0.66; // bulk price break
+        const uniqueMpn = new Set(rows.map((r) => r.mpn)).size;
+        document.getElementById("count-lines").textContent = rows.length;
+        document.getElementById("count-parts").textContent = totalQty;
+        document.getElementById("count-unique").textContent = uniqueMpn;
+        document.getElementById("ft-lines").innerHTML =
+          `${rows.length}<span class="unit">grouped</span>`;
+        document.getElementById("ft-qty").innerHTML =
+          `${totalQty}<span class="unit">parts</span>`;
+        document.getElementById("ft-cost-1").innerHTML =
+          `$${totalCost1.toFixed(2)}<span class="unit">USD</span>`;
+        document.getElementById("ft-cost-100").innerHTML =
+          `$${totalCost100.toFixed(2)}<span class="unit">USD</span>`;
+      }
+
+      // ============ INSPECTOR ============
+      function renderInspector() {
+        const r = BOM.find((x) => x.id === state.focus) || BOM[0];
+        const ins = document.getElementById("inspector");
+        const refsChips = r.refs
+          .map((x) => `<span class="ref-chip">${x}</span>`)
+          .join("");
+        const typePill =
+          r.jlcType === "Basic"
+            ? `<span class="pill pill--success"><span class="dot"></span>JLC Basic</span>`
+            : `<span class="pill pill--info"><span class="dot"></span>JLC Extended</span>`;
+
+        const supplierCard = (key, label) => {
+          const s = r.suppliers[key];
+          if (!s || s.mpn === "—") {
+            return `
+              <div class="supplier">
+                <div class="supplier__head">
+                  <span class="supplier__name">${label}</span>
+                </div>
+                <div class="supplier__mpn" style="color:var(--text-muted)">Not listed</div>
+                <div class="supplier__row">
+                  <span class="supplier__price" style="color:var(--text-muted)">—</span>
+                  <span class="supplier__stock" style="color:var(--text-muted)">—</span>
+                </div>
+              </div>`;
+          }
+          return `
+            <div class="supplier">
+              <div class="supplier__head">
+                <span class="supplier__name">${label}</span>
+              </div>
+              <div class="supplier__mpn" title="${s.mpn}">${s.mpn}</div>
+              <div class="supplier__row">
+                <span class="supplier__price">${fmtUSD(s.price)}</span>
+                <span class="supplier__stock">${fmtStock(s.stock)} in stock</span>
+              </div>
+            </div>`;
+        };
+
+        ins.innerHTML = `
+          <div class="ins__head">
+            <div class="ins__eyebrow">
+              <span class="caption">Selected · ${r.refs.length}× ${r.refs[0].replace(/[0-9]+/g, "")}</span>
+              ${typePill}
+            </div>
+            <h3 class="ins__title">${r.name} <span style="color:var(--text-muted); font-weight:500"> · ${r.value}</span></h3>
+            <div class="ins__sub">${r.desc}</div>
+            <div class="ins__refs">${refsChips}</div>
+          </div>
+          <div class="ins__body">
+            <div class="ins__section">
+              <span class="caption">Part</span>
+              <div class="prop"><span class="prop__k">MPN</span><span class="prop__v">${r.mpn}</span></div>
+              <div class="prop"><span class="prop__k">Manufacturer</span><span class="prop__v flat">${r.mfg}</span></div>
+              <div class="prop"><span class="prop__k">Value</span><span class="prop__v">${r.value}</span></div>
+              <div class="prop"><span class="prop__k">Footprint</span><span class="prop__v">${r.footprint}</span></div>
+              <div class="prop"><span class="prop__k">Quantity</span><span class="prop__v">${r.qty} × ${BOARDS} brd</span></div>
+            </div>
+
+            <div class="ins__section">
+              <span class="caption">JLC Assembly</span>
+              <div class="jlc-grid">
+                <div class="jlc-cell"><div class="k">JLC P/N</div><div class="v">${r.jlc}</div></div>
+                <div class="jlc-cell"><div class="k">Type</div><div class="v">${r.jlcType}</div></div>
+                <div class="jlc-cell"><div class="k">Side</div><div class="v">${r.side}</div></div>
+                <div class="jlc-cell"><div class="k">Rotation</div><div class="v">${r.rotation}°</div></div>
+              </div>
+            </div>
+
+            <div class="ins__section">
+              <span class="caption">Suppliers · live</span>
+              <div class="suppliers">
+                ${supplierCard("lcsc", "LCSC")}
+                ${supplierCard("jlcpcb", "JLCPCB")}
+                ${supplierCard("mouser", "Mouser")}
+                ${supplierCard("digikey", "Digi-Key")}
+              </div>
+            </div>
+
+            <div class="ins__section">
+              <span class="caption">Actions</span>
+              <div style="display:flex; flex-direction:column; gap:6px">
+                <button class="btn" style="width:100%; justify-content:flex-start">
+                  <svg class="icon" viewBox="0 0 24 24"><path d="M21 21l-4.3-4.3"/><circle cx="11" cy="11" r="7"/></svg>
+                  Find alternatives
+                </button>
+                <button class="btn" style="width:100%; justify-content:flex-start">
+                  <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                  Add to favorites
+                </button>
+                <button class="btn" style="width:100%; justify-content:flex-start">
+                  <svg class="icon" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+                  Cross-locate on PCB
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // ============ WIRING ============
+      document.getElementById("bom-search").addEventListener("input", (e) => {
+        state.filter = e.target.value;
+        renderTable();
+      });
+
+      document.querySelectorAll("th.sortable").forEach((th) => {
+        th.addEventListener("click", () => {
+          const k = th.dataset.sort;
+          if (state.sort.key === k) state.sort.dir = -state.sort.dir;
+          else {
+            state.sort.key = k;
+            state.sort.dir = 1;
+          }
+          document
+            .querySelectorAll("th.sortable")
+            .forEach((t) => t.removeAttribute("aria-sort"));
+          th.setAttribute(
+            "aria-sort",
+            state.sort.dir === 1 ? "ascending" : "descending",
+          );
+          renderTable();
+        });
+      });
+
+      document.getElementById("check-all").addEventListener("change", (e) => {
+        const ids = filterRows().map((r) => r.id);
+        if (e.target.checked) ids.forEach((id) => state.selected.add(id));
+        else ids.forEach((id) => state.selected.delete(id));
+        renderTable();
+      });
+
+      document.getElementById("bulk-clear").addEventListener("click", () => {
+        state.selected.clear();
+        renderTable();
+      });
+
+      // Theme toggle
+      document.querySelectorAll("[data-theme-set]").forEach((b) => {
+        b.addEventListener("click", () => {
+          const t = b.dataset.themeSet;
+          document.documentElement.dataset.theme = t;
+          document
+            .querySelectorAll("[data-theme-set]")
+            .forEach((x) =>
+              x.setAttribute(
+                "aria-pressed",
+                x.dataset.themeSet === t ? "true" : "false",
+              ),
+            );
+        });
+      });
+
+      // Export menu
+      const exportBtn = document.getElementById("export-btn");
+      const exportMenu = document.getElementById("export-menu");
+      function positionMenu() {
+        const r = exportBtn.getBoundingClientRect();
+        exportMenu.style.top = r.bottom + 4 + "px";
+        exportMenu.style.left = r.right - exportMenu.offsetWidth + "px";
+      }
+      exportBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const wasHidden = exportMenu.hidden;
+        exportMenu.hidden = !wasHidden;
+        if (wasHidden) positionMenu();
+      });
+      document.addEventListener("click", (e) => {
+        if (!exportMenu.contains(e.target) && e.target !== exportBtn)
+          exportMenu.hidden = true;
+      });
+      exportMenu.querySelectorAll("[data-export]").forEach((item) => {
+        item.addEventListener("click", () => {
+          exportMenu.hidden = true;
+        });
+      });
+      window.addEventListener("resize", () => {
+        if (!exportMenu.hidden) positionMenu();
+      });
+
+      // ⌘F / Ctrl+F focuses filter
+      window.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+          e.preventDefault();
+          document.getElementById("bom-search").focus();
+        }
+      });
+
+      // Initial paint
+      renderTable();
+    </script>
+  </body>
+</html>
