@@ -1883,9 +1883,15 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           drcHoverRef.current = null;
           useDrcStore.getState().setHovered(null);
         }
-        // Cancel an in-flight trace-segment drag if the pointer leaves before
-        // release — no partial reshape is committed.
-        if (traceDragSessionRef.current) setTraceDragSession(null);
+        // NB: do NOT cancel an in-flight trace-segment drag here. `EdaCanvas`
+        // calls `setPointerCapture` on press, which makes R3F synthesize
+        // spurious mesh `pointerleave` events mid-drag (the ray transiently
+        // misses the hit-plane) even while the cursor stays on the board —
+        // cancelling on those aborts a perfectly valid drag before it can
+        // commit. Pointer capture also guarantees the matching pointer-up is
+        // delivered to the canvas (so the commit still fires on release even if
+        // the cursor truly left), and Escape remains the explicit cancel. The
+        // marquee session is resilient to leave for the same reason.
         // Keep the last board cursor during active routing so toolbar/context
         // layer switches can still drop a smart via at the last route point.
         if (toolMode === "measure") {
