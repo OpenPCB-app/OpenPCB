@@ -11,6 +11,7 @@ import { useShallow } from "zustand/react/shallow";
 import { Bot, PanelRightOpen } from "lucide-react";
 import { useNavigationStore } from "@/stores/navigation-store";
 import { useAuth } from "@/cloud/AuthProvider";
+import { useCloudPrefs } from "@/cloud/cloud-prefs";
 import { readCloudConfig } from "@/cloud/config";
 import { DesignerFloatingToolbar } from "./components/DesignerFloatingToolbar";
 import { DesignerHeader } from "./components/DesignerHeader";
@@ -291,8 +292,11 @@ function DesignerSpaceInner({
 }: ModuleSpaceProps): ReactElement {
   const { addToast } = useToast();
   const { session, enabled: cloudEnabled } = useAuth();
+  const projectSyncEnabled = useCloudPrefs((s) => s.projectSyncEnabled);
+  // No cloud headers (→ no command mirroring, no linking) unless cloud is
+  // configured AND the user has project sync turned on.
   const cloudHeaders = useMemo(() => {
-    if (!cloudEnabled) return undefined;
+    if (!cloudEnabled || !projectSyncEnabled) return undefined;
     return () => {
       const token = session?.access_token;
       const apiUrl = readCloudConfig().apiUrl;
@@ -301,7 +305,7 @@ function DesignerSpaceInner({
         ...(apiUrl ? { "x-cloud-api-url": apiUrl } : {}),
       };
     };
-  }, [cloudEnabled, session?.access_token]);
+  }, [cloudEnabled, projectSyncEnabled, session?.access_token]);
   const { state, actions } = useDesignerWorkspace({
     backendURL,
     moduleId,

@@ -15,6 +15,7 @@ import type {
   LibraryComponentPlacementDetail,
 } from "../../../sdks";
 import { cloudLink } from "./schema";
+import { loadSchematicProjection } from "./projection-read";
 
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
@@ -305,6 +306,39 @@ export async function linkDesignToCloud(
   }
   const designBody = { id: cloudDesignId };
 
+  // 3b) Seed the new cloud design with the design's CURRENT content so an
+  // existing local design appears in the cloud immediately (command mirroring
+  // only streams FUTURE edits, and its baseRevision check requires the cloud
+  // revision to match local — so without this an existing design never syncs).
+  // Skipped for the import flow (existing cloud design already has content).
+  let linkedRevision = params.lastSyncedRevision ?? -1;
+  if (!params.existingCloudDesignId) {
+    const projection = loadSchematicProjection(db, params.designId);
+    const revision = projection?.revision ?? 0;
+    if (projection && revision > 0) {
+      // Best-effort: a seed failure leaves an empty cloud design; the next edit
+      // surfaces a conflict in the badge and re-linking retries.
+      try {
+        const seedRes = await fetch(
+          `${params.apiUrl}/v1/designs/${cloudDesignId}/seed`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              authorization: `Bearer ${params.bearer}`,
+            },
+            body: JSON.stringify({ revision, projection }),
+          },
+        );
+        if (seedRes.ok) linkedRevision = revision;
+      } catch {
+        /* leave linkedRevision at default */
+      }
+    } else {
+      linkedRevision = revision; // empty design → cloud already at rev 0
+    }
+  }
+
   // 4) Persist the link.
   db.insert(cloudLink)
     .values({
@@ -312,7 +346,7 @@ export async function linkDesignToCloud(
       cloudDesignId: designBody.id,
       cloudWorkspaceId: wsBody.id,
       cloudUserId: meBody.id,
-      lastSyncedRevision: params.lastSyncedRevision ?? -1,
+      lastSyncedRevision: linkedRevision,
       linkedAt: nowIso(),
       failedAttempts: 0,
       lastError: null,

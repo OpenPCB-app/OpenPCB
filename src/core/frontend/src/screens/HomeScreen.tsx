@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownWideNarrow,
   ChevronDown,
+  Cloud,
   CloudOff,
   FilePlus,
   LayoutGrid,
@@ -15,6 +16,8 @@ import {
 } from "lucide-react";
 import { useBootstrap } from "../providers/BootstrapProvider";
 import { useNavigationStore } from "../stores/navigation-store";
+import { useAuth } from "@/cloud/AuthProvider";
+import { useCloudPrefs } from "@/cloud/cloud-prefs";
 import { Button } from "@shared/frontend/ui/button";
 import { Chip } from "@shared/frontend/ui/chip";
 import { Pill } from "@shared/frontend/ui/pill";
@@ -95,6 +98,54 @@ function DeleteConfirmationModal({
         </div>
       </div>
     </div>
+  );
+}
+
+// Cloud-sync status pill — reflects real auth + the project-sync setting, and
+// opens Settings → Account on click. (Replaces the old hardcoded "coming soon"
+// placeholder.)
+function CloudSyncPill() {
+  const { enabled, session } = useAuth();
+  const syncOn = useCloudPrefs((s) => s.projectSyncEnabled);
+  const openSettings = useNavigationStore((s) => s.openSettings);
+  if (!enabled) return null; // cloud not configured → no badge
+  const open = () => openSettings("account");
+  if (!session) {
+    return (
+      <Pill
+        tone="warning"
+        icon={<CloudOff className="h-3 w-3" />}
+        className="cursor-pointer"
+        title="Sign in to enable cloud sync"
+        onClick={open}
+      >
+        Sign in to sync
+      </Pill>
+    );
+  }
+  if (!syncOn) {
+    return (
+      <Pill
+        tone="neutral"
+        icon={<CloudOff className="h-3 w-3" />}
+        className="cursor-pointer"
+        title="Project sync is off — manage in Settings → Account"
+        onClick={open}
+      >
+        Sync off
+      </Pill>
+    );
+  }
+  return (
+    <Pill
+      tone="success"
+      icon={<Cloud className="h-3 w-3" />}
+      className="cursor-pointer"
+      title="Cloud sync is on — manage in Settings → Account"
+      onClick={open}
+    >
+      Cloud sync on
+    </Pill>
   );
 }
 
@@ -265,14 +316,7 @@ export function HomeScreen() {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <Pill
-                tone="warning"
-                icon={<CloudOff className="h-3 w-3" />}
-                className="cursor-pointer"
-                title="Cloud sync — coming soon"
-              >
-                Sign in to sync
-              </Pill>
+              <CloudSyncPill />
               <Button
                 variant="primary"
                 onClick={handleCreateDesign}

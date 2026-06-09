@@ -67,7 +67,10 @@ function installSecurityPolicy(): void {
       "style-src 'self' 'unsafe-inline' http://127.0.0.1:*",
       "img-src 'self' data: blob: http://127.0.0.1:*",
       "font-src 'self' data: http://127.0.0.1:* https://cdn.jsdelivr.net",
-      "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://cdn.jsdelivr.net",
+      // Dev: embedded backend (127.0.0.1), local devstack cloud (localhost:8000
+      // Supabase / :3000 cloud-api / :5173 dashboard), and prod cloud domains so
+      // a dev build can also point at prod.
+      "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https://*.cloud.openpcb.app wss://*.cloud.openpcb.app https://cdn.jsdelivr.net",
       "worker-src 'self' blob: http://127.0.0.1:*",
       "media-src 'self' blob:",
       "object-src 'none'",
@@ -80,7 +83,9 @@ function installSecurityPolicy(): void {
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data: https://cdn.jsdelivr.net",
-      "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://cdn.jsdelivr.net",
+      // Prod: embedded backend (127.0.0.1) + OpenPCB Cloud (Supabase, cloud-api,
+      // realtime) under the *.cloud.openpcb.app wildcard.
+      "connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* https://*.cloud.openpcb.app wss://*.cloud.openpcb.app https://cdn.jsdelivr.net",
       "worker-src 'self' blob:",
       "media-src 'self' blob:",
       "object-src 'none'",
@@ -255,6 +260,14 @@ ipcMain.handle("get-backend-url", () => {
 });
 
 ipcMain.handle("deep-link:pending", () => flushPending());
+
+// Open a URL in the user's default browser (used by the cloud-login handoff).
+// Scheme-allowlisted to http(s) so the renderer can't be tricked into launching
+// arbitrary protocol handlers.
+ipcMain.handle("shell:open-external", (_e, url: string) => {
+  if (typeof url !== "string" || !/^https?:\/\//i.test(url)) return;
+  void shell.openExternal(url);
+});
 
 ipcMain.handle("secure-storage:get", (_e, key: string) => getSecureItem(key));
 ipcMain.handle("secure-storage:set", (_e, key: string, value: string) =>

@@ -4,12 +4,14 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { getSupabase } from "./supabase";
 import { readCloudConfig } from "./config";
+import { createPkcePair } from "./pkce";
 
 type Tier = "pro" | null;
 
@@ -19,7 +21,12 @@ interface AuthContextValue {
   session: Session | null;
   tier: Tier;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  // Start the browser-based login handoff (opens the Cloud login page; the
+  // session is installed when the openpcb://auth-callback deep-link returns).
+  beginCloudLogin: () => Promise<void>;
+  // Last login-handoff error, surfaced in the Account panel (there is no longer
+  // an in-app form to host inline errors).
+  loginError: string | null;
   signOut: () => Promise<void>;
   // Set by AcceptInvite flow (via openpcb://invite?token=...).
   acceptInviteToken: (token: string, newPassword: string) => Promise<void>;
@@ -34,6 +41,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sb = getSupabase();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState<boolean>(cfg.enabled);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  // PKCE state for an in-flight browser login. In-memory only — survives the
+  // openExternal → deep-link round trip because the renderer is not reloaded.
+  const pkceRef = useRef<{ verifier: string; state: string } | null>(null);
 
   useEffect(() => {
     if (!sb) {
@@ -71,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const handleUrl = (raw: string) => {
       try {
         const url = new URL(raw);
-        // openpcb://invite?token=... or openpcb://auth-callback?code=...
+        // openpcb://invite?token=... or openpcb://auth-callback?code=&state=
         if (url.host === "invite" || url.pathname.includes("invite")) {
           const token = url.searchParams.get("token");
           if (token)
@@ -80,7 +91,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             );
         } else if (url.host === "auth-callback") {
           const code = url.searchParams.get("code");
-          if (code && sb) void sb.auth.exchangeCodeForSession(code);
+          const returnedState = url.searchParams.get("state");
+          const pending = pkceRef.current;
+          // Ignore callbacks we didn't initiate or whose state doesn't match
+          // (CSRF / cross-session guard). Clear immediately — single use.
+          if (!code || !pending || returnedState !== pending.state) return;
+          pkceRef.current = null;
+          void completeCloudLogin(code, pending.verifier);
         }
       } catch {
         /* ignore malformed */
@@ -88,16 +105,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     api.onDeepLink(handleUrl);
     api.flushPendingDeepLink?.().then((u) => u && handleUrl(u));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sb]);
 
-  const signIn = useCallback(
-    async (email: string, password: string) => {
-      if (!sb) throw new Error("Cloud not configured");
-      const { error } = await sb.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+  // Redeem the auth code returned via openpcb://auth-callback for a magiclink
+  // token at the cloud-api broker, then install an independent session.
+  const completeCloudLogin = useCallback(
+    async (code: string, verifier: string) => {
+      if (!sb) return;
+      setLoginError(null);
+      try {
+        const { apiUrl } = readCloudConfig();
+        const res = await fetch(`${apiUrl}/v1/auth/desktop/token`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ code, verifier }),
+        });
+        if (!res.ok) throw new Error(`Sign-in failed (${res.status})`);
+        const { token_hash } = (await res.json()) as { token_hash: string };
+        const { error } = await sb.auth.verifyOtp({
+          type: "magiclink",
+          token_hash,
+        });
+        if (error) throw error;
+        // onAuthStateChange installs the session; secure storage persists it.
+      } catch (err) {
+        setLoginError(
+          err instanceof Error ? err.message : "Sign-in failed. Try again.",
+        );
+      }
     },
     [sb],
   );
+
+  // Open the Cloud login page in the system browser to start the handoff.
+  const beginCloudLogin = useCallback(async () => {
+    if (!sb) throw new Error("Cloud not configured");
+    const { webUrl } = readCloudConfig();
+    if (!webUrl) {
+      setLoginError(
+        "Cloud login is not configured (missing VITE_CLOUD_WEB_URL).",
+      );
+      return;
+    }
+    setLoginError(null);
+    const { verifier, challenge, state } = await createPkcePair();
+    pkceRef.current = { verifier, state };
+    const target = `${webUrl.replace(/\/$/, "")}/desktop-auth?challenge=${encodeURIComponent(
+      challenge,
+    )}&state=${encodeURIComponent(state)}`;
+    const api = (
+      window as unknown as {
+        electronAPI?: { openExternal?: (url: string) => Promise<void> };
+      }
+    ).electronAPI;
+    if (api?.openExternal) await api.openExternal(target);
+    else window.open(target, "_blank", "noopener,noreferrer");
+  }, [sb]);
 
   const signOut = useCallback(async () => {
     if (!sb) return;
@@ -144,7 +208,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       tier,
       loading,
-      signIn,
+      beginCloudLogin,
+      loginError,
       signOut,
       acceptInviteToken,
       updatePassword,
@@ -155,7 +220,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       tier,
       loading,
-      signIn,
+      beginCloudLogin,
+      loginError,
       signOut,
       acceptInviteToken,
       updatePassword,

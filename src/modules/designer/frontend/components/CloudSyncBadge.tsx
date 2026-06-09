@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import { useAuth } from "@/cloud/AuthProvider";
+import { useCloudPrefs } from "@/cloud/cloud-prefs";
 
 interface CloudLink {
   cloudDesignId: string;
@@ -25,14 +32,23 @@ interface CloudSyncBadgeProps {
   ) => void;
 }
 
+/**
+ * Cloud-sync status for the open design. Under automatic sync, designs link
+ * themselves when signed in + project sync is on (no manual button) — this badge
+ * is purely informational. The master switch lives in Settings → Account.
+ */
 export function CloudSyncBadge({
   designId,
   api,
   onNotify,
 }: CloudSyncBadgeProps): ReactElement | null {
   const { enabled, session } = useAuth();
+  const projectSyncEnabled = useCloudPrefs((s) => s.projectSyncEnabled);
   const [link, setLink] = useState<CloudLink | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [linking, setLinking] = useState(false);
+  // One auto-link attempt per design per mount (the backend call is idempotent
+  // on an existing link, but this avoids redundant requests on re-render).
+  const attemptedRef = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!designId) {
@@ -48,49 +64,39 @@ export function CloudSyncBadge({
   }, [designId, api]);
 
   useEffect(() => {
+    attemptedRef.current = null;
     void refresh();
   }, [refresh]);
 
-  const onLink = useCallback(async () => {
-    if (!designId) return;
-    setBusy(true);
-    try {
-      await api.linkDesignToCloud(designId);
-      onNotify("Linked to cloud", "success");
-      await refresh();
-    } catch (err) {
-      onNotify(
-        `Cloud link failed: ${err instanceof Error ? err.message : String(err)}`,
-        "error",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }, [api, designId, onNotify, refresh]);
-
-  const onUnlink = useCallback(async () => {
-    if (!designId) return;
-    if (
-      !window.confirm(
-        "Unlink this design from cloud? The cloud copy is kept, but local changes will no longer sync.",
-      )
-    ) {
-      return;
-    }
-    setBusy(true);
-    try {
-      await api.unlinkDesignFromCloud(designId);
-      onNotify("Unlinked from cloud", "info");
-      await refresh();
-    } catch (err) {
-      onNotify(
-        `Unlink failed: ${err instanceof Error ? err.message : String(err)}`,
-        "error",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }, [api, designId, onNotify, refresh]);
+  // Auto-link: when signed in with project sync on, push the design to the
+  // cloud (seeds existing content + streams future edits).
+  useEffect(() => {
+    if (!enabled || !session || !projectSyncEnabled || !designId) return;
+    if (link || linking) return;
+    if (attemptedRef.current === designId) return;
+    attemptedRef.current = designId;
+    setLinking(true);
+    void api
+      .linkDesignToCloud(designId)
+      .then(() => refresh())
+      .catch((err) => {
+        onNotify(
+          `Cloud sync failed: ${err instanceof Error ? err.message : String(err)}`,
+          "error",
+        );
+      })
+      .finally(() => setLinking(false));
+  }, [
+    enabled,
+    session,
+    projectSyncEnabled,
+    designId,
+    link,
+    linking,
+    api,
+    refresh,
+    onNotify,
+  ]);
 
   if (!enabled) return null;
   if (!session) {
@@ -103,19 +109,23 @@ export function CloudSyncBadge({
       </span>
     );
   }
+  if (!projectSyncEnabled) {
+    return (
+      <span
+        className="text-xs text-slate-400"
+        title="Project sync is off — turn it on in Settings → Account"
+      >
+        cloud: sync off
+      </span>
+    );
+  }
   if (!designId) return null;
 
   if (!link) {
     return (
-      <button
-        type="button"
-        onClick={() => void onLink()}
-        disabled={busy}
-        className="rounded-sm border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
-        title="Push this design to the cloud"
-      >
-        {busy ? "Linking…" : "Link to Cloud"}
-      </button>
+      <span className="text-xs text-slate-400" title="Syncing to cloud…">
+        {linking ? "cloud: syncing…" : "cloud: …"}
+      </span>
     );
   }
 
@@ -138,19 +148,8 @@ export function CloudSyncBadge({
       : `Cloud rev: ${link.lastSyncedRevision} (linked ${link.cloudDesignId.slice(0, 8)}…)`;
 
   return (
-    <span className="inline-flex items-center gap-1">
-      <span className={statusClass} title={statusTitle}>
-        {statusText}
-      </span>
-      <button
-        type="button"
-        onClick={() => void onUnlink()}
-        disabled={busy}
-        className="rounded-sm px-1 text-xs text-slate-400 hover:text-slate-600 disabled:opacity-50 dark:hover:text-slate-200"
-        title="Unlink from cloud"
-      >
-        Unlink
-      </button>
+    <span className={statusClass} title={statusTitle}>
+      {statusText}
     </span>
   );
 }

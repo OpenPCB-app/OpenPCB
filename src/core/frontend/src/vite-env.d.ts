@@ -53,6 +53,7 @@ declare global {
     openUserDataFolder?: () => Promise<FolderOpenResult>;
     secureStorage?: ElectronSecureStorage;
     preferences?: ElectronPreferences;
+    openExternal?: (url: string) => Promise<void>;
     window?: {
       setOverlayTheme: (theme: {
         color: string;

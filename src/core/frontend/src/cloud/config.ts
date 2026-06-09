@@ -6,6 +6,10 @@ export interface CloudConfig {
   supabaseUrl: string;
   supabaseAnonKey: string;
   apiUrl: string;
+  // Cloud website (dashboard) host that hosts the browser login page. Not part
+  // of `enabled` so existing sessions keep working if it's unset; the login
+  // flow validates it separately (see AuthProvider.beginCloudLogin).
+  webUrl: string;
 }
 
 export function readCloudConfig(): CloudConfig {
@@ -13,10 +17,12 @@ export function readCloudConfig(): CloudConfig {
   const supabaseAnonKey =
     (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ?? "";
   const apiUrl = (import.meta.env.VITE_CLOUD_API_URL as string) ?? "";
+  const webUrl = (import.meta.env.VITE_CLOUD_WEB_URL as string) ?? "";
   return {
     enabled: Boolean(supabaseUrl && supabaseAnonKey && apiUrl),
     supabaseUrl,
     supabaseAnonKey,
     apiUrl,
+    webUrl,
   };
 }

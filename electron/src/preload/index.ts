@@ -60,6 +60,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   flushPendingDeepLink: (): Promise<string | null> => {
     return ipcRenderer.invoke("deep-link:pending");
   },
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke("shell:open-external", url),
   secureStorage: {
     get: (key: string): Promise<string | null> =>
       ipcRenderer.invoke("secure-storage:get", key),
