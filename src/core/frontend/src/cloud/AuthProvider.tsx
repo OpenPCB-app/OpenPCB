@@ -23,6 +23,8 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
   // Set by AcceptInvite flow (via openpcb://invite?token=...).
   acceptInviteToken: (token: string, newPassword: string) => Promise<void>;
+  // Update the current user's password (signed-in change + recovery completion).
+  updatePassword: (newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -120,6 +122,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [sb],
   );
 
+  const updatePassword = useCallback(
+    async (newPassword: string) => {
+      if (!sb) throw new Error("Cloud not configured");
+      const { error } = await sb.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+    },
+    [sb],
+  );
+
   const user = session?.user ?? null;
   const tier: Tier =
     (user?.app_metadata as { tier?: string } | undefined)?.tier === "pro"
@@ -136,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signOut,
       acceptInviteToken,
+      updatePassword,
     }),
     [
       cfg.enabled,
@@ -146,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signOut,
       acceptInviteToken,
+      updatePassword,
     ],
   );
 

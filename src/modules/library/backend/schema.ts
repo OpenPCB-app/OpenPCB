@@ -134,6 +134,21 @@ export const components = sqliteTable(
 );
 
 /**
+ * Desktop-local sync state for the custom-component cloud library (single row,
+ * id='default'). Mirrors designer's `designer_cloud_link` semantics.
+ */
+export const cloudSync = sqliteTable("library_cloud_sync", {
+  id: text("id").primaryKey(),
+  cloudWorkspaceId: text("cloud_workspace_id"),
+  lastPackId: text("last_pack_id"),
+  lastPackageSha256: text("last_package_sha256"),
+  componentCount: integer("component_count").notNull().default(0),
+  lastSyncedAt: text("last_synced_at"),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  lastError: text("last_error"),
+});
+
+/**
  * Content-addressed cache of rendered preview SVGs. Populated lazily by the
  * `/preview.svg` endpoints; identical symbol/footprint payloads share a row.
  */

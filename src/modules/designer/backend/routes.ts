@@ -2158,6 +2158,14 @@ export function registerRoutes(
     return success({ link });
   });
 
+  // Sever the local→cloud association (stops mirroring). Leaves the remote
+  // cloud design intact.
+  router.delete("/designs/:designId/cloud-link", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    await store.unlinkDesignFromCloud(designId);
+    return success({ ok: true });
+  });
+
   router.get("/designs/:designId/history", async ({ params, query }) => {
     const designId = params.getOrThrow("designId");
     const sessionId = query.get("sessionId")?.trim();

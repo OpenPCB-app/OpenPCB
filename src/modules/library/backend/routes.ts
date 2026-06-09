@@ -38,6 +38,11 @@ import {
   installOpclibFromUrl,
 } from "./sync/install-source";
 import {
+  getLibrarySyncState,
+  pullCustomLibrary,
+  syncCustomLibrary,
+} from "./cloud-sync";
+import {
   checkCoreLibraryUpdates,
   getCoreLibraryStatus,
   updateCoreLibrary,
@@ -1221,6 +1226,38 @@ export function registerRoutes(
   router.post("/core-library/update", async () => {
     const result = await updateCoreLibrary(ctx);
     return success({ result }, result.imported ? 201 : 200);
+  });
+
+  // ── Custom-component cloud sync ─────────────────────────────────────
+  // Token + API URL are passed per-request (x-cloud-bearer / x-cloud-api-url),
+  // mirroring the designer cloud sync; the backend never stores the token.
+  function cloudCreds(req: Request): { bearer: string; apiUrl: string } {
+    const bearer = req.headers.get("x-cloud-bearer");
+    const apiUrl = req.headers.get("x-cloud-api-url");
+    if (!bearer || !apiUrl) {
+      throw new ValidationError(
+        "x-cloud-bearer and x-cloud-api-url headers required",
+      );
+    }
+    return { bearer, apiUrl };
+  }
+
+  router.get("/cloud/sync", async () => {
+    return success({ state: getLibrarySyncState(getDb(ctx)) });
+  });
+
+  router.post("/cloud/sync", async (routeCtx) => {
+    const result = await syncCustomLibrary(
+      getDb(ctx),
+      ctx.logger,
+      cloudCreds(routeCtx.req),
+    );
+    return success({ result });
+  });
+
+  router.post("/cloud/pull", async (routeCtx) => {
+    const result = await pullCustomLibrary(ctx, cloudCreds(routeCtx.req));
+    return success({ result });
   });
 
   router.get("/components", async (routeCtx) => {

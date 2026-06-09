@@ -20,6 +20,7 @@ import type { LibraryComponent } from "../../../sdks/library";
 import { useNavigationStore } from "../../../core/frontend/src/stores/navigation-store";
 import { ComponentDetailPage } from "./ComponentDetailPage";
 import { ActiveFilterChips } from "./components/ActiveFilterChips";
+import { CloudLibrarySyncButton } from "./components/CloudLibrarySyncButton";
 import { FacetSidebar } from "./components/FacetSidebar";
 import { useLibraryFacets } from "./hooks/useLibraryFacets";
 import { commitKicadZipImportRequest } from "./import-wizard/import-api";
@@ -549,6 +550,12 @@ export function LibrarySpace({
             onChange={(event) => {
               void handleZipUpload(event.currentTarget.files?.[0] ?? null);
             }}
+          />
+
+          <CloudLibrarySyncButton
+            backendURL={backendURL}
+            moduleId={moduleId}
+            onChanged={() => setRefreshTick((value) => value + 1)}
           />
 
           <ActionButton

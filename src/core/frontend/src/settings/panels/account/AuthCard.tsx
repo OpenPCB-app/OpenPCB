@@ -1,40 +1,83 @@
 import { useState } from "react";
-import { Github } from "lucide-react";
+import { useAuth } from "@/cloud/AuthProvider";
+import { getSupabase } from "@/cloud/supabase";
 import { cn } from "@/lib/utils";
 import { CLOUD_AUTH_ENABLED, COMING_SOON_NOTICE } from "./config";
-import { emailHint } from "./auth-schema";
+import { emailHint, emailSchema } from "./auth-schema";
 
 export function AuthCard() {
+  const { enabled: cloudConfigured, signIn } = useAuth();
+  const enabled = CLOUD_AUTH_ENABLED && cloudConfigured;
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
-  const [showNotice, setShowNotice] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const emailError = emailTouched ? emailHint(email) : null;
 
-  // While the flag is off every action is inert and surfaces the notice.
-  const inert = (event?: { preventDefault: () => void }) => {
-    event?.preventDefault();
-    if (!CLOUD_AUTH_ENABLED) {
-      setShowNotice(true);
-      return true;
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!enabled) {
+      setNotice(COMING_SOON_NOTICE);
+      return;
     }
-    return false;
+    if (submitting) return;
+    setError(null);
+    setNotice(null);
+    if (!emailSchema.safeParse(email).success) {
+      setEmailTouched(true);
+      return;
+    }
+    if (password.length === 0) {
+      setError("Password is required.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      // On success AuthProvider's onAuthStateChange updates the session and the
+      // Account panel swaps to the signed-in view.
+      await signIn(email, password);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign in failed.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
-    if (inert(event)) return;
-    // TODO(cloud-auth): call auth client (sign in).
-  };
-
-  const handleGitHub = () => {
-    if (inert()) return;
-    // TODO(cloud-auth): start GitHub OAuth flow.
-  };
-
-  const handleForgot = () => {
-    if (inert()) return;
-    // TODO(cloud-auth): open password reset flow.
+  const handleForgot = async () => {
+    if (!enabled) {
+      setNotice(COMING_SOON_NOTICE);
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    if (!emailSchema.safeParse(email).success) {
+      setEmailTouched(true);
+      setError("Enter your email above, then choose Forgot.");
+      return;
+    }
+    const sb = getSupabase();
+    if (!sb) return;
+    setSubmitting(true);
+    try {
+      // Recovery link returns to the app via the openpcb://auth-callback
+      // deep-link, which exchanges the code for a session; the user then sets a
+      // new password from the signed-in account view.
+      const { error: resetErr } = await sb.auth.resetPasswordForEmail(email, {
+        redirectTo: "openpcb://auth-callback",
+      });
+      if (resetErr) throw resetErr;
+      setNotice("Password reset email sent. Check your inbox.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not send reset email.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -42,21 +85,6 @@ export function AuthCard() {
       <h3 className="mb-3 text-sm font-medium text-slate-900 dark:text-slate-100">
         Sign in
       </h3>
-
-      <button
-        type="button"
-        onClick={handleGitHub}
-        className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-      >
-        <Github className="h-4 w-4" strokeWidth={1.8} />
-        Continue with GitHub
-      </button>
-
-      <div className="my-3 flex items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
-        <span className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
-        or
-        <span className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
-      </div>
 
       <form onSubmit={handleSubmit} className="space-y-3" noValidate>
         <div className="space-y-1">
@@ -104,7 +132,8 @@ export function AuthCard() {
             <button
               type="button"
               onClick={handleForgot}
-              className="cursor-pointer text-xs font-medium text-violet-600 hover:text-violet-500 dark:text-violet-400"
+              disabled={submitting}
+              className="cursor-pointer text-xs font-medium text-violet-600 hover:text-violet-500 disabled:cursor-not-allowed disabled:opacity-60 dark:text-violet-400"
             >
               Forgot?
             </button>
@@ -122,18 +151,28 @@ export function AuthCard() {
 
         <button
           type="submit"
-          className="h-9 w-full cursor-pointer rounded-md bg-violet-600 text-sm font-medium text-white transition-colors hover:bg-violet-500"
+          disabled={submitting}
+          className="h-9 w-full cursor-pointer rounded-md bg-violet-600 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Sign in
+          {submitting ? "Signing in…" : "Sign in"}
         </button>
       </form>
 
-      {showNotice ? (
+      {error ? (
+        <p
+          role="alert"
+          className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300"
+        >
+          {error}
+        </p>
+      ) : null}
+
+      {notice ? (
         <p
           role="status"
           className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
         >
-          {COMING_SOON_NOTICE}
+          {notice}
         </p>
       ) : null}
     </section>

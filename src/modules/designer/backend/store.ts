@@ -37,6 +37,7 @@ import {
   linkDesignToCloud as linkToCloud,
   mirrorCommand,
   readLinkPublic,
+  unlinkDesign,
 } from "./cloud-sync";
 import {
   getDrcResult,
@@ -179,6 +180,7 @@ export interface DesignerStore {
     failedAttempts: number;
     lastError: string | null;
   } | null>;
+  unlinkDesignFromCloud(designId: string): Promise<void>;
   getHistory(
     designId: string,
     sessionId: string,
@@ -877,6 +879,10 @@ export function createDesignerStore(
 
     async getCloudLink(designId) {
       return readLinkPublic(db, designId);
+    },
+
+    async unlinkDesignFromCloud(designId) {
+      unlinkDesign(db, designId);
     },
   };
 }

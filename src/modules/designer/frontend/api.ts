@@ -375,6 +375,17 @@ export function createDesignerApi(params: {
       );
     },
 
+    async unlinkDesignFromCloud(designId: string): Promise<{ ok: boolean }> {
+      return fetchData<{ ok: boolean }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/cloud-link`,
+        ),
+        { method: "DELETE" },
+      );
+    },
+
     async getHistory(
       designId: string,
       sessionId: string,

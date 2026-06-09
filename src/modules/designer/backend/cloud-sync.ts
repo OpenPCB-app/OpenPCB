@@ -127,16 +127,22 @@ async function recordSyncOutcome(
       .set({ lastSyncedRevision: revision, failedAttempts: 0, lastError: null })
       .where(eq(cloudLink.designId, designId))
       .run();
-  } else {
-    const cur = readLink(db, designId);
-    db.update(cloudLink)
-      .set({
-        failedAttempts: (cur ? 0 : 0) + 1,
-        lastError: err ?? "unknown",
-      })
-      .where(eq(cloudLink.designId, designId))
-      .run();
+    return;
   }
+  // Accumulate the failure count (the previous implementation always reset it
+  // to 1, masking repeated failures).
+  const cur = db
+    .select({ failedAttempts: cloudLink.failedAttempts })
+    .from(cloudLink)
+    .where(eq(cloudLink.designId, designId))
+    .get();
+  db.update(cloudLink)
+    .set({
+      failedAttempts: (cur?.failedAttempts ?? 0) + 1,
+      lastError: err ?? "unknown",
+    })
+    .where(eq(cloudLink.designId, designId))
+    .run();
 }
 
 export async function mirrorCommand(
@@ -206,13 +212,14 @@ export async function mirrorCommand(
       status: res.status,
       body: body.slice(0, 300),
     });
-    recordSyncOutcome(
-      db,
-      opts.designId,
-      false,
-      opts.newRevision,
-      `${res.status} ${body.slice(0, 200)}`,
-    );
+    // A 409 means the cloud design has diverged from local (e.g. edited from
+    // another device). Tag it distinctly so the UI can prompt a reconcile
+    // rather than showing a generic error.
+    const detail =
+      res.status === 409
+        ? "REVISION_CONFLICT (409): cloud design has diverged — reopen it from cloud to reconcile"
+        : `${res.status} ${body.slice(0, 200)}`;
+    recordSyncOutcome(db, opts.designId, false, opts.newRevision, detail);
   } catch (err) {
     logger.error("cloud-sync: network error", {
       err: err instanceof Error ? err.message : String(err),
@@ -317,6 +324,14 @@ export async function linkDesignToCloud(
     workspaceId: wsBody.id,
     userId: meBody.id,
   };
+}
+
+/**
+ * Remove the cloud link for a design (stop mirroring). The remote cloud design
+ * is left intact; this only severs the local→cloud association.
+ */
+export function unlinkDesign(db: DbClient, designId: string): void {
+  db.delete(cloudLink).where(eq(cloudLink.designId, designId)).run();
 }
 
 export function readLinkPublic(
