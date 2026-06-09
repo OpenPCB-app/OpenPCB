@@ -36,6 +36,7 @@ import {
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
 import { TraceLayer } from "./layers/TraceLayer";
 import { TracePreviewLayer } from "./layers/TracePreviewLayer";
+import { TraceVertexHandlesLayer } from "./layers/TraceVertexHandlesLayer";
 import { CopperFillLayer } from "./layers/CopperFillLayer";
 import { viaCrossesLayer } from "./layers/copper-fill-trace-geometry";
 import { ViaLayer } from "./layers/ViaLayer";
@@ -1334,6 +1335,20 @@ export function PcbScene({
     return projection.overlayTexts.filter((t) => ids.has(t.id));
   }, [projection.overlayTexts, selection?.overlayTextIds]);
 
+  // Single-trace vertex handles: only when exactly one trace (and nothing else)
+  // is selected — matches the pointer-down priority gate in PcbCanvas.
+  const singleSelectedTrace = useMemo(() => {
+    const ids = selection?.traceIds;
+    if (!ids || ids.size !== 1) return null;
+    if ((selection?.placementIds?.size ?? 0) > 0) return null;
+    if ((selection?.viaIds?.size ?? 0) > 0) return null;
+    if ((selection?.freeHoleIds?.size ?? 0) > 0) return null;
+    if ((selection?.freePadIds?.size ?? 0) > 0) return null;
+    if ((selection?.overlayTextIds?.size ?? 0) > 0) return null;
+    const id = [...ids][0]!;
+    return projection.traces.find((t) => t.id === id) ?? null;
+  }, [selection, projection.traces]);
+
   const renderFreeHoles = useMemo(() => {
     const overrides = freePrimitiveDragOverrides?.freeHoles;
     if (!overrides || overrides.size === 0) return projection.freeHoles;
@@ -1777,6 +1792,9 @@ export function PcbScene({
             )}
           />
         ))}
+        {singleSelectedTrace ? (
+          <TraceVertexHandlesLayer trace={singleSelectedTrace} />
+        ) : null}
         <SelectionRectOverlay
           a={marqueeOverlay?.a ?? null}
           b={marqueeOverlay?.b ?? null}

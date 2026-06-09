@@ -33,6 +33,7 @@ import {
   hitPad,
   hitPlacement,
   hitTrace,
+  hitTraceVertex,
   hitVia,
   type PcbHitCandidate,
   type TraceHit,
@@ -40,6 +41,8 @@ import {
 
 /** Click/hover grab radius (px) for DRC markers; → mm via the live zoom. */
 const DRC_HIT_PX = 18;
+/** Grab radius (px) for trace vertex handles; → mm via the live zoom. */
+const HANDLE_HIT_PX = 10;
 import {
   applyHandleDrag,
   countOutsideBoard,
@@ -111,7 +114,7 @@ import {
   type RouteSession,
 } from "./tools/route-tool-state";
 import { buildPreviewPath } from "./tools/route-preview-geometry";
-import { dragTraceSegment } from "./tools/trace-drag-state";
+import { dragTraceSegment, dragTraceVertex } from "./tools/trace-drag-state";
 import {
   initialMeasureToolState,
   measureToolReducer,
@@ -245,6 +248,28 @@ interface TraceDragSession {
   previewPointsNm: PointNm[];
   /** Routing-alignment guides for the live drag point (cyan rays + collinear
    * lines), recomputed each pointer-move; empty when guides are disabled. */
+  guides: RouteGuide[];
+  rejected: boolean;
+  moved: boolean;
+}
+
+/**
+ * In-progress drag of a single INTERIOR trace vertex (bend). Mirrors
+ * {@link TraceDragSession} but moves one vertex; `previewPointsNm` is recomputed
+ * each pointer-move via `dragTraceVertex`. Commits the preview on pointer-up.
+ */
+interface TraceVertexDragSession {
+  traceId: string;
+  /** Interior vertex being dragged (1 .. n-2). */
+  vertexIndex: number;
+  layer: PcbCopperLayerId;
+  widthMm: number;
+  netId: string | null;
+  netClassId: string;
+  segmentMode: PcbTraceSegmentMode;
+  originalPointsNm: PointNm[];
+  startCursorMm: PcbPointMm;
+  previewPointsNm: PointNm[];
   guides: RouteGuide[];
   rejected: boolean;
   moved: boolean;
@@ -423,6 +448,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     useState<TraceDragSession | null>(null);
   const traceDragSessionRef = useRef<TraceDragSession | null>(null);
   traceDragSessionRef.current = traceDragSession;
+  const [traceVertexDragSession, setTraceVertexDragSession] =
+    useState<TraceVertexDragSession | null>(null);
+  const traceVertexDragSessionRef = useRef<TraceVertexDragSession | null>(null);
+  traceVertexDragSessionRef.current = traceVertexDragSession;
   const [toolMode, setToolMode] = useState<ToolMode>("select");
   const [routeState, dispatchRoute] = useReducer(
     routeToolReducer,
@@ -1340,11 +1369,63 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           }
         }
 
+        // Trace-vertex handle takes priority over the segment body when exactly
+        // one trace is selected: grabbing a bend reshapes the corner, not the
+        // segment. Tolerance is a constant on-screen radius (px → mm via the
+        // live zoom), matching the DRC-marker hit convention above.
+        {
+          const sel = selectionRef.current;
+          const singleTraceId =
+            sel.traceIds.size === 1 &&
+            sel.placementIds.size === 0 &&
+            sel.viaIds.size === 0 &&
+            (sel.freeHoleIds?.size ?? 0) === 0 &&
+            (sel.freePadIds?.size ?? 0) === 0 &&
+            (sel.overlayTextIds?.size ?? 0) === 0
+              ? [...sel.traceIds][0]!
+              : null;
+          if (
+            singleTraceId &&
+            selectionFilterRef.current.traces &&
+            isCopperLayerVisible(visibleLayers, activeCopperLayer)
+          ) {
+            const selTrace = tracesRef.current.find(
+              (t) => t.id === singleTraceId,
+            );
+            if (selTrace && selTrace.layer === activeCopperLayer) {
+              const tolMm = HANDLE_HIT_PX / 2 / drcZoomRef.current;
+              const vHit = hitTraceVertex(selTrace, cursor, tolMm);
+              if (vHit) {
+                setCommittedDragOverride(null);
+                setDragSession(null);
+                setTraceDragSession(null);
+                setTraceVertexDragSession({
+                  traceId: selTrace.id,
+                  vertexIndex: vHit.vertexIndex,
+                  layer: selTrace.layer,
+                  widthMm: selTrace.widthMm,
+                  netId: selTrace.netId,
+                  netClassId: selTrace.netClassId,
+                  segmentMode: selTrace.segmentMode,
+                  originalPointsNm: selTrace.pointsNm.map((p) => ({ ...p })),
+                  startCursorMm: cursor,
+                  previewPointsNm: selTrace.pointsNm.map((p) => ({ ...p })),
+                  guides: [],
+                  rejected: false,
+                  moved: false,
+                });
+                return;
+              }
+            }
+          }
+        }
+
         // Select mode: click trace/via/freeHole/freePad/overlayText first, then placement.
         const shift = event.modifiers.shift;
         const current = selectionRef.current;
         const sf = selectionFilterRef.current;
         setTraceDragSession(null);
+        setTraceVertexDragSession(null);
         const traceHit =
           sf.traces && isCopperLayerVisible(visibleLayers, activeCopperLayer)
             ? hitTrace(tracesRef.current, cursor, activeCopperLayer)
@@ -1636,6 +1717,69 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           marquee.updateMarqueeCursor(cursor);
           return;
         }
+        // Trace VERTEX drag in flight: re-solve the two adjacent connectors.
+        // Reuses the same grid-snap + alignment-guide pipeline as the segment
+        // drag, anchored at the vertex itself.
+        if (traceVertexDragSessionRef.current) {
+          workspace.hoverNet(null);
+          const session = traceVertexDragSessionRef.current;
+          let snapped = snapPoint(cursor);
+          let guides: RouteGuide[] = [];
+          if (
+            alignmentGuidesEnabledRef.current &&
+            !altHeldRef.current &&
+            workspace.projection
+          ) {
+            const v = session.originalPointsNm[session.vertexIndex];
+            if (v) {
+              const anchorMm = { x: v.x / NM_PER_MM, y: v.y / NM_PER_MM };
+              const res = computeRouteGuides({
+                anchorMm,
+                cursorMm: snapped,
+                posture: "auto",
+                placements: workspace.projection.placements,
+                traces: workspace.projection.traces.filter(
+                  (t) => t.id !== session.traceId,
+                ),
+                vias: workspace.projection.vias,
+                activeLayer: session.layer,
+                netId: session.netId,
+                toleranceMm: SNAP_THRESHOLD_PX / drcZoomRef.current,
+              });
+              guides = res.guides;
+              if (res.snapPointMm) snapped = res.snapPointMm;
+            }
+          }
+          const startNm = pointMmToNm(session.startCursorMm);
+          const curNm = pointMmToNm(snapped);
+          const deltaNm = { x: curNm.x - startNm.x, y: curNm.y - startNm.y };
+          const result = dragTraceVertex(
+            session.originalPointsNm,
+            session.vertexIndex,
+            deltaNm,
+            session.segmentMode,
+          );
+          setTraceVertexDragSession((prev) => {
+            if (!prev) return prev;
+            if (result.kind === "rejected") {
+              return {
+                ...prev,
+                previewPointsNm: prev.originalPointsNm,
+                guides,
+                rejected: true,
+                moved: true,
+              };
+            }
+            return {
+              ...prev,
+              previewPointsNm: result.pointsNm,
+              guides,
+              rejected: false,
+              moved: true,
+            };
+          });
+          return;
+        }
         // Trace segment drag in flight: recompute the perpendicular reshape.
         if (traceDragSessionRef.current) {
           workspace.hoverNet(null);
@@ -1803,6 +1947,19 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         if (marquee.marqueeSession) {
           marquee.finishMarquee();
+          return;
+        }
+        const vertexSession = traceVertexDragSessionRef.current;
+        if (vertexSession) {
+          setTraceVertexDragSession(null);
+          if (vertexSession.moved && !vertexSession.rejected) {
+            void workspace
+              .updateTraceGeometry(
+                vertexSession.traceId,
+                vertexSession.previewPointsNm,
+              )
+              .catch(() => undefined);
+          }
           return;
         }
         const traceSession = traceDragSessionRef.current;
@@ -2555,7 +2712,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           marquee.cancelMarquee();
           return;
         }
-        // Cancel an in-flight trace-segment drag without dropping the selection.
+        // Cancel an in-flight trace reshape (segment or vertex) without dropping
+        // the selection.
+        if (traceVertexDragSessionRef.current) {
+          setTraceVertexDragSession(null);
+          return;
+        }
         if (traceDragSessionRef.current) {
           setTraceDragSession(null);
           return;
@@ -2717,42 +2879,47 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   // Live preview for an in-flight trace-segment drag — rendered through the
   // same ghost as the route preview (the two are mutually exclusive: drag runs
   // in select mode, route preview only while routing).
+  // Whichever trace reshape is in flight — a vertex drag wins over a segment
+  // drag (they're mutually exclusive in practice). Both sessions expose the same
+  // preview/DRC fields, so downstream consumers treat them uniformly.
+  const activeTraceDrag = traceVertexDragSession ?? traceDragSession;
+
   const traceDragPreview = useMemo(() => {
     if (
-      !traceDragSession ||
-      !traceDragSession.moved ||
-      traceDragSession.rejected
+      !activeTraceDrag ||
+      !activeTraceDrag.moved ||
+      activeTraceDrag.rejected
     ) {
       return null;
     }
     return {
-      pointsNm: traceDragSession.previewPointsNm,
-      layer: traceDragSession.layer,
-      widthMm: traceDragSession.widthMm,
+      pointsNm: activeTraceDrag.previewPointsNm,
+      layer: activeTraceDrag.layer,
+      widthMm: activeTraceDrag.widthMm,
     };
-  }, [traceDragSession]);
+  }, [activeTraceDrag]);
 
   // Live DRC for the dragged preview. The dragged trace's committed copy is
   // excluded so the preview isn't flagged against its own old geometry.
   const traceDragDrc: DrcViolation[] = useMemo(() => {
-    if (!traceDragPreview || !traceDragSession || !workspace.projection) {
+    if (!traceDragPreview || !activeTraceDrag || !workspace.projection) {
       return [];
     }
     return runLiveDrc({
       traceNm: traceDragPreview.pointsNm,
-      traceWidthMm: traceDragSession.widthMm,
-      netId: traceDragSession.netId,
-      layer: traceDragSession.layer,
+      traceWidthMm: activeTraceDrag.widthMm,
+      netId: activeTraceDrag.netId,
+      layer: activeTraceDrag.layer,
       traces: workspace.projection.traces.filter(
-        (t) => t.id !== traceDragSession.traceId,
+        (t) => t.id !== activeTraceDrag.traceId,
       ),
       placements: workspace.projection.placements,
       padNetMap: padToNet,
       netClasses: workspace.projection.board.netClasses,
-      netClassId: traceDragSession.netClassId,
+      netClassId: activeTraceDrag.netClassId,
       designRules: workspace.projection.board.designRules,
     });
-  }, [padToNet, traceDragPreview, traceDragSession, workspace.projection]);
+  }, [padToNet, traceDragPreview, activeTraceDrag, workspace.projection]);
 
   // Emit the live in-progress conflict count for whichever interaction is
   // active — routing (in-progress trace) or a trace-segment drag; `null` when
@@ -2843,10 +3010,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   // vs select mode), so at most one of these is non-empty at a time.
   const sceneTraceDragGuides = useMemo<RouteGuide[]>(
     () =>
-      alignmentGuidesEnabled && traceDragSession?.moved
-        ? traceDragSession.guides
+      alignmentGuidesEnabled && activeTraceDrag?.moved
+        ? activeTraceDrag.guides
         : [],
-    [alignmentGuidesEnabled, traceDragSession],
+    [alignmentGuidesEnabled, activeTraceDrag],
   );
 
   const sceneRoutePreview = useMemo(() => {
@@ -3369,10 +3536,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           <MeasureHintStrip active={measureState.kind === "measuring"} />
         </div>
       ) : null}
-      {traceDragSession?.rejected ? (
+      {activeTraceDrag?.rejected ? (
         <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
           <div className="rounded-full border border-amber-700/80 bg-amber-950/80 px-3 py-1 text-[11px] font-medium text-amber-200 shadow-lg backdrop-blur">
-            Can&rsquo;t reshape this segment cleanly — release to cancel, or
+            Can&rsquo;t reshape this trace cleanly — release to cancel, or
             reroute instead
           </div>
         </div>

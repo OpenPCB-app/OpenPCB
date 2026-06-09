@@ -163,6 +163,41 @@ export function hitTrace(
   return best;
 }
 
+export interface TraceVertexHit {
+  trace: PcbTrace;
+  /** Interior vertex index (1 .. pointsNm.length-2). */
+  vertexIndex: number;
+  /** Vertex position in world mm. */
+  pointMm: PcbPointMm;
+}
+
+/**
+ * Hit-test the INTERIOR vertices (bends) of one trace. Endpoints are pads and
+ * are excluded — they're never draggable. `toleranceMm` is a constant
+ * on-screen radius converted to mm by the caller (`(hitPx/2)/zoom`) so handles
+ * stay grabbable at any zoom (cf. `hitDrcMarker`).
+ */
+export function hitTraceVertex(
+  trace: PcbTrace,
+  cursorMm: PcbPointMm,
+  toleranceMm: number,
+): TraceVertexHit | null {
+  let best: TraceVertexHit | null = null;
+  let bestSq = toleranceMm * toleranceMm;
+  for (let i = 1; i < trace.pointsNm.length - 1; i += 1) {
+    const vx = trace.pointsNm[i]!.x / 1_000_000;
+    const vy = trace.pointsNm[i]!.y / 1_000_000;
+    const dx = cursorMm.x - vx;
+    const dy = cursorMm.y - vy;
+    const d2 = dx * dx + dy * dy;
+    if (d2 <= bestSq) {
+      bestSq = d2;
+      best = { trace, vertexIndex: i, pointMm: { x: vx, y: vy } };
+    }
+  }
+  return best;
+}
+
 /** Hit-test free standalone holes. Uses drill radius + small padding. */
 export function hitFreeHole(
   freeHoles: readonly PcbFreeHole[],
