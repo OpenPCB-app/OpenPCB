@@ -243,6 +243,9 @@ interface TraceDragSession {
   originalPointsNm: PointNm[];
   startCursorMm: PcbPointMm;
   previewPointsNm: PointNm[];
+  /** Routing-alignment guides for the live drag point (cyan rays + collinear
+   * lines), recomputed each pointer-move; empty when guides are disabled. */
+  guides: RouteGuide[];
   rejected: boolean;
   moved: boolean;
 }
@@ -1373,6 +1376,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               originalPointsNm: trace.pointsNm.map((p) => ({ ...p })),
               startCursorMm: cursor,
               previewPointsNm: trace.pointsNm.map((p) => ({ ...p })),
+              guides: [],
               rejected: false,
               moved: false,
             });
@@ -1635,24 +1639,65 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         // Trace segment drag in flight: recompute the perpendicular reshape.
         if (traceDragSessionRef.current) {
           workspace.hoverNet(null);
+          const session = traceDragSessionRef.current;
+          // Snap the live cursor like the router does: grid first, then pull
+          // onto a routing-alignment guide (collinear pad/trace coords + angle
+          // rays) so a dragged segment lines up with surrounding geometry. The
+          // dragged trace itself is excluded as a snap target. Alt or the
+          // disabled toggle skips the guide snap (grid still applies). Any
+          // along-segment component is discarded by `dragTraceSegment`'s
+          // perpendicular projection, so only the meaningful axis survives.
+          let snapped = snapPoint(cursor);
+          let guides: RouteGuide[] = [];
+          if (
+            alignmentGuidesEnabledRef.current &&
+            !altHeldRef.current &&
+            workspace.projection
+          ) {
+            const seg = session.segmentIndex;
+            const a = session.originalPointsNm[seg];
+            const b = session.originalPointsNm[seg + 1];
+            if (a && b) {
+              const anchorMm = {
+                x: (a.x + b.x) / 2 / NM_PER_MM,
+                y: (a.y + b.y) / 2 / NM_PER_MM,
+              };
+              const res = computeRouteGuides({
+                anchorMm,
+                cursorMm: snapped,
+                posture: "auto",
+                placements: workspace.projection.placements,
+                traces: workspace.projection.traces.filter(
+                  (t) => t.id !== session.traceId,
+                ),
+                vias: workspace.projection.vias,
+                activeLayer: session.layer,
+                netId: session.netId,
+                toleranceMm: SNAP_THRESHOLD_PX / drcZoomRef.current,
+              });
+              guides = res.guides;
+              if (res.snapPointMm) snapped = res.snapPointMm;
+            }
+          }
+          const startNm = pointMmToNm(session.startCursorMm);
+          const curNm = pointMmToNm(snapped);
+          const deltaNm = {
+            x: curNm.x - startNm.x,
+            y: curNm.y - startNm.y,
+          };
+          const result = dragTraceSegment(
+            session.originalPointsNm,
+            session.segmentIndex,
+            deltaNm,
+            session.segmentMode,
+          );
           setTraceDragSession((prev) => {
             if (!prev) return prev;
-            const startNm = pointMmToNm(prev.startCursorMm);
-            const curNm = pointMmToNm(cursor);
-            const deltaNm = {
-              x: curNm.x - startNm.x,
-              y: curNm.y - startNm.y,
-            };
-            const result = dragTraceSegment(
-              prev.originalPointsNm,
-              prev.segmentIndex,
-              deltaNm,
-              prev.segmentMode,
-            );
             if (result.kind === "rejected") {
               return {
                 ...prev,
                 previewPointsNm: prev.originalPointsNm,
+                guides,
                 rejected: true,
                 moved: true,
               };
@@ -1660,6 +1705,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             return {
               ...prev,
               previewPointsNm: result.pointsNm,
+              guides,
               rejected: false,
               moved: true,
             };
@@ -2785,6 +2831,18 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     }).guides;
   }, [alignmentGuidesEnabled, cursorMm, routeState, workspace.projection]);
 
+  // Routing-alignment guides for an in-flight trace-segment drag — same engine
+  // and visual layer as routing, recomputed in the pointer-move handler and
+  // stashed on the session. Routing and drag are mutually exclusive (route mode
+  // vs select mode), so at most one of these is non-empty at a time.
+  const sceneTraceDragGuides = useMemo<RouteGuide[]>(
+    () =>
+      alignmentGuidesEnabled && traceDragSession?.moved
+        ? traceDragSession.guides
+        : [],
+    [alignmentGuidesEnabled, traceDragSession],
+  );
+
   const sceneRoutePreview = useMemo(() => {
     if (traceDragPreview) return traceDragPreview;
     if (!routePreview) return null;
@@ -2914,7 +2972,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             viewSide={workspace.viewSide}
             displayMode={workspace.displayMode}
             routeGuide={sceneRouteGuide}
-            routeGuides={sceneRouteGuides}
+            routeGuides={
+              sceneTraceDragGuides.length > 0
+                ? sceneTraceDragGuides
+                : sceneRouteGuides
+            }
             routePreview={sceneRoutePreview}
             routeFocusActive={routeState.kind === "routing"}
             routeFocusLayer={
