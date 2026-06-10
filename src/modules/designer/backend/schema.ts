@@ -261,3 +261,108 @@ export const drcResults = sqliteTable("designer_drc_results", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const commentThreads = sqliteTable(
+  "designer_comment_threads",
+  {
+    id: text("id").primaryKey(),
+    designId: text("design_id").notNull(),
+    surface: text("surface").notNull(),
+    anchorJson: text("anchor_json"),
+    status: text("status").notNull().default("open"),
+    todoStatus: text("todo_status").notNull().default("none"),
+    title: text("title"),
+    createdBy: text("created_by"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    lastMessageAt: text("last_message_at"),
+    messageCount: integer("message_count").notNull().default(0),
+    revision: integer("revision").notNull().default(0),
+    syncState: text("sync_state").notNull().default("local"),
+    deletedAt: text("deleted_at"),
+  },
+  (table) => ({
+    designIdIdx: index("designer_comment_threads_design_id_idx").on(
+      table.designId,
+    ),
+    designSurfaceIdx: index("designer_comment_threads_design_surface_idx").on(
+      table.designId,
+      table.surface,
+    ),
+  }),
+);
+
+export const commentMessages = sqliteTable(
+  "designer_comment_messages",
+  {
+    id: text("id").primaryKey(),
+    designId: text("design_id").notNull(),
+    threadId: text("thread_id").notNull(),
+    kind: text("kind").notNull().default("user"),
+    body: text("body"),
+    mentionsJson: text("mentions_json").notNull().default("[]"),
+    createdBy: text("created_by"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    editedAt: text("edited_at"),
+    deletedAt: text("deleted_at"),
+    revision: integer("revision").notNull().default(0),
+  },
+  (table) => ({
+    threadIdIdx: index("designer_comment_messages_thread_id_idx").on(
+      table.threadId,
+    ),
+    designIdIdx: index("designer_comment_messages_design_id_idx").on(
+      table.designId,
+    ),
+  }),
+);
+
+export const commentAttachments = sqliteTable(
+  "designer_comment_attachments",
+  {
+    id: text("id").primaryKey(),
+    designId: text("design_id").notNull(),
+    threadId: text("thread_id").notNull(),
+    messageId: text("message_id"),
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    localPath: text("local_path"),
+    storageKey: text("storage_key"),
+    createdAt: text("created_at").notNull(),
+    deletedAt: text("deleted_at"),
+  },
+  (table) => ({
+    threadIdIdx: index("designer_comment_attachments_thread_id_idx").on(
+      table.threadId,
+    ),
+    messageIdIdx: index("designer_comment_attachments_message_id_idx").on(
+      table.messageId,
+    ),
+  }),
+);
+
+export const commentOutbox = sqliteTable(
+  "designer_comment_outbox",
+  {
+    commandId: text("command_id").primaryKey(),
+    designId: text("design_id").notNull(),
+    threadId: text("thread_id"),
+    baseRevision: integer("base_revision"),
+    commandType: text("command_type").notNull(),
+    commandJson: text("command_json").notNull(),
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    syncedAt: text("synced_at"),
+  },
+  (table) => ({
+    statusIdx: index("designer_comment_outbox_status_idx").on(table.status),
+    designIdIdx: index("designer_comment_outbox_design_id_idx").on(
+      table.designId,
+    ),
+  }),
+);

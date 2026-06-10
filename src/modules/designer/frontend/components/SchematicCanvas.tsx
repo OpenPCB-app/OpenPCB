@@ -50,6 +50,8 @@ import {
 } from "../../../../shared/frontend/canvas/utils/keyboard-shortcuts";
 import type {
   DesignerCommand,
+  DesignerCommentAnchor,
+  DesignerCommentThread,
   DesignerPlacedPart,
   DesignerPin,
   DesignerPrimitive,
@@ -71,6 +73,10 @@ import {
 import { NetPortalPicker, PwrRailPicker } from "./LabelPicker";
 import { openContextMenu } from "../../../../shared/frontend/context-menu";
 import type { ContextMenuGroup } from "../../../../shared/frontend/context-menu";
+import {
+  CanvasCommentMarkers,
+  hitCommentThread,
+} from "./CanvasCommentMarkers";
 const PIN_HIT_MM = 0.35;
 // Primitive connection dots are rendered larger (≈0.36 mm radius), so the
 // hit zone must be wider than for part pins to match the visible target.
@@ -173,6 +179,11 @@ interface SchematicCanvasProps {
   dragPlacementDetail: LibraryComponentPlacementDetail | null;
   dragGhostNm: { x: number; y: number } | null;
   actions: DesignerWorkspaceActions;
+  commentThreads?: readonly DesignerCommentThread[];
+  activeCommentThreadId?: string | null;
+  commentMode?: boolean;
+  onCreateComment?: (anchor: DesignerCommentAnchor, body: string) => void;
+  onSelectCommentThread?: (threadId: string) => void;
   onZoomChange?: (zoomPercent: number) => void;
   initialViewport?: ViewportState | null;
   onViewportChange?: (zoom: number, posX: number, posY: number) => void;
@@ -728,6 +739,11 @@ export const SchematicCanvas = forwardRef<
     dragPlacementDetail,
     dragGhostNm,
     actions,
+    commentThreads = [],
+    activeCommentThreadId = null,
+    commentMode = false,
+    onCreateComment,
+    onSelectCommentThread,
     onZoomChange,
     initialViewport,
     onViewportChange,
@@ -1610,6 +1626,35 @@ export const SchematicCanvas = forwardRef<
         const labelId = hitLabelId(worldNm);
         const primitiveId = hitPrimitiveId(worldNm);
 
+        if (commentMode && onCreateComment) {
+          const body = window.prompt("Add comment (Markdown supported)");
+          if (body?.trim()) {
+            onCreateComment({
+              surface: "schematic",
+              pointNm: snappedWorldNm,
+              entity: pin
+                ? { kind: "pin", id: pin.id }
+                : wireHit
+                  ? { kind: "wire", id: wireHit.wire.id }
+                  : partId
+                    ? { kind: "part", id: partId }
+                    : labelId
+                      ? { kind: "label", id: labelId }
+                      : primitiveId
+                        ? { kind: "primitive", id: primitiveId }
+                        : undefined,
+              sourceRevision: projection.revision,
+            }, body.trim());
+          }
+          return;
+        }
+
+        const commentHit = hitCommentThread(commentThreads, worldNm);
+        if (commentHit && onSelectCommentThread) {
+          onSelectCommentThread(commentHit.id);
+          return;
+        }
+
         if (armedComponentDetail) {
           void actions
             .dispatchCommand({
@@ -2368,6 +2413,8 @@ export const SchematicCanvas = forwardRef<
       armedLabelText,
       armedPrimitive,
       armedComponentDetail,
+      commentMode,
+      commentThreads,
       commitWireToPin,
       commitWireToWireJunction,
       dispatchCommandsSequentially,
@@ -2383,6 +2430,8 @@ export const SchematicCanvas = forwardRef<
       hitWire,
       labelDraftText,
       marquee,
+      onCreateComment,
+      onSelectCommentThread,
       pinById,
       projection,
       renderedPartPositionNm,
@@ -2525,6 +2574,8 @@ export const SchematicCanvas = forwardRef<
           dragGhostModel={dragGhostModel}
           componentGhostNm={componentGhostNm}
           componentGhostModel={componentGhostModel}
+          commentThreads={commentThreads}
+          activeCommentThreadId={activeCommentThreadId}
         />
       </EdaCanvas>
       {pwrPickerOpen ? (
@@ -2567,6 +2618,8 @@ interface SchematicSceneProps {
   dragGhostModel: SymbolRenderModel | null;
   componentGhostNm: { x: number; y: number } | null;
   componentGhostModel: SymbolRenderModel | null;
+  commentThreads: readonly DesignerCommentThread[];
+  activeCommentThreadId: string | null;
 }
 
 function SchematicScene({
@@ -2587,6 +2640,8 @@ function SchematicScene({
   dragGhostModel,
   componentGhostNm,
   componentGhostModel,
+  commentThreads,
+  activeCommentThreadId,
 }: SchematicSceneProps) {
   const { theme } = useCanvasTheme();
   const t = theme.schematic;
@@ -2833,6 +2888,11 @@ function SchematicScene({
               </mesh>
             </group>
           ) : null}
+
+          <CanvasCommentMarkers
+            threads={commentThreads}
+            activeThreadId={activeCommentThreadId}
+          />
         </>
       ) : null}
     </>

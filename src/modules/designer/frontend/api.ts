@@ -1,5 +1,10 @@
 import type {
   DesignerCommandEnvelope,
+  DesignerCommentAttachment,
+  DesignerCommentCommandEnvelope,
+  DesignerCommentCommandResult,
+  DesignerCommentSurface,
+  DesignerCommentThread,
   BomOverride,
   BomOverridePatch,
   BomProjection,
@@ -183,6 +188,81 @@ export function createDesignerApi(params: {
         ),
       );
       return data.projection;
+    },
+
+    async listCommentThreads(
+      designId: string,
+      surface?: DesignerCommentSurface,
+    ): Promise<DesignerCommentThread[]> {
+      const suffix = surface ? `?surface=${encodeURIComponent(surface)}` : "";
+      const data = await fetchData<{ threads: DesignerCommentThread[] }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/comments${suffix}`,
+        ),
+        { headers: applyCloudHeaders(undefined) },
+      );
+      return data.threads;
+    },
+
+    async getCommentThread(
+      designId: string,
+      threadId: string,
+    ): Promise<DesignerCommentThread> {
+      const data = await fetchData<{ thread: DesignerCommentThread }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/comments/${encodeURIComponent(threadId)}`,
+        ),
+        { headers: applyCloudHeaders(undefined) },
+      );
+      return data.thread;
+    },
+
+    async dispatchCommentCommand(
+      designId: string,
+      envelope: DesignerCommentCommandEnvelope,
+    ): Promise<DesignerCommentCommandResult> {
+      const data = await fetchData<{ result: DesignerCommentCommandResult }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/comments/commands`,
+        ),
+        {
+          method: "POST",
+          headers: applyCloudHeaders({ "content-type": "application/json" }),
+          body: JSON.stringify(envelope),
+        },
+      );
+      return data.result;
+    },
+
+    async uploadCommentScreenshot(
+      designId: string,
+      input: {
+        threadId: string;
+        messageId?: string | null;
+        fileName: string;
+        mimeType: string;
+        base64: string;
+      },
+    ): Promise<DesignerCommentAttachment> {
+      const data = await fetchData<{ attachment: DesignerCommentAttachment }>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/comments/attachments`,
+        ),
+        {
+          method: "POST",
+          headers: applyCloudHeaders({ "content-type": "application/json" }),
+          body: JSON.stringify(input),
+        },
+      );
+      return data.attachment;
     },
 
     /** Compute + persist DRC, returning the fresh report. */

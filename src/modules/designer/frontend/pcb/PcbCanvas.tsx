@@ -10,6 +10,8 @@ import {
 import { createPortal } from "react-dom";
 import type {
   DesignerCommand,
+  DesignerCommentAnchor,
+  DesignerCommentThread,
   DesignerDispatchResult,
   PcbBoardOutline,
   PcbCopperLayerId,
@@ -72,6 +74,10 @@ import {
   pcbSelectionCount,
   type PcbSelection,
 } from "./pcb-selection";
+import {
+  CanvasCommentMarkers,
+  hitCommentThread,
+} from "../components/CanvasCommentMarkers";
 import {
   PcbSelectionInspector,
   type PcbInspectorSelection,
@@ -241,6 +247,11 @@ interface PcbCanvasProps {
   onDrcCountChange?: (count: number | null) => void;
   /** Reports the number of selected primitives (for the status bar). */
   onSelectionCountChange?: (count: number) => void;
+  commentThreads?: readonly DesignerCommentThread[];
+  activeCommentThreadId?: string | null;
+  commentMode?: boolean;
+  onCreateComment?: (anchor: DesignerCommentAnchor, body: string) => void;
+  onSelectCommentThread?: (threadId: string) => void;
   boardPanelTarget?: HTMLElement | null;
   layersPanelTarget?: HTMLElement | null;
   selectionRequest?: {
@@ -1132,6 +1143,43 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       onPointerDown(event) {
         if (event.button !== 0) return;
         const cursor = eventToMm(event);
+
+        if (props.commentMode && props.onCreateComment) {
+          const point = snapPoint(cursor);
+          const pointNm = pointMmToNm(point);
+          const pad = hitPad(visiblePlacements, cursor);
+          const trace = hitTrace(tracesRef.current, cursor, activeCopperLayer);
+          const via = hitVia(viasRef.current, cursor);
+          const placement = hitPlacement(visiblePlacements, cursor);
+          const body = window.prompt("Add comment (Markdown supported)");
+          if (body?.trim()) {
+            props.onCreateComment({
+              surface: "pcb",
+              pointNm,
+              entity: pad
+                ? { kind: "pad", id: pad.placementId, subId: pad.padNumber }
+                : trace
+                  ? { kind: "trace", id: trace.trace.id }
+                  : via
+                    ? { kind: "via", id: via.id }
+                    : placement
+                      ? { kind: "placement", id: placement.id }
+                      : undefined,
+              layerId: activeCopperLayer,
+              sourceRevision: workspace.projection?.revision,
+            }, body.trim());
+          }
+          return;
+        }
+
+        const commentHit = hitCommentThread(
+          props.commentThreads ?? [],
+          pointMmToNm(cursor),
+        );
+        if (commentHit && props.onSelectCommentThread) {
+          props.onSelectCommentThread(commentHit.id);
+          return;
+        }
 
         if (toolMode === "measure") {
           dispatchMeasure({
@@ -2040,12 +2088,18 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     eventToMm,
     marquee,
     padToNet,
+    props.activeCommentThreadId,
+    props.commentMode,
+    props.commentThreads,
+    props.onCreateComment,
+    props.onSelectCommentThread,
     resolveMeasureAnchor,
     resolveRouteAnchor,
     routeState,
     selection,
     setActiveCopperLayer,
     setCursorMm,
+    snapPoint,
     splitAndRerouteTrace,
     toolMode,
     viasVisible,
@@ -2768,6 +2822,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               props.onViewportChange?.(zoom, posX, posY);
             }}
             onCameraReady={handleCameraReady}
+          />
+          <CanvasCommentMarkers
+            threads={props.commentThreads ?? []}
+            activeThreadId={props.activeCommentThreadId ?? null}
+            mirrorX={mirrorActive}
           />
         </EdaCanvas>
       ) : null}

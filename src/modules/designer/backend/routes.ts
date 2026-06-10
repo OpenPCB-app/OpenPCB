@@ -2,6 +2,7 @@ import type {
   CoreBackendModuleContext,
   ModuleRouterHandle,
 } from "../../../core/contracts/modules/backend-module";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { NotFoundError, ValidationError } from "../../../core/contracts/errors";
 import { buildExportBundle } from "./export";
 import {
@@ -79,9 +80,13 @@ import type {
   PcbBoardCutout,
   PcbBoardCutoutShape,
   PcbOutlineSegment,
+  DesignerCommentCommandEnvelope,
+  DesignerCommentSurface,
+  DesignerCommentThread,
 } from "../../../sdks/designer";
 import { buildDesignerSdk } from "./sdk";
 import { createDesignerStore } from "./store";
+import { createCommentStore } from "./comments/comment-store";
 import { runDrc } from "./drc/drc-engine";
 import { runErc } from "./erc/erc-engine";
 import { asNumber, asRecord, asString } from "./value-guards";
@@ -96,6 +101,133 @@ async function parseJsonBody<T>(req: Request): Promise<T> {
   } catch {
     throw new ValidationError("Request body must be valid JSON");
   }
+}
+
+function parseCommentSurface(raw: string | undefined): DesignerCommentSurface | undefined {
+  if (!raw) return undefined;
+  if (raw === "schematic" || raw === "pcb" || raw === "design") return raw;
+  throw new ValidationError("surface must be schematic, pcb, or design");
+}
+
+function parseCommentCommandEnvelope(raw: unknown): DesignerCommentCommandEnvelope {
+  const rec = asRecord(raw);
+  if (!rec) throw new ValidationError("Request body must be an object");
+  const commandId = asString(rec.commandId);
+  const sessionId = asString(rec.sessionId);
+  const aggregateId = asString(rec.aggregateId);
+  const issuedAt = asNumber(rec.issuedAt);
+  const command = asRecord(rec.command);
+  if (!commandId || !sessionId || !aggregateId || issuedAt === null || !command) {
+    throw new ValidationError("Invalid comment command envelope");
+  }
+  const baseRevisionRaw = rec.baseRevision;
+  const baseRevision =
+    baseRevisionRaw === null || baseRevisionRaw === undefined
+      ? null
+      : asNumber(baseRevisionRaw);
+  if (baseRevision !== null && !Number.isInteger(baseRevision)) {
+    throw new ValidationError("baseRevision must be an integer or null");
+  }
+  const type = asString(command.type);
+  const threadId = asString(command.threadId);
+  if (!type || !threadId) throw new ValidationError("Invalid comment command");
+  return {
+    commandId,
+    sessionId,
+    aggregateId,
+    baseRevision,
+    issuedAt,
+    command: command as DesignerCommentCommandEnvelope["command"],
+  };
+}
+
+function parseScreenshotUpload(raw: unknown): {
+  attachmentId?: string;
+  threadId: string;
+  messageId?: string | null;
+  fileName: string;
+  mimeType: string;
+  base64: string;
+} {
+  const rec = asRecord(raw);
+  if (!rec) throw new ValidationError("Request body must be an object");
+  const threadId = asString(rec.threadId);
+  const fileName = asString(rec.fileName);
+  const mimeType = asString(rec.mimeType);
+  const base64 = asString(rec.base64);
+  if (!threadId || !fileName || !mimeType || !base64) {
+    throw new ValidationError("threadId, fileName, mimeType, and base64 are required");
+  }
+  return {
+    attachmentId: asString(rec.attachmentId) ?? undefined,
+    threadId,
+    messageId: rec.messageId === null ? null : (asString(rec.messageId) ?? undefined),
+    fileName,
+    mimeType,
+    base64,
+  };
+}
+
+async function mirrorCommentCommandToCloud(
+  store: ReturnType<typeof createDesignerStore>,
+  designId: string,
+  envelope: DesignerCommentCommandEnvelope,
+  req: Request,
+): Promise<void> {
+  const bearer = req.headers.get("x-cloud-bearer");
+  const apiUrl = req.headers.get("x-cloud-api-url");
+  if (!bearer || !apiUrl) return;
+  const link = await store.getCloudLink(designId);
+  if (!link) return;
+  const cloudEnvelope = {
+    ...envelope,
+    aggregateId: envelope.command.threadId,
+  };
+  void fetch(`${apiUrl}/v1/designs/${link.cloudDesignId}/comments/commands`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${bearer}`,
+    },
+    body: JSON.stringify(cloudEnvelope),
+  }).catch(() => undefined);
+}
+
+async function pullCloudCommentsIntoLocal(
+  store: ReturnType<typeof createDesignerStore>,
+  commentStore: ReturnType<typeof createCommentStore>,
+  designId: string,
+  req: Request,
+): Promise<void> {
+  const bearer = req.headers.get("x-cloud-bearer");
+  const apiUrl = req.headers.get("x-cloud-api-url");
+  if (!bearer || !apiUrl) return;
+  const link = await store.getCloudLink(designId);
+  if (!link) return;
+  const res = await fetch(`${apiUrl}/v1/designs/${link.cloudDesignId}/comments`, {
+    headers: { authorization: `Bearer ${bearer}` },
+  }).catch(() => null);
+  if (!res?.ok) return;
+  const body = (await res.json().catch(() => null)) as {
+    threads?: DesignerCommentThread[];
+  } | null;
+  if (!body?.threads) return;
+  const fullThreads: DesignerCommentThread[] = [];
+  for (const thread of body.threads) {
+    const detail = await fetch(
+      `${apiUrl}/v1/designs/${link.cloudDesignId}/comments/${thread.id}`,
+      { headers: { authorization: `Bearer ${bearer}` } },
+    ).catch(() => null);
+    if (!detail?.ok) {
+      fullThreads.push(thread);
+      continue;
+    }
+    const detailBody = (await detail.json().catch(() => null)) as {
+      thread?: DesignerCommentThread;
+    } | null;
+    fullThreads.push(detailBody?.thread ?? thread);
+  }
+  commentStore.upsertRemoteThreads(designId, fullThreads);
 }
 
 function parseExportOptions(raw: unknown): GerberExportOptions {
@@ -1874,6 +2006,9 @@ export function registerRoutes(
   ctx: CoreBackendModuleContext,
 ): void {
   const store = createDesignerStore(ctx);
+  const commentStore = createCommentStore({
+    db: (ctx.db as { db: BetterSQLite3Database<Record<string, unknown>> }).db,
+  });
   const designerSdk = buildDesignerSdk(ctx);
 
   router.get("/status", async () => {
@@ -1938,6 +2073,56 @@ export function registerRoutes(
       throw new NotFoundError(`Design '${designId}' not found`);
     }
     return success({ projection });
+  });
+
+  router.get("/designs/:designId/comments", async ({ params, query, req }) => {
+    const designId = params.getOrThrow("designId");
+    await pullCloudCommentsIntoLocal(store, commentStore, designId, req);
+    const surface = parseCommentSurface(query.get("surface") ?? undefined);
+    const threads = commentStore.listThreads(designId, surface);
+    if (!threads) throw new NotFoundError(`Design '${designId}' not found`);
+    return success({ threads });
+  });
+
+  router.get("/designs/:designId/comments/:threadId", async ({ params, req }) => {
+    const designId = params.getOrThrow("designId");
+    await pullCloudCommentsIntoLocal(store, commentStore, designId, req);
+    const threadId = params.getOrThrow("threadId");
+    const thread = commentStore.getThread(designId, threadId);
+    if (!thread) throw new NotFoundError(`Comment thread '${threadId}' not found`);
+    return success({ thread });
+  });
+
+  router.post("/designs/:designId/comments/commands", async ({ params, req }) => {
+    const designId = params.getOrThrow("designId");
+    const envelope = parseCommentCommandEnvelope(await parseJsonBody<unknown>(req));
+    const result = commentStore.dispatch(designId, envelope);
+    if (result.ok) void mirrorCommentCommandToCloud(store, designId, envelope, req);
+    const status = !result.ok && result.code === "COMMENT_CONFLICT" ? 409 : 200;
+    return success({ result }, status);
+  });
+
+  router.post("/designs/:designId/comments/attachments", async ({ params, req }) => {
+    const designId = params.getOrThrow("designId");
+    const input = parseScreenshotUpload(await parseJsonBody<unknown>(req));
+    const attachment = await commentStore.addScreenshot(designId, input);
+    if (!attachment) throw new ValidationError("Invalid screenshot attachment");
+    const bearer = req.headers.get("x-cloud-bearer");
+    const apiUrl = req.headers.get("x-cloud-api-url");
+    if (bearer && apiUrl) {
+      const link = await store.getCloudLink(designId);
+      if (link) {
+        void fetch(`${apiUrl}/v1/designs/${link.cloudDesignId}/comments/attachments`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${bearer}`,
+          },
+          body: JSON.stringify({ ...input, attachmentId: attachment.id }),
+        }).catch(() => undefined);
+      }
+    }
+    return success({ attachment }, 201);
   });
 
   router.get("/designs/:designId/bom", async ({ params }) => {

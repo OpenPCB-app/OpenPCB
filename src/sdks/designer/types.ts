@@ -74,6 +74,163 @@ export interface DesignerSchematicProjection {
   nets: DesignerDerivedNet[];
 }
 
+export type DesignerCommentSurface = "schematic" | "pcb" | "design";
+
+export type DesignerCommentThreadStatus = "open" | "resolved" | "archived";
+
+export type DesignerCommentTodoStatus =
+  | "none"
+  | "todo"
+  | "in_progress"
+  | "done";
+
+export type DesignerCommentSyncState =
+  | "local"
+  | "pending"
+  | "synced"
+  | "failed"
+  | "conflict";
+
+export type DesignerCommentMessageKind = "user" | "system" | "assistant";
+
+export type DesignerCommentAnchorEntityKind =
+  | "part"
+  | "pin"
+  | "wire"
+  | "label"
+  | "primitive"
+  | "placement"
+  | "pad"
+  | "trace"
+  | "via"
+  | "freePad"
+  | "freeHole"
+  | "overlayText"
+  | "overlayShape";
+
+export interface DesignerCommentAnchor {
+  surface: DesignerCommentSurface;
+  pointNm: { x: number; y: number };
+  entity?: {
+    kind: DesignerCommentAnchorEntityKind;
+    id: string;
+    subId?: string;
+  };
+  layerId?: string;
+  netId?: string | null;
+  sourceRevision?: number;
+}
+
+export interface DesignerCommentAttachment {
+  id: string;
+  designId: string;
+  threadId: string;
+  messageId: string | null;
+  fileName: string;
+  mimeType: "image/png" | "image/jpeg" | "image/webp";
+  byteSize: number;
+  localPath?: string | null;
+  storageKey?: string | null;
+  createdAt: string;
+  deletedAt: string | null;
+}
+
+export interface DesignerCommentMessage {
+  id: string;
+  designId: string;
+  threadId: string;
+  kind: DesignerCommentMessageKind;
+  body: string | null;
+  mentions: string[];
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  editedAt: string | null;
+  deletedAt: string | null;
+  revision: number;
+  attachments: DesignerCommentAttachment[];
+}
+
+export interface DesignerCommentThread {
+  id: string;
+  designId: string;
+  surface: DesignerCommentSurface;
+  anchor: DesignerCommentAnchor | null;
+  status: DesignerCommentThreadStatus;
+  todoStatus: DesignerCommentTodoStatus;
+  title: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt: string | null;
+  messageCount: number;
+  revision: number;
+  syncState: DesignerCommentSyncState;
+  deletedAt: string | null;
+  messages?: DesignerCommentMessage[];
+}
+
+export interface DesignerCommentThreadPage {
+  threads: DesignerCommentThread[];
+}
+
+export interface DesignerCommentCommandEnvelope {
+  commandId: string;
+  sessionId: string;
+  aggregateId: string;
+  baseRevision: number | null;
+  issuedAt: number;
+  command: DesignerCommentCommand;
+}
+
+export type DesignerCommentCommand =
+  | {
+      type: "create_thread";
+      threadId: string;
+      messageId: string;
+      surface: DesignerCommentSurface;
+      anchor: DesignerCommentAnchor | null;
+      body: string;
+      title?: string | null;
+      todoStatus?: DesignerCommentTodoStatus;
+      mentions?: string[];
+      createdBy?: string | null;
+    }
+  | {
+      type: "add_message";
+      threadId: string;
+      messageId: string;
+      body: string;
+      mentions?: string[];
+      createdBy?: string | null;
+    }
+  | { type: "edit_message"; threadId: string; messageId: string; body: string }
+  | { type: "delete_message"; threadId: string; messageId: string }
+  | {
+      type: "set_thread_status";
+      threadId: string;
+      status: DesignerCommentThreadStatus;
+    }
+  | {
+      type: "set_thread_todo_status";
+      threadId: string;
+      todoStatus: DesignerCommentTodoStatus;
+    }
+  | {
+      type: "set_thread_anchor";
+      threadId: string;
+      anchor: DesignerCommentAnchor | null;
+    };
+
+export type DesignerCommentCommandResult =
+  | { ok: true; threadRevision: number; thread: DesignerCommentThread }
+  | {
+      ok: false;
+      code: "COMMENT_CONFLICT" | "COMMENT_NOT_FOUND" | "INVALID_COMMENT";
+      detail: string;
+      currentRevision?: number;
+    };
+
 /** Compact schematic snapshot for Home-screen thumbnails. Carries the vector
  *  geometry needed to draw an auto-fit SVG preview — placed-symbol
  *  graphics/bounds + pin stubs (mm), wire polylines (nm), and power/ground/

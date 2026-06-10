@@ -10,6 +10,7 @@
 
 ## Current Status
 
+- Canvas comments implementation validated 2026-06-10: local-first schematic+PCB anchored Markdown threads, screenshot attachments (<=5MB), cloud sync via comments module, AI tagging deferred.
 - Branch `aggresive-cleanup` merged to `master`. Phases 1–3 complete; Phase 4 partially shipped (trace routing, vias, layer switching, live DRC, ratsnest).
 - F4 drill cutouts + lime outline + unified drill selector: **shipped** (`pcb-drills.ts:collectDrills`, `BoardFill` ShapeGeometry holes, `DrillLayer` RingGeometry).
 - F5 Part B free entities (free hole / free pad / manual smart via): **shipped** (commands `pcb_add_free_hole/pad`, `pcb_add_manual_via`, migration `0008_pcb_free_entities.sql`, `FreePadLayer`, toolbar tools, `PcbCanvas.placeSmartVia`).

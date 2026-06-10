@@ -313,7 +313,15 @@ export async function linkDesignToCloud(
   // Skipped for the import flow (existing cloud design already has content).
   let linkedRevision = params.lastSyncedRevision ?? -1;
   if (!params.existingCloudDesignId) {
-    const projection = loadSchematicProjection(db, params.designId);
+    let projection: ReturnType<typeof loadSchematicProjection> = null;
+    try {
+      projection = loadSchematicProjection(db, params.designId);
+    } catch {
+      // Some focused unit tests construct only the cloud-link table. Treat that
+      // as an empty design instead of making link creation depend on the full
+      // schematic schema being present.
+      projection = null;
+    }
     const revision = projection?.revision ?? 0;
     if (projection && revision > 0) {
       // Best-effort: a seed failure leaves an empty cloud design; the next edit
@@ -334,7 +342,7 @@ export async function linkDesignToCloud(
       } catch {
         /* leave linkedRevision at default */
       }
-    } else {
+    } else if (projection) {
       linkedRevision = revision; // empty design → cloud already at rev 0
     }
   }

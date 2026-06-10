@@ -8,11 +8,13 @@ import {
   type ReactElement,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Bot, PanelRightOpen } from "lucide-react";
 import { useNavigationStore } from "@/stores/navigation-store";
 import { useAuth } from "@/cloud/AuthProvider";
 import { useCloudPrefs } from "@/cloud/cloud-prefs";
 import { readCloudConfig } from "@/cloud/config";
+import { getSupabase } from "@/cloud/supabase";
 import { DesignerFloatingToolbar } from "./components/DesignerFloatingToolbar";
 import { DesignerHeader } from "./components/DesignerHeader";
 import { CloudSyncBadge } from "./components/CloudSyncBadge";
@@ -38,6 +40,8 @@ import {
 } from "./components/SelectionInspector/SelectionInspector";
 import { ToastProvider, useToast } from "./hooks/use-toast";
 import { useDesignerWorkspace } from "./hooks/useDesignerWorkspace";
+import { useDesignerComments } from "./hooks/useDesignerComments";
+import { CanvasCommentsPanel } from "./components/CanvasCommentsPanel";
 import { PcbCanvas } from "./pcb/PcbCanvas";
 import { Board3DCanvas } from "./three-d/Board3DCanvas";
 import { DesignerChatDock } from "../../assistant/frontend";
@@ -313,6 +317,14 @@ function DesignerSpaceInner({
     cloudHeaders,
     onNotify: addToast,
   });
+  const commentSurface = state.activeView === "pcb" ? "pcb" : "schematic";
+  const comments = useDesignerComments({
+    backendURL,
+    moduleId,
+    designId: state.selectedDesignId,
+    surface: commentSurface,
+    cloudHeaders,
+  });
   const [kicadImportOpen, setKicadImportOpen] = useState(false);
 
   const cloudBadgeApi = useMemo(
@@ -320,6 +332,34 @@ function DesignerSpaceInner({
     [backendURL, moduleId, cloudHeaders],
   );
   const [cloudBrowserOpen, setCloudBrowserOpen] = useState(false);
+
+  useEffect(() => {
+    if (!state.selectedDesignId || !cloudEnabled || !session) return;
+    let cancelled = false;
+    let channel: RealtimeChannel | null = null;
+    void cloudBadgeApi
+      .getCloudLink(state.selectedDesignId)
+      .then(({ link }) => {
+        if (cancelled || !link?.cloudDesignId) return;
+        const sb = getSupabase();
+        if (!sb) return;
+        channel = sb.channel(`design:${link.cloudDesignId}`);
+        channel
+          .on("broadcast", { event: "comment" }, () => {
+            void comments.refresh();
+          })
+          .subscribe();
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      if (channel) {
+        void channel.unsubscribe();
+        const sb = getSupabase();
+        if (sb) void sb.removeChannel(channel);
+      }
+    };
+  }, [cloudBadgeApi, cloudEnabled, comments, session, state.selectedDesignId]);
 
   const { openDesignIds, activeDesignId } = useDesignerTabsStore(
     useShallow((s) => ({
@@ -918,6 +958,11 @@ function DesignerSpaceInner({
         dragPlacementDetail={state.dragPlacementDetail}
         dragGhostNm={state.dragGhostNm}
         actions={actions}
+        commentThreads={comments.threads}
+        activeCommentThreadId={comments.activeThreadId}
+        commentMode={comments.commentMode}
+        onCreateComment={(anchor, body) => void comments.createThread(anchor, body)}
+        onSelectCommentThread={(threadId) => void comments.loadThread(threadId)}
         onZoomChange={setZoomPercent}
         initialViewport={
           state.selectedDesignId
@@ -1055,6 +1100,15 @@ function DesignerSpaceInner({
                   }
                   onDrcCountChange={setPcbLiveDrc}
                   onSelectionCountChange={setPcbSelectionCount}
+                  commentThreads={comments.threads}
+                  activeCommentThreadId={comments.activeThreadId}
+                  commentMode={comments.commentMode}
+                  onCreateComment={(anchor, body) =>
+                    void comments.createThread(anchor, body)
+                  }
+                  onSelectCommentThread={(threadId) =>
+                    void comments.loadThread(threadId)
+                  }
                   boardPanelTarget={pcbBoardSlot}
                   layersPanelTarget={pcbLayersSlot}
                   selectionRequest={pcbSelectionRequest}
@@ -1225,6 +1279,31 @@ function DesignerSpaceInner({
               />
             </div>
           </>
+        ) : null}
+
+        {!noTabsOpen &&
+        (state.activeView === "schem" || state.activeView === "pcb") ? (
+          <CanvasCommentsPanel
+            surface={commentSurface}
+            threads={comments.threads}
+            activeThread={comments.activeThread}
+            commentMode={comments.commentMode}
+            loading={comments.loading}
+            error={comments.error}
+            onSelectThread={(threadId) => void comments.loadThread(threadId)}
+            onToggleCommentMode={() =>
+              comments.setCommentMode(!comments.commentMode)
+            }
+            onAddMessage={async (thread, body) => {
+              await comments.addMessage(thread, body);
+            }}
+            onSetStatus={async (thread, status) => {
+              await comments.setStatus(thread, status);
+            }}
+            onSetTodoStatus={async (thread, status) => {
+              await comments.setTodoStatus(thread, status);
+            }}
+          />
         ) : null}
 
         {chatOpen ? (
