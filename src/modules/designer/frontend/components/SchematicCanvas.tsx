@@ -207,6 +207,10 @@ interface SchematicCanvasProps {
     messageId: string,
     emoji: string,
   ) => Promise<void>;
+  onMoveComment?: (
+    thread: DesignerCommentThread,
+    pointNm: { x: number; y: number },
+  ) => void;
   commentAttachmentUrl?: (attachmentId: string) => string;
   onZoomChange?: (zoomPercent: number) => void;
   initialViewport?: ViewportState | null;
@@ -771,6 +775,7 @@ export const SchematicCanvas = forwardRef<
     onSetCommentStatus,
     onSetCommentTodoStatus,
     onToggleCommentReaction,
+    onMoveComment,
     commentAttachmentUrl,
     onZoomChange,
     initialViewport,
@@ -2385,6 +2390,44 @@ export const SchematicCanvas = forwardRef<
           );
         }
 
+        if (onCreateComment) {
+          groups.push({
+            id: "comment",
+            items: [
+              {
+                kind: "action",
+                id: "add-comment",
+                label: "Add comment",
+                onSelect: () => {
+                  const r = wrapperRef.current?.getBoundingClientRect();
+                  setCommentDraft({
+                    anchor: {
+                      surface: "schematic",
+                      pointNm: snap(worldNm),
+                      entity: pin
+                        ? { kind: "pin", id: pin.id }
+                        : wireHit
+                          ? { kind: "wire", id: wireHit.wire.id }
+                          : partId
+                            ? { kind: "part", id: partId }
+                            : labelId
+                              ? { kind: "label", id: labelId }
+                              : primitiveId
+                                ? { kind: "primitive", id: primitiveId }
+                                : undefined,
+                      sourceRevision: projection.revision,
+                    },
+                    screen: {
+                      x: event.screenPoint.x - (r?.left ?? 0),
+                      y: event.screenPoint.y - (r?.top ?? 0),
+                    },
+                  });
+                },
+              },
+            ],
+          });
+        }
+
         openContextMenu({
           scope: "schematic",
           position: { x: event.screenPoint.x, y: event.screenPoint.y },
@@ -2633,6 +2676,7 @@ export const SchematicCanvas = forwardRef<
         mirrored={false}
         rect={projection2d.rect}
         project={projection2d.project}
+        screenToWorld={projection2d.screenToWorld}
         clampToEdge={projection2d.clampToEdge}
         draft={commentDraft}
         currentUserEmail={currentUserEmail}
@@ -2645,6 +2689,7 @@ export const SchematicCanvas = forwardRef<
         onOpenThread={(id) => onSelectCommentThread?.(id)}
         onCloseThread={() => onCloseCommentThread?.()}
         onRecenter={recenterOnNm}
+        onMoveComment={(thread, pointNm) => onMoveComment?.(thread, pointNm)}
         onAddMessage={async (thread, body, file) => {
           await onAddCommentMessage?.(thread, body, file);
         }}

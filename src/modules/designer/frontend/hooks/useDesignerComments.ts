@@ -209,6 +209,25 @@ export function useDesignerComments(params: {
     [dispatch, loadThread, params.currentUserEmail],
   );
 
+  const setAnchor = useCallback(
+    async (
+      thread: DesignerCommentThread,
+      pointNm: { x: number; y: number },
+    ) => {
+      const anchor: DesignerCommentAnchor = {
+        surface: thread.anchor?.surface ?? thread.surface,
+        pointNm,
+        ...(thread.anchor?.layerId ? { layerId: thread.anchor.layerId } : {}),
+      };
+      await dispatch(thread.id, thread.revision, {
+        type: "set_thread_anchor",
+        threadId: thread.id,
+        anchor,
+      });
+    },
+    [dispatch],
+  );
+
   const setStatus = useCallback(
     async (
       thread: DesignerCommentThread,
@@ -251,6 +270,7 @@ export function useDesignerComments(params: {
     toggleReaction,
     uploadImage,
     attachmentUrl,
+    setAnchor,
     setStatus,
     setTodoStatus,
     setActiveThreadId,

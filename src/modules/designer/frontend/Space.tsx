@@ -979,6 +979,9 @@ function DesignerSpaceInner({
         onToggleCommentReaction={async (thread, messageId, emoji) => {
           await comments.toggleReaction(thread, messageId, emoji);
         }}
+        onMoveComment={(thread, pointNm) =>
+          void comments.setAnchor(thread, pointNm)
+        }
         commentAttachmentUrl={comments.attachmentUrl}
         onZoomChange={setZoomPercent}
         initialViewport={
@@ -1143,6 +1146,9 @@ function DesignerSpaceInner({
                   onToggleCommentReaction={async (thread, messageId, emoji) => {
                     await comments.toggleReaction(thread, messageId, emoji);
                   }}
+                  onMoveComment={(thread, pointNm) =>
+                    void comments.setAnchor(thread, pointNm)
+                  }
                   commentAttachmentUrl={comments.attachmentUrl}
                   boardPanelTarget={pcbBoardSlot}
                   layersPanelTarget={pcbLayersSlot}

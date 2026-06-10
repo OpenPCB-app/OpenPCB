@@ -114,6 +114,24 @@ export function useCanvasProjection(
     [viewport, rect],
   );
 
+  /** Inverse of `project`: wrapper-relative screen px → world nanometres. */
+  const screenToWorld = useCallback(
+    (
+      screen: { x: number; y: number },
+      mirrorX = false,
+    ): { x: number; y: number } => {
+      const zoom = viewport.zoom || 1;
+      const wxRaw = (screen.x - rect.width / 2) / zoom + viewport.posX;
+      const worldMmX = mirrorX ? -wxRaw : wxRaw;
+      const worldMmY = viewport.posY + (rect.height / 2 - screen.y) / zoom;
+      return {
+        x: Math.round(worldMmX * NM_TO_MM),
+        y: Math.round(worldMmY * NM_TO_MM),
+      };
+    },
+    [viewport, rect],
+  );
+
   /** Clamp an (off-screen) point to the nearest canvas edge, keeping padding. */
   const clampToEdge = useCallback(
     (screen: { x: number; y: number }) => ({
@@ -129,5 +147,5 @@ export function useCanvasProjection(
     [rect],
   );
 
-  return { viewport, rect, setViewport, project, clampToEdge };
+  return { viewport, rect, setViewport, project, screenToWorld, clampToEdge };
 }

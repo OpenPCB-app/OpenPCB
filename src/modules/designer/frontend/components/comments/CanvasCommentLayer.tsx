@@ -6,6 +6,7 @@ import type {
   DesignerCommentTodoStatus,
 } from "@sdks/designer";
 import type { CanvasRect, ScreenPoint } from "./useCanvasProjection";
+import { TooltipProvider } from "@shared/frontend/ui/tooltip";
 import { CommentPin } from "./CommentPin";
 import { CommentThreadPopup } from "./CommentThreadPopup";
 import { CommentComposerPopup } from "./CommentComposerPopup";
@@ -28,6 +29,11 @@ export interface CanvasCommentHandlers {
   onOpenThread: (threadId: string) => void;
   onCloseThread: () => void;
   onRecenter: (anchorNm: { x: number; y: number }) => void;
+  /** Reposition a pin to a new world (nm) anchor (drag-drop). */
+  onMoveComment: (
+    thread: DesignerCommentThread,
+    pointNm: { x: number; y: number },
+  ) => void;
   onAddMessage: (
     thread: DesignerCommentThread,
     body: string,
@@ -57,6 +63,10 @@ export interface CanvasCommentLayerProps extends CanvasCommentHandlers {
     anchorNm: { x: number; y: number },
     mirrorX?: boolean,
   ) => ScreenPoint;
+  screenToWorld: (
+    screen: { x: number; y: number },
+    mirrorX?: boolean,
+  ) => { x: number; y: number };
   clampToEdge: (pt: { x: number; y: number }) => { x: number; y: number };
   draft: CommentDraft | null;
 }
@@ -87,14 +97,37 @@ export function CanvasCommentLayer(
   }, [active, props]);
 
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {anchored.map((thread, index) => {
-        const number = index + 1;
-        const color = commentStatusColor(thread);
-        const isActive = thread.id === props.activeThreadId;
-        const sp = props.project(thread.anchor!.pointNm, props.mirrored);
-        const title = `${displayNameFrom(thread.createdBy)} · ${thread.messageCount} message${thread.messageCount === 1 ? "" : "s"}`;
-        if (sp.onScreen) {
+    <TooltipProvider delayDuration={300}>
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        {anchored.map((thread, index) => {
+          const number = index + 1;
+          const color = commentStatusColor(thread);
+          const isActive = thread.id === props.activeThreadId;
+          const sp = props.project(thread.anchor!.pointNm, props.mirrored);
+          const title = `${displayNameFrom(thread.createdBy)} · ${thread.messageCount} message${thread.messageCount === 1 ? "" : "s"}`;
+          if (sp.onScreen) {
+            return (
+              <CommentPin
+                key={thread.id}
+                index={number}
+                color={color}
+                active={isActive}
+                resolved={thread.status === "resolved"}
+                x={sp.x}
+                y={sp.y}
+                clamped={false}
+                title={title}
+                onClick={() => props.onOpenThread(thread.id)}
+                onMoveEnd={(screen) =>
+                  props.onMoveComment(
+                    thread,
+                    props.screenToWorld(screen, props.mirrored),
+                  )
+                }
+              />
+            );
+          }
+          const edge = props.clampToEdge(sp);
           return (
             <CommentPin
               key={thread.id}
@@ -102,56 +135,41 @@ export function CanvasCommentLayer(
               color={color}
               active={isActive}
               resolved={thread.status === "resolved"}
-              x={sp.x}
-              y={sp.y}
-              clamped={false}
-              title={title}
-              onClick={() => props.onOpenThread(thread.id)}
+              x={edge.x}
+              y={edge.y}
+              clamped
+              title={`${title} — off-screen, click to reveal`}
+              onClick={() => props.onRecenter(thread.anchor!.pointNm)}
             />
           );
-        }
-        const edge = props.clampToEdge(sp);
-        return (
-          <CommentPin
-            key={thread.id}
-            index={number}
-            color={color}
-            active={isActive}
-            resolved={thread.status === "resolved"}
-            x={edge.x}
-            y={edge.y}
-            clamped
-            title={`${title} — off-screen, click to reveal`}
-            onClick={() => props.onRecenter(thread.anchor!.pointNm)}
+        })}
+
+        {active && activeScreen ? (
+          <CommentThreadPopup
+            thread={active}
+            screen={activeScreen}
+            rect={props.rect}
+            currentUserEmail={props.currentUserEmail}
+            attachmentUrl={props.attachmentUrl}
+            onClose={props.onCloseThread}
+            onAddMessage={props.onAddMessage}
+            onSetStatus={props.onSetStatus}
+            onSetTodoStatus={props.onSetTodoStatus}
+            onToggleReaction={props.onToggleReaction}
           />
-        );
-      })}
+        ) : null}
 
-      {active && activeScreen ? (
-        <CommentThreadPopup
-          thread={active}
-          screen={activeScreen}
-          rect={props.rect}
-          currentUserEmail={props.currentUserEmail}
-          attachmentUrl={props.attachmentUrl}
-          onClose={props.onCloseThread}
-          onAddMessage={props.onAddMessage}
-          onSetStatus={props.onSetStatus}
-          onSetTodoStatus={props.onSetTodoStatus}
-          onToggleReaction={props.onToggleReaction}
-        />
-      ) : null}
-
-      {props.draft ? (
-        <CommentComposerPopup
-          screen={props.draft.screen}
-          rect={props.rect}
-          onSubmit={(bodyText) =>
-            props.onCreateComment(props.draft!.anchor, bodyText)
-          }
-          onCancel={props.onCancelDraft}
-        />
-      ) : null}
-    </div>
+        {props.draft ? (
+          <CommentComposerPopup
+            screen={props.draft.screen}
+            rect={props.rect}
+            onSubmit={(bodyText) =>
+              props.onCreateComment(props.draft!.anchor, bodyText)
+            }
+            onCancel={props.onCancelDraft}
+          />
+        ) : null}
+      </div>
+    </TooltipProvider>
   );
 }

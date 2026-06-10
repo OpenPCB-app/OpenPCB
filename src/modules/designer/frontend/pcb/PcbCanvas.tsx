@@ -276,6 +276,10 @@ interface PcbCanvasProps {
     messageId: string,
     emoji: string,
   ) => Promise<void>;
+  onMoveComment?: (
+    thread: DesignerCommentThread,
+    pointNm: { x: number; y: number },
+  ) => void;
   commentAttachmentUrl?: (attachmentId: string) => string;
   boardPanelTarget?: HTMLElement | null;
   layersPanelTarget?: HTMLElement | null;
@@ -2112,6 +2116,57 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           }
         }
 
+        if (props.onCreateComment) {
+          groups.push({
+            id: "comment",
+            items: [
+              {
+                kind: "action",
+                id: "add-comment",
+                label: "Add comment",
+                onSelect: () => {
+                  const point = snapPoint(cursor);
+                  const pointNm = pointMmToNm(point);
+                  const pad = hitPad(visiblePlacements, cursor);
+                  const trace = hitTrace(
+                    tracesRef.current,
+                    cursor,
+                    activeCopperLayer,
+                  );
+                  const via = hitVia(viasRef.current, cursor);
+                  const placement = hitPlacement(visiblePlacements, cursor);
+                  const r = wrapperRef.current?.getBoundingClientRect();
+                  setCommentDraft({
+                    anchor: {
+                      surface: "pcb",
+                      pointNm,
+                      entity: pad
+                        ? {
+                            kind: "pad",
+                            id: pad.placementId,
+                            subId: pad.padNumber,
+                          }
+                        : trace
+                          ? { kind: "trace", id: trace.trace.id }
+                          : via
+                            ? { kind: "via", id: via.id }
+                            : placement
+                              ? { kind: "placement", id: placement.id }
+                              : undefined,
+                      layerId: activeCopperLayer,
+                      sourceRevision: workspace.projection?.revision,
+                    },
+                    screen: {
+                      x: event.screenPoint.x - (r?.left ?? 0),
+                      y: event.screenPoint.y - (r?.top ?? 0),
+                    },
+                  });
+                },
+              },
+            ],
+          });
+        }
+
         openContextMenu({
           scope: "pcb",
           position: { x: event.screenPoint.x, y: event.screenPoint.y },
@@ -2873,6 +2928,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           mirrored={mirrorActive}
           rect={commentProjection.rect}
           project={commentProjection.project}
+          screenToWorld={commentProjection.screenToWorld}
           clampToEdge={commentProjection.clampToEdge}
           draft={commentDraft}
           currentUserEmail={props.currentUserEmail ?? null}
@@ -2885,6 +2941,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           onOpenThread={(id) => props.onSelectCommentThread?.(id)}
           onCloseThread={() => props.onCloseCommentThread?.()}
           onRecenter={recenterOnComment}
+          onMoveComment={(thread, pointNm) =>
+            props.onMoveComment?.(thread, pointNm)
+          }
           onAddMessage={async (thread, body, file) => {
             await props.onAddCommentMessage?.(thread, body, file);
           }}

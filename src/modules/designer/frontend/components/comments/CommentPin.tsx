@@ -1,5 +1,13 @@
-import type { ReactElement } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type ReactElement,
+} from "react";
 import { cn } from "@/lib/utils";
+
+const DRAG_THRESHOLD_PX = 4;
 
 export interface CommentPinProps {
   index: number;
@@ -14,12 +22,15 @@ export interface CommentPinProps {
   clamped: boolean;
   title?: string;
   onClick: () => void;
+  /** Commit a drag: final wrapper-relative screen position of the pin tip.
+   *  Only wired for on-screen pins. */
+  onMoveEnd?: (screen: { x: number; y: number }) => void;
 }
 
 /**
  * A floating, canvas-anchored comment marker. On-screen → a numbered teardrop
- * whose tip sits on the anchor; off-screen → a small edge chip that recenters
- * the camera on click.
+ * whose tip sits on the anchor (draggable to reposition); off-screen → a small
+ * edge chip that recenters the camera on click.
  */
 export function CommentPin({
   index,
@@ -31,7 +42,22 @@ export function CommentPin({
   clamped,
   title,
   onClick,
+  onMoveEnd,
 }: CommentPinProps): ReactElement {
+  // Live drag offset (px) while the pointer is down; null when idle.
+  const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null);
+  const startRef = useRef<{ x: number; y: number; moved: boolean } | null>(
+    null,
+  );
+
+  // After a move-release we keep the offset so the pin stays at the drop point
+  // until the committed anchor re-projects (avoids a snap-back flicker during
+  // the dispatch round-trip). The reprojected x/y change clears it; a timeout
+  // is the safety net for a no-op move that doesn't shift the projected pixel.
+  useEffect(() => {
+    if (!startRef.current) setDrag(null);
+  }, [x, y]);
+
   if (clamped) {
     return (
       <button
@@ -51,24 +77,81 @@ export function CommentPin({
     );
   }
 
+  const draggable = !!onMoveEnd;
+  const dragging = drag !== null && (startRef.current?.moved ?? false);
+
+  const handlePointerDown = (e: PointerEvent<HTMLButtonElement>) => {
+    if (!draggable || e.button !== 0) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    startRef.current = { x: e.clientX, y: e.clientY, moved: false };
+    setDrag({ dx: 0, dy: 0 });
+  };
+
+  const handlePointerMove = (e: PointerEvent<HTMLButtonElement>) => {
+    const start = startRef.current;
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (!start.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
+      start.moved = true;
+    }
+    setDrag({ dx, dy });
+  };
+
+  const handlePointerUp = (e: PointerEvent<HTMLButtonElement>) => {
+    const start = startRef.current;
+    const offset = drag;
+    startRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    if (start?.moved && offset && onMoveEnd) {
+      // Keep `offset` applied (don't clear `drag`) until the reprojected
+      // anchor lands; the [x,y] effect clears it. Safety-clear after 1s.
+      onMoveEnd({ x: x + offset.dx, y: y + offset.dy });
+      window.setTimeout(() => setDrag(null), 1000);
+    } else {
+      setDrag(null);
+      onClick();
+    }
+  };
+
   return (
     <button
       type="button"
       title={title}
-      onClick={onClick}
+      onClick={(e) => {
+        // When draggable, open/move is decided in pointerUp; swallow the native
+        // click so a drag-release never double-fires. Otherwise open directly.
+        if (draggable) e.preventDefault();
+        else onClick();
+      }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={draggable ? handlePointerMove : undefined}
+      onPointerUp={draggable ? handlePointerUp : undefined}
       className={cn(
-        "pointer-events-auto absolute z-20 -translate-x-1/2 -translate-y-full cursor-pointer transition-transform focus:outline-none",
-        active ? "scale-110" : "hover:scale-110",
-        resolved && !active && "scale-90 opacity-60 hover:opacity-90",
+        "pointer-events-auto absolute z-20 -translate-x-1/2 -translate-y-full select-none focus:outline-none",
+        dragging ? "cursor-grabbing" : "cursor-grab",
+        !dragging &&
+          (active ? "scale-110" : "transition-transform hover:scale-110"),
+        resolved &&
+          !active &&
+          !dragging &&
+          "scale-90 opacity-60 hover:opacity-90",
       )}
-      style={{ left: x, top: y }}
+      style={{
+        left: x + (drag?.dx ?? 0),
+        top: y + (drag?.dy ?? 0),
+        touchAction: "none",
+      }}
     >
       <span className="relative flex h-7 w-7 items-center justify-center">
         <span
           aria-hidden
           className={cn(
             "absolute inset-0 rotate-45 rounded-full rounded-br-none shadow-md",
-            active && "ring-2 ring-white dark:ring-slate-900",
+            (active || dragging) && "ring-2 ring-white dark:ring-slate-900",
           )}
           style={{ backgroundColor: color }}
         />
