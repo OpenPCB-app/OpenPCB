@@ -209,16 +209,27 @@ export function createDesignerApi(params: {
     async getCommentThread(
       designId: string,
       threadId: string,
+      viewer?: string | null,
     ): Promise<DesignerCommentThread> {
+      const suffix = viewer ? `?viewer=${encodeURIComponent(viewer)}` : "";
       const data = await fetchData<{ thread: DesignerCommentThread }>(
         buildModuleUrl(
           backendURL,
           moduleId,
-          `/designs/${encodeURIComponent(designId)}/comments/${encodeURIComponent(threadId)}`,
+          `/designs/${encodeURIComponent(designId)}/comments/${encodeURIComponent(threadId)}${suffix}`,
         ),
         { headers: applyCloudHeaders(undefined) },
       );
       return data.thread;
+    },
+
+    /** Direct URL for an image attachment (served by the local backend). */
+    commentAttachmentUrl(designId: string, attachmentId: string): string {
+      return buildModuleUrl(
+        backendURL,
+        moduleId,
+        `/designs/${encodeURIComponent(designId)}/comments/attachments/${encodeURIComponent(attachmentId)}`,
+      );
     },
 
     async dispatchCommentCommand(

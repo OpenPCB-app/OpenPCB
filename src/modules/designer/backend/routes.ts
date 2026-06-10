@@ -103,13 +103,17 @@ async function parseJsonBody<T>(req: Request): Promise<T> {
   }
 }
 
-function parseCommentSurface(raw: string | undefined): DesignerCommentSurface | undefined {
+function parseCommentSurface(
+  raw: string | undefined,
+): DesignerCommentSurface | undefined {
   if (!raw) return undefined;
   if (raw === "schematic" || raw === "pcb" || raw === "design") return raw;
   throw new ValidationError("surface must be schematic, pcb, or design");
 }
 
-function parseCommentCommandEnvelope(raw: unknown): DesignerCommentCommandEnvelope {
+function parseCommentCommandEnvelope(
+  raw: unknown,
+): DesignerCommentCommandEnvelope {
   const rec = asRecord(raw);
   if (!rec) throw new ValidationError("Request body must be an object");
   const commandId = asString(rec.commandId);
@@ -117,7 +121,13 @@ function parseCommentCommandEnvelope(raw: unknown): DesignerCommentCommandEnvelo
   const aggregateId = asString(rec.aggregateId);
   const issuedAt = asNumber(rec.issuedAt);
   const command = asRecord(rec.command);
-  if (!commandId || !sessionId || !aggregateId || issuedAt === null || !command) {
+  if (
+    !commandId ||
+    !sessionId ||
+    !aggregateId ||
+    issuedAt === null ||
+    !command
+  ) {
     throw new ValidationError("Invalid comment command envelope");
   }
   const baseRevisionRaw = rec.baseRevision;
@@ -156,12 +166,15 @@ function parseScreenshotUpload(raw: unknown): {
   const mimeType = asString(rec.mimeType);
   const base64 = asString(rec.base64);
   if (!threadId || !fileName || !mimeType || !base64) {
-    throw new ValidationError("threadId, fileName, mimeType, and base64 are required");
+    throw new ValidationError(
+      "threadId, fileName, mimeType, and base64 are required",
+    );
   }
   return {
     attachmentId: asString(rec.attachmentId) ?? undefined,
     threadId,
-    messageId: rec.messageId === null ? null : (asString(rec.messageId) ?? undefined),
+    messageId:
+      rec.messageId === null ? null : (asString(rec.messageId) ?? undefined),
     fileName,
     mimeType,
     base64,
@@ -204,9 +217,12 @@ async function pullCloudCommentsIntoLocal(
   if (!bearer || !apiUrl) return;
   const link = await store.getCloudLink(designId);
   if (!link) return;
-  const res = await fetch(`${apiUrl}/v1/designs/${link.cloudDesignId}/comments`, {
-    headers: { authorization: `Bearer ${bearer}` },
-  }).catch(() => null);
+  const res = await fetch(
+    `${apiUrl}/v1/designs/${link.cloudDesignId}/comments`,
+    {
+      headers: { authorization: `Bearer ${bearer}` },
+    },
+  ).catch(() => null);
   if (!res?.ok) return;
   const body = (await res.json().catch(() => null)) as {
     threads?: DesignerCommentThread[];
@@ -2084,46 +2100,84 @@ export function registerRoutes(
     return success({ threads });
   });
 
-  router.get("/designs/:designId/comments/:threadId", async ({ params, req }) => {
-    const designId = params.getOrThrow("designId");
-    await pullCloudCommentsIntoLocal(store, commentStore, designId, req);
-    const threadId = params.getOrThrow("threadId");
-    const thread = commentStore.getThread(designId, threadId);
-    if (!thread) throw new NotFoundError(`Comment thread '${threadId}' not found`);
-    return success({ thread });
-  });
-
-  router.post("/designs/:designId/comments/commands", async ({ params, req }) => {
-    const designId = params.getOrThrow("designId");
-    const envelope = parseCommentCommandEnvelope(await parseJsonBody<unknown>(req));
-    const result = commentStore.dispatch(designId, envelope);
-    if (result.ok) void mirrorCommentCommandToCloud(store, designId, envelope, req);
-    const status = !result.ok && result.code === "COMMENT_CONFLICT" ? 409 : 200;
-    return success({ result }, status);
-  });
-
-  router.post("/designs/:designId/comments/attachments", async ({ params, req }) => {
-    const designId = params.getOrThrow("designId");
-    const input = parseScreenshotUpload(await parseJsonBody<unknown>(req));
-    const attachment = await commentStore.addScreenshot(designId, input);
-    if (!attachment) throw new ValidationError("Invalid screenshot attachment");
-    const bearer = req.headers.get("x-cloud-bearer");
-    const apiUrl = req.headers.get("x-cloud-api-url");
-    if (bearer && apiUrl) {
-      const link = await store.getCloudLink(designId);
-      if (link) {
-        void fetch(`${apiUrl}/v1/designs/${link.cloudDesignId}/comments/attachments`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${bearer}`,
-          },
-          body: JSON.stringify({ ...input, attachmentId: attachment.id }),
-        }).catch(() => undefined);
+  router.get(
+    "/designs/:designId/comments/:threadId",
+    async ({ params, query, req }) => {
+      const designId = params.getOrThrow("designId");
+      await pullCloudCommentsIntoLocal(store, commentStore, designId, req);
+      const threadId = params.getOrThrow("threadId");
+      const viewer = query.get("viewer") || null;
+      const thread = commentStore.getThread(designId, threadId, viewer);
+      if (!thread) {
+        throw new NotFoundError(`Comment thread '${threadId}' not found`);
       }
-    }
-    return success({ attachment }, 201);
-  });
+      return success({ thread });
+    },
+  );
+
+  router.get(
+    "/designs/:designId/comments/attachments/:attachmentId",
+    async ({ params }) => {
+      const designId = params.getOrThrow("designId");
+      const attachmentId = params.getOrThrow("attachmentId");
+      const attachment = commentStore.getAttachment(designId, attachmentId);
+      if (!attachment?.localPath) {
+        throw new NotFoundError(`Attachment '${attachmentId}' not found`);
+      }
+      return new Response(Bun.file(attachment.localPath), {
+        headers: {
+          "Content-Type": attachment.mimeType,
+          "Cache-Control": "private, max-age=86400",
+        },
+      });
+    },
+  );
+
+  router.post(
+    "/designs/:designId/comments/commands",
+    async ({ params, req }) => {
+      const designId = params.getOrThrow("designId");
+      const envelope = parseCommentCommandEnvelope(
+        await parseJsonBody<unknown>(req),
+      );
+      const result = commentStore.dispatch(designId, envelope);
+      if (result.ok)
+        void mirrorCommentCommandToCloud(store, designId, envelope, req);
+      const status =
+        !result.ok && result.code === "COMMENT_CONFLICT" ? 409 : 200;
+      return success({ result }, status);
+    },
+  );
+
+  router.post(
+    "/designs/:designId/comments/attachments",
+    async ({ params, req }) => {
+      const designId = params.getOrThrow("designId");
+      const input = parseScreenshotUpload(await parseJsonBody<unknown>(req));
+      const attachment = await commentStore.addScreenshot(designId, input);
+      if (!attachment)
+        throw new ValidationError("Invalid screenshot attachment");
+      const bearer = req.headers.get("x-cloud-bearer");
+      const apiUrl = req.headers.get("x-cloud-api-url");
+      if (bearer && apiUrl) {
+        const link = await store.getCloudLink(designId);
+        if (link) {
+          void fetch(
+            `${apiUrl}/v1/designs/${link.cloudDesignId}/comments/attachments`,
+            {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                authorization: `Bearer ${bearer}`,
+              },
+              body: JSON.stringify({ ...input, attachmentId: attachment.id }),
+            },
+          ).catch(() => undefined);
+        }
+      }
+      return success({ attachment }, 201);
+    },
+  );
 
   router.get("/designs/:designId/bom", async ({ params }) => {
     const designId = params.getOrThrow("designId");

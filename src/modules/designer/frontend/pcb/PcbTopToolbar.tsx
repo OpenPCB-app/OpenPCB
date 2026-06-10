@@ -6,6 +6,7 @@ import {
   EyeOff,
   FlipHorizontal2,
   Magnet,
+  MessageSquarePlus,
   Minus,
   Network,
   Plus,
@@ -49,6 +50,8 @@ interface PcbTopToolbarProps {
   onToggleRouteMode: () => void;
   measureMode: boolean;
   onToggleMeasureMode: () => void;
+  commentMode?: boolean;
+  onToggleCommentMode?: () => void;
   segmentMode: PcbTraceSegmentMode;
   onToggleSegmentMode: () => void;
   activeWidthMm: number;
@@ -513,6 +516,8 @@ export function PcbTopToolbar({
   onToggleRouteMode,
   measureMode,
   onToggleMeasureMode,
+  commentMode = false,
+  onToggleCommentMode,
   segmentMode,
   onToggleSegmentMode,
   activeWidthMm,
@@ -637,6 +642,23 @@ export function PcbTopToolbar({
         <Ruler className="h-3.5 w-3.5" />
         Measure (M)
       </button>
+
+      {onToggleCommentMode ? (
+        <button
+          type="button"
+          onClick={onToggleCommentMode}
+          title="Comment (C)"
+          className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+            commentMode
+              ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+              : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+          }`}
+          aria-pressed={commentMode}
+        >
+          <MessageSquarePlus className="h-3.5 w-3.5" />
+          Comment
+        </button>
+      ) : null}
 
       {routeMode ? (
         <>

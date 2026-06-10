@@ -52,6 +52,8 @@ import type {
   DesignerCommand,
   DesignerCommentAnchor,
   DesignerCommentThread,
+  DesignerCommentThreadStatus,
+  DesignerCommentTodoStatus,
   DesignerPlacedPart,
   DesignerPin,
   DesignerPrimitive,
@@ -74,9 +76,10 @@ import { NetPortalPicker, PwrRailPicker } from "./LabelPicker";
 import { openContextMenu } from "../../../../shared/frontend/context-menu";
 import type { ContextMenuGroup } from "../../../../shared/frontend/context-menu";
 import {
-  CanvasCommentMarkers,
-  hitCommentThread,
-} from "./CanvasCommentMarkers";
+  CanvasCommentLayer,
+  type CommentDraft,
+} from "./comments/CanvasCommentLayer";
+import { useCanvasProjection } from "./comments/useCanvasProjection";
 const PIN_HIT_MM = 0.35;
 // Primitive connection dots are rendered larger (≈0.36 mm radius), so the
 // hit zone must be wider than for part pins to match the visible target.
@@ -182,8 +185,29 @@ interface SchematicCanvasProps {
   commentThreads?: readonly DesignerCommentThread[];
   activeCommentThreadId?: string | null;
   commentMode?: boolean;
+  currentUserEmail?: string | null;
   onCreateComment?: (anchor: DesignerCommentAnchor, body: string) => void;
   onSelectCommentThread?: (threadId: string) => void;
+  onCloseCommentThread?: () => void;
+  onAddCommentMessage?: (
+    thread: DesignerCommentThread,
+    body: string,
+    file?: File | null,
+  ) => Promise<void>;
+  onSetCommentStatus?: (
+    thread: DesignerCommentThread,
+    status: DesignerCommentThreadStatus,
+  ) => Promise<void>;
+  onSetCommentTodoStatus?: (
+    thread: DesignerCommentThread,
+    todoStatus: DesignerCommentTodoStatus,
+  ) => Promise<void>;
+  onToggleCommentReaction?: (
+    thread: DesignerCommentThread,
+    messageId: string,
+    emoji: string,
+  ) => Promise<void>;
+  commentAttachmentUrl?: (attachmentId: string) => string;
   onZoomChange?: (zoomPercent: number) => void;
   initialViewport?: ViewportState | null;
   onViewportChange?: (zoom: number, posX: number, posY: number) => void;
@@ -702,23 +726,20 @@ function ViewportReporter({
   onViewportChange: (zoom: number, posX: number, posY: number) => void;
 }): null {
   const camera = useThree((s) => s.camera) as OrthographicCamera;
-  const lastRef = useRef({
-    zoom: camera.zoom,
-    posX: camera.position.x,
-    posY: camera.position.y,
-  });
+  const lastRef = useRef<{ zoom: number; posX: number; posY: number } | null>(
+    null,
+  );
 
   useFrame(() => {
     const { zoom, position } = camera;
     const l = lastRef.current;
     if (
+      !l ||
       Math.abs(l.zoom - zoom) > 0.001 ||
       Math.abs(l.posX - position.x) > 0.1 ||
       Math.abs(l.posY - position.y) > 0.1
     ) {
-      l.zoom = zoom;
-      l.posX = position.x;
-      l.posY = position.y;
+      lastRef.current = { zoom, posX: position.x, posY: position.y };
       onViewportChange(zoom, position.x, position.y);
     }
   });
@@ -742,8 +763,15 @@ export const SchematicCanvas = forwardRef<
     commentThreads = [],
     activeCommentThreadId = null,
     commentMode = false,
+    currentUserEmail = null,
     onCreateComment,
     onSelectCommentThread,
+    onCloseCommentThread,
+    onAddCommentMessage,
+    onSetCommentStatus,
+    onSetCommentTodoStatus,
+    onToggleCommentReaction,
+    commentAttachmentUrl,
     onZoomChange,
     initialViewport,
     onViewportChange,
@@ -772,6 +800,23 @@ export const SchematicCanvas = forwardRef<
   const [cameraReady, setCameraReady] = useState(false);
   const lastAutoFittedDesignIdRef = useRef<string | null>(null);
   const markCameraReady = useCallback(() => setCameraReady(true), []);
+
+  // Floating canvas comment overlay: projection + new-comment draft.
+  const wrapperRef = useRef<HTMLElement | null>(null);
+  const projection2d = useCanvasProjection(wrapperRef, initialViewport);
+  const [commentDraft, setCommentDraft] = useState<CommentDraft | null>(null);
+  const recenterOnNm = useCallback((anchorNm: { x: number; y: number }) => {
+    const camera = cameraRef.current;
+    if (!camera) return;
+    camera.position.set(
+      Units.nmToMm(anchorNm.x),
+      Units.nmToMm(anchorNm.y),
+      camera.position.z,
+    );
+    camera.zoom = Math.min(Math.max(camera.zoom, 40), 200);
+    camera.updateProjectionMatrix();
+    (camera.userData.invalidate as (() => void) | undefined)?.();
+  }, []);
 
   useEffect(() => {
     actions.setSelectedPartId(firstSelectedId(selection.partIds));
@@ -1627,9 +1672,9 @@ export const SchematicCanvas = forwardRef<
         const primitiveId = hitPrimitiveId(worldNm);
 
         if (commentMode && onCreateComment) {
-          const body = window.prompt("Add comment (Markdown supported)");
-          if (body?.trim()) {
-            onCreateComment({
+          const r = wrapperRef.current?.getBoundingClientRect();
+          setCommentDraft({
+            anchor: {
               surface: "schematic",
               pointNm: snappedWorldNm,
               entity: pin
@@ -1644,14 +1689,12 @@ export const SchematicCanvas = forwardRef<
                         ? { kind: "primitive", id: primitiveId }
                         : undefined,
               sourceRevision: projection.revision,
-            }, body.trim());
-          }
-          return;
-        }
-
-        const commentHit = hitCommentThread(commentThreads, worldNm);
-        if (commentHit && onSelectCommentThread) {
-          onSelectCommentThread(commentHit.id);
+            },
+            screen: {
+              x: event.screenPoint.x - (r?.left ?? 0),
+              y: event.screenPoint.y - (r?.top ?? 0),
+            },
+          });
           return;
         }
 
@@ -2528,7 +2571,10 @@ export const SchematicCanvas = forwardRef<
   }, [armedPrimitive, cursorNm]);
 
   return (
-    <section className="relative h-full w-full min-h-0 rounded-none">
+    <section
+      ref={wrapperRef}
+      className="relative h-full w-full min-h-0 rounded-none"
+    >
       <EdaCanvas
         readOnly={false}
         interactionHandler={interactionHandler}
@@ -2544,9 +2590,12 @@ export const SchematicCanvas = forwardRef<
           onReady={markCameraReady}
         />
         <ZoomReporter onZoomChange={onZoomChange} />
-        {onViewportChange && (
-          <ViewportReporter onViewportChange={onViewportChange} />
-        )}
+        <ViewportReporter
+          onViewportChange={(zoom, posX, posY) => {
+            projection2d.setViewport(zoom, posX, posY);
+            onViewportChange?.(zoom, posX, posY);
+          }}
+        />
         <InvalidateOnCanvasChange
           projection={projection}
           cursorNm={cursorNm}
@@ -2578,6 +2627,37 @@ export const SchematicCanvas = forwardRef<
           activeCommentThreadId={activeCommentThreadId}
         />
       </EdaCanvas>
+      <CanvasCommentLayer
+        threads={commentThreads}
+        activeThreadId={activeCommentThreadId}
+        mirrored={false}
+        rect={projection2d.rect}
+        project={projection2d.project}
+        clampToEdge={projection2d.clampToEdge}
+        draft={commentDraft}
+        currentUserEmail={currentUserEmail}
+        attachmentUrl={commentAttachmentUrl ?? (() => "")}
+        onCreateComment={(anchor, body) => {
+          onCreateComment?.(anchor, body);
+          setCommentDraft(null);
+        }}
+        onCancelDraft={() => setCommentDraft(null)}
+        onOpenThread={(id) => onSelectCommentThread?.(id)}
+        onCloseThread={() => onCloseCommentThread?.()}
+        onRecenter={recenterOnNm}
+        onAddMessage={async (thread, body, file) => {
+          await onAddCommentMessage?.(thread, body, file);
+        }}
+        onSetStatus={async (thread, status) => {
+          await onSetCommentStatus?.(thread, status);
+        }}
+        onSetTodoStatus={async (thread, todoStatus) => {
+          await onSetCommentTodoStatus?.(thread, todoStatus);
+        }}
+        onToggleReaction={async (thread, messageId, emoji) => {
+          await onToggleCommentReaction?.(thread, messageId, emoji);
+        }}
+      />
       {pwrPickerOpen ? (
         <PwrRailPicker
           onPick={(railText) => {
@@ -2888,11 +2968,6 @@ function SchematicScene({
               </mesh>
             </group>
           ) : null}
-
-          <CanvasCommentMarkers
-            threads={commentThreads}
-            activeThreadId={activeCommentThreadId}
-          />
         </>
       ) : null}
     </>
@@ -2910,13 +2985,15 @@ function CameraRefBridge({
 }) {
   const camera = useThree((state) => state.camera) as OrthographicCamera;
   const gl = useThree((state) => state.gl);
+  const invalidate = useThree((state) => state.invalidate);
 
   useEffect(() => {
     cameraRef.current = camera;
     camera.userData.canvas = gl.domElement;
+    camera.userData.invalidate = invalidate;
     onZoomChange?.(camera.zoom * 2);
     onReady?.();
-  }, [camera, gl, cameraRef, onZoomChange, onReady]);
+  }, [camera, gl, invalidate, cameraRef, onZoomChange, onReady]);
 
   return null;
 }

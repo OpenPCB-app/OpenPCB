@@ -194,23 +194,20 @@ function ViewportReporter({
   onViewportChange: (zoom: number, posX: number, posY: number) => void;
 }): null {
   const camera = useThree((s) => s.camera) as THREE.OrthographicCamera;
-  const lastRef = useRef({
-    zoom: camera.zoom,
-    posX: camera.position.x,
-    posY: camera.position.y,
-  });
+  const lastRef = useRef<{ zoom: number; posX: number; posY: number } | null>(
+    null,
+  );
 
   useFrame(() => {
     const { zoom, position } = camera;
     const l = lastRef.current;
     if (
+      !l ||
       Math.abs(l.zoom - zoom) > 0.001 ||
       Math.abs(l.posX - position.x) > 0.1 ||
       Math.abs(l.posY - position.y) > 0.1
     ) {
-      l.zoom = zoom;
-      l.posX = position.x;
-      l.posY = position.y;
+      lastRef.current = { zoom, posX: position.x, posY: position.y };
       onViewportChange(zoom, position.x, position.y);
     }
   });

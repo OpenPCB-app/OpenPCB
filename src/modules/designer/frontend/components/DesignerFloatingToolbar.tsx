@@ -2,6 +2,7 @@ import {
   ArrowRightFromLine,
   ChevronsDown,
   Grid3X3,
+  MessageSquarePlus,
   Minus,
   Plus,
   ScanSearch,
@@ -26,6 +27,8 @@ interface DesignerFloatingToolbarProps {
   onPlaceGnd?: () => void;
   onPlacePwr?: () => void;
   onPlaceNetPortal?: () => void;
+  commentMode?: boolean;
+  onToggleCommentMode?: () => void;
 }
 
 export function DesignerFloatingToolbar({
@@ -42,6 +45,8 @@ export function DesignerFloatingToolbar({
   onPlaceGnd,
   onPlacePwr,
   onPlaceNetPortal,
+  commentMode = false,
+  onToggleCommentMode,
 }: DesignerFloatingToolbarProps): ReactElement {
   return (
     <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200/90 bg-white/95 px-2 py-1 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-slate-900/90">
@@ -148,6 +153,27 @@ export function DesignerFloatingToolbar({
           <ArrowRightFromLine className="h-3.5 w-3.5" />
           Portal
         </button>
+      ) : null}
+
+      {onToggleCommentMode ? (
+        <>
+          <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
+          <button
+            type="button"
+            onClick={onToggleCommentMode}
+            className={`inline-flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-medium transition-colors ${
+              commentMode
+                ? "border-violet-500 bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+                : "border-transparent text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            }`}
+            title="Comment (C)"
+            aria-label="Comment"
+            aria-pressed={commentMode}
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5" />
+            Comment
+          </button>
+        </>
       ) : null}
     </div>
   );

@@ -41,7 +41,6 @@ import {
 import { ToastProvider, useToast } from "./hooks/use-toast";
 import { useDesignerWorkspace } from "./hooks/useDesignerWorkspace";
 import { useDesignerComments } from "./hooks/useDesignerComments";
-import { CanvasCommentsPanel } from "./components/CanvasCommentsPanel";
 import { PcbCanvas } from "./pcb/PcbCanvas";
 import { Board3DCanvas } from "./three-d/Board3DCanvas";
 import { DesignerChatDock } from "../../assistant/frontend";
@@ -295,7 +294,7 @@ function DesignerSpaceInner({
   designId,
 }: ModuleSpaceProps): ReactElement {
   const { addToast } = useToast();
-  const { session, enabled: cloudEnabled } = useAuth();
+  const { session, user, enabled: cloudEnabled } = useAuth();
   const projectSyncEnabled = useCloudPrefs((s) => s.projectSyncEnabled);
   // No cloud headers (→ no command mirroring, no linking) unless cloud is
   // configured AND the user has project sync turned on.
@@ -323,6 +322,7 @@ function DesignerSpaceInner({
     moduleId,
     designId: state.selectedDesignId,
     surface: commentSurface,
+    currentUserEmail: user?.email ?? null,
     cloudHeaders,
   });
   const [kicadImportOpen, setKicadImportOpen] = useState(false);
@@ -961,8 +961,25 @@ function DesignerSpaceInner({
         commentThreads={comments.threads}
         activeCommentThreadId={comments.activeThreadId}
         commentMode={comments.commentMode}
-        onCreateComment={(anchor, body) => void comments.createThread(anchor, body)}
+        currentUserEmail={user?.email ?? null}
+        onCreateComment={(anchor, body) =>
+          void comments.createThread(anchor, body)
+        }
         onSelectCommentThread={(threadId) => void comments.loadThread(threadId)}
+        onCloseCommentThread={() => comments.setActiveThreadId(null)}
+        onAddCommentMessage={async (thread, body, file) => {
+          await comments.addMessage(thread, body, file);
+        }}
+        onSetCommentStatus={async (thread, status) => {
+          await comments.setStatus(thread, status);
+        }}
+        onSetCommentTodoStatus={async (thread, todoStatus) => {
+          await comments.setTodoStatus(thread, todoStatus);
+        }}
+        onToggleCommentReaction={async (thread, messageId, emoji) => {
+          await comments.toggleReaction(thread, messageId, emoji);
+        }}
+        commentAttachmentUrl={comments.attachmentUrl}
         onZoomChange={setZoomPercent}
         initialViewport={
           state.selectedDesignId
@@ -1103,12 +1120,30 @@ function DesignerSpaceInner({
                   commentThreads={comments.threads}
                   activeCommentThreadId={comments.activeThreadId}
                   commentMode={comments.commentMode}
+                  currentUserEmail={user?.email ?? null}
                   onCreateComment={(anchor, body) =>
                     void comments.createThread(anchor, body)
                   }
                   onSelectCommentThread={(threadId) =>
                     void comments.loadThread(threadId)
                   }
+                  onCloseCommentThread={() => comments.setActiveThreadId(null)}
+                  onToggleCommentMode={() =>
+                    comments.setCommentMode(!comments.commentMode)
+                  }
+                  onAddCommentMessage={async (thread, body, file) => {
+                    await comments.addMessage(thread, body, file);
+                  }}
+                  onSetCommentStatus={async (thread, status) => {
+                    await comments.setStatus(thread, status);
+                  }}
+                  onSetCommentTodoStatus={async (thread, todoStatus) => {
+                    await comments.setTodoStatus(thread, todoStatus);
+                  }}
+                  onToggleCommentReaction={async (thread, messageId, emoji) => {
+                    await comments.toggleReaction(thread, messageId, emoji);
+                  }}
+                  commentAttachmentUrl={comments.attachmentUrl}
                   boardPanelTarget={pcbBoardSlot}
                   layersPanelTarget={pcbLayersSlot}
                   selectionRequest={pcbSelectionRequest}
@@ -1216,6 +1251,10 @@ function DesignerSpaceInner({
                   onPlaceNetPortal={() =>
                     canvasRef.current?.armPrimitive("net_portal")
                   }
+                  commentMode={comments.commentMode}
+                  onToggleCommentMode={() =>
+                    comments.setCommentMode(!comments.commentMode)
+                  }
                 />
               </div>
             </div>
@@ -1279,31 +1318,6 @@ function DesignerSpaceInner({
               />
             </div>
           </>
-        ) : null}
-
-        {!noTabsOpen &&
-        (state.activeView === "schem" || state.activeView === "pcb") ? (
-          <CanvasCommentsPanel
-            surface={commentSurface}
-            threads={comments.threads}
-            activeThread={comments.activeThread}
-            commentMode={comments.commentMode}
-            loading={comments.loading}
-            error={comments.error}
-            onSelectThread={(threadId) => void comments.loadThread(threadId)}
-            onToggleCommentMode={() =>
-              comments.setCommentMode(!comments.commentMode)
-            }
-            onAddMessage={async (thread, body) => {
-              await comments.addMessage(thread, body);
-            }}
-            onSetStatus={async (thread, status) => {
-              await comments.setStatus(thread, status);
-            }}
-            onSetTodoStatus={async (thread, status) => {
-              await comments.setTodoStatus(thread, status);
-            }}
-          />
         ) : null}
 
         {chatOpen ? (

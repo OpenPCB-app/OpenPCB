@@ -24,3 +24,4 @@ export {
   type StackedCardProps,
   type StackedCardTone,
 } from "./stacked-card";
+export { Textarea, type TextareaProps } from "./textarea";

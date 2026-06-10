@@ -35,6 +35,7 @@ export type {
   DesignerCommentCommandResult,
   DesignerCommentMessage,
   DesignerCommentMessageKind,
+  DesignerCommentReaction,
   DesignerCommentSurface,
   DesignerCommentSyncState,
   DesignerCommentThread,

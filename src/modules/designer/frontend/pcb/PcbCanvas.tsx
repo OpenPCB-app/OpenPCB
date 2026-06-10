@@ -12,6 +12,8 @@ import type {
   DesignerCommand,
   DesignerCommentAnchor,
   DesignerCommentThread,
+  DesignerCommentThreadStatus,
+  DesignerCommentTodoStatus,
   DesignerDispatchResult,
   PcbBoardOutline,
   PcbCopperLayerId,
@@ -75,9 +77,10 @@ import {
   type PcbSelection,
 } from "./pcb-selection";
 import {
-  CanvasCommentMarkers,
-  hitCommentThread,
-} from "../components/CanvasCommentMarkers";
+  CanvasCommentLayer,
+  type CommentDraft,
+} from "../components/comments/CanvasCommentLayer";
+import { useCanvasProjection } from "../components/comments/useCanvasProjection";
 import {
   PcbSelectionInspector,
   type PcbInspectorSelection,
@@ -250,8 +253,30 @@ interface PcbCanvasProps {
   commentThreads?: readonly DesignerCommentThread[];
   activeCommentThreadId?: string | null;
   commentMode?: boolean;
+  currentUserEmail?: string | null;
   onCreateComment?: (anchor: DesignerCommentAnchor, body: string) => void;
   onSelectCommentThread?: (threadId: string) => void;
+  onCloseCommentThread?: () => void;
+  onToggleCommentMode?: () => void;
+  onAddCommentMessage?: (
+    thread: DesignerCommentThread,
+    body: string,
+    file?: File | null,
+  ) => Promise<void>;
+  onSetCommentStatus?: (
+    thread: DesignerCommentThread,
+    status: DesignerCommentThreadStatus,
+  ) => Promise<void>;
+  onSetCommentTodoStatus?: (
+    thread: DesignerCommentThread,
+    todoStatus: DesignerCommentTodoStatus,
+  ) => Promise<void>;
+  onToggleCommentReaction?: (
+    thread: DesignerCommentThread,
+    messageId: string,
+    emoji: string,
+  ) => Promise<void>;
+  commentAttachmentUrl?: (attachmentId: string) => string;
   boardPanelTarget?: HTMLElement | null;
   layersPanelTarget?: HTMLElement | null;
   selectionRequest?: {
@@ -670,6 +695,25 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       ? routeState.session.layer
       : activeCopperLayer;
   const mirrorActive = workspace.viewSide === "bottom";
+
+  // Floating canvas comment overlay: projection + new-comment draft + recenter.
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const commentProjection = useCanvasProjection(
+    wrapperRef,
+    props.initialViewport,
+  );
+  const [commentDraft, setCommentDraft] = useState<CommentDraft | null>(null);
+  const recenterOnComment = useCallback(
+    (anchorNm: { x: number; y: number }) => {
+      const scaleX = mirrorActive ? -1 : 1;
+      cameraControlsRef.current?.centerOnMm({
+        x: scaleX * nmToSceneMm(anchorNm.x),
+        y: nmToSceneMm(anchorNm.y),
+      });
+    },
+    [mirrorActive],
+  );
+
   // Snap target derived from cursor + nearby primitives. Tolerance is a
   // fixed world-mm radius (0.5mm) so the indicator stays consistent at any
   // zoom without piping viewport state through here. A future Phase 3 swap
@@ -1151,9 +1195,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           const trace = hitTrace(tracesRef.current, cursor, activeCopperLayer);
           const via = hitVia(viasRef.current, cursor);
           const placement = hitPlacement(visiblePlacements, cursor);
-          const body = window.prompt("Add comment (Markdown supported)");
-          if (body?.trim()) {
-            props.onCreateComment({
+          const r = wrapperRef.current?.getBoundingClientRect();
+          setCommentDraft({
+            anchor: {
               surface: "pcb",
               pointNm,
               entity: pad
@@ -1167,17 +1211,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                       : undefined,
               layerId: activeCopperLayer,
               sourceRevision: workspace.projection?.revision,
-            }, body.trim());
-          }
-          return;
-        }
-
-        const commentHit = hitCommentThread(
-          props.commentThreads ?? [],
-          pointMmToNm(cursor),
-        );
-        if (commentHit && props.onSelectCommentThread) {
-          props.onSelectCommentThread(commentHit.id);
+            },
+            screen: {
+              x: event.screenPoint.x - (r?.left ?? 0),
+              y: event.screenPoint.y - (r?.top ?? 0),
+            },
+          });
           return;
         }
 
@@ -2774,6 +2813,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
 
   return (
     <div
+      ref={wrapperRef}
       className="relative h-full w-full bg-slate-950"
       style={canvasCursor ? { cursor: canvasCursor } : undefined}
     >
@@ -2819,16 +2859,45 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             onViewportChange={(zoom, posX, posY) => {
               // Capture live zoom for DOM-side DRC marker hit-test tolerance.
               drcZoomRef.current = zoom;
+              commentProjection.setViewport(zoom, posX, posY);
               props.onViewportChange?.(zoom, posX, posY);
             }}
             onCameraReady={handleCameraReady}
           />
-          <CanvasCommentMarkers
-            threads={props.commentThreads ?? []}
-            activeThreadId={props.activeCommentThreadId ?? null}
-            mirrorX={mirrorActive}
-          />
         </EdaCanvas>
+      ) : null}
+      {workspace.projection ? (
+        <CanvasCommentLayer
+          threads={props.commentThreads ?? []}
+          activeThreadId={props.activeCommentThreadId ?? null}
+          mirrored={mirrorActive}
+          rect={commentProjection.rect}
+          project={commentProjection.project}
+          clampToEdge={commentProjection.clampToEdge}
+          draft={commentDraft}
+          currentUserEmail={props.currentUserEmail ?? null}
+          attachmentUrl={props.commentAttachmentUrl ?? (() => "")}
+          onCreateComment={(anchor, body) => {
+            props.onCreateComment?.(anchor, body);
+            setCommentDraft(null);
+          }}
+          onCancelDraft={() => setCommentDraft(null)}
+          onOpenThread={(id) => props.onSelectCommentThread?.(id)}
+          onCloseThread={() => props.onCloseCommentThread?.()}
+          onRecenter={recenterOnComment}
+          onAddMessage={async (thread, body, file) => {
+            await props.onAddCommentMessage?.(thread, body, file);
+          }}
+          onSetStatus={async (thread, status) => {
+            await props.onSetCommentStatus?.(thread, status);
+          }}
+          onSetTodoStatus={async (thread, todoStatus) => {
+            await props.onSetCommentTodoStatus?.(thread, todoStatus);
+          }}
+          onToggleReaction={async (thread, messageId, emoji) => {
+            await props.onToggleCommentReaction?.(thread, messageId, emoji);
+          }}
+        />
       ) : null}
       {workspace.projection ? (
         <div className="pointer-events-none absolute left-3 bottom-3 z-20">
@@ -2966,6 +3035,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                 });
                 dispatchRoute({ kind: "cancel" });
               }}
+              commentMode={props.commentMode ?? false}
+              onToggleCommentMode={
+                props.onToggleCommentMode
+                  ? () => props.onToggleCommentMode?.()
+                  : undefined
+              }
               holeMode={toolMode === "hole"}
               onToggleHoleMode={() => {
                 setToolMode((prev) => (prev === "hole" ? "select" : "hole"));

@@ -343,6 +343,28 @@ export const commentAttachments = sqliteTable(
   }),
 );
 
+export const commentReactions = sqliteTable(
+  "designer_comment_reactions",
+  {
+    id: text("id").primaryKey(),
+    designId: text("design_id").notNull(),
+    threadId: text("thread_id").notNull(),
+    messageId: text("message_id").notNull(),
+    emoji: text("emoji").notNull(),
+    createdBy: text("created_by"),
+    createdAt: text("created_at").notNull(),
+    deletedAt: text("deleted_at"),
+  },
+  (table) => ({
+    messageIdIdx: index("designer_comment_reactions_message_id_idx").on(
+      table.messageId,
+    ),
+    threadIdIdx: index("designer_comment_reactions_thread_id_idx").on(
+      table.threadId,
+    ),
+  }),
+);
+
 export const commentOutbox = sqliteTable(
   "designer_comment_outbox",
   {

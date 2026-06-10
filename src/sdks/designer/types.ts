@@ -135,6 +135,14 @@ export interface DesignerCommentAttachment {
   deletedAt: string | null;
 }
 
+/** Aggregated reaction tally for a single emoji on a message. */
+export interface DesignerCommentReaction {
+  emoji: string;
+  count: number;
+  /** Whether the current user has this reaction active. */
+  reactedByMe: boolean;
+}
+
 export interface DesignerCommentMessage {
   id: string;
   designId: string;
@@ -149,6 +157,7 @@ export interface DesignerCommentMessage {
   deletedAt: string | null;
   revision: number;
   attachments: DesignerCommentAttachment[];
+  reactions: DesignerCommentReaction[];
 }
 
 export interface DesignerCommentThread {
@@ -220,6 +229,13 @@ export type DesignerCommentCommand =
       type: "set_thread_anchor";
       threadId: string;
       anchor: DesignerCommentAnchor | null;
+    }
+  | {
+      type: "toggle_reaction";
+      threadId: string;
+      messageId: string;
+      emoji: string;
+      createdBy?: string | null;
     };
 
 export type DesignerCommentCommandResult =

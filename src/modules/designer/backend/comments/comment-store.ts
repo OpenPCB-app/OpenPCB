@@ -10,6 +10,7 @@ import type {
   DesignerCommentCommandResult,
   DesignerCommentMessage,
   DesignerCommentMessageKind,
+  DesignerCommentReaction,
   DesignerCommentSurface,
   DesignerCommentSyncState,
   DesignerCommentThread,
@@ -20,6 +21,7 @@ import {
   commentAttachments,
   commentMessages,
   commentOutbox,
+  commentReactions,
   commentThreads,
   designHeads,
 } from "../schema";
@@ -27,7 +29,11 @@ import {
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
 const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024;
-const SCREENSHOT_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const SCREENSHOT_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+]);
 
 type ThreadRow = typeof commentThreads.$inferSelect;
 type MessageRow = typeof commentMessages.$inferSelect;
@@ -70,6 +76,7 @@ function attachmentFromRow(row: AttachmentRow): DesignerCommentAttachment {
 function messageFromRow(
   row: MessageRow,
   attachments: DesignerCommentAttachment[],
+  reactions: DesignerCommentReaction[],
 ): DesignerCommentMessage {
   return {
     id: row.id,
@@ -85,6 +92,7 @@ function messageFromRow(
     deletedAt: row.deletedAt,
     revision: row.revision,
     attachments,
+    reactions,
   };
 }
 
@@ -176,7 +184,10 @@ export function createCommentStore({ db }: CreateCommentStoreOptions) {
     );
   }
 
-  function loadMessages(threadId: string): DesignerCommentMessage[] {
+  function loadMessages(
+    threadId: string,
+    viewer: string | null = null,
+  ): DesignerCommentMessage[] {
     const rows = db
       .select()
       .from(commentMessages)
@@ -204,13 +215,56 @@ export function createCommentStore({ db }: CreateCommentStoreOptions) {
       list.push(attachmentFromRow(row));
       byMessage.set(row.messageId, list);
     }
-    return rows.map((row) => messageFromRow(row, byMessage.get(row.id) ?? []));
+
+    const reactionRows = messageIds.length
+      ? db
+          .select()
+          .from(commentReactions)
+          .where(
+            and(
+              inArray(commentReactions.messageId, messageIds),
+              isNull(commentReactions.deletedAt),
+            ),
+          )
+          .all()
+      : [];
+    // messageId → emoji → { count, mine }
+    const reactionsByMessage = new Map<
+      string,
+      Map<string, { count: number; mine: boolean }>
+    >();
+    for (const row of reactionRows) {
+      const perMsg = reactionsByMessage.get(row.messageId) ?? new Map();
+      const agg = perMsg.get(row.emoji) ?? { count: 0, mine: false };
+      agg.count += 1;
+      const isMine =
+        viewer === null ? row.createdBy === null : row.createdBy === viewer;
+      if (isMine) agg.mine = true;
+      perMsg.set(row.emoji, agg);
+      reactionsByMessage.set(row.messageId, perMsg);
+    }
+    const reactionsFor = (messageId: string): DesignerCommentReaction[] => {
+      const perMsg = reactionsByMessage.get(messageId);
+      if (!perMsg) return [];
+      return [...perMsg.entries()].map(([emoji, v]) => ({
+        emoji,
+        count: v.count,
+        reactedByMe: v.mine,
+      }));
+    };
+
+    return rows.map((row) =>
+      messageFromRow(row, byMessage.get(row.id) ?? [], reactionsFor(row.id)),
+    );
   }
 
-  function loadThread(threadId: string): DesignerCommentThread | null {
+  function loadThread(
+    threadId: string,
+    viewer: string | null = null,
+  ): DesignerCommentThread | null {
     const row = loadThreadRow(threadId);
     if (!row) return null;
-    return threadFromRow(row, loadMessages(threadId));
+    return threadFromRow(row, loadMessages(threadId, viewer));
   }
 
   function bumpThread(
@@ -267,11 +321,34 @@ export function createCommentStore({ db }: CreateCommentStoreOptions) {
       return rows.map((row) => threadFromRow(row));
     },
 
-    getThread(designId: string, threadId: string) {
+    getThread(
+      designId: string,
+      threadId: string,
+      viewer: string | null = null,
+    ) {
       if (!ensureDesign(designId)) return null;
-      const thread = loadThread(threadId);
-      if (!thread || thread.designId !== designId || thread.deletedAt) return null;
+      const thread = loadThread(threadId, viewer);
+      if (!thread || thread.designId !== designId || thread.deletedAt)
+        return null;
       return thread;
+    },
+
+    getAttachment(designId: string, attachmentId: string) {
+      if (!ensureDesign(designId)) return null;
+      const row = db
+        .select()
+        .from(commentAttachments)
+        .where(eq(commentAttachments.id, attachmentId))
+        .get();
+      if (
+        !row ||
+        row.designId !== designId ||
+        row.deletedAt ||
+        !row.localPath
+      ) {
+        return null;
+      }
+      return attachmentFromRow(row);
     },
 
     dispatch(
@@ -291,7 +368,8 @@ export function createCommentStore({ db }: CreateCommentStoreOptions) {
         .get();
       if (existing) {
         const thread = loadThread(envelope.command.threadId);
-        if (thread) return { ok: true, threadRevision: thread.revision, thread };
+        if (thread)
+          return { ok: true, threadRevision: thread.revision, thread };
       }
 
       const command = envelope.command;
@@ -305,7 +383,8 @@ export function createCommentStore({ db }: CreateCommentStoreOptions) {
           envelope.baseRevision,
           timestamp,
         );
-        if (result.ok && options.enqueue !== false) enqueueOutbox(designId, envelope);
+        if (result.ok && options.enqueue !== false)
+          enqueueOutbox(designId, envelope);
       });
 
       return result!;
@@ -319,10 +398,17 @@ export function createCommentStore({ db }: CreateCommentStoreOptions) {
     ): DesignerCommentCommandResult {
       if (command.type === "create_thread") {
         const body = validateBody(command.body);
-        if (!body) return invalid("comment body is required and must be <= 4000 characters");
+        if (!body)
+          return invalid(
+            "comment body is required and must be <= 4000 characters",
+          );
         const existingThread = loadThread(command.threadId);
         if (existingThread) {
-          return { ok: true, threadRevision: existingThread.revision, thread: existingThread };
+          return {
+            ok: true,
+            threadRevision: existingThread.revision,
+            thread: existingThread,
+          };
         }
         db.insert(commentThreads)
           .values({
@@ -361,7 +447,11 @@ export function createCommentStore({ db }: CreateCommentStoreOptions) {
       }
 
       const threadRow = loadThreadRow(command.threadId);
-      if (!threadRow || threadRow.designId !== designId || threadRow.deletedAt) {
+      if (
+        !threadRow ||
+        threadRow.designId !== designId ||
+        threadRow.deletedAt
+      ) {
         return notFound("thread not found");
       }
       if (baseRevision !== null && baseRevision < threadRow.revision) {
@@ -369,14 +459,18 @@ export function createCommentStore({ db }: CreateCommentStoreOptions) {
           command.type === "add_message" ||
           command.type === "set_thread_status" ||
           command.type === "set_thread_todo_status" ||
-          command.type === "set_thread_anchor";
+          command.type === "set_thread_anchor" ||
+          command.type === "toggle_reaction";
         if (!safe) return conflict("thread changed", threadRow.revision);
       }
 
       switch (command.type) {
         case "add_message": {
           const body = validateBody(command.body);
-          if (!body) return invalid("message body is required and must be <= 4000 characters");
+          if (!body)
+            return invalid(
+              "message body is required and must be <= 4000 characters",
+            );
           const existingMessage = db
             .select()
             .from(commentMessages)
@@ -390,7 +484,9 @@ export function createCommentStore({ db }: CreateCommentStoreOptions) {
                 threadId: command.threadId,
                 kind: "user",
                 body,
-                mentionsJson: JSON.stringify(normalizeMentions(command.mentions)),
+                mentionsJson: JSON.stringify(
+                  normalizeMentions(command.mentions),
+                ),
                 createdBy: command.createdBy ?? null,
                 createdAt: timestamp,
                 updatedAt: timestamp,
@@ -406,17 +502,29 @@ export function createCommentStore({ db }: CreateCommentStoreOptions) {
         }
         case "edit_message": {
           const body = validateBody(command.body);
-          if (!body) return invalid("message body is required and must be <= 4000 characters");
+          if (!body)
+            return invalid(
+              "message body is required and must be <= 4000 characters",
+            );
           const message = db
             .select()
             .from(commentMessages)
             .where(eq(commentMessages.id, command.messageId))
             .get();
-          if (!message || message.threadId !== command.threadId || message.deletedAt) {
+          if (
+            !message ||
+            message.threadId !== command.threadId ||
+            message.deletedAt
+          ) {
             return notFound("message not found");
           }
           db.update(commentMessages)
-            .set({ body, editedAt: timestamp, updatedAt: timestamp, revision: message.revision + 1 })
+            .set({
+              body,
+              editedAt: timestamp,
+              updatedAt: timestamp,
+              revision: message.revision + 1,
+            })
             .where(eq(commentMessages.id, command.messageId))
             .run();
           bumpThread(command.threadId);
@@ -428,11 +536,19 @@ export function createCommentStore({ db }: CreateCommentStoreOptions) {
             .from(commentMessages)
             .where(eq(commentMessages.id, command.messageId))
             .get();
-          if (!message || message.threadId !== command.threadId || message.deletedAt) {
+          if (
+            !message ||
+            message.threadId !== command.threadId ||
+            message.deletedAt
+          ) {
             return notFound("message not found");
           }
           db.update(commentMessages)
-            .set({ deletedAt: timestamp, updatedAt: timestamp, revision: message.revision + 1 })
+            .set({
+              deletedAt: timestamp,
+              updatedAt: timestamp,
+              revision: message.revision + 1,
+            })
             .where(eq(commentMessages.id, command.messageId))
             .run();
           bumpThread(command.threadId);
@@ -450,6 +566,52 @@ export function createCommentStore({ db }: CreateCommentStoreOptions) {
             surface: command.anchor?.surface ?? threadRow.surface,
           });
           break;
+        case "toggle_reaction": {
+          const message = db
+            .select()
+            .from(commentMessages)
+            .where(eq(commentMessages.id, command.messageId))
+            .get();
+          if (!message || message.threadId !== command.threadId) {
+            return notFound("message not found");
+          }
+          const emoji = command.emoji.trim().slice(0, 16);
+          if (!emoji) return invalid("emoji is required");
+          const who = command.createdBy ?? null;
+          const existing = db
+            .select()
+            .from(commentReactions)
+            .where(
+              and(
+                eq(commentReactions.messageId, command.messageId),
+                eq(commentReactions.emoji, emoji),
+                who === null
+                  ? isNull(commentReactions.createdBy)
+                  : eq(commentReactions.createdBy, who),
+                isNull(commentReactions.deletedAt),
+              ),
+            )
+            .get();
+          if (existing) {
+            db.delete(commentReactions)
+              .where(eq(commentReactions.id, existing.id))
+              .run();
+          } else {
+            db.insert(commentReactions)
+              .values({
+                id: crypto.randomUUID(),
+                designId,
+                threadId: command.threadId,
+                messageId: command.messageId,
+                emoji,
+                createdBy: who,
+                createdAt: timestamp,
+              })
+              .run();
+          }
+          bumpThread(command.threadId);
+          break;
+        }
         default:
           return invalid("unsupported comment command");
       }
@@ -537,12 +699,19 @@ export function createCommentStore({ db }: CreateCommentStoreOptions) {
     ): Promise<DesignerCommentAttachment | null> {
       if (!ensureDesign(designId)) return null;
       const thread = loadThreadRow(input.threadId);
-      if (!thread || thread.designId !== designId || thread.deletedAt) return null;
+      if (!thread || thread.designId !== designId || thread.deletedAt)
+        return null;
       if (!SCREENSHOT_MIME_TYPES.has(input.mimeType)) return null;
       const data = Buffer.from(input.base64, "base64");
-      if (data.byteLength <= 0 || data.byteLength > MAX_SCREENSHOT_BYTES) return null;
+      if (data.byteLength <= 0 || data.byteLength > MAX_SCREENSHOT_BYTES)
+        return null;
       const id = input.attachmentId ?? crypto.randomUUID();
-      const safeExt = input.mimeType === "image/png" ? "png" : input.mimeType === "image/webp" ? "webp" : "jpg";
+      const safeExt =
+        input.mimeType === "image/png"
+          ? "png"
+          : input.mimeType === "image/webp"
+            ? "webp"
+            : "jpg";
       const dir = path.join(attachmentRoot(), designId, input.threadId);
       await mkdir(dir, { recursive: true });
       const localPath = path.join(dir, `${id}.${safeExt}`);
