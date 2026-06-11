@@ -17,6 +17,37 @@
 - Manufacturing export (Gerber X2 + Excellon + BOM + PnP + ZIP + Export dialog): **shipped 2026-05-17**; **overhauled 2026-06-02** (P0 correctness — copper FileFunction L-code/`,Signal`, CPL rotation, copper-pour `G36/G37`; plus Excellon decimals, `.gbrjob`, export preflight, silk-text rasterization, determinism, dialog warnings) — see "Manufacturing Export Overhaul (2026-06-02)" section below. **First fab-able beta is unblocked.**
 - Active sprint: post-merge cleanup + dead-code removal (see plan in `.claude/plans/act-as-senior-software-resilient-meadow.md`).
 
+## Cloud Teams + Sharing — Desktop integration (PENDING, 2026-06-10)
+
+Full handoff: **`CURRENT_STATE.md`** (this dir). Plan:
+`~/.claude/plans/act-as-senior-software-atomic-lightning.md`. Cross-repo tracker:
+workspace-root `TODO.md`. Memory: `project_teams_sharing_collab_plan`.
+
+The cloud backend (cloud-api) + web dashboard + SDK for company/team usage are **DONE +
+E2E-validated 2026-06-10** (org workspaces, members/roles, per-design grants, share links,
+role-aware authz). The **desktop integration is the only remaining P1 work** — shared
+designs must become cloud-authoritative in the editor; personal/unshared stay local-first.
+
+- [ ] **P1.9** `designer/backend/migrations/0016_cloud_link_authority.sql` (next free = 0016) + `cloudLink` Drizzle: `authority` (`local_first`|`cloud`), `cloud_role` (UI hint),
+      `cloud_workspace_kind`, `applied_revision`, `read_only`.
+- [ ] **P1.10** `dispatchToCloudAndReplicate` (projection-driven refetch, NOT replay;
+      per-design queue; `baseRevision=applied_revision`; 200→refetch; 409→resync; 403→read-only;
+      block `pcb_*`); `upgradeLinkToCloudAuthority` (don't reuse `linkDesignToCloud` — it
+      early-returns); `downgradeLinkToLocalFirst` (un-share is reversible); widen lossy
+      `CloudProjection` (`core/frontend/src/cloud/queries.ts`); shared-open via
+      `existingCloudDesignId` (skip `/seed`); "Shared with me" list.
+- [ ] **P1.11** read-only/offline gating (`editable = cloud authority && role editor+ &&
+    connected`), offline banner + never-synced-offline empty state, role via
+      `GET /v1/designs/:id/access`, role-gated toolbar/palette, `commandErrorMessage` for
+      `FORBIDDEN_ROLE`/`OFFLINE_READONLY`/`PCB_NOT_SHARED`.
+- [ ] **P2 (later)** backend WS client (`cloud-ws-client.ts`, ref-counted) + SSE→renderer
+      (reuse tasks SSE) for live command/presence push.
+- [ ] **P3 (later)** client rebase + per-user multiplayer undo (gated on a field-level patch refactor).
+
+Files: `src/modules/designer/backend/{schema,store,cloud-sync,routes}.ts` ·
+`frontend/{api,hooks/useDesignerWorkspace,Space,components/CloudDesignBrowser}` ·
+`core/frontend/src/cloud/queries.ts`.
+
 ## Agentic Loop Upgrade (Phases 0–4) — LANDED 2026-06-02
 
 Full record: `~/.claude/plans/act-as-senior-ts-foamy-treasure.md` + handoff
