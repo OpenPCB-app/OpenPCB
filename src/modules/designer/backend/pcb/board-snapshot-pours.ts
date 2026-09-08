@@ -1,14 +1,17 @@
 import type {
   DesignerPcbProjection,
-  PcbCopperLayerId,
   PcbPointMm,
   PourIsland,
   SnapshotCopperLayerId,
 } from "../../../../sdks/designer";
+import { buildCopperFillIslands } from "../../../../shared/rendering/copper-fill/copper-fill-geometry";
 import {
-  buildCopperFillPourPaths,
-  resolveCopperFillClearanceMm,
-} from "../../../../shared/rendering/copper-fill/copper-fill-geometry";
+  collectCopperZones,
+  collectKeepouts,
+  pourParamsForZone,
+  zonePourNets,
+  type ZonePourParams,
+} from "../../../../shared/pcb-areas";
 import {
   escapeStructuralIdSegment,
   fnv1a64,
@@ -29,8 +32,8 @@ type PourSource = {
   readonly sourceId: string;
   readonly layer: SnapshotCopperLayerId;
   readonly pourNetId: string | null;
-  readonly padConnection: "solid" | "thermal";
-  readonly clipPolygonMm?: readonly PcbPointMm[];
+  /** Composed fill params for this zone (zone/keepout contract §6). */
+  readonly params: ZonePourParams;
 };
 
 type PendingPourIsland = PourIsland & {
@@ -38,34 +41,44 @@ type PendingPourIsland = PourIsland & {
   readonly geometryOrder: string;
 };
 
+/**
+ * The snapshot's pour islands. `warnings` is the caller's warning sink (plain
+ * strings, as everywhere in `board-snapshot.ts`): a zone whose fill BAILED
+ * (copper-pour contract §8) contributes no islands, and silently sending the
+ * autorouter a board with a missing plane is exactly the failure the `failed`
+ * status exists to prevent — so it is named here instead.
+ */
 export function buildSnapshotPourIslands(
   projection: DesignerPcbProjection,
+  warnings: string[] = [],
 ): PourIsland[] {
   const padNetIds = new Map(Object.entries(projection.padNets ?? {}));
   const dr = projection.board.designRules;
   const baseParams = {
+    layerCount: projection.board.layerCount,
     outline: projection.board.outline,
     placements: projection.placements,
     traces: projection.traces,
     vias: projection.vias,
     padNetIds,
-    clearanceMm: resolveCopperFillClearanceMm(dr.clearance),
     copperToBoardEdgeMm: dr.clearance.copperToBoardEdgeMm,
     cutouts: projection.board.cutouts,
     freeHoles: projection.freeHoles,
     freePads: projection.freePads,
-    minThicknessMm: dr.minimums.traceWidthMm,
   };
   const pending: PendingPourIsland[] = [];
   for (const source of pourSources(projection)) {
-    const islands = buildCopperFillPourPaths({
+    const result = buildCopperFillIslands({
       ...baseParams,
-      layer: source.layer,
-      pourNetId: source.pourNetId,
-      padConnection: source.padConnection,
-      ...(source.clipPolygonMm ? { clipPolygonMm: source.clipPolygonMm } : {}),
+      ...source.params,
     });
-    for (const rings of islands) {
+    if (result.status === "failed") {
+      warnings.push(
+        `Copper pour "${source.sourceId}" on ${source.layer} could not be filled (${result.reason}); it was not sent to the cloud service.`,
+      );
+      continue;
+    }
+    for (const { rings } of result.islands) {
       const normalized = normalizeIslandRings(rings);
       if (!normalized) continue;
       const geometryOrder = ringsKey(normalized);
@@ -91,44 +104,40 @@ export function buildSnapshotPourIslands(
 }
 
 function pourSources(projection: DesignerPcbProjection): PourSource[] {
-  const view = projection.board.viewState;
-  const boardConnection = view?.copperFillPadConnection ?? "solid";
+  const board = projection.board;
+  // The ONE derivation (contract §3.1). `sourceId` is the effective zone's id —
+  // `board:<layer>` for a board zone, the zone id for an explicit one — so the
+  // hashed `islandId` stays byte-stable across this rewiring.
+  const { zones } = collectCopperZones({
+    zones: projection.zones,
+    layerCount: board.layerCount,
+    knownNetIds: new Set(Object.keys(projection.netNames ?? {})),
+  });
+  // The same keepouts the canvas, Gerber and DRC subtract (§13.3): a snapshot
+  // island that ignored a `copperPour` keepout would send the autorouter copper
+  // the board will never manufacture.
+  const { keepouts } = collectKeepouts({
+    keepouts: projection.keepouts ?? [],
+    layerCount: board.layerCount,
+  });
   const sources: PourSource[] = [];
-  if (view) {
-    for (const layer of sortedLayers(view.copperFillLayers)) {
-      if (!SNAPSHOT_LAYER_SET.has(layer)) continue;
-      sources.push({
-        kind: "board",
-        sourceId: `board:${layer}`,
-        layer: layer as SnapshotCopperLayerId,
-        pourNetId: view.copperFillPourNetIds[layer] ?? null,
-        padConnection: boardConnection,
-      });
-    }
-  }
-  for (const zone of projection.zones) {
-    if (!zone.netId || zone.polygonPointsMm.length < 3) continue;
+  for (const zone of zones) {
     if (!SNAPSHOT_LAYER_SET.has(zone.layer)) continue;
     sources.push({
-      kind: "zone",
+      kind: zone.sourceKind,
       sourceId: zone.id,
       layer: zone.layer as SnapshotCopperLayerId,
       pourNetId: zone.netId,
-      padConnection: zone.connection ?? boardConnection,
-      clipPolygonMm: zone.polygonPointsMm,
+      params: pourParamsForZone(
+        zone,
+        board.designRules,
+        keepouts,
+        zones,
+        zonePourNets(board, projection.netNames ?? {}),
+      ),
     });
   }
   return sources.sort((a, b) => sourceSortKey(a).localeCompare(sourceSortKey(b)));
-}
-
-function sortedLayers(
-  layers: readonly PcbCopperLayerId[],
-): PcbCopperLayerId[] {
-  return [...layers].sort(
-    (a, b) =>
-      (COPPER_LAYER_ORDER as readonly string[]).indexOf(a) -
-      (COPPER_LAYER_ORDER as readonly string[]).indexOf(b),
-  );
 }
 
 function normalizeIslandRings(

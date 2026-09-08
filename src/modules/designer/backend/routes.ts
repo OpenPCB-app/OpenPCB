@@ -79,6 +79,17 @@ import type {
   DesignerPcbDeleteOverlayTextCommand,
   DesignerPcbUpdateOverlayShapeCommand,
   DesignerPcbUpdateOverlayTextCommand,
+  DesignerPcbAddZoneCommand,
+  DesignerPcbUpdateZoneCommand,
+  DesignerPcbDeleteZoneCommand,
+  DesignerPcbAddKeepoutCommand,
+  DesignerPcbUpdateKeepoutCommand,
+  DesignerPcbDeleteKeepoutCommand,
+  PcbKeepoutRestrictions,
+  PcbZoneIslandRemoval,
+  PcbZoneNetRef,
+  PcbZonePadConnection,
+  PcbZoneRegion,
   PcbFreePadShape,
   PcbFreePadType,
   PcbOverlayLayer,
@@ -112,7 +123,8 @@ import { ulid } from "./capture/ulid";
 import { buildDesignerSdk } from "./sdk";
 import { createDesignerStore } from "./store";
 import { createCommentStore } from "./comments/comment-store";
-import { runDrc } from "./drc/drc-engine";
+import { drcOptionsFromProjection, runDrc } from "./drc/drc-engine";
+import { buildRawFootprintLookup } from "./pcb/raw-footprint-lookup";
 import { registerAutolayoutRoutes } from "./autolayout/register-routes";
 import { runErc } from "./erc/erc-engine";
 import { buildBoardSnapshot } from "./pcb/board-snapshot";
@@ -2010,6 +2022,174 @@ function parsePointMmArray(
   return raw.map((p, i) => parsePointMm(p, `${field}[${i}]`));
 }
 
+/** `""` is never a net id / net name (contract §3.2 has only set or null). */
+function parseZoneNet(raw: unknown, field: string): PcbZoneNetRef {
+  const record = asRecord(raw);
+  if (!record) {
+    throw new ValidationError(`${field} must be an object`);
+  }
+  const read = (key: "netId" | "netName"): string | null => {
+    const value = record[key];
+    if (value === undefined || value === null) return null;
+    const s = asString(value);
+    if (s === null) {
+      throw new ValidationError(`${field}.${key} must be a string or null`);
+    }
+    return s.length === 0 ? null : s;
+  };
+  return { netId: read("netId"), netName: read("netName") };
+}
+
+function parseZoneRegion(raw: unknown, field: string): PcbZoneRegion {
+  const record = asRecord(raw);
+  if (!record) {
+    throw new ValidationError(`${field} must be an object`);
+  }
+  const kind = asString(record.kind);
+  if (kind === "board") return { kind: "board" };
+  if (kind === "polygon") {
+    return {
+      kind: "polygon",
+      pointsMm: parsePointMmArray(record.pointsMm, `${field}.pointsMm`),
+      ...parseZoneHoles(record.holesMm, `${field}.holesMm`),
+    };
+  }
+  throw new ValidationError(`${field}.kind must be 'board' or 'polygon'`);
+}
+
+/**
+ * Zone cutouts (copper-pour contract §11). Absent or empty means "no holes" —
+ * the key is then left off the region so a hole-less zone round-trips
+ * byte-identically to a pre-S5 one.
+ */
+function parseZoneHoles(
+  raw: unknown,
+  field: string,
+): { holesMm?: Array<Array<{ x: number; y: number }>> } {
+  if (raw === undefined || raw === null) return {};
+  if (!Array.isArray(raw)) {
+    throw new ValidationError(`${field} must be an array`);
+  }
+  const holesMm = raw.map((hole, i) =>
+    parsePointMmArray(hole, `${field}[${i}]`),
+  );
+  return holesMm.length === 0 ? {} : { holesMm };
+}
+
+function parsePadConnectionOrThrow(
+  raw: unknown,
+  field: string,
+): PcbZonePadConnection {
+  const s = asString(raw);
+  if (
+    s === "solid" ||
+    s === "thermal" ||
+    s === "thruHoleThermal" ||
+    s === "none"
+  ) {
+    return s;
+  }
+  throw new ValidationError(
+    `${field} must be one of: solid, thermal, thruHoleThermal, none`,
+  );
+}
+
+function parseIslandRemovalOrThrow(
+  raw: unknown,
+  field: string,
+): PcbZoneIslandRemoval {
+  const s = asString(raw);
+  if (s === "always" || s === "never") return s;
+  const record = asRecord(raw);
+  if (record) {
+    const minAreaMm2 = asNumber(record.minAreaMm2);
+    if (minAreaMm2 === null) {
+      throw new ValidationError(
+        `${field}.minAreaMm2 must be a finite number`,
+      );
+    }
+    return { minAreaMm2 };
+  }
+  throw new ValidationError(
+    `${field} must be 'always', 'never' or { minAreaMm2 }`,
+  );
+}
+
+function parseThermalOrThrow(
+  raw: unknown,
+  field: string,
+): { gapMm: number; spokeWidthMm: number } | null {
+  if (raw === null) return null;
+  const record = asRecord(raw);
+  if (!record) {
+    throw new ValidationError(`${field} must be an object or null`);
+  }
+  return {
+    gapMm: parsePositiveNumber(record.gapMm, `${field}.gapMm`),
+    spokeWidthMm: parsePositiveNumber(
+      record.spokeWidthMm,
+      `${field}.spokeWidthMm`,
+    ),
+  };
+}
+
+function parseNonNegativeNumberOrNull(
+  raw: unknown,
+  field: string,
+): number | null {
+  if (raw === null) return null;
+  const n = asNumber(raw);
+  if (n === null || n < 0) {
+    throw new ValidationError(
+      `${field} must be a non-negative finite number or null`,
+    );
+  }
+  return n;
+}
+
+function parseKeepoutLayersOrThrow(
+  raw: unknown,
+  field: string,
+): PcbCopperLayerId[] {
+  if (!Array.isArray(raw)) {
+    throw new ValidationError(`${field} must be an array`);
+  }
+  if (raw.length === 0) {
+    throw new ValidationError(`${field} must not be empty`);
+  }
+  return raw.map((layer, i) =>
+    parseCopperLayerOrThrow(layer, `${field}[${i}]`),
+  );
+}
+
+/** The full five-flag object; a missing flag is `false` (contract §12.2). */
+function parseKeepoutRestrictionsOrThrow(
+  raw: unknown,
+  field: string,
+): PcbKeepoutRestrictions {
+  const record = asRecord(raw);
+  if (!record) {
+    throw new ValidationError(`${field} must be an object`);
+  }
+  const flag = (
+    key: keyof PcbKeepoutRestrictions,
+  ): boolean => {
+    const value = record[key];
+    if (value === undefined) return false;
+    if (typeof value !== "boolean") {
+      throw new ValidationError(`${field}.${key} must be a boolean`);
+    }
+    return value;
+  };
+  return {
+    tracks: flag("tracks"),
+    vias: flag("vias"),
+    pads: flag("pads"),
+    copperPour: flag("copperPour"),
+    footprints: flag("footprints"),
+  };
+}
+
 function parsePcbAddOverlayTextCommand(
   raw: Record<string, unknown>,
 ): DesignerPcbAddOverlayTextCommand {
@@ -2167,6 +2347,223 @@ function parsePcbDeleteOverlayShapeCommand(
     throw new ValidationError("command.overlayShapeId must be a string");
   }
   return { type: "pcb_delete_overlay_shape", overlayShapeId };
+}
+
+function parsePcbAddZoneCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbAddZoneCommand {
+  const out: DesignerPcbAddZoneCommand = {
+    type: "pcb_add_zone",
+    layer: parseCopperLayerOrThrow(raw.layer, "command.layer"),
+    net: parseZoneNet(raw.net, "command.net"),
+    region: parseZoneRegion(raw.region, "command.region"),
+  };
+  if (raw.name !== undefined) {
+    parseOptionalString(raw, "name", (value) => {
+      out.name = value;
+    });
+  }
+  if (raw.enabled !== undefined) {
+    if (typeof raw.enabled !== "boolean") {
+      throw new ValidationError("command.enabled must be a boolean");
+    }
+    out.enabled = raw.enabled;
+  }
+  if (raw.priority !== undefined) {
+    const priority = asNumber(raw.priority);
+    if (priority === null) {
+      throw new ValidationError("command.priority must be a finite number");
+    }
+    out.priority = priority;
+  }
+  if (raw.padConnection !== undefined) {
+    out.padConnection = parsePadConnectionOrThrow(
+      raw.padConnection,
+      "command.padConnection",
+    );
+  }
+  if (raw.clearanceMm !== undefined) {
+    out.clearanceMm = parseNonNegativeNumberOrNull(
+      raw.clearanceMm,
+      "command.clearanceMm",
+    );
+  }
+  if (raw.minWidthMm !== undefined) {
+    out.minWidthMm = parseNonNegativeNumberOrNull(
+      raw.minWidthMm,
+      "command.minWidthMm",
+    );
+  }
+  if (raw.thermal !== undefined) {
+    out.thermal = parseThermalOrThrow(raw.thermal, "command.thermal");
+  }
+  if (raw.islandRemoval !== undefined) {
+    out.islandRemoval = parseIslandRemovalOrThrow(
+      raw.islandRemoval,
+      "command.islandRemoval",
+    );
+  }
+  return out;
+}
+
+function parsePcbUpdateZoneCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbUpdateZoneCommand {
+  const zoneId = asString(raw.zoneId);
+  if (!zoneId) {
+    throw new ValidationError("command.zoneId must be a string");
+  }
+  const out: DesignerPcbUpdateZoneCommand = { type: "pcb_update_zone", zoneId };
+  if (raw.name !== undefined) {
+    parseOptionalString(raw, "name", (value) => {
+      out.name = value;
+    });
+  }
+  if (raw.enabled !== undefined) {
+    if (typeof raw.enabled !== "boolean") {
+      throw new ValidationError("command.enabled must be a boolean");
+    }
+    out.enabled = raw.enabled;
+  }
+  if (raw.layer !== undefined) {
+    out.layer = parseCopperLayerOrThrow(raw.layer, "command.layer");
+  }
+  if (raw.net !== undefined) {
+    out.net = parseZoneNet(raw.net, "command.net");
+  }
+  if (raw.region !== undefined) {
+    out.region = parseZoneRegion(raw.region, "command.region");
+  }
+  if (raw.priority !== undefined) {
+    const priority = asNumber(raw.priority);
+    if (priority === null) {
+      throw new ValidationError("command.priority must be a finite number");
+    }
+    out.priority = priority;
+  }
+  if (raw.padConnection !== undefined) {
+    out.padConnection = parsePadConnectionOrThrow(
+      raw.padConnection,
+      "command.padConnection",
+    );
+  }
+  if (raw.clearanceMm !== undefined) {
+    out.clearanceMm = parseNonNegativeNumberOrNull(
+      raw.clearanceMm,
+      "command.clearanceMm",
+    );
+  }
+  if (raw.minWidthMm !== undefined) {
+    out.minWidthMm = parseNonNegativeNumberOrNull(
+      raw.minWidthMm,
+      "command.minWidthMm",
+    );
+  }
+  if (raw.thermal !== undefined) {
+    out.thermal = parseThermalOrThrow(raw.thermal, "command.thermal");
+  }
+  if (raw.islandRemoval !== undefined) {
+    out.islandRemoval =
+      raw.islandRemoval === null
+        ? null
+        : parseIslandRemovalOrThrow(raw.islandRemoval, "command.islandRemoval");
+  }
+  if (raw.locked !== undefined) {
+    if (typeof raw.locked !== "boolean") {
+      throw new ValidationError("command.locked must be a boolean");
+    }
+    out.locked = raw.locked;
+  }
+  return out;
+}
+
+function parsePcbDeleteZoneCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbDeleteZoneCommand {
+  const zoneId = asString(raw.zoneId);
+  if (!zoneId) {
+    throw new ValidationError("command.zoneId must be a string");
+  }
+  return { type: "pcb_delete_zone", zoneId };
+}
+
+function parsePcbAddKeepoutCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbAddKeepoutCommand {
+  const out: DesignerPcbAddKeepoutCommand = {
+    type: "pcb_add_keepout",
+    layers: parseKeepoutLayersOrThrow(raw.layers, "command.layers"),
+    pointsMm: parsePointMmArray(raw.pointsMm, "command.pointsMm"),
+    restrictions: parseKeepoutRestrictionsOrThrow(
+      raw.restrictions,
+      "command.restrictions",
+    ),
+  };
+  if (raw.name !== undefined) {
+    parseOptionalString(raw, "name", (value) => {
+      out.name = value;
+    });
+  }
+  if (raw.enabled !== undefined) {
+    if (typeof raw.enabled !== "boolean") {
+      throw new ValidationError("command.enabled must be a boolean");
+    }
+    out.enabled = raw.enabled;
+  }
+  return out;
+}
+
+function parsePcbUpdateKeepoutCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbUpdateKeepoutCommand {
+  const keepoutId = asString(raw.keepoutId);
+  if (!keepoutId) {
+    throw new ValidationError("command.keepoutId must be a string");
+  }
+  const out: DesignerPcbUpdateKeepoutCommand = {
+    type: "pcb_update_keepout",
+    keepoutId,
+  };
+  if (raw.name !== undefined) {
+    parseOptionalString(raw, "name", (value) => {
+      out.name = value;
+    });
+  }
+  if (raw.enabled !== undefined) {
+    if (typeof raw.enabled !== "boolean") {
+      throw new ValidationError("command.enabled must be a boolean");
+    }
+    out.enabled = raw.enabled;
+  }
+  if (raw.layers !== undefined) {
+    out.layers = parseKeepoutLayersOrThrow(raw.layers, "command.layers");
+  }
+  if (raw.pointsMm !== undefined) {
+    out.pointsMm = parsePointMmArray(raw.pointsMm, "command.pointsMm");
+  }
+  if (raw.restrictions !== undefined) {
+    out.restrictions = parseKeepoutRestrictionsOrThrow(
+      raw.restrictions,
+      "command.restrictions",
+    );
+  }
+  if (raw.locked !== undefined) {
+    if (typeof raw.locked !== "boolean") {
+      throw new ValidationError("command.locked must be a boolean");
+    }
+    out.locked = raw.locked;
+  }
+  return out;
+}
+
+function parsePcbDeleteKeepoutCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbDeleteKeepoutCommand {
+  const keepoutId = asString(raw.keepoutId);
+  if (!keepoutId) {
+    throw new ValidationError("command.keepoutId must be a string");
+  }
+  return { type: "pcb_delete_keepout", keepoutId };
 }
 
 function parsePcbAddManualViaCommand(
@@ -2383,6 +2780,24 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
       break;
     case "pcb_delete_overlay_shape":
       command = parsePcbDeleteOverlayShapeCommand(commandRecord);
+      break;
+    case "pcb_add_zone":
+      command = parsePcbAddZoneCommand(commandRecord);
+      break;
+    case "pcb_update_zone":
+      command = parsePcbUpdateZoneCommand(commandRecord);
+      break;
+    case "pcb_delete_zone":
+      command = parsePcbDeleteZoneCommand(commandRecord);
+      break;
+    case "pcb_add_keepout":
+      command = parsePcbAddKeepoutCommand(commandRecord);
+      break;
+    case "pcb_update_keepout":
+      command = parsePcbUpdateKeepoutCommand(commandRecord);
+      break;
+    case "pcb_delete_keepout":
+      command = parsePcbDeleteKeepoutCommand(commandRecord);
       break;
     default:
       throw new ValidationError(`Unsupported command type '${type}'`);
@@ -2780,13 +3195,16 @@ export function registerRoutes(
     if (!projection) {
       throw new NotFoundError(`Design '${designId}' not found`);
     }
-    const view = projection.board.viewState;
-    const options = {
-      ignoredRuleClasses: view?.drcIgnoredRuleClasses ?? [],
-      waivedIds: view?.drcWaivedViolationIds ?? [],
-      severityOverrides: projection.board.drcSeverityOverrides,
-    };
-    const report = runDrc(projection, options);
+    // Every suppression DEFAULTS from the projection inside `runDrc`
+    // (rule-semantics contract §8), so this route, the SDK and the cloud apply
+    // path cannot drift; the options are only recorded with the stored result.
+    const options = drcOptionsFromProjection(projection);
+    // Raw footprints recover the courtyards a KiCad import dropped, so the
+    // keepout `footprints` extent is the real body and not just the preview
+    // bounds (contract §4). Not part of the persisted options.
+    const report = runDrc(projection, {
+      lookupRawFootprint: await buildRawFootprintLookup(ctx, projection),
+    });
     await store.saveDrcResult(designId, report, options);
     return success({ report });
   });
@@ -2954,12 +3372,9 @@ export function registerRoutes(
           groupId: captureGroupId,
         });
         const projection = await store.getPcbProjection(designId);
-        const view = projection?.board.viewState;
         const drc = projection
           ? runDrc(projection, {
-              ignoredRuleClasses: view?.drcIgnoredRuleClasses ?? [],
-              waivedIds: view?.drcWaivedViolationIds ?? [],
-              severityOverrides: projection.board.drcSeverityOverrides,
+              lookupRawFootprint: await buildRawFootprintLookup(ctx, projection),
             })
           : null;
         return success({ appliedCount, failures, drc });
@@ -3083,12 +3498,9 @@ export function registerRoutes(
           else failures.push({ opId: op.id, code: result.code });
         }
         const projection = await store.getPcbProjection(designId);
-        const view = projection?.board.viewState;
         const drc = projection
           ? runDrc(projection, {
-              ignoredRuleClasses: view?.drcIgnoredRuleClasses ?? [],
-              waivedIds: view?.drcWaivedViolationIds ?? [],
-              severityOverrides: projection.board.drcSeverityOverrides,
+              lookupRawFootprint: await buildRawFootprintLookup(ctx, projection),
             })
           : null;
         return success({ appliedCount, failures, drc });
@@ -3108,12 +3520,9 @@ export function registerRoutes(
       loadProjection: (designId) => store.getPcbProjection(designId),
       dispatch: (designId, envelope) =>
         store.dispatchCommand(designId, envelope, {}, { actor: "autolayout_apply" }),
-      runDrc: (projection) => {
-        const view = projection.board.viewState;
+      runDrc: async (projection) => {
         return runDrc(projection, {
-          ignoredRuleClasses: view?.drcIgnoredRuleClasses ?? [],
-          waivedIds: view?.drcWaivedViolationIds ?? [],
-          severityOverrides: projection.board.drcSeverityOverrides,
+          lookupRawFootprint: await buildRawFootprintLookup(ctx, projection),
         });
       },
       notFound: (message) => new NotFoundError(message),

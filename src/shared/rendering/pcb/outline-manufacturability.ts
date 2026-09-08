@@ -8,6 +8,11 @@
  *    the board's minimum routed feature width.
  */
 import type { PcbBoardOutline, PcbPointMm } from "../../../sdks";
+// The shared segment kernel (S2 geometry contract §2) — a superset of the
+// private endpoint-projection helper this file used to carry: it also reports 0
+// for edges that actually touch, which a validated ring never has.
+import { segmentToSegmentDistance } from "../../pcb-geometry/pcb-trace-geometry";
+import { segmentsIntersect } from "../../pcb-geometry/segment-predicates";
 
 const EPS_MM = 1e-4;
 
@@ -95,35 +100,6 @@ export function findSmallInternalRadii(
   return hits;
 }
 
-function pointSegDistance(p: PcbPointMm, a: PcbPointMm, b: PcbPointMm): number {
-  const abx = b.x - a.x;
-  const aby = b.y - a.y;
-  const len2 = abx * abx + aby * aby;
-  const t =
-    len2 < 1e-12
-      ? 0
-      : Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.y - a.y) * aby) / len2));
-  const cx = a.x + abx * t;
-  const cy = a.y + aby * t;
-  return Math.hypot(p.x - cx, p.y - cy);
-}
-
-function segSegDistance(
-  a: PcbPointMm,
-  b: PcbPointMm,
-  c: PcbPointMm,
-  d: PcbPointMm,
-): number {
-  // Non-adjacent edges of a validated (non-self-intersecting) ring never cross,
-  // so the min distance is the smallest of the four endpoint-to-segment gaps.
-  return Math.min(
-    pointSegDistance(a, c, d),
-    pointSegDistance(b, c, d),
-    pointSegDistance(c, a, b),
-    pointSegDistance(d, a, b),
-  );
-}
-
 /**
  * Coarse vertex ring for slot detection: arc endpoints only, so tessellation
  * chords of one smooth curve never read as a narrow gap against each other.
@@ -170,7 +146,11 @@ export function findNarrowestSlot(
       if ((j + 1) % n === i || (i + 1) % n === j) continue;
       const c = ring[j]!;
       const d = ring[(j + 1) % n]!;
-      const gap = segSegDistance(a, b, c, d);
+      // Edges that touch or cross are an invalid outline (BOARD_OUTLINE_INVALID
+      // reports that), not a slot; this coarse arc-endpoint ring is never
+      // validated, so the case is reachable here.
+      if (segmentsIntersect(a, b, c, d)) continue;
+      const gap = segmentToSegmentDistance(a, b, c, d);
       if (gap < minWidthMm - EPS_MM && (!best || gap < best.gapMm)) {
         best = {
           gapMm: gap,

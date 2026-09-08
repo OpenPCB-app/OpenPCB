@@ -6,19 +6,30 @@
  */
 import { createDefaultPcbBoardSettings } from "../../../../modules/designer/backend/pcb/pcb-defaults";
 import { computeRatsnest } from "../../../../modules/designer/backend/pcb/ratsnest";
-import type { NetPadCorrelation } from "../../../../modules/designer/backend/pcb/net-pad-correlation";
 import {
-  padWorldPositionMm,
-  placementPads,
-} from "../../../../modules/designer/backend/pcb/pad-geometry";
+  boardPourSpecs,
+  buildBoardPourFills,
+} from "../../../../modules/designer/backend/pcb/board-connectivity";
+import { placementPads } from "../../../../modules/designer/backend/pcb/pad-geometry";
 import type {
   DesignerPcbProjection,
   PcbBoardSettings,
+  PcbKeepout,
   PcbPlacedPart,
   PcbTrace,
   PcbVia,
+  PcbZone,
   RatsnestSegment,
 } from "../../../../sdks/designer";
+import {
+  collectCopperZones,
+  collectKeepouts,
+} from "../../../../shared/pcb-areas/copper-zones";
+import {
+  parsePcbKeepoutRecord,
+  upgradePcbZoneRecord,
+} from "../../../../shared/pcb-areas/zone-parse";
+import { zonePourNets } from "../../../../shared/pcb-areas/pour-params";
 
 const TS = "2026-01-01T00:00:00.000Z";
 const NM = 1_000_000;
@@ -27,10 +38,17 @@ const NM = 1_000_000;
 export function fixtureToProjection(fixture: any): DesignerPcbProjection {
   const board: PcbBoardSettings = createDefaultPcbBoardSettings(TS);
   board.fabricator = fixture.fabricator ?? "custom";
+  // Goldens are FLOOR-FREE unless the fixture asks for one: the 0.1 mm
+  // `minimums.clearanceMm` is a NEW-BOARD default (rule-semantics §12 item 5)
+  // and applying it here would silently re-baseline every existing golden.
+  delete board.designRules.minimums.clearanceMm;
   if (fixture.clearance)
     Object.assign(board.designRules.clearance, fixture.clearance);
   if (fixture.minimums)
     Object.assign(board.designRules.minimums, fixture.minimums);
+  if (fixture.drcRules) board.drcRules = fixture.drcRules;
+  if (fixture.drcSeverityOverrides)
+    board.drcSeverityOverrides = fixture.drcSeverityOverrides;
   if (fixture.layerCount) board.layerCount = fixture.layerCount;
   if (fixture.boardThicknessMm)
     board.boardThicknessMm = fixture.boardThicknessMm;
@@ -38,8 +56,6 @@ export function fixtureToProjection(fixture: any): DesignerPcbProjection {
   if (fixture.perNetClassAssignments)
     board.perNetClassAssignments = fixture.perNetClassAssignments;
   if (fixture.cutouts) board.cutouts = fixture.cutouts;
-  if (fixture.viewState)
-    board.viewState = { ...board.viewState, ...fixture.viewState };
   // Wide default outline so v1 fixtures are never accidentally off-board /
   // near the edge; v2 fixtures may supply a real outline.
   board.outline = fixture.outline ?? {
@@ -107,29 +123,60 @@ export function fixtureToProjection(fixture: any): DesignerPcbProjection {
 
   const padNets: Record<string, string> = fixture.padNets ?? {};
 
-  // Derive the ratsnest through the real computeRatsnest so UNCONNECTED_NET
-  // is fixture-testable. Pour-aware fill context is not wired here.
+  // Fixture zones are stored in the v1 shape; the goldens stay byte-identical
+  // because they go through the SAME read-time upgrade the store uses.
+  const zones: PcbZone[] = [];
+  for (const raw of fixture.zones ?? []) {
+    const upgraded = upgradePcbZoneRecord(raw);
+    if (upgraded.zone) zones.push(upgraded.zone);
+  }
+  // Keepouts take the same read path the store uses (fail-closed parse).
+  const keepouts: PcbKeepout[] = [];
+  for (const raw of fixture.keepouts ?? []) {
+    const parsed = parsePcbKeepoutRecord(raw);
+    if (parsed) keepouts.push(parsed);
+  }
+  const knownNetIds = new Set(Object.keys(fixture.netNames ?? {}));
+
+  // Derive the ratsnest through the real computeRatsnest so UNCONNECTED_NET is
+  // fixture-testable, with the same pour wiring loadPcbProjection uses: the
+  // effective copper areas, board rows and explicit zones alike.
   function deriveRatsnest(): RatsnestSegment[] {
-    const netPads: NetPadCorrelation["netPads"] = new Map();
-    for (const placement of placements) {
-      for (const pad of placementPads(placement)) {
-        const netId = padNets[`${placement.id}|${pad.number}`];
-        if (!netId) continue;
-        const worldMm = padWorldPositionMm(placement, pad);
-        const list = netPads.get(netId) ?? [];
-        list.push({ placementId: placement.id, padNumber: pad.number, worldMm });
-        netPads.set(netId, list);
-      }
-    }
-    return computeRatsnest(
-      { netPads, warnings: [] },
-      {
-        netNames: new Map(Object.entries(fixture.netNames ?? {})),
-        netClasses: board.netClasses,
-        traces,
-        vias,
-      },
+    const netNames = new Map<string, string>(
+      Object.entries(fixture.netNames ?? {}),
     );
+    const copper = {
+      layerCount: board.layerCount,
+      placements,
+      padNetIds: new Map(Object.entries(padNets)),
+      freePads: fixture.freePads ?? [],
+      traces,
+      vias,
+    };
+    // One kernel run per net-bound zone, exactly as DRC does it (contract §9).
+    const pours = buildBoardPourFills(copper, {
+      outline: board.outline,
+      designRules: board.designRules,
+      cutouts: board.cutouts ?? [],
+      freeHoles: fixture.freeHoles ?? [],
+      pours: boardPourSpecs(
+        collectCopperZones({
+          zones,
+          layerCount: board.layerCount,
+          knownNetIds,
+        }).zones,
+        board.designRules,
+        collectKeepouts({ keepouts, layerCount: board.layerCount }).keepouts,
+        zonePourNets(board, fixture.netNames ?? {}),
+      ),
+    });
+    return computeRatsnest({
+      ...copper,
+      netNames,
+      netClasses: board.netClasses,
+      perNetClassAssignments: board.perNetClassAssignments,
+      pours,
+    });
   }
 
   return {
@@ -143,7 +190,8 @@ export function fixtureToProjection(fixture: any): DesignerPcbProjection {
     freePads: fixture.freePads ?? [],
     overlayTexts: fixture.overlayTexts ?? [],
     overlayShapes: fixture.overlayShapes ?? [],
-    zones: fixture.zones ?? [],
+    zones,
+    keepouts,
     ratsnest: fixture.computeRatsnest ? deriveRatsnest() : [],
     netNames: fixture.netNames ?? {},
     ...(Object.keys(padNets).length > 0 ? { padNets } : {}),

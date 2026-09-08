@@ -7,6 +7,7 @@ import type {
   PcbViewState,
 } from "../../../sdks";
 import { MODULE_SDK_TOKENS } from "../../../sdks";
+import { runDrc } from "../../../modules/designer/backend/drc/drc-engine";
 import { resetSharedSqliteForTesting } from "../db/sqlite-client";
 import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
@@ -119,8 +120,6 @@ describe("designer PCB view-state persistence", () => {
     expect(viewState?.viewSide).toBe("top");
     expect(viewState?.displayMode).toBe("normal");
     expect(viewState?.layerPreset).toBe("custom");
-    expect(viewState?.copperFillLayers).toEqual([]);
-    expect(viewState?.copperFillPourNetIds).toEqual({});
     expect(viewState?.perLayerOpacity).toEqual({});
     expect(viewState?.ratsnestVisible).toBe(true);
   });
@@ -136,8 +135,6 @@ describe("designer PCB view-state persistence", () => {
         patch: {
           viewSide: "bottom",
           displayMode: "dim",
-          copperFillLayers: ["F.Cu", "B.Cu"],
-          copperFillPourNetIds: { "F.Cu": "net-a", "B.Cu": null },
           layerPreset: "top-side",
           ratsnestVisible: false,
         },
@@ -149,28 +146,22 @@ describe("designer PCB view-state persistence", () => {
     const viewState = projection?.board.viewState;
     expect(viewState?.viewSide).toBe("bottom");
     expect(viewState?.displayMode).toBe("dim");
-    expect(viewState?.copperFillLayers).toEqual(["F.Cu", "B.Cu"]);
-    // Copper fill is policy-forced to the GND net on every enabled layer
-    // (no per-layer net picker). This test design has no GND net, so the
-    // projection forces both enabled layers to `null` (no merge), overriding
-    // the persisted "net-a"/null patch.
-    expect(viewState?.copperFillPourNetIds).toEqual({
-      "F.Cu": null,
-      "B.Cu": null,
-    });
-    expect(viewState?.copperFillPadConnection).toBe("solid");
     expect(viewState?.layerPreset).toBe("top-side");
     expect(viewState?.ratsnestVisible).toBe(false);
   });
 
   test("DRC waivers + ignored rule-classes persist through pcb_set_view_state", async () => {
     const { sdk, designId } = await createDesignerSdk("pcb-view-state-drc");
+    const v2Id = "TRACE_TO_TRACE_CLEARANCE-v2-0123456789abcdef";
     const result = await sdk.dispatchCommand(
       designId,
       envelope(designId, "cmd-vs-drc", 0, {
         type: "pcb_set_view_state",
         patch: {
-          drcWaivedViolationIds: ["TRACE_TO_TRACE_CLEARANCE-abc123"],
+          // A v1-format id alongside a v2 one: the v1 id cannot be mapped
+          // forward (it omitted the layer and the location), so it is PRUNED
+          // on patch and on read (rule-semantics contract §8, §12 item 9).
+          drcWaivedViolationIds: [v2Id, "TRACE_TO_TRACE_CLEARANCE-abc123"],
           // includes a bogus rule-class that must be filtered on persist
           drcIgnoredRuleClasses: ["manufacturability", "bogus" as never],
         },
@@ -180,9 +171,7 @@ describe("designer PCB view-state persistence", () => {
 
     const projection = await sdk.getPcbProjection(designId);
     const viewState = projection?.board.viewState;
-    expect(viewState?.drcWaivedViolationIds).toEqual([
-      "TRACE_TO_TRACE_CLEARANCE-abc123",
-    ]);
+    expect(viewState?.drcWaivedViolationIds).toEqual([v2Id]);
     expect(viewState?.drcIgnoredRuleClasses).toEqual(["manufacturability"]);
   });
 
@@ -485,7 +474,7 @@ describe("designer PCB view-state persistence", () => {
     expect(cleared?.board.lengthMatchGroups).toBeUndefined();
   });
 
-  test("drcRules round-trip: valid rule persists, malformed-area rule dropped (review H1)", async () => {
+  test("drcRules round-trip: a well-formed scoped rule persists", async () => {
     const { sdk, server, designId } = await createDesignerHttp(
       "pcb-drc-rules-http",
     );
@@ -510,26 +499,272 @@ describe("designer PCB view-state persistence", () => {
           ],
           constraint: { kind: "clearance", mm: 0.1 },
         },
-        // Malformed area (< 3 points) — the store must drop the whole rule so
-        // the resolver never pushes an undefined polygon (which would crash
-        // pointInPolygon on the next DRC run).
-        {
-          id: "broken",
-          name: "broken area",
-          enabled: true,
-          priority: 1,
-          scopes: [{ kind: "area", polygonMm: [{ x: 0, y: 0 }] }],
-          constraint: { kind: "clearance", mm: 0.2 },
-        },
       ],
     });
     expect(res.status).toBe(200);
 
     const proj = await sdk.getPcbProjection(designId);
-    // Only the well-formed rule survives; the malformed-area rule is dropped so
-    // the resolver never receives an undefined polygon (crash guard, review H1).
     expect(proj?.board.drcRules?.map((r) => r.id)).toEqual(["bga"]);
     expect(proj?.board.drcRules?.[0]?.scopes?.[0]?.kind).toBe("area");
+  });
+
+  // S6: a malformed rule is REFUSED on save, not dropped (rule-semantics
+  // contract §2.1, §12 item 10). Dropping it was fail-open — the author's
+  // tightening rule silently stopped enforcing and nothing said so.
+  test("a malformed drcRule refuses the whole command and persists nothing", async () => {
+    const { sdk, designId } = await createDesignerSdk("pcb-drc-rules-invalid");
+    const rev0 = (await sdk.getPcbProjection(designId))?.revision ?? null;
+    const command = {
+      type: "pcb_set_design_rules" as const,
+      drcRules: [
+        {
+          id: "bga",
+          name: "BGA fanout",
+          enabled: true,
+          priority: 10,
+          scopes: [],
+          constraint: { kind: "clearance" as const, mm: 0.1 },
+        },
+        // Degenerate area (a single point) — `parseDrcRuleScopes` cannot even
+        // shape it, so the row is `malformed`.
+        {
+          id: "broken",
+          name: "broken area",
+          enabled: true,
+          priority: 1,
+          scopes: [{ kind: "area" as const, polygonMm: [{ x: 0, y: 0 }] }],
+          constraint: { kind: "clearance" as const, mm: 0.2 },
+        },
+      ],
+    };
+    const result = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-drc-rule-invalid", rev0, command),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected a refusal");
+    expect(result.code).toBe("INVALID_DRC_RULE");
+    if (result.code !== "INVALID_DRC_RULE") throw new Error("wrong code");
+    expect(result.ruleId).toBe("broken");
+    expect(result.detail.length).toBeGreaterThan(0);
+
+    // Nothing persisted — not even the well-formed sibling.
+    const proj = await sdk.getPcbProjection(designId);
+    expect(proj?.board.drcRules).toBeUndefined();
+
+    // The same commandId replays to the SAME refusal, never REVISION_CONFLICT.
+    const replay = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-drc-rule-invalid", rev0, command),
+    );
+    expect(replay).toEqual(result);
+  });
+
+  // A structurally invalid rule the PARSER accepts is caught by the compiler:
+  // two rows sharing an id are `duplicate_id` (§2.1).
+  test("a duplicate rule id refuses the whole command", async () => {
+    const { sdk, designId } = await createDesignerSdk("pcb-drc-rules-dup");
+    const rev0 = (await sdk.getPcbProjection(designId))?.revision ?? null;
+    const result = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-drc-rule-dup", rev0, {
+        type: "pcb_set_design_rules",
+        drcRules: [
+          {
+            id: "same",
+            name: "first",
+            enabled: true,
+            priority: 10,
+            scopes: [],
+            constraint: { kind: "clearance", mm: 0.3 },
+          },
+          {
+            id: "same",
+            name: "second",
+            enabled: true,
+            priority: 5,
+            scopes: [],
+            constraint: { kind: "clearance", mm: 0.1 },
+          },
+        ],
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected a refusal");
+    expect(result.code).toBe("INVALID_DRC_RULE");
+    if (result.code !== "INVALID_DRC_RULE") throw new Error("wrong code");
+    expect(result.ruleId).toBe("same");
+    expect((await sdk.getPcbProjection(designId))?.board.drcRules).toBeUndefined();
+  });
+
+  // The HTTP parser forwards `designRules` shape-only, so a dialog that edits
+  // one clearance can legally send a partial object. Validation must normalise
+  // it through the store's own update parse first — compiling the raw payload
+  // read `minimums.clearanceMm` off `undefined`.
+  test("a partial designRules payload alongside drcRules still saves", async () => {
+    const { sdk, server, designId } = await createDesignerHttp(
+      "pcb-rules-partial",
+    );
+    const rev0 = (await sdk.getPcbProjection(designId))?.revision ?? null;
+    const res = await postCommand(server, designId, rev0, {
+      designRules: { clearance: { traceToTraceMm: 0.3 } },
+      drcRules: [
+        {
+          id: "ok",
+          name: "fine",
+          enabled: true,
+          priority: 1,
+          scopes: [],
+          constraint: { kind: "clearance", mm: 0.3 },
+        },
+      ],
+      type: "pcb_set_design_rules",
+    } as never);
+    expect(res.status).toBe(200);
+
+    const board = (await sdk.getPcbProjection(designId))!.board;
+    expect(board.drcRules?.map((r) => r.id)).toEqual(["ok"]);
+    expect(board.designRules.clearance.traceToTraceMm).toBe(0.3);
+    // The omitted keys kept their stored values (§12 item 6), which is what
+    // the rules were validated against.
+    expect(board.designRules.minimums.traceWidthMm).toBe(0.2);
+  });
+
+  // An unknown net CLASS is `ineffective`, not `invalid` (§2.1): the rule still
+  // resolves for whatever else matches, so the save must succeed and batch DRC
+  // must report it. Refusing it here would be fail-closed in the wrong place.
+  test("a netClass scope naming a dropped class is accepted, then reported by DRC", async () => {
+    const { sdk, designId } = await createDesignerSdk("pcb-rules-unknown-class");
+    const rev0 = (await sdk.getPcbProjection(designId))?.revision ?? null;
+    const result = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-unknown-class", rev0, {
+        type: "pcb_set_design_rules",
+        // The class entry is malformed (no id), so the store DROPS it — the
+        // rule below then names a class the persisted board does not have.
+        netClasses: [
+          {
+            id: "default",
+            name: "Default",
+            traceWidthMm: 0.25,
+            clearanceMm: 0.25,
+            viaDiameterMm: 0.8,
+            viaDrillMm: 0.4,
+            color: "#d4d4d8",
+            defaultViaProtection: "tented",
+          },
+          { name: "Ghost", clearanceMm: 0.9 },
+        ] as never,
+        drcRules: [
+          {
+            id: "ghost-class",
+            name: "Ghost class rule",
+            enabled: true,
+            priority: 1,
+            scopes: [{ kind: "netClass", netClassIds: ["ghost"] }],
+            constraint: { kind: "clearance", mm: 0.9 },
+          },
+        ],
+      }),
+    );
+    expect(result.ok).toBe(true);
+
+    const proj = (await sdk.getPcbProjection(designId))!;
+    expect(proj.board.netClasses.map((c) => c.id)).toEqual(["default"]);
+    expect(proj.board.drcRules?.map((r) => r.id)).toEqual(["ghost-class"]);
+    const report = runDrc(proj);
+    const ineffective = report.violations.find(
+      (v) => v.code === "DRC_RULE_INEFFECTIVE",
+    );
+    expect(ineffective).toBeDefined();
+    expect(ineffective!.message).toContain("Ghost class rule");
+    expect(report.violations.some((v) => v.code === "DRC_RULE_INVALID")).toBe(
+      false,
+    );
+  });
+
+  // The dialog sends `{ clearance, minimums }` only. Before S6 every optional
+  // key it omitted was reset to the default (§12 item 6).
+  test("a dialog-shaped save preserves electrical, the floor and pourToCopperMm", async () => {
+    const { sdk, designId } = await createDesignerSdk("pcb-rules-optional");
+    const rev0 = (await sdk.getPcbProjection(designId))?.revision ?? null;
+    const seeded = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-rules-seed", rev0, {
+        type: "pcb_set_design_rules",
+        designRules: {
+          clearance: {
+            traceToTraceMm: 0.25,
+            traceToPadMm: 0.25,
+            padToPadMm: 0.25,
+            traceToViaMm: 0.25,
+            viaToViaMm: 0.3,
+            copperToBoardEdgeMm: 0.5,
+            pourToCopperMm: 0.45,
+          },
+          minimums: {
+            traceWidthMm: 0.2,
+            drillSizeMm: 0.4,
+            annularRingMm: 0.2,
+            viaDiameterMm: 0.8,
+            viaDrillMm: 0.4,
+            clearanceMm: 0.12,
+          },
+          electrical: { tempRiseC: 20, copperWeightOz: 2 },
+        },
+      }),
+    );
+    expect(seeded.ok).toBe(true);
+
+    const rev1 = (await sdk.getPcbProjection(designId))?.revision ?? null;
+    const saved = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-rules-dialog", rev1, {
+        type: "pcb_set_design_rules",
+        designRules: {
+          clearance: {
+            traceToTraceMm: 0.3,
+            traceToPadMm: 0.25,
+            padToPadMm: 0.25,
+            traceToViaMm: 0.25,
+            viaToViaMm: 0.3,
+            copperToBoardEdgeMm: 0.5,
+          },
+          minimums: {
+            traceWidthMm: 0.2,
+            drillSizeMm: 0.4,
+            annularRingMm: 0.2,
+            viaDiameterMm: 0.8,
+            viaDrillMm: 0.4,
+          },
+        } as never,
+      }),
+    );
+    expect(saved.ok).toBe(true);
+    const kept = (await sdk.getPcbProjection(designId))?.board.designRules;
+    expect(kept?.clearance.traceToTraceMm).toBe(0.3);
+    expect(kept?.clearance.pourToCopperMm).toBe(0.45);
+    expect(kept?.minimums.clearanceMm).toBe(0.12);
+    expect(kept?.electrical).toEqual({ tempRiseC: 20, copperWeightOz: 2 });
+
+    // An explicit `null` CLEARS an optional key.
+    const rev2 = (await sdk.getPcbProjection(designId))?.revision ?? null;
+    const clearedResult = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-rules-clear", rev2, {
+        type: "pcb_set_design_rules",
+        designRules: {
+          clearance: { ...kept!.clearance, pourToCopperMm: null },
+          minimums: { ...kept!.minimums, clearanceMm: null },
+          electrical: null,
+        } as never,
+      }),
+    );
+    expect(clearedResult.ok).toBe(true);
+    const cleared = (await sdk.getPcbProjection(designId))?.board.designRules;
+    expect(cleared?.clearance.pourToCopperMm).toBeUndefined();
+    expect(cleared?.minimums.clearanceMm).toBeUndefined();
+    expect(cleared?.electrical).toBeUndefined();
   });
 
   test("a new trace on an assigned net adopts that class's width (HTTP, apply-at-creation)", async () => {

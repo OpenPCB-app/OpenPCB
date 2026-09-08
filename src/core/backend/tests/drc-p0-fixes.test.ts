@@ -40,6 +40,7 @@ function projection(
     overlayTexts: parts.overlayTexts ?? [],
     overlayShapes: parts.overlayShapes ?? [],
     zones: parts.zones ?? [],
+    keepouts: [],
     ratsnest: parts.ratsnest ?? [],
     netNames: parts.netNames ?? {},
     padNets: parts.padNets,

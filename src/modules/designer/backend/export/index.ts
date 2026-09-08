@@ -19,7 +19,6 @@ import { buildGerberJobFile, type GerberJobFileAttr } from "./gerber/job-file";
 import { buildPnpCsv } from "./pnp/writer";
 import { runExportPreflight } from "./preflight";
 import { exportBundleName } from "../../../../sdks/designer/pcb-helpers";
-import { correlateNetPads } from "../pcb/net-pad-correlation";
 
 /**
  * Manufacturing export orchestrator.
@@ -105,12 +104,6 @@ export function buildExportBundle(
     },
   ];
 
-  // Build the per-pad netId lookup so copper-layer Gerbers can emit the
-  // `%TO.N,<netName>*%` attribute on each pad flash (used by fab AOI).
-  // Skipped when no schematic projection is provided — exports remain
-  // spec-valid without it.
-  const padNetIds = schematic ? buildPadNetIdMap(schematic, pcb) : undefined;
-
   // Collected alongside the artifacts to populate the .gbrjob FilesAttributes.
   const jobFiles: GerberJobFileAttr[] = [];
 
@@ -119,13 +112,7 @@ export function buildExportBundle(
     artifacts.push({
       kind: emission.kind,
       fileName,
-      text: buildGerberLayer(
-        pcb,
-        emission.layer,
-        warnings,
-        padNetIds,
-        createdAt,
-      ),
+      text: buildGerberLayer(pcb, emission.layer, warnings, createdAt),
     });
     jobFiles.push({
       Path: fileName,
@@ -198,27 +185,4 @@ export function buildExportBundle(
     artifacts,
     warnings,
   };
-}
-
-/**
- * Invert the schematic→PCB net-pad correlation into a per-pad netId
- * lookup keyed by `${placementId}|${padNumber}`. Used by the copper
- * Gerber writer to emit `%TO.N,<name>*%` on each pad flash.
- *
- * Correlation warnings are intentionally dropped here — they belong on
- * the schematic side (ERC) and would be noise in an export bundle. The
- * map only contains successfully-correlated pads.
- */
-function buildPadNetIdMap(
-  schematic: DesignerSchematicProjection,
-  pcb: DesignerPcbProjection,
-): Map<string, string> {
-  const { netPads } = correlateNetPads(schematic, pcb.placements);
-  const map = new Map<string, string>();
-  for (const [netId, refs] of netPads.entries()) {
-    for (const ref of refs) {
-      map.set(`${ref.placementId}|${ref.padNumber}`, netId);
-    }
-  }
-  return map;
 }

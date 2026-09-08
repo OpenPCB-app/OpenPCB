@@ -101,13 +101,16 @@ describe("DFM — hole to board edge", () => {
     ).not.toContain("HOLE_TO_BOARD_EDGE");
   });
 
-  test("hole drill crossing the edge → HOLE_TO_BOARD_EDGE (error)", () => {
+  // S6 §7 split the former dual-severity code: a drill that is not inside the
+  // board region at all is HOLE_OFF_BOARD (error), not a near-miss warning.
+  test("hole drill crossing the edge → HOLE_OFF_BOARD (error)", () => {
     const report = runDrc(
       projection({ board: board100(), freeHoles: [freeHole("h", { x: 49.2, y: 0 }, 3)] }),
     );
-    const v = report.violations.find((x) => x.code === "HOLE_TO_BOARD_EDGE");
+    const v = report.violations.find((x) => x.code === "HOLE_OFF_BOARD");
     expect(v).toBeDefined();
     expect(v!.severity).toBe("error");
+    expect(codes(report)).not.toContain("HOLE_TO_BOARD_EDGE");
   });
 
   test("hole near (but inside) the edge → warning", () => {
@@ -138,7 +141,7 @@ describe("DFM — hole to board edge", () => {
         ],
       }),
     );
-    expect(codes(report)).toContain("HOLE_TO_BOARD_EDGE");
+    expect(codes(report)).toContain("HOLE_OFF_BOARD");
   });
 });
 
@@ -235,17 +238,22 @@ describe("DFM — zone pour", () => {
         zones: [
           {
             id: "z1",
+            name: null,
+            enabled: true,
+            lockedAt: null,
             netName: "GND",
             netId: "n1",
             layer: "F.Cu",
-            polygonPointsMm: [
-              { x: -5, y: -5 },
-              { x: 5, y: -5 },
-              { x: 5, y: 5 },
-              { x: -5, y: 5 },
-            ],
-            hatchEdgeMm: 0.5,
-            fillType: "solid",
+            region: {
+              kind: "polygon",
+              pointsMm: [
+                { x: -5, y: -5 },
+                { x: 5, y: -5 },
+                { x: 5, y: 5 },
+                { x: -5, y: 5 },
+              ],
+            },
+            priority: 0,
           },
         ],
       }),
@@ -271,17 +279,22 @@ function board100Fixture(): DesignerPcbProjection {
   p.zones = [
     {
       id: "z1",
+      name: null,
+      enabled: true,
+      lockedAt: null,
       netName: "GND",
       netId: "n1",
       layer: "F.Cu",
-      polygonPointsMm: [
-        { x: -20, y: -20 },
-        { x: -10, y: -20 },
-        { x: -10, y: -10 },
-        { x: -20, y: -10 },
-      ],
-      hatchEdgeMm: 0.5,
-      fillType: "solid",
+      region: {
+        kind: "polygon",
+        pointsMm: [
+          { x: -20, y: -20 },
+          { x: -10, y: -20 },
+          { x: -10, y: -10 },
+          { x: -20, y: -10 },
+        ],
+      },
+      priority: 0,
     },
   ];
   void freePad; // reserved for future slot fixtures

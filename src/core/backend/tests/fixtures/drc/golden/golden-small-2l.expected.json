@@ -1,6 +1,6 @@
 {
  "summary": {
-  "errors": 12,
+  "errors": 13,
   "warnings": 17,
   "infos": 0
  },
@@ -11,7 +11,7 @@
   "TRACE_TO_TRACE_CLEARANCE": 1,
   "NET_SHORT_CIRCUIT": 1,
   "VIA_TO_VIA_CLEARANCE": 1,
-  "UNCONNECTED_NET": 7,
+  "UNCONNECTED_NET": 8,
   "ISOLATED_COPPER_ISLAND": 1,
   "TRACK_DANGLING": 7,
   "VIA_DANGLING": 2,
@@ -43,6 +43,7 @@
   "UNCONNECTED_NET-v2-7cae9b8f754fbd5f",
   "UNCONNECTED_NET-v2-a1af4157fb419269",
   "UNCONNECTED_NET-v2-ebbeccc1d4e6573c",
+  "UNCONNECTED_NET-v2-ed837a5cea24d0f8",
   "UNCONNECTED_NET-v2-f6b0df9883d1be30",
   "VIA_DANGLING-v2-7a99952a9e25a51d",
   "VIA_DANGLING-v2-fb4595b804612a24",

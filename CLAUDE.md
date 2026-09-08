@@ -103,7 +103,17 @@ src/
 └── shared/
     ├── domain/             ECS world, commands, events, revision, patch/history infrastructure
     ├── drc/                shared DRC primitives
-    ├── pcb-geometry/       PCB geometry
+    ├── pcb-connectivity/   copper connectivity kernel (records, items, touch, graph) — see
+    │                       docs/pcb-hardening/01-connectivity-contract.md
+    ├── pcb-areas/          copper zones + keepouts: v1→v2 upgrade, the ONE derivation of
+    │                       effective copper areas (board zones are persisted rows), the
+    │                       keepout predicate, pour-parameter composition — see
+    │                       docs/pcb-hardening/03-zone-keepout-contract.md
+    ├── pcb-geometry/       PCB geometry: segment predicates, arc chords, outline flattening, the
+    │                       board region, area overlap (area-overlap.ts) (+ tolerance.ts: the
+    │                       single epsilon policy) — see docs/pcb-hardening/02-geometry-contract.md.
+    │                       `rendering/pcb/outline-geometry.ts` and `backend/pcb/outline-geometry.ts`
+    │                       are re-export shims over it
     ├── pcb-routing/        PCB routing
     ├── rendering/          re-export shim over @openpcb/rendering-core (see above)
     ├── schematic-routing/  schematic wire routing
@@ -114,7 +124,7 @@ scripts/                module-cli.ts, gen-modules.ts, gen-sdk.ts, gen-contract-
 tests/e2e/              Playwright
 ```
 
-The shared tree has **seven** subtrees, listed above. There is no `src/shared/backend/`.
+The shared tree has **nine** subtrees, listed above. There is no `src/shared/backend/`.
 
 ### Modules
 
@@ -331,7 +341,7 @@ Full list in `DEVELOPER.md`. What is not obvious from it:
 | `npm run gen:contracts -- --check` is **wired into CI**                                                    | `bun scripts/gen-contract-types.ts` regenerates `board-snapshot.generated.ts`; commit the result or CI fails |
 | `npm run gen:check` fails if the generated module registry / SDK stubs are dirty                           | Any manifest change needs `npm run gen` + a commit                          |
 | Backend tests are **Bun** (`npm run test:backend`), frontend tests are **Vitest** (`npm run test:react`)    | Never cross them                                                            |
-| Frontend Vitest `include` is scoped to `src/core/frontend/src/**`                                          | Pure-logic frontend reducers are tested under Bun in the backend suite       |
+| Frontend Vitest `include` covers `src/core/frontend/src/**`, `src/modules/*/frontend/**` and `src/shared/frontend/**` only | A `*.test.ts` under any other `src/shared/*` subtree runs in **neither** runner — put kernel tests under `src/core/backend/tests/` (Bun) |
 | `npm run db:migrate` is a no-op message                                                                    | Module SQL migrations apply on backend startup                              |
 | The module CLI (`npm run module`, `module:create`, `module:validate`, `module:codegen`) does **registry + SDK codegen only** | There is no Rust, no bridge and no Cargo anywhere in this repo, whatever older script docs claim |
 
@@ -404,7 +414,7 @@ detailed reference material — use them instead of guessing EDA conventions.
 | `/pcb-layout`        | Trace routing (Manhattan + 45°), vias, pad rendering, ratsnest (MST), board outline, placement, net classes, footprint rendering from KiCad payload, grid presets, Gerber export   |
 | `/r3f-eda-rendering` | **Any** visual rendering in EDA editors. R3F orthographic + demand rendering (`invalidate()`), render-order constants, InstancedMesh, LineSegments2, text, hit-testing patterns    |
 | `/eda-standards`     | IPC-2221B clearance tables, trace-width formula and lookup, manufacturer presets (JLCPCB / PCBWay), layer naming, via specs, copper weight, grid standards, DRC rule values. **Values only, no code patterns** |
-| `/pcb-hardening-review` | **Opt-in, explicit invocation only.** Delegates a DRC / PCB-geometry / manual-routing / copper-pour / ERC correctness question to GPT-6-Astra via the Codex CLI, read-only, attack-framed (finds counterexamples, specifies fixes — never writes code). Scoped only to `backend/drc/`, `shared/pcb-geometry/`, `shared/pcb-routing/`, `shared/schematic-routing/` + `backend/erc/`, `shared/rendering/copper-fill/`. Refuses and redirects for anything else. |
+| `/pcb-hardening-review` | **Opt-in, explicit invocation only.** Delegates a DRC / PCB-geometry / manual-routing / copper-pour / ERC correctness question to GPT-6-Astra via the Codex CLI, read-only, attack-framed (finds counterexamples, specifies fixes — never writes code). Scoped only to `backend/drc/`, `shared/pcb-connectivity/`, `shared/pcb-geometry/`, `shared/pcb-routing/`, `shared/schematic-routing/` + `backend/erc/`, `shared/rendering/copper-fill/`. Refuses and redirects for anything else. |
 
 Selection guidance:
 

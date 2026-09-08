@@ -27,6 +27,13 @@ export interface ResolvedProjectFiles {
   pcbFileName: string;
   pcbContent: string;
   schematicSheets: Array<{ fileName: string; content: string }>;
+  /**
+   * The archive carried a `.kicad_dru` custom-rules file. OpenPCB does not
+   * import KiCad's custom rule language (rule-semantics contract §9), and
+   * silently ignoring a file whose whole purpose is extra constraints would be
+   * fail-open — so the inspect report warns.
+   */
+  customRulesFileName?: string;
 }
 
 /**
@@ -71,6 +78,8 @@ export function resolveProjectFiles(
     return a.path.localeCompare(b.path);
   });
 
+  const customRules = entries.find((e) => e.extension === ".kicad_dru");
+
   return {
     projectFileName: project.baseName,
     projectContent: decode(project.bytes),
@@ -80,6 +89,7 @@ export function resolveProjectFiles(
       fileName: s.baseName,
       content: decode(s.bytes),
     })),
+    ...(customRules ? { customRulesFileName: customRules.baseName } : {}),
   };
 }
 
@@ -129,6 +139,14 @@ export async function buildInspectReport(
   // --- Parse project ---
   const project = parseKicadProject(files.projectContent);
   pushWarnings(warnings, project.warnings, "info");
+
+  if (files.customRulesFileName) {
+    warnings.push({
+      code: "kicad_custom_rules_ignored",
+      severity: "warning",
+      message: `'${files.customRulesFileName}' custom design rules (.kicad_dru) are not imported.`,
+    });
+  }
 
   // --- Parse PCB (authoritative for layer count + nets + outline) ---
   const pcb = parseKicadPcb(files.pcbContent);
@@ -223,6 +241,7 @@ export async function buildInspectReport(
     pcbSegments: pcb.segments.length,
     pcbVias: pcb.vias.length,
     pcbZones: pcb.zoneCount,
+    pcbKeepouts: pcb.keepoutCount,
   };
 
   const netClasses: KicadProjectImportNetClass[] = project.netClasses.map(
@@ -236,6 +255,8 @@ export async function buildInspectReport(
     }),
   );
 
+  const netClassAssignments = foldNetClassAssignments(project, warnings);
+
   return {
     projectName:
       project.name ?? files.projectFileName.replace(/\.kicad_pro$/i, ""),
@@ -248,8 +269,64 @@ export async function buildInspectReport(
     ),
     counts,
     netClasses,
+    ...(Object.keys(project.designRules).length > 0
+      ? { designRules: project.designRules }
+      : {}),
+    ...(Object.keys(netClassAssignments).length > 0
+      ? { netClassAssignments }
+      : {}),
     warnings,
   };
+}
+
+/** KiCad pattern wildcards; a pattern carrying one names no single net. */
+const NETCLASS_PATTERN_WILDCARD = /[*?[]/;
+
+/**
+ * Fold the three KiCad per-net assignment formats into one net NAME → class
+ * NAME map (rule-semantics contract §12.3). Precedence follows KiCad's own
+ * file order: `classes[].nets` (v6) first, then `netclass_patterns` (v7/8),
+ * then `netclass_assignments` (v9) — each later, more specific format
+ * overrides. Only patterns free of wildcard characters name a real net; a
+ * wildcard pattern warns rather than matching nothing silently.
+ */
+function foldNetClassAssignments(
+  project: ReturnType<typeof parseKicadProject>,
+  warnings: KicadProjectImportWarning[],
+): Record<string, string> {
+  const knownClasses = new Set(project.netClasses.map((c) => c.name));
+  const out: Record<string, string> = {};
+  const assign = (netName: string, className: string): void => {
+    if (!knownClasses.has(className)) {
+      warnings.push({
+        code: "kicad_netclass_unknown",
+        severity: "warning",
+        message: `Net '${netName}' is assigned to net class '${className}', which the project does not declare; the assignment was skipped.`,
+      });
+      return;
+    }
+    out[netName] = className;
+  };
+  for (const netClass of project.netClasses) {
+    for (const netName of netClass.nets) assign(netName, netClass.name);
+  }
+  for (const { pattern, netclass } of project.netClassPatterns) {
+    if (NETCLASS_PATTERN_WILDCARD.test(pattern)) {
+      warnings.push({
+        code: "kicad_netclass_pattern_unsupported",
+        severity: "warning",
+        message: `Net-class pattern '${pattern}' → '${netclass}' uses wildcards, which are not imported; assign those nets manually.`,
+      });
+      continue;
+    }
+    assign(pattern, netclass);
+  }
+  for (const [netName, className] of Object.entries(
+    project.netClassAssignments ?? {},
+  )) {
+    assign(netName, className);
+  }
+  return out;
 }
 
 function appendComponentReference(

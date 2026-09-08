@@ -14,7 +14,13 @@ export function escapeStructuralIdSegment(s: string): string {
     .replace(/:/g, "\\c");
 }
 
-function anchorKey(a: DrcAnchor): string {
+/**
+ * Total, escaped key for one anchor. Exported because it is also the CANONICAL
+ * PAIR ORDER of the clearance witness search (rule-semantics contract §11):
+ * the item with the smaller key leads, so reordering the input arrays cannot
+ * move the reported witness — and with it the id's location bucket.
+ */
+export function anchorKey(a: DrcAnchor): string {
   switch (a.kind) {
     case "trace":
       return `t:${escapeStructuralIdSegment(a.traceId)}`;
@@ -36,8 +42,12 @@ function anchorKey(a: DrcAnchor): string {
       return `n:${escapeStructuralIdSegment(a.netId)}`;
     case "zone":
       return `z:${escapeStructuralIdSegment(a.zoneId)}`;
+    case "keepout":
+      return `k:${escapeStructuralIdSegment(a.keepoutId)}`;
     case "diffPair":
       return `dp:${escapeStructuralIdSegment(a.pNetId)}:${escapeStructuralIdSegment(a.nNetId)}`;
+    case "rule":
+      return `r:${escapeStructuralIdSegment(a.ruleId)}`;
     case "boardEdge":
       return "be";
   }
@@ -119,16 +129,4 @@ export function computeViolationId(
     locSeg = `${qx},${qy}`;
   }
   return `${code}-v2-${fnv1a64(`v2|${code}#${keys}#L:${layerSeg}#Q:${locSeg}`)}`;
-}
-
-/**
- * Legacy v1 id (code + sorted anchors only). Retained so a one-shot waiver
- * migration can map old persisted ids to the v2 scheme.
- */
-export function computeViolationIdV1(
-  code: DrcRuleCode,
-  anchors: readonly DrcAnchor[],
-): string {
-  const keys = anchors.map(anchorKey).sort().join("|");
-  return `${code}-${fnv1a64(`${code}#${keys}`)}`;
 }

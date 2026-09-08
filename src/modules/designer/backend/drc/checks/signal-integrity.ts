@@ -62,7 +62,6 @@ export function checkSignalIntegrity(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "DIFF_PAIR_SKEW",
         ruleClass: "signal-integrity",
-        severity: "warning",
         message: `Diff-pair ${dp.name} length skew ${skew.toFixed(3)} mm exceeds ${maxSkew.toFixed(3)} mm`,
         anchors: [anchor],
         locationMm: pTraces[0]!.mid,
@@ -111,7 +110,6 @@ export function checkSignalIntegrity(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "DIFF_PAIR_GAP",
         ruleClass: "signal-integrity",
-        severity: "error",
         message: `Diff-pair ${dp.name} coupled gap deviates ${worstGapDev.toFixed(3)} mm from target ${targetGap.toFixed(3)} mm`,
         anchors: [anchor],
         locationMm: worstGapPoint,
@@ -124,7 +122,6 @@ export function checkSignalIntegrity(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "DIFF_PAIR_UNCOUPLED_LENGTH",
         ruleClass: "signal-integrity",
-        severity: "warning",
         message: `Diff-pair ${dp.name} has ${uncoupled.toFixed(2)} mm uncoupled (max ${maxUncoupled.toFixed(2)} mm)`,
         anchors: [anchor],
         locationMm: pTraces[0]!.mid,

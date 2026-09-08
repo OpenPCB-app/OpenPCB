@@ -19,15 +19,20 @@ import type {
   PcbBoardContour,
   PcbBoardOutline,
   PcbCopperLayerId,
+  PcbKeepout,
   PcbLayerId,
   PcbOverlayText,
   PcbPlacedPart,
   PcbPointMm,
   PcbTrace,
   PcbVia,
+  PcbZone,
+  PcbZoneNetRef,
+  PcbZonePadConnection,
   PlacePayloadSummary,
   PlacementResultEnvelope,
 } from "../../../../sdks";
+import { copperLayersForCount } from "../../../../sdks/designer";
 import { nmToSceneMm } from "../../../../shared/frontend/canvas/coords";
 import type { OpenpcbCapturePcbApi } from "../capture-bridge";
 import { EdaCanvas } from "../../../../shared/frontend/canvas/interaction/EdaCanvas";
@@ -166,7 +171,18 @@ import {
   initialSketchToolState,
   MIN_SKETCH_VERTICES,
   sketchToolReducer,
+  type SketchSession,
+  type SketchTarget,
 } from "./tools/sketch-tool-state";
+import { useAreaTools } from "./tools/use-area-tools";
+import { useAreaInteractions } from "./tools/use-area-interactions";
+import { AreaToolOptionsBar } from "./AreaToolOptionsBar";
+import {
+  boardZoneToggleAction,
+  boardZoneForLayer,
+} from "./tools/board-zone-controls";
+import { defaultZoneToolOptions } from "./tools/area-tool-options";
+import { KEEPOUT_COLOR } from "./layers/KeepoutLayer";
 import { verticesToContour } from "./sketch-geometry";
 import {
   appendToEntry,
@@ -219,6 +235,7 @@ import { buildRouteHudModel, routeLengthMm } from "./tools/route-hud-model";
 import { buildPcbSpatialIndex, pointQueryBox } from "./spatial-index";
 import { nextRouteLayer } from "./tools/route-layer";
 import { nearestRatsnestPad } from "./tools/route-target";
+import { viaKeepoutBlock } from "./tools/route-keepouts";
 import {
   distanceAlongPolylineNm,
   initialTuneToolState,
@@ -249,10 +266,9 @@ import {
 import { generateMeander } from "../../../../shared/pcb-routing/meander";
 import { routeAutoFinish } from "../../../../shared/pcb-routing/auto-finish";
 import { walkaroundHead } from "../../../../shared/pcb-routing/walkaround";
-import {
-  buildRouteObstacles,
-  resolveRouteClearancesMm,
-} from "../../../../shared/pcb-routing/route-obstacles";
+import { buildRouteObstacles } from "../../../../shared/pcb-routing/route-obstacles";
+import { createRuleResolver } from "../../../../shared/drc/rule-resolver";
+import { defaultNetClassId } from "../../../../shared/pcb-areas/net-class-resolver";
 import { useFeatureFlag } from "@/feature-flags";
 import { FlipHorizontal2 } from "lucide-react";
 import { openContextMenu } from "../../../../shared/frontend/context-menu";
@@ -265,6 +281,10 @@ import {
   visibleLayerSet,
   visibleOverlayEntities,
 } from "./pcb-layer-visibility";
+import {
+  createPcbVisualState,
+  shouldRenderCopperLayer,
+} from "./pcb-visual-state";
 
 const NM_PER_MM = 1_000_000;
 
@@ -318,7 +338,30 @@ type ToolMode =
   | "text"
   | "tune"
   | "bundle"
-  | "boardShape";
+  | "boardShape"
+  | "zone"
+  | "keepout"
+  | "zoneHole";
+
+/**
+ * What a tool mode sketches, or null when it does not sketch at all. Every
+ * sketch-machinery predicate keys off this, so the zone (Z) and keepout (K)
+ * tools reuse the board-shape draw loop unchanged (contract §12.3).
+ */
+function sketchTargetFor(mode: ToolMode): SketchTarget | null {
+  if (mode === "boardShape") return "boardShape";
+  if (mode === "zone") return "zone";
+  if (mode === "keepout") return "keepout";
+  if (mode === "zoneHole") return "zoneHole";
+  return null;
+}
+
+/**
+ * Shown when Shift+Z is pressed with no cuttable zone selected. One line, same
+ * transient lifetime as the route notices.
+ */
+const ZONE_HOLE_NO_SUBJECT_NOTICE =
+  "Select one unlocked polygon zone first — Shift+Z cuts a hole in it";
 
 /** Grab radius (mm) for closing a board-shape sketch by clicking near its start. */
 const SKETCH_CLOSE_THRESHOLD_MM = 1.5;
@@ -466,6 +509,11 @@ interface PcbCanvasProps {
 
 /** Stable identity for the optional `partValues` prop. */
 const EMPTY_PART_VALUES: ReadonlyMap<string, string> = new Map();
+// Stable empty fallbacks: the area hooks memoise on these, so a fresh literal
+// per render would re-run every dependent memo while no projection is loaded.
+const EMPTY_ZONES: ReadonlyArray<PcbZone> = [];
+const EMPTY_KEEPOUTS: ReadonlyArray<PcbKeepout> = [];
+const EMPTY_NET_NAMES: Readonly<Record<string, string>> = {};
 
 /**
  * Status-bar hints (design D2 §9). These replace the floating hint strips that
@@ -500,6 +548,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     dispatchCommand: props.dispatchCommand,
     notifyExternalRevisionBump: props.notifyExternalRevisionBump,
   });
+  // THE effective keepouts for this projection (zone/keepout contract §4),
+  // derived once in the workspace hook. Feeds the scene, the route obstacles
+  // (conservative AABB superset), the live DRC (exact predicate) and the
+  // smart-via guard, so all four agree on which rule areas exist.
+  const effectiveKeepouts = workspace.effectiveKeepouts;
   // On design open, clear any stale store state and hydrate the *persisted*
   // DRC report so reopening restores the markers (the DRC tab does the same).
   // We deliberately do NOT clear on revision bump — last results stay visible
@@ -635,7 +688,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   // cancel, or tool switch) so a stale value can't leak into the next sketch.
   useEffect(() => {
     if (
-      (toolMode !== "boardShape" || sketchState.kind !== "drawing") &&
+      (sketchTargetFor(toolMode) === null || sketchState.kind !== "drawing") &&
       sketchEntryRef.current
     ) {
       setSketchEntry(null);
@@ -683,6 +736,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     targetName: string | null;
   } | null>(null);
   const [autoFinishNotice, setAutoFinishNotice] = useState<string | null>(null);
+  // Transient route refusal shown under the HUD conflict line (currently: a
+  // smart via refused by a `vias` keepout). Nothing changed when it appears.
+  const [routeNotice, setRouteNotice] = useState<string | null>(null);
+  // Transient refusal for the Zone-cutout sub-mode (Shift+Z) when the gesture
+  // has no subject. Same lifetime as `routeNotice`; nothing changed when it
+  // appears.
+  const [zoneHoleNotice, setZoneHoleNotice] = useState<string | null>(null);
   // Walkaround-lite (pcb.routeWalkaround): the ghost head bends around the
   // obstacle cluster it would collide with. Refs (not state) — the detour is
   // recomputed per pointer move inside the routePreview memo; clicks read the
@@ -844,18 +904,50 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   // vertices, persist it as one `pcb_set_board_outline`, exit to select, and
   // reframe. Held in a ref so the interaction handler / keydown effect call the
   // latest closure without listing it (and `workspace`) in their dep arrays.
-  const finishSketchRef = useRef<(verticesMm: PcbPointMm[]) => void>(
+  const finishSketchRef = useRef<(session: SketchSession) => void>(
     () => undefined,
   );
-  finishSketchRef.current = (verticesMm) => {
+  finishSketchRef.current = (session) => {
+    const verticesMm = session.verticesMm;
+    const target = session.target;
     if (verticesMm.length < MIN_SKETCH_VERTICES) return;
-    const outline = verticesToContour(verticesMm);
-    dispatchSketch({ kind: "cancel" });
-    setToolMode("select");
-    void workspace
-      .updateBoardOutline(outline)
-      .then(() => cameraControlsRef.current?.fit())
-      .catch(() => undefined);
+    if (target === "boardShape") {
+      const outline = verticesToContour(verticesMm);
+      dispatchSketch({ kind: "cancel" });
+      setToolMode("select");
+      void workspace
+        .updateBoardOutline(outline)
+        .then(() => cameraControlsRef.current?.fit())
+        .catch(() => undefined);
+      return;
+    }
+    // Zone cutout: the ring is checked against the parent zone's whole region
+    // with the executor's own `zoneRegionValidity` (copper-pour §11).
+    if (target === "zoneHole") {
+      const parent = (workspace.projection?.zones ?? EMPTY_ZONES).find(
+        (z) => z.id === session.parentZoneId,
+      );
+      if (!parent) return;
+      void areaTools.commitHole(parent, verticesMm).then((zoneId) => {
+        if (zoneId === null) return;
+        dispatchSketch({ kind: "cancel" });
+        setToolMode("select");
+      });
+      return;
+    }
+    // Zone / keepout: the ring is pre-checked with the executor's own
+    // `zoneRingValidity` (contract §12.3). An invalid ring keeps the sketch
+    // open with the reason in the options bar — no dispatch, no tool exit.
+    void areaTools.commit(target, verticesMm).then((createdId) => {
+      if (createdId === null) return;
+      dispatchSketch({ kind: "cancel" });
+      setToolMode("select");
+      setSelection({
+        ...emptyPcbSelection(),
+        zoneIds: new Set(target === "zone" ? [createdId] : []),
+        keepoutIds: new Set(target === "keepout" ? [createdId] : []),
+      });
+    });
   };
   // Apply a cross-tab "center on violation" request from the DRC tab once the
   // camera is ready. Board mirror flips X on bottom view, so flip the target.
@@ -1100,16 +1192,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     };
   }, []);
 
-  // Reverse-lookup (placementId|padNumber) → netId from ratsnest segments.
-  // Only nets with >=2 pads appear here; isolated single-pad nets won't hover-highlight.
-  const padToNet = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const seg of workspace.projection?.ratsnest ?? []) {
-      map.set(`${seg.fromPlacementId}|${seg.fromPadNumber}`, seg.netId);
-      map.set(`${seg.toPlacementId}|${seg.toPadNumber}`, seg.netId);
-    }
-    return map;
-  }, [workspace.projection?.ratsnest]);
+  // Reverse-lookup (placementId|padNumber) → netId. Straight from the
+  // authoritative schematic correlation, so single-pad and fully routed nets
+  // hover-highlight too (the old ratsnest reconstruction saw neither).
+  const padToNet = useMemo(
+    () => new Map(Object.entries(workspace.projection?.padNets ?? {})),
+    [workspace.projection?.padNets],
+  );
 
   const traceToNet = useMemo(() => {
     const map = new Map<string, string | null>();
@@ -1147,6 +1236,62 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       ? routeState.session.layer
       : activeCopperLayer;
   const mirrorActive = workspace.viewSide === "bottom";
+
+  // Zone (Z) / keepout (K) draw-tool options + the ring-check commit path.
+  const areaTools = useAreaTools({
+    workspace,
+    activeCopperLayer,
+    layerCount: workspace.projection?.board.layerCount ?? 2,
+    netNames: workspace.projection?.netNames ?? EMPTY_NET_NAMES,
+  });
+  // Selection / marquee / vertex editing for polygon zones + keepouts. Hidden
+  // layers are never hit, marquee-selected or highlighted (contract §12.3).
+  // Same pair `ZoneOutlineLayer` / `KeepoutLayer` use, so solo mode cannot
+  // select what it does not draw. Route focus never coexists with area picks.
+  const areaVisualState = useMemo(
+    () =>
+      createPcbVisualState({
+        displayMode: workspace.displayMode,
+        activeLayer: focusedLayer,
+      }),
+    [focusedLayer, workspace.displayMode],
+  );
+  const areaLayerAllowed = useCallback(
+    (layer: PcbCopperLayerId) =>
+      isCopperLayerVisible(visibleLayers, layer) &&
+      shouldRenderCopperLayer(areaVisualState, layer),
+    [areaVisualState, visibleLayers],
+  );
+  const areaInteractions = useAreaInteractions({
+    zones: workspace.projection?.zones ?? EMPTY_ZONES,
+    keepouts: workspace.projection?.keepouts ?? EMPTY_KEEPOUTS,
+    selection,
+    activeCopperLayer,
+    layerAllowed: areaLayerAllowed,
+    snapPoint,
+    workspace,
+  });
+
+  // The one unlocked polygon zone a cutout can be cut from (copper-pour
+  // contract §11). Shift+Z refuses when this is null.
+  const selectedPolygonZone = useMemo<PcbZone | null>(() => {
+    const ids = [...(selection.zoneIds ?? [])];
+    if (ids.length !== 1) return null;
+    const zone = (workspace.projection?.zones ?? EMPTY_ZONES).find(
+      (z) => z.id === ids[0],
+    );
+    if (!zone || zone.region.kind !== "polygon") return null;
+    return zone.lockedAt === null ? zone : null;
+  }, [selection.zoneIds, workspace.projection?.zones]);
+  const zoneHoleParentRef = useRef<PcbZone | null>(null);
+  zoneHoleParentRef.current = selectedPolygonZone;
+
+  // A ring-validity message belongs to the sketch that produced it — drop it
+  // whenever the tool changes so the next session starts clean.
+  const clearAreaToolError = areaTools.clearError;
+  useEffect(() => {
+    clearAreaToolError();
+  }, [clearAreaToolError, toolMode]);
 
   // Floating canvas comment overlay: projection + new-comment draft + recenter.
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -1355,15 +1500,68 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           if (viaHit(v, rect)) viaIds.add(v.id);
         }
       }
-      return { placementIds, traceIds, viaIds };
+      const areaHits = areaInteractions.marqueeHits(rect, mode, baseSelection);
+      return {
+        placementIds,
+        traceIds,
+        viaIds,
+        zoneIds: areaHits.zoneIds,
+        keepoutIds: areaHits.keepoutIds,
+      };
     },
   });
 
   // Default net class supplies width/clearance/via dims when starting a trace
-  // on empty space (no pad → null netId).
+  // on empty space (no pad → null netId). Array order is semantic — the first
+  // class is the default (rule-semantics contract §3 step 3).
   const defaultNetClass = useMemo(() => {
-    return workspace.projection?.board.netClasses[0] ?? null;
+    const classes = workspace.projection?.board.netClasses;
+    if (!classes) return null;
+    const id = defaultNetClassId(classes);
+    return classes.find((c) => c.id === id) ?? null;
   }, [workspace.projection?.board.netClasses]);
+
+  /**
+   * The ONE rule resolver for this projection, built here and shared by every
+   * clearance consumer on the canvas: the live-DRC commit gate, the route
+   * preview gate and the obstacle inflation for auto-finish / walkaround /
+   * tune. Batch DRC builds an equivalent one from the same board, so the gate
+   * and the report cannot disagree (rule-semantics contract §9).
+   *
+   * `knownNetIds` is deliberately omitted: it only decides whether a rule that
+   * references a missing net is REPORTED as ineffective, never what a rule
+   * resolves to (§2.1), and the gate reports no rule problems.
+   */
+  const ruleResolver = useMemo(() => {
+    const projection = workspace.projection;
+    if (!projection) return null;
+    return createRuleResolver(projection.board, projection.netNames ?? {}, {
+      validCopperLayers: copperLayersForCount(projection.board.layerCount),
+    });
+  }, [workspace.projection?.board, workspace.projection?.netNames]);
+
+  /**
+   * Upper bound of ANY clearance the resolver can return for a routed trace
+   * against ANY neighbour on this board: the board tier of both pair kinds the
+   * gate checks, every enabled rule's value and the floor (all folded into
+   * `clearanceBound`), plus the largest net-class clearance — because either
+   * item of a pair may raise the implicit tier and the neighbour's net is not
+   * known when a query window is sized (§4.1).
+   *
+   * Session-independent by construction, so it is memoised once here and used
+   * for every SIZING decision (broad-phase query boxes, the A* grid step, the
+   * meander leg floor). Legality never reads it: the per-obstacle requirement
+   * is resolved inside `buildRouteObstacles`, and the verdict inside
+   * `runLiveDrc`.
+   */
+  const maxClearanceBoundMm = useMemo(() => {
+    if (!ruleResolver || !workspace.projection) return 0;
+    return Math.max(
+      ruleResolver.clearanceBound("traceToTrace", null, null),
+      ruleResolver.clearanceBound("traceToPad", null, null),
+      ...workspace.projection.board.netClasses.map((c) => c.clearanceMm),
+    );
+  }, [ruleResolver, workspace.projection?.board.netClasses]);
 
   /**
    * Resolve a starting anchor: snaps to pad center if cursor is over a pad and
@@ -1547,8 +1745,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       // DRC commit gate: never persist a clearance violation by default.
       // Checks EVERY run (accumulated + final) against committed copper;
       // same-net copper is exempt inside runLiveDrc.
-      if (!allowDrcViolations && workspace.projection) {
-        const board = workspace.projection.board;
+      if (!allowDrcViolations && workspace.projection && ruleResolver) {
         let conflictCount = 0;
         for (const t of traces) {
           conflictCount += runLiveDrc({
@@ -1559,9 +1756,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             traces: workspace.projection.traces,
             placements: workspace.projection.placements,
             padNetMap: padToNet,
-            netClasses: board.netClasses,
-            netClassId: session.netClassId,
-            designRules: board.designRules,
+            resolver: ruleResolver,
+            keepouts: effectiveKeepouts,
           }).length;
         }
         if (conflictCount > 0) {
@@ -1578,7 +1774,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         // intentionally survives for adjust-and-retry.
       }
     },
-    [allowDrcViolations, padToNet, workspace],
+    [allowDrcViolations, effectiveKeepouts, padToNet, ruleResolver, workspace],
   );
 
   /**
@@ -1616,14 +1812,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         return;
       }
       const targetNm = pointMmToNm(target.centerMm);
-      const netClass =
-        projection.board.netClasses.find(
-          (nc) => nc.id === session.netClassId,
-        ) ?? null;
-      const clearances = resolveRouteClearancesMm({
-        netClass,
-        designRules: projection.board.designRules,
-      });
+      if (!ruleResolver) return;
       // Broad-phase: copper within the source→target corridor + headroom.
       // This box also bounds how far the A* corridor can grow. Copper beyond
       // it is invisible to the search (the corridor can outgrow the box when
@@ -1649,10 +1838,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         layer: session.layer,
         netId: session.netId,
         padNetMap: padToNet,
-        traceClearanceMm: clearances.traceClearanceMm,
-        padClearanceMm: clearances.padClearanceMm,
+        resolver: ruleResolver,
         routeWidthMm: session.widthMm,
         excludePadIds,
+        keepouts: effectiveKeepouts,
       });
       const result = routeAutoFinish({
         sourceNm,
@@ -1661,9 +1850,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         mode: session.segmentMode,
         posture: session.posture,
         caps: {
-          // Keep the grid fine enough for pad-pitch corridors.
+          // Keep the grid fine enough for pad-pitch corridors. Sizing only —
+          // `maxClearanceBoundMm` bounds every requirement the search could
+          // meet, whatever the neighbour's net turns out to be.
           maxStepNm: Math.round(
-            (clearances.traceClearanceMm + session.widthMm) * NM_PER_MM,
+            (maxClearanceBoundMm + session.widthMm) * NM_PER_MM,
           ),
         },
       });
@@ -1696,10 +1887,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     },
     [
       cursorMm,
+      effectiveKeepouts,
+      maxClearanceBoundMm,
       padToNet,
       pendingRouteGeometry,
       projectionIndex,
       routeState,
+      ruleResolver,
       workspace.projection,
     ],
   );
@@ -1728,6 +1922,18 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     const timer = setTimeout(() => setAutoFinishNotice(null), 2500);
     return () => clearTimeout(timer);
   }, [autoFinishNotice]);
+
+  useEffect(() => {
+    if (!routeNotice) return;
+    const timer = setTimeout(() => setRouteNotice(null), 2500);
+    return () => clearTimeout(timer);
+  }, [routeNotice]);
+
+  useEffect(() => {
+    if (!zoneHoleNotice) return;
+    const timer = setTimeout(() => setZoneHoleNotice(null), 2500);
+    return () => clearTimeout(timer);
+  }, [zoneHoleNotice]);
 
   // ---- Length-Tune tool (pcb.lengthTuning) ----------------------------
 
@@ -1834,14 +2040,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     const targetExtraNm = Math.round(
       Math.max(0, tuneResolvedTargetMm - netTotalMm) * NM_PER_MM,
     );
-    const netClass =
-      workspace.projection.board.netClasses.find(
-        (nc) => nc.id === tunedTrace.netClassId,
-      ) ?? null;
-    const clearances = resolveRouteClearancesMm({
-      netClass,
-      designRules: workspace.projection.board.designRules,
-    });
+    if (!ruleResolver) return null;
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -1852,9 +2051,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       if (p.x > maxX) maxX = p.x;
       if (p.y > maxY) maxY = p.y;
     }
+    // Sizing only — the board-wide upper bound, so the query window holds
+    // every neighbour that could constrain the meander and the leg floor is
+    // never tighter than some rule allows.
     const padMm =
       1 +
-      clearances.traceClearanceMm +
+      maxClearanceBoundMm +
       tunedTrace.widthMm +
       session.amplitudeNm / NM_PER_MM;
     const box = {
@@ -1872,13 +2074,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       layer: tunedTrace.layer,
       netId: tunedTrace.netId,
       padNetMap: padToNet,
-      traceClearanceMm: clearances.traceClearanceMm,
-      padClearanceMm: clearances.padClearanceMm,
+      resolver: ruleResolver,
       routeWidthMm: tunedTrace.widthMm,
+      keepouts: effectiveKeepouts,
     });
     // Adjacent serpentine legs must not violate clearance to each other.
     const spacingFloorNm = Math.round(
-      (tunedTrace.widthMm + clearances.traceClearanceMm) * NM_PER_MM,
+      (tunedTrace.widthMm + maxClearanceBoundMm) * NM_PER_MM,
     );
     return generateMeander({
       baselinePointsNm: session.baselinePointsNm,
@@ -1892,8 +2094,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       minAmplitudeNm: Math.round(tunedTrace.widthMm * 2 * NM_PER_MM),
     });
   }, [
+    effectiveKeepouts,
     padToNet,
+    maxClearanceBoundMm,
     projectionIndex,
+    ruleResolver,
     tuneNetLengths,
     tuneResolvedTargetMm,
     tunedTrace,
@@ -2130,7 +2335,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       );
       return;
     }
-    const board = workspace.projection.board;
+    if (!ruleResolver) return;
     let conflicts = 0;
     bundlePreview.lanes.forEach((lane, i) => {
       const otherLanes: PcbTrace[] = bundlePreview.lanes
@@ -2152,14 +2357,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         traces: [...workspace.projection!.traces, ...otherLanes],
         placements: workspace.projection!.placements,
         padNetMap: padToNet,
-        netClasses: board.netClasses,
-        netClassId: s.netClassId,
-        designRules: board.designRules,
+        resolver: ruleResolver,
+        keepouts: effectiveKeepouts,
       }).length;
     });
     if (conflicts > 0) {
       setBundleBlocked(
-        `${conflicts} clearance conflict${conflicts === 1 ? "" : "s"} — adjust the route or pitch`,
+        `${conflicts} DRC conflict${conflicts === 1 ? "" : "s"} — adjust the route or pitch`,
       );
       return;
     }
@@ -2180,7 +2384,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     } catch {
       // Rejection surfaced via the workspace toast; session survives.
     }
-  }, [bundlePreview, bundleState, padToNet, workspace]);
+  }, [
+    bundlePreview,
+    bundleState,
+    effectiveKeepouts,
+    padToNet,
+    ruleResolver,
+    workspace,
+  ]);
 
   // Session-scoped: leaving bundle mode drops everything; any session change
   // clears a stale block reason; the last-good lane cache dies with the session.
@@ -2252,9 +2463,39 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       session: RouteSession,
       cursorMm: PcbPointMm,
       targetLayer: PcbCopperLayerId,
-    ): void => {
+    ): boolean => {
       const snapped = snapPoint(cursorMm);
       const viaCenterNm = pointMmToNm(snapped);
+      // Via guard (zone/keepout contract §13.4): the disc the preview draws —
+      // the same diameter `pendingRouteGeometry` renders, and the THROUGH span
+      // it commits (every copper layer, which is also the fail-closed answer
+      // when the stackup is unknown) — must clear every `vias` keepout.
+      const projection = workspace.projection;
+      if (projection && effectiveKeepouts.length > 0) {
+        const netClass = projection.board.netClasses.find(
+          (nc) => nc.id === session.netClassId,
+        );
+        // Test the centre the session COMMITS (nm-quantised), not the mm
+        // double before quantisation — the two differ by ≤ 0.5 nm, inside the
+        // disc predicate's fail-open eps band.
+        const blocking = viaKeepoutBlock(effectiveKeepouts, {
+          centerMm: {
+            x: viaCenterNm.x / NM_PER_MM,
+            y: viaCenterNm.y / NM_PER_MM,
+          },
+          diameterMm:
+            session.viaDiameterMmOverride ?? netClass?.viaDiameterMm ?? 0.8,
+          layers: new Set<PcbCopperLayerId>(
+            copperLayersForCount(projection.board.layerCount),
+          ),
+        });
+        if (blocking) {
+          setRouteNotice(
+            `Via blocked by keepout ${blocking.name ? `"${blocking.name}"` : blocking.id}`,
+          );
+          return false;
+        }
+      }
       const path = buildPreviewPath(
         [...sessionAnchors(session), viaCenterNm],
         session.segmentMode,
@@ -2275,8 +2516,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             : {}),
         },
       });
+      return true;
     },
-    [snapPoint],
+    [effectiveKeepouts, snapPoint, workspace.projection],
   );
 
   // Width preset list (from board settings, fallback to net-class default).
@@ -2304,7 +2546,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         }
         const viaCursor = cursorOverrideMm ?? cursorMmRef.current;
         if (!viaCursor) return;
-        placeSmartVia(session, viaCursor, targetLayer);
+        // A refused via (keepout) leaves the session on its current layer.
+        if (!placeSmartVia(session, viaCursor, targetLayer)) return;
         await workspace.setActiveLayer(targetLayer);
         return;
       }
@@ -2356,6 +2599,18 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           placementIds: new Set([candidate.hit.placementId]),
           traceIds: new Set(),
           viaIds: new Set(),
+        });
+        return;
+      case "zone":
+        setSelection({
+          ...emptyPcbSelection(),
+          zoneIds: new Set([candidate.zone.id]),
+        });
+        return;
+      case "keepout":
+        setSelection({
+          ...emptyPcbSelection(),
+          keepoutIds: new Set([candidate.keepout.id]),
         });
         return;
     }
@@ -2683,14 +2938,22 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           return;
         }
 
-        // Board Shape mode — each click drops a polygon vertex (Shift locks the
-        // edge to 45°). Clicking near the start vertex (>= 3 placed) or pressing
-        // Enter closes the outline into one committed contour.
-        if (toolMode === "boardShape") {
+        // Sketch modes (Board Shape / Zone / Keepout) — each click drops a
+        // polygon vertex (Shift locks the edge to 45°). Clicking near the start
+        // vertex (>= 3 placed) or pressing Enter closes the ring.
+        const sketchTarget = sketchTargetFor(toolMode);
+        if (sketchTarget !== null) {
           const snapped = snapPoint(cursor);
           const sketch = sketchStateRef.current;
           if (sketch.kind !== "drawing") {
-            dispatchSketch({ kind: "start", pointMm: snapped });
+            dispatchSketch({
+              kind: "start",
+              pointMm: snapped,
+              target: sketchTarget,
+              ...(sketchTarget === "zoneHole" && zoneHoleParentRef.current
+                ? { parentZoneId: zoneHoleParentRef.current.id }
+                : {}),
+            });
             return;
           }
           const verts = sketch.session.verticesMm;
@@ -2708,7 +2971,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             Math.hypot(point.x - first.x, point.y - first.y) <=
               SKETCH_CLOSE_THRESHOLD_MM
           ) {
-            finishSketchRef.current(verts);
+            finishSketchRef.current(sketch.session);
             setSketchEntry(null);
             return;
           }
@@ -2898,6 +3161,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             placements: visiblePlacements,
             traces: tracesRef.current,
             vias: viasRef.current,
+            zones: workspace.projection?.zones,
+            keepouts: workspace.projection?.keepouts,
             cursorMm: cursor,
             activeLayer: activeCopperLayer,
           });
@@ -2944,6 +3209,16 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             useDrcStore.getState().select(drcHit.id);
             return;
           }
+        }
+
+        // Area vertex grip — a grip on the single selected polygon zone /
+        // keepout wins over the copper underneath it, or it would be
+        // unreachable over a pour (contract §12.3 vertex editing).
+        if (areaInteractions.tryGrabVertex(cursor)) {
+          setCommittedDragOverride(null);
+          setDragSession(null);
+          setFreePrimitiveDragSession(null);
+          return;
         }
 
         // Select mode: click trace/via/freeHole/freePad/overlayText first, then placement.
@@ -3149,6 +3424,16 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           }
           return;
         }
+        // Polygon zones / keepouts — edge proximity only, so a marquee can
+        // still start anywhere inside a pour (contract §12.3).
+        const areaSelection = areaInteractions.trySelect(cursor, shift, current);
+        if (areaSelection) {
+          setCommittedDragOverride(null);
+          setDragSession(null);
+          setFreePrimitiveDragSession(null);
+          setSelection(areaSelection);
+          return;
+        }
         // Empty space → start marquee (no drag).
         setCommittedDragOverride(null);
         setDragSession(null);
@@ -3192,6 +3477,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           });
           return;
         }
+
+        // Area vertex drag in flight — reshape the ring live.
+        if (areaInteractions.handlePointerMove(cursor)) return;
 
         // Vertex drag in flight — reshape the outline live to the snapped cursor.
         if (vertexDragSessionRef.current) {
@@ -3335,6 +3623,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           }
           return;
         }
+        if (areaInteractions.handlePointerUp()) return;
         const vertexDrag = vertexDragSessionRef.current;
         if (vertexDrag) {
           setVertexDragSession(null);
@@ -3437,6 +3726,17 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       onContextMenu(event) {
         const cursor = eventToMm(event);
         const groups: ContextMenuGroup[] = [];
+
+        // Vertex / edge ops on the single selected polygon zone or keepout.
+        const areaGroup = areaInteractions.contextMenuGroup(cursor);
+        if (areaGroup) {
+          openContextMenu({
+            scope: "pcb",
+            position: { x: event.screenPoint.x, y: event.screenPoint.y },
+            groups: [areaGroup],
+          });
+          return;
+        }
 
         // Board-outline corner ops (board-dim mode + editable outline): fillet /
         // chamfer / delete the vertex under the cursor. Fillet & chamfer need a
@@ -3914,6 +4214,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     };
   }, [
     activeCopperLayer,
+    areaInteractions,
     autoFinishEnabled,
     autoFinishProposal,
     bundleState,
@@ -4042,6 +4343,66 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         setToolMode((prev) =>
           prev === "boardShape" ? "select" : "boardShape",
         );
+        dispatchRoute({ kind: "cancel" });
+        dispatchMeasure({ kind: "clear" });
+        return;
+      }
+      // Shift+Z — Zone cutout sub-mode. Needs exactly one unlocked polygon
+      // zone selected; without a subject it refuses with a notice and changes
+      // nothing (copper-pour contract §11).
+      if (
+        (event.key === "z" || event.key === "Z") &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        event.shiftKey &&
+        routeState.kind !== "routing"
+      ) {
+        event.preventDefault();
+        if (toolMode === "zoneHole") {
+          dispatchSketch({ kind: "cancel" });
+          setToolMode("select");
+          return;
+        }
+        if (!zoneHoleParentRef.current) {
+          setZoneHoleNotice(ZONE_HOLE_NO_SUBJECT_NOTICE);
+          return;
+        }
+        dispatchSketch({ kind: "cancel" });
+        setBoardDimMode(false);
+        setToolMode("zoneHole");
+        dispatchRoute({ kind: "cancel" });
+        dispatchMeasure({ kind: "clear" });
+        return;
+      }
+      if (
+        (event.key === "z" || event.key === "Z") &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        routeState.kind !== "routing"
+      ) {
+        event.preventDefault();
+        dispatchSketch({ kind: "cancel" });
+        setBoardDimMode(false);
+        setToolMode((prev) => (prev === "zone" ? "select" : "zone"));
+        dispatchRoute({ kind: "cancel" });
+        dispatchMeasure({ kind: "clear" });
+        return;
+      }
+      if (
+        (event.key === "k" || event.key === "K") &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        routeState.kind !== "routing"
+      ) {
+        event.preventDefault();
+        dispatchSketch({ kind: "cancel" });
+        setBoardDimMode(false);
+        setToolMode((prev) => (prev === "keepout" ? "select" : "keepout"));
         dispatchRoute({ kind: "cancel" });
         dispatchMeasure({ kind: "clear" });
         return;
@@ -4208,9 +4569,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         return;
       }
 
-      // Board-shape sketch keys: Enter closes, Esc cancels + exits, Backspace
-      // removes the last vertex.
-      if (toolMode === "boardShape") {
+      // Sketch keys (board shape / zone / keepout): Enter closes, Esc cancels +
+      // exits, Backspace removes the last vertex.
+      if (sketchTargetFor(toolMode) !== null) {
         const sketch = sketchStateRef.current;
         const drawing = sketch.kind === "drawing";
         // Typed numeric entry: digits / dot / (angle) minus build the buffer.
@@ -4244,7 +4605,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                 Math.hypot(point.x - first.x, point.y - first.y) <=
                   SKETCH_CLOSE_THRESHOLD_MM
               ) {
-                finishSketchRef.current(verts);
+                finishSketchRef.current(sketch.session);
               } else {
                 dispatchSketch({ kind: "commit-vertex", pointMm: point });
               }
@@ -4253,7 +4614,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             return;
           }
           if (drawing && canCloseSketch(sketch)) {
-            finishSketchRef.current(sketch.session.verticesMm);
+            finishSketchRef.current(sketch.session);
           }
           return;
         }
@@ -4571,7 +4932,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         } else if (
           toolMode === "hole" ||
           toolMode === "pad" ||
-          toolMode === "text"
+          toolMode === "text" ||
+          toolMode === "zone" ||
+          toolMode === "keepout" ||
+          toolMode === "zoneHole"
         ) {
           setToolMode("select");
         }
@@ -4585,13 +4949,17 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         const freeHoleIds = [...(selection.freeHoleIds ?? [])];
         const freePadIds = [...(selection.freePadIds ?? [])];
         const overlayTextIds = [...(selection.overlayTextIds ?? [])];
+        const zoneIds = [...(selection.zoneIds ?? [])];
+        const keepoutIds = [...(selection.keepoutIds ?? [])];
         if (
           placementIds.length === 0 &&
           traceIds.length === 0 &&
           viaIds.length === 0 &&
           freeHoleIds.length === 0 &&
           freePadIds.length === 0 &&
-          overlayTextIds.length === 0
+          overlayTextIds.length === 0 &&
+          zoneIds.length === 0 &&
+          keepoutIds.length === 0
         ) {
           return;
         }
@@ -4605,6 +4973,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         for (const id of freePadIds) tasks.push(workspace.deleteFreePad(id));
         for (const id of overlayTextIds)
           tasks.push(workspace.deleteOverlayText(id));
+        // Board zones and locked rows are filtered inside the hook — the
+        // layers-panel toggle owns a board zone's lifecycle (contract §12.3).
+        tasks.push(areaInteractions.deleteSelected(selection));
         void Promise.allSettled(tasks).then(() => {
           setSelection(emptyPcbSelection());
         });
@@ -4615,6 +4986,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     return () => window.removeEventListener("keydown", onKey);
   }, [
     acceptAutoFinish,
+    areaInteractions,
     autoFinishEnabled,
     autoFinishProposal,
     bundleState,
@@ -4718,17 +5090,16 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     let detourAnchorsNm: PointNm[] | null = null;
     let walkChoice: { clusterSignature: string; side: "cw" | "ccw" } | null =
       null;
-    if (walkaroundEnabled && workspace.projection && projectionIndex) {
+    if (
+      walkaroundEnabled &&
+      workspace.projection &&
+      projectionIndex &&
+      ruleResolver
+    ) {
       const headStartNm = committedAnchors[committedAnchors.length - 1]!;
-      const netClass =
-        workspace.projection.board.netClasses.find(
-          (nc) => nc.id === session.netClassId,
-        ) ?? null;
-      const clearances = resolveRouteClearancesMm({
-        netClass,
-        designRules: workspace.projection.board.designRules,
-      });
-      const headPadMm = 1 + clearances.traceClearanceMm + session.widthMm;
+      // Corridor padding only: the board-wide upper bound, so the query window
+      // can never be too small for a neighbour of any net class.
+      const headPadMm = 1 + maxClearanceBoundMm + session.widthMm;
       const box = {
         minX: Math.min(headStartNm.x, cursorNm.x) / NM_PER_MM - headPadMm,
         minY: Math.min(headStartNm.y, cursorNm.y) / NM_PER_MM - headPadMm,
@@ -4746,9 +5117,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           layer: session.layer,
           netId: session.netId,
           padNetMap: padToNet,
-          traceClearanceMm: clearances.traceClearanceMm,
-          padClearanceMm: clearances.padClearanceMm,
+          resolver: ruleResolver,
           routeWidthMm: session.widthMm,
+          keepouts: effectiveKeepouts,
           ...(session.startPadId !== undefined
             ? { excludePadIds: new Set([session.startPadId]) }
             : {}),
@@ -4815,11 +5186,14 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     };
   }, [
     cursorMm,
+    effectiveKeepouts,
+    maxClearanceBoundMm,
     padToNet,
     pendingRouteGeometry,
     projectionIndex,
     resolveRouteAnchor,
     routeState,
+    ruleResolver,
     walkaroundEnabled,
     workspace.projection,
   ]);
@@ -4832,10 +5206,19 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
 
   // Live DRC for the in-progress trace.
   const drcViolations: DrcViolation[] = useMemo(() => {
-    if (!routePreview || routeState.kind !== "routing" || !workspace.projection)
+    if (
+      !routePreview ||
+      routeState.kind !== "routing" ||
+      !workspace.projection ||
+      !ruleResolver
+    )
       return [];
-    // Broad-phase: only copper near the ghost's bbox (inflated by the widest
-    // plausible clearance envelope) reaches the exact distance checks.
+    // Broad-phase: only copper near the ghost's bbox reaches the exact
+    // distance checks. The inflation must cover the widest requirement any
+    // rule on this board can resolve to, or a real conflict outside the window
+    // would never be MARKED — a scoped rule is uncapped, so a fixed constant
+    // is not safe (the commit gate at `finishRoute` still sees every trace, so
+    // nothing illegal can commit either way).
     let neighborTraces = workspace.projection.traces;
     let neighborPlacements = workspace.projection.placements;
     if (projectionIndex) {
@@ -4849,7 +5232,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         if (p.x > maxX) maxX = p.x;
         if (p.y > maxY) maxY = p.y;
       }
-      const inflateMm = 5; // clearance + widths headroom; broad-phase only
+      const inflateMm = Math.max(
+        // Keep the historical 5 mm halo on ordinary boards, where the bound is
+        // well under it — the marker set is then unchanged.
+        5,
+        maxClearanceBoundMm + routeState.session.widthMm / 2 + 1,
+      );
       const box = {
         minX: minX / NM_PER_MM - inflateMm,
         minY: minY / NM_PER_MM - inflateMm,
@@ -4867,15 +5255,17 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       traces: neighborTraces,
       placements: neighborPlacements,
       padNetMap: padToNet,
-      netClasses: workspace.projection.board.netClasses,
-      netClassId: routeState.session.netClassId,
-      designRules: workspace.projection.board.designRules,
+      resolver: ruleResolver,
+      keepouts: effectiveKeepouts,
     });
   }, [
+    effectiveKeepouts,
+    maxClearanceBoundMm,
     padToNet,
     projectionIndex,
     routePreview,
     routeState,
+    ruleResolver,
     workspace.projection,
   ]);
 
@@ -4954,6 +5344,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       setAllowDrcViolations(false);
       setBlockedConflictCount(null);
       setAutoFinishNotice(null);
+      setRouteNotice(null);
     }
   }, [routeState.kind]);
 
@@ -5306,7 +5697,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   // Board-shape draw preview: committed vertices + the rubber-band to the
   // (snapped, optionally 45°-locked) cursor. Null unless actively drawing.
   const sketchPreview = useMemo(() => {
-    if (toolMode !== "boardShape" || sketchState.kind !== "drawing") return null;
+    if (sketchTargetFor(toolMode) === null || sketchState.kind !== "drawing") {
+      return null;
+    }
     const vertices = sketchState.session.verticesMm;
     let preview: PcbPointMm | null = null;
     let infer: InferResult | null = null;
@@ -5322,8 +5715,28 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       preview = resolved.point;
       infer = resolved.infer;
     }
-    return { vertices, preview, infer };
-  }, [cursorMm, snapPoint, sketchState, toolMode, sketchEntry]);
+    const target = sketchState.session.target;
+    // A cutout is drawn in its parent zone's layer colour, not the zone tool's.
+    const color =
+      target === "zone"
+        ? copperLayerColor(areaTools.zoneOptions.layer)
+        : target === "zoneHole"
+          ? copperLayerColor(
+              selectedPolygonZone?.layer ?? areaTools.zoneOptions.layer,
+            )
+          : target === "keepout"
+            ? KEEPOUT_COLOR
+            : undefined;
+    return { vertices, preview, infer, color };
+  }, [
+    areaTools.zoneOptions.layer,
+    selectedPolygonZone,
+    cursorMm,
+    snapPoint,
+    sketchState,
+    toolMode,
+    sketchEntry,
+  ]);
   const sketchPreviewRef = useRef(sketchPreview);
   sketchPreviewRef.current = sketchPreview;
 
@@ -5385,6 +5798,16 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       const text = proj.overlayTexts.find((t) => t.id === textId);
       if (text) return { kind: "overlayText", text };
     }
+    const zoneId = [...(selection.zoneIds ?? [])][0];
+    if (zoneId) {
+      const zone = proj.zones.find((z) => z.id === zoneId);
+      if (zone) return { kind: "zone", zone };
+    }
+    const keepoutId = [...(selection.keepoutIds ?? [])][0];
+    if (keepoutId) {
+      const keepout = proj.keepouts.find((k) => k.id === keepoutId);
+      if (keepout) return { kind: "keepout", keepout };
+    }
     return null;
   }, [selection, workspace.projection]);
 
@@ -5435,6 +5858,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         >
           <PcbScene
             projection={workspace.projection}
+            effectiveKeepouts={effectiveKeepouts}
             selection={sceneSelection}
             outlineOverride={
               boardResizeSession?.currentRect ??
@@ -5481,7 +5905,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                 : activeCopperLayer
             }
             focusedLayer={focusedLayer}
-            copperFillLayers={workspace.copperFillLayers}
+            areaDragOverride={areaInteractions.areaDragOverride}
+            areaVertexHandles={
+              areaInteractions.vertexHandlePoints.length > 0
+                ? { pointsMm: areaInteractions.vertexHandlePoints }
+                : null
+            }
             marqueeOverlay={sceneMarqueeOverlay}
             measurement={sceneMeasurement}
             snapTarget={snapTarget}
@@ -5664,6 +6093,24 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               textMode={toolMode === "text"}
               onToggleTextMode={() => {
                 setToolMode((prev) => (prev === "text" ? "select" : "text"));
+                dispatchRoute({ kind: "cancel" });
+                dispatchMeasure({ kind: "clear" });
+              }}
+              zoneMode={toolMode === "zone"}
+              onToggleZoneMode={() => {
+                dispatchSketch({ kind: "cancel" });
+                setBoardDimMode(false);
+                setToolMode((prev) => (prev === "zone" ? "select" : "zone"));
+                dispatchRoute({ kind: "cancel" });
+                dispatchMeasure({ kind: "clear" });
+              }}
+              keepoutMode={toolMode === "keepout"}
+              onToggleKeepoutMode={() => {
+                dispatchSketch({ kind: "cancel" });
+                setBoardDimMode(false);
+                setToolMode((prev) =>
+                  prev === "keepout" ? "select" : "keepout",
+                );
                 dispatchRoute({ kind: "cancel" });
                 dispatchMeasure({ kind: "clear" });
               }}
@@ -5930,13 +6377,49 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           })()
         : null}
 
-      {toolMode === "boardShape" && sketchState.kind === "drawing" ? (
+      {sketchTargetFor(toolMode) !== null && sketchState.kind === "drawing" ? (
         <SketchDimEntry
           entry={sketchEntry}
           readout={sketchReadout}
           constraint={sketchPreview?.infer?.kind ?? null}
           cursorClientPx={cursorClientPx}
         />
+      ) : null}
+      {toolMode === "zone" ||
+      toolMode === "keepout" ||
+      toolMode === "zoneHole" ? (
+        <AreaToolOptionsBar
+          target={toolMode}
+          cutoutMode={toolMode === "zoneHole"}
+          canCutout={selectedPolygonZone !== null}
+          onToggleCutout={() => {
+            dispatchSketch({ kind: "cancel" });
+            if (toolMode === "zoneHole") {
+              setToolMode("zone");
+              return;
+            }
+            if (!selectedPolygonZone) {
+              setZoneHoleNotice(ZONE_HOLE_NO_SUBJECT_NOTICE);
+              return;
+            }
+            setToolMode("zoneHole");
+          }}
+          zoneOptions={areaTools.zoneOptions}
+          onZoneChange={areaTools.setZoneOptions}
+          keepoutOptions={areaTools.keepoutOptions}
+          onKeepoutChange={areaTools.setKeepoutOptions}
+          layerCount={workspace.projection?.board.layerCount ?? 2}
+          nets={workspace.nets}
+          error={areaTools.error}
+        />
+      ) : null}
+      {zoneHoleNotice ? (
+        <div
+          data-testid="pcb-tool-notice"
+          className="absolute left-1/2 top-3 z-30 -translate-x-1/2 rounded-control border border-border bg-surface-raised/95 px-2.5 py-1.5 text-[11px] text-status-warning shadow-lg backdrop-blur"
+        >
+          <span role="alert">{zoneHoleNotice}</span>
+        </div>
       ) : null}
 
       {workspace.projection && props.layersPanelTarget
@@ -5956,18 +6439,50 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               layerCount={workspace.projection.board.layerCount}
               displayMode={workspace.displayMode}
               onSetDisplayMode={workspace.setDisplayMode}
-              copperFillLayers={workspace.copperFillLayers}
-              onToggleCopperFillLayer={(layer) => {
-                const enabling = !workspace.copperFillLayers.includes(layer);
+              boardZones={workspace.projection.zones}
+              nets={workspace.nets}
+              onToggleBoardZone={(layer) => {
+                const zones = workspace.projection?.zones ?? EMPTY_ZONES;
+                const action = boardZoneToggleAction(zones, layer);
+                const enabling =
+                  action.kind === "add" ? true : action.enabled;
                 if (enabling && !visibleLayers.has(layer)) {
                   void workspace.setVisibleLayers([
                     ...(workspace.projection?.board.visibleLayers ?? []),
                     layer,
                   ]);
                 }
-                workspace.toggleCopperFillLayer(layer);
-                // Copper fill is always GND + solid (forced in the projection,
-                // see `pcb-projection.ts`); no per-layer net/connection picker.
+                if (action.kind === "add") {
+                  // A new board plane defaults to the ground net by name, the
+                  // same default the zone tool uses (contract §12.3).
+                  void workspace.addZone({
+                    layer,
+                    net: defaultZoneToolOptions({
+                      activeLayer: layer,
+                      netNames: workspace.projection?.netNames ?? EMPTY_NET_NAMES,
+                    }).net,
+                    region: { kind: "board" },
+                    padConnection: "solid",
+                  });
+                  return;
+                }
+                void workspace.updateZone(action.zoneId, {
+                  enabled: action.enabled,
+                });
+              }}
+              onSetBoardZoneNet={(layer, net) => {
+                const row = boardZoneForLayer(
+                  workspace.projection?.zones ?? EMPTY_ZONES,
+                  layer,
+                );
+                if (row) void workspace.updateZone(row.id, { net });
+              }}
+              onSetBoardZonePadConnection={(layer, padConnection) => {
+                const row = boardZoneForLayer(
+                  workspace.projection?.zones ?? EMPTY_ZONES,
+                  layer,
+                );
+                if (row) void workspace.updateZone(row.id, { padConnection });
               }}
               onCleanupPourTraces={() => void workspace.cleanupPourTraces()}
               onSelectLayerPreset={(preset) => {
@@ -6140,6 +6655,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
                   onAcceptAutoFinish={acceptAutoFinish}
                   onDismissAutoFinish={() => setAutoFinishProposal(null)}
                   autoFinishNotice={autoFinishNotice}
+                  routeNotice={routeNotice}
                 />
               </>
             ) : toolMode === "tune" && !previewActive ? (
@@ -6204,6 +6720,23 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               onDeleteOverlayText={(id) =>
                 workspace
                   .deleteOverlayText(id)
+                  .then(() => setSelection(emptyPcbSelection()))
+              }
+              nets={workspace.nets}
+              onUpdateZone={(id, patch) =>
+                workspace.updateZone(id, patch).then(() => undefined)
+              }
+              onDeleteZone={(id) =>
+                workspace
+                  .deleteZone(id)
+                  .then(() => setSelection(emptyPcbSelection()))
+              }
+              onUpdateKeepout={(id, patch) =>
+                workspace.updateKeepout(id, patch).then(() => undefined)
+              }
+              onDeleteKeepout={(id) =>
+                workspace
+                  .deleteKeepout(id)
                   .then(() => setSelection(emptyPcbSelection()))
               }
             />,

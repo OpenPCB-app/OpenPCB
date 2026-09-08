@@ -19,13 +19,21 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
   KicadProjectImportWarning,
   PcbCopperLayerId,
+  PcbKeepout,
   PcbPlacedPart,
+  PcbPointMm,
   PcbTrace,
   PcbVia,
   PcbZone,
 } from "../../../../../sdks/designer";
 import { isCopperLayerId } from "../../../../../sdks/designer";
 import {
+  isZoneHoleInvalidity,
+  zoneRegionValidity,
+  zoneRingValidity,
+} from "../../../../../shared/pcb-areas/zone-parse";
+import {
+  insertPcbKeepout,
   insertPcbTrace,
   insertPcbVia,
   insertPcbZone,
@@ -36,6 +44,8 @@ import {
 import type {
   ParsedKicadPcb,
   ParsedKicadPcbFootprint,
+  ParsedKicadPcbPoint,
+  ParsedKicadPcbZone,
 } from "../../../../library/backend/infrastructure/parsers/kicad/kicad-pcb-parser";
 import { schematicParts } from "../../schema";
 import { eq } from "drizzle-orm";
@@ -56,6 +66,7 @@ export interface PcbInsertResult {
   tracesInserted: number;
   viasInserted: number;
   zonesInserted: number;
+  keepoutsInserted: number;
   segmentsDropped: number;
   warnings: KicadProjectImportWarning[];
 }
@@ -79,6 +90,7 @@ export function insertPcbEntities(
     tracesInserted: 0,
     viasInserted: 0,
     zonesInserted: 0,
+    keepoutsInserted: 0,
     segmentsDropped: 0,
     warnings: [],
   };
@@ -220,25 +232,14 @@ export function insertPcbEntities(
     });
   }
 
-  // ─── Zones ───
-  for (const z of options.pcb.zones) {
-    const layer = pickCopperLayer(z.layer);
-    const zone: PcbZone = {
-      id: crypto.randomUUID(),
-      netName: z.netName ?? null,
-      layer,
-      polygonPointsMm: z.polygonPointsMm.map((p) => ({ x: p.xMm, y: p.yMm })),
-      hatchEdgeMm: z.hatchEdgeMm,
-      fillType: z.fillType,
-    };
-    insertPcbZone(tx, options.designId, zone, timestamp);
-    result.zonesInserted += 1;
-  }
-  if (result.zonesInserted > 0) {
+  // ─── Zones + keepouts (S3a contract §8) ───
+  insertKeepouts(tx, options, timestamp, result);
+  insertZones(tx, options, timestamp, result);
+  if (result.zonesInserted > 0 || result.keepoutsInserted > 0) {
     result.warnings.push({
       code: "pcb_zones_imported",
       severity: "info",
-      message: `Imported ${result.zonesInserted} zone(s) as outline polygons. Fill recomputation and DRC participation are not yet wired.`,
+      message: `Imported ${result.zonesInserted} copper zone(s) and ${result.keepoutsInserted} keepout(s).`,
     });
   }
 
@@ -246,6 +247,199 @@ export function insertPcbEntities(
   void loadPcbPlacements;
 
   return result;
+}
+
+/**
+ * KiCad rule areas → `PcbKeepout` rows. A rule area on no copper layer, or one
+ * whose contour fails the shared ring test, is dropped with a warning rather
+ * than persisted as a row `parsePcbKeepoutRecord` would later reject.
+ */
+function insertKeepouts(
+  tx: DbClient,
+  options: PcbInsertOptions,
+  timestamp: string,
+  result: PcbInsertResult,
+): void {
+  for (const k of options.pcb.keepouts) {
+    const layers = warnNonCopperLayers(k.layers, "Rule area", k.name, result);
+    if (layers.length === 0) continue;
+    const pointsMm = toPointsMm(k.polygonPointsMm);
+    if (!warnRingValid(pointsMm, "Rule area", k.name, result)) continue;
+    // Holes included: ignoring one only widens the forbidden area, which is
+    // the safe direction for a rule area (contract §8).
+    if (k.extraContours > 0) {
+      result.warnings.push({
+        code: "zone_extra_contour_dropped",
+        severity: "warning",
+        message: `Rule area ${zoneLabel(k.name)} has ${k.extraContours} additional contour(s); only the first was imported.`,
+      });
+    }
+    const keepout: PcbKeepout = {
+      id: crypto.randomUUID(),
+      name: k.name,
+      enabled: true,
+      lockedAt: k.locked ? timestamp : null,
+      layers,
+      pointsMm,
+      restrictions: k.restrictions,
+    };
+    insertPcbKeepout(tx, options.designId, keepout, timestamp);
+    result.keepoutsInserted += 1;
+  }
+}
+
+/** Copper zones → one `PcbZone` per copper layer (contract §8, §2: one zone = one layer). */
+function insertZones(
+  tx: DbClient,
+  options: PcbInsertOptions,
+  timestamp: string,
+  result: PcbInsertResult,
+): void {
+  for (const z of options.pcb.zones) {
+    const layers = warnNonCopperLayers(z.layers, "Zone", z.name, result);
+    if (layers.length === 0) continue;
+    const pointsMm = toPointsMm(z.polygonPointsMm);
+    if (!warnRingValid(pointsMm, "Zone", z.name, result)) continue;
+    if (z.fillModeHatch) {
+      result.warnings.push({
+        code: "zone_hatched_fill_as_solid",
+        severity: "warning",
+        message: `Zone ${zoneLabel(z.name)} uses a hatched fill; imported as a solid fill.`,
+      });
+    }
+    if (z.extraContours > 0) {
+      result.warnings.push({
+        code: "zone_extra_contour_dropped",
+        severity: "warning",
+        message: `Zone ${zoneLabel(z.name)} has ${z.extraContours} additional outline(s); only the first was imported.`,
+      });
+    }
+    const region = buildZoneRegion(pointsMm, z.holes);
+    // A cutout that survives flattening as an unusable ring is never DROPPED
+    // (that would pour more copper than drawn): the zone comes in disabled,
+    // keeping the holes, and the user fixes it (copper-pour contract §11).
+    const holesValidity = zoneRegionValidity(region);
+    const holesUsable = !isZoneHoleInvalidity(holesValidity);
+    if (!holesUsable) {
+      result.warnings.push({
+        code: "zone_hole_invalid_import",
+        severity: "warning",
+        message: `Zone ${zoneLabel(z.name)} has a cutout that is not usable (${holesValidity}); imported disabled so it pours no copper.`,
+      });
+    }
+    if (layers.length > 1) {
+      result.warnings.push({
+        code: "zone_multilayer_split",
+        severity: "info",
+        message: `Zone ${zoneLabel(z.name)} spans ${layers.length} copper layers; split into one zone per layer (${layers.join(", ")}).`,
+      });
+    }
+    for (const layer of layers) {
+      insertPcbZone(
+        tx,
+        options.designId,
+        // A fresh region per row: two layers must not alias one points array.
+        buildZone(z, layer, buildZoneRegion(pointsMm, z.holes), holesUsable, timestamp),
+        timestamp,
+      );
+      result.zonesInserted += 1;
+    }
+  }
+}
+
+/** Outline plus its cutouts; an empty cutout list leaves the key off (§11). */
+function buildZoneRegion(
+  pointsMm: readonly PcbPointMm[],
+  holes: readonly ParsedKicadPcbPoint[][],
+): PcbZone["region"] {
+  const holesMm = holes.map(toPointsMm).filter((hole) => hole.length >= 3);
+  return {
+    kind: "polygon",
+    pointsMm: pointsMm.map((p) => ({ x: p.x, y: p.y })),
+    ...(holesMm.length === 0 ? {} : { holesMm }),
+  };
+}
+
+function buildZone(
+  z: ParsedKicadPcbZone,
+  layer: PcbCopperLayerId,
+  region: PcbZone["region"],
+  enabled: boolean,
+  timestamp: string,
+): PcbZone {
+  const zone: PcbZone = {
+    id: crypto.randomUUID(),
+    name: z.name,
+    // Fail safe: a zone whose drawn shape we cannot reproduce must not pour.
+    enabled,
+    lockedAt: z.locked ? timestamp : null,
+    layer,
+    // netId stays null at insert; projection binding resolves netName the same
+    // way it does for traces and vias (contract §3.2).
+    netId: null,
+    netName: z.netName,
+    region,
+    priority: z.priority,
+  };
+  // Overrides are written only when the file carried the token — an absent
+  // override inherits the board rule (contract §6).
+  if (z.padConnection !== null) zone.padConnection = z.padConnection;
+  if (z.clearanceMm !== null) zone.clearanceMm = z.clearanceMm;
+  if (z.minThicknessMm !== null) zone.minWidthMm = z.minThicknessMm;
+  if (z.thermal !== null) zone.thermal = z.thermal;
+  if (z.islandRemoval !== null) zone.islandRemoval = z.islandRemoval;
+  return zone;
+}
+
+/** Keeps the copper layer ids, warning once about everything else it dropped. */
+function warnNonCopperLayers(
+  layers: readonly string[],
+  kind: string,
+  name: string | null,
+  result: PcbInsertResult,
+): PcbCopperLayerId[] {
+  const kept = layers.filter((l): l is PcbCopperLayerId => isCopperLayerId(l));
+  const dropped = layers.filter((l) => !isCopperLayerId(l));
+  if (dropped.length > 0) {
+    result.warnings.push({
+      code: "zone_layer_unsupported",
+      severity: "warning",
+      message: `${kind} ${zoneLabel(name)} references non-copper layer(s) ${dropped.join(", ")}; ${
+        kept.length > 0 ? "those layers were dropped" : "nothing was imported"
+      }.`,
+    });
+  } else if (kept.length === 0) {
+    result.warnings.push({
+      code: "zone_layer_unsupported",
+      severity: "warning",
+      message: `${kind} ${zoneLabel(name)} declares no layer; nothing was imported.`,
+    });
+  }
+  return kept;
+}
+
+function warnRingValid(
+  pointsMm: PcbPointMm[],
+  kind: string,
+  name: string | null,
+  result: PcbInsertResult,
+): boolean {
+  const validity = zoneRingValidity(pointsMm);
+  if (validity === "ok") return true;
+  result.warnings.push({
+    code: "zone_ring_invalid",
+    severity: "warning",
+    message: `${kind} ${zoneLabel(name)} has an invalid outline (${validity}); dropped.`,
+  });
+  return false;
+}
+
+function toPointsMm(points: readonly ParsedKicadPcbPoint[]): PcbPointMm[] {
+  return points.map((p) => ({ x: p.xMm, y: p.yMm }));
+}
+
+function zoneLabel(name: string | null): string {
+  return name ? `'${name}'` : "(unnamed)";
 }
 
 function pickCopperLayer(layer: string): PcbCopperLayerId {

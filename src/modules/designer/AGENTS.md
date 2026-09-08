@@ -81,22 +81,80 @@ And a command field with no parser in `routes.ts` is silently dropped over HTTP.
 
 ## DRC
 
-- **Only `clearanceMm` from `PcbNetClass` is enforced.** `traceWidthMm`, `viaDiameterMm`,
-  `viaDrillMm`, `defaultViaProtection` and `color` are **stored but unused by DRC** — they feed
-  route-tool defaults. A net class with a wider `traceWidthMm` produces **no** per-net min-width
-  violation. Do not assume per-net width or via geometry is validated anywhere.
-- **Net class can only tighten.** Clearance resolves as `max(designRule, netA, netB)`. There is no
-  mechanism for a net class to relax a board rule.
-- **Dispatch is a hardcoded array, not a registry.** The engine builds one `DrcContext` and spreads
-  seven pure `(ctx: DrcContext) => DrcViolationDraft[]` checks into a flat list. Adding a check is
-  trivial — a new file under `drc/checks/` plus one array entry. The real cost is always the
-  **rules-input schema**: a new rule has no home on `PcbDesignRules` / `PcbNetClass` until you add
-  one, wire the corresponding command field, and add a dialog section.
-- **`DrcRuleClass` has exactly five values:** `clearance | constraint | connectivity |
-  manufacturability | structural`. There is **no `copper-pour` class** — pour islands report under
-  `structural`. Do not add a sixth without checking every consumer that switches on the union.
-- Violation ids are order-independent by construction (a hash over code plus **sorted** anchor keys),
-  which is what makes waivers survive re-runs.
+- **Defect register and program.** `docs/drc/OPEN_FINDINGS.md` is the live defect register (one
+  `test.todo` per open finding in `src/core/backend/tests/drc-audit-b*.test.ts`);
+  `docs/pcb-hardening/PROGRAM.md` is the hardening-program tracker and
+  `docs/pcb-hardening/00-ground-truth.md` the verified current-master inventory. Read the register
+  entry for a check before touching it — several traps look deliberate (a comment, a passing test).
+- **Net-class enforcement is partial.** `clearanceMm` resolves through the clearance path for
+  every net. `traceWidthMm`, `viaDiameterMm` and `viaDrillMm` are enforced by `checks/netclass.ts`
+  (`NETCLASS_*`, severity warning) **only for nets deliberately classed — an explicit
+  `perNetClassAssignments` entry or a GND/POWER name match**; nets that fall to the default class
+  (`defaultNetClassId` = the first class in the stored array — the order is semantic) get no
+  width/via check. `defaultViaProtection` and `color` feed route-tool defaults only. The
+  `netClassId` stored on a trace or via is a creation-time hint; no legality consumer reads it.
+- **One rule resolver** (`src/shared/drc/rule-resolver.ts` `createRuleResolver`, contract
+  `docs/pcb-hardening/05-rule-semantics-contract.md`): explicit scoped `PcbDrcRule`s
+  (priority-descending first match, **may relax** above the floor; `net`/`netClass` match on
+  either item, `area` needs both evaluation points in the same polygon, pour pair kinds only
+  through an explicit `pairKind` scope) → implicit `max(designRule[pairKind], netA, netB)` → the
+  `minimums.clearanceMm` floor; scalar kinds (`trackWidth`, `viaDiameter`, `viaDrill`,
+  `annularRing`, `holeToHole`, `edgeClearance`) resolve the same way with the board minimum as
+  their floor and ARE enforced. Batch DRC, the live route gate, route obstacles, the pour
+  composition and the via insert gate all consume it — there is no other clearance formula. Area
+  scopes are evaluated on regions of constant membership (segments split at the area rings), never
+  at a representative point. Severity: `override → matched rule → DEFAULT_SEVERITY_BY_CODE`;
+  drafts carry no severity literal. Invalid / partially ineffective rules are reported
+  (`DRC_RULE_INVALID` non-overridable, `DRC_RULE_INEFFECTIVE`). Clearance comparisons use
+  `clearanceViolated` (0.5 nm float grace).
+- **Dispatch is a hardcoded array, not a registry.** `runDrc` is one monolithic function: it builds
+  one `DrcContext`, runs thirteen pure `(ctx: DrcContext) => DrcViolationDraft[]` checks into a flat
+  list, then applies ignores, waivers, severity and ids in a single pass. Adding a check is a new
+  file under `drc/checks/` plus one array entry. The real cost is always the **rules-input
+  schema**: a new rule has no home on `PcbDesignRules` / `PcbNetClass` until you add one, wire the
+  corresponding command field, and add a dialog section. `DrcContext` carries traces, pads, vias
+  and holes only — pours and zones are read from the projection inside the checks that need them.
+  As of S3a it also carries `copperZones` (the effective `collectCopperZones` list) and `keepouts`;
+  since S4 also `copperAreaWarnings` (the derivation's own warnings — `ZONE_INVALID` /
+  `ZONE_EMPTY_FILL` are a total mapping of them, never a re-derivation) and a lazily cached
+  `placementExtent(id)` (courtyard hull, else the transformed pads+graphics bounds, else the pad
+  bbox — `pcb/placement-extent.ts`, a declared superset). Checks must read those, never
+  `projection.zones` / `projection.keepouts`. `DrcOptions.lookupRawFootprint` (built by
+  `pcb/raw-footprint-lookup.ts` in the `/drc/run` route and the SDK) recovers KiCad-imported
+  courtyards; it is not persisted with the options. Since S5 the context also owns
+  `pourResults()` — ONE `buildCopperFillIslands` per effective zone (net-less included), fed the
+  context's own copper records; the connectivity graph's pour nodes and `checks/copper-pour.ts`
+  (`ISOLATED_COPPER_ISLAND` = the island's S1 component has no pad, `ZONE_FILL_FAILED` for a
+  failed fill) both read it, so the DRC never runs the fill twice and never disagrees with itself
+  (`docs/pcb-hardening/04-copper-pour-contract.md` §9–§10).
+- **`DrcRuleClass` has eight values:** `clearance | constraint | connectivity | manufacturability |
+  structural | dfm | electrical | signal-integrity`. There is **no `copper-pour` class** — pour
+  islands report under `structural`. Do not add a value without checking every consumer that
+  switches on the union.
+- Violation ids (v2) hash the code, the **sorted** anchor keys, the layer, and a 0.1 mm location
+  bucket for pairwise codes — order-independent by construction, which is what makes waivers
+  survive re-runs. `measuredMm` is never hashed.
+- **Connectivity has one model: `src/shared/pcb-connectivity/`.** Records (one geometry
+  resolution per pad / free pad / trace / via) → fail-safe items → copper-overlap touch predicates
+  → union-find graph with end-cap and via-layer contact records. Contract:
+  `docs/pcb-hardening/01-connectivity-contract.md`. `pcb/ratsnest.ts` is an MST over kernel
+  components (`pcb/board-connectivity.ts` adds one node per filled pour island, members from the
+  fill kernel); `checks/dangling.ts` is a lookup into the contact records; `checks/connectivity.ts`
+  reads the ratsnest. There is no net-name rule anywhere — GND shows airwires until a GND pour
+  exists. Two layer policies share the one geometry: connectivity is fail-safe (a layer-invalid
+  pad or via occupies no layer), DRC short detection clamps such items to every layer; the DRC-side
+  graph (`ctx.connectivity()`) is always built from the fail-safe items. The remaining private
+  answers to "is this copper connected" — copper-fill island anchoring (S5), routed-length sums in
+  `checks/length.ts` / `signal-integrity.ts` (S14), routing-obstacle and live-DRC pad layers (S8)
+  — are scheduled, not sanctioned. Never add another.
+- **Board geometry has one region: `src/shared/pcb-geometry/board-region.ts`.** `buildBoardRegion`
+  flattens the outline and cutouts once per `runDrc` into a closed set (`ctx.boardRegion`); the
+  legality build biases every arc toward the board side so the polygon is a subset of the true
+  board (≤ 0.01 mm). Off-board, hole-to-edge and outline validity (cutout-in-outline, cutout
+  separation) and edge clearance ask that region; only self-intersection asks its unbiased rings. Contract: `docs/pcb-hardening/02-geometry-contract.md`. No
+  check samples points or tests vertices only — use `stadiumInsideRegion` / `discInsideRegion` /
+  `polygonInsideRegion`. Touching or tangent cutouts and a cutout touching the edge are invalid.
+  Zone and keepout rings share the same validity kernels as the outline (`zoneRingValidity`, S3a).
 - **Apply-time re-validation is a non-blocking backstop, not a gate.** Both cloud apply handlers run
   the same `runDrc` and report the result, but they do **not** reject a bad envelope and do **not**
   persist the report (unlike the interactive DRC run). Partial apply therefore carries no overlap
@@ -120,12 +178,42 @@ an import-whitelist change or a library re-query.
 
 ## PCB CAPABILITY BOUNDARIES
 
-- **4-layer is import-only.** `PcbLayerCount` is `2 | 4`, and the **sole writer of `layerCount = 4`
-  is the KiCad project importer** — no UI and no command sets it. The board panel renders a static
-  `2-layer` pill that is not bound to `board.layerCount`. Any 4-layer testing needs a KiCad-imported
-  fixture; a `layerCount` control is a prerequisite for native 4-layer work.
-- **Bounded `PcbZone`s are KiCad-import-only.** There is no `pcb_add_zone` command and no zone tool
-  mode. Only whole-layer board fill is native.
+- **Multilayer is import-only.** `PcbLayerCount` is `2 | 4 | … | 32` and the engine, stackup
+  validation and the 2/4-layer Gerber path follow it, but the **sole writer of `layerCount > 2` is
+  the KiCad project importer** — no UI and no command sets it. The board panel renders a static
+  `2-layer` pill that is not bound to `board.layerCount`. Multilayer testing uses an inline
+  `layerCount` on a fixture projection; a `layerCount` control is a prerequisite for native
+  multilayer work.
+- **Zones and keepouts are authored data** (persisted kinds `zone` / `keepout`, read-time v1
+  upgrade in `src/shared/pcb-areas/zone-parse.ts`; commands `pcb_add/update/delete_zone` and
+  `pcb_add/update/delete_keepout` with `routes.ts` parsers and undo arms; zone / keepout tool
+  modes, canvas selection, vertex editing and an inspector — S3b). **The per-layer copper fill is
+  a persisted board-zone row** (`region.kind === "board"`, id `board:<layer>`), not view state:
+  `PcbViewState` has no `copperFill*` fields any more, a legacy row migrates lazily through
+  `migrateLegacyBoardFill` (`pcb-store.ts`) before any settings write, and the ONE effective list
+  is `collectCopperZones` (`src/shared/pcb-areas/copper-zones.ts`) — never assemble pours from
+  `projection.zones` yourself. Zone / keepout rows have a uuid row id with the entity id in the
+  payload (`designer_pcb_entities.id` is a global primary key); resolve rows by payload id. Ring
+  validity is the shared `zoneRingValidity`, in the executor and in the tools — never a tool-local
+  rule. **Legality (S4):** `checks/keepouts.ts` emits `KEEPOUT_VIOLATION` through
+  `keepoutAffects` for traces, vias, pads and placements; `checks/zones.ts` emits `ZONE_OVERLAP`
+  (same layer, equal priority, different nets, positive-area overlap), `ZONE_INVALID`
+  (non-overridable, non-waivable — a dropped keepout is fail-open) and `ZONE_EMPTY_FILL`;
+  `checks/copper-pour.ts` adds `ZONE_EMPTY_FILL` for an effective zone with no island.
+  `pourParamsForZone(zone, rules, keepouts, zones, nets)` (S5: the effective zone list drives
+  the §3.3 precedence exclusions, `nets = zonePourNets(board, netNames)` the per-obstacle
+  net-class clearance), `boardPourSpecs(zones, rules, keepouts, …)` and
+  `collectCopperZones({ zones, layerCount, knownNetIds })` have NO defaults — a fill consumer that
+  omits the keepouts, the zone list, the net tier or the known net ids does not compile, which is
+  what keeps Gerber, snapshot, DRC, cleanup, ratsnest, canvas and 3D on the same copper. The
+  kernel itself is specified by `docs/pcb-hardening/04-copper-pour-contract.md` (S5): S1 records
+  as the one copper geometry, the S2 region as the extent, `buildCopperFillIslands` →
+  `{ status: "ok" | "failed", islands }` with islands in the total order. Routing: `tracks` keepouts are AABB
+  superset obstacles (`route-obstacles.ts`), `live-drc.ts` runs the exact predicate per pending
+  segment (`trace-keepout`), and `placeSmartVia` refuses a via inside a `vias` keepout. No
+  server-side route gate (S8). `placementSideLayer` (`shared/rendering/pad-copper-layers.ts`) is
+  the one side resolution. Contract: `docs/pcb-hardening/03-zone-keepout-contract.md` (§12
+  authoring, §13 legality).
 
 ## AUTO-LAYOUT INTEGRATION
 
@@ -193,15 +281,19 @@ cross-repo parity checks instead of standing up a runtime.
   module.
 - The PCB tab renders in dark mode regardless of app theme (single token set).
 - Trace modes: `manhattan-90` | `manhattan-45`. Copper layers on a 2-layer board: `F.Cu` | `B.Cu`.
-- Every via is currently a through via, `F.Cu → B.Cu`. There are no blind, buried or micro vias.
+- Via types are `through | blind | buried | micro` (`PcbViaType`) with span topology enforced by
+  `VIA_LAYER_SPAN`; non-through spans are accepted only behind the `pcb.advancedVias` dev flag, so
+  release builds create through vias only.
 
 ## ANTI-PATTERNS
 
 - Do **NOT** persist anything keyed on `net.id`. Use `` `${placement.id}|${pad.number}` `` or the
   upper-cased net name.
-- Do **NOT** assume a `PcbNetClass` width or via field is enforced — only `clearanceMm` is.
+- Do **NOT** assume a `PcbNetClass` width or via field is enforced for a net that fell to the
+  array-order default class — `NETCLASS_*` checks cover explicitly assigned or name-matched nets
+  only; `clearanceMm` covers all.
 - Do **NOT** treat apply-time DRC as a gate. It reports; it does not reject.
-- Do **NOT** add a `DrcRuleClass` value without auditing every consumer of the five-value union.
+- Do **NOT** add a `DrcRuleClass` value without auditing every consumer of the eight-value union.
 - Do **NOT** add a command field without adding its parser in `routes.ts` — unparsed fields are
   silently dropped over HTTP, with no error.
 - Do **NOT** add a designer command without extending the `DesignerCommand` union in

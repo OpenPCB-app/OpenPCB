@@ -102,6 +102,7 @@ function fixtureProjection(): DesignerPcbProjection {
     overlayTexts: [],
     overlayShapes: [],
     zones: [],
+    keepouts: [],
     ratsnest: [],
     netNames: {},
     warnings: [],

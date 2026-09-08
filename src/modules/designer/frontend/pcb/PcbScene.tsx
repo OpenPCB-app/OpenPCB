@@ -20,6 +20,7 @@ import type {
   PcbPointMm,
   PcbTrace,
   PcbVia,
+  RatsnestEndpoint,
   RatsnestSegment,
 } from "../../../../sdks";
 import { copperLayersForCount } from "../../../../sdks";
@@ -46,6 +47,20 @@ import { isEditableOutline, outlineVertices } from "./pcb-outline-edit";
 import { TraceLayer } from "./layers/TraceLayer";
 import { TracePreviewLayer } from "./layers/TracePreviewLayer";
 import { CopperFillLayer } from "./layers/CopperFillLayer";
+import { KeepoutLayer } from "./layers/KeepoutLayer";
+import { ZoneOutlineLayer } from "./layers/ZoneOutlineLayer";
+// Import the two zone/keepout modules directly, not through the
+// `shared/pcb-areas` barrel: the barrel also re-exports the keepout predicates,
+// which pull the geometry kernel in for no reason here.
+import {
+  collectCopperZones,
+  type EffectiveKeepout,
+} from "../../../../shared/pcb-areas/copper-zones";
+import {
+  pourParamsForZone,
+  zonePourNets,
+} from "../../../../shared/pcb-areas/pour-params";
+import { placementSideLayer } from "../../../../shared/rendering/pad-copper-layers";
 import { viaCrossesLayer } from "./layers/copper-fill-trace-geometry";
 import { ViaLayer } from "./layers/ViaLayer";
 import { DrillHighlightLayer, DrillHoleCutoutLayer } from "./layers/DrillLayer";
@@ -65,7 +80,6 @@ import {
   outlineToShape,
 } from "./pcb-outline-three";
 import { collectDrills } from "./pcb-drills";
-import { buildPadNetIds } from "./pcb-pad-nets";
 import { SolderMaskLayer } from "./layers/SolderMaskLayer";
 import { SolderPasteLayer } from "./layers/SolderPasteLayer";
 import { NetTraceLabels } from "./layers/NetTraceLabels";
@@ -99,7 +113,6 @@ import {
 } from "./pcb-visual-state";
 
 const EMPTY_TRACES: PcbTrace[] = [];
-const EMPTY_VIAS: PcbVia[] = [];
 
 export interface PcbCameraControls {
   zoomIn(): void;
@@ -393,10 +406,13 @@ function SketchPreviewLayer({
   vertices,
   preview,
   infer = null,
+  color,
 }: {
   vertices: readonly PcbPointMm[];
   preview: PcbPointMm | null;
   infer?: InferResult | null;
+  /** Committed-edge colour — the sketch target's own colour, not always Edge.Cuts. */
+  color?: string;
 }): ReactElement | null {
   const { theme } = useCanvasTheme();
   const committed = useMemo(() => {
@@ -452,7 +468,7 @@ function SketchPreviewLayer({
         renderOrder={RENDER_ORDER.BOARD_OUTLINE + 1}
       >
         <lineBasicMaterial
-          color={PCB_LAYER_COLORS["Edge.Cuts"]}
+          color={color ?? PCB_LAYER_COLORS["Edge.Cuts"]}
           depthTest={false}
           depthWrite={false}
           transparent
@@ -678,10 +694,12 @@ function RatsnestLayer({
   }, [projection.placements]);
 
   const adjustEndpoint = useCallback(
-    (placementId: string, point: PcbPointMm): PcbPointMm => {
-      const override = dragOverride?.get(placementId);
+    (endpoint: RatsnestEndpoint, point: PcbPointMm): PcbPointMm => {
+      // Free pads are board-anchored, never carried by a dragged placement.
+      if (endpoint.kind !== "pad") return point;
+      const override = dragOverride?.get(endpoint.placementId);
       if (!override) return point;
-      const original = placementPositions.get(placementId);
+      const original = placementPositions.get(endpoint.placementId);
       if (!original) return point;
       return {
         x: point.x + override.x - original.x,
@@ -709,16 +727,18 @@ function RatsnestLayer({
         selectedPlacementIds !== undefined && selectedPlacementIds.size > 0;
       const isLocal =
         placementsScoped &&
-        (selectedPlacementIds.has(seg.fromPlacementId) ||
-          selectedPlacementIds.has(seg.toPlacementId));
+        ((seg.from.kind === "pad" &&
+          selectedPlacementIds.has(seg.from.placementId)) ||
+          (seg.to.kind === "pad" &&
+            selectedPlacementIds.has(seg.to.placementId)));
       // When something is highlighted/scoped, "bright" wins; otherwise everything is bright.
       const scopingActive =
         (highlightedNetId !== null && highlightedNetId !== undefined) ||
         placementsScoped;
       const target =
         !scopingActive || isHighlighted || isLocal ? bucket.bright : bucket.dim;
-      const fromMm = adjustEndpoint(seg.fromPlacementId, seg.fromMm);
-      const toMm = adjustEndpoint(seg.toPlacementId, seg.toMm);
+      const fromMm = adjustEndpoint(seg.from, seg.fromMm);
+      const toMm = adjustEndpoint(seg.to, seg.toMm);
       target.push(fromMm.x, fromMm.y, 0, toMm.x, toMm.y, 0);
     }
     const result: RatsnestGroup[] = [];
@@ -968,7 +988,7 @@ function PlacementRender({
           hidePadNumbers={!isPcbLayerVisible(visibleLayers, "Metadata")}
           padNumberRenderOrder={RENDER_ORDER.METADATA}
           padRenderOrder={effectiveRenderOrder(
-            placement.layer === "B.Cu" ? "B.Cu" : "F.Cu",
+            placementSideLayer(placement),
             viewSide,
             "object",
           )}
@@ -1280,6 +1300,75 @@ function SelectionHandle({ x, y }: { x: number; y: number }): ReactElement {
   );
 }
 
+/**
+ * Selection ring for a polygon zone / keepout: the closed ring in the
+ * selection colour with a grip at every corner. Fed the live vertex-drag
+ * geometry while a grip is being dragged so the outline tracks the cursor.
+ */
+function AreaSelectionOutline({
+  pointsMm,
+}: {
+  pointsMm: readonly PcbPointMm[];
+}): ReactElement | null {
+  const geometry = useMemo(() => {
+    if (pointsMm.length < 2) return null;
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i < pointsMm.length; i += 1) {
+      const a = pointsMm[i]!;
+      const b = pointsMm[(i + 1) % pointsMm.length]!;
+      pts.push(new THREE.Vector3(a.x, a.y, 0));
+      pts.push(new THREE.Vector3(b.x, b.y, 0));
+    }
+    return new THREE.BufferGeometry().setFromPoints(pts);
+  }, [pointsMm]);
+  useEffect(() => () => geometry?.dispose(), [geometry]);
+  if (!geometry) return null;
+  return (
+    <group>
+      <lineSegments geometry={geometry} renderOrder={RENDER_ORDER.SELECTION}>
+        <SelectionOutlineMaterial />
+      </lineSegments>
+      {pointsMm.map((p, i) => (
+        <SelectionHandle key={i} x={p.x} y={p.y} />
+      ))}
+    </group>
+  );
+}
+
+/**
+ * Draggable vertex grips on the single selected polygon zone / keepout —
+ * the `OutlineVertexHandles` affordance, applied to an area ring. Purely
+ * visual; the grab / drag / commit live in `use-area-interactions.ts`.
+ */
+function AreaVertexHandles({
+  pointsMm,
+}: {
+  pointsMm: readonly PcbPointMm[];
+}): ReactElement | null {
+  const { theme } = useCanvasTheme();
+  if (pointsMm.length === 0) return null;
+  const accent = theme.pcbCanvas.selectionOutline;
+  return (
+    <group>
+      {pointsMm.map((v, i) => (
+        <mesh
+          key={`av${i}`}
+          position={[v.x, v.y, 0]}
+          renderOrder={RENDER_ORDER.SELECTION + 1}
+        >
+          <planeGeometry args={[0.8, 0.8]} />
+          <meshBasicMaterial
+            color={accent}
+            depthTest={false}
+            depthWrite={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 /** Amber ring over a collected bundle pad — in-scene collection feedback. */
 function BundlePadMarker({ x, y }: { x: number; y: number }): ReactElement {
   return (
@@ -1386,6 +1475,26 @@ interface PcbSceneProps {
     vertices: readonly PcbPointMm[];
     preview: PcbPointMm | null;
     infer?: InferResult | null;
+    /** Edge.Cuts for a board shape, the layer colour for a zone, violet for a keepout. */
+    color?: string;
+  } | null;
+  /**
+   * Live vertex-drag geometry for a polygon zone / keepout: the scene draws
+   * this ring instead of the persisted one until the drag commits.
+   */
+  areaDragOverride?: {
+    kind: "zone" | "keepout";
+    id: string;
+    /** 0 = outer ring / the keepout ring, i+1 = cutout i (copper-pour §11). */
+    ringIndex: number;
+    current: readonly PcbPointMm[];
+  } | null;
+  /**
+   * Vertex grips for the single selected polygon zone / keepout — every ring,
+   * with the live drag already applied by `useAreaInteractions`.
+   */
+  areaVertexHandles?: {
+    pointsMm: readonly PcbPointMm[];
   } | null;
   /** Per-placement live drag preview positions (group drag). */
   dragOverride?: ReadonlyMap<string, PcbPointMm> | null;
@@ -1492,7 +1601,6 @@ interface PcbSceneProps {
   routeFocusActive?: boolean;
   routeFocusLayer?: PcbCopperLayerId;
   focusedLayer?: PcbCopperLayerId | null;
-  copperFillLayers?: ReadonlyArray<PcbCopperLayerId>;
   /**
    * Rubber-band marquee overlay rendered inside the mirror group so selection
    * rect aligns with board content in both top and bottom view.
@@ -1527,15 +1635,24 @@ interface PcbSceneProps {
   onViewportChange?: (zoom: number, posX: number, posY: number) => void;
   /** Called once the R3F camera is ready; pass `null` on unmount. */
   onCameraReady?: (controls: PcbCameraControls | null) => void;
+  /**
+   * Effective keepouts of this projection, derived ONCE in `usePcbWorkspace`
+   * (`collectKeepouts`) so the scene, the route obstacles, the live DRC and
+   * the smart-via guard can never disagree (zone/keepout contract §4).
+   */
+  effectiveKeepouts: readonly EffectiveKeepout[];
 }
 
 export function PcbScene({
   projection,
+  effectiveKeepouts,
   selection,
   outlineOverride = null,
   boardHandlesVisible = false,
   vertexHandlesVisible = false,
   sketchPreview = null,
+  areaDragOverride = null,
+  areaVertexHandles = null,
   dragOverride,
   freePrimitiveDragOverrides,
   highlightedNetId,
@@ -1557,7 +1674,6 @@ export function PcbScene({
   routeFocusActive = false,
   routeFocusLayer,
   focusedLayer = null,
-  copperFillLayers = [],
   marqueeOverlay = null,
   measurement = null,
   snapTarget = null,
@@ -1574,11 +1690,14 @@ export function PcbScene({
     invalidate();
   }, [
     projection,
+    effectiveKeepouts,
     selection,
     outlineOverride,
     boardHandlesVisible,
     vertexHandlesVisible,
     sketchPreview,
+    areaDragOverride,
+    areaVertexHandles,
     dragOverride,
     freePrimitiveDragOverrides,
     highlightedNetId,
@@ -1591,7 +1710,6 @@ export function PcbScene({
     previewFromMarkers,
     routeFocusActive,
     focusedLayer,
-    copperFillLayers,
     marqueeOverlay,
     measurement,
     alignmentGuides,
@@ -1723,28 +1841,43 @@ export function PcbScene({
       routePreview?.layer,
     ],
   );
-  // Pad → net map driving the copper-pour same-net merge and route-focus
-  // dimming. Prefer the authoritative schematic↔PCB correlation (`padNets`,
-  // computed once at projection time): it covers every correlated pad
-  // regardless of routing state, so a GND pad never loses its net and gets
-  // mis-bucketed as different-net (spurious moat). Fall back to the
-  // ratsnest/trace-endpoint reconstruction only when `padNets` is absent
-  // (pre-DRC saves, or boards with no schematic).
-  const padNetIds = useMemo<ReadonlyMap<string, string>>(() => {
-    if (projection.padNets) {
-      return new Map(Object.entries(projection.padNets));
-    }
-    return buildPadNetIds(
-      projection.ratsnest,
-      projection.placements,
-      projection.traces,
+  // Selected polygon zones / keepouts. Board zones have no ring to outline and
+  // a hidden layer must not leave an orphan outline behind — the same
+  // visibility pair `KeepoutLayer` and `ZoneOutlineLayer` apply.
+  const selectedZones = useMemo(() => {
+    const ids = selection?.zoneIds;
+    if (!ids || ids.size === 0) return [];
+    return projection.zones.filter(
+      (z) =>
+        ids.has(z.id) &&
+        z.region.kind === "polygon" &&
+        isCopperLayerVisible(visibleLayers, z.layer) &&
+        shouldRenderCopperLayer(visualState, z.layer),
     );
-  }, [
-    projection.padNets,
-    projection.ratsnest,
-    projection.placements,
-    projection.traces,
-  ]);
+  }, [projection.zones, selection?.zoneIds, visibleLayers, visualState]);
+
+  const selectedKeepouts = useMemo(() => {
+    const ids = selection?.keepoutIds;
+    if (!ids || ids.size === 0) return [];
+    return projection.keepouts.filter(
+      (k) =>
+        ids.has(k.id) &&
+        k.layers.some(
+          (l) =>
+            isCopperLayerVisible(visibleLayers, l) &&
+            shouldRenderCopperLayer(visualState, l),
+        ),
+    );
+  }, [projection.keepouts, selection?.keepoutIds, visibleLayers, visualState]);
+
+  // Pad → net map driving the copper-pour same-net merge and route-focus
+  // dimming. The authoritative schematic↔PCB correlation (`padNets`) is written
+  // on every projection load, so it covers every correlated pad regardless of
+  // routing state.
+  const padNetIds = useMemo<ReadonlyMap<string, string>>(
+    () => new Map(Object.entries(projection.padNets ?? {})),
+    [projection.padNets],
+  );
   // Per-layer opacity overrides from the panel's slider. Multiplied against
   // the layer's display-mode opacity so dim + per-layer attenuation compose.
   const perLayerOpacity = usePcbViewStore((s) => s.viewState.perLayerOpacity);
@@ -1755,16 +1888,52 @@ export function PcbScene({
     },
     [perLayerOpacity],
   );
-  const copperFillSet = useMemo(
-    () => new Set<PcbCopperLayerId>(copperFillLayers),
-    [copperFillLayers],
+  // The ONE derivation of which copper areas exist (zone/keepout contract
+  // §3.1): board planes and explicit zones are the same kind of persisted row,
+  // so the canvas can no longer disagree with Gerber, DRC, the snapshot or the
+  // 3D preview.
+  // Keepouts that forbid copper pour carve every fill on their layers
+  // (contract §4 `copperPour`), exactly as the backend's Gerber/DRC pours do.
+  // The list itself arrives as a prop — `usePcbWorkspace` owns the derivation.
+  const effectiveZones = useMemo(
+    () =>
+      collectCopperZones({
+        zones: projection.zones,
+        layerCount: projection.board.layerCount,
+        knownNetIds: new Set(Object.keys(projection.netNames)),
+      }).zones,
+    [projection.zones, projection.netNames, projection.board.layerCount],
   );
-  const copperFillPourNetIds = usePcbViewStore(
-    (s) => s.viewState.copperFillPourNetIds,
+  // Painting order is the REVERSE of fill order: every pour on a layer shares
+  // one renderOrder, so the last one mounted paints on top. Reversing puts the
+  // board plane down first and the highest-priority explicit zone last, which
+  // is the precedence §5 defines (S5 gives them real mutual clearance).
+  const pourRenderList = useMemo(
+    () => [...effectiveZones].reverse(),
+    [effectiveZones],
   );
-  const copperFillPadConnection = usePcbViewStore(
-    (s) => s.viewState.copperFillPadConnection ?? "solid",
-  );
+  // One `ZonePourParams` per zone, memoised here: `pourParamsForZone` returns
+  // a fresh `clearanceForItem` closure and fresh exclusion arrays on every
+  // call, and <CopperFillLayer>'s useMemo keys on them — spread inline in the
+  // JSX, every scene render (hover, marquee, drag) re-ran the Clipper pour.
+  const pourParamsByZone = useMemo(() => {
+    const nets = zonePourNets(projection.board, projection.netNames);
+    return new Map(
+      effectiveZones.map(
+        (zone) =>
+          [
+            zone.id,
+            pourParamsForZone(
+              zone,
+              projection.board.designRules,
+              effectiveKeepouts,
+              effectiveZones,
+              nets,
+            ),
+          ] as const,
+      ),
+    );
+  }, [effectiveZones, effectiveKeepouts, projection.board, projection.netNames]);
   // Pre-bucket traces and vias by copper layer once per projection so each
   // <CopperFillLayer> receives an identity-stable array slice. Without this
   // the inner useMemo would invalidate on every render (fresh filter result
@@ -1776,32 +1945,25 @@ export function PcbScene({
     }
     return map;
   }, [projection.traces]);
-  // Vias are bucketed by every layer their barrel crosses. v1 vias are always
-  // through (F.Cu↔B.Cu) so every via lands in all four buckets; the helper
-  // keeps the door open for v2 blind/buried vias without changing this site.
-  const viasByLayer = useMemo(() => {
-    const map: Partial<Record<PcbCopperLayerId, PcbVia[]>> = {};
-    const layers = copperLayersForCount(projection.board.layerCount);
-    for (const via of projection.vias) {
-      for (const layer of layers) {
-        if (viaCrossesLayer(via, layer)) (map[layer] ??= []).push(via);
-      }
-    }
-    return map;
-  }, [projection.vias, projection.board.layerCount]);
   // Vias whose net matches a rendered same-net pour they cross. Such a via's
   // copper ring would otherwise be invisible (same color as the pour it merges
   // into), so ViaLayer draws a presentation-only board-color separator ring
   // around it (Flux look). The pour fill itself keeps the electrical merge.
   const samePourViaIds = useMemo(() => {
     const ids = new Set<string>();
-    if (copperFillSet.size === 0) return ids;
-    const pourLayers = copperLayersForCount(projection.board.layerCount);
+    // Board planes only: an explicit zone is a local patch, so a via crossing
+    // one is not the "invisible ring in a plane" case the separator solves.
+    const boardPlaneNetByLayer = new Map<PcbCopperLayerId, string | null>();
+    for (const zone of effectiveZones) {
+      if (zone.sourceKind === "board") {
+        boardPlaneNetByLayer.set(zone.layer, zone.netId);
+      }
+    }
+    if (boardPlaneNetByLayer.size === 0) return ids;
     for (const via of projection.vias) {
       if (via.netId === null) continue;
-      for (const layer of pourLayers) {
-        if (!copperFillSet.has(layer)) continue;
-        if ((copperFillPourNetIds[layer] ?? null) !== via.netId) continue;
+      for (const [layer, netId] of boardPlaneNetByLayer) {
+        if (netId !== via.netId) continue;
         if (viaCrossesLayer(via, layer)) {
           ids.add(via.id);
           break;
@@ -1809,7 +1971,7 @@ export function PcbScene({
       }
     }
     return ids;
-  }, [projection.vias, copperFillSet, copperFillPourNetIds]);
+  }, [projection.vias, effectiveZones]);
   const effectiveHighlightedNetId = visualState.routeFocusActive
     ? visualState.activeNetId
     : visualState.activeLayer === null
@@ -1969,6 +2131,7 @@ export function PcbScene({
             vertices={sketchPreview.vertices}
             preview={sketchPreview.preview}
             infer={sketchPreview.infer ?? null}
+            color={sketchPreview.color}
           />
         ) : null}
         {vertexHandlesVisible ? (
@@ -1976,56 +2139,34 @@ export function PcbScene({
             outline={outlineOverride ?? projection.board.outline}
           />
         ) : null}
-        {(["B.Cu", "In2.Cu", "In1.Cu", "F.Cu"] as const).map((layer) =>
-          copperFillSet.has(layer) &&
-          isCopperLayerVisible(visibleLayers, layer) &&
-          shouldRenderCopperLayer(visualState, layer) ? (
+        {/* Every copper area — the per-layer board planes AND the explicit
+            (imported / user-drawn) zones — through one loop over the effective
+            list, each with its own overrides composed by `pourParamsForZone`. */}
+        {pourRenderList.map((zone) =>
+          isCopperLayerVisible(visibleLayers, zone.layer) &&
+          shouldRenderCopperLayer(visualState, zone.layer) ? (
             <CopperFillLayer
-              key={`fill:${layer}`}
-              layer={layer}
+              key={`pour:${zone.id}`}
               outline={projection.board.outline}
+              layerCount={projection.board.layerCount}
               // Feed the pour COMMITTED geometry, not the per-frame drag
               // overrides: the Clipper pour is expensive and would otherwise
               // rebuild every frame (×N copper layers) while dragging a part /
               // free primitive. The moat refreshes once on commit — standard
               // EDA "pour is stale during edit" behavior.
               placements={projection.placements}
-              traces={tracesByLayer[layer] ?? EMPTY_TRACES}
-              vias={viasByLayer[layer] ?? EMPTY_VIAS}
-              pourNetId={copperFillPourNetIds[layer] ?? null}
-              padNetIds={padNetIds}
-              designRules={projection.board.designRules}
-              cutouts={projection.board.cutouts}
-              freeHoles={projection.freeHoles}
-              freePads={projection.freePads}
-              padConnection={copperFillPadConnection}
-              opacity={
-                layerOpacity(visualState, layer) * layerOpacityFor(layer)
-              }
-              viewSide={viewSide}
-            />
-          ) : null,
-        )}
-        {/* Explicit copper zones (imported / user-drawn) — each clipped to its
-            polygon, same kernel + same-net merge as the board-wide pour. */}
-        {projection.zones.map((zone) =>
-          isCopperLayerVisible(visibleLayers, zone.layer) &&
-          shouldRenderCopperLayer(visualState, zone.layer) ? (
-            <CopperFillLayer
-              key={`zone:${zone.id}`}
-              layer={zone.layer}
-              outline={projection.board.outline}
-              clipPolygonMm={zone.polygonPointsMm}
-              placements={projection.placements}
               traces={tracesByLayer[zone.layer] ?? EMPTY_TRACES}
-              vias={viasByLayer[zone.layer] ?? EMPTY_VIAS}
-              pourNetId={zone.netId ?? null}
+              // EVERY via, unfiltered: the kernel resolves each via's span on the
+              // real stackup (a blind via, a layer-invalid span); a canvas-side
+              // bucket by global layer index poured B.Cu across a blind F→In1
+              // via while every backend fill cleared it (Astra S5 run 2 #4).
+              vias={projection.vias}
               padNetIds={padNetIds}
               designRules={projection.board.designRules}
               cutouts={projection.board.cutouts}
               freeHoles={projection.freeHoles}
               freePads={projection.freePads}
-              padConnection={zone.connection ?? copperFillPadConnection}
+              {...pourParamsByZone.get(zone.id)!}
               opacity={
                 layerOpacity(visualState, zone.layer) *
                 layerOpacityFor(zone.layer)
@@ -2034,6 +2175,24 @@ export function PcbScene({
             />
           ) : null,
         )}
+        {/* Polygon-zone rings: solid under an enabled zone's fill, a dashed
+            ghost when disabled (§3.5). Board zones have no ring. */}
+        <ZoneOutlineLayer
+          zones={projection.zones}
+          visibleLayers={visibleLayers}
+          visualState={visualState}
+          layerOpacityFor={layerOpacityFor}
+          viewSide={viewSide}
+        />
+        {/* Keepouts (rule areas) — hatched outlines, never copper, never
+            pickable. Disabled ones stay visible but dimmed (§3.5). */}
+        <KeepoutLayer
+          keepouts={projection.keepouts}
+          visibleLayers={visibleLayers}
+          visualState={visualState}
+          layerOpacityFor={layerOpacityFor}
+          viewSide={viewSide}
+        />
         {renderPlacements.map((placement) => (
           <PlacementRender
             key={placement.id}
@@ -2250,6 +2409,34 @@ export function PcbScene({
             )}
           />
         ))}
+        {selectedZones.map((zone) => (
+          <AreaSelectionOutline
+            key={`zone-sel:${zone.id}`}
+            pointsMm={
+              areaDragOverride?.kind === "zone" &&
+              areaDragOverride.id === zone.id &&
+              areaDragOverride.ringIndex === 0
+                ? areaDragOverride.current
+                : zone.region.kind === "polygon"
+                  ? zone.region.pointsMm
+                  : []
+            }
+          />
+        ))}
+        {selectedKeepouts.map((keepout) => (
+          <AreaSelectionOutline
+            key={`keepout-sel:${keepout.id}`}
+            pointsMm={
+              areaDragOverride?.kind === "keepout" &&
+              areaDragOverride.id === keepout.id
+                ? areaDragOverride.current
+                : keepout.pointsMm
+            }
+          />
+        ))}
+        {areaVertexHandles ? (
+          <AreaVertexHandles pointsMm={areaVertexHandles.pointsMm} />
+        ) : null}
         <SelectionRectOverlay
           a={marqueeOverlay?.a ?? null}
           b={marqueeOverlay?.b ?? null}

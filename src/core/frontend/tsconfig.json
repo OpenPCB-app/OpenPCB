@@ -22,6 +22,10 @@
     "../../contracts/**/*.ts",
     "../../sdks/**/*.ts",
     "../../shared/domain/**/*.ts",
+    "../../shared/drc/**/*.ts",
+    "../../shared/pcb-areas/**/*.ts",
+    "../../shared/pcb-connectivity/**/*.ts",
+    "../../shared/pcb-geometry/**/*.ts",
     "../../shared/rendering/**/*.ts",
     "../../shared/frontend/**/*.ts",
     "../../shared/frontend/**/*.tsx"

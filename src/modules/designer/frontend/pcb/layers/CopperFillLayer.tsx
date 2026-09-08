@@ -8,40 +8,44 @@ import type {
   PcbDesignRules,
   PcbFreeHole,
   PcbFreePad,
+  PcbLayerCount,
   PcbPlacedPart,
   PcbTrace,
   PcbVia,
   PcbViewSide,
 } from "../../../../../sdks";
+import type { ZonePourParams } from "../../../../../shared/pcb-areas/pour-params";
 import { RENDER_ORDER } from "../../../../../shared/frontend/canvas/layers";
 import { copperLayerColor } from "../pcb-layer-colors";
 import { useCanvasTheme } from "../../../../../shared/frontend/canvas/theme";
-import {
-  buildCopperFillPourShapes,
-  resolveCopperFillClearanceMm,
-} from "./copper-fill-geometry";
+import { buildCopperFillIslands } from "./copper-fill-geometry";
+import { islandsToShapes } from "../../../../../shared/rendering/copper-fill/copper-fill-shapes";
 
-interface CopperFillLayerProps {
-  layer: PcbCopperLayerId;
+/**
+ * One effective copper zone (board plane or explicit polygon) plus the
+ * board-wide obstacles it pours around. The zone-derived half — layer, net,
+ * clearance, minimum width, pad connection, thermal / island overrides and the
+ * clip polygon — is `ZonePourParams`, produced by `pourParamsForZone` so the
+ * canvas, Gerber, DRC and the 3D preview compose overrides identically
+ * (zone/keepout contract §6).
+ */
+interface CopperFillLayerProps extends ZonePourParams {
   outline: PcbBoardOutline;
+  /** The board's real stackup size — the record layer policy depends on it. */
+  layerCount: PcbLayerCount;
   placements: ReadonlyArray<PcbPlacedPart>;
   /** Traces on this layer. Same-net traces merge into the pour silently. */
   traces: ReadonlyArray<PcbTrace>;
   /** Vias whose barrel crosses this layer. Same-net merge applies. */
   vias: ReadonlyArray<PcbVia>;
-  /** Net id of the pour on this layer (e.g. `"GND"`); `null` disables merge. */
-  pourNetId: string | null;
   /** `"<placementId>|<padNumber>"` → netId for same-net pad merge. */
   padNetIds: ReadonlyMap<string, string>;
+  /** Board rules — only `copperToBoardEdgeMm` is read; the rest is composed. */
   designRules: PcbDesignRules;
   /** Board cutouts + free holes/pads — subtracted (apertures) from the pour. */
   cutouts?: ReadonlyArray<PcbBoardCutout>;
   freeHoles?: ReadonlyArray<PcbFreeHole>;
   freePads?: ReadonlyArray<PcbFreePad>;
-  /** Same-net pad connection: `"solid"` flood (default) or `"thermal"` relief. */
-  padConnection?: "solid" | "thermal";
-  /** Clip the pour to this zone polygon (mm). Omitted ⇒ board-wide pour. */
-  clipPolygonMm?: ReadonlyArray<{ x: number; y: number }>;
   opacity?: number;
   /** Side-flip indicator; reverses render order so bottom-view shows B over F. */
   viewSide?: PcbViewSide;
@@ -91,6 +95,7 @@ function blendedCopperFillColor(
  */
 export function CopperFillLayer({
   layer,
+  layerCount,
   outline,
   placements,
   traces,
@@ -101,33 +106,55 @@ export function CopperFillLayer({
   cutouts,
   freeHoles,
   freePads,
-  padConnection = "solid",
+  clearanceMm,
+  clearanceForItem,
+  minThicknessMm,
+  padConnection,
+  islandRemoval,
+  thermalReliefGapMm,
+  thermalSpokeWidthMm,
   clipPolygonMm,
+  clipHolesMm,
+  excludeZonesMm,
+  excludePolygonsMm,
   opacity = 0.95,
   viewSide = "top",
 }: CopperFillLayerProps): ReactElement | null {
   const { theme } = useCanvasTheme();
+  // A `failed` pour draws nothing (contract §8) — the canvas must never show
+  // copper the kernel could not clear.
   const shapes = useMemo(
     () =>
-      buildCopperFillPourShapes({
-        layer,
-        outline,
-        placements,
-        traces,
-        vias,
-        pourNetId,
-        padNetIds,
-        clearanceMm: resolveCopperFillClearanceMm(designRules.clearance),
-        copperToBoardEdgeMm: designRules.clearance.copperToBoardEdgeMm,
-        cutouts,
-        freeHoles,
-        freePads,
-        minThicknessMm: designRules.minimums.traceWidthMm,
-        padConnection,
-        ...(clipPolygonMm ? { clipPolygonMm } : {}),
-      }),
+      islandsToShapes(
+        buildCopperFillIslands({
+          layer,
+          layerCount,
+          outline,
+          placements,
+          traces,
+          vias,
+          pourNetId,
+          padNetIds,
+          clearanceMm,
+          clearanceForItem,
+          copperToBoardEdgeMm: designRules.clearance.copperToBoardEdgeMm,
+          cutouts,
+          freeHoles,
+          freePads,
+          minThicknessMm,
+          padConnection,
+          ...(islandRemoval === undefined ? {} : { islandRemoval }),
+          ...(thermalReliefGapMm === undefined ? {} : { thermalReliefGapMm }),
+          ...(thermalSpokeWidthMm === undefined ? {} : { thermalSpokeWidthMm }),
+          ...(clipPolygonMm ? { clipPolygonMm } : {}),
+          ...(clipHolesMm ? { clipHolesMm } : {}),
+          ...(excludeZonesMm ? { excludeZonesMm } : {}),
+          ...(excludePolygonsMm ? { excludePolygonsMm } : {}),
+        }).islands,
+      ),
     [
       layer,
+      layerCount,
       outline,
       placements,
       traces,
@@ -138,8 +165,17 @@ export function CopperFillLayer({
       cutouts,
       freeHoles,
       freePads,
+      clearanceMm,
+      clearanceForItem,
+      minThicknessMm,
       padConnection,
+      islandRemoval,
+      thermalReliefGapMm,
+      thermalSpokeWidthMm,
       clipPolygonMm,
+      clipHolesMm,
+      excludeZonesMm,
+      excludePolygonsMm,
     ],
   );
 

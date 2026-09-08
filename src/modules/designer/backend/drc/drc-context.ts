@@ -12,44 +12,53 @@ import type {
   DrcAnchor,
   PcbCopperLayerId,
   PcbDesignRules,
-  DrcPairKind,
   PcbFabricatorId,
-  PcbLayerCount,
   PcbNetClass,
   PcbPointMm,
   PcbVia,
   RatsnestSegment,
 } from "../../../../sdks/designer";
+import { isValidViaSpan } from "../../../../sdks/designer";
 import {
-  copperLayersForCount,
-  isCopperLayerId,
-  isValidViaSpan,
-  viaSpanLayers,
-} from "../../../../sdks/designer";
-import {
-  areaMaskForPoint,
-  compileRuleSet,
-  resolveClearance,
-  type CompiledRuleSet,
+  createRuleResolver,
+  DEFAULT_HOLE_TO_HOLE_MM,
+  type RuleResolver,
 } from "../../../../shared/drc/rule-resolver";
-import { resolvePadCopperLayers } from "../../../../shared/rendering/pad-copper-layers";
-import { resolveNetClassId } from "../pcb/net-class-resolver";
-import { flattenCutout, flattenOutline } from "../pcb/outline-geometry";
 import {
-  freePadOutlineWorldMm,
-  padOutlineWorldMm,
-  ringBounds,
-  type RingBounds,
-} from "../pcb/pad-outline";
-import { padWorldPositionMm, placementPads } from "../pcb/pad-geometry";
+  buildCopperRecords,
+  type CopperPadAnchor,
+} from "../../../../shared/pcb-connectivity/copper-records";
+import type {
+  ConnectivityResult,
+  CopperItem,
+} from "../../../../shared/pcb-connectivity";
+import {
+  computeBoardConnectivity,
+  type BoardPourFill,
+} from "../pcb/board-connectivity";
+import {
+  collectCopperZones,
+  collectKeepouts,
+  pourParamsForZone,
+  type CopperAreaWarning,
+  type EffectiveCopperZone,
+  type EffectiveKeepout,
+  type ZonePourNets,
+} from "../../../../shared/pcb-areas";
+import {
+  buildCopperFillIslands,
+  type CopperFillResult,
+} from "../../../../shared/rendering/copper-fill/copper-fill-geometry";
+import { buildBoardRegion, type BoardRegion } from "../pcb/board-region";
+import { placementKeepoutExtentMm } from "../pcb/placement-extent";
+import type { DrcOptions } from "./types";
+import type { RingBounds } from "../pcb/pad-outline";
 import type { Point } from "../pcb/pcb-trace-geometry";
 
 /** Default minimums when a (pre-DRC) board lacks the optional rule field. */
-export const DEFAULT_HOLE_TO_HOLE_MM = 0.25;
+export { DEFAULT_HOLE_TO_HOLE_MM } from "../../../../shared/drc/rule-resolver";
 export const DEFAULT_HOLE_TO_BOARD_EDGE_MM = 0.3;
 export const DEFAULT_BOARD_THICKNESS_MM = 1.6;
-
-const NM_TO_MM = 1 / 1_000_000;
 
 // The tolerance policy moved to pcb/tolerance.ts (P1 epsilon unification) so
 // fab validators and creation gates share it; re-exported here because every
@@ -148,6 +157,30 @@ export interface DrcContext {
   /** Flattened board outline ring (mm) + internal cutout rings. */
   outlineRing: Point[];
   cutoutRings: Point[][];
+  /**
+   * The S2 board region (biased "board-inner" for legality; §4). `outlineRing`
+   * / `cutoutRings` above are its unbiased rings, kept as a separate field only
+   * because outline validity's self-intersection / zero-area tests run on them
+   * (§4 table) — every containment/off-board/hole check goes through
+   * `boardRegion` instead.
+   */
+  boardRegion: BoardRegion;
+  /**
+   * The effective copper areas (zone/keepout contract §3.1) — explicit zones
+   * then the synthesized board zones, with every view-state default resolved.
+   * The ONLY zone list a check may read; `projection.zones` is the persisted
+   * shape, which says nothing about what actually pours.
+   */
+  copperZones: readonly EffectiveCopperZone[];
+  /** The effective keepouts (contract §3.1); `checks/keepouts.ts` consumes them. */
+  keepouts: readonly EffectiveKeepout[];
+  /**
+   * Everything the ONE derivation refused, zones' warnings then keepouts', each
+   * in the derivation's sorted order. `checks/zones.ts` maps them to
+   * `ZONE_INVALID` / `ZONE_EMPTY_FILL` (§13.2) — DRC consumes the derivation,
+   * it never re-derives.
+   */
+  copperAreaWarnings: readonly CopperAreaWarning[];
   ratsnest: RatsnestSegment[];
   netNames: Record<string, string>;
   /**
@@ -161,38 +194,55 @@ export interface DrcContext {
   /** Resolved net-class id for a net (live; never the stored id). */
   netClassIdOf(netId: string | null): string;
   /**
-   * Effective clearance (mm) for a pair — implicit tier + scoped rules + floor
-   * (P6). `pointA`/`pointB` are representative locations for area-scope tests.
+   * The ONE rule resolver for this run (rule-semantics contract §9): every
+   * clearance pair, every scalar minimum and every rule-validity problem this
+   * report contains comes out of it. `netClassClearanceMm` / `netClassIdOf`
+   * above forward to it, so a check can never resolve a class two ways.
    */
-  clearanceFor(
-    pairKind: DrcPairKind,
-    layer: PcbCopperLayerId,
-    aNetId: string | null,
-    pointA: PcbPointMm,
-    bNetId: string | null,
-    pointB: PcbPointMm,
-  ): number;
+  resolver: RuleResolver;
+  /**
+   * Every piece of copper on the board as a connectivity-graph node, under the
+   * FAIL-SAFE layer policy (contract §2 "Two layer policies"), plus one node
+   * per filled pour island. Deliberately NOT derived from `ctx.pads` /
+   * `ctx.vias`: those carry the CLAMP policy, where a layer-invalid pad or via
+   * is checked on every valid copper layer so it cannot mask a short — as a
+   * connectivity node it would instead manufacture a connection on every layer
+   * and silently join every net it overlaps. Computed lazily and memoized, so a
+   * `runDrc` that skips the `dfm` class pays nothing.
+   */
+  copperItems(): readonly CopperItem[];
+  /** Components + contact records over `copperItems()` (memoized). */
+  connectivity(): ConnectivityResult;
+  /**
+   * The fill verdict of EVERY effective copper zone, net-less ones included, in
+   * `copperZones` order — computed once per run and shared (copper-pour
+   * contract §9): the connectivity pour nodes and `checks/copper-pour.ts` read
+   * the same islands, so DRC's electrical verdict and its dead-copper report can
+   * never be about two different pieces of copper. Lazy for the same reason
+   * `copperItems()` is: a run that skips the pour-bearing classes pays nothing.
+   */
+  pourResults(): ReadonlyArray<{
+    zone: EffectiveCopperZone;
+    result: CopperFillResult;
+  }>;
+  /**
+   * World-space extent of a placement for the keepout `footprints` restriction
+   * (contract §4), or null when the footprint describes no area. Lazily
+   * resolved and cached: the courtyard branch walks every preview graphic, and
+   * a board with many keepouts would otherwise redo it per keepout.
+   */
+  placementExtent(placementId: string): readonly PcbPointMm[] | null;
 }
 
-function copperLayerOf(layer: string): PcbCopperLayerId | null {
-  return isCopperLayerId(layer) ? layer : null;
-}
-
-function boundsOfPoints(points: readonly Point[], pad = 0): RingBounds {
-  const b = ringBounds(points);
-  return {
-    minX: b.minX - pad,
-    minY: b.minY - pad,
-    maxX: b.maxX + pad,
-    maxY: b.maxY + pad,
-  };
-}
-
-function viaLayers(
-  via: PcbVia,
-  layerCount: PcbLayerCount,
-): PcbCopperLayerId[] {
-  return viaSpanLayers(via.fromLayer, via.toLayer, layerCount);
+/** Widen a copper record's pad anchor to the DRC anchor union. */
+function padAnchor(anchor: CopperPadAnchor): DrcAnchor {
+  return anchor.kind === "pad"
+    ? {
+        kind: "pad",
+        placementId: anchor.placementId,
+        padNumber: anchor.padNumber,
+      }
+    : { kind: "freePad", freePadId: anchor.freePadId };
 }
 
 /**
@@ -216,103 +266,96 @@ function slotCenterline(
   };
 }
 
-export function buildDrcContext(projection: DesignerPcbProjection): DrcContext {
+export function buildDrcContext(
+  projection: DesignerPcbProjection,
+  options: DrcOptions = {},
+): DrcContext {
   const { board } = projection;
+  const cutouts = board.cutouts ?? [];
+  // The S2 legality region (contract §4): biased so every arc's chord lies on
+  // the board side of the true curve. Built once, up front, so every check
+  // (containment, off-board, hole-to-edge, outline validity) shares one region.
+  const boardRegion = buildBoardRegion(board.outline, cutouts, {
+    bias: "board-inner",
+  });
+  // One derivation of the copper areas and keepouts for the whole DRC run
+  // (contract §3.1): the connectivity pours below and `checks/copper-pour.ts`
+  // both read it, so they can never disagree about what pours.
+  const zoneAreas = collectCopperZones({
+    zones: projection.zones,
+    layerCount: board.layerCount,
+    knownNetIds: new Set(Object.keys(projection.netNames ?? {})),
+  });
+  const keepoutAreas = collectKeepouts({
+    keepouts: projection.keepouts ?? [],
+    layerCount: board.layerCount,
+  });
+  const copperZones = zoneAreas.zones;
+  const keepouts = keepoutAreas.keepouts;
+  // Zones' warnings first, then the keepouts' — the order `checks/zones.ts`
+  // reports them in, and the one DRC ever sees.
+  const copperAreaWarnings: CopperAreaWarning[] = [
+    ...zoneAreas.warnings,
+    ...keepoutAreas.warnings,
+  ];
+  // One shared resolution of every piece of copper geometry (the same records
+  // connectivity consumes); DRC applies its own clamp layer policy below.
+  const records = buildCopperRecords({
+    layerCount: board.layerCount,
+    placements: projection.placements,
+    padNetIds: new Map(Object.entries(projection.padNets ?? {})),
+    freePads: projection.freePads,
+    traces: projection.traces,
+    vias: projection.vias,
+  });
   const validCopperLayers = new Set<PcbCopperLayerId>(
-    copperLayersForCount(board.layerCount),
+    records.validCopperLayers,
   );
 
-  const classById = new Map(board.netClasses.map((c) => [c.id, c]));
-  const compiledRules: CompiledRuleSet = compileRuleSet(board);
-  const classIdByNet = new Map<string, string>();
-  const netClassIdOf = (netId: string | null): string => {
-    if (!netId) return "";
-    const cached = classIdByNet.get(netId);
-    if (cached !== undefined) return cached;
-    const id = resolveNetClassId(
-      netNames[netId] ?? "",
-      board.netClasses,
-      board.perNetClassAssignments,
-      netId,
-    );
-    classIdByNet.set(netId, id);
-    return id;
-  };
-  // Memoize net → clearance resolution: the O(n²) clearance loops query the
-  // same net's class repeatedly, and resolveNetClassId re-scans every net class
-  // per call. Cache the resolved clearance once per net id.
-  const clearanceByNetId = new Map<string, number>();
+  // Copy every array / point object out of the records at this boundary: the
+  // same records also back the connectivity items (`copperItems()` below), and
+  // a check that reordered or mutated a DRC primitive in place would otherwise
+  // silently corrupt the connectivity graph.
+  const traces: DrcTrace[] = records.traces.map((t) => ({
+    id: t.id,
+    netId: t.netId,
+    layer: t.layer,
+    widthMm: t.widthMm,
+    halfWidthMm: t.halfWidthMm,
+    pointsMm: t.pointsMm.map((p) => ({ x: p.x, y: p.y })),
+    bounds: { ...t.bounds },
+    mid: { ...t.mid },
+  }));
 
-  const traces: DrcTrace[] = projection.traces.map((t) => {
-    const pointsMm = t.pointsNm.map((p) => ({
-      x: p.x * NM_TO_MM,
-      y: p.y * NM_TO_MM,
-    }));
-    const half = t.widthMm / 2;
-    const raw = ringBounds(pointsMm);
-    return {
-      id: t.id,
-      netId: t.netId,
-      layer: t.layer,
-      widthMm: t.widthMm,
-      halfWidthMm: half,
-      pointsMm,
-      bounds: boundsOfPoints(pointsMm, half),
-      mid: { x: (raw.minX + raw.maxX) / 2, y: (raw.minY + raw.maxY) / 2 },
-    };
-  });
+  // Clamp-with-fallback (audit B5-VIA-MASK, symmetric with vias): an
+  // invalid-layer pad is checked on ALL valid copper layers so its copper
+  // still collides with everything until repaired — never masks a short.
+  const pads: DrcPad[] = records.pads.map((p) => ({
+    anchor: padAnchor(p.anchor),
+    netId: p.netId,
+    layers: p.declaredLayerInvalid
+      ? [...validCopperLayers]
+      : [...p.resolvedLayers],
+    ring: p.ring.map((v) => ({ x: v.x, y: v.y })),
+    bounds: { ...p.bounds },
+    center: { ...p.center },
+    declaredLayerInvalid: p.declaredLayerInvalid,
+  }));
 
-  const pads: DrcPad[] = [];
   const holes: DrcHole[] = [];
-  const padNets = projection.padNets ?? {};
-  for (const placement of projection.placements) {
-    for (const pad of placementPads(placement)) {
-      const drill = pad.drillDiameterMm ?? 0;
-      const isThroughHole = drill > 0;
-      // Shared resolver applies the B.Cu side-flip (audit B1-1) and *.Cu →
-      // all-layers (B1-6). A pad that named an explicit copper layer outside
-      // this stackup resolves to the placement side (fallback) but is flagged.
-      const resolved = resolvePadCopperLayers(pad, placement, validCopperLayers);
-      const declaredLayerInvalid =
-        !isThroughHole &&
-        pad.layer !== undefined &&
-        pad.layer !== "*.Cu" &&
-        isCopperLayerId(pad.layer) &&
-        !validCopperLayers.has(pad.layer);
-      // Clamp-with-fallback (audit B5-VIA-MASK, symmetric with vias): an
-      // invalid-layer pad is checked on ALL valid copper layers so its copper
-      // still collides with everything until repaired — never masks a short.
-      const layers: PcbCopperLayerId[] = declaredLayerInvalid
-        ? [...validCopperLayers]
-        : [...resolved];
-      const ring = padOutlineWorldMm(placement, pad);
-      const center = padWorldPositionMm(placement, pad);
-      const anchor: DrcAnchor = {
-        kind: "pad",
-        placementId: placement.id,
-        padNumber: pad.number,
-      };
-      const padNetId = padNets[`${placement.id}|${pad.number}`] ?? null;
-      pads.push({
-        anchor,
-        netId: padNetId,
-        layers,
-        ring,
-        bounds: ringBounds(ring),
-        center,
-        declaredLayerInvalid,
-      });
-      if (isThroughHole) {
-        holes.push({
-          anchor,
-          kind: "pth",
-          netId: padNetId,
-          center,
-          drillMm: drill,
-          padOdMm: Math.min(pad.widthMm, pad.heightMm),
-        });
-      }
-    }
+  // Footprint pads lead the record order, so this reproduces the old
+  // placement × pad hole order; free-pad holes follow below because the
+  // copper-less NPTH `hole` type has no copper record at all.
+  for (const p of records.pads) {
+    if (p.anchor.kind !== "pad" || p.drillMm <= 0) continue;
+    holes.push({
+      anchor: padAnchor(p.anchor),
+      kind: "pth",
+      netId: p.netId,
+      center: { ...p.center },
+      drillMm: p.drillMm,
+      padOdMm: Math.min(p.widthMm, p.heightMm),
+    });
   }
   for (const freePad of projection.freePads) {
     const drill = freePad.drillMm ?? 0;
@@ -334,26 +377,6 @@ export function buildDrcContext(projection: DesignerPcbProjection): DrcContext {
         ...(padSlot ? { slot: padSlot } : {}),
       });
     }
-    if (freePad.padType === "hole") continue; // NPTH: counted above, no copper
-    const isStd = freePad.padType === "std";
-    const declaredLayerInvalid =
-      !isStd &&
-      isCopperLayerId(freePad.layer) &&
-      !validCopperLayers.has(freePad.layer);
-    const layers: PcbCopperLayerId[] =
-      isStd || declaredLayerInvalid
-        ? [...validCopperLayers]
-        : [copperLayerOf(freePad.layer) ?? "F.Cu"];
-    const ring = freePadOutlineWorldMm(freePad);
-    pads.push({
-      anchor: { kind: "freePad", freePadId: freePad.id },
-      netId: freePad.netId,
-      layers,
-      ring,
-      bounds: ringBounds(ring),
-      center: freePad.centerMm,
-      declaredLayerInvalid,
-    });
   }
   for (const hole of projection.freeHoles) {
     const holeSlot = slotCenterline(hole.centerMm, hole.drillSlot);
@@ -367,34 +390,26 @@ export function buildDrcContext(projection: DesignerPcbProjection): DrcContext {
     });
   }
 
-  const vias: DrcViaGeom[] = projection.vias.map((via) => {
-    const radius = via.diameterMm / 2;
-    const span = viaLayers(via, board.layerCount);
-    const layerSpanInvalid = span.length < 2;
-    const viaTypeInvalid =
-      !layerSpanInvalid &&
-      !isValidViaSpan(via.fromLayer, via.toLayer, via.viaType, board.layerCount)
-        .ok;
+  const vias: DrcViaGeom[] = records.vias.map((v) => ({
+    via: v.via,
+    netId: v.netId,
+    center: { ...v.center },
+    radiusMm: v.radiusMm,
     // Clamp-with-fallback (audit B5-VIA-MASK): a layer-invalid via is checked
     // on every valid copper layer so its physical barrel copper still collides
     // with everything until repaired — it must not vanish from clearance/short.
-    const layers = layerSpanInvalid ? [...validCopperLayers] : span;
-    return {
-      via,
-      netId: via.netId,
-      center: via.centerMm,
-      radiusMm: radius,
-      layers,
-      layerSpanInvalid,
-      viaTypeInvalid,
-      bounds: {
-        minX: via.centerMm.x - radius,
-        minY: via.centerMm.y - radius,
-        maxX: via.centerMm.x + radius,
-        maxY: via.centerMm.y + radius,
-      },
-    };
-  });
+    layers: v.layerSpanInvalid ? [...validCopperLayers] : [...v.span],
+    layerSpanInvalid: v.layerSpanInvalid,
+    viaTypeInvalid:
+      !v.layerSpanInvalid &&
+      !isValidViaSpan(
+        v.via.fromLayer,
+        v.via.toLayer,
+        v.via.viaType,
+        board.layerCount,
+      ).ok,
+    bounds: { ...v.bounds },
+  }));
 
   for (const vg of vias) {
     holes.push({
@@ -407,7 +422,100 @@ export function buildDrcContext(projection: DesignerPcbProjection): DrcContext {
   }
 
   const netNames = projection.netNames ?? {};
-  const cutouts = board.cutouts ?? [];
+
+  // Every net id the rule table could legitimately reference: the projection's
+  // named nets PLUS any net a primitive carries but the name map lost — a rule
+  // scoped to a copper-bearing net must not be reported as dangling.
+  const knownNetIds = new Set<string>(Object.keys(netNames));
+  for (const t of traces) if (t.netId) knownNetIds.add(t.netId);
+  for (const p of pads) if (p.netId) knownNetIds.add(p.netId);
+  for (const v of vias) if (v.netId) knownNetIds.add(v.netId);
+  const resolver = createRuleResolver(board, netNames, {
+    // Ordered stackup, so a `layer` scope is judged against the real board and
+    // multi-layer pairs resolve F.Cu → … → B.Cu (§4.3).
+    validCopperLayers: [...records.validCopperLayers],
+    knownNetIds,
+  });
+
+  const placementById = new Map(projection.placements.map((p) => [p.id, p]));
+  // Pad rings grouped by owner, for the last-resort extent branch. Built from
+  // `pads` (already copied out of the records) so the accessor stays O(1).
+  const padRingsByPlacement = new Map<string, PcbPointMm[][]>();
+  for (const p of pads) {
+    if (p.anchor.kind !== "pad") continue;
+    const rings = padRingsByPlacement.get(p.anchor.placementId);
+    if (rings) rings.push(p.ring);
+    else padRingsByPlacement.set(p.anchor.placementId, [p.ring]);
+  }
+  const placementExtentCache = new Map<string, PcbPointMm[] | null>();
+
+  // Lazily built once per context: only the `dfm` dangling check (and future
+  // pour-anchoring / routed-length consumers) need the graph, and each enabled
+  // pour layer costs a full fill-kernel run.
+  let copperItemsCache: readonly CopperItem[] | undefined;
+  let connectivityCache: ConnectivityResult | undefined;
+  let pourResultsCache:
+    | ReadonlyArray<{ zone: EffectiveCopperZone; result: CopperFillResult }>
+    | undefined;
+  const padNetIds = new Map(Object.entries(projection.padNets ?? {}));
+  const ensurePourResults = () => {
+    if (pourResultsCache === undefined) {
+      // ONE resolver per DRC run (contract §9): the pour resolves through the
+      // context's own, not a second one built from the same board — otherwise
+      // `problems` and `knownNetIds` could diverge between the report and the
+      // fill that produced its copper.
+      const nets: ZonePourNets = { resolver };
+      pourResultsCache = copperZones.map((zone) => ({
+        zone,
+        // `records` are the context's own, built from the SAME copper above —
+        // an identical input, so the kernel's own build is pure overhead here.
+        result: buildCopperFillIslands({
+          layerCount: board.layerCount,
+          outline: board.outline,
+          placements: projection.placements,
+          traces: projection.traces,
+          vias: projection.vias,
+          padNetIds,
+          records,
+          copperToBoardEdgeMm: board.designRules.clearance.copperToBoardEdgeMm,
+          cutouts,
+          freeHoles: projection.freeHoles,
+          freePads: projection.freePads,
+          ...pourParamsForZone(
+            zone,
+            board.designRules,
+            keepouts,
+            copperZones,
+            nets,
+          ),
+        }),
+      }));
+    }
+    return pourResultsCache;
+  };
+  const ensureConnectivity = (): ConnectivityResult => {
+    if (connectivityCache === undefined) {
+      // Net-bound zones only, in derivation order — the position here is the
+      // `pourIndex` of `pour:<layer>:<net>:<pourIndex>:<island>`, unchanged.
+      const pours: BoardPourFill[] = [];
+      for (const { zone, result } of ensurePourResults()) {
+        if (zone.netId === null) continue;
+        pours.push({ layer: zone.layer, netId: zone.netId, result });
+      }
+      const { items, result } = computeBoardConnectivity({
+        layerCount: board.layerCount,
+        placements: projection.placements,
+        padNetIds,
+        freePads: projection.freePads,
+        traces: projection.traces,
+        vias: projection.vias,
+        pours,
+      });
+      copperItemsCache = items;
+      connectivityCache = result;
+    }
+    return connectivityCache;
+  };
 
   return {
     projection,
@@ -425,52 +533,37 @@ export function buildDrcContext(projection: DesignerPcbProjection): DrcContext {
     holeToBoardEdgeMm:
       board.designRules.clearance.holeToBoardEdgeMm ??
       DEFAULT_HOLE_TO_BOARD_EDGE_MM,
-    outlineRing: flattenOutline(board.outline),
-    cutoutRings: cutouts.map((c) => flattenCutout(c.shape)),
+    // Already canonicalised by buildBoardRegion — no second flatten.
+    outlineRing: boardRegion.unbiasedOuter,
+    cutoutRings: boardRegion.unbiasedHoles,
+    boardRegion,
+    copperZones,
+    keepouts,
+    copperAreaWarnings,
     ratsnest: projection.ratsnest,
     netNames,
-    netClassClearanceMm(netId) {
-      if (!netId) return 0;
-      const cached = clearanceByNetId.get(netId);
-      if (cached !== undefined) return cached;
-      const name = netNames[netId] ?? "";
-      const id = resolveNetClassId(
-        name,
-        board.netClasses,
-        board.perNetClassAssignments,
-        netId,
-      );
-      const c = classById.get(id);
-      const value = c ? c.clearanceMm : 0;
-      clearanceByNetId.set(netId, value);
-      return value;
+    netClassClearanceMm: resolver.netClassClearanceMm,
+    netClassIdOf: resolver.netClassIdOf,
+    resolver,
+    copperItems() {
+      ensureConnectivity();
+      return copperItemsCache!;
     },
-    netClassIdOf,
-    clearanceFor(pairKind, layer, aNetId, pointA, bNetId, pointB) {
-      // Implicit tier: pre-P6 max(boardRule, classA, classB) — reuses the
-      // memoized net-class clearance lookups above.
-      const implicitMax = Math.max(
-        compiledRules.boardClearanceByPairKind[pairKind] ?? 0,
-        this.netClassClearanceMm(aNetId),
-        this.netClassClearanceMm(bNetId),
-      );
-      // Fast path: no scoped rules ⇒ implicit tier only (floor is 0 pre-P6),
-      // byte-identical to the old max(...).
-      if (compiledRules.clearanceRules.length === 0) {
-        return Math.max(implicitMax, compiledRules.floorMm);
-      }
-      const a = {
-        netId: aNetId,
-        netClassId: netClassIdOf(aNetId),
-        areaMask: areaMaskForPoint(compiledRules, pointA),
-      };
-      const b = {
-        netId: bNetId,
-        netClassId: netClassIdOf(bNetId),
-        areaMask: areaMaskForPoint(compiledRules, pointB),
-      };
-      return resolveClearance(compiledRules, pairKind, layer, a, b, implicitMax)
-        .mm;
+    connectivity: ensureConnectivity,
+    pourResults: ensurePourResults,
+    placementExtent(placementId) {
+      const cached = placementExtentCache.get(placementId);
+      if (cached !== undefined) return cached;
+      const placement = placementById.get(placementId);
+      const extent = placement
+        ? placementKeepoutExtentMm(
+            placement,
+            padRingsByPlacement.get(placementId) ?? [],
+            options.lookupRawFootprint,
+          )
+        : null;
+      placementExtentCache.set(placementId, extent);
+      return extent;
     },
   };
 }

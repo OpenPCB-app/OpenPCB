@@ -38,7 +38,11 @@ export interface AutolayoutRouteDeps {
     designId: string,
     envelope: DesignerCommandEnvelope,
   ) => Promise<import("../../../../sdks/designer").DesignerDispatchResult>;
-  runDrc: (projection: DesignerPcbProjection) => import("../../../../sdks/designer").DrcReport;
+  runDrc: (
+    projection: DesignerPcbProjection,
+  ) =>
+    | import("../../../../sdks/designer").DrcReport
+    | Promise<import("../../../../sdks/designer").DrcReport>;
   notFound: (message: string) => Error;
   success: (data: unknown, status?: number) => Response;
 }

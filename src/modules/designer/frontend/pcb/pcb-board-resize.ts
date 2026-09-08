@@ -5,7 +5,10 @@ import type {
 } from "../../../../sdks";
 import type { BoundsMm } from "../../../../shared/rendering/types";
 import { placementBoundsMm } from "./pcb-rect-hit";
-import { pointInOutline } from "../../backend/pcb/outline-geometry";
+import {
+  buildBoardRegion,
+  regionContainsPoint,
+} from "../../../../shared/pcb-geometry/board-region";
 
 /** Resize grips: 4 edges + 4 corners. */
 export type BoardHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
@@ -253,8 +256,10 @@ export function countOutsideBoard(
   outline: PcbBoardOutline,
   cutouts?: DesignerPcbProjection["board"]["cutouts"],
 ): number {
-  const inside = (p: PcbPointMm): boolean =>
-    pointInOutline(outline, cutouts, p);
+  // Build the region once: `pointInOutline` re-flattens the outline and every
+  // cutout on every call, and this runs per placement corner / trace point.
+  const region = buildBoardRegion(outline, cutouts ?? [], { bias: "none" });
+  const inside = (p: PcbPointMm): boolean => regionContainsPoint(region, p);
   const cornersInside = (b: BoundsMm): boolean =>
     inside({ x: b.minX, y: b.minY }) &&
     inside({ x: b.maxX, y: b.minY }) &&

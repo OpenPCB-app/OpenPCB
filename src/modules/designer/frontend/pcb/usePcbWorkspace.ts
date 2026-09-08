@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   DesignerCommand,
   DesignerDispatchResult,
+  DesignerPcbAddKeepoutCommand,
+  DesignerPcbAddZoneCommand,
   DesignerPcbProjection,
+  DesignerPcbUpdateKeepoutCommand,
+  DesignerPcbUpdateZoneCommand,
   PcbBoardOutline,
   PcbBoardSettings,
   PcbCopperLayerId,
@@ -11,6 +15,10 @@ import type {
   PcbPointMm,
   PcbTraceSegmentMode,
 } from "../../../../sdks";
+import {
+  collectKeepouts,
+  type EffectiveKeepout,
+} from "../../../../shared/pcb-areas/copper-zones";
 import { createDesignerApi } from "../api";
 import { dispatchFailureMessage } from "./dispatch-failure";
 import { fallbackBoardBoundsFromProjection } from "../three-d/primitives/geometry-utils";
@@ -18,6 +26,9 @@ import { useDesignerHighlight } from "../useDesignerHighlight";
 import { syncLayerPresetFromVisible, usePcbViewStore } from "./pcb-view-store";
 
 const PCB_SESSION_ID = "designer-pcb-session";
+
+/** Stable empty list so keepout consumers keep referential identity when idle. */
+const NO_KEEPOUTS: readonly EffectiveKeepout[] = [];
 
 export function usePcbWorkspace(params: {
   backendURL?: string | null;
@@ -60,25 +71,13 @@ export function usePcbWorkspace(params: {
   // from `board_settings.viewState` on every projection load and persists
   // changes through a debounced `pcb_set_view_state` command, replacing the
   // earlier per-design localStorage hooks. The hook surface stays
-  // compatible: callers continue to use viewSide / displayMode /
-  // copperFillLayers but those values now come from the store.
+  // compatible: callers continue to use viewSide / displayMode but those
+  // values now come from the store.
   const viewState = usePcbViewStore((s) => s.viewState);
   const setViewSideStore = usePcbViewStore((s) => s.setViewSide);
   const toggleViewSideStore = usePcbViewStore((s) => s.toggleViewSide);
   const setDisplayModeStore = usePcbViewStore((s) => s.setDisplayMode);
   const cycleDisplayModeStore = usePcbViewStore((s) => s.cycleDisplayMode);
-  const setCopperFillLayersStore = usePcbViewStore(
-    (s) => s.setCopperFillLayers,
-  );
-  const toggleCopperFillLayerStore = usePcbViewStore(
-    (s) => s.toggleCopperFillLayer,
-  );
-  const setCopperFillPourNetStore = usePcbViewStore(
-    (s) => s.setCopperFillPourNet,
-  );
-  const setCopperFillPadConnectionStore = usePcbViewStore(
-    (s) => s.setCopperFillPadConnection,
-  );
   const setRatsnestVisibleStore = usePcbViewStore((s) => s.setRatsnestVisible);
   const toggleRatsnestVisibleStore = usePcbViewStore(
     (s) => s.toggleRatsnestVisible,
@@ -423,47 +422,6 @@ export function usePcbWorkspace(params: {
   const cycleDisplayMode = useCallback(
     () => cycleDisplayModeStore(),
     [cycleDisplayModeStore],
-  );
-
-  // Copper-fill changes now drive BACKEND pour-aware ratsnest connectivity
-  // (a same-net plane satisfies the net), so after persisting the view-state
-  // patch we flush it immediately and reload the projection — otherwise the
-  // airwires / UNCONNECTED_NET DRC would lag until the next command.
-  const refreshFill = useCallback(() => {
-    void (async () => {
-      await flushView();
-      await refresh();
-    })();
-  }, [flushView, refresh]);
-
-  const setCopperFillLayers = useCallback(
-    (layers: ReadonlyArray<PcbCopperLayerId>) => {
-      setCopperFillLayersStore(layers);
-      refreshFill();
-    },
-    [setCopperFillLayersStore, refreshFill],
-  );
-
-  const toggleCopperFillLayer = useCallback(
-    (layer: PcbCopperLayerId) => {
-      toggleCopperFillLayerStore(layer);
-      refreshFill();
-    },
-    [toggleCopperFillLayerStore, refreshFill],
-  );
-
-  const setCopperFillPourNet = useCallback(
-    (layer: PcbCopperLayerId, netId: string | null) => {
-      setCopperFillPourNetStore(layer, netId);
-      refreshFill();
-    },
-    [setCopperFillPourNetStore, refreshFill],
-  );
-
-  const setCopperFillPadConnection = useCallback(
-    (connection: "solid" | "thermal") =>
-      setCopperFillPadConnectionStore(connection),
-    [setCopperFillPadConnectionStore],
   );
 
   const addTrace = useCallback(
@@ -881,6 +839,118 @@ export function usePcbWorkspace(params: {
     [dispatchCommand, refresh, refreshHistory],
   );
 
+  // Copper zones + keepouts (zone/keepout contract §12.2). A board zone is a
+  // persisted zone row too, so the layers-panel fill toggle goes through
+  // addZone / updateZone rather than through view state.
+  const addZone = useCallback(
+    async (input: Omit<DesignerPcbAddZoneCommand, "type">) => {
+      setError(null);
+      try {
+        const result = await dispatchCommand({ type: "pcb_add_zone", ...input });
+        await refresh();
+        await refreshHistory();
+        return result.ok ? result.createdEntityId : null;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Add zone failed");
+        return null;
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const updateZone = useCallback(
+    async (
+      zoneId: string,
+      patch: Omit<DesignerPcbUpdateZoneCommand, "type" | "zoneId">,
+    ) => {
+      setError(null);
+      try {
+        const result = await dispatchCommand({
+          type: "pcb_update_zone",
+          zoneId,
+          ...patch,
+        });
+        await refresh();
+        await refreshHistory();
+        return result.ok;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Update zone failed");
+        return false;
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const deleteZone = useCallback(
+    async (zoneId: string) => {
+      setError(null);
+      try {
+        await dispatchCommand({ type: "pcb_delete_zone", zoneId });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Delete zone failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const addKeepout = useCallback(
+    async (input: Omit<DesignerPcbAddKeepoutCommand, "type">) => {
+      setError(null);
+      try {
+        const result = await dispatchCommand({
+          type: "pcb_add_keepout",
+          ...input,
+        });
+        await refresh();
+        await refreshHistory();
+        return result.ok ? result.createdEntityId : null;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Add keepout failed");
+        return null;
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const updateKeepout = useCallback(
+    async (
+      keepoutId: string,
+      patch: Omit<DesignerPcbUpdateKeepoutCommand, "type" | "keepoutId">,
+    ) => {
+      setError(null);
+      try {
+        const result = await dispatchCommand({
+          type: "pcb_update_keepout",
+          keepoutId,
+          ...patch,
+        });
+        await refresh();
+        await refreshHistory();
+        return result.ok;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Update keepout failed");
+        return false;
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
+  const deleteKeepout = useCallback(
+    async (keepoutId: string) => {
+      setError(null);
+      try {
+        await dispatchCommand({ type: "pcb_delete_keepout", keepoutId });
+        await refresh();
+        await refreshHistory();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Delete keepout failed");
+      }
+    },
+    [dispatchCommand, refresh, refreshHistory],
+  );
+
   const runDrc = useCallback(async () => {
     if (!designId) return null;
     return api.runDrc(designId);
@@ -890,6 +960,18 @@ export function usePcbWorkspace(params: {
     if (!designId) return null;
     return api.getDrcResult(designId);
   }, [api, designId]);
+
+  // THE one derivation of the effective keepouts for this projection (zone/
+  // keepout contract §4): enabled-filtered, ring-canonicalised, layers narrowed
+  // to the stackup. The scene, the route obstacles, the live DRC and the smart-
+  // via guard all read this list, so the canvas cannot disagree with itself.
+  const effectiveKeepouts = useMemo<readonly EffectiveKeepout[]>(() => {
+    if (!projection) return NO_KEEPOUTS;
+    return collectKeepouts({
+      keepouts: projection.keepouts ?? [],
+      layerCount: projection.board.layerCount,
+    }).keepouts;
+  }, [projection]);
 
   // Nets available to pour into, sorted by name (GND/PWR first for convenience).
   const pcbNets = useMemo<ReadonlyArray<{ id: string; name: string }>>(() => {
@@ -909,6 +991,7 @@ export function usePcbWorkspace(params: {
 
   return {
     projection,
+    effectiveKeepouts,
     loading,
     saving,
     error,
@@ -930,13 +1013,12 @@ export function usePcbWorkspace(params: {
     displayMode: viewState.displayMode,
     setDisplayMode,
     cycleDisplayMode,
-    copperFillLayers: viewState.copperFillLayers,
-    setCopperFillLayers,
-    toggleCopperFillLayer,
-    copperFillPourNetIds: viewState.copperFillPourNetIds,
-    setCopperFillPourNet,
-    copperFillPadConnection: viewState.copperFillPadConnection ?? "solid",
-    setCopperFillPadConnection,
+    addZone,
+    updateZone,
+    deleteZone,
+    addKeepout,
+    updateKeepout,
+    deleteKeepout,
     cleanupPourTraces,
     nets: pcbNets,
     refresh,

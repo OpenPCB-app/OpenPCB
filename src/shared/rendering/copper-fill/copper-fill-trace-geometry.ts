@@ -46,6 +46,7 @@ export function buildTraceSegmentStadium(
   b: PcbPointMm,
   radiusMm: number,
   capSegments: number = TRACE_CAP_SEGMENTS,
+  circumscribed = false,
 ): ClipperRing | null {
   if (radiusMm <= 0) return null;
   const dx = b.x - a.x;
@@ -53,8 +54,18 @@ export function buildTraceSegmentStadium(
   const len = Math.hypot(dx, dy);
   if (len < 1e-9) {
     // Degenerate segment → full disc with the same effective radius.
-    return buildDiscRing(a, radiusMm, capSegments * 2);
+    return buildDiscRing(a, radiusMm, capSegments * 2, circumscribed);
   }
+  // Circumscribed cap (copper-pour contract §4): the flat sides are exact
+  // tangents at ±90°, so the tangent chain continues from them — vertices at
+  // the HALF-step angles, pushed out to `r · sec(π / 2n)`, enclose the true
+  // semicircle. The inscribed cap (vertices on the arc at whole steps) under-
+  // cuts a wide trace's clearance halo by `r · (1 − cos(π/n))`, 4.8 ‰ of r.
+  const capRadius = circumscribed
+    ? radiusMm / Math.cos(Math.PI / (2 * capSegments))
+    : radiusMm;
+  const capOffset = circumscribed ? 0.5 : 0;
+  const capEnd = circumscribed ? capSegments + 1 : capSegments;
   const ux = dx / len;
   const uy = dy / len;
   // Left-hand perpendicular: rotate (ux,uy) by +90° → (-uy, ux).
@@ -68,18 +79,18 @@ export function buildTraceSegmentStadium(
   // around the outside (i.e. away from A). Going clockwise in xy-space keeps
   // the overall ring CCW because we're tracing the outside of the stadium.
   const angleB = Math.atan2(py, px);
-  for (let i = 1; i < capSegments; i += 1) {
-    const t = angleB - (Math.PI * i) / capSegments;
-    ring.push([b.x + Math.cos(t) * radiusMm, b.y + Math.sin(t) * radiusMm]);
+  for (let i = 1; i < capEnd; i += 1) {
+    const t = angleB - (Math.PI * (i - capOffset)) / capSegments;
+    ring.push([b.x + Math.cos(t) * capRadius, b.y + Math.sin(t) * capRadius]);
   }
   // Right long edge B → A.
   ring.push([b.x - px, b.y - py]);
   ring.push([a.x - px, a.y - py]);
   // Semicircular cap at A: sweep from −perp clockwise to +perp around outside.
   const angleA = Math.atan2(-py, -px);
-  for (let i = 1; i < capSegments; i += 1) {
-    const t = angleA - (Math.PI * i) / capSegments;
-    ring.push([a.x + Math.cos(t) * radiusMm, a.y + Math.sin(t) * radiusMm]);
+  for (let i = 1; i < capEnd; i += 1) {
+    const t = angleA - (Math.PI * (i - capOffset)) / capSegments;
+    ring.push([a.x + Math.cos(t) * capRadius, a.y + Math.sin(t) * capRadius]);
   }
   return ring;
 }
@@ -90,21 +101,32 @@ export function buildTraceSegmentStadium(
  *   n = π / acos(1 − maxError / r)
  * clamped to [16, 96]. Caller may pass `segmentsHint` to override the formula
  * (used by zero-length stadium degeneration to inherit a denser cap count).
+ *
+ * `circumscribed` pushes the sample points out to the tangent-polygon radius
+ * (`r · sec(π/n)`) so the polygon ENCLOSES the true circle — what the pour needs
+ * for a via obstacle, whose halo must never be short (copper-pour contract §4,
+ * the same bias `padOutlineWorldMm` applies to pad arcs). The default stays
+ * inscribed: connectivity and the drill artwork want the chord approximation.
  */
 export function buildDiscRing(
   center: PcbPointMm,
   radiusMm: number,
   segmentsHint?: number,
+  circumscribed = false,
 ): ClipperRing {
   const r = Math.max(0, radiusMm);
   const guarded = Math.max(r, VIA_MAX_ERROR_MM);
   const ratio = Math.max(-1, Math.min(1, 1 - VIA_MAX_ERROR_MM / guarded));
   const minN = segmentsHint ?? Math.ceil(Math.PI / Math.acos(ratio));
   const n = Math.max(VIA_MIN_SEGMENTS, Math.min(VIA_MAX_SEGMENTS, minN));
+  const sampled = circumscribed ? r / Math.cos(Math.PI / n) : r;
   const ring: ClipperRing = [];
   for (let i = 0; i < n; i += 1) {
     const t = (Math.PI * 2 * i) / n;
-    ring.push([center.x + Math.cos(t) * r, center.y + Math.sin(t) * r]);
+    ring.push([
+      center.x + Math.cos(t) * sampled,
+      center.y + Math.sin(t) * sampled,
+    ]);
   }
   return ring;
 }
@@ -117,6 +139,7 @@ export function buildDiscRing(
 export function buildTraceMaskPolygons(
   trace: PcbTrace,
   clearanceMm: number,
+  circumscribed = false,
 ): ClipperPolygon[] {
   if (trace.pointsNm.length < 2) return [];
   const radius = trace.widthMm / 2 + clearanceMm;
@@ -127,7 +150,13 @@ export function buildTraceMaskPolygons(
     const curr = trace.pointsNm[i]!;
     const a: PcbPointMm = { x: prev.x * NM_TO_MM, y: prev.y * NM_TO_MM };
     const b: PcbPointMm = { x: curr.x * NM_TO_MM, y: curr.y * NM_TO_MM };
-    const ring = buildTraceSegmentStadium(a, b, radius);
+    const ring = buildTraceSegmentStadium(
+      a,
+      b,
+      radius,
+      TRACE_CAP_SEGMENTS,
+      circumscribed,
+    );
     if (ring) stadia.push([ring]);
   }
   return stadia;

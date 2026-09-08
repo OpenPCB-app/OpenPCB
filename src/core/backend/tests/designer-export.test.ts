@@ -10,13 +10,97 @@ import {
 } from "../../../modules/designer/backend/export/bom/writer";
 import { buildPnpCsv } from "../../../modules/designer/backend/export/pnp/writer";
 import { packZip, crc32 } from "../../../modules/designer/backend/export/zip";
-import { createDefaultPcbViewState } from "../../../modules/designer/backend/pcb/pcb-defaults";
+import {
+  boardZoneRow,
+  keepoutRow,
+  polygonZoneRow,
+} from "./helpers/pcb-zone-fixtures";
 import { textToStrokes } from "../../../modules/designer/backend/export/text/stroke-font";
 import { exportBundleName } from "../../../sdks/designer/pcb-helpers";
 import type {
   DesignerPcbProjection,
   DesignerSchematicProjection,
 } from "../../../sdks/designer/types";
+
+interface GerberRegion {
+  /** Emitted inside a `%LPC%` block — an antipad / clearance hole. */
+  clear: boolean;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  /** Shoelace area (mm²), unsigned. */
+  areaMm2: number;
+}
+
+/** Every `G36…G37` region of a layer, with its polarity and its area. */
+function gerberRegions(gerber: string): GerberRegion[] {
+  const out: GerberRegion[] = [];
+  let clear = false;
+  let ring: Array<{ x: number; y: number }> | null = null;
+  for (const line of gerber.split("\r\n")) {
+    if (line === "%LPC*%") clear = true;
+    else if (line === "%LPD*%") clear = false;
+    else if (line === "G36*") ring = [];
+    else if (line === "G37*") {
+      if (ring && ring.length >= 3) {
+        let twice = 0;
+        for (let i = 0; i < ring.length; i += 1) {
+          const a = ring[i]!;
+          const b = ring[(i + 1) % ring.length]!;
+          twice += a.x * b.y - b.x * a.y;
+        }
+        out.push({
+          clear,
+          minX: Math.min(...ring.map((p) => p.x)),
+          maxX: Math.max(...ring.map((p) => p.x)),
+          minY: Math.min(...ring.map((p) => p.y)),
+          maxY: Math.max(...ring.map((p) => p.y)),
+          areaMm2: Math.abs(twice) / 2,
+        });
+      }
+      ring = null;
+    } else if (ring) {
+      const m = /^X(-?\d+)Y(-?\d+)D0[12]\*$/.exec(line);
+      if (m) ring.push({ x: Number(m[1]) / 1e6, y: Number(m[2]) / 1e6 });
+    }
+  }
+  return out;
+}
+
+/**
+ * Bounding boxes of every `G36…G37` region emitted inside a clear-polarity
+ * (`%LPC%`) block — the pour's antipad / keepout holes. Coordinates are the
+ * X2 4.6 integer form (1 mm = 1e6).
+ */
+function clearRegionBounds(
+  gerber: string,
+): Array<{ minX: number; maxX: number; minY: number; maxY: number }> {
+  const out: Array<{ minX: number; maxX: number; minY: number; maxY: number }> =
+    [];
+  let clear = false;
+  let ring: Array<{ x: number; y: number }> | null = null;
+  for (const line of gerber.split("\r\n")) {
+    if (line === "%LPC*%") clear = true;
+    else if (line === "%LPD*%") clear = false;
+    else if (line === "G36*") ring = clear ? [] : null;
+    else if (line === "G37*") {
+      if (ring && ring.length >= 3) {
+        out.push({
+          minX: Math.min(...ring.map((p) => p.x)),
+          maxX: Math.max(...ring.map((p) => p.x)),
+          minY: Math.min(...ring.map((p) => p.y)),
+          maxY: Math.max(...ring.map((p) => p.y)),
+        });
+      }
+      ring = null;
+    } else if (ring) {
+      const m = /^X(-?\d+)Y(-?\d+)D0[12]\*$/.exec(line);
+      if (m) ring.push({ x: Number(m[1]) / 1e6, y: Number(m[2]) / 1e6 });
+    }
+  }
+  return out;
+}
 
 // =========================================================================
 // Test fixture: minimal "555 blinker" surrogate — one through-hole DIP,
@@ -194,6 +278,7 @@ function fixtureProjection(): DesignerPcbProjection {
     overlayTexts: [],
     overlayShapes: [],
     zones: [],
+    keepouts: [],
     ratsnest: [],
     netNames: { "n-vcc": "VCC" },
     warnings: [],
@@ -339,15 +424,15 @@ describe("Gerber X2 writer", () => {
     );
   });
 
-  test("per-pad .TO.N attribute resolves from net-pad correlation", () => {
+  test("per-pad .TO.N attribute resolves from the projection's padNets", () => {
     const proj = fixtureProjection();
-    // Manually build a placement→pad→net map mirroring what the orchestrator
-    // does when a schematic projection is available.
-    const padNetIds = new Map<string, string>([
-      ["p1|1", "n-vcc"], // U1 pin 1 → VCC net
-      ["p2|2", "n-vcc"], // R1 pin 2 → VCC net
-    ]);
-    const out = buildGerberLayer(proj, "copper.top", [], padNetIds);
+    // The projection's OWN authoritative pad→net map (copper-pour contract §9)
+    // — the exporter no longer re-derives one from the schematic correlation.
+    proj.padNets = {
+      "p1|1": "n-vcc", // U1 pin 1 → VCC net
+      "p2|2": "n-vcc", // R1 pin 2 → VCC net
+    };
+    const out = buildGerberLayer(proj, "copper.top", []);
     // The U1 pad-1 flash should emit %TO.N,VCC*% before the D03.
     const lines = out.split("\r\n");
     const padPIdx = lines.findIndex((l) => l === "%TO.P,U1,1*%");
@@ -359,11 +444,11 @@ describe("Gerber X2 writer", () => {
     ).toBe(true);
   });
 
-  test("pad without correlation entry emits no .TO.N attribute", () => {
+  test("pad without a padNets entry emits no .TO.N attribute", () => {
     const proj = fixtureProjection();
-    // Empty correlation map — every pad should fall through.
-    const padNetIds = new Map<string, string>();
-    const out = buildGerberLayer(proj, "copper.top", [], padNetIds);
+    // Empty pad→net map — every pad should fall through.
+    proj.padNets = {};
+    const out = buildGerberLayer(proj, "copper.top", []);
     // U1 pad-1 has no net entry; the %TO.P line must not be preceded by
     // a per-pad net attribute (vias still emit their own net attr).
     const lines = out.split("\r\n");
@@ -374,11 +459,7 @@ describe("Gerber X2 writer", () => {
 
   test("copper pour emitted as positive G36/G37 regions with antipad holes", () => {
     const proj = fixtureProjection();
-    proj.board.viewState = {
-      ...createDefaultPcbViewState(),
-      copperFillLayers: ["F.Cu"],
-      copperFillPourNetIds: { "F.Cu": "n-vcc" },
-    };
+    proj.zones = [boardZoneRow("F.Cu", "n-vcc")];
     const out = buildGerberLayer(proj, "copper.top", []);
     // Pour present as filled regions.
     expect(out).toContain("G36*");
@@ -393,14 +474,136 @@ describe("Gerber X2 writer", () => {
     expect(out.indexOf("G36*")).toBeLessThan(out.indexOf("D03*"));
   });
 
+  test("a copperPour keepout is cut out of the pour as an LPC hole", () => {
+    // Fill parity (contract §13.3): the artwork subtracts the same keepouts the
+    // canvas and DRC do — a keepout the Gerber ignored would be a
+    // displayed-but-unenforced rule.
+    const KEEPOUT = [
+      { x: 22, y: 3 },
+      { x: 27, y: 3 },
+      { x: 27, y: 8 },
+      { x: 22, y: 8 },
+    ];
+    const withKeepout = (): DesignerPcbProjection => {
+      const proj = fixtureProjection();
+      proj.zones = [boardZoneRow("F.Cu", "n-vcc")];
+      proj.keepouts = [
+        keepoutRow("k1", ["F.Cu"], KEEPOUT, {
+          tracks: false,
+          vias: false,
+          pads: false,
+          footprints: false,
+          copperPour: true,
+        }),
+      ];
+      return proj;
+    };
+    const plainProj = fixtureProjection();
+    plainProj.zones = [boardZoneRow("F.Cu", "n-vcc")];
+
+    const plain = clearRegionBounds(buildGerberLayer(plainProj, "copper.top", []));
+    const carved = clearRegionBounds(
+      buildGerberLayer(withKeepout(), "copper.top", []),
+    );
+    expect(carved.length).toBe(plain.length + 1);
+    // The kernel inflates the ring by one output-grid step (0.1 µm) before
+    // subtracting, so the hole is the keepout plus at most that much.
+    const hole = carved.find(
+      (b) => Math.abs(b.minX - 22) < 1e-3 && Math.abs(b.maxX - 27) < 1e-3,
+    );
+    expect(hole).toBeDefined();
+    expect(hole!.minY).toBeCloseTo(3, 3);
+    expect(hole!.maxY).toBeCloseTo(8, 3);
+  });
+
+  test("same-net zones with different clearances emit ONE union, not per-pour regions", () => {
+    // Contract §9: the layer carries the UNION of every pour. Emitting the two
+    // zones one after the other would cut the WIDER zone's `%LPC%` antipad out
+    // of the copper the TIGHTER zone had already laid down — a manufactured
+    // open around the via that neither zone asked for.
+    const proj = fixtureProjection();
+    proj.netNames = { "n-vcc": "VCC", "n-gnd": "GND" };
+    // Only the via is left as a different-net obstacle, so the hole geometry is
+    // exactly the two clearances and nothing else.
+    proj.placements = [];
+    proj.traces = [];
+    proj.freeHoles = [];
+    proj.zones = [
+      polygonZoneRow(
+        "z-tight",
+        "F.Cu",
+        "n-gnd",
+        [
+          { x: 12, y: 6 },
+          { x: 20, y: 6 },
+          { x: 20, y: 14 },
+          { x: 12, y: 14 },
+        ],
+        { clearanceMm: 0.5 },
+      ),
+      polygonZoneRow(
+        "z-wide",
+        "F.Cu",
+        "n-gnd",
+        [
+          { x: 14, y: 6 },
+          { x: 22, y: 6 },
+          { x: 22, y: 14 },
+          { x: 14, y: 14 },
+        ],
+        { clearanceMm: 0.8 },
+      ),
+    ];
+    const regions = gerberRegions(buildGerberLayer(proj, "copper.top", []));
+    const dark = regions.filter((r) => !r.clear);
+    const holes = regions.filter((r) => r.clear);
+    // One merged island, one antipad — not two overlapping region sets.
+    expect(dark).toHaveLength(1);
+    expect(holes).toHaveLength(1);
+    // The union's hole is the TIGHTER clearance (0.3 via radius + 0.5), because
+    // the wide zone's larger hole is filled by the tight zone's copper. A
+    // per-pour emission would leave the 1.1 mm hole instead.
+    const radius = (holes[0]!.maxX - holes[0]!.minX) / 2;
+    expect(radius).toBeGreaterThan(0.75);
+    expect(radius).toBeLessThan(0.9);
+    // Every pour on the layer shares one net, so the union keeps its attribute.
+    expect(buildGerberLayer(proj, "copper.top", [])).toContain("%TO.N,GND*%");
+  });
+
+  test("export without a schematic still merges a same-net pad into the pour", () => {
+    // `padNets` lives on the PCB projection (contract §9), so a PCB-only export
+    // resolves pad nets exactly as the canvas does. The exporter used to
+    // re-derive the map from the schematic correlation and pass `undefined`
+    // here, which gave a same-net pad a full clearance halo in the artwork.
+    const withNet = fixtureProjection();
+    withNet.netNames = { "n-vcc": "VCC", "n-gnd": "GND" };
+    withNet.zones = [boardZoneRow("F.Cu", "n-gnd")];
+    withNet.padNets = { "p2|1": "n-gnd" };
+    const withoutNet = fixtureProjection();
+    withoutNet.netNames = { ...withNet.netNames };
+    withoutNet.zones = [boardZoneRow("F.Cu", "n-gnd")];
+
+    const copperOf = (proj: DesignerPcbProjection): string =>
+      buildExportBundle(proj, null).artifacts.find(
+        (a) => a.kind === "gerber.top_copper",
+      )!.text;
+    const clearArea = (gerber: string): number =>
+      gerberRegions(gerber)
+        .filter((r) => r.clear)
+        .reduce((sum, r) => sum + r.areaMm2, 0);
+    const merged = clearArea(copperOf(withNet));
+    const isolated = clearArea(copperOf(withoutNet));
+    // R1 pad 1 floods solid instead of getting its own antipad, so at least the
+    // pad's own 0.95 mm² of copper (plus its halo) comes back into the pour.
+    // R1's two pads sit 1.65 mm apart, so their halos merge into ONE hole
+    // either way — the region COUNT cannot see this, only the area can.
+    expect(merged).toBeLessThan(isolated - 0.9);
+  });
+
   test("non-poured copper layer emits no region", () => {
     const proj = fixtureProjection();
-    proj.board.viewState = {
-      ...createDefaultPcbViewState(),
-      copperFillLayers: ["F.Cu"],
-      copperFillPourNetIds: { "F.Cu": "n-vcc" },
-    };
-    // B.Cu is not in copperFillLayers → no pour regions.
+    proj.zones = [boardZoneRow("F.Cu", "n-vcc")];
+    // B.Cu has no board zone row → no pour regions.
     expect(buildGerberLayer(proj, "copper.bottom", [])).not.toContain("G36*");
   });
 
@@ -890,7 +1093,6 @@ describe("export orchestrator", () => {
       fixtureProjection(),
       "copper.top",
       [],
-      undefined,
       "2020-01-01T00:00:00.000Z",
     );
     expect(out).toContain("%TF.CreationDate,2020-01-01T00:00:00.000Z*%");

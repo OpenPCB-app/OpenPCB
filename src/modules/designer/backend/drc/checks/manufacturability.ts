@@ -12,6 +12,7 @@ import {
 import { below, type DrcContext } from "../drc-context";
 import { exceeds } from "../../pcb/tolerance";
 import type { DrcViolationDraft } from "../types";
+import { ruleSuffix } from "../rule-message";
 
 /**
  * Minimum-geometry rules (design-rule errors) + fabricator-capability warnings.
@@ -23,17 +24,26 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
   const min = ctx.designRules.minimums;
 
   for (const t of ctx.traces) {
-    if (below(t.widthMm, min.traceWidthMm)) {
+    const width = ctx.resolver.scalar("trackWidth", {
+      netId: t.netId,
+      layers: [t.layer],
+      geometry: {
+        kind: "polyline",
+        pointsMm: t.pointsMm,
+        halfWidthMm: t.halfWidthMm,
+      },
+    });
+    if (below(t.widthMm, width.mm)) {
       out.push({
         code: "TRACE_WIDTH_MIN",
         ruleClass: "manufacturability",
-        severity: "error",
-        message: `Trace width ${t.widthMm.toFixed(3)} mm is below the minimum ${min.traceWidthMm.toFixed(3)} mm`,
+        ...(width.rule?.severity ? { ruleSeverity: width.rule.severity } : {}),
+        message: `Trace width ${t.widthMm.toFixed(3)} mm is below the minimum ${width.mm.toFixed(3)} mm${ruleSuffix(width)}`,
         anchors: [{ kind: "trace", traceId: t.id }],
         locationMm: t.mid,
         layer: t.layer,
         measuredMm: t.widthMm,
-        requiredMm: min.traceWidthMm,
+        requiredMm: width.mm,
       });
     }
     for (const v of validateTraceAgainstFab(
@@ -43,7 +53,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "FAB_TRACE_WIDTH",
         ruleClass: "manufacturability",
-        severity: "warning",
         message: v.message,
         anchors: [{ kind: "trace", traceId: t.id }],
         locationMm: t.mid,
@@ -56,41 +65,61 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
 
   for (const vg of ctx.vias) {
     const via = vg.via;
-    if (below(via.diameterMm, min.viaDiameterMm)) {
+    // One scope item per via: its barrel disc and its resolved layer span.
+    const viaItem = {
+      netId: vg.netId,
+      layers: vg.layers,
+      geometry: {
+        kind: "disc" as const,
+        center: vg.center,
+        radiusMm: vg.radiusMm,
+      },
+    };
+    const viaDiameter = ctx.resolver.scalar("viaDiameter", viaItem);
+    if (below(via.diameterMm, viaDiameter.mm)) {
       out.push({
         code: "VIA_DIAMETER_MIN",
         ruleClass: "manufacturability",
-        severity: "error",
-        message: `Via pad diameter ${via.diameterMm.toFixed(3)} mm is below the minimum ${min.viaDiameterMm.toFixed(3)} mm`,
+        ...(viaDiameter.rule?.severity
+          ? { ruleSeverity: viaDiameter.rule.severity }
+          : {}),
+        message: `Via pad diameter ${via.diameterMm.toFixed(3)} mm is below the minimum ${viaDiameter.mm.toFixed(3)} mm${ruleSuffix(viaDiameter)}`,
         anchors: [{ kind: "via", viaId: via.id }],
         locationMm: via.centerMm,
         measuredMm: via.diameterMm,
-        requiredMm: min.viaDiameterMm,
+        requiredMm: viaDiameter.mm,
       });
     }
-    if (below(via.drillMm, min.viaDrillMm)) {
+    const viaDrill = ctx.resolver.scalar("viaDrill", viaItem);
+    if (below(via.drillMm, viaDrill.mm)) {
       out.push({
         code: "VIA_DRILL_MIN",
         ruleClass: "manufacturability",
-        severity: "error",
-        message: `Via drill ${via.drillMm.toFixed(3)} mm is below the minimum ${min.viaDrillMm.toFixed(3)} mm`,
+        ...(viaDrill.rule?.severity
+          ? { ruleSeverity: viaDrill.rule.severity }
+          : {}),
+        message: `Via drill ${via.drillMm.toFixed(3)} mm is below the minimum ${viaDrill.mm.toFixed(3)} mm${ruleSuffix(viaDrill)}`,
         anchors: [{ kind: "via", viaId: via.id }],
         locationMm: via.centerMm,
         measuredMm: via.drillMm,
-        requiredMm: min.viaDrillMm,
+        requiredMm: viaDrill.mm,
       });
     }
     const annular = (via.diameterMm - via.drillMm) / 2;
-    if (below(annular, min.annularRingMm)) {
+    // `annularRing` rules reach vias only; THT pad rings stay board-only (S11).
+    const viaAnnular = ctx.resolver.scalar("annularRing", viaItem);
+    if (below(annular, viaAnnular.mm)) {
       out.push({
         code: "ANNULAR_RING_MIN",
         ruleClass: "manufacturability",
-        severity: "error",
-        message: `Via annular ring ${annular.toFixed(3)} mm is below the minimum ${min.annularRingMm.toFixed(3)} mm`,
+        ...(viaAnnular.rule?.severity
+          ? { ruleSeverity: viaAnnular.rule.severity }
+          : {}),
+        message: `Via annular ring ${annular.toFixed(3)} mm is below the minimum ${viaAnnular.mm.toFixed(3)} mm${ruleSuffix(viaAnnular)}`,
         anchors: [{ kind: "via", viaId: via.id }],
         locationMm: via.centerMm,
         measuredMm: annular,
-        requiredMm: min.annularRingMm,
+        requiredMm: viaAnnular.mm,
       });
     }
     for (const fv of validateViaAgainstFab(
@@ -106,7 +135,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code,
         ruleClass: "manufacturability",
-        severity: "warning",
         message: fv.message,
         anchors: [{ kind: "via", viaId: via.id }],
         locationMm: via.centerMm,
@@ -130,7 +158,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
         out.push({
           code: "VIA_ASPECT_RATIO",
           ruleClass: "manufacturability",
-          severity: "warning",
           message: `Via aspect ratio ${ratio.toFixed(1)}:1 exceeds ${preset.name} maximum ${preset.maxAspectRatio}:1 (span ${effectiveThicknessMm.toFixed(2)} mm / drill ${via.drillMm.toFixed(3)} mm)`,
           anchors: [{ kind: "via", viaId: via.id }],
           locationMm: via.centerMm,
@@ -148,7 +175,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "DRILL_SIZE_MIN",
         ruleClass: "manufacturability",
-        severity: "error",
         message: `Drill size ${hole.drillMm.toFixed(3)} mm is below the minimum ${min.drillSizeMm.toFixed(3)} mm`,
         anchors: [hole.anchor],
         locationMm: hole.center,
@@ -162,7 +188,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
         out.push({
           code: "ANNULAR_RING_MIN",
           ruleClass: "manufacturability",
-          severity: "error",
           message: `Pad annular ring ${annular.toFixed(3)} mm is below the minimum ${min.annularRingMm.toFixed(3)} mm`,
           anchors: [hole.anchor],
           locationMm: hole.center,
@@ -182,7 +207,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
         out.push({
           code: fv.rule === "minDrillMm" ? "FAB_DRILL" : "FAB_ANNULAR_RING",
           ruleClass: "manufacturability",
-          severity: "warning",
           message: fv.message,
           anchors: [hole.anchor],
           locationMm: hole.center,
@@ -205,7 +229,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
         out.push({
           code: "OUTLINE_INTERNAL_RADIUS",
           ruleClass: "manufacturability",
-          severity: "warning",
           message: `Internal corner radius ${hit.radiusMm.toFixed(2)} mm < ${preset.name} min ${preset.minInternalRadiusMm.toFixed(2)} mm`,
           anchors: [{ kind: "boardEdge" }],
           locationMm: hit.locationMm,
@@ -223,7 +246,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
         out.push({
           code: "OUTLINE_SLOT_WIDTH",
           ruleClass: "manufacturability",
-          severity: "warning",
           message: `Board slot / neck ${slot.gapMm.toFixed(2)} mm < ${preset.name} min ${preset.minSlotWidthMm.toFixed(2)} mm`,
           anchors: [{ kind: "boardEdge" }],
           locationMm: slot.locationMm,

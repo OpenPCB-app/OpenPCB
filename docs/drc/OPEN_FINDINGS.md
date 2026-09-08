@@ -1,13 +1,16 @@
 # DRC — open findings
 
-This is the defect register for OpenPCB's design-rule checker. It records the 19 bugs that a
-full adversarial audit of the DRC engine confirmed and that are **still open**, together with the
-durable engineering contracts and constant sets that the surrounding hardening work locked in.
+This is the defect register for OpenPCB's design-rule checker. It records the 12 bugs that a
+full adversarial audit of the DRC engine confirmed and that are **still open** (19 at the audit;
+B2-9 and B5-LIVE-PADGEOMS were verified closed in Session 0, and B3-1, B3-3, B3-4, B3-5, B3-6
+were fixed in Session 1 — both 2026-09-06), together with the durable
+engineering contracts and constant sets that the surrounding hardening work locked in.
 
-For 18 of the 19 findings this document is the only prose description that exists. The audit
+For 11 of the 12 findings this document is the only prose description that exists. The audit
 report they came from has been retired; the hardening plan that scheduled the fixes has been
-retired. Nothing else in the repository explains *why* these are bugs or what the correct
-behaviour is.
+retired and replaced by `docs/pcb-hardening/PROGRAM.md`. Nothing else in the repository explains
+*why* these are bugs or what the correct behaviour is. The verified current-master inventory that
+re-checked every entry is `docs/pcb-hardening/00-ground-truth.md`.
 
 ## How to use it
 
@@ -25,12 +28,15 @@ Every open finding has a corresponding `test.todo` regression test. The register
 long as that correspondence holds:
 
 ```
-rg -n "test\.todo" src/core/backend/tests/drc-audit-b*.test.ts
+rg -n "test\.todo\(" src/core/backend/tests/drc-audit-b*.test.ts
 ```
 
-Expect **20 lines covering 19 unique bug ids**. When a fix lands, the `test.todo` becomes a real
-`test` and the finding leaves this document. If the count drops without a finding being removed
-here, the register is stale.
+Expect **8 call sites, 8 unique bug ids**, and every body a real post-fix assertion
+(`rg "expect\(true\)\.toBe\(true\)"` over the same files must return nothing — Session 0 replaced
+the seven placeholder bodies; Sessions 1 and 2 flipped nine of them). When a fix lands, the `test.todo` becomes a real `test` and the
+finding leaves this document. If the count drops without a finding being removed here, the
+register is stale. To check whether a finding is still open without editing the suite, copy the
+file to a scratch directory with `test.todo(` → `test(` and absolute import paths, and run it.
 
 ## Evidence standard
 
@@ -44,112 +50,102 @@ and were never independently verified against code. The only verified signal is 
 census above. Where this document says something shipped, it means "the test file says it is no
 longer pending" — not "someone confirmed the code is correct."
 
----
-
-# 1. Unowned — needs an owner before anything else
-
-## B3-1 — an unrouted `GND` net reports DRC-clean on a default board
-
-**Severity: HIGH.** This is the finding to escalate. A completely unrouted ground net on a
-default board produces no violation of any kind.
-
-**Mechanism.** The ratsnest builder drops GND-named nets *by name*, and it does so **before** any
-check for whether a copper pour actually exists. On a default board `copperFillLayers` is empty.
-So the two checks that should catch an unrouted ground both miss:
-
-- `UNCONNECTED_NET` (connectivity check) trusts `projection.ratsnest`. GND was suppressed from the
-  ratsnest, so there are no airwires, so there is nothing to report.
-- `ISOLATED_COPPER_ISLAND` (copper-pour check) only iterates board-wide fill layers. There are
-  none, so it never runs.
-
-The name-based suppression is only defensible if a same-net pour is guaranteed to satisfy the net.
-The doc comment in the copper-pour check asserts exactly that — **and it is false for this path**,
-because nothing verifies that a pour exists. KiCad, by contrast, clears airwires only through real
-zone connectivity, and ships `unconnected_items` at Error severity.
-
-**The test codifies the wrong behaviour.** The ratsnest test suite contains an assertion that a
-GND net with no routing produces no airwires. It passes. Fixing B3-1 means changing that test,
-not just the engine — anyone approaching this from the test suite will conclude the current
-behaviour is intended.
-
-**Anchors.** Ratsnest builder (`pcb/ratsnest.ts`), GND name-suppression branch · default
-`copperFillLayers` in `pcb-defaults.ts` · `checks/connectivity.ts` · `checks/copper-pour.ts`
-doc-comment claim · the ratsnest regression suite `designer-pcb-ratsnest.test.ts`.
-
-**Ownership: none.** B3-1 is tracked as a `test.todo` in `drc-audit-b3.test.ts`, so it is a real,
-visible regression test — it was not lost. But it is **assigned to no milestone**: P4, P7 and P9
-each list the bugs they own, and B3-1 appears in none of them, nor anywhere in the tracker. It is
-the highest-severity item in this register and the only one with no route to being fixed.
-
-**Action required:** assign B3-1 to a milestone, or schedule it standalone. A fix has to decide
-what the correct semantics are (suppress GND airwires only when a pour on that net exists on some
-enabled layer, versus dropping name-based suppression entirely) and update the ratsnest test to
-match.
+Session 0 (2026-09-06) re-verified every *open* entry by running its `test.todo` body against
+current source: 11 of the 12 bodies that carried a real assertion failed as expected; one
+(B5-LIVE-ROT-PAD) passed for the wrong reason and was rewritten; the seven placeholder bodies were
+replaced with real specs, and two of those (B2-9, B5-LIVE-PADGEOMS) passed and were flipped.
 
 ---
 
-# 2. Open findings by owning milestone
+# 1. Resolved in Session 1 — connectivity (B3-1, B3-3, B3-4, B3-5, B3-6)
 
-## P4 — backend spatial index
+Fixed 2026-09-06 by the connectivity program session (`docs/pcb-hardening/PROGRAM.md` S1). The
+contract that replaced the six independent connectivity models is
+`docs/pcb-hardening/01-connectivity-contract.md`; the kernel is `src/shared/pcb-connectivity/`;
+`pcb/ratsnest.ts` is now an MST over kernel components and `checks/dangling.ts` a lookup into the
+kernel's contact records. All five regressions are live `test`s in `drc-audit-b3.test.ts`.
 
-P4 replaces the brute-force pair loops with an rbush-backed index, gated on byte-identity against
-an exhaustive-mode oracle. It owns four findings. Three are geometric sampling defects that a
-proper index makes cheap to fix; one is pure waste.
+What was wrong, for the record:
 
-### B4-1 — off-board trace detection samples, and a narrow cutout falls between samples
+- **B3-1 (was HIGH)** — `computeRatsnest` dropped GND-named nets by name before any check that a
+  pour existed, so an entirely unrouted ground on a default board (no fill layers) reported
+  DRC-clean; `designer-pcb-ratsnest.test.ts` codified that as intended. Resolution: no net-name
+  rule anywhere; a same-net pour island is a graph node and collapses GND geometrically when a
+  fill layer is enabled; otherwise GND shows airwires and `UNCONNECTED_NET` like any net (user
+  decision). The golden board gained exactly one `UNCONNECTED_NET` (net `GND`).
+- **B3-3** — endpoint↔endpoint chaining ignored layer. Resolution: connection requires a shared
+  copper layer; a via is the only cross-layer node.
+- **B3-4** — pad↔endpoint and via↔endpoint unions were layer-blind and `PadRef` had no layer.
+  Resolution: pads carry `resolvePadCopperLayers` layers and their exact `padOutlineWorldMm` ring;
+  the `pcb.padShapeConnectivity` AABB flag is retired because copper overlap subsumes it.
+- **B3-5** — vias unioned with trace endpoints only. Resolution: via disc vs trace body on every
+  span layer.
+- **B3-6** — free pads were absent. Resolution: free pads are items (`std` on every layer,
+  `smd`/`conn` on their layer, `hole` none) and ratsnest endpoints (`RatsnestEndpoint.kind ===
+  "freePad"`); free-pad-anchored airwires are omitted from the cloud autoroute target list with a
+  snapshot warning because the generated `RatsnestTarget` contract has footprint-pad fields only.
 
-`COPPER_OFF_BOARD` for traces tests only polyline vertices and segment midpoints for containment
-in the board outline. A trace crossing a cutout narrower than the sampling stride passes straight
-over it undetected. Worse, the miss is not silent: the geometry still registers as touching the
-cutout edge, so it is **demoted to a distance-0 `COPPER_TO_BOARD_EDGE` warning** when the correct
-verdict is a `COPPER_OFF_BOARD` error. Reproduced end-to-end with a 4 mm cutout and an 80 mm trace.
+---
 
-*Anchor:* `checks/board.ts`, trace off-board branch and its vertex/midpoint sampler.
+# 2. Resolved in Session 2 — geometry (B4-1, B4-2, B4-6, B4-7, full-radius roundrects)
 
-### B4-2 — off-board pad detection is vertex-only
+Fixed 2026-09-07 by the geometry program session (`docs/pcb-hardening/PROGRAM.md` S2). The
+contract is `docs/pcb-hardening/02-geometry-contract.md`; the kernel is
+`src/shared/pcb-geometry/{segment-predicates,arc-chords,ring-utils,outline-geometry,region-rings,board-region}.ts`;
+`checks/board.ts` and `checks/outline.ts` consume one closed-set board region built once per run
+(`ctx.boardRegion`). All four regressions are live `test`s in `drc-audit-b4.test.ts` (20 tests).
 
-The pad branch tests pad-outline vertices only. Two real geometries escape: a slot cutout passing
-clean through a pad's interior (all vertices remain on-board), and a concave notch that the pad
-spans (all vertices on-board, the middle of the pad over air). Both reproduced.
+What was wrong, for the record:
 
-*Anchor:* `checks/board.ts`, pad off-board branch.
+- **B4-1 (was HIGH)** — trace containment sampled vertices and segment midpoints, so a trace
+  crossing a cutout narrower than the stride passed and was demoted to a distance-0
+  `COPPER_TO_BOARD_EDGE`. Resolution: `stadiumInsideRegion` — the copper WITH its width must lie
+  inside the region; a centreline farther than its half-width from every boundary edge cannot
+  cross one, so the test is exact and O(edges).
+- **B4-2 (was HIGH)** — pad containment tested pad vertices plus "a cutout vertex inside the pad".
+  A slot through the pad interior, a pad spanning a concave notch and a pad exactly filling a
+  cutout all passed. Resolution: `polygonInsideRegion` — every pad edge inside the region
+  (sub-interval midpoints between every boundary contact), and no hole interior meeting the pad
+  interior through the hole's own boundary, including coincident edges.
+- **B4-6** — cutout arcs were flattened inscribed (hole polygon smaller than the true hole) and
+  circles with a fixed 64 chords (0.024 mm off at r = 20). Resolution: per-arc bias — the chord
+  polygon always lies on the board side of the true curve (holes circumscribed as a tangent chain
+  with exact endpoints, convex outer arcs inscribed, concave notches circumscribed) — so the
+  legality region is a subset of the true board within `MAX_CHORD_DEVIATION_MM`; full circles
+  follow the chord rule with 64 as a floor.
+- **B4-7** — `pointInOutline` re-flattened the outline and every cutout on each sampled point
+  (151 flattens for 50 traces). Resolution: `buildBoardRegion` once per `runDrc`; the audit test
+  now asserts the flatten count is independent of the trace count.
+- **Full-radius roundrects (found in S2 reconnaissance, no register id)** — `roundRectPoints`
+  emitted a duplicate vertex when the corner radius equalled half the width or height, and the
+  zero-length edge tripped the self-intersection test, so every rounded slot cutout and every
+  stadium outline was `BOARD_OUTLINE_INVALID`. Resolution: no zero-length edge is emitted and
+  every flattened ring is canonicalised.
+- **Same class, no id — outline validity was vertex-only**: a cutout crossing the outline with no
+  vertex outside, two cutouts crossing with no vertex inside each other, and cutouts sharing
+  supporting edges all passed. Resolution: validity runs on the biased rings —
+  `ringStrictlyInside(cut, outer)` and no `ringsIntersect(cut, other)` — so a cutout that touches
+  the edge or another cutout is now invalid (zero-width web), as is any true breach or overlap.
 
-### B4-6 — arc flattening shrinks cutouts, so cutout clearance is over-measured
+---
 
-Outline arcs are flattened to inscribed polygons. For the *outer* outline that errs safe
-(the polygon is inside the true boundary). For *cutouts* the same inscription makes the hole
-smaller than it really is, so copper-to-cutout-edge distance is over-measured — a false-pass
-direction. Bounded at roughly 0.024 mm at a 20 mm radius, so low severity, but it is the wrong
-sign of error.
+# 3. Open findings by owning session
 
-*Anchor:* `outline-geometry.ts`, arc flattening and cutout ring construction.
+Sessions refer to `docs/pcb-hardening/PROGRAM.md`. The former P4/P7/P9 milestone groupings are
+kept as sub-headings because their prose still explains the mechanisms; ownership has moved.
 
-### B4-7 — `pointInOutline` re-flattens the outline on every sampled point
+## S2 — core PCB geometry truth (formerly P4)
 
-Each containment test re-flattens the outer outline and every cutout from scratch, inside the
-per-point sampling loops of B4-1 and B4-2. The DRC context already precomputes these rings. This
-is not a correctness bug; it is the single largest avoidable constant factor in the board checks
-and it compounds with the sampling density any B4-1/B4-2 fix will add.
+Closed — see §2 above (B4-1, B4-2, B4-6, B4-7 resolved 2026-09-07).
 
-*Anchor:* `outline-geometry.ts`, `pointInOutline`.
+## S8 — live DRC / route-legality parity, and S10 — async execution (formerly P7)
 
-## P7 — async DRC, engine move to `shared/drc/`, live/batch parity
-
-P7 moves the engine to `src/shared/drc/` behind re-export shims so live DRC and the batch path
-consume the identical code, and moves the batch run off the HTTP request path onto the task
-executor. It owns five findings. Four of them are the *reason* the move is necessary: the live
-path is a second, weaker reimplementation of the same geometry, and its divergences are P7's
-acceptance criteria (see §5.5).
-
-### B2-9 — the creation gate and DRC disagree on identical geometry
-
-The route tool's via-placement gate and the DRC engine apply different comparison semantics to the
-same numbers, so a via can be accepted at creation and then flagged by DRC (or the reverse). This
-is the fourth of the four epsilon regimes catalogued in §5.1. See §3 — there is an open question
-about whether this one is already fixed.
-
-*Anchor:* `command-executor.ts`, route-tool via gate · `checks/clearance.ts` · the shared tolerance
-policy in `pcb/tolerance.ts`.
+S8 moves the engine to `src/shared/drc/` behind re-export shims so live DRC and the batch path
+consume the identical code; its acceptance criteria are the divergences in §5.5. S10 moves the
+batch run off the HTTP request path. Session 0 (2026-09-06) closed two of P7's original five
+findings: B2-9 (the via gate already consumes `pcb/tolerance.ts`) and B5-LIVE-PADGEOMS (the
+per-segment rebuild is gone; the residual per-cursor-move rebuild is noted in
+`docs/pcb-hardening/00-ground-truth.md` §1 for S8/S9).
 
 ### B5-LIVE-ROT-PAD — live pad boxes never swap dimensions under rotation
 
@@ -169,16 +165,6 @@ to live checking. The code comment immediately above this logic states the oppos
 
 *Anchor:* `frontend/pcb/drc/live-drc.ts`, pad layer assignment.
 
-### B5-LIVE-PADGEOMS — pad geometry is rebuilt per pending segment per cursor move
-
-`computePadGeoms` sits inside the per-pending-segment loop, which itself runs on every cursor
-move. All pad geometry for the board is reconstructed on each frame of a drag. This is why the
-live path degrades at roughly 1–2k pads, an order of magnitude below the batch path's
-interactive-hostile threshold.
-
-*Anchor:* `frontend/pcb/drc/live-drc.ts`, `computePadGeoms` call site inside the segment loop;
-driven from `PcbCanvas.tsx`.
-
 ### B5-SYNC — the full O(n²) batch run executes synchronously in the HTTP handler
 
 `POST /designs/:designId/drc/run` runs the engine inline on Bun's single thread. At ~10k copper
@@ -188,21 +174,26 @@ itself is pure and correct; this is purely a placement problem.
 *Anchor:* the `POST /designs/:designId/drc/run` handler in `designer/backend/routes.ts`. Cite the
 route, not a line number — the handler has already drifted once.
 
-## P9 — DFM overlay checks
+## S11 — manufacturability, S5 — pours (formerly P9; the two pour findings were closed in S5)
 
-P9 adds courtyard, silkscreen, mask and copper-shape checks on top of a new overlay-extraction
-context module. It also owns nine pre-existing findings: three geometry-model defects in
-manufacturability, and the entire layer-blindness cluster in the connectivity graph.
+The DFM overlay checks P9 was to add (courtyard, silkscreen, mask, copper shape) are now S12 and
+own no register entry — none of those codes exist yet. The nine pre-existing findings P9 carried
+are split: three manufacturability geometry defects → S11; the layer-blindness cluster → S1
+(fixed, see §1); the two island findings → S5.
 
-### B2-5 — slotted drills are modelled as round holes
+### B2-5 — slotted drills are modelled as round holes in the manufacturability checks
 
-`drillSlot` is ignored. A slot is treated as a round hole of the slot's *width*, so every check
-that consumes hole geometry — annular ring, `HOLE_TO_HOLE`, `DRILL_SIZE_MIN` — measures the wrong
-geometry along the slot's long axis. P9's slot-aware `DrcHole.slot` field is the template for the
-fix.
+**Narrowed 2026-09-06.** `DrcHole.slot` exists and is populated for free pads and free holes, and
+`checks/board.ts` already consumes it: `HOLE_TO_HOLE` measures slot-to-slot edge gaps on the slot
+centreline and the hole-to-board-edge check uses the slot radius. What remains: `DRILL_SIZE_MIN`
+and the pad `ANNULAR_RING_MIN` branch in `checks/manufacturability.ts` read only `hole.drillMm`
+and `hole.padOdMm`, so a slot is still judged as a round hole of the slot's *width* there; and
+footprint through-hole pads never populate `slot` at all (only free pads/holes go through
+`slotCenterline`). Excellon export is slot-aware (`G85`), so DRC and the fab see different holes.
 
-*Anchor:* `drc-context.ts` hole construction · the `drillSlot` field on the pad type in
-`sdks/designer/types.ts`.
+*Anchor:* `checks/manufacturability.ts`, `DRILL_SIZE_MIN` and pad annular branches ·
+`drc-context.ts` `slotCenterline` and footprint-pad hole construction · the `drillSlot` field on
+the pad type in `sdks/designer/types.ts`.
 
 ### B2-6 — annular ring uses bounding-box extents for non-rectangular pads
 
@@ -223,42 +214,6 @@ a depth-to-drill convention closer to 1:1. Compounding it, neither JLCPCB standa
 
 *Anchor:* `checks/manufacturability.ts`, `VIA_ASPECT_RATIO` branch.
 
-### B3-3 — trace endpoint chaining in the ratsnest is layer-agnostic
-
-Two traces whose endpoints share exact integer-nm coordinates are unioned regardless of layer. An
-F.Cu trace and a B.Cu trace meeting at a point with **no via** are marked connected, so the net
-reports routed while it is electrically open. Reproduced. A comment in the working tree
-acknowledges this as "historical layer-agnostic behavior" — it is not a decision anyone should
-preserve.
-
-*Anchor:* `pcb/ratsnest.ts`, endpoint-to-endpoint union.
-
-### B3-4 — pad and via unions in the ratsnest are layer-blind
-
-The pad-to-endpoint and via-to-trace unions also ignore layer; `PadRef` carries no layer at all.
-A B.Cu trace terminating at the XY of an F.Cu-only SMD pad counts as connected.
-
-*Anchor:* `pcb/ratsnest.ts`, pad-to-endpoint and via-to-trace unions · `PadRef` shape.
-
-### B3-5 — a via on a trace's interior connects nothing
-
-Via unions test trace **endpoints** only. A stitching via placed mid-segment — the normal way to
-change layers along a run — unions with neither trace, producing a false airwire and a false
-`UNCONNECTED_NET`. The same-layer T-junction pass added later covers trace-to-trace only, not
-via-to-trace.
-
-*Anchor:* `pcb/ratsnest.ts`, via union.
-
-### B3-6 — free pads are absent from the connectivity graph
-
-`correlateNetPads` builds the graph from schematic pins only, so free pads (pads not backed by a
-schematic pin) do not exist to connectivity. Both error directions follow: a net stitched through
-a free pad reports a permanent, unwaivable airwire; a net that exists only on free pads is
-invisible. This is the same defect the tracker records as the "free-pad false `UNCONNECTED_NET`"
-item under DRC trust.
-
-*Anchor:* `net-pad-correlation.ts`, `correlateNetPads` · `checks/connectivity.ts` doc comment.
-
 ### B3-9 — `measuredMm` carries mm² for isolated islands
 
 `ISOLATED_COPPER_ISLAND` writes the island's **area** into `measuredMm`, whose field contract
@@ -266,6 +221,9 @@ declares millimetres. Any consumer formatting or comparing that number is wrong 
 
 *Anchor:* `checks/copper-pour.ts` emit site · the `measuredMm` field contract in
 `sdks/designer/types.ts`.
+
+**Resolved 2026-09-08 (Session 5).** `ISOLATED_COPPER_ISLAND` no longer sets `measuredMm`; the
+area stays in the message (mm²). Live regression: `drc-audit-b3.test.ts` "B3-9" (now `test`).
 
 ### B3-10 — `anchored` accepts dead copper, and the message overclaims
 
@@ -275,23 +233,24 @@ verifies.
 
 *Anchor:* `copper-fill-geometry.ts`, anchoring predicate · `checks/copper-pour.ts` message text.
 
+**Resolved 2026-09-08 (Session 5).** The check reads the S1 connectivity component of every kept
+island (`DrcContext.pourResults()` → `pourItemKey` → `connectivity().componentOf`): an island is
+dead iff its component contains no pad / free pad, so a floating same-net stub no longer anchors
+it; the message says "reach no pad". The kernel's own `attached` flag is now only the
+island-removal criterion (`docs/pcb-hardening/04-copper-pour-contract.md` §8, §10). Live
+regression: `drc-audit-b3.test.ts` "B3-10" (now `test`), plus `drc-copper-pour.test.ts`.
+
 ---
 
-# 3. Open question — the B2-9 double-claim
+# 3. Resolved — the B2-9 double-claim
 
-The tracker records that milestone P1 unified the epsilon policy across clearance, fab,
-manufacturability **and the creation gates**. Unifying the creation gates is precisely B2-9's fix.
-
-But the hardening plan still lists B2-9 under P7's owned bugs, and B2-9 is still a `test.todo`.
-Both cannot be right.
-
-This is cheap to settle: read the route-tool via gate in `command-executor.ts` and check whether
-it now goes through `pcb/tolerance.ts` (`below` / `exceeds`, `DRC_EPS_MM`, `SHORT_EPS_MM`) or
-still uses its own bare comparisons. If it uses the shared policy, B2-9 is fixed and its
-`test.todo` should be flipped; P7 then owns four findings, not five.
-
-Until someone checks, treat B2-9 as open. That is the conservative reading and it matches the only
-verified evidence — the `test.todo` census.
+Settled 2026-09-06 (Session 0). The route-tool via gate (`buildPcbViaForInsert` in
+`command-executor.ts`) checks diameter, drill and annular ring through `below()` from
+`pcb/tolerance.ts` — the same policy the engine uses — so P1's claim was right and the register
+was stale. B2-9 is now a live executor-level parity test in `drc-audit-b2.test.ts`: a 5e-7 mm
+deficit is accepted by the gate and not flagged by DRC, a 2e-6 mm deficit is rejected by the gate
+and flagged by DRC, and an exact-minimum annular ring passes both. The former P7 group therefore
+owns three findings (B5-LIVE-ROT-PAD, B5-LIVE-TH-PAD-SIDE → S8; B5-SYNC → S10).
 
 ---
 
@@ -327,20 +286,23 @@ proposals.
 
 Four distinct comparison regimes existed at audit time. The hardening program's P1 milestone
 unified them into `src/modules/designer/backend/pcb/tolerance.ts` (`below` / `exceeds`,
-`DRC_EPS_MM = 1e-6`, `SHORT_EPS_MM = 1e-4`) — one policy, grace everywhere — with the exception
-tracked as B2-9. The *semantics chosen* are the part that must survive:
+`DRC_EPS_MM = 1e-6`, `SHORT_EPS_MM = 1e-4`) — one policy, grace everywhere, including the
+route-tool via gate (the former B2-9 exception, verified closed 2026-09-06). The *semantics
+chosen* are the part that must survive:
 
 | Regime | Form | Applies to | Boundary behaviour |
 |---|---|---|---|
 | Minimums | `below(v, limit)` = `v < limit − 1e-6` | Manufacturability minimums, board checks | Exact-spec geometry passes; sub-nanometre float noise forgiven |
-| Clearance | bare `gap < required` | All clearance pairs, FAB tier | Exact equality passes; a 1 nm deficit errors — zero grace |
+| Clearance | `gap < required − GEOM_EPS_MM` (0.5 nm grace, S6 — `clearanceViolated` in `tolerance.ts`) | All clearance pairs, FAB tier | Exact equality passes, including the derived-float case `0.3 − (0.1 + 0.1)` that the former bare `<` failed; a 1 nm deficit still errors |
 | Short | `gap <= SHORT_EPS_MM` (1e-4), **inclusive** | Short tier | A gap of exactly 1e-4 mm is a short |
 | Fab validators | bare `<` / `>`, no epsilon | Fab preset comparisons | Produced a real false positive on a derived float |
 
 The asymmetry between regimes 1 and 2 is deliberate but was undocumented: trace coordinates are
-integer nanometres, so exact-equality clearance cases are exactly representable and the bare `<`
-is safe for authored geometry. The exposure is *derived* floats — diagonal geometry and
-half-width subtraction — which is where B1-3 lived.
+integer nanometres, so exact-equality clearance cases are exactly representable. The exposure
+was *derived* floats — diagonal geometry and half-width subtraction — which is where B1-3
+lived, and where Astra (S6 run 1 #10) showed the bare `<` failing exact physical equality
+(`0.3 − (0.1 + 0.1) = 0.09999999999999998 < 0.1`). S6 gave the clearance regime 0.5 nm of grace
+(`GEOM_EPS_MM`), below the 1 nm deficit that must still fire (P-A2).
 
 **The probe ladder.** These were run against the real engine through the parity harness with
 integer-nm coordinates, where 1 nm equals `DRC_EPS_MM` exactly. They are the only record of the
@@ -362,9 +324,14 @@ chosen boundary semantics and are the specification an epsilon-matrix test must 
 
 ## 5.2 Determinism contract
 
-The engine is a pure function. Grep-verified: no `Date`, no `Math.random`, no I/O anywhere under
-`drc/`. The persistence timestamp is injected *outside* the engine, at the store's DRC-result
-write.
+The engine is a pure function of `(projection, options)`. Grep-verified: no `Date`, no
+`Math.random`, no I/O anywhere under `drc/`. The persistence timestamp is injected *outside* the
+engine, at the store's DRC-result write. Since S4 the options may carry `lookupRawFootprint`, a
+map of raw KiCad footprints the CALLER pre-fetches from the library (`pcb/raw-footprint-lookup.ts`,
+built by the `/drc/run` route, the SDK and the cloud apply paths) so a KiCad-imported placement
+contributes its real courtyard to the keepout `footprints` extent; the engine only reads the map.
+A DRC verdict can therefore differ between a run with and without the lookup (courtyard hull vs
+the pads+graphics bounds — both supersets of the part) — every production entry point builds it.
 
 Violation ids are FNV-1a-64 over the rule code plus the **sorted** anchor keys, which makes them
 order-independent by construction rather than by convention.
@@ -387,23 +354,26 @@ full-report byte-identity.
 1. Explicit `perNetClassAssignments[netId]`, if that class still exists.
 2. Anchored name regexes, tried in order: `GND_NAMES`, then `POWER_NAMES`, then `POWER_VOLTAGE`.
    All are fully anchored — `GND_SENSE` does **not** match the GND pattern.
-3. **The first class in the `board.netClasses` array** (`available[0]?.id ?? "default"`).
+3. **The first class in the `board.netClasses` array** (`defaultNetClassId`, S6 — one helper
+   used by the resolver, the executor and the canvas; still `netClasses[0]?.id ?? "default"`).
 
-Step 3 is the fragile one: it is array-order-dependent, it is untested, and it silently decides
-the class for every net that neither has an explicit assignment nor matches a name pattern —
-which, given the anchoring in step 2, is most nets on a real board. Any change to how
-`board.netClasses` is ordered changes DRC results.
+Step 3 is array-order-dependent by contract (`docs/pcb-hardening/05-rule-semantics-contract.md`
+§3): the stored order is semantic, the first class is the default, no UI reorders classes. S6
+kept it deliberately — preferring a class whose id is `default` would have silently changed
+existing boards (Astra S6 run 1 #8).
 
-Only `clearanceMm` is DRC-enforced from a net class. `traceWidthMm`, `viaDiameterMm`, `viaDrillMm`,
-`defaultViaProtection` and `color` are stored and feed route-tool defaults, but no check reads
-them (P5 added `NETCLASS_*` checks; treat per-class width enforcement as new behaviour, not as a
-long-standing guarantee).
+`clearanceMm` is enforced for every net through the clearance path. `traceWidthMm`,
+`viaDiameterMm` and `viaDrillMm` are enforced by `checks/netclass.ts` (`NETCLASS_*`, added in
+P5, severity warning) **only for nets deliberately classed — an explicit
+`perNetClassAssignments` entry or a GND/POWER name match**; nets that fall to the array-order
+default class get no width/via check. `defaultViaProtection` and `color` feed route-tool
+defaults only.
 
 **Model comparison** — worth keeping because it explains a functional gap:
 
 | Tool | Model | Can a scoped rule relax? |
 |---|---|---|
-| OpenPCB | Tighten-only `max(boardRule, classA, classB)` | No (before the scoped rule engine) |
+| OpenPCB | Explicit scoped rules (first match, may relax) → `max(boardRule, classA, classB)` → floor; scalar kinds first-match then the board minimum — `05-rule-semantics-contract.md` §4–§5 | Yes, above `minimums.clearanceMm` (S6) |
 | KiCad | Larger-wins for implicit values, board minimum as absolute floor, plus priority-ordered custom rules (last matching rule wins) | Yes, above the floor, via custom rules |
 | Altium | Pure priority-ordered first-match; one rule wins | Yes — a specific-scope rule may be *less* strict |
 
@@ -427,7 +397,10 @@ sampled point (B4-7).
 | 100k | ~5 × 10⁹ | Minutes | Unusable |
 
 Concrete thresholds: **batch becomes interactive-hostile at roughly 5–10k primitives**; the **live
-path degrades at roughly 1–2k pads**, an order of magnitude sooner, because of B5-LIVE-PADGEOMS.
+path degraded at roughly 1–2k pads** at audit time because pad geometry was rebuilt per pending
+segment (B5-LIVE-PADGEOMS, closed 2026-09-06 — now built once per `runLiveDrc` call and
+broad-phase filtered by `PcbCanvas.tsx`; a per-cursor-move rebuild remains and is tracked for
+S8/S9 in `docs/pcb-hardening/00-ground-truth.md`).
 For contrast, KiCad's `DRC_RTREE` gives approximately O(n log n) queries.
 
 The conclusion the audit reached and that still holds: this is a scaling problem, not a
@@ -456,9 +429,11 @@ the same item builders and clearance kernels rather than by fixing the live path
 
 ## 5.6 Waiver semantics and drift
 
-Waivers are id-based and persisted per design in `viewState`, alongside whole-rule-class ignores.
-This matches KiCad's behaviour of remembering excluded violations between runs, and is coarser
-than KiCad's per-check severity remapping.
+Waivers are id-based (`viewState.drcWaivedViolationIds: string[]`) and persisted per design in
+`viewState`, alongside whole-rule-class ignores. This matches KiCad's behaviour of remembering
+excluded violations between runs, and is coarser than KiCad's per-check severity remapping.
+Since S6 an id that does not match the v2 format is pruned on read and on patch — a v1 id
+cannot be recomputed (`05-rule-semantics-contract.md` §8).
 
 **The drift mechanism.** A violation id hashes the rule code and the anchors — *not* the location
 and *not* the measured value. Two consequences follow directly:
@@ -581,28 +556,27 @@ PcbDrcRule {
 
 Stored on `PcbBoardSettings.drcRules`, persisted through an extended `pcb_set_design_rules`.
 
-**Resolution order:**
+**Resolution — authoritative text is `docs/pcb-hardening/05-rule-semantics-contract.md` §4–§6
+(S6, 2026-09-08); the summary:**
 
-1. Explicit tier — priority-descending first match. **May relax.** An `area` scope requires
-   **both** items to be inside the area.
-2. Implicit tier — `max(boardRule, classA, classB)`, byte-identical to pre-rule behaviour.
-3. Absolute floor — `minimums.clearanceMm` (0.1 mm on new boards, 0 when absent).
+1. Explicit tier — priority-descending first match (ties by array index). **May relax.** `net` /
+   `netClass` match on either item; `area` requires **both** evaluation points inside the same one
+   of the rule's polygons; pour pair kinds match only through an explicit `pairKind` scope.
+2. Implicit tier — `max(boardRule[pairKind], classA, classB)`, byte-identical to pre-rule
+   behaviour (`padToVia` reads `traceToViaMm`; the pour kinds read `pourToCopperMm ?? 0.5`).
+3. Absolute floor — `minimums.clearanceMm` (0.1 mm on boards created after S6, 0 when absent).
 
-**Constraints:**
+Scalar kinds resolve by the same algorithm with the board minimum of their kind as the floor
+("tighten-only" = that floor); they are enforced by the manufacturability and board checks since
+S6. Area membership is evaluated on regions of constant scope membership (trace segments split at
+the area rings), not at a representative point. A matched rule's `severity` applies to the
+violations it decided. Invalid rules are refused on save and reported (`DRC_RULE_INVALID`);
+partially ineffective ones are reported (`DRC_RULE_INEFFECTIVE`). Area rules are capped at 31
+polygons; the 32nd makes its rule invalid rather than global. Memoised on
+`(pairKind, layer, netA, netB, maskA, maskB)`.
 
-- Scalar constraints are **tighten-only**; only clearance may relax.
-- Area scopes use a per-item bitmask, capping area rules at **32**. Rules beyond the cap are
-  dropped rather than silently becoming global.
-- Resolution is memoized on `(pairKind, layer, netA, netB)`.
-
-**Known limitation, documented not silent:** scalar scoped constraints (`trackWidth`,
-`viaDiameter`, `viaDrill`, `annularRing`, `holeToHole`, `edgeClearance`) are persisted and
-validated but **not enforced** — v1 rule enforcement is clearance-only. Enforcing them means
-wiring the resolver into the manufacturability and board checks. Related deferrals: area-scope
-relaxation tests each item's representative midpoint rather than its exact closest-approach point
-(conservative, but can over-relax a long trace whose offending point lies outside the area);
-scoped-rule optional `severity` is not applied; v1-to-v2 waiver auto-migration is not wired;
-cutout-overlap uses vertex containment, so perpendicular crossing rectangles are missed.
+**Remaining limitation, documented not silent:** cutout-overlap uses vertex containment, so
+perpendicular crossing rectangles are missed (S2 territory, unchanged here).
 
 ## 6.3 Violation id v2
 
@@ -616,23 +590,31 @@ ${code}-v2-${fnv1a64("v2|code#sortedAnchors#L:layer#Q:qx,qy")}
 | Layer `L:` | Hashed whenever set (this is what fixes cross-layer island id collisions) |
 | `measuredMm` | **Never** hashed |
 
-The engine splits into `computeDrcViolationDrafts` and `finalizeDrcReport`. Waivers live at
-`viewState.drcWaivers: { id, comment?, waivedAt }[]`, with a one-shot v1-to-v2 remap through
-`store.patchPcbViewState` that does not bump the design revision.
+The engine is one monolithic `runDrc` (build `DrcContext` → the checks → a single pass applying
+ignores, waivers, severity and ids); the draft/finalize split the plan described was never
+implemented (verified 2026-09-06). Waivers live at `viewState.drcWaivedViolationIds: string[]` —
+the `{ id, comment, waivedAt }` shape and the "one-shot v1-to-v2 remap through
+`store.patchPcbViewState`" that earlier revisions of this section described never existed
+(verified 2026-09-08); S6 prunes non-v2 ids on read and patch instead, and `runDrc` defaults
+its ignore / waiver / override options from the projection so every entry point agrees.
 
 ## 6.4 Severity model
 
 An exhaustive `DEFAULT_SEVERITY_BY_CODE` map lives in `drc/severity.ts`. Overrides
 (`DrcSeverityOverrides`) live on **board settings**, not on `viewState`.
 
-**Precedence: override → rule severity → default.**
+**Precedence: override → rule severity → default** — true since S6. Before S6 every check
+hardcoded a severity literal on its draft, so the table was never reached as a default and a
+scoped rule's `severity` never applied; drafts now carry no severity, the engine decides
+(`05-rule-semantics-contract.md` §7). `HOLE_TO_BOARD_EDGE` (which emitted both `error` and
+`warning`) was split: breach → `HOLE_OFF_BOARD` (error).
 
 | Decision | Value |
 |---|---|
 | `NET_SHORT_CIRCUIT` override | **Ignored** — cannot be downgraded |
 | `COPPER_TO_BOARD_EDGE` | Promoted to error (was hardcoded warning) |
 | `UNCONNECTED_NET` | Promoted to error (KiCad alignment) |
-| Non-waivable set (`waivable: false`) | Shorts and layer-invalid codes: `NET_SHORT_CIRCUIT`, `VIA_LAYER_SPAN`, `PAD_LAYER_MISMATCH` |
+| Non-waivable set (`NON_OVERRIDABLE`, the single list since S6) | `NET_SHORT_CIRCUIT`, `VIA_LAYER_SPAN`, `PAD_LAYER_MISMATCH`, `BOARD_OUTLINE_INVALID`, `ZONE_INVALID`, `ZONE_FILL_FAILED`, `DRC_RULE_INVALID` |
 | `ignoredRuleClasses` | Retained |
 
 Non-waivable codes survive both a class-level ignore and a per-code `"ignore"` override.

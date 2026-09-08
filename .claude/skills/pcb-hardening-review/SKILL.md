@@ -42,7 +42,7 @@ invariants. Summary — in scope only if the target is one of:
 | DRC engine + checks | `src/modules/designer/backend/drc/`, `src/shared/drc/rule-resolver.ts` |
 | PCB geometry | `src/shared/pcb-geometry/` |
 | Manual routing (route/walkaround/tune/bundle/diff-pair) — **not** cloud auto-layout | `src/shared/pcb-routing/`, `src/modules/designer/frontend/pcb/tools/` |
-| Ratsnest / connectivity | `src/modules/designer/backend/pcb/ratsnest.ts`, `pcb-pad-nets.ts` |
+| Ratsnest / connectivity | `src/shared/pcb-connectivity/` (the kernel), `src/modules/designer/backend/pcb/{ratsnest,board-connectivity}.ts` |
 | Copper pours / polygon booleans | `src/shared/rendering/copper-fill/`, `src/shared/rendering/pcb/` |
 | ERC / electrical rules | `src/modules/designer/backend/erc/erc-engine.ts`, `src/shared/schematic-routing/` |
 | Signal integrity / length matching | `checks/signal-integrity.ts`, `checks/length.ts` |

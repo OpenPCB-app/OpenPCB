@@ -448,10 +448,11 @@ export interface AutoLayoutConfig {
  * canvas chrome needs to re-render identically on reload. Additive: missing
  * fields fall back to defaults (no destructive migration).
  *
- *  - copperFillLayers: which copper layers render their pour mesh.
- *  - copperFillPourNetIds: pour-net per copper layer; objects on the same net
- *    merge silently into the pour; different-net objects render with a visible
- *    clearance halo (spec §7). null/undefined = no merging (every object haloed).
+ * The per-layer copper fill is NOT here: it is a persisted board zone row
+ * (`PcbZone` with `region: { kind: "board" }`), so display state never decides
+ * what copper exists. Legacy rows carrying the old `copperFill*` keys are
+ * migrated once by `migrateLegacyBoardFill` (zone/keepout contract §12.1).
+ *
  *  - perLayerOpacity: 0..1 override applied on top of displayMode dimming.
  *  - layerPreset: tracks which built-in preset (if any) the visibleLayers set
  *    currently matches; UI uses it to highlight the active preset chip.
@@ -459,14 +460,6 @@ export interface AutoLayoutConfig {
 export interface PcbViewState {
   displayMode: PcbDisplayMode;
   viewSide: PcbViewSide;
-  copperFillLayers: PcbCopperLayerId[];
-  copperFillPourNetIds: Partial<Record<PcbCopperLayerId, string | null>>;
-  /**
-   * How same-net footprint pads connect to the copper pour. `"solid"` (default)
-   * floods over the pad; `"thermal"` leaves an IPC-2221 relief gap crossed by
-   * spokes for solderability. Additive; absent = `"solid"`.
-   */
-  copperFillPadConnection?: "solid" | "thermal";
   perLayerOpacity: Partial<Record<PcbLayerId, number>>;
   layerPreset: PcbLayerPreset;
   ratsnestVisible: boolean;
@@ -606,6 +599,13 @@ export interface PcbDesignRules {
      * pre-P5 boards, where the context defaults it (audit B4-4).
      */
     holeToBoardEdgeMm?: number;
+    /**
+     * Zone-fill clearance floor against foreign copper (mm) — the pour-side
+     * component of the `pourToTrace` / `pourToPad` / `pourToVia` / `pourToPour`
+     * pair kinds (rule-semantics contract §6). Optional/additive; absent reads
+     * as 0.5, the constant the fill kernel has always used.
+     */
+    pourToCopperMm?: number;
   };
   minimums: {
     traceWidthMm: number;
@@ -636,20 +636,31 @@ export interface PcbDesignRules {
   };
 }
 
-/** Object-pair kind a scoped clearance rule targets. */
+/**
+ * Object-pair kind a scoped clearance rule targets. The four `pourTo*` kinds
+ * name a copper pour on one side; a rule reaches them ONLY through an explicit
+ * `pairKind` scope (rule-semantics contract §6 rule 1), so no pre-S6 rule can
+ * change a fill.
+ */
 export type DrcPairKind =
   | "traceToTrace"
   | "traceToPad"
   | "traceToVia"
   | "padToPad"
   | "padToVia"
-  | "viaToVia";
+  | "viaToVia"
+  | "pourToTrace"
+  | "pourToPad"
+  | "pourToVia"
+  | "pourToPour";
 
 /**
  * A scope predicate for a DRC rule. All scopes on a rule are AND-combined; a
  * rule with `scopes: []` matches everything. For a clearance query, `net` /
  * `netClass` match if EITHER pair item qualifies; `area` matches only when
  * BOTH items fall inside the polygon (BGA-fanout relaxation semantics).
+ * Repeated scopes of the SAME kind union their sets (rule-semantics contract
+ * §4.2): several `area` scopes mean "both items inside any ONE of them".
  */
 export type DrcRuleScope =
   | { kind: "net"; netIds: string[] }
@@ -967,35 +978,103 @@ export interface PcbFreeHole {
 }
 
 /**
- * Copper-pour zone (mostly imported from KiCad). v1 stores the outline polygon
- * + net name + layer; fill recomputation and DRC participation are deferred to
- * a later iteration. Rendered as a faint outline + net-color ghost so the
- * design intent stays visible after import.
+ * Region a copper zone fills. A `"board"` region is the whole board (the
+ * per-layer copper plane the layers panel toggles); a `"polygon"` region is an
+ * explicit simple polygon in mm. Both are persisted rows — a board region
+ * carries no points, and its zone id must be `board:<layer>`.
+ */
+export type PcbZoneRegion =
+  | { kind: "board" }
+  /** `holesMm` = zone cutouts (copper-pour contract §11); parse/validity is WP4's. */
+  | { kind: "polygon"; pointsMm: PcbPointMm[]; holesMm?: PcbPointMm[][] };
+
+/**
+ * Same-net pad connection inside a zone. `"solid"` floods the pad,
+ * `"thermal"` leaves an IPC-2221 relief crossed by spokes, `"thruHoleThermal"`
+ * is thermal for drilled pads and `"none"` for undrilled ones, and `"none"`
+ * treats same-net pads as different-net copper (excluded with clearance).
+ */
+export type PcbZonePadConnection =
+  | "solid"
+  | "thermal"
+  | "thruHoleThermal"
+  | "none";
+
+/**
+ * What happens to a fill island that no same-net object anchors: keep every
+ * island, drop every unanchored one, or keep the ones at least `minAreaMm2`.
+ */
+export type PcbZoneIslandRemoval =
+  | "always"
+  | "never"
+  | { minAreaMm2: number };
+
+/**
+ * Copper zone (v2) — a region of ONE copper layer filled with the copper of
+ * one net, or of no net. Zones make copper; keepouts make rules. The effective
+ * list every consumer reads comes from `collectCopperZones`
+ * (`src/shared/pcb-areas/copper-zones.ts`), never from this record directly.
+ * Persisted v1 rows are upgraded on read by `upgradePcbZoneRecord`.
  */
 export interface PcbZone {
   id: string;
+  name: string | null;
+  /** `false` = intent, not a warning: no copper, no connectivity, no export. */
+  enabled: boolean;
+  /** When set, the zone is read-only in the editor until unlocked. */
+  lockedAt: string | null;
+  layer: PcbCopperLayerId;
   /**
-   * Source net name (e.g. "GND"). Resolved to `netId` at projection time by
-   * the same name-binding pass that handles `PcbTrace.netName`.
+   * Resolved net id (schematic net the zone pours). `null` with a `netName`
+   * that does not resolve is *unbound* — the zone pours nothing; `null` with
+   * no `netName` is net-less copper, which pours but joins no net graph.
+   */
+  netId: string | null;
+  /**
+   * Source net name (e.g. "GND"). Bound to `netId` at projection time by the
+   * same name-binding pass that handles `PcbTrace.netName`.
    */
   netName: string | null;
-  /**
-   * Resolved net id (schematic net the zone pours). Bound from `netName` at
-   * projection time; same-net pads/traces/vias merge into the zone fill.
-   * Additive — absent on pre-resolution saves.
-   */
-  netId?: string | null;
-  /**
-   * Same-net pad connection inside this zone: `"solid"` flood or `"thermal"`
-   * relief. Absent ⇒ inherit the board-level `copperFillPadConnection`.
-   */
-  connection?: "solid" | "thermal";
-  layer: PcbCopperLayerId;
-  /** Closed polyline (last point implicitly connects back to first). */
-  polygonPointsMm: Array<{ x: number; y: number }>;
-  /** Hatch edge spacing for hatched fills; mm. */
-  hatchEdgeMm: number;
-  fillType: "solid" | "hatched";
+  region: PcbZoneRegion;
+  /** Integer ≥ 0; a higher priority fills first. */
+  priority: number;
+  /** Absent ⇒ the constant default `"solid"`; there is no board-level setting. */
+  padConnection?: PcbZonePadConnection;
+  /** Tighten-only override: the resolved value is `max(board rule, this)`. */
+  clearanceMm?: number | null;
+  /** Tighten-only override: the resolved value is `max(board rule, this)`. */
+  minWidthMm?: number | null;
+  /** Absent ⇒ the fill kernel's thermal defaults. */
+  thermal?: { gapMm: number; spokeWidthMm: number } | null;
+  /** Absent ⇒ the board default island-removal policy. */
+  islandRemoval?: PcbZoneIslandRemoval;
+}
+
+/** Object classes a keepout forbids inside its region. `true` = forbidden. */
+export interface PcbKeepoutRestrictions {
+  tracks: boolean;
+  vias: boolean;
+  pads: boolean;
+  copperPour: boolean;
+  footprints: boolean;
+}
+
+/**
+ * Keepout (KiCad "rule area") — a region on a SET of copper layers where the
+ * selected object classes are forbidden. Keepouts never make copper, and are
+ * not clipped to the board (the off-board part is inert).
+ */
+export interface PcbKeepout {
+  id: string;
+  name: string | null;
+  /** `false` = intent: the keepout affects nothing anywhere. */
+  enabled: boolean;
+  /** When set, the keepout is read-only in the editor until unlocked. */
+  lockedAt: string | null;
+  /** Non-empty; copper layers only in v1. */
+  layers: PcbCopperLayerId[];
+  pointsMm: PcbPointMm[];
+  restrictions: PcbKeepoutRestrictions;
 }
 
 /**
@@ -1098,16 +1177,25 @@ export interface PcbFreePad {
   lockedAt: string | null;
 }
 
+/**
+ * What an airwire is anchored on. Free pads (test points, paddles) carry a net
+ * and join the copper graph, so a ratsnest endpoint is not always a footprint
+ * pad — consumers that need `placementId` must narrow on `kind` first.
+ */
+export type RatsnestEndpoint =
+  | { kind: "pad"; placementId: string; padNumber: string }
+  | { kind: "freePad"; freePadId: string };
+
 export interface RatsnestSegment {
   netId: string;
   /** Net-class id used for color routing (e.g. "default", "power", "gnd"). */
   netClassId: string;
   fromMm: PcbPointMm;
   toMm: PcbPointMm;
-  fromPlacementId: string;
-  fromPadNumber: string;
-  toPlacementId: string;
-  toPadNumber: string;
+  /** Copper the airwire leaves from (the component representative). */
+  from: RatsnestEndpoint;
+  /** Copper the airwire lands on. */
+  to: RatsnestEndpoint;
 }
 
 export interface DesignerPcbProjection {
@@ -1124,8 +1212,15 @@ export interface DesignerPcbProjection {
   /** Silkscreen / fab text and shape primitives (F5 overlay layer). */
   overlayTexts: PcbOverlayText[];
   overlayShapes: PcbOverlayShape[];
-  /** Copper-pour zones imported from KiCad (v1: outline only, no fill). */
+  /**
+   * Copper zones (v2), including the persisted `board:<layer>` board zones the
+   * per-layer copper fill is made of. The effective pour list comes from
+   * `collectCopperZones` (`src/shared/pcb-areas/copper-zones.ts`), never from
+   * these rows directly.
+   */
   zones: PcbZone[];
+  /** Keepouts (KiCad rule areas). Never copper; see `collectKeepouts`. */
+  keepouts: PcbKeepout[];
   ratsnest: RatsnestSegment[];
   /**
    * Net id → display name map (e.g. `"net-7" → "VCC_3V3"`). Sourced from the
@@ -1786,6 +1881,102 @@ export interface DesignerPcbDeleteOverlayShapeCommand {
   overlayShapeId: string;
 }
 
+/**
+ * The net a zone pours, as the pair the record persists. Net ids are ephemeral
+ * (`designer/AGENTS.md`): a named net is persisted as `{ netId: null, netName }`
+ * and re-bound by name on every projection, an unnamed net as
+ * `{ netId, netName: null }`, and "no net" as both null.
+ */
+export interface PcbZoneNetRef {
+  netId: string | null;
+  netName: string | null;
+}
+
+/**
+ * Create a copper zone (zone/keepout contract §12.2). A board region takes the
+ * derived id `board:<layer>` and rejects a second row on the same layer
+ * (`PCB_ZONE_BOARD_EXISTS`); a polygon region takes a fresh uuid and must pass
+ * `zoneRingValidity`.
+ */
+export interface DesignerPcbAddZoneCommand {
+  type: "pcb_add_zone";
+  layer: PcbCopperLayerId;
+  net: PcbZoneNetRef;
+  region: PcbZoneRegion;
+  name?: string | null;
+  enabled?: boolean;
+  /** Integer ≥ 0; omitted = 0. Ignored for a board region (forced below every zone). */
+  priority?: number;
+  padConnection?: PcbZonePadConnection;
+  clearanceMm?: number | null;
+  minWidthMm?: number | null;
+  thermal?: { gapMm: number; spokeWidthMm: number } | null;
+  islandRemoval?: PcbZoneIslandRemoval;
+}
+
+/**
+ * Patch a copper zone — only provided fields change. A locked zone rejects
+ * every change except `locked: false`; a board zone rejects `layer` and
+ * `region`; `net` replaces both net fields together.
+ */
+export interface DesignerPcbUpdateZoneCommand {
+  type: "pcb_update_zone";
+  zoneId: string;
+  name?: string | null;
+  enabled?: boolean;
+  layer?: PcbCopperLayerId;
+  net?: PcbZoneNetRef;
+  region?: PcbZoneRegion;
+  priority?: number;
+  padConnection?: PcbZonePadConnection;
+  clearanceMm?: number | null;
+  minWidthMm?: number | null;
+  thermal?: { gapMm: number; spokeWidthMm: number } | null;
+  /** `null` clears the override (back to the board default). */
+  islandRemoval?: PcbZoneIslandRemoval | null;
+  /**
+   * Pass `true` to lock, `false` to unlock, omit to leave unchanged. A locked
+   * zone accepts `locked: false` ONLY on its own — never bundled with edits.
+   */
+  locked?: boolean;
+}
+
+export interface DesignerPcbDeleteZoneCommand {
+  type: "pcb_delete_zone";
+  zoneId: string;
+}
+
+/**
+ * Create a keepout (KiCad "rule area"). Keepouts make rules, never copper:
+ * `restrictions` is the full five-flag object, a missing flag being `false`.
+ */
+export interface DesignerPcbAddKeepoutCommand {
+  type: "pcb_add_keepout";
+  layers: PcbCopperLayerId[];
+  pointsMm: PcbPointMm[];
+  restrictions: PcbKeepoutRestrictions;
+  name?: string | null;
+  enabled?: boolean;
+}
+
+/** Patch a keepout — only provided fields change; `restrictions` replaces the whole object. */
+export interface DesignerPcbUpdateKeepoutCommand {
+  type: "pcb_update_keepout";
+  keepoutId: string;
+  name?: string | null;
+  enabled?: boolean;
+  layers?: PcbCopperLayerId[];
+  pointsMm?: PcbPointMm[];
+  restrictions?: PcbKeepoutRestrictions;
+  /** Pass `true` to lock, `false` to unlock, omit to leave unchanged. */
+  locked?: boolean;
+}
+
+export interface DesignerPcbDeleteKeepoutCommand {
+  type: "pcb_delete_keepout";
+  keepoutId: string;
+}
+
 export type DesignerCommand =
   | DesignerPlacePartCommand
   | DesignerCreateWireCommand
@@ -1838,7 +2029,13 @@ export type DesignerCommand =
   | DesignerPcbDeleteOverlayTextCommand
   | DesignerPcbAddOverlayShapeCommand
   | DesignerPcbUpdateOverlayShapeCommand
-  | DesignerPcbDeleteOverlayShapeCommand;
+  | DesignerPcbDeleteOverlayShapeCommand
+  | DesignerPcbAddZoneCommand
+  | DesignerPcbUpdateZoneCommand
+  | DesignerPcbDeleteZoneCommand
+  | DesignerPcbAddKeepoutCommand
+  | DesignerPcbUpdateKeepoutCommand
+  | DesignerPcbDeleteKeepoutCommand;
 
 export type DesignerCommandEnvelope = CommandEnvelope<DesignerCommand>;
 
@@ -1992,6 +2189,43 @@ export type DesignerDispatchResult =
       ok: false;
       code: "PCB_OVERLAY_NOT_FOUND";
       overlayId: string;
+    }
+  | {
+      ok: false;
+      code: "INVALID_PCB_ZONE";
+      detail: string;
+    }
+  | {
+      ok: false;
+      code: "PCB_ZONE_NOT_FOUND";
+      zoneId: string;
+    }
+  | {
+      ok: false;
+      code: "PCB_ZONE_BOARD_EXISTS";
+      layer: PcbCopperLayerId;
+    }
+  | {
+      ok: false;
+      code: "INVALID_PCB_KEEPOUT";
+      detail: string;
+    }
+  | {
+      ok: false;
+      code: "PCB_KEEPOUT_NOT_FOUND";
+      keepoutId: string;
+    }
+  /**
+   * A `pcb_set_design_rules` payload carried a structurally invalid DRC rule
+   * (rule-semantics contract §2.1). The WHOLE command is refused — nothing is
+   * persisted and nothing is dropped silently, because a dropped tightening
+   * rule is fail-open and the author would never see it.
+   */
+  | {
+      ok: false;
+      code: "INVALID_DRC_RULE";
+      ruleId: string;
+      detail: string;
     };
 
 /**
@@ -2035,7 +2269,10 @@ export type DrcAnchor =
   | { kind: "placement"; placementId: string }
   | { kind: "net"; netId: string }
   | { kind: "zone"; zoneId: string }
+  | { kind: "keepout"; keepoutId: string }
   | { kind: "diffPair"; pNetId: string; nNetId: string }
+  /** A stored `PcbDrcRule` row — DRC_RULE_INVALID / DRC_RULE_INEFFECTIVE. */
+  | { kind: "rule"; ruleId: string }
   | { kind: "boardEdge" };
 
 export type DrcSeverity = "error" | "warning" | "info";
@@ -2055,9 +2292,10 @@ export type DrcRuleClass =
   | "signal-integrity";
 
 /**
- * Stable, machine-readable violation codes. P1 codes are implemented now; P2
- * codes are declared for forward-compat (panel grouping / i18n) and wired
- * later. See `src/modules/designer/backend/drc/`.
+ * Stable, machine-readable violation codes. Every code below has an emit site
+ * under `src/modules/designer/backend/drc/checks/` and a label in
+ * `drc-labels.ts` (verified 2026-09-07); the P1/P2 group comments are
+ * historical milestone labels, not implementation status.
  */
 export type DrcRuleCode =
   // --- P1 ---
@@ -2077,6 +2315,9 @@ export type DrcRuleCode =
   | "NETCLASS_VIA_DIAMETER"
   | "NETCLASS_VIA_DRILL"
   | "HOLE_TO_BOARD_EDGE"
+  // A drill (or slot) that is not inside the board region at all — the error
+  // half of the former dual-severity HOLE_TO_BOARD_EDGE (contract §7).
+  | "HOLE_OFF_BOARD"
   | "TRACK_DANGLING"
   | "VIA_DANGLING"
   | "CREEPAGE_DISTANCE"
@@ -2093,7 +2334,7 @@ export type DrcRuleCode =
   | "FAB_PAD"
   // --- Length matching (pcb.lengthTuning) ---
   | "NET_LENGTH_OUT_OF_RANGE"
-  // --- P2 (declared, not yet implemented) ---
+  // --- P2 (historical group label; all implemented) ---
   | "VIA_TO_VIA_CLEARANCE"
   | "PAD_TO_PAD_CLEARANCE"
   | "PAD_TO_VIA_CLEARANCE"
@@ -2105,7 +2346,22 @@ export type DrcRuleCode =
   | "OUTLINE_INTERNAL_RADIUS"
   | "OUTLINE_SLOT_WIDTH"
   | "COPPER_OFF_BOARD"
-  | "ISOLATED_COPPER_ISLAND";
+  | "ISOLATED_COPPER_ISLAND"
+  // --- Zones and keepouts (S4 legality integration, contract 03 §13.1) ---
+  | "KEEPOUT_VIOLATION"
+  | "ZONE_OVERLAP"
+  | "ZONE_INVALID"
+  | "ZONE_EMPTY_FILL"
+  // The fill kernel bailed on a zone (copper-pour contract §8/§10): the zone
+  // ships NO copper for a reason that is not its geometry.
+  | "ZONE_FILL_FAILED"
+  // --- Rule validity (rule-semantics contract §2.1, §10) ---
+  // A persisted rule row that cannot be applied at all; excluded from
+  // resolution. Non-overridable: a dropped tightening rule is fail-open.
+  | "DRC_RULE_INVALID"
+  // A rule that resolves, but not with the number its author wrote (unknown
+  // net / class / layer reference, or a value clamped by the floor / minimum).
+  | "DRC_RULE_INEFFECTIVE";
 
 export interface DrcViolation {
   /**
@@ -2196,7 +2452,31 @@ export interface KicadProjectInspectReport {
   counts: KicadProjectImportCounts;
   /** Net classes declared in the project, with unknown rules preserved. */
   netClasses: KicadProjectImportNetClass[];
+  /**
+   * `board.design_settings.rules` — KiCad's project-wide minimums, mapped 1:1
+   * onto OpenPCB's (rule-semantics contract §12.3). Every field is optional:
+   * an absent KiCad minimum is never invented.
+   */
+  designRules?: KicadProjectImportDesignRules;
+  /**
+   * Net NAME → net-class NAME, folded from `classes[].nets` (KiCad 6),
+   * `netclass_patterns` (7/8, exact names only) and `netclass_assignments`
+   * (9). Resolved to `perNetClassAssignments` (netId → classId) at commit,
+   * once the nets exist.
+   */
+  netClassAssignments?: Record<string, string>;
   warnings: KicadProjectImportWarning[];
+}
+
+/** KiCad's `board.design_settings.rules`, in mm (rule-semantics §12.3). */
+export interface KicadProjectImportDesignRules {
+  minClearanceMm?: number;
+  minTrackWidthMm?: number;
+  minViaDiameterMm?: number;
+  minThroughHoleMm?: number;
+  minViaAnnularMm?: number;
+  minHoleToHoleMm?: number;
+  minCopperEdgeClearanceMm?: number;
 }
 
 export interface KicadProjectImportComponentRow {
@@ -2224,6 +2504,7 @@ export interface KicadProjectImportCounts {
   pcbSegments: number;
   pcbVias: number;
   pcbZones: number;
+  pcbKeepouts: number;
 }
 
 export interface KicadProjectImportNetClass {

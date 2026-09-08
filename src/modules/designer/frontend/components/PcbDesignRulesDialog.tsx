@@ -6,6 +6,7 @@ import type {
   PcbLengthMatchGroup,
   PcbNetClass,
 } from "../../../../sdks";
+import { DEFAULT_POUR_TO_COPPER_MM } from "../../../../shared/drc/rule-resolver";
 import { useFeatureFlag } from "@/feature-flags";
 
 interface PcbDesignRulesDialogProps {
@@ -26,6 +27,7 @@ interface PcbDesignRulesDialogProps {
 const CLEARANCE_FIELDS: Array<{
   key: keyof PcbDesignRules["clearance"];
   label: string;
+  title?: string;
 }> = [
   { key: "traceToTraceMm", label: "Trace ↔ trace" },
   { key: "traceToPadMm", label: "Trace ↔ pad" },
@@ -33,11 +35,18 @@ const CLEARANCE_FIELDS: Array<{
   { key: "viaToViaMm", label: "Via ↔ via" },
   { key: "padToPadMm", label: "Pad ↔ pad" },
   { key: "copperToBoardEdgeMm", label: "Copper ↔ edge" },
+  {
+    key: "pourToCopperMm",
+    label: "Pour ↔ copper",
+    title:
+      "Zone-fill clearance floor against foreign copper. Absent on older boards; the fill kernel's own default is 0.5 mm.",
+  },
 ];
 
 const MINIMUM_FIELDS: Array<{
   key: keyof PcbDesignRules["minimums"];
   label: string;
+  title?: string;
 }> = [
   { key: "traceWidthMm", label: "Trace width" },
   { key: "viaDiameterMm", label: "Via diameter" },
@@ -45,19 +54,57 @@ const MINIMUM_FIELDS: Array<{
   { key: "annularRingMm", label: "Annular ring" },
   { key: "drillSizeMm", label: "Drill size" },
   { key: "holeToHoleMm", label: "Hole ↔ hole" },
+  {
+    key: "clearanceMm",
+    label: "Clearance floor",
+    title: "No rule or net class may resolve below this.",
+  },
 ];
+
+/**
+ * Materialise the optional pour clearance so the field always shows the value
+ * the fill kernel actually uses. Absent on pre-S6 boards; saving then writes
+ * `DEFAULT_POUR_TO_COPPER_MM` explicitly, which is the constant the kernel has
+ * always applied — the board gains a key, not a different pour.
+ */
+export function seedClearance(
+  rules: PcbDesignRules,
+): PcbDesignRules["clearance"] {
+  return {
+    ...rules.clearance,
+    pourToCopperMm: rules.clearance.pourToCopperMm ?? DEFAULT_POUR_TO_COPPER_MM,
+  };
+}
+
+/**
+ * The `designRules` a save sends: the STORED rules with the two blocks this
+ * dialog edits replaced, so `electrical` — and any key added later — survives
+ * a round-trip through the form (rule-semantics contract §9).
+ */
+export function designRulesForSave(
+  stored: PcbDesignRules,
+  clearance: PcbDesignRules["clearance"],
+  minimums: PcbDesignRules["minimums"],
+): PcbDesignRules {
+  return { ...stored, clearance, minimums };
+}
 
 function NumberField({
   label,
   value,
   onChange,
+  title,
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
+  title?: string;
 }): ReactElement {
   return (
-    <label className="flex items-center justify-between gap-2 text-xs text-text-secondary">
+    <label
+      className="flex items-center justify-between gap-2 text-xs text-text-secondary"
+      {...(title ? { title } : {})}
+    >
       <span>{label}</span>
       <span className="flex items-center gap-1">
         <input
@@ -81,7 +128,9 @@ export function PcbDesignRulesDialog({
   onClose,
   onSave,
 }: PcbDesignRulesDialogProps): ReactElement | null {
-  const [clearance, setClearance] = useState(board.designRules.clearance);
+  const [clearance, setClearance] = useState(
+    seedClearance(board.designRules),
+  );
   const [minimums, setMinimums] = useState(board.designRules.minimums);
   const [thickness, setThickness] = useState(board.boardThicknessMm ?? 1.6);
   const [netClasses, setNetClasses] = useState<PcbNetClass[]>(board.netClasses);
@@ -97,7 +146,7 @@ export function PcbDesignRulesDialog({
   // Re-seed the form whenever it opens against the live board.
   useEffect(() => {
     if (!open) return;
-    setClearance(board.designRules.clearance);
+    setClearance(seedClearance(board.designRules));
     setMinimums(board.designRules.minimums);
     setThickness(board.boardThicknessMm ?? 1.6);
     setNetClasses(board.netClasses);
@@ -123,7 +172,11 @@ export function PcbDesignRulesDialog({
     setSaving(true);
     try {
       await onSave({
-        designRules: { clearance, minimums },
+        designRules: designRulesForSave(
+          board.designRules,
+          clearance,
+          minimums,
+        ),
         netClasses,
         boardThicknessMm: thickness,
         perNetClassAssignments: assignments,
@@ -194,6 +247,7 @@ export function PcbDesignRulesDialog({
               <NumberField
                 key={f.key}
                 label={f.label}
+                {...(f.title ? { title: f.title } : {})}
                 value={clearance[f.key] ?? 0}
                 onChange={(v) => setClearance((c) => ({ ...c, [f.key]: v }))}
               />
@@ -208,6 +262,7 @@ export function PcbDesignRulesDialog({
               <NumberField
                 key={f.key}
                 label={f.label}
+                {...(f.title ? { title: f.title } : {})}
                 value={minimums[f.key] ?? 0}
                 onChange={(v) => setMinimums((m) => ({ ...m, [f.key]: v }))}
               />

@@ -1,6 +1,9 @@
-import { pointInOutline } from "../../pcb/outline-geometry";
 import {
-  pointInPolygon,
+  discInsideRegion,
+  polygonInsideRegion,
+  stadiumInsideRegion,
+} from "../../pcb/board-region";
+import {
   pointToRingEdgeDistance,
   polylineToRingEdgeDistance,
   ringToRingEdgeDistance,
@@ -8,9 +11,24 @@ import {
 import { distance } from "../../pcb/pcb-trace-geometry";
 import { FAB_PRESETS } from "../../pcb/fab-presets";
 import { below, type DrcContext } from "../drc-context";
+import { clearanceViolated } from "../../pcb/tolerance";
 import type { DrcViolationDraft } from "../types";
 import { segmentToSegmentDistance } from "../../pcb/pcb-trace-geometry";
 import type { DrcHole } from "../drc-context";
+import type { ScalarItem } from "../../../../../shared/drc/rule-resolver";
+import { ruleSuffix } from "../rule-message";
+
+/** A hole's scope geometry is its DRILL — an NPTH has no copper (§4.2). */
+function holeGeometry(hole: DrcHole): ScalarItem["geometry"] {
+  return hole.slot
+    ? {
+        kind: "segment",
+        a: hole.slot.a,
+        b: hole.slot.b,
+        halfWidthMm: hole.slot.widthMm / 2,
+      }
+    : { kind: "disc", center: hole.center, radiusMm: hole.drillMm / 2 };
+}
 
 /** Edge-to-edge gap between two holes, slot-aware when either carries a slot. */
 function holeEdgeGap(a: DrcHole, b: DrcHole, centerGap: number): number {
@@ -26,26 +44,6 @@ function holeEdgeGap(a: DrcHole, b: DrcHole, centerGap: number): number {
 }
 
 /**
- * Vertices plus each segment's midpoint — a denser sample so a trace that
- * crosses a cutout (or the outline) between two on-board vertices is still
- * caught by the point-in-outline test.
- */
-function sampledTracePoints(
-  points: readonly { x: number; y: number }[],
-): Array<{ x: number; y: number }> {
-  const out: Array<{ x: number; y: number }> = [];
-  for (let i = 0; i < points.length; i += 1) {
-    const p = points[i]!;
-    out.push(p);
-    if (i > 0) {
-      const prev = points[i - 1]!;
-      out.push({ x: (prev.x + p.x) / 2, y: (prev.y + p.y) / 2 });
-    }
-  }
-  return out;
-}
-
-/**
  * Board-relative checks: copper-to-board-edge clearance, copper outside the
  * outline, and hole-to-hole spacing. All distances are to the board outline +
  * cutout perimeters (NOT filled containment), so copper inside the board still
@@ -53,10 +51,15 @@ function sampledTracePoints(
  */
 export function checkBoard(ctx: DrcContext): DrcViolationDraft[] {
   const out: DrcViolationDraft[] = [];
-  const board = ctx.projection.board;
-  const cutouts = board.cutouts ?? [];
-  const edgeReq = ctx.designRules.clearance.copperToBoardEdgeMm;
-  const rings = [ctx.outlineRing, ...ctx.cutoutRings];
+  const region = ctx.boardRegion;
+  // A drilled hole passes through the whole stackup, so every valid copper
+  // layer is "a layer the item occupies" for a `layer` scope (§4.2).
+  const allLayers = [...ctx.validCopperLayers];
+  // Edge clearance measures against the BIASED region rings too: on an arc the
+  // unbiased chords sit up to 0.01 mm on the wrong side, and a hole's inscribed
+  // chords over-measured copper-to-cutout clearance (B4-6 — Astra §9.2 showed a
+  // true 0.4949999 mm gap passing a 0.5 mm rule on the unbiased rings).
+  const rings = [region.outer, ...region.holes];
 
   const edgeDistToBoundary = (
     compute: (ring: readonly { x: number; y: number }[]) => number,
@@ -70,33 +73,44 @@ export function checkBoard(ctx: DrcContext): DrcViolationDraft[] {
   };
 
   for (const t of ctx.traces) {
-    if (t.pointsMm.length < 2) continue;
+    if (t.pointsMm.length === 0) continue;
+    // A single-point trace is a disc of copper, not a free pass: measure and
+    // contain it as one (Astra §9.2 #4 — it used to skip both checks).
+    const single = t.pointsMm.length === 1 ? t.pointsMm[0]! : null;
     const gap =
       edgeDistToBoundary((ring) =>
-        polylineToRingEdgeDistance(t.pointsMm, ring),
+        single
+          ? pointToRingEdgeDistance(single, ring)
+          : polylineToRingEdgeDistance(t.pointsMm, ring),
       ) - t.halfWidthMm;
-    if (below(gap, edgeReq)) {
+    const traceEdge = ctx.resolver.scalar("edgeClearance", {
+      netId: t.netId,
+      layers: [t.layer],
+      geometry: {
+        kind: "polyline",
+        pointsMm: t.pointsMm,
+        halfWidthMm: t.halfWidthMm,
+      },
+    });
+    if (clearanceViolated(gap, traceEdge.mm)) {
       out.push({
         code: "COPPER_TO_BOARD_EDGE",
         ruleClass: "clearance",
-        severity: "error",
-        message: `Trace is ${gap.toFixed(3)} mm from the board edge (min ${edgeReq.toFixed(3)} mm)`,
+        ...(traceEdge.rule?.severity
+          ? { ruleSeverity: traceEdge.rule.severity }
+          : {}),
+        message: `Trace is ${gap.toFixed(3)} mm from the board edge (min ${traceEdge.mm.toFixed(3)} mm)${ruleSuffix(traceEdge)}`,
         anchors: [{ kind: "trace", traceId: t.id }],
         locationMm: t.mid,
         layer: t.layer,
         measuredMm: gap,
-        requiredMm: edgeReq,
+        requiredMm: traceEdge.mm,
       });
     }
-    if (
-      sampledTracePoints(t.pointsMm).some(
-        (p) => !pointInOutline(board.outline, cutouts, p),
-      )
-    ) {
+    if (!stadiumInsideRegion(region, t.pointsMm, t.halfWidthMm)) {
       out.push({
         code: "COPPER_OFF_BOARD",
         ruleClass: "constraint",
-        severity: "error",
         message: "Trace extends outside the board outline",
         anchors: [{ kind: "trace", traceId: t.id }],
         locationMm: t.mid,
@@ -109,25 +123,29 @@ export function checkBoard(ctx: DrcContext): DrcViolationDraft[] {
     const gap =
       edgeDistToBoundary((ring) => pointToRingEdgeDistance(vg.center, ring)) -
       vg.radiusMm;
-    if (below(gap, edgeReq)) {
+    const viaEdge = ctx.resolver.scalar("edgeClearance", {
+      netId: vg.netId,
+      layers: vg.layers,
+      geometry: { kind: "disc", center: vg.center, radiusMm: vg.radiusMm },
+    });
+    if (clearanceViolated(gap, viaEdge.mm)) {
       out.push({
         code: "COPPER_TO_BOARD_EDGE",
         ruleClass: "clearance",
-        severity: "error",
-        message: `Via is ${gap.toFixed(3)} mm from the board edge (min ${edgeReq.toFixed(3)} mm)`,
+        ...(viaEdge.rule?.severity ? { ruleSeverity: viaEdge.rule.severity } : {}),
+        message: `Via is ${gap.toFixed(3)} mm from the board edge (min ${viaEdge.mm.toFixed(3)} mm)${ruleSuffix(viaEdge)}`,
         anchors: [{ kind: "via", viaId: vg.via.id }],
         locationMm: vg.center,
         measuredMm: gap,
-        requiredMm: edgeReq,
+        requiredMm: viaEdge.mm,
       });
     }
-    // Off-board if the center is outside, or the via circle pokes through the
-    // outline / a cutout edge (gap = edge distance − radius < 0).
-    if (!pointInOutline(board.outline, cutouts, vg.center) || gap < 0) {
+    // Off-board if the via disc (center + radius) is not fully inside the
+    // biased region — replaces the old center-only test plus `gap < 0`.
+    if (!discInsideRegion(region, vg.center, vg.radiusMm)) {
       out.push({
         code: "COPPER_OFF_BOARD",
         ruleClass: "constraint",
-        severity: "error",
         message: "Via is outside the board outline",
         anchors: [{ kind: "via", viaId: vg.via.id }],
         locationMm: vg.center,
@@ -139,31 +157,30 @@ export function checkBoard(ctx: DrcContext): DrcViolationDraft[] {
     const gap = edgeDistToBoundary((ring) =>
       ringToRingEdgeDistance(pad.ring, ring),
     );
-    if (below(gap, edgeReq)) {
+    const padEdge = ctx.resolver.scalar("edgeClearance", {
+      netId: pad.netId,
+      layers: pad.layers,
+      geometry: { kind: "ring", ring: pad.ring },
+    });
+    if (clearanceViolated(gap, padEdge.mm)) {
       out.push({
         code: "COPPER_TO_BOARD_EDGE",
         ruleClass: "clearance",
-        severity: "error",
-        message: `Pad is ${gap.toFixed(3)} mm from the board edge (min ${edgeReq.toFixed(3)} mm)`,
+        ...(padEdge.rule?.severity ? { ruleSeverity: padEdge.rule.severity } : {}),
+        message: `Pad is ${gap.toFixed(3)} mm from the board edge (min ${padEdge.mm.toFixed(3)} mm)${ruleSuffix(padEdge)}`,
         anchors: [pad.anchor],
         locationMm: pad.center,
         measuredMm: gap,
-        requiredMm: edgeReq,
+        requiredMm: padEdge.mm,
       });
     }
-    // Off-board if any pad-ring vertex falls outside the outline / inside a
-    // cutout, OR the pad fully covers a cutout (a cutout vertex sits inside the
-    // pad ring) — the center-only test missed both cases.
-    if (
-      pad.ring.some((v) => !pointInOutline(board.outline, cutouts, v)) ||
-      ctx.cutoutRings.some((ring) =>
-        ring.some((cv) => pointInPolygon(cv, pad.ring)),
-      )
-    ) {
+    // Off-board unless the whole pad ring is inside the biased region —
+    // replaces the vertex-only outline test and the separate cutout-covers-pad
+    // vertex test (both folded into polygonInsideRegion's hole-interior check).
+    if (!polygonInsideRegion(region, pad.ring)) {
       out.push({
         code: "COPPER_OFF_BOARD",
         ruleClass: "constraint",
-        severity: "error",
         message: "Pad is outside the board outline",
         anchors: [pad.anchor],
         locationMm: pad.center,
@@ -192,16 +209,18 @@ export function checkBoard(ctx: DrcContext): DrcViolationDraft[] {
         : pointToRingEdgeDistance(hole.center, ring),
     );
     const gap = edgeDist - radius;
-    const outside = !pointInOutline(
-      ctx.projection.board.outline,
-      ctx.projection.board.cutouts ?? [],
-      hole.center,
-    );
-    if (outside || gap < 0) {
+    // Error when the drill (disc, or slot stadium) is not inside the biased
+    // region; warning when inside and merely below the clearance rule.
+    const inside = hole.slot
+      ? stadiumInsideRegion(region, [hole.slot.a, hole.slot.b], hole.slot.widthMm / 2)
+      : discInsideRegion(region, hole.center, hole.drillMm / 2);
+    if (!inside) {
       out.push({
-        code: "HOLE_TO_BOARD_EDGE",
+        // A drill that is not inside the board region at all is its own code
+        // (contract §7) — the former dual-severity HOLE_TO_BOARD_EDGE hid an
+        // error and a near-miss warning behind one id.
+        code: "HOLE_OFF_BOARD",
         ruleClass: "dfm",
-        severity: "error",
         message: `Hole breaches the board edge (${gap.toFixed(3)} mm)`,
         anchors: [hole.anchor],
         locationMm: hole.center,
@@ -212,7 +231,6 @@ export function checkBoard(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "HOLE_TO_BOARD_EDGE",
         ruleClass: "dfm",
-        severity: "warning",
         message: `Hole is ${gap.toFixed(3)} mm from the board edge (min ${holeEdgeReq.toFixed(3)} mm)`,
         anchors: [hole.anchor],
         locationMm: hole.center,
@@ -249,19 +267,28 @@ export function checkBoard(ctx: DrcContext): DrcViolationDraft[] {
       // instead of the round center, so overlapping slot ends between distant
       // centers are still caught (Codex review; audit B2-5 follow-through).
       const gap = holeEdgeGap(a, b, centerGap);
-      if (below(gap, ctx.holeToHoleMm)) {
+      // `net` / `netClass` match if EITHER hole qualifies, `area` needs BOTH
+      // (contract §5.1); the scope geometry is the drill, not the copper.
+      const holeReq = ctx.resolver.scalarPair(
+        "holeToHole",
+        { netId: a.netId, layers: allLayers, geometry: holeGeometry(a) },
+        { netId: b.netId, layers: allLayers, geometry: holeGeometry(b) },
+      );
+      if (below(gap, holeReq.mm)) {
         out.push({
           code: "HOLE_TO_HOLE",
           ruleClass: "clearance",
-          severity: "warning",
-          message: `Holes are ${gap.toFixed(3)} mm apart (min ${ctx.holeToHoleMm.toFixed(3)} mm)`,
+          ...(holeReq.rule?.severity
+            ? { ruleSeverity: holeReq.rule.severity }
+            : {}),
+          message: `Holes are ${gap.toFixed(3)} mm apart (min ${holeReq.mm.toFixed(3)} mm)${ruleSuffix(holeReq)}`,
           anchors: [a.anchor, b.anchor],
           locationMm: {
             x: (a.center.x + b.center.x) / 2,
             y: (a.center.y + b.center.y) / 2,
           },
           measuredMm: gap,
-          requiredMm: ctx.holeToHoleMm,
+          requiredMm: holeReq.mm,
         });
       } else if (fabPreset) {
         // Fab capability tier (P8): JLCPCB publishes distinct hole-to-hole
@@ -275,7 +302,6 @@ export function checkBoard(ctx: DrcContext): DrcViolationDraft[] {
           out.push({
             code: "FAB_HOLE_TO_HOLE",
             ruleClass: "manufacturability",
-            severity: "warning",
             message: `Holes are ${gap.toFixed(3)} mm apart (${fabPreset.name} min ${fabReq.toFixed(3)} mm)`,
             anchors: [a.anchor, b.anchor],
             locationMm: {

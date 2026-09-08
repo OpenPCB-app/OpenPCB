@@ -4,8 +4,10 @@ import type {
   PcbCopperLayerId,
   PcbFreePad,
   PcbPlacedPart,
+  PcbPointMm,
   PcbVia,
 } from "../../../../../sdks/designer/types";
+import { placementSideLayer } from "../../../../../shared/rendering/pad-copper-layers";
 import {
   ApertureTable,
   type AperFunction,
@@ -24,9 +26,18 @@ import { textToStrokes } from "../text/stroke-font";
 // pure geometry (clipper2 + math; no React/R3F) and runs under Bun. Lives in
 // shared/ so backend and canvas import one implementation.
 import {
-  buildCopperFillPourPaths,
-  resolveCopperFillClearanceMm,
+  buildCopperFillIslands,
+  sortCopperFillIslands,
+  unionPourIslands,
 } from "../../../../../shared/rendering/copper-fill/copper-fill-geometry";
+import { AppError } from "../../../../../core/contracts/errors";
+import {
+  collectCopperZones,
+  collectKeepouts,
+  pourParamsForZone,
+  zonePourNets,
+  type EffectiveKeepout,
+} from "../../../../../shared/pcb-areas";
 
 /**
  * Build a complete Gerber X2 file for one fabrication layer.
@@ -65,22 +76,36 @@ interface BuildContext {
   proj: DesignerPcbProjection;
   warnings: string[];
   /**
-   * Pre-built per-pad net lookup: key is `${placementId}|${padNumber}`,
-   * value is the resolved netId. Optional — when absent, per-pad `.TO.N`
-   * attributes are omitted (still spec-legal; fab AOI tools that want
-   * them will not flag the export, just skip optical-net validation).
+   * Per-pad net lookup, `${placementId}|${padNumber}` → netId, taken from the
+   * projection's OWN `padNets` (copper-pour contract §9): the same authoritative
+   * map the fill, connectivity and DRC read. The exporter used to re-derive it
+   * from the schematic correlation, so a pad the pour merged could still flash
+   * without a `%TO.N` — two answers to one question.
    */
-  padNetIds?: Map<string, string>;
+  padNetIds: ReadonlyMap<string, string>;
+  /**
+   * The effective keepouts of this projection, derived ONCE per build: every
+   * `copperPour` keepout is subtracted from every pour on its layers (contract
+   * §4), so the artwork carves exactly what the canvas and DRC do.
+   */
+  keepouts: readonly EffectiveKeepout[];
 }
 
 export function buildGerberLayer(
   proj: DesignerPcbProjection,
   layerKind: GerberLayerKind,
   warnings: string[],
-  padNetIds?: Map<string, string>,
   createdAt: string = new Date().toISOString(),
 ): string {
-  const ctx: BuildContext = { proj, warnings, padNetIds };
+  const ctx: BuildContext = {
+    proj,
+    warnings,
+    padNetIds: new Map(Object.entries(proj.padNets ?? {})),
+    keepouts: collectKeepouts({
+      keepouts: proj.keepouts ?? [],
+      layerCount: proj.board.layerCount,
+    }).keepouts,
+  };
   const aperTable = new ApertureTable();
   const body: string[] = [];
 
@@ -308,96 +333,143 @@ function emitCopper(
  * fill kernel the canvas renders so the manufactured plane is byte-identical to
  * the on-screen copper (clearance halos, thermal necks, island pruning included).
  *
+ * The layer carries ONE region set — the UNION of every zone's islands
+ * (copper-pour contract §9). Emitting pour-by-pour is unsound: a later same-net
+ * pour's `LPC` antipad holes are cut out of the accumulated dark copper, so
+ * where two same-net zones overlap with different clearances the second pour's
+ * holes erase the first pour's copper. After §3.3's precedence carve only
+ * same-net overlaps survive, so the union changes no electrical answer.
+ *
  * Each island's outer contour is a dark (LPD) region; its antipad/clearance
  * holes are clear (LPC) regions — the spec-preferred "polarity" method for holes
- * over cut-ins. Pours are configured per layer in the design's persisted view
- * state (`copperFillLayers` / `copperFillPourNetIds`); absent → no pour, which
- * is spec-valid. Must run before pads/traces/vias (they paint over the holes).
+ * over cut-ins. Which copper areas exist comes from `collectCopperZones` — the
+ * one derivation the canvas, DRC and the snapshot also read — so a layer with
+ * no effective zone emits no pour, which is spec-valid. Must run before
+ * pads/traces/vias (they paint over the holes).
  */
 function emitCopperPour(
   ctx: BuildContext,
   out: string[],
   layer: PcbCopperLayerId,
 ): void {
-  const view = ctx.proj.board.viewState;
-  if (!view) return;
-  const dr = ctx.proj.board.designRules;
-  const boardConnection = view.copperFillPadConnection ?? "solid";
+  const board = ctx.proj.board;
+  const dr = board.designRules;
   const common = {
-    layer,
-    outline: ctx.proj.board.outline,
+    layerCount: board.layerCount,
+    outline: board.outline,
     placements: ctx.proj.placements,
     traces: ctx.proj.traces,
     vias: ctx.proj.vias,
-    padNetIds: ctx.padNetIds ?? new Map<string, string>(),
-    clearanceMm: resolveCopperFillClearanceMm(dr.clearance),
+    padNetIds: ctx.padNetIds,
     copperToBoardEdgeMm: dr.clearance.copperToBoardEdgeMm,
-    cutouts: ctx.proj.board.cutouts,
+    cutouts: board.cutouts,
     freeHoles: ctx.proj.freeHoles,
     freePads: ctx.proj.freePads,
-    minThicknessMm: dr.minimums.traceWidthMm,
   };
 
-  // Board-wide pour, if this layer has one configured.
-  if (view.copperFillLayers.includes(layer)) {
-    const pourNetId = view.copperFillPourNetIds[layer] ?? null;
-    emitPourIslands(
-      ctx,
-      out,
-      buildCopperFillPourPaths({
-        ...common,
-        pourNetId,
-        padConnection: boardConnection,
-      }),
-      pourNetId,
-    );
-  }
-
-  // Explicit copper zones on this layer (same kernel, clipped to the polygon).
-  for (const zone of ctx.proj.zones) {
-    if (
-      zone.layer !== layer ||
-      !zone.netId ||
-      zone.polygonPointsMm.length < 3
-    ) {
-      continue;
+  // ONE loop over the effective copper areas on this layer (zone/keepout
+  // contract §3.1 / §7) — board zones and explicit zones are the same thing to
+  // the fill kernel, so artwork can no longer disagree with the canvas.
+  const { zones } = collectCopperZones({
+    zones: ctx.proj.zones,
+    layerCount: board.layerCount,
+    knownNetIds: new Set(Object.keys(ctx.proj.netNames)),
+  });
+  const nets = zonePourNets(board, ctx.proj.netNames);
+  // Rings grouped by pour net: same-net pours are unioned (their overlaps are
+  // one copper, contract §9), different-net pours never overlap after the §3.3
+  // precedence carve, so each union keeps its own `%TO.N`.
+  const ringsByNet = new Map<string | null, PcbPointMm[][][]>();
+  for (const zone of zones) {
+    if (zone.layer !== layer) continue;
+    const result = buildCopperFillIslands({
+      ...common,
+      ...pourParamsForZone(zone, dr, ctx.keepouts, zones, nets),
+    });
+    // Fail the export rather than ship a layer that silently lost a plane
+    // (contract §8/§9): a bailed fill is not "this zone pours nothing".
+    if (result.status === "failed") {
+      throw new AppError(
+        `Copper pour for zone "${zone.id}" on ${layer} could not be filled (${result.reason}); the export would omit its copper`,
+        422,
+        "Copper pour failed",
+        "https://openpcb.dev/problems/copper-pour-failed",
+        { zoneId: zone.id, layer, reason: result.reason },
+      );
     }
-    emitPourIslands(
-      ctx,
-      out,
-      buildCopperFillPourPaths({
-        ...common,
-        pourNetId: zone.netId,
-        padConnection: zone.connection ?? boardConnection,
-        clipPolygonMm: zone.polygonPointsMm,
-      }),
-      zone.netId,
+    if (result.islands.length === 0) continue;
+    const bucket = ringsByNet.get(zone.netId) ?? [];
+    for (const island of result.islands) bucket.push(island.rings);
+    ringsByNet.set(zone.netId, bucket);
+  }
+  // One list across nets in the §8 total order: an island nested in another
+  // net's clearance void has a strictly larger `minX`, so its ancestor is
+  // emitted first and the ancestor's `LPC` hole never erases it.
+  const islands: Array<{
+    rings: PcbPointMm[][];
+    areaMm2: number;
+    netId: string | null;
+  }> = [];
+  for (const netId of [...ringsByNet.keys()].sort(compareNetIds)) {
+    for (const island of unionLayerPours(ringsByNet.get(netId)!, netId, layer)) {
+      islands.push({ ...island, netId });
+    }
+  }
+  emitPourIslands(ctx, out, sortCopperFillIslands(islands));
+}
+
+/**
+ * The per-net union, with a kernel failure (a clipper throw or a collapsed
+ * union) reported the same way a failed per-zone fill is: a typed problem the
+ * export route returns, never a bare 500 and never a layer without its plane.
+ */
+function unionLayerPours(
+  pours: PcbPointMm[][][],
+  netId: string | null,
+  layer: PcbCopperLayerId,
+): ReturnType<typeof unionPourIslands> {
+  try {
+    return unionPourIslands(pours);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new AppError(
+      `Copper pours of net "${netId ?? "(no net)"}" on ${layer} could not be merged for export (${reason}); the export would omit their copper`,
+      422,
+      "Copper pour failed",
+      "https://openpcb.dev/problems/copper-pour-failed",
+      { netId, layer, reason },
     );
   }
+}
+
+/** `null` (net-less copper) first, then ids in code-point order. */
+function compareNetIds(a: string | null, b: string | null): number {
+  if (a === b) return 0;
+  if (a === null) return -1;
+  if (b === null) return 1;
+  return a < b ? -1 : 1;
 }
 
 /** Emit a pour's islands as `G36/G37` dark regions with `%LPC%` antipad holes. */
 function emitPourIslands(
   ctx: BuildContext,
   out: string[],
-  islands: ReadonlyArray<
-    ReadonlyArray<ReadonlyArray<{ x: number; y: number }>>
-  >,
-  pourNetId: string | null,
+  islands: ReadonlyArray<{
+    rings: ReadonlyArray<ReadonlyArray<{ x: number; y: number }>>;
+    netId: string | null;
+  }>,
 ): void {
-  if (islands.length === 0) return;
-  const netName = resolveNetName(ctx, pourNetId, null);
   for (const island of islands) {
-    const outer = island[0];
+    const outer = island.rings[0];
     if (!outer || outer.length < 3) continue;
-    emitNetAttr(out, netName);
+    emitNetAttr(out, resolveNetName(ctx, island.netId, null));
     emitRegion(out, outer);
-    if (island.length > 1) {
+    if (island.rings.length > 1) {
       // Clear (LPC) regions cut the antipads/clearance gaps back out of the
       // pour, then restore dark for the next island.
       out.push("%LPC*%");
-      for (let h = 1; h < island.length; h++) {
-        const hole = island[h]!;
+      for (let h = 1; h < island.rings.length; h++) {
+        const hole = island.rings[h]!;
         if (hole.length >= 3) emitRegion(out, hole);
       }
       out.push("%LPD*%");
@@ -473,8 +545,7 @@ function padTouchesCopperLayer(
   if (pad.layer && (pad.layer === "F.Cu" || pad.layer === "B.Cu")) {
     return pad.layer === layer;
   }
-  const placementOnBottom = placement.layer === "B.Cu";
-  return (placementOnBottom ? "B.Cu" : "F.Cu") === layer;
+  return placementSideLayer(placement) === layer;
 }
 
 function padApertureShape(
@@ -879,10 +950,8 @@ function resolveNetNameForPad(
   placement: PcbPlacedPart,
   padNumber: string,
 ): string | null {
-  // Lookup populated by the orchestrator when a schematic projection is
-  // available. Falls back to null when the export is PCB-only (no
-  // schematic) or when the pad isn't correlated to any net.
-  if (!ctx.padNetIds) return null;
+  // The projection's own pad→net map. Null when the pad carries no net (a
+  // PCB-only design, or a pad the schematic never correlated).
   const netId = ctx.padNetIds.get(`${placement.id}|${padNumber}`);
   if (!netId) return null;
   return ctx.proj.netNames[netId] ?? null;

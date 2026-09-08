@@ -7,21 +7,12 @@ import type {
   PcbPlacedPart,
   PcbPointMm,
 } from "../../../../sdks/designer";
-import {
-  padWorldHalfExtentsMm,
-  padWorldPositionMm,
-  placementPads,
-} from "./pad-geometry";
+import { padWorldPositionMm, placementPads } from "./pad-geometry";
 
 export interface PadRef {
   placementId: string;
   padNumber: string;
   worldMm: PcbPointMm;
-  /**
-   * World-space AABB half extents of the pad copper (mm). Feeds pad-shape
-   * connectivity (flag `pcb.padShapeConnectivity`); absent on legacy callers.
-   */
-  halfExtentsMm?: { x: number; y: number };
 }
 
 export interface NetPadCorrelation {
@@ -106,7 +97,6 @@ export function correlateNetPads(
         placementId: placement.id,
         padNumber: pad.number,
         worldMm: padWorldPositionMm(placement, pad),
-        halfExtentsMm: padWorldHalfExtentsMm(placement, pad),
       });
     }
 

@@ -12,9 +12,13 @@ import type {
   PcbBoardOutline,
   PcbBoardSettings,
   PcbCopperLayerId,
+  PcbKeepout,
   PcbTrace,
   PcbVia,
   PcbViaType,
+  PcbZone,
+  PcbZoneIslandRemoval,
+  PcbZoneRegion,
 } from "../../../sdks";
 import {
   insertPrimitiveRow,
@@ -51,19 +55,25 @@ import {
   invalidPcbBoardSettings,
   invalidPcbFreeHole,
   invalidPcbFreePad,
+  invalidPcbKeepout,
   invalidPcbOverlay,
   invalidPcbTrace,
   invalidPcbVia,
+  invalidPcbZone,
+  invalidDrcRule,
   invalidPrimitive,
   invalidWirePath,
   okResult,
   pcbFreeHoleNotFound,
   pcbFreePadNotFound,
+  pcbKeepoutNotFound,
   pcbOverlayNotFound,
   pcbNetClassNotFound,
   pcbPlacementNotFound,
   pcbTraceNotFound,
   pcbViaNotFound,
+  pcbZoneBoardExists,
+  pcbZoneNotFound,
   pinNotFound,
   primitiveNotFound,
 } from "./results";
@@ -78,27 +88,33 @@ import {
 import {
   deletePcbFreeHole,
   deletePcbFreePad,
+  deletePcbKeepout,
   deletePcbOverlayShape,
   deletePcbOverlayText,
   deletePcbPlacement,
   deletePcbTrace,
   deletePcbVia,
+  deletePcbZone,
   ensurePcbBoardSettings,
   flipPcbPlacement,
   insertPcbFreeHole,
   insertPcbFreePad,
+  insertPcbKeepout,
   insertPcbOverlayShape,
   insertPcbOverlayText,
   insertPcbTrace,
   insertPcbVia,
+  insertPcbZone,
   loadPcbFreeHoleById,
   loadPcbFreePadById,
+  loadPcbKeepoutRowById,
   loadPcbOverlayShapeById,
   loadPcbOverlayTextById,
   loadPcbPlacementById,
   upsertPcbPlacement,
   loadPcbTraceById,
   loadPcbViaById,
+  loadPcbZoneRowById,
   movePcbPlacement,
   rotatePcbPlacement,
   updatePcbActiveLayer,
@@ -106,12 +122,15 @@ import {
   updatePcbBoardOutline,
   updatePcbFreeHole,
   updatePcbFreePad,
+  updatePcbKeepout,
   updatePcbOverlayShape,
   updatePcbOverlayText,
   updatePcbTrace,
   updatePcbViewState,
   updatePcbDesignRules,
+  validateDrcRulesForSave,
   updatePcbVisibleLayers,
+  updatePcbZone,
 } from "./pcb/pcb-store";
 import {
   planCandidatePlacements,
@@ -121,12 +140,26 @@ import {
   validatePath as validateTracePath,
   sanitizePath as sanitizeTracePath,
 } from "./pcb/pcb-trace-geometry";
-import { loadPcbProjection } from "./pcb/pcb-projection";
 import {
-  buildCopperFillPourPaths,
+  loadPcbProjection,
+  netNamesFromSchematic,
+} from "./pcb/pcb-projection";
+import { loadSchematicProjection } from "./projection-read";
+import {
+  createRuleResolver,
+  type RuleResolver,
+} from "../../../shared/drc/rule-resolver";
+import { defaultNetClassId } from "../../../shared/pcb-areas/net-class-resolver";
+import {
+  buildCopperFillIslands,
   isTraceCoveredByPour,
-  resolveCopperFillClearanceMm,
 } from "../../../shared/rendering/copper-fill/copper-fill-geometry";
+import {
+  collectCopperZones,
+  collectKeepouts,
+  pourParamsForZone,
+  zonePourNets,
+} from "../../../shared/pcb-areas";
 import {
   validateTraceAgainstFab,
   validateViaAgainstFab,
@@ -134,7 +167,17 @@ import {
 import { computeOutlineBboxMm } from "./pcb/outline-geometry";
 import { firstContourError, normalizeContour } from "./pcb/contour-validation";
 import { below } from "./pcb/tolerance";
-import { copperLayerIndex } from "../../../sdks/designer";
+import {
+  copperLayerIndex,
+  copperLayersForCount,
+  isCopperLayerId,
+  viaSpanLayers,
+} from "../../../sdks/designer";
+import { boardZoneId } from "../../../shared/pcb-areas/copper-zones";
+import {
+  zoneRegionValidity,
+  zoneRingValidity,
+} from "../../../shared/pcb-areas/zone-parse";
 import {
   insertVertexOnWire,
   parseWirePointsJson,
@@ -159,6 +202,126 @@ function isFinitePoint(point: { x: number; y: number }): boolean {
 }
 
 const MAX_BOARD_DIM_MM = 2000;
+
+/** `""` is never a net id or net name (zone/keepout contract §3.2). */
+function emptyToNull(value: string | null): string | null {
+  return value ? value : null;
+}
+
+function copyZoneRegion(region: PcbZoneRegion): PcbZoneRegion {
+  if (region.kind === "board") return { kind: "board" };
+  // An empty cutout list normalises to an absent key (copper-pour §11).
+  const holesMm = (region.holesMm ?? []).map((hole) =>
+    hole.map((p) => ({ x: p.x, y: p.y })),
+  );
+  return {
+    kind: "polygon",
+    pointsMm: region.pointsMm.map((p) => ({ x: p.x, y: p.y })),
+    ...(holesMm.length === 0 ? {} : { holesMm }),
+  };
+}
+
+function copyIslandRemoval(value: PcbZoneIslandRemoval): PcbZoneIslandRemoval {
+  return typeof value === "string" ? value : { minAreaMm2: value.minAreaMm2 };
+}
+
+/**
+ * The value rules shared by `pcb_add_zone` and `pcb_update_zone` (contract
+ * §12.2). Returns the failure detail, or null when every provided field is in
+ * range. A fractional or negative `priority` is rejected here rather than
+ * silently floored: the derivation normalises persisted rows, but the command
+ * boundary is where a producer can still be told it is wrong.
+ */
+/**
+ * Contract §12.2: a locked row accepts `locked: false` and nothing else in the
+ * same command, so an unlock can never smuggle edits past the lock gate.
+ */
+function unlockOnly(
+  command: object,
+  idField: "zoneId" | "keepoutId",
+): boolean {
+  for (const [key, value] of Object.entries(command)) {
+    if (value === undefined) continue;
+    if (key === "type" || key === idField || key === "locked") continue;
+    return false;
+  }
+  return true;
+}
+
+function zoneValueError(command: {
+  priority?: number;
+  clearanceMm?: number | null;
+  minWidthMm?: number | null;
+  thermal?: { gapMm: number; spokeWidthMm: number } | null;
+  islandRemoval?: PcbZoneIslandRemoval | null;
+}): string | null {
+  if (command.priority !== undefined) {
+    if (!Number.isInteger(command.priority) || command.priority < 0) {
+      return "priority must be an integer >= 0";
+    }
+  }
+  const overrides: Array<[string, number | null | undefined]> = [
+    ["clearanceMm", command.clearanceMm],
+    ["minWidthMm", command.minWidthMm],
+  ];
+  for (const [field, value] of overrides) {
+    if (value === undefined || value === null) continue;
+    if (!Number.isFinite(value) || value < 0) {
+      return `${field} must be a finite number >= 0`;
+    }
+  }
+  const thermal = command.thermal;
+  if (thermal !== undefined && thermal !== null) {
+    if (
+      !Number.isFinite(thermal.gapMm) ||
+      !(thermal.gapMm > 0) ||
+      !Number.isFinite(thermal.spokeWidthMm) ||
+      !(thermal.spokeWidthMm > 0)
+    ) {
+      return "thermal gapMm and spokeWidthMm must be finite numbers > 0";
+    }
+  }
+  const islandRemoval = command.islandRemoval;
+  if (
+    islandRemoval !== undefined &&
+    islandRemoval !== null &&
+    typeof islandRemoval !== "string"
+  ) {
+    if (
+      !Number.isFinite(islandRemoval.minAreaMm2) ||
+      islandRemoval.minAreaMm2 < 0
+    ) {
+      return "islandRemoval.minAreaMm2 must be a finite number >= 0";
+    }
+  }
+  return null;
+}
+
+/** First occurrence wins, so the persisted order is the client's order. */
+function dedupeLayers(layers: PcbCopperLayerId[]): PcbCopperLayerId[] {
+  const seen = new Set<string>();
+  const out: PcbCopperLayerId[] = [];
+  for (const layer of layers) {
+    if (seen.has(layer)) continue;
+    seen.add(layer);
+    out.push(layer);
+  }
+  return out;
+}
+
+function keepoutLayerError(
+  layers: PcbCopperLayerId[],
+  stackup: readonly PcbCopperLayerId[],
+): string | null {
+  if (layers.length === 0) return "layers must not be empty";
+  for (const layer of layers) {
+    if (!isCopperLayerId(layer)) return `${layer} is not a copper layer`;
+    if (!stackup.includes(layer)) {
+      return `layer ${layer} is not on the board stackup`;
+    }
+  }
+  return null;
+}
 
 /**
  * Validate a board outline (or cutout shape). Returns an error message, or null
@@ -274,7 +437,9 @@ function effectiveNetClassId(
   if (!netId) return requestedClassId;
   const assigned = board.perNetClassAssignments?.[netId];
   if (!assigned) return requestedClassId;
-  const defaultId = board.netClasses[0]?.id ?? "default";
+  // ONE default-class helper (rule-semantics contract §3 step 3): the stored
+  // array order is semantic, so this must not drift from the resolver's.
+  const defaultId = defaultNetClassId(board.netClasses);
   if (requestedClassId !== defaultId) return requestedClassId;
   return board.netClasses.some((nc) => nc.id === assigned)
     ? assigned
@@ -298,7 +463,10 @@ function buildPcbTraceForInsert(
   if (reason) return { error: invalidPcbTrace(reason) };
   // If we upgraded an un-chosen (default) class, take the assigned class's
   // trace width too — but never override a width the caller explicitly set.
-  const defaultWidth = board.netClasses[0]?.traceWidthMm;
+  // Through the ONE default-class helper (§3 step 3), never a raw array read.
+  const defaultWidth = board.netClasses.find(
+    (nc) => nc.id === defaultNetClassId(board.netClasses),
+  )?.traceWidthMm;
   const widthMm =
     netClassId !== input.netClassId && input.widthMm === defaultWidth
       ? netClass.traceWidthMm
@@ -382,9 +550,32 @@ function resolveViaSpan(
   return { fromLayer, toLayer, viaType };
 }
 
+/**
+ * The rule resolver a command handler resolves scoped constraints through —
+ * the SAME `createRuleResolver` batch DRC builds (rule-semantics contract §9),
+ * so the via insert gate and the DRC report cannot disagree about a minimum.
+ * Net names come from the schematic because a `netClass` scope may resolve
+ * through the GND / power NAME heuristic (§3 step 2), not only through an
+ * explicit assignment.
+ */
+function ruleResolverFor(
+  tx: DbClient,
+  designId: string,
+  board: PcbBoardSettings,
+): RuleResolver {
+  return createRuleResolver(
+    board,
+    Object.fromEntries(
+      netNamesFromSchematic(loadSchematicProjection(tx, designId)),
+    ),
+    { validCopperLayers: copperLayersForCount(board.layerCount) },
+  );
+}
+
 function buildPcbViaForInsert(
   input: PcbViaInput,
   board: PcbBoardSettings,
+  resolver: RuleResolver,
 ): { via: PcbVia } | { error: DesignerDispatchResult } {
   const netClassId = effectiveNetClassId(board, input.netId, input.netClassId);
   const netClass = board.netClasses.find((nc) => nc.id === netClassId);
@@ -401,16 +592,39 @@ function buildPcbViaForInsert(
     return { error: invalidPcbVia("via diameter must exceed drill") };
   }
   const minimums = board.designRules.minimums;
-  if (below(diameterMm, minimums.viaDiameterMm)) {
+  const span = resolveViaSpan(input, board);
+  // Scope geometry for the resolver: the via's copper disc over its resolved
+  // span. An unresolvable span cannot narrow a `layer` scope, so fall back to
+  // the whole stackup — conservative, and the span error is still returned
+  // below in the order this gate has always reported it.
+  const scalarItem = {
+    netId: input.netId,
+    layers:
+      "error" in span
+        ? copperLayersForCount(board.layerCount)
+        : viaSpanLayers(span.fromLayer, span.toLayer, board.layerCount),
+    geometry: {
+      kind: "disc" as const,
+      center: input.centerMm,
+      radiusMm: diameterMm / 2,
+    },
+  };
+  // Scoped scalar rules gate the insert exactly as the board minimum does
+  // (rule-semantics contract §5.1): the resolution is first-match, then
+  // floored by the board minimum, so this can only ever be at least as strict.
+  const requiredDiameterMm = resolver.scalar("viaDiameter", scalarItem).mm;
+  if (below(diameterMm, requiredDiameterMm)) {
     return { error: invalidPcbVia("via diameter is below board minimum") };
   }
-  if (below(drillMm, minimums.viaDrillMm) || below(drillMm, minimums.drillSizeMm)) {
+  const requiredDrillMm = resolver.scalar("viaDrill", scalarItem).mm;
+  // `drillSizeMm` has no scalar rule kind and stays board-only (§5.1).
+  if (below(drillMm, requiredDrillMm) || below(drillMm, minimums.drillSizeMm)) {
     return { error: invalidPcbVia("via drill is below board minimum") };
   }
-  if (below((diameterMm - drillMm) / 2, minimums.annularRingMm)) {
+  const requiredAnnularMm = resolver.scalar("annularRing", scalarItem).mm;
+  if (below((diameterMm - drillMm) / 2, requiredAnnularMm)) {
     return { error: invalidPcbVia("via annular ring is below board minimum") };
   }
-  const span = resolveViaSpan(input, board);
   if ("error" in span) return span;
   const via: PcbVia = {
     id: crypto.randomUUID(),
@@ -730,7 +944,11 @@ export function executeDesignerCommand({
 
   if (command.type === "pcb_add_via") {
     const board = ensurePcbBoardSettings(tx, designId, timestamp);
-    const built = buildPcbViaForInsert(command, board);
+    const built = buildPcbViaForInsert(
+      command,
+      board,
+      ruleResolverFor(tx, designId, board),
+    );
     if ("error" in built) return built.error;
     const { via } = built;
     insertPcbVia(tx, designId, via, timestamp);
@@ -741,7 +959,11 @@ export function executeDesignerCommand({
     const board = ensurePcbBoardSettings(tx, designId, timestamp);
     const builtTrace = buildPcbTraceForInsert(command.trace, board);
     if ("error" in builtTrace) return builtTrace.error;
-    const builtVia = buildPcbViaForInsert(command.via, board);
+    const builtVia = buildPcbViaForInsert(
+      command.via,
+      board,
+      ruleResolverFor(tx, designId, board),
+    );
     if ("error" in builtVia) return builtVia.error;
     insertPcbTrace(tx, designId, builtTrace.trace, timestamp);
     insertPcbVia(tx, designId, builtVia.via, timestamp);
@@ -768,8 +990,9 @@ export function executeDesignerCommand({
       traces.push(built.trace);
     }
     const vias = [];
+    const viaResolver = ruleResolverFor(tx, designId, board);
     for (const viaInput of command.vias) {
-      const built = buildPcbViaForInsert(viaInput, board);
+      const built = buildPcbViaForInsert(viaInput, board, viaResolver);
       if ("error" in built) return built.error;
       vias.push(built.via);
     }
@@ -824,19 +1047,20 @@ export function executeDesignerCommand({
     // 2. copper — built (not inserted) against the same board settings
     const traces: PcbTrace[] = [];
     const vias: PcbVia[] = [];
+    const viaResolver = ruleResolverFor(tx, designId, board);
     for (const op of command.routeOperations) {
       if (op.type === "pcb_add_trace") {
         const built = buildPcbTraceForInsert(op, board);
         if ("error" in built) return built.error;
         traces.push(built.trace);
       } else if (op.type === "pcb_add_via") {
-        const built = buildPcbViaForInsert(op, board);
+        const built = buildPcbViaForInsert(op, board, viaResolver);
         if ("error" in built) return built.error;
         vias.push(built.via);
       } else {
         const builtTrace = buildPcbTraceForInsert(op.trace, board);
         if ("error" in builtTrace) return builtTrace.error;
-        const builtVia = buildPcbViaForInsert(op.via, board);
+        const builtVia = buildPcbViaForInsert(op.via, board, viaResolver);
         if ("error" in builtVia) return builtVia.error;
         traces.push(builtTrace.trace);
         vias.push(builtVia.via);
@@ -887,34 +1111,83 @@ export function executeDesignerCommand({
 
   if (command.type === "pcb_cleanup_pour_traces") {
     const proj = loadPcbProjection({ db: tx, designId, revision, timestamp });
-    const view = proj.board.viewState;
-    if (!view) return okResult(revision, null);
     const dr = proj.board.designRules;
     const padNetIds = new Map(Object.entries(proj.padNets ?? {}));
-    const toDelete = new Set<string>();
-    for (const layer of view.copperFillLayers) {
-      const pourNetId = view.copperFillPourNetIds[layer];
-      if (!pourNetId) continue;
-      const islands = buildCopperFillPourPaths({
-        layer,
-        outline: proj.board.outline,
-        placements: proj.placements,
-        traces: proj.traces,
-        vias: proj.vias,
-        pourNetId,
-        padNetIds,
-        clearanceMm: resolveCopperFillClearanceMm(dr.clearance),
-        copperToBoardEdgeMm: dr.clearance.copperToBoardEdgeMm,
-        cutouts: proj.board.cutouts,
-        freeHoles: proj.freeHoles,
-        freePads: proj.freePads,
-        minThicknessMm: dr.minimums.traceWidthMm,
-      });
-      if (islands.length === 0) continue;
-      for (const trace of proj.traces) {
-        if (trace.layer !== layer || trace.netId !== pourNetId) continue;
-        if (isTraceCoveredByPour(trace, islands)) toDelete.add(trace.id);
+    // EVERY effective zone on the trace's layer, board plane and polygon zone
+    // alike (copper-pour contract §9 — widened from S3a's board-only): a trace
+    // buried in an explicit zone's copper is just as redundant as one buried in
+    // a plane, and the S4 rule that a trace must lie strictly inside a SINGLE
+    // island is what keeps the widening conservative.
+    const effectiveZones = collectCopperZones({
+      zones: proj.zones,
+      layerCount: proj.board.layerCount,
+      knownNetIds: new Set(Object.keys(proj.netNames ?? {})),
+    }).zones;
+    // Same keepouts every other fill site subtracts (§13.3): a trace lying in a
+    // `copperPour` keepout is NOT covered by the pour, so it must survive.
+    const { keepouts } = collectKeepouts({
+      keepouts: proj.keepouts ?? [],
+      layerCount: proj.board.layerCount,
+    });
+    // Which of `candidates` a pour covers when the fill is computed with
+    // `removed` already deleted — the fill the board would actually have.
+    const coveredTraces = (
+      removed: ReadonlySet<string>,
+      candidates: ReadonlyArray<PcbTrace>,
+    ): Set<string> => {
+      const fillTraces =
+        removed.size === 0
+          ? proj.traces
+          : proj.traces.filter((trace) => !removed.has(trace.id));
+      const covered = new Set<string>();
+      for (const zone of effectiveZones) {
+        const pourNetId = zone.netId;
+        if (!pourNetId) continue;
+        const fill = buildCopperFillIslands({
+          layerCount: proj.board.layerCount,
+          outline: proj.board.outline,
+          placements: proj.placements,
+          traces: fillTraces,
+          vias: proj.vias,
+          padNetIds,
+          copperToBoardEdgeMm: dr.clearance.copperToBoardEdgeMm,
+          cutouts: proj.board.cutouts,
+          freeHoles: proj.freeHoles,
+          freePads: proj.freePads,
+          ...pourParamsForZone(
+            zone,
+            dr,
+            keepouts,
+            effectiveZones,
+            zonePourNets(proj.board, proj.netNames ?? {}),
+          ),
+        });
+        // A bailed fill ships no copper (contract §8), so nothing it "covers"
+        // may be deleted — skip the zone rather than reason about `[]`.
+        if (fill.status === "failed" || fill.islands.length === 0) continue;
+        const islands = fill.islands.map((island) => island.rings);
+        for (const trace of candidates) {
+          if (covered.has(trace.id)) continue;
+          if (trace.layer !== zone.layer || trace.netId !== pourNetId) continue;
+          if (isTraceCoveredByPour(trace, islands)) covered.add(trace.id);
+        }
       }
+      return covered;
+    };
+
+    let toDelete = coveredTraces(new Set(), proj.traces);
+    // The pre-deletion fill is not the fill the board is left with: a trace can
+    // be the only member keeping its own island alive, and with
+    // `islandRemoval: "always"` that island disappears once the trace goes —
+    // deleting trace AND copper. So re-run the fill without the candidates and
+    // keep only those the REMAINING pour still covers. Removing one candidate
+    // can shrink another's island, so iterate to a fixed point; each round can
+    // only drop candidates, so it terminates in at most |candidates| rounds.
+    while (toDelete.size > 0) {
+      const candidates = proj.traces.filter((trace) => toDelete.has(trace.id));
+      const stillCovered = coveredTraces(toDelete, candidates);
+      if (stillCovered.size === toDelete.size) break;
+      toDelete = stillCovered;
     }
     for (const id of toDelete) deletePcbTrace(tx, id);
     return okResult(
@@ -923,6 +1196,233 @@ export function executeDesignerCommand({
         : revision,
       null,
     );
+  }
+
+  // ───────── Zones and keepouts (zone/keepout contract §12.2) ─────────
+  if (
+    command.type === "pcb_add_zone" ||
+    command.type === "pcb_update_zone" ||
+    command.type === "pcb_delete_zone" ||
+    command.type === "pcb_add_keepout" ||
+    command.type === "pcb_update_keepout" ||
+    command.type === "pcb_delete_keepout"
+  ) {
+    const board = ensurePcbBoardSettings(tx, designId, timestamp);
+    const stackup = copperLayersForCount(board.layerCount);
+
+    if (command.type === "pcb_add_zone") {
+      if (!stackup.includes(command.layer)) {
+        return invalidPcbZone(
+          `layer ${command.layer} is not on the board stackup`,
+        );
+      }
+      let id: string;
+      if (command.region.kind === "board") {
+        // The board-zone id is derived from the layer, never chosen by the
+        // client, so "one board zone per layer" is an id-uniqueness fact.
+        id = boardZoneId(command.layer);
+        if (loadPcbZoneRowById(tx, designId, id)) {
+          return pcbZoneBoardExists(command.layer);
+        }
+      } else {
+        // Outer ring AND cutouts (copper-pour contract §11).
+        const validity = zoneRegionValidity(command.region);
+        if (validity !== "ok") {
+          return invalidPcbZone(`zone outline is invalid (${validity})`);
+        }
+        id = crypto.randomUUID();
+      }
+      const valueError = zoneValueError(command);
+      if (valueError) return invalidPcbZone(valueError);
+      const zone: PcbZone = {
+        id,
+        name: command.name ?? null,
+        enabled: command.enabled ?? true,
+        lockedAt: null,
+        layer: command.layer,
+        netId: emptyToNull(command.net.netId),
+        netName: emptyToNull(command.net.netName),
+        region: copyZoneRegion(command.region),
+        priority: command.priority ?? 0,
+        ...(command.padConnection !== undefined
+          ? { padConnection: command.padConnection }
+          : {}),
+        ...(command.clearanceMm === undefined || command.clearanceMm === null
+          ? {}
+          : { clearanceMm: command.clearanceMm }),
+        ...(command.minWidthMm === undefined || command.minWidthMm === null
+          ? {}
+          : { minWidthMm: command.minWidthMm }),
+        ...(command.thermal === undefined || command.thermal === null
+          ? {}
+          : { thermal: { ...command.thermal } }),
+        ...(command.islandRemoval !== undefined
+          ? { islandRemoval: copyIslandRemoval(command.islandRemoval) }
+          : {}),
+      };
+      insertPcbZone(tx, designId, zone, timestamp);
+      return okResult(bumpRevision(tx, designId, revision, timestamp), zone.id);
+    }
+
+    if (command.type === "pcb_update_zone") {
+      const existing = loadPcbZoneRowById(tx, designId, command.zoneId);
+      if (!existing) return pcbZoneNotFound(command.zoneId);
+      if (existing.zone.lockedAt) {
+        if (command.locked !== false) {
+          return invalidPcbZone("zone is locked — unlock before editing");
+        }
+        if (!unlockOnly(command, "zoneId")) {
+          return invalidPcbZone(
+            "a locked zone accepts only locked: false — unlock first, then edit",
+          );
+        }
+      }
+      const isBoardZone = existing.zone.region.kind === "board";
+      if (
+        isBoardZone &&
+        (command.layer !== undefined || command.region !== undefined)
+      ) {
+        return invalidPcbZone("board zone layer and region are fixed");
+      }
+      if (command.layer !== undefined && !stackup.includes(command.layer)) {
+        return invalidPcbZone(
+          `layer ${command.layer} is not on the board stackup`,
+        );
+      }
+      if (command.region !== undefined) {
+        // A polygon zone can never become a board zone: its id would no longer
+        // be `board:<layer>` and the derivation would drop it fail-closed.
+        if (command.region.kind === "board") {
+          return invalidPcbZone("a polygon zone cannot take a board region");
+        }
+        const validity = zoneRegionValidity(command.region);
+        if (validity !== "ok") {
+          return invalidPcbZone(`zone outline is invalid (${validity})`);
+        }
+      }
+      const valueError = zoneValueError(command);
+      if (valueError) return invalidPcbZone(valueError);
+      const next: PcbZone = { ...existing.zone };
+      if (command.name !== undefined) next.name = command.name;
+      if (command.enabled !== undefined) next.enabled = command.enabled;
+      if (command.layer !== undefined) next.layer = command.layer;
+      if (command.net !== undefined) {
+        next.netId = emptyToNull(command.net.netId);
+        next.netName = emptyToNull(command.net.netName);
+      }
+      if (command.region !== undefined) {
+        next.region = copyZoneRegion(command.region);
+      }
+      if (command.priority !== undefined) next.priority = command.priority;
+      if (command.padConnection !== undefined) {
+        next.padConnection = command.padConnection;
+      }
+      if (command.clearanceMm !== undefined) {
+        if (command.clearanceMm === null) delete next.clearanceMm;
+        else next.clearanceMm = command.clearanceMm;
+      }
+      if (command.minWidthMm !== undefined) {
+        if (command.minWidthMm === null) delete next.minWidthMm;
+        else next.minWidthMm = command.minWidthMm;
+      }
+      if (command.thermal !== undefined) {
+        if (command.thermal === null) delete next.thermal;
+        else next.thermal = { ...command.thermal };
+      }
+      if (command.islandRemoval !== undefined) {
+        if (command.islandRemoval === null) delete next.islandRemoval;
+        else next.islandRemoval = copyIslandRemoval(command.islandRemoval);
+      }
+      if (command.locked !== undefined) {
+        next.lockedAt = command.locked ? timestamp : null;
+      }
+      updatePcbZone(tx, existing.rowId, next, timestamp);
+      return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+    }
+
+    if (command.type === "pcb_delete_zone") {
+      const existing = loadPcbZoneRowById(tx, designId, command.zoneId);
+      if (!existing) return pcbZoneNotFound(command.zoneId);
+      if (existing.zone.lockedAt) {
+        return invalidPcbZone("zone is locked — unlock before deleting");
+      }
+      deletePcbZone(tx, existing.rowId);
+      return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+    }
+
+    if (command.type === "pcb_add_keepout") {
+      const layers = dedupeLayers(command.layers);
+      const layerError = keepoutLayerError(layers, stackup);
+      if (layerError) return invalidPcbKeepout(layerError);
+      const validity = zoneRingValidity(command.pointsMm);
+      if (validity !== "ok") {
+        return invalidPcbKeepout(`keepout outline is invalid (${validity})`);
+      }
+      const keepout: PcbKeepout = {
+        id: crypto.randomUUID(),
+        name: command.name ?? null,
+        enabled: command.enabled ?? true,
+        lockedAt: null,
+        layers,
+        pointsMm: command.pointsMm.map((p) => ({ x: p.x, y: p.y })),
+        restrictions: { ...command.restrictions },
+      };
+      insertPcbKeepout(tx, designId, keepout, timestamp);
+      return okResult(
+        bumpRevision(tx, designId, revision, timestamp),
+        keepout.id,
+      );
+    }
+
+    if (command.type === "pcb_update_keepout") {
+      const existing = loadPcbKeepoutRowById(tx, designId, command.keepoutId);
+      if (!existing) return pcbKeepoutNotFound(command.keepoutId);
+      if (existing.keepout.lockedAt) {
+        if (command.locked !== false) {
+          return invalidPcbKeepout("keepout is locked — unlock before editing");
+        }
+        if (!unlockOnly(command, "keepoutId")) {
+          return invalidPcbKeepout(
+            "a locked keepout accepts only locked: false — unlock first, then edit",
+          );
+        }
+      }
+      let layers: PcbCopperLayerId[] | undefined;
+      if (command.layers !== undefined) {
+        layers = dedupeLayers(command.layers);
+        const layerError = keepoutLayerError(layers, stackup);
+        if (layerError) return invalidPcbKeepout(layerError);
+      }
+      if (command.pointsMm !== undefined) {
+        const validity = zoneRingValidity(command.pointsMm);
+        if (validity !== "ok") {
+          return invalidPcbKeepout(`keepout outline is invalid (${validity})`);
+        }
+      }
+      const next: PcbKeepout = { ...existing.keepout };
+      if (command.name !== undefined) next.name = command.name;
+      if (command.enabled !== undefined) next.enabled = command.enabled;
+      if (layers !== undefined) next.layers = layers;
+      if (command.pointsMm !== undefined) {
+        next.pointsMm = command.pointsMm.map((p) => ({ x: p.x, y: p.y }));
+      }
+      if (command.restrictions !== undefined) {
+        next.restrictions = { ...command.restrictions };
+      }
+      if (command.locked !== undefined) {
+        next.lockedAt = command.locked ? timestamp : null;
+      }
+      updatePcbKeepout(tx, existing.rowId, next, timestamp);
+      return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+    }
+
+    const existing = loadPcbKeepoutRowById(tx, designId, command.keepoutId);
+    if (!existing) return pcbKeepoutNotFound(command.keepoutId);
+    if (existing.keepout.lockedAt) {
+      return invalidPcbKeepout("keepout is locked — unlock before deleting");
+    }
+    deletePcbKeepout(tx, existing.rowId);
+    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
   }
 
   if (command.type === "pcb_set_view_state") {
@@ -936,6 +1436,32 @@ export function executeDesignerCommand({
   }
 
   if (command.type === "pcb_set_design_rules") {
+    if (command.drcRules !== undefined) {
+      // Fail CLOSED (rule-semantics contract §2.1): a structurally invalid
+      // rule refuses the WHOLE command and nothing is persisted. Dropping the
+      // row instead would be fail-open — a tightening rule the author wrote
+      // would silently stop enforcing.
+      // Judged against the settings this command WILL persist, not the raw
+      // payload: `designRules` / `netClasses` arrive shape-only from the HTTP
+      // parser, so a partial `{ clearance: { … } }` must be normalised through
+      // the store's own update parse before the compiler sees it.
+      const settings = ensurePcbBoardSettings(tx, designId, timestamp);
+      const { invalid } = validateDrcRulesForSave(command.drcRules, settings, {
+        ...(command.designRules !== undefined
+          ? { designRules: command.designRules }
+          : {}),
+        ...(command.netClasses !== undefined
+          ? { netClasses: command.netClasses }
+          : {}),
+        ...(command.perNetClassAssignments !== undefined
+          ? { perNetClassAssignments: command.perNetClassAssignments }
+          : {}),
+      });
+      const first = invalid[0];
+      if (first) {
+        return invalidDrcRule(first.ruleId, `${first.reason}: ${first.detail}`);
+      }
+    }
     updatePcbDesignRules({
       db: tx,
       designId,
@@ -1118,7 +1644,11 @@ export function executeDesignerCommand({
 
   if (command.type === "pcb_add_manual_via") {
     const board = ensurePcbBoardSettings(tx, designId, timestamp);
-    const built = buildPcbViaForInsert(command, board);
+    const built = buildPcbViaForInsert(
+      command,
+      board,
+      ruleResolverFor(tx, designId, board),
+    );
     if ("error" in built) return built.error;
     const via = { ...built.via, provenance: "manual" as const };
     insertPcbVia(tx, designId, via, timestamp);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import type { PcbLayerCount, PcbLayerId } from "../../../../sdks";
 import {
+  Ban,
   Cable,
   PenTool,
   CircleDot,
@@ -8,6 +9,7 @@ import {
   EyeOff,
   Factory,
   FlipHorizontal2,
+  LayoutGrid,
   Magnet,
   Maximize,
   MessageSquarePlus,
@@ -116,6 +118,12 @@ interface PcbTopToolbarProps {
   /** F5 overlay-text drop tool. Click on canvas opens prompt → silkscreen label. */
   textMode: boolean;
   onToggleTextMode: () => void;
+  /** Copper-zone draw tool (Z) — sketches a polygon zone (contract §12.3). */
+  zoneMode: boolean;
+  onToggleZoneMode: () => void;
+  /** Keepout ("rule area") draw tool (K). */
+  keepoutMode: boolean;
+  onToggleKeepoutMode: () => void;
 }
 
 const POSTURE_LABEL: Record<RoutePosture, string> = {
@@ -372,6 +380,10 @@ function AddDropdown({
   onTogglePadMode,
   textMode,
   onToggleTextMode,
+  zoneMode,
+  onToggleZoneMode,
+  keepoutMode,
+  onToggleKeepoutMode,
   commentMode,
   onToggleCommentMode,
 }: {
@@ -381,6 +393,10 @@ function AddDropdown({
   onTogglePadMode: () => void;
   textMode: boolean;
   onToggleTextMode: () => void;
+  zoneMode: boolean;
+  onToggleZoneMode: () => void;
+  keepoutMode: boolean;
+  onToggleKeepoutMode: () => void;
   /** Comment tool — only offered when the caller wires it. */
   commentMode?: boolean;
   onToggleCommentMode?: () => void;
@@ -420,6 +436,26 @@ function AddDropdown({
       active: textMode,
       onToggle: onToggleTextMode,
     },
+    {
+      key: "zone",
+      label: "Zone",
+      hotkey: "Z",
+      title:
+        "Draw copper zone (Z) — click to place vertices, click the first one to close. Shift+Z cuts a hole in the selected zone",
+      Icon: LayoutGrid,
+      active: zoneMode,
+      onToggle: onToggleZoneMode,
+    },
+    {
+      key: "keepout",
+      label: "Keepout",
+      hotkey: "K",
+      title:
+        "Draw keepout / rule area (K) — click to place vertices, click the first one to close",
+      Icon: Ban,
+      active: keepoutMode,
+      onToggle: onToggleKeepoutMode,
+    },
     ...(onToggleCommentMode
       ? [
           {
@@ -439,7 +475,7 @@ function AddDropdown({
   const ButtonIcon = activeItem ? activeItem.Icon : Plus;
   const name = activeItem
     ? activeItem.title
-    : "Add hole, pad, or silkscreen text";
+    : "Add hole, pad, text, zone, or keepout";
 
   return (
     <div ref={ref} className="relative">
@@ -644,6 +680,10 @@ export function PcbTopToolbar({
   onTogglePadMode,
   textMode,
   onToggleTextMode,
+  zoneMode,
+  onToggleZoneMode,
+  keepoutMode,
+  onToggleKeepoutMode,
 }: PcbTopToolbarProps): ReactElement {
   return (
     <Toolbar aria-label="PCB tools">
@@ -700,6 +740,10 @@ export function PcbTopToolbar({
         onTogglePadMode={onTogglePadMode}
         textMode={textMode}
         onToggleTextMode={onToggleTextMode}
+        zoneMode={zoneMode}
+        onToggleZoneMode={onToggleZoneMode}
+        keepoutMode={keepoutMode}
+        onToggleKeepoutMode={onToggleKeepoutMode}
         commentMode={commentMode}
         onToggleCommentMode={onToggleCommentMode}
       />

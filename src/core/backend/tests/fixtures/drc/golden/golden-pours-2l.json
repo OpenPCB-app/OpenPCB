@@ -1,0 +1,1926 @@
+{
+ "schemaVersion": 2,
+ "fabricator": "custom",
+ "layerCount": 2,
+ "minimums": {
+  "traceWidthMm": 0.05,
+  "viaDiameterMm": 0.45,
+  "viaDrillMm": 0.3,
+  "drillSizeMm": 0.3,
+  "annularRingMm": 0.15
+ },
+ "outline": {
+  "kind": "roundrect",
+  "widthMm": 80,
+  "heightMm": 60,
+  "centerMm": {
+   "x": 0,
+   "y": 0
+  },
+  "cornerRadiusMm": 5
+ },
+ "cutouts": [
+  {
+   "id": "c1",
+   "shape": {
+    "kind": "circle",
+    "widthMm": 6,
+    "heightMm": 6,
+    "centerMm": {
+     "x": 28,
+     "y": 20
+    }
+   }
+  }
+ ],
+ "netNames": {
+  "gnd": "GND",
+  "na": "NET_A",
+  "nb": "NET_B",
+  "nc": "NET_C",
+  "nd": "NET_D",
+  "nsplit": "SPLITTER",
+  "s1": "SIG_1",
+  "s2": "SIG_2",
+  "s3": "SIG_3",
+  "s4": "SIG_4",
+  "s5": "SIG_5",
+  "s6": "SIG_6",
+  "s7": "SIG_7",
+  "s8": "SIG_8",
+  "s9": "SIG_9",
+  "s10": "SIG_10",
+  "s11": "SIG_11",
+  "s12": "SIG_12"
+ },
+ "placements": [
+  {
+   "id": "U1",
+   "reference": "U1",
+   "positionMm": {
+    "x": 0,
+    "y": 20
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -4.445
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -3.1750000000000003
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p3",
+     "number": "3",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -1.9050000000000002
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p4",
+     "number": "4",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -0.6350000000000002
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p5",
+     "number": "5",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 0.6349999999999998
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p6",
+     "number": "6",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 1.9049999999999994
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p7",
+     "number": "7",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 3.175
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p8",
+     "number": "8",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 4.445
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p9",
+     "number": "9",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 4.445
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p10",
+     "number": "10",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 3.1750000000000003
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p11",
+     "number": "11",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 1.9050000000000002
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p12",
+     "number": "12",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 0.6350000000000002
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p13",
+     "number": "13",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -0.6349999999999998
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p14",
+     "number": "14",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -1.9049999999999994
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p15",
+     "number": "15",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -3.175
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    },
+    {
+     "id": "p16",
+     "number": "16",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -4.445
+     },
+     "widthMm": 1.5,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "J1",
+   "reference": "J1",
+   "positionMm": {
+    "x": -30,
+    "y": -2
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "oval",
+     "centerMm": {
+      "x": -4.445,
+      "y": 0
+     },
+     "widthMm": 1.9,
+     "heightMm": 1.3,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.9
+    },
+    {
+     "id": "p2",
+     "number": "2",
+     "shape": "circle",
+     "centerMm": {
+      "x": -3.1750000000000003,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "p3",
+     "number": "3",
+     "shape": "circle",
+     "centerMm": {
+      "x": -1.9050000000000002,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "p4",
+     "number": "4",
+     "shape": "circle",
+     "centerMm": {
+      "x": -0.6350000000000002,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "p5",
+     "number": "5",
+     "shape": "circle",
+     "centerMm": {
+      "x": 0.6349999999999998,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "p6",
+     "number": "6",
+     "shape": "circle",
+     "centerMm": {
+      "x": 1.9049999999999994,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "p7",
+     "number": "7",
+     "shape": "circle",
+     "centerMm": {
+      "x": 3.175,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "p8",
+     "number": "8",
+     "shape": "circle",
+     "centerMm": {
+      "x": 4.445,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    }
+   ]
+  },
+  {
+   "id": "J2",
+   "reference": "J2",
+   "positionMm": {
+    "x": 30,
+    "y": -20
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "circle",
+     "centerMm": {
+      "x": -4.445,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "p2",
+     "number": "2",
+     "shape": "circle",
+     "centerMm": {
+      "x": -3.1750000000000003,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "p3",
+     "number": "3",
+     "shape": "circle",
+     "centerMm": {
+      "x": -1.9050000000000002,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "p4",
+     "number": "4",
+     "shape": "circle",
+     "centerMm": {
+      "x": -0.6350000000000002,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "p5",
+     "number": "5",
+     "shape": "circle",
+     "centerMm": {
+      "x": 0.6349999999999998,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "p6",
+     "number": "6",
+     "shape": "circle",
+     "centerMm": {
+      "x": 1.9049999999999994,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "p7",
+     "number": "7",
+     "shape": "circle",
+     "centerMm": {
+      "x": 3.175,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "p8",
+     "number": "8",
+     "shape": "circle",
+     "centerMm": {
+      "x": 4.445,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    }
+   ]
+  },
+  {
+   "id": "R1",
+   "reference": "R1",
+   "positionMm": {
+    "x": -34,
+    "y": 8
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    },
+    {
+     "id": "p2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    }
+   ]
+  },
+  {
+   "id": "R2",
+   "reference": "R2",
+   "positionMm": {
+    "x": -34,
+    "y": 14
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    },
+    {
+     "id": "p2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    }
+   ]
+  },
+  {
+   "id": "R3",
+   "reference": "R3",
+   "positionMm": {
+    "x": -34,
+    "y": 20
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    },
+    {
+     "id": "p2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    }
+   ]
+  },
+  {
+   "id": "R4",
+   "reference": "R4",
+   "positionMm": {
+    "x": 34,
+    "y": 6
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    },
+    {
+     "id": "p2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    }
+   ]
+  },
+  {
+   "id": "R5",
+   "reference": "R5",
+   "positionMm": {
+    "x": 34,
+    "y": 12
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    },
+    {
+     "id": "p2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    }
+   ]
+  },
+  {
+   "id": "R6",
+   "reference": "R6",
+   "positionMm": {
+    "x": 34,
+    "y": 18
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    },
+    {
+     "id": "p2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    }
+   ]
+  },
+  {
+   "id": "R7",
+   "reference": "R7",
+   "positionMm": {
+    "x": -6,
+    "y": -20
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    },
+    {
+     "id": "p2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    }
+   ]
+  },
+  {
+   "id": "R8",
+   "reference": "R8",
+   "positionMm": {
+    "x": -20,
+    "y": 26
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    },
+    {
+     "id": "p2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    }
+   ]
+  },
+  {
+   "id": "R9",
+   "reference": "R9",
+   "positionMm": {
+    "x": 34,
+    "y": 24
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    },
+    {
+     "id": "p2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    }
+   ]
+  },
+  {
+   "id": "R10",
+   "reference": "R10",
+   "positionMm": {
+    "x": -34,
+    "y": 2
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    },
+    {
+     "id": "p2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.825,
+      "y": 0
+     },
+     "widthMm": 0.95,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    }
+   ]
+  },
+  {
+   "id": "P_ROT",
+   "reference": "P_ROT",
+   "positionMm": {
+    "x": 19,
+    "y": -3
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 2.4,
+     "heightMm": 1.4,
+     "rotationDeg": 30
+    }
+   ]
+  },
+  {
+   "id": "P_NONE",
+   "reference": "P_NONE",
+   "positionMm": {
+    "x": -2,
+    "y": -2
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 2.0,
+     "heightMm": 2.0,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "P_NA1",
+   "reference": "P_NA1",
+   "positionMm": {
+    "x": -30,
+    "y": 8
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "P_NB",
+   "reference": "P_NB",
+   "positionMm": {
+    "x": -12,
+    "y": 16
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "P_NC",
+   "reference": "P_NC",
+   "positionMm": {
+    "x": 8,
+    "y": 8
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "P_ND",
+   "reference": "P_ND",
+   "positionMm": {
+    "x": 20,
+    "y": 24
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "P_NA2",
+   "reference": "P_NA2",
+   "positionMm": {
+    "x": -30,
+    "y": -20
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "P_B",
+   "reference": "P_B",
+   "positionMm": {
+    "x": -22.5,
+    "y": -17.5
+   },
+   "rotationDeg": 0,
+   "mirrored": false,
+   "layer": "F.Cu",
+   "pads": [
+    {
+     "id": "p1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 1.8,
+     "heightMm": 1.8,
+     "rotationDeg": 0
+    }
+   ]
+  }
+ ],
+ "padNets": {
+  "U1|1": "gnd",
+  "U1|8": "s1",
+  "U1|9": "s2",
+  "U1|16": "gnd",
+  "J1|1": "gnd",
+  "J1|3": "s3",
+  "J2|1": "gnd",
+  "J2|3": "s4",
+  "R1|1": "s1",
+  "R2|1": "s2",
+  "R3|1": "s3",
+  "R4|1": "s4",
+  "R5|1": "s5",
+  "R6|1": "s6",
+  "R7|1": "s7",
+  "R8|1": "s8",
+  "R9|1": "s9",
+  "R10|1": "s10",
+  "P_ROT|1": "gnd",
+  "P_NONE|1": "gnd",
+  "P_NA1|1": "na",
+  "P_NB|1": "nb",
+  "P_NC|1": "nc",
+  "P_ND|1": "nd",
+  "P_NA2|1": "na",
+  "P_B|1": "nb"
+ },
+ "traces": [
+  {
+   "id": "t_split",
+   "netId": "nsplit",
+   "netClassId": "default",
+   "layer": "B.Cu",
+   "widthMm": 2.0,
+   "pointsNm": [
+    [
+     -38000000,
+     14000000
+    ],
+    [
+     38000000,
+     14000000
+    ]
+   ]
+  },
+  {
+   "id": "t_stub",
+   "netId": "gnd",
+   "netClassId": "default",
+   "layer": "B.Cu",
+   "widthMm": 0.3,
+   "pointsNm": [
+    [
+     -4000000,
+     20000000
+    ],
+    [
+     6000000,
+     20000000
+    ]
+   ]
+  },
+  {
+   "id": "t_s1",
+   "netId": "s1",
+   "netClassId": "default",
+   "layer": "F.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     -2500000,
+     24445000
+    ],
+    [
+     -8000000,
+     24445000
+    ]
+   ]
+  },
+  {
+   "id": "t_s2",
+   "netId": "s2",
+   "netClassId": "default",
+   "layer": "F.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     2500000,
+     24445000
+    ],
+    [
+     8000000,
+     24445000
+    ]
+   ]
+  },
+  {
+   "id": "t_s3",
+   "netId": "s3",
+   "netClassId": "default",
+   "layer": "F.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     -31905000,
+     -2000000
+    ],
+    [
+     -31905000,
+     -7000000
+    ]
+   ]
+  },
+  {
+   "id": "t_s4",
+   "netId": "s4",
+   "netClassId": "default",
+   "layer": "F.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     28095000,
+     -20000000
+    ],
+    [
+     28095000,
+     -26000000
+    ]
+   ]
+  },
+  {
+   "id": "t_s5",
+   "netId": "s5",
+   "netClassId": "default",
+   "layer": "F.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     33174999,
+     12000000
+    ],
+    [
+     30000000,
+     12000000
+    ]
+   ]
+  },
+  {
+   "id": "t_s7",
+   "netId": "s7",
+   "netClassId": "default",
+   "layer": "F.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     -6825000,
+     -20000000
+    ],
+    [
+     -14000000,
+     -20000000
+    ]
+   ]
+  },
+  {
+   "id": "t_s9",
+   "netId": "s9",
+   "netClassId": "default",
+   "layer": "F.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     33174999,
+     24000000
+    ],
+    [
+     33174999,
+     28000000
+    ]
+   ]
+  },
+  {
+   "id": "t_gnd_a",
+   "netId": "gnd",
+   "netClassId": "default",
+   "layer": "F.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     -2000000,
+     -2000000
+    ],
+    [
+     -2000000,
+     -8000000
+    ]
+   ]
+  },
+  {
+   "id": "t_gnd_b",
+   "netId": "gnd",
+   "netClassId": "default",
+   "layer": "F.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     19000000,
+     -3000000
+    ],
+    [
+     24000000,
+     -3000000
+    ]
+   ]
+  }
+ ],
+ "vias": [
+  {
+   "id": "v1",
+   "netId": "gnd",
+   "centerMm": [
+    -12000000,
+    2000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through",
+   "protection": "tented"
+  },
+  {
+   "id": "v2",
+   "netId": "gnd",
+   "centerMm": [
+    -6000000,
+    2000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through",
+   "protection": "tented"
+  },
+  {
+   "id": "v3",
+   "netId": "gnd",
+   "centerMm": [
+    0,
+    -10000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through",
+   "protection": "tented"
+  },
+  {
+   "id": "v4",
+   "netId": "gnd",
+   "centerMm": [
+    8000000,
+    -10000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through",
+   "protection": "tented"
+  },
+  {
+   "id": "v5",
+   "netId": "gnd",
+   "centerMm": [
+    14000000,
+    -6000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through",
+   "protection": "tented"
+  },
+  {
+   "id": "v6",
+   "netId": "gnd",
+   "centerMm": [
+    22000000,
+    2000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through",
+   "protection": "tented"
+  },
+  {
+   "id": "v7",
+   "netId": "gnd",
+   "centerMm": [
+    26000000,
+    -8000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through",
+   "protection": "tented"
+  },
+  {
+   "id": "v8",
+   "netId": "gnd",
+   "centerMm": [
+    -16000000,
+    -6000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through",
+   "protection": "tented"
+  },
+  {
+   "id": "v9",
+   "netId": "gnd",
+   "centerMm": [
+    -8000000,
+    6000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through",
+   "protection": "tented"
+  },
+  {
+   "id": "v10",
+   "netId": "gnd",
+   "centerMm": [
+    4000000,
+    2000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through",
+   "protection": "tented"
+  },
+  {
+   "id": "v11",
+   "netId": "gnd",
+   "centerMm": [
+    12000000,
+    8000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through",
+   "protection": "tented"
+  },
+  {
+   "id": "v12",
+   "netId": "gnd",
+   "centerMm": [
+    -28000000,
+    4000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through",
+   "protection": "tented"
+  }
+ ],
+ "freePads": [
+  {
+   "id": "fp_gnd",
+   "padType": "std",
+   "shape": "circle",
+   "centerMm": {
+    "x": 33,
+    "y": -8
+   },
+   "widthMm": 1.8,
+   "heightMm": 1.8,
+   "rotationDeg": 0,
+   "drillMm": 0.9,
+   "layer": "F.Cu",
+   "netId": "gnd",
+   "netName": null,
+   "lockedAt": null
+  },
+  {
+   "id": "fp_free",
+   "padType": "std",
+   "shape": "circle",
+   "centerMm": {
+    "x": 33,
+    "y": -2
+   },
+   "widthMm": 1.8,
+   "heightMm": 1.8,
+   "rotationDeg": 0,
+   "drillMm": 0.9,
+   "layer": "F.Cu",
+   "netId": null,
+   "netName": null,
+   "lockedAt": null
+  }
+ ],
+ "freeHoles": [
+  {
+   "id": "mh1",
+   "centerMm": {
+    "x": -36,
+    "y": 26
+   },
+   "drillMm": 3.2,
+   "lockedAt": null
+  }
+ ],
+ "zones": [
+  {
+   "id": "board:F.Cu",
+   "name": null,
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "F.Cu",
+   "netId": "gnd",
+   "netName": null,
+   "region": {
+    "kind": "board"
+   },
+   "priority": 0,
+   "padConnection": "solid"
+  },
+  {
+   "id": "board:B.Cu",
+   "name": null,
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "B.Cu",
+   "netId": "gnd",
+   "netName": null,
+   "region": {
+    "kind": "board"
+   },
+   "priority": 0,
+   "padConnection": "solid"
+  },
+  {
+   "id": "z_pri_lo",
+   "name": "PRI_LO",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "F.Cu",
+   "netId": "na",
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": -35,
+      "y": 5
+     },
+     {
+      "x": -15,
+      "y": 5
+     },
+     {
+      "x": -15,
+      "y": 25
+     },
+     {
+      "x": -35,
+      "y": 25
+     }
+    ]
+   },
+   "priority": 0
+  },
+  {
+   "id": "z_pri_hi",
+   "name": "PRI_HI",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "F.Cu",
+   "netId": "nb",
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": -20,
+      "y": 10
+     },
+     {
+      "x": -5,
+      "y": 10
+     },
+     {
+      "x": -5,
+      "y": 22
+     },
+     {
+      "x": -20,
+      "y": 22
+     }
+    ]
+   },
+   "priority": 2
+  },
+  {
+   "id": "z_eq_c",
+   "name": "EQ_C",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "F.Cu",
+   "netId": "nc",
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": 5,
+      "y": 5
+     },
+     {
+      "x": 20,
+      "y": 5
+     },
+     {
+      "x": 20,
+      "y": 20
+     },
+     {
+      "x": 5,
+      "y": 20
+     }
+    ]
+   },
+   "priority": 1
+  },
+  {
+   "id": "z_eq_d",
+   "name": "EQ_D",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "F.Cu",
+   "netId": "nd",
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": 15,
+      "y": 15
+     },
+     {
+      "x": 30,
+      "y": 15
+     },
+     {
+      "x": 30,
+      "y": 28
+     },
+     {
+      "x": 15,
+      "y": 28
+     }
+    ]
+   },
+   "priority": 1
+  },
+  {
+   "id": "z_same_tight",
+   "name": "SAME_TIGHT",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "F.Cu",
+   "netId": "na",
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": -35,
+      "y": -25
+     },
+     {
+      "x": -20,
+      "y": -25
+     },
+     {
+      "x": -20,
+      "y": -10
+     },
+     {
+      "x": -35,
+      "y": -10
+     }
+    ]
+   },
+   "priority": 3,
+   "clearanceMm": 0.5
+  },
+  {
+   "id": "z_same_wide",
+   "name": "SAME_WIDE",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "F.Cu",
+   "netId": "na",
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": -25,
+      "y": -25
+     },
+     {
+      "x": -10,
+      "y": -25
+     },
+     {
+      "x": -10,
+      "y": -10
+     },
+     {
+      "x": -25,
+      "y": -10
+     }
+    ]
+   },
+   "priority": 3,
+   "clearanceMm": 0.8
+  },
+  {
+   "id": "z_hole",
+   "name": "HOLE",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "F.Cu",
+   "netId": "gnd",
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": 0,
+      "y": -28
+     },
+     {
+      "x": 20,
+      "y": -28
+     },
+     {
+      "x": 20,
+      "y": -12
+     },
+     {
+      "x": 0,
+      "y": -12
+     }
+    ],
+    "holesMm": [
+     [
+      {
+       "x": 6,
+       "y": -24
+      },
+      {
+       "x": 12,
+       "y": -24
+      },
+      {
+       "x": 12,
+       "y": -18
+      },
+      {
+       "x": 6,
+       "y": -18
+      }
+     ]
+    ]
+   },
+   "priority": 1
+  },
+  {
+   "id": "z_none",
+   "name": "NONE",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "F.Cu",
+   "netId": "gnd",
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": -10,
+      "y": -8
+     },
+     {
+      "x": 6,
+      "y": -8
+     },
+     {
+      "x": 6,
+      "y": 4
+     },
+     {
+      "x": -10,
+      "y": 4
+     }
+    ]
+   },
+   "priority": 1,
+   "padConnection": "none"
+  },
+  {
+   "id": "z_therm",
+   "name": "THERM",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "F.Cu",
+   "netId": "gnd",
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": 10,
+      "y": -10
+     },
+     {
+      "x": 28,
+      "y": -10
+     },
+     {
+      "x": 28,
+      "y": 4
+     },
+     {
+      "x": 10,
+      "y": 4
+     }
+    ]
+   },
+   "priority": 1,
+   "padConnection": "thermal",
+   "thermal": {
+    "gapMm": 0.4,
+    "spokeWidthMm": 0.5
+   }
+  },
+  {
+   "id": "z_empty",
+   "name": "EMPTY",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "B.Cu",
+   "netId": "gnd",
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": -32,
+      "y": -24
+     },
+     {
+      "x": -22,
+      "y": -24
+     },
+     {
+      "x": -22,
+      "y": -16
+     },
+     {
+      "x": -32,
+      "y": -16
+     }
+    ]
+   },
+   "priority": 1
+  }
+ ],
+ "keepouts": [
+  {
+   "id": "k_pour",
+   "name": null,
+   "enabled": true,
+   "lockedAt": null,
+   "layers": [
+    "B.Cu"
+   ],
+   "pointsMm": [
+    {
+     "x": -34,
+     "y": -26
+    },
+    {
+     "x": -20,
+     "y": -26
+    },
+    {
+     "x": -20,
+     "y": -14
+    },
+    {
+     "x": -34,
+     "y": -14
+    }
+   ],
+   "restrictions": {
+    "tracks": false,
+    "vias": false,
+    "pads": false,
+    "copperPour": true,
+    "footprints": false
+   }
+  }
+ ],
+ "computeRatsnest": true
+}

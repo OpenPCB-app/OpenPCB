@@ -4,14 +4,11 @@ import type { DrcViolationDraft } from "../types";
 
 /**
  * Unconnected-net check, derived from the projection's ratsnest. The ratsnest
- * is the MST of each net's *unrouted* components (union-find over pads ↔ trace
- * endpoints ↔ vias), so any remaining airwire means the net is not fully
- * routed. One warning per net (NET_SHORT_CIRCUIT for diff-net overlap is
- * emitted by the clearance check).
- *
- * Same-layer mid-trace T-junctions ARE part of the graph (endpoint on a
- * sibling trace's interior unions them). Limitation (shared with the
- * ratsnest): footprint pads only; free pads are not yet included.
+ * is the MST of each net's *unrouted* components, computed from the shared
+ * copper-connectivity kernel (footprint pads, free pads, traces, vias and pour
+ * islands), so any remaining airwire means the net is not fully routed. One
+ * warning per net (NET_SHORT_CIRCUIT for diff-net overlap is emitted by the
+ * clearance check). Contract: docs/pcb-hardening/01-connectivity-contract.md.
  */
 export function checkConnectivity(ctx: DrcContext): DrcViolationDraft[] {
   const out: DrcViolationDraft[] = [];
@@ -27,7 +24,6 @@ export function checkConnectivity(ctx: DrcContext): DrcViolationDraft[] {
     out.push({
       code: "UNCONNECTED_NET",
       ruleClass: "connectivity",
-      severity: "error",
       message: `Net "${name}" is not fully routed (${segs.length} airwire${segs.length > 1 ? "s" : ""} remaining)`,
       anchors: [{ kind: "net", netId }],
       locationMm: {

@@ -1,8 +1,19 @@
 import type { PcbTraceSegmentMode } from "../../sdks/designer";
+import {
+  distance,
+  isCollinear,
+  projectPointToSegment,
+  segmentsCrossTransversally,
+  segmentsIntersect,
+} from "./segment-predicates";
+import { GEOM_EPS_MM } from "./tolerance";
 
 export type Point = { x: number; y: number };
 
-const EPS = 1e-6;
+// The segment kernel lives in ./segment-predicates (S2 geometry contract §2);
+// these names stay reachable here because every DRC and routing consumer
+// imports them from this module.
+export { distance, projectPointToSegment, segmentsIntersect };
 
 export function pointKey(point: Point): string {
   return `${point.x}:${point.y}`;
@@ -271,12 +282,6 @@ export function buildTracePathThroughAnchors(
   return mode === "manhattan-45" ? chamfer45Corners(sanitized) : sanitized;
 }
 
-export function distance(a: Point, b: Point): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return Math.sqrt(dx * dx + dy * dy);
-}
-
 /**
  * Euclidean polyline length, unit-agnostic (nm in → nm out, mm in → mm out).
  * Shared by the backend DRC length check, the frontend routed-length gauges
@@ -288,32 +293,6 @@ export function polylineLength(points: ReadonlyArray<Point>): number {
     total += distance(points[i - 1]!, points[i]!);
   }
   return total;
-}
-
-/** Returns closest point on segment AB to P, plus the squared distance. */
-export function projectPointToSegment(
-  point: Point,
-  start: Point,
-  end: Point,
-): {
-  x: number;
-  y: number;
-  t: number;
-  distance: number;
-} {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const lenSq = dx * dx + dy * dy;
-  // Degenerate (zero-length) segment. lenSq is a squared length (mm²), so the
-  // threshold must be EPS² to stay dimensionally consistent with EPS (mm) —
-  // `lenSq < EPS` would only trip for segments shorter than 1 µm, not 1 nm.
-  if (lenSq < EPS * EPS) {
-    return { x: start.x, y: start.y, t: 0, distance: distance(point, start) };
-  }
-  const rawT = ((point.x - start.x) * dx + (point.y - start.y) * dy) / lenSq;
-  const t = Math.max(0, Math.min(1, rawT));
-  const projected = { x: start.x + dx * t, y: start.y + dy * t };
-  return { ...projected, t, distance: distance(point, projected) };
 }
 
 /**
@@ -352,30 +331,6 @@ export function pointToPolylineDistance(
   return { distance: best, segmentIndex: bestIndex, closest: bestPoint };
 }
 
-/** Returns true if segments AB and CD intersect (proper or improper). */
-export function segmentsIntersect(
-  a: Point,
-  b: Point,
-  c: Point,
-  d: Point,
-): boolean {
-  const r = { x: b.x - a.x, y: b.y - a.y };
-  const s = { x: d.x - c.x, y: d.y - c.y };
-  const rxs = r.x * s.y - r.y * s.x;
-  const qmp = { x: c.x - a.x, y: c.y - a.y };
-  const qmpxr = qmp.x * r.y - qmp.y * r.x;
-  if (Math.abs(rxs) < EPS) {
-    // Near-parallel. `rxs` is the cross product of the two direction vectors
-    // (an area-like quantity), not a length, so the threshold stays a plain EPS
-    // small-magnitude guard (not EPS²). Collinear overlap is disregarded here —
-    // it's approximated by the endpoint-projection distances elsewhere.
-    return false;
-  }
-  const t = (qmp.x * s.y - qmp.y * s.x) / rxs;
-  const u = qmpxr / rxs;
-  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
-}
-
 /** Minimum distance between two segments AB and CD. */
 export function segmentToSegmentDistance(
   a: Point,
@@ -410,14 +365,42 @@ export function polylineToPolylineDistance(a: Point[], b: Point[]): number {
 }
 
 /** Closest point on AB and on CD, plus the gap. p is on AB, q is on CD. */
+/**
+ * Midpoint of the overlap when AB and CD are collinear (within GEOM_EPS_MM)
+ * and share more than eps of extent, else null. Contract §2: the marker for a
+ * collinear short sits mid-overlap — not at whichever overlap end the endpoint
+ * projections happen to visit first — so its 0.1 mm location bucket is stable.
+ */
+function collinearOverlapMidpoint(
+  a: Point,
+  b: Point,
+  c: Point,
+  d: Point,
+): Point | null {
+  const len = distance(a, b);
+  if (len <= GEOM_EPS_MM) return null;
+  if (!isCollinear(a, b, c) || !isCollinear(a, b, d)) return null;
+  const tc = projectPointToSegment(c, a, b).t;
+  const td = projectPointToSegment(d, a, b).t;
+  const lo = Math.min(tc, td);
+  const hi = Math.max(tc, td);
+  if ((hi - lo) * len <= GEOM_EPS_MM) return null;
+  const t = (lo + hi) / 2;
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+
 function segmentToSegmentClosestPoints(
   a: Point,
   b: Point,
   c: Point,
   d: Point,
 ): { distance: number; p: Point; q: Point } {
-  if (segmentsIntersect(a, b, c, d)) {
-    // The closest points coincide at the intersection; solve for it.
+  if (segmentsCrossTransversally(a, b, c, d)) {
+    // The closest points coincide at the crossing; solve for it. Only a
+    // transversal crossing may take this branch — `rxs` is then provably
+    // non-zero. Every other contact (T-touch, shared endpoint, collinear
+    // overlap) falls through to the four endpoint projections below, which
+    // return distance 0 with finite points instead of a 0/0 NaN location.
     const r = { x: b.x - a.x, y: b.y - a.y };
     const s = { x: d.x - c.x, y: d.y - c.y };
     const rxs = r.x * s.y - r.y * s.x;
@@ -426,6 +409,8 @@ function segmentToSegmentClosestPoints(
     const point = { x: a.x + r.x * t, y: a.y + r.y * t };
     return { distance: 0, p: point, q: point };
   }
+  const overlap = collinearOverlapMidpoint(a, b, c, d);
+  if (overlap) return { distance: 0, p: overlap, q: overlap };
   // Non-intersecting: the minimum is at one of the four endpoint→segment
   // projections. Track the endpoint and its projection as the closest pair.
   const proj = (
@@ -449,6 +434,28 @@ function segmentToSegmentClosestPoints(
     if (cand.distance < best.distance) best = cand;
   }
   return best;
+}
+
+/**
+ * Closest point on each of two segments plus their gap — the single-segment
+ * form of {@link polylineToPolylineClosestPoints}. Exact: a transversal
+ * crossing returns the intersection for both points, a collinear overlap its
+ * midpoint, and everything else the best of the four endpoint→segment
+ * projections. A degenerate (zero-length) segment behaves as its point.
+ *
+ * S6 rule semantics §4.4 needs this per sub-segment pair: once a trace is split
+ * at every area-polygon crossing, the requirement is constant over each
+ * sub-segment pair, so the verdict is decided pair by pair rather than once at
+ * the polylines' single closest approach.
+ */
+export function segmentClosestPoints(
+  a0: Point,
+  a1: Point,
+  b0: Point,
+  b1: Point,
+): { distance: number; a: Point; b: Point } {
+  const cp = segmentToSegmentClosestPoints(a0, a1, b0, b1);
+  return { distance: cp.distance, a: cp.p, b: cp.q };
 }
 
 /**

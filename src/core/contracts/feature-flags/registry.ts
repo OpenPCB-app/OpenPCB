@@ -93,11 +93,6 @@ export const FEATURE_FLAGS = {
     description:
       "Accept blind/buried/micro via spans in via commands (data + DRC only; no picker UI). Through vias stay the only kind the route tool emits.",
   },
-  "pcb.padShapeConnectivity": {
-    availability: "dev",
-    description:
-      "Ratsnest/DRC connectivity accepts trace endpoints anywhere inside a pad's copper AABB, not only within 1 µm of pad center — removes false opens on KiCad imports. Graduate to 'all' after a bake cycle (shifts DRC results on existing designs).",
-  },
   "pcb.routeAutoFinish": {
     availability: "dev",
     description:

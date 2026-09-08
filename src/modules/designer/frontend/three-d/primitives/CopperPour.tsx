@@ -1,20 +1,28 @@
 import { useEffect, useMemo, type ReactElement } from "react";
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import type {
-  DesignerPcbProjection,
-  PcbCopperLayerId,
-} from "../../../../../sdks";
+import type { DesignerPcbProjection } from "../../../../../sdks";
 import {
-  buildCopperFillPourShapes,
-  resolveCopperFillClearanceMm,
-} from "../../pcb/layers/copper-fill-geometry";
-import { buildPadNetIds } from "../../pcb/pcb-pad-nets";
+  collectCopperZones,
+  collectKeepouts,
+} from "../../../../../shared/pcb-areas/copper-zones";
+import {
+  pourParamsForZone,
+  zonePourNets,
+} from "../../../../../shared/pcb-areas/pour-params";
+import { buildCopperFillIslands } from "../../pcb/layers/copper-fill-geometry";
+import { islandsToShapes } from "../../../../../shared/rendering/copper-fill/copper-fill-shapes";
 import {
   COPPER_RELIEF_HEIGHT_MM,
   DEFAULT_BOARD_THICKNESS_MM,
 } from "./geometry-utils";
 import { COPPER_FILL_GREEN, COPPER_FILL_ROUGHNESS } from "./materials";
+
+/** One effective copper zone's poured islands on a visible board face. */
+interface FacePour {
+  id: string;
+  shapes: THREE.Shape[];
+}
 
 function PourLayer({
   shapes,
@@ -57,14 +65,17 @@ function PourLayer({
 }
 
 /**
- * Copper pour flooding the empty board area (the ground/power plane), mirroring
- * the 2D `CopperFillLayer` via the shared `buildCopperFillPourShapes`. Net-aware
- * off the projection's persisted view state: the poured net per layer
- * (`board.viewState.copperFillPourNetIds`) drives same-net merge, and the same
- * `buildPadNetIds` mapping the 2D scene uses resolves pad nets — so a same-net
- * plane reads as merged copper (no moat) here exactly as in 2D. Refreshes on
- * commit (the projection is re-fetched then). Sits just under the translucent
- * soldermask → flooded green plane with subtle moats around different-net copper.
+ * Copper pour on the two outer faces, mirroring the 2D `CopperFillLayer` via
+ * the shared `buildCopperFillIslands` + `islandsToShapes`. Which copper areas exist comes from
+ * `collectCopperZones` — the one derivation the canvas, DRC, the snapshot and
+ * Gerber also read (zone/keepout contract §3.1 / §7) — so the preview shows
+ * exactly the copper that would be manufactured: a board plane only where the
+ * layer carries a board zone row, plus every explicit zone clipped to its
+ * polygon. The zones are the projection's, not a store slice: 3D is a preview
+ * of the committed design, not the live-edit surface, and it refreshes when the
+ * projection is re-fetched on commit.
+ * Sits just under the translucent soldermask → flooded green plane with subtle
+ * moats around different-net copper.
  */
 export function CopperPour({
   projection,
@@ -77,47 +88,62 @@ export function CopperPour({
 }): ReactElement | null {
   const designRules = projection.board?.designRules;
 
-  const shapesByLayer = useMemo(() => {
-    if (!designRules) return { front: [], back: [] };
-    // The 3D model is a realistic board preview: always flood the pour on both
-    // copper faces, independent of the 2D canvas's `copperFillLayers` visibility
-    // toggle (an editor-only concern). The per-layer poured net still drives
-    // same-net merge below.
-    const viewState = projection.board.viewState;
-    const pourNetIds = viewState?.copperFillPourNetIds ?? {};
-    const padConnection = viewState?.copperFillPadConnection ?? "solid";
-    // Prefer the authoritative schematic pad→net map (Phase 0); fall back to the
-    // ratsnest reconstruction only when it's absent (pre-DRC saves / no schematic).
-    const padNetIds = projection.padNets
-      ? new Map(Object.entries(projection.padNets))
-      : buildPadNetIds(
-          projection.ratsnest,
-          projection.placements,
-          projection.traces,
-        );
+  const poursByFace = useMemo(() => {
+    const empty: { front: FacePour[]; back: FacePour[] } = {
+      front: [],
+      back: [],
+    };
+    if (!designRules) return empty;
+    // The authoritative schematic pad→net map, written on every projection load.
+    const padNetIds = new Map(Object.entries(projection.padNets ?? {}));
     const common = {
-      padConnection,
+      layerCount: projection.board.layerCount,
       outline: projection.board.outline,
       placements: projection.placements,
       traces: projection.traces,
       vias: projection.vias,
       padNetIds,
-      clearanceMm: resolveCopperFillClearanceMm(designRules.clearance),
       copperToBoardEdgeMm: designRules.clearance.copperToBoardEdgeMm,
       cutouts: projection.board.cutouts,
       freeHoles: projection.freeHoles,
       freePads: projection.freePads,
     };
-    const forLayer = (layer: PcbCopperLayerId): THREE.Shape[] =>
-      buildCopperFillPourShapes({
-        ...common,
-        layer,
-        pourNetId: pourNetIds[layer] ?? null,
+    const { zones } = collectCopperZones({
+      zones: projection.zones,
+      layerCount: projection.board.layerCount,
+      knownNetIds: new Set(Object.keys(projection.netNames ?? {})),
+    });
+    const { keepouts } = collectKeepouts({
+      keepouts: projection.keepouts ?? [],
+      layerCount: projection.board.layerCount,
+    });
+    // One rule resolver per projection (rule-semantics contract §9) — building
+    // it per zone would compile the rule table once per pour.
+    const nets = zonePourNets(projection.board, projection.netNames ?? {});
+    const out = { front: [] as FacePour[], back: [] as FacePour[] };
+    // Only the two outer faces are visible on the 3D board; inner-layer zones
+    // exist in the derivation but are buried in the substrate.
+    for (const zone of zones) {
+      if (zone.layer !== "F.Cu" && zone.layer !== "B.Cu") continue;
+      const shapes = islandsToShapes(
+        buildCopperFillIslands({
+          ...common,
+          ...pourParamsForZone(zone, designRules, keepouts, zones, nets),
+        }).islands,
+      );
+      if (shapes.length === 0) continue;
+      // Derivation order is fill order; the later pour on a face extrudes over
+      // the earlier one, so reverse it (board plane down first, §5 precedence).
+      (zone.layer === "F.Cu" ? out.front : out.back).unshift({
+        id: zone.id,
+        shapes,
       });
-    return { front: forLayer("F.Cu"), back: forLayer("B.Cu") };
+    }
+    return out;
   }, [
     designRules,
     projection.board,
+    projection.zones,
     projection.padNets,
     projection.ratsnest,
     projection.placements,
@@ -136,16 +162,22 @@ export function CopperPour({
 
   return (
     <group data-testid="designer-3d-copper-pour">
-      <PourLayer
-        shapes={shapesByLayer.front}
-        zMm={frontZ}
-        fillColor={fillColor}
-      />
-      <PourLayer
-        shapes={shapesByLayer.back}
-        zMm={backZ}
-        fillColor={fillColor}
-      />
+      {poursByFace.front.map((pour) => (
+        <PourLayer
+          key={`front:${pour.id}`}
+          shapes={pour.shapes}
+          zMm={frontZ}
+          fillColor={fillColor}
+        />
+      ))}
+      {poursByFace.back.map((pour) => (
+        <PourLayer
+          key={`back:${pour.id}`}
+          shapes={pour.shapes}
+          zMm={backZ}
+          fillColor={fillColor}
+        />
+      ))}
     </group>
   );
 }

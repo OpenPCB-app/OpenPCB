@@ -71,8 +71,8 @@ export function placementPads(
  * placement rotations swap width/height exactly; arbitrary (KiCad-import)
  * angles get the rotated-rect AABB, which slightly overestimates at the
  * corners. Mirroring never changes extents. Matches the AABB approximation of
- * the frontend pad hit-test (pcb-hit.ts hitPad). Used by pad-shape
- * connectivity (trace endpoint inside pad ⇒ connected).
+ * the frontend pad hit-test (pcb-hit.ts hitPad). Used by the routing obstacle
+ * map; connectivity uses the exact pad ring (`pcb-connectivity/`), not an AABB.
  */
 export function padWorldHalfExtentsMm(
   placement: PcbPlacedPart,

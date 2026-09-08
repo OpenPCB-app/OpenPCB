@@ -4,16 +4,16 @@
 // rule, net-class filtering, and determinism.
 import { describe, expect, test } from "bun:test";
 import { buildBoardSnapshot } from "../../../modules/designer/backend/pcb/board-snapshot";
-import {
-  createDefaultPcbBoardSettings,
-  createDefaultPcbViewState,
-} from "../../../modules/designer/backend/pcb/pcb-defaults";
+import { buildSnapshotPourIslands } from "../../../modules/designer/backend/pcb/board-snapshot-pours";
+import { createDefaultPcbBoardSettings } from "../../../modules/designer/backend/pcb/pcb-defaults";
+import { boardZoneRow, keepoutRow } from "./helpers/pcb-zone-fixtures";
 import type { FootprintRenderSourcePad } from "../../../shared/rendering/types";
 import type {
   DesignerPcbProjection,
   PcbBoardSettings,
   PcbFreeHole,
   PcbFreePad,
+  PcbKeepout,
   PcbPointMm,
   PcbPlacedPart,
   PcbTrace,
@@ -44,6 +44,7 @@ function projection(
     overlayTexts: parts.overlayTexts ?? [],
     overlayShapes: parts.overlayShapes ?? [],
     zones: parts.zones ?? [],
+    keepouts: parts.keepouts ?? [],
     ratsnest: parts.ratsnest ?? [],
     netNames: parts.netNames ?? {},
     padNets: parts.padNets,
@@ -149,44 +150,36 @@ function rats(netId: string, netClassId = "default"): RatsnestSegment {
     netClassId,
     fromMm: { x: 1, y: 1 },
     toMm: { x: 9, y: 1 },
-    fromPlacementId: "U1",
-    fromPadNumber: "1",
-    toPlacementId: "U2",
-    toPadNumber: "1",
+    from: { kind: "pad", placementId: "U1", padNumber: "1" },
+    to: { kind: "pad", placementId: "U2", padNumber: "1" },
   };
 }
 
 function zone(overrides: Partial<PcbZone> = {}): PcbZone {
   return {
     id: "z1",
+    name: null,
+    enabled: true,
+    lockedAt: null,
     netName: "GND",
     netId: "net_gnd",
     layer: "F.Cu",
-    polygonPointsMm: [
-      { x: -10, y: -5 },
-      { x: 10, y: -5 },
-      { x: 10, y: 5 },
-      { x: -10, y: 5 },
-    ],
-    hatchEdgeMm: 0.5,
-    fillType: "solid",
+    region: {
+      kind: "polygon",
+      pointsMm: [
+        { x: -10, y: -5 },
+        { x: 10, y: -5 },
+        { x: 10, y: 5 },
+        { x: -10, y: 5 },
+      ],
+    },
+    priority: 0,
     ...overrides,
   };
 }
 
-function filledBoard(overrides: Partial<PcbBoardSettings> = {}): PcbBoardSettings {
-  const base = board(overrides);
-  const viewState = base.viewState ?? createDefaultPcbViewState();
-  return {
-    ...base,
-    viewState: {
-      ...viewState,
-      copperFillLayers: ["F.Cu"],
-      copperFillPourNetIds: { "F.Cu": "net_gnd" },
-      copperFillPadConnection: "solid",
-    },
-  };
-}
+/** The board-wide GND fill, now a persisted board zone row on F.Cu. */
+const FILL_ZONES = [boardZoneRow("F.Cu", "net_gnd")];
 
 function freeHole(overrides: Partial<PcbFreeHole> = {}): PcbFreeHole {
   return {
@@ -284,6 +277,32 @@ describe("buildBoardSnapshot", () => {
     ]);
   });
 
+  // The wire schema is byte-stable: `ClearanceRules` / `MinimumRules` in the
+  // vendored `board-snapshot.generated.ts` declare neither S6 key, and the
+  // cloud router routes at the implicit tier (rule-semantics contract §13).
+  test("the S6 desktop-only design-rule keys are stripped from the snapshot", () => {
+    const base = createDefaultPcbBoardSettings(TS);
+    const { snapshot } = buildBoardSnapshot(
+      projection({
+        board: board({
+          designRules: {
+            clearance: { ...base.designRules.clearance, pourToCopperMm: 0.45 },
+            minimums: { ...base.designRules.minimums, clearanceMm: 0.12 },
+          },
+        }),
+      }),
+    );
+    expect("pourToCopperMm" in snapshot.designRules.clearance).toBe(false);
+    expect("clearanceMm" in snapshot.designRules.minimums).toBe(false);
+    // Everything else still ships verbatim.
+    expect(snapshot.designRules.clearance.traceToTraceMm).toBe(
+      base.designRules.clearance.traceToTraceMm,
+    );
+    expect(snapshot.designRules.minimums.traceWidthMm).toBe(
+      base.designRules.minimums.traceWidthMm,
+    );
+  });
+
   test("through-hole pad spans both copper layers", () => {
     const { snapshot } = buildBoardSnapshot(
       projection({
@@ -328,7 +347,8 @@ describe("buildBoardSnapshot", () => {
   test("board-wide fill emits pour island when serializePours is true", () => {
     const { snapshot } = buildBoardSnapshot(
       projection({
-        board: filledBoard(),
+        board: board(),
+        zones: FILL_ZONES,
         netNames: { net_gnd: "GND" },
         ratsnest: [rats("net_gnd")],
       }),
@@ -345,7 +365,8 @@ describe("buildBoardSnapshot", () => {
       JSON.stringify(
         buildBoardSnapshot(
           projection({
-            board: filledBoard(),
+            board: board(),
+            zones: FILL_ZONES,
             freeHoles: [freeHole()],
             netNames: { net_gnd: "GND" },
             ratsnest: [rats("net_gnd")],
@@ -356,10 +377,37 @@ describe("buildBoardSnapshot", () => {
     expect(make()).toBe(make());
   });
 
+  test("serialized pour island id is a stable content-addressed hash", () => {
+    // Pins the wire contract: `islandId` is
+    // `pour-${fnv1a64(sourceOrder|geometryOrder)}` — content-addressed off the
+    // effective zone id and the normalized ring geometry, sorted by
+    // (sourceOrder, geometryOrder). A silent change to that derivation (hash
+    // input order, ring normalization, quantization) would break every
+    // consumer that persists or diffs `islandId` across runs, so this pins the
+    // literal value rather than only re-asserting equality-with-itself.
+    const { snapshot } = buildBoardSnapshot(
+      projection({
+        board: board(),
+        zones: FILL_ZONES,
+        freeHoles: [freeHole()],
+        netNames: { net_gnd: "GND" },
+        ratsnest: [rats("net_gnd")],
+      }),
+      { serializePours: true },
+    );
+    const pours = definedPours(snapshot.pours);
+    // Re-pinned once during S5 itself: the Astra run 2 fixes (every extent
+    // inset by one grid step, obstacle winding normalisation) moved the ring
+    // by 0.1 µm and with it the content hash. Any later change of this literal
+    // is a wire-contract change for the cloud autorouter.
+    expect(pours.map((p) => p.islandId)).toEqual(["pour-05b59122ec5b86e9"]);
+  });
+
   test("serialized pour rings are quantized and normalized", () => {
     const { snapshot } = buildBoardSnapshot(
       projection({
-        board: filledBoard(),
+        board: board(),
+        zones: FILL_ZONES,
         freeHoles: [freeHole()],
         netNames: { net_gnd: "GND" },
         ratsnest: [rats("net_gnd")],
@@ -382,6 +430,54 @@ describe("buildBoardSnapshot", () => {
     expect(holes.every((ring) => ringArea(ring) < 0)).toBe(true);
   });
 
+  test("a copperPour keepout is a hole in the serialized pour island", () => {
+    // Fill parity (contract §13.3): the snapshot subtracts the same keepouts
+    // the canvas, the Gerber and DRC do, so the autorouter is never told about
+    // copper the board will not manufacture.
+    const KEEPOUT: PcbPointMm[] = [
+      { x: -5, y: -5 },
+      { x: 5, y: -5 },
+      { x: 5, y: 5 },
+      { x: -5, y: 5 },
+    ];
+    const build = (keepouts: PcbKeepout[]) =>
+      buildBoardSnapshot(
+        projection({
+          board: board(),
+          zones: FILL_ZONES,
+          keepouts,
+          netNames: { net_gnd: "GND" },
+          ratsnest: [rats("net_gnd")],
+        }),
+        { serializePours: true },
+      ).snapshot;
+
+    const plain = definedPours(build([]).pours).at(0)!;
+    expect(plain.rings.slice(1)).toHaveLength(0);
+
+    const carved = definedPours(
+      build([
+        keepoutRow("k1", ["F.Cu"], KEEPOUT, {
+          tracks: false,
+          vias: false,
+          pads: false,
+          footprints: false,
+          copperPour: true,
+        }),
+      ]).pours,
+    ).at(0)!;
+    const holes = carved.rings.slice(1);
+    expect(holes).toHaveLength(1);
+    const xs = holes[0]!.map((p) => p.x);
+    const ys = holes[0]!.map((p) => p.y);
+    // The kernel inflates the ring by one output-grid step (0.1 µm) before
+    // subtracting, so the hole is the keepout plus at most that much.
+    expect(Math.min(...xs)).toBeCloseTo(-5, 3);
+    expect(Math.max(...xs)).toBeCloseTo(5, 3);
+    expect(Math.min(...ys)).toBeCloseTo(-5, 3);
+    expect(Math.max(...ys)).toBeCloseTo(5, 3);
+  });
+
   test("net-class filtering drops non-routable ratsnest targets", () => {
     const proj = projection({
       ratsnest: [rats("net_a", "default"), rats("net_p", "power")],
@@ -391,6 +487,23 @@ describe("buildBoardSnapshot", () => {
     });
     expect(snapshot.ratsnest).toHaveLength(1);
     expect(snapshot.ratsnest![0]!.netClassId).toBe("default");
+  });
+
+  test("free-pad-anchored airwires are dropped with a warning", () => {
+    const freePadSeg: RatsnestSegment = {
+      ...rats("net_a"),
+      from: { kind: "freePad", freePadId: "tp1" },
+    };
+    const { snapshot, warnings } = buildBoardSnapshot(
+      projection({ ratsnest: [rats("net_a"), freePadSeg] }),
+    );
+    expect(snapshot.ratsnest).toHaveLength(1);
+    expect(snapshot.ratsnest![0]!.fromPlacementId).toBe("U1");
+    expect(
+      warnings.some((w) =>
+        w.includes("1 airwire(s) anchored on free pads were not sent"),
+      ),
+    ).toBe(true);
   });
 
   test("defaults options.portfolio to the production default (4)", () => {
@@ -430,7 +543,12 @@ describe("buildBoardSnapshot", () => {
   test("NPTH free pad emits a freeHole, no padOutline (data-loss fix)", () => {
     const proj = projection({
       freePads: [
-        freePad({ id: "h1", padType: "hole", drillMm: 0.8, centerMm: { x: 3, y: 4 } }),
+        freePad({
+          id: "h1",
+          padType: "hole",
+          drillMm: 0.8,
+          centerMm: { x: 3, y: 4 },
+        }),
       ],
     });
     const { snapshot } = buildBoardSnapshot(proj);
@@ -455,7 +573,9 @@ describe("buildBoardSnapshot", () => {
     });
     const { snapshot, warnings } = buildBoardSnapshot(proj);
     expect(snapshot.freeHoles![0]!.drillMm).toBe(2);
-    expect(warnings.some((w) => w.includes("h1") && w.includes("oblong"))).toBe(true);
+    expect(warnings.some((w) => w.includes("h1") && w.includes("oblong"))).toBe(
+      true,
+    );
   });
 
   test("round free hole (no slot, or slot not longer) keeps drillMm unchanged, no warning", () => {
@@ -481,16 +601,28 @@ describe("buildBoardSnapshot", () => {
     });
     const { snapshot, warnings } = buildBoardSnapshot(proj);
     expect(snapshot.freeHoles![0]!.drillMm).toBe(1.5);
-    expect(warnings.some((w) => w.includes("free:h1") && w.includes("oblong"))).toBe(true);
+    expect(
+      warnings.some((w) => w.includes("free:h1") && w.includes("oblong")),
+    ).toBe(true);
   });
 
   test("mountType projects smd/tht from library metadata, omits unrecognized/null", () => {
     const proj = projection({
       placements: [
         placement("U1", [smdPad("1", { x: 0, y: 0 })], { x: 0, y: 0 }, "smd"),
-        placement("U2", [smdPad("1", { x: 0, y: 0 })], { x: 5, y: 0 }, "through_hole"),
+        placement(
+          "U2",
+          [smdPad("1", { x: 0, y: 0 })],
+          { x: 5, y: 0 },
+          "through_hole",
+        ),
         placement("U3", [smdPad("1", { x: 0, y: 0 })], { x: 10, y: 0 }, "SMD"),
-        placement("U4", [smdPad("1", { x: 0, y: 0 })], { x: 15, y: 0 }, "virtual"),
+        placement(
+          "U4",
+          [smdPad("1", { x: 0, y: 0 })],
+          { x: 15, y: 0 },
+          "virtual",
+        ),
         placement("U5", [smdPad("1", { x: 0, y: 0 })], { x: 20, y: 0 }, null),
       ],
     });
@@ -507,7 +639,14 @@ describe("buildBoardSnapshot", () => {
 
   test("a blind/buried/micro via emits a warning; serialized as an unchanged through-span obstacle", () => {
     const proj = projection({
-      vias: [via({ id: "v1", viaType: "blind", fromLayer: "F.Cu", toLayer: "In1.Cu" })],
+      vias: [
+        via({
+          id: "v1",
+          viaType: "blind",
+          fromLayer: "F.Cu",
+          toLayer: "In1.Cu",
+        }),
+      ],
       board: board({ layerCount: 4 }),
     });
     const { snapshot, warnings } = buildBoardSnapshot(proj);
@@ -523,7 +662,9 @@ describe("buildBoardSnapshot", () => {
       toLayer: "In1.Cu",
       isHoleOnly: false,
     });
-    expect(warnings.some((w) => w.includes("v1") && w.includes("blind"))).toBe(true);
+    expect(warnings.some((w) => w.includes("v1") && w.includes("blind"))).toBe(
+      true,
+    );
   });
 
   test("a through via emits no warning", () => {
@@ -533,5 +674,37 @@ describe("buildBoardSnapshot", () => {
     });
     const { warnings } = buildBoardSnapshot(proj);
     expect(warnings).toEqual([]);
+  });
+
+  test("a zone whose fill fails contributes no islands and one named warning", () => {
+    // copper-pour contract §8: `failed` != `empty`. A non-finite obstacle
+    // coordinate makes the fill kernel bail (see
+    // copper-fill-kernel-s5.test.ts case (h)) rather than silently pour zero
+    // copper — the caller must be told, by zone id and layer, not just handed
+    // an empty island list indistinguishable from "nothing there".
+    const badTrace: PcbTrace = {
+      id: "bad",
+      netId: "vcc",
+      netClassId: "default",
+      layer: "F.Cu",
+      widthMm: 0.2,
+      pointsNm: [
+        { x: Number.NaN, y: 0 },
+        { x: 2_000_000, y: 0 },
+      ],
+      segmentMode: "manhattan-90",
+    };
+    const proj = projection({
+      board: board(),
+      zones: FILL_ZONES,
+      netNames: { net_gnd: "GND" },
+      traces: [badTrace],
+    });
+    const warnings: string[] = [];
+    const islands = buildSnapshotPourIslands(proj, warnings);
+    expect(islands).toEqual([]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("board:F.Cu");
+    expect(warnings[0]).toContain("F.Cu");
   });
 });

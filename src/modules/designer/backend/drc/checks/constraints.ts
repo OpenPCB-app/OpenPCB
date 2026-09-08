@@ -10,7 +10,6 @@ export function checkConstraints(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "TRACE_LAYER_MISMATCH",
         ruleClass: "constraint",
-        severity: "error",
         message: `Trace is on ${t.layer}, which is not a routable copper layer for a ${layerCount}-layer board`,
         anchors: [{ kind: "trace", traceId: t.id }],
         locationMm: t.mid,
@@ -24,13 +23,9 @@ export function checkConstraints(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "PAD_LAYER_MISMATCH",
         ruleClass: "constraint",
-        severity: "error",
         message: `Pad is on a copper layer not valid for a ${layerCount}-layer board`,
         anchors: [pad.anchor],
         locationMm: pad.center,
-        // Non-waivable: the pad is checked on all layers as a fallback, and a
-        // waivable "invalid layer" note could hide that geometry (B5-VIA-MASK).
-        waivable: false,
       });
     }
   }
@@ -45,11 +40,9 @@ export function checkConstraints(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "VIA_LAYER_SPAN",
         ruleClass: "constraint",
-        severity: "error",
         message,
         anchors: [{ kind: "via", viaId: vg.via.id }],
         locationMm: vg.center,
-        waivable: false,
       });
     }
   }

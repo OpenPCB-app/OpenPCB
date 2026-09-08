@@ -18,7 +18,8 @@
 //     "cutouts": [{ "id", "shape": { ... } }],
 //     "netClasses": [ ...PcbNetClass ],        // REPLACES the default classes when given
 //     "perNetClassAssignments": { "n1": "wide" },
-//     "viewState": { "copperFillLayers": ["F.Cu"], "copperFillPourNetIds": {...} },
+//     // per-layer copper fill is a "zones" row: { "region": { "kind": "board" },
+//     //   "id": "board:F.Cu", "layer": "F.Cu", "netId": "n1" }
 //     "traces": [{ "id","netId","netClassId","layer","widthMm","pointsNm":[[x,y],...] }],
 //     "vias":   [{ "id","netId","centerMm":[x,y],"diameterMm","drillMm","fromLayer","toLayer",
 //                  "viaType","protection" }],
@@ -29,7 +30,9 @@
 //     "zones": [ ...PcbZone ], "overlayTexts": [...], "overlayShapes": [...],
 //     "computeRatsnest": true,                 // derive projection.ratsnest from
 //                                              // placements+padNets via the real
-//                                              // computeRatsnest (pour-blind)
+//                                              // computeRatsnest — POUR-AWARE:
+//                                              // one fill-kernel run per net-bound
+//                                              // effective zone feeds the graph
 //     "netNames": { "n1": "NET_A" }
 //   }
 //

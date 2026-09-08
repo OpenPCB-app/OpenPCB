@@ -21,12 +21,14 @@
  * the archive is parsed independently and merged into one flat sheet.
  */
 
+import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
   KicadProjectCommitResult,
   KicadProjectDeferredEntityKind,
   KicadProjectImportWarning,
   PcbBoardSettings,
+  PcbDesignRules,
   PcbLayerCount,
   PcbNetClass,
 } from "../../../../../sdks/designer";
@@ -35,6 +37,7 @@ import type {
   LibrarySDK,
 } from "../../../../../sdks/library";
 import { parsePcbLayerCount } from "../../../../../sdks/designer";
+import { DEFAULT_HOLE_TO_HOLE_MM } from "../../../../../shared/drc/rule-resolver";
 import { MODULE_SDK_TOKENS } from "../../../../../sdks";
 import type { CoreBackendModuleContext } from "../../../../../core/contracts/modules/backend-module";
 import { resolveCaptureRuntime } from "../../capture";
@@ -52,6 +55,8 @@ import { ingestProjectModels } from "./ingest-models";
 import { insertSchematicEntities } from "./insert-schematic";
 import { adjustBoardCenter, insertPcbEntities } from "./insert-pcb";
 import { flattenSheets } from "./flatten-sheets";
+import { loadSchematicProjection } from "../../projection-read";
+import { netNamesFromSchematic } from "../../pcb/pcb-projection";
 
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
@@ -202,6 +207,36 @@ export async function commitKicadProjectImport(
         timestamp,
       );
 
+      // Per-net class assignments are keyed by net NAME in the project file,
+      // but OpenPCB stores them by net ID — and net ids only exist once the
+      // schematic projection can derive them from the inserted wires/labels
+      // (rule-semantics contract §12.3). So resolve them here, after the
+      // schematic insert, and rewrite the settings row.
+      const assignments = resolvePerNetClassAssignments(
+        tx,
+        designId,
+        settings,
+        report.netClassAssignments ?? {},
+        warnings,
+      );
+      if (Object.keys(assignments).length > 0) {
+        tx.update(pcbEntities)
+          .set({
+            payloadJson: JSON.stringify({
+              ...settings,
+              perNetClassAssignments: assignments,
+            }),
+            updatedAt: timestamp,
+          })
+          .where(
+            and(
+              eq(pcbEntities.designId, designId),
+              eq(pcbEntities.kind, "board_settings"),
+            ),
+          )
+          .run();
+      }
+
       const pcbResult = insertPcbEntities(
         tx,
         {
@@ -338,7 +373,129 @@ function buildBoardSettings(
     layerCount,
     outline,
     netClasses,
+    designRules: applyKicadDesignRules(base.designRules, report),
   };
+}
+
+/**
+ * KiCad's project minimums and its `Default` class clearance → OpenPCB's
+ * design rules (rule-semantics contract §12.3). Every mapping is 1:1 and every
+ * source field is optional: an absent KiCad minimum keeps OpenPCB's default
+ * rather than inventing a number. A KiCad minimum of 0 is legitimate (its own
+ * `min_clearance` default is 0) and must survive, so the guard is
+ * "is a finite number", never truthiness.
+ *
+ * The board's per-kind clearances take the KiCad `Default` class clearance —
+ * KiCad's working clearance for unclassed nets — while the FLOOR stays the
+ * project's `min_clearance`, which reproduces KiCad's "class clearance,
+ * floored by the board minimum" semantics.
+ */
+function applyKicadDesignRules(
+  base: PcbDesignRules,
+  report: Awaited<ReturnType<typeof buildInspectReport>>,
+): PcbDesignRules {
+  const rules = report.designRules ?? {};
+  const num = (v: number | undefined, fallback: number): number =>
+    typeof v === "number" && Number.isFinite(v) ? v : fallback;
+  const defaultClearanceMm = report.netClasses.find(
+    (nc) => nc.name.toLowerCase() === "default",
+  )?.clearanceMm;
+  const working =
+    typeof defaultClearanceMm === "number" && Number.isFinite(defaultClearanceMm)
+      ? defaultClearanceMm
+      : null;
+  const clearance: PcbDesignRules["clearance"] = {
+    ...base.clearance,
+    ...(working !== null
+      ? {
+          traceToTraceMm: working,
+          traceToPadMm: working,
+          padToPadMm: working,
+          traceToViaMm: working,
+          viaToViaMm: working,
+        }
+      : {}),
+    copperToBoardEdgeMm: num(
+      rules.minCopperEdgeClearanceMm,
+      base.clearance.copperToBoardEdgeMm,
+    ),
+  };
+  // KiCad has ONE drill minimum; it floors both the plain drill and the via
+  // drill (§12.3). `min_hole_clearance` (hole-to-copper) has no field yet (S11).
+  const drillMm = num(rules.minThroughHoleMm, base.minimums.drillSizeMm);
+  const minimums: PcbDesignRules["minimums"] = {
+    ...base.minimums,
+    traceWidthMm: num(rules.minTrackWidthMm, base.minimums.traceWidthMm),
+    drillSizeMm: drillMm,
+    viaDrillMm:
+      typeof rules.minThroughHoleMm === "number" &&
+      Number.isFinite(rules.minThroughHoleMm)
+        ? rules.minThroughHoleMm
+        : base.minimums.viaDrillMm,
+    annularRingMm: num(rules.minViaAnnularMm, base.minimums.annularRingMm),
+    viaDiameterMm: num(rules.minViaDiameterMm, base.minimums.viaDiameterMm),
+    holeToHoleMm: num(
+      rules.minHoleToHoleMm,
+      base.minimums.holeToHoleMm ?? DEFAULT_HOLE_TO_HOLE_MM,
+    ),
+    clearanceMm: num(rules.minClearanceMm, base.minimums.clearanceMm ?? 0),
+  };
+  return { ...base, clearance, minimums };
+}
+
+/**
+ * Net NAME → class NAME (from the project file) resolved against the design's
+ * real nets and class ids. A name that matches no net, or a class that the
+ * merged class list does not carry, is skipped WITH a warning — a silently
+ * dropped assignment would leave a net quietly on the default class.
+ */
+function resolvePerNetClassAssignments(
+  tx: DbClient,
+  designId: string,
+  settings: PcbBoardSettings,
+  byNetName: Record<string, string>,
+  warnings: KicadProjectImportWarning[],
+): Record<string, string> {
+  if (Object.keys(byNetName).length === 0) return {};
+  const netIdByName = new Map<string, string>();
+  for (const [netId, netName] of netNamesFromSchematic(
+    loadSchematicProjection(tx, designId),
+  )) {
+    // Two nets can share a display name; the first in projection order wins,
+    // which is the same tie-break every other name lookup uses.
+    if (!netIdByName.has(netName)) netIdByName.set(netName, netId);
+  }
+  const classIdByName = new Map(
+    settings.netClasses.map((c) => [c.name.toLowerCase(), c.id]),
+  );
+  const out: Record<string, string> = {};
+  for (const [netName, className] of Object.entries(byNetName)) {
+    const netId = netIdByName.get(netName);
+    if (!netId) {
+      warnings.push({
+        code: "kicad_netclass_assignment_unknown_net",
+        severity: "warning",
+        message: `Net class '${className}' is assigned to net '${netName}', which this design has no net for; the assignment was skipped.`,
+      });
+      continue;
+    }
+    // Guard, not a live branch today: `foldNetClassAssignments` already drops
+    // an assignment naming a class the PROJECT does not declare (tested at
+    // inspect level), and `mergeNetClasses` puts every declared class on the
+    // board. It stays so a future merge that filters classes cannot silently
+    // leave a net on the default class.
+    const classId = classIdByName.get(className.toLowerCase());
+    if (!classId) {
+      warnings.push({
+        code: "kicad_netclass_unknown",
+        severity: "warning",
+        message: `Net '${netName}' is assigned to net class '${className}', which was not imported; the assignment was skipped.`,
+      });
+      continue;
+    }
+    out[netId] = classId;
+  }
+  return out;
 }
 
 function pickLayerCount(

@@ -119,6 +119,11 @@ function kindColor(c: PcbHitCandidate): string {
     case "placement":
       // --selection (dark)
       return "#33d1ff";
+    case "zone":
+      return "#22c55e";
+    case "keepout":
+      // matches KEEPOUT_COLOR in layers/KeepoutLayer.tsx
+      return "#c084fc";
   }
 }
 
@@ -134,5 +139,9 @@ export function formatCandidateLabel(c: PcbHitCandidate): string {
       return `Via${c.via.netId ? ` (net ${c.via.netId.slice(0, 6)})` : ""}`;
     case "placement":
       return `Placement ${c.placement.reference}`;
+    case "zone":
+      return `${c.zone.name ?? "Zone"} (${c.zone.layer})`;
+    case "keepout":
+      return c.keepout.name ?? "Keepout";
   }
 }

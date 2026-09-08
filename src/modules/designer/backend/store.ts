@@ -70,21 +70,26 @@ import {
   ensurePcbBoardSettings,
   loadPcbFreeHoles,
   loadPcbFreePads,
+  loadPcbKeepouts,
   loadPcbOverlayShapes,
   loadPcbOverlayTexts,
   loadPcbPlacements,
   loadPcbTraces,
   loadPcbVias,
+  loadPcbZones,
+  migrateLegacyBoardFill,
   replacePcbBoardSettings,
   replacePcbFreeHoles,
   replacePcbFreePads,
+  replacePcbKeepouts,
   replacePcbOverlayShapes,
   replacePcbOverlayTexts,
   replacePcbPlacements,
   replacePcbTraces,
   replacePcbVias,
+  replacePcbZones,
 } from "./pcb/pcb-store";
-import { loadPcbProjection } from "./pcb/pcb-projection";
+import { loadPcbProjection, netNamesFromSchematic } from "./pcb/pcb-projection";
 import {
   historyEmpty,
   historySessionKey,
@@ -288,6 +293,14 @@ export function createDesignerStore(
       if (!current) {
         return null;
       }
+      // History replay rewrites board settings from the world snapshot, so the
+      // legacy fill keys must become board zone rows first (contract §12.1).
+      migrateLegacyBoardFill(
+        tx,
+        designId,
+        netNamesFromSchematic(current),
+        timestamp,
+      );
       const pcb = ensurePcbBoardSettings(tx, designId, timestamp);
       const placements = loadPcbPlacements(tx, designId);
       const traces = loadPcbTraces(tx, designId);
@@ -296,6 +309,8 @@ export function createDesignerStore(
       const freePads = loadPcbFreePads(tx, designId);
       const overlayTexts = loadPcbOverlayTexts(tx, designId);
       const overlayShapes = loadPcbOverlayShapes(tx, designId);
+      const zones = loadPcbZones(tx, designId).zones;
+      const keepouts = loadPcbKeepouts(tx, designId);
       const nextRevision = current.revision + 1;
       const world = combinedStateToWorld({
         schematic: current,
@@ -307,6 +322,8 @@ export function createDesignerStore(
         freePads,
         overlayTexts,
         overlayShapes,
+        zones,
+        keepouts,
       });
       applyPatches(world, patches);
       const next = combinedStateFromWorld(designId, nextRevision, world);
@@ -335,6 +352,8 @@ export function createDesignerStore(
       replacePcbFreePads(tx, designId, next.freePads, timestamp);
       replacePcbOverlayTexts(tx, designId, next.overlayTexts, timestamp);
       replacePcbOverlayShapes(tx, designId, next.overlayShapes, timestamp);
+      replacePcbZones(tx, designId, next.zones, timestamp);
+      replacePcbKeepouts(tx, designId, next.keepouts, timestamp);
       return nextRevision;
     });
   }
@@ -691,6 +710,15 @@ export function createDesignerStore(
           const timestamp = nowIso();
           const command = envelope.command;
           const isPcbCommand = command.type.startsWith("pcb_");
+          // Lazy legacy board-fill migration (contract §12.1) BEFORE the
+          // before-snapshot: every settings writer re-serialises the parsed
+          // record, which would drop the unread legacy keys unread.
+          migrateLegacyBoardFill(
+            tx,
+            designId,
+            netNamesFromSchematic(projection),
+            timestamp,
+          );
           const pcbBefore = isPcbCommand
             ? ensurePcbBoardSettings(tx, designId, timestamp)
             : null;
@@ -712,6 +740,12 @@ export function createDesignerStore(
             : null;
           const overlayShapesBefore = isPcbCommand
             ? loadPcbOverlayShapes(tx, designId)
+            : null;
+          const zonesBefore = isPcbCommand
+            ? loadPcbZones(tx, designId).zones
+            : null;
+          const keepoutsBefore = isPcbCommand
+            ? loadPcbKeepouts(tx, designId)
             : null;
           const result = executeDesignerCommand({
             tx,
@@ -745,6 +779,8 @@ export function createDesignerStore(
                 const freePadsAfter = loadPcbFreePads(tx, designId);
                 const overlayTextsAfter = loadPcbOverlayTexts(tx, designId);
                 const overlayShapesAfter = loadPcbOverlayShapes(tx, designId);
+                const zonesAfter = loadPcbZones(tx, designId).zones;
+                const keepoutsAfter = loadPcbKeepouts(tx, designId);
                 const patchSet = buildCombinedHistoryPatchSet(
                   {
                     schematic: projection,
@@ -756,6 +792,8 @@ export function createDesignerStore(
                     freePads: freePadsBefore ?? [],
                     overlayTexts: overlayTextsBefore ?? [],
                     overlayShapes: overlayShapesBefore ?? [],
+                    zones: zonesBefore ?? [],
+                    keepouts: keepoutsBefore ?? [],
                   },
                   {
                     schematic: nextProjection,
@@ -767,6 +805,8 @@ export function createDesignerStore(
                     freePads: freePadsAfter,
                     overlayTexts: overlayTextsAfter,
                     overlayShapes: overlayShapesAfter,
+                    zones: zonesAfter,
+                    keepouts: keepoutsAfter,
                   },
                 );
                 if (patchSet.forwardPatches.length > 0) {

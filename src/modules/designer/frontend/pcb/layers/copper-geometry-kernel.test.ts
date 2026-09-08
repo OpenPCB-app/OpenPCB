@@ -5,7 +5,7 @@ import {
   difference,
   offsetRound,
   removeOnlyFillet,
-  toShapes,
+  splitIslands,
   union,
 } from "./copper-geometry-kernel";
 
@@ -22,28 +22,31 @@ function rect(cx: number, cy: number, w: number, h: number): PathD {
 }
 
 describe("copper-geometry-kernel", () => {
-  test("toShapes of a square → 1 shape, no holes", () => {
-    const shapes = toShapes([rect(0, 0, 10, 10)]);
-    expect(shapes).toHaveLength(1);
-    expect(shapes[0]!.holes).toHaveLength(0);
+  // S5 dropped `toShapes` / `CopperIsland.shape`: the kernel runs on the Bun
+  // backend and may not import `three` (copper-pour contract §8). The island
+  // nesting these tests exercise is unchanged — it is now read off `paths`.
+  test("splitIslands of a square → 1 island, no holes", () => {
+    const islands = splitIslands([rect(0, 0, 10, 10)]);
+    expect(islands).toHaveLength(1);
+    expect(islands[0]!.paths).toHaveLength(1);
   });
 
-  test("difference carves a hole (annulus) and toShapes preserves it", () => {
+  test("difference carves a hole (annulus) and splitIslands preserves it", () => {
     const annulus: PathsD = difference(
       [rect(0, 0, 10, 10)],
       [rect(0, 0, 4, 4)],
     );
     expect(area(annulus)).toBeCloseTo(100 - 16, 1);
-    const shapes = toShapes(annulus);
-    expect(shapes).toHaveLength(1);
-    expect(shapes[0]!.holes).toHaveLength(1);
+    const islands = splitIslands(annulus);
+    expect(islands).toHaveLength(1);
+    expect(islands[0]!.paths).toHaveLength(2); // outer + 1 hole
   });
 
   test("union merges overlapping rectangles into one shape", () => {
     const merged = union([rect(-2, 0, 6, 6)], [rect(2, 0, 6, 6)]);
     // 6×6 + 6×6 − 2×6 overlap = 36 + 36 − 12 = 60.
     expect(area(merged)).toBeCloseTo(60, 1);
-    expect(toShapes(merged)).toHaveLength(1);
+    expect(splitIslands(merged)).toHaveLength(1);
   });
 
   test("offsetRound: +δ grows + rounds corners, −δ shrinks", () => {
@@ -71,13 +74,13 @@ describe("copper-geometry-kernel", () => {
       [rect(3, 0, 4.2, 5)], //  x ∈ [ 0.9, 5.1]
       [rect(0, 0, 2, 0.1)], //  bridge, overlaps both
     );
-    expect(toShapes(dumbbell)).toHaveLength(1); // connected before
+    expect(splitIslands(dumbbell)).toHaveLength(1); // connected before
     const opened = removeOnlyFillet(dumbbell, 0.2);
-    expect(toShapes(opened)).toHaveLength(2); // neck severed
+    expect(splitIslands(opened)).toHaveLength(2); // neck severed
   });
 
   test("fail-closed / empty-input invariants", () => {
-    expect(toShapes([])).toHaveLength(0);
+    expect(splitIslands([])).toHaveLength(0);
     expect(union()).toHaveLength(0);
     expect(difference([rect(0, 0, 4, 4)], [])).toHaveLength(1);
     // Degenerate zero-area ring → no shape.
@@ -86,6 +89,6 @@ describe("copper-geometry-kernel", () => {
       { x: 0, y: 0 },
       { x: 0, y: 0 },
     ];
-    expect(toShapes([degenerate])).toHaveLength(0);
+    expect(splitIslands([degenerate])).toHaveLength(0);
   });
 });

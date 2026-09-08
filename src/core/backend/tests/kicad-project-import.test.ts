@@ -14,6 +14,10 @@ import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { resetSharedSqliteForTesting } from "../db/sqlite-client";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
+import {
+  buildInspectReport,
+  resolveProjectFiles,
+} from "../../../modules/designer/backend/import/kicad-project/inspect";
 
 function isolateTestDb(label: string): void {
   resetSharedSqliteForTesting();
@@ -108,10 +112,26 @@ function createStoredZip(
   return concatBytes([local, central, end]);
 }
 
-function buildSampleProjectZip(): Uint8Array {
+/** The sample project's ZIP entries, so a variant can swap one of them. */
+function buildSampleProjectEntries(): Array<{ name: string; bytes: Uint8Array }> {
   const encoder = new TextEncoder();
   const projectContent = JSON.stringify({
     meta: { filename: "blinky.kicad_pro", version: 1 },
+    board: {
+      design_settings: {
+        rules: {
+          // KiCad's OWN default is 0, and 0 is a legitimate floor — it must
+          // survive the mapping, not be treated as "absent" (§12.3).
+          min_clearance: 0,
+          min_track_width: 0.15,
+          min_via_diameter: 0.45,
+          min_through_hole_diameter: 0.3,
+          min_via_annular_width: 0.13,
+          min_hole_to_hole: 0.25,
+          min_copper_edge_clearance: 0.4,
+        },
+      },
+    },
     net_settings: {
       classes: [
         {
@@ -128,7 +148,17 @@ function buildSampleProjectZip(): Uint8Array {
           via_diameter: 1.0,
           via_drill: 0.5,
           diff_pair_gap: 0.15,
+          // KiCad 6 per-net assignment.
+          nets: ["VCC"],
         },
+      ],
+      // KiCad 7/8 per-net assignment: an exact name maps, a wildcard warns,
+      // and a name this design has no net for is skipped WITH a warning at
+      // commit (the net ids only exist once the schematic is inserted).
+      netclass_patterns: [
+        { pattern: "GND", netclass: "Power" },
+        { pattern: "D*", netclass: "Power" },
+        { pattern: "NOT_A_NET", netclass: "Power" },
       ],
     },
   });
@@ -182,11 +212,30 @@ function buildSampleProjectZip(): Uint8Array {
       (gr_line (start 60 40) (end 0 40) (layer "Edge.Cuts") (width 0.05))
       (gr_line (start 0 40) (end 0 0) (layer "Edge.Cuts") (width 0.05))
     )`.trim();
-  return createStoredZip([
+  return [
     { name: "blinky.kicad_pro", bytes: encoder.encode(projectContent) },
     { name: "blinky.kicad_sch", bytes: encoder.encode(schematicContent) },
     { name: "blinky.kicad_pcb", bytes: encoder.encode(pcbContent) },
-  ]);
+    // Custom design rules are NOT imported; the report must say so (§9).
+    {
+      name: "blinky.kicad_dru",
+      bytes: encoder.encode("(version 1)\n(rule \"x\" (constraint clearance))"),
+    },
+  ];
+}
+
+function buildSampleProjectZip(): Uint8Array {
+  return createStoredZip(buildSampleProjectEntries());
+}
+
+/** The sample project with a different `.kicad_pro` payload. */
+function buildProjectZipWith(projectJson: unknown): Uint8Array {
+  const bytes = new TextEncoder().encode(JSON.stringify(projectJson));
+  return createStoredZip(
+    buildSampleProjectEntries().map((entry) =>
+      entry.name.endsWith(".kicad_pro") ? { ...entry, bytes } : entry,
+    ),
+  );
 }
 
 async function bootRuntime(): Promise<DesignerSDK> {
@@ -232,6 +281,32 @@ describe("KiCad project import (F3)", () => {
       diff_pair_gap: 0.15,
     });
     expect(report.components.length).toBeGreaterThanOrEqual(2);
+
+    // S6 (rule-semantics contract §12.3) — project minimums are read from
+    // `board.design_settings.rules`, `min_clearance: 0` included.
+    expect(report.designRules).toEqual({
+      minClearanceMm: 0,
+      minTrackWidthMm: 0.15,
+      minViaDiameterMm: 0.45,
+      minThroughHoleMm: 0.3,
+      minViaAnnularMm: 0.13,
+      minHoleToHoleMm: 0.25,
+      minCopperEdgeClearanceMm: 0.4,
+    });
+    // `classes[].nets` (v6) and exact `netclass_patterns` (v7/8) fold into one
+    // net-name → class-name map; the wildcard pattern warns instead.
+    expect(report.netClassAssignments).toEqual({
+      VCC: "Power",
+      GND: "Power",
+      // Inspect cannot know the design's nets yet — commit resolves them.
+      NOT_A_NET: "Power",
+    });
+    expect(
+      report.warnings.map((w) => w.code),
+    ).toContain("kicad_netclass_pattern_unsupported");
+    expect(report.warnings.map((w) => w.code)).toContain(
+      "kicad_custom_rules_ignored",
+    );
   });
 
   test("commit creates design with board settings derived from .kicad_pcb", async () => {
@@ -263,6 +338,77 @@ describe("KiCad project import (F3)", () => {
     expect(schematic?.parts.length ?? 0).toBeGreaterThanOrEqual(0);
     expect(projection?.traces.length ?? 0).toBeGreaterThan(0);
     expect(projection?.vias.length ?? 0).toBeGreaterThan(0);
+
+    // S6 — the project minimums land on the board 1:1, and the board's
+    // per-kind clearances take the KiCad `Default` class clearance while the
+    // FLOOR stays `min_clearance` (rule-semantics contract §12.3).
+    const rules = projection!.board.designRules;
+    expect(rules.minimums.clearanceMm).toBe(0);
+    expect(rules.minimums.traceWidthMm).toBe(0.15);
+    expect(rules.minimums.viaDiameterMm).toBe(0.45);
+    // KiCad has ONE drill minimum; it floors both drill fields.
+    expect(rules.minimums.drillSizeMm).toBe(0.3);
+    expect(rules.minimums.viaDrillMm).toBe(0.3);
+    expect(rules.minimums.annularRingMm).toBe(0.13);
+    expect(rules.minimums.holeToHoleMm).toBe(0.25);
+    expect(rules.clearance.copperToBoardEdgeMm).toBe(0.4);
+    expect(rules.clearance.traceToTraceMm).toBe(0.2);
+    expect(rules.clearance.traceToPadMm).toBe(0.2);
+    expect(rules.clearance.padToPadMm).toBe(0.2);
+    expect(rules.clearance.traceToViaMm).toBe(0.2);
+    expect(rules.clearance.viaToViaMm).toBe(0.2);
+
+    // Per-net assignments are resolved to netId → classId once nets exist.
+    const powerClassId = projection!.board.netClasses.find(
+      (c) => c.name.toLowerCase() === "power",
+    )?.id;
+    expect(powerClassId).toBeDefined();
+    const assignments = projection!.board.perNetClassAssignments ?? {};
+    const assignedNames = Object.entries(assignments)
+      .filter(([, classId]) => classId === powerClassId)
+      .map(([netId]) => projection!.netNames?.[netId])
+      .sort();
+    expect(assignedNames).toEqual(["GND", "VCC"]);
+    // The assignment naming a net this design has no net for is SKIPPED, with
+    // a warning rather than silently (rule-semantics contract §12.3).
+    expect(result.warnings.map((w) => w.code)).toContain(
+      "kicad_netclass_assignment_unknown_net",
+    );
+    expect(
+      result.warnings.find(
+        (w) => w.code === "kicad_netclass_assignment_unknown_net",
+      )!.message,
+    ).toContain("NOT_A_NET");
+  });
+
+  // The mirror branch, one step earlier: an assignment naming a class the
+  // PROJECT does not declare is skipped at inspect time, so it never reaches
+  // the commit-side resolver at all.
+  test("inspect skips an assignment naming an undeclared net class, with a warning", async () => {
+    const zip = buildProjectZipWith({
+      meta: { filename: "blinky.kicad_pro", version: 1 },
+      net_settings: {
+        classes: [
+          {
+            name: "Default",
+            clearance: 0.2,
+            track_width: 0.25,
+            via_diameter: 0.8,
+            via_drill: 0.4,
+          },
+        ],
+        netclass_patterns: [{ pattern: "VCC", netclass: "NoSuchClass" }],
+      },
+    });
+    const files = resolveProjectFiles(zip);
+    const report = await buildInspectReport(files, async () => null);
+    expect(report.netClassAssignments).toBeUndefined();
+    expect(report.warnings.map((w) => w.code)).toContain(
+      "kicad_netclass_unknown",
+    );
+    expect(
+      report.warnings.find((w) => w.code === "kicad_netclass_unknown")!.message,
+    ).toContain("NoSuchClass");
   });
 
   test("commit rejects ZIP missing .kicad_pcb", async () => {

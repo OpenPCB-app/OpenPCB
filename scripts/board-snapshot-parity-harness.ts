@@ -50,6 +50,7 @@ function projection(parts: Partial<DesignerPcbProjection> = {}): DesignerPcbProj
     overlayTexts: parts.overlayTexts ?? [],
     overlayShapes: parts.overlayShapes ?? [],
     zones: parts.zones ?? [],
+    keepouts: [],
     ratsnest: parts.ratsnest ?? [],
     netNames: parts.netNames ?? {},
     padNets: parts.padNets,
@@ -159,27 +160,30 @@ function rats(netId: string, netClassId = "default"): RatsnestSegment {
     netClassId,
     fromMm: { x: 1, y: 1 },
     toMm: { x: 9, y: 1 },
-    fromPlacementId: "U1",
-    fromPadNumber: "1",
-    toPlacementId: "U2",
-    toPadNumber: "1",
+    from: { kind: "pad", placementId: "U1", padNumber: "1" },
+    to: { kind: "pad", placementId: "U2", padNumber: "1" },
   };
 }
 
 function zone(overrides: Partial<PcbZone> = {}): PcbZone {
   return {
     id: "z1",
+    name: null,
+    enabled: true,
+    lockedAt: null,
     netName: "GND",
     netId: "net_gnd",
     layer: "F.Cu",
-    polygonPointsMm: [
-      { x: -10, y: -5 },
-      { x: 10, y: -5 },
-      { x: 10, y: 5 },
-      { x: -10, y: 5 },
-    ],
-    hatchEdgeMm: 0.5,
-    fillType: "solid",
+    region: {
+      kind: "polygon",
+      pointsMm: [
+        { x: -10, y: -5 },
+        { x: 10, y: -5 },
+        { x: 10, y: 5 },
+        { x: -10, y: 5 },
+      ],
+    },
+    priority: 0,
     ...overrides,
   };
 }

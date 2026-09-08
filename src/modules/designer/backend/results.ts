@@ -2,7 +2,9 @@ import type {
   DesignerCommandOkResult,
   DesignerDispatchResult,
   DesignerEntityKind,
+  PcbCopperLayerId,
 } from "../../../sdks";
+import { isCopperLayerId } from "../../../sdks/designer";
 import { asNumber, asRecord, asString, parseJsonRecord } from "./value-guards";
 
 export function parseDispatchResultJson(
@@ -141,6 +143,37 @@ export function parseDispatchResultJson(
     return netClassId ? { ok: false, code, netClassId } : null;
   }
 
+  if (code === "INVALID_PCB_ZONE") {
+    const detail = asString(parsed.detail);
+    return detail ? { ok: false, code, detail } : null;
+  }
+
+  if (code === "PCB_ZONE_NOT_FOUND") {
+    const zoneId = asString(parsed.zoneId);
+    return zoneId ? { ok: false, code, zoneId } : null;
+  }
+
+  if (code === "PCB_ZONE_BOARD_EXISTS") {
+    const layer = asString(parsed.layer);
+    return isCopperLayerId(layer) ? { ok: false, code, layer } : null;
+  }
+
+  if (code === "INVALID_PCB_KEEPOUT") {
+    const detail = asString(parsed.detail);
+    return detail ? { ok: false, code, detail } : null;
+  }
+
+  if (code === "PCB_KEEPOUT_NOT_FOUND") {
+    const keepoutId = asString(parsed.keepoutId);
+    return keepoutId ? { ok: false, code, keepoutId } : null;
+  }
+
+  if (code === "INVALID_DRC_RULE") {
+    const ruleId = asString(parsed.ruleId);
+    const detail = asString(parsed.detail);
+    return ruleId && detail ? { ok: false, code, ruleId, detail } : null;
+  }
+
   return null;
 }
 
@@ -238,6 +271,35 @@ export function invalidPcbOverlay(detail: string): DesignerDispatchResult {
 
 export function pcbOverlayNotFound(overlayId: string): DesignerDispatchResult {
   return { ok: false, code: "PCB_OVERLAY_NOT_FOUND", overlayId };
+}
+
+export function invalidPcbZone(detail: string): DesignerDispatchResult {
+  return { ok: false, code: "INVALID_PCB_ZONE", detail };
+}
+
+export function pcbZoneNotFound(zoneId: string): DesignerDispatchResult {
+  return { ok: false, code: "PCB_ZONE_NOT_FOUND", zoneId };
+}
+
+export function pcbZoneBoardExists(
+  layer: PcbCopperLayerId,
+): DesignerDispatchResult {
+  return { ok: false, code: "PCB_ZONE_BOARD_EXISTS", layer };
+}
+
+export function invalidPcbKeepout(detail: string): DesignerDispatchResult {
+  return { ok: false, code: "INVALID_PCB_KEEPOUT", detail };
+}
+
+export function pcbKeepoutNotFound(keepoutId: string): DesignerDispatchResult {
+  return { ok: false, code: "PCB_KEEPOUT_NOT_FOUND", keepoutId };
+}
+
+export function invalidDrcRule(
+  ruleId: string,
+  detail: string,
+): DesignerDispatchResult {
+  return { ok: false, code: "INVALID_DRC_RULE", ruleId, detail };
 }
 
 export function pcbNetClassNotFound(

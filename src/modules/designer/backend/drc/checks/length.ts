@@ -50,7 +50,6 @@ export function checkLength(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "NET_LENGTH_OUT_OF_RANGE",
         ruleClass: "constraint",
-        severity: "warning",
         message:
           `Net ${netName} routed ${member.lengthMm.toFixed(2)} mm — ` +
           `${tooShort ? "short of" : "over"} the '${group.name}' target ` +

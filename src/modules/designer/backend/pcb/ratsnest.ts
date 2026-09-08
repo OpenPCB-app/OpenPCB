@@ -1,27 +1,39 @@
-// Ratsnest = MST of pad positions per net. Edges are airwires the user must route.
-// Prim's algorithm, O(N^2) — fine for hundreds of pads per net; revisit if it bites.
+// Ratsnest = MST of the still-unconnected copper components per net. Edges are
+// airwires the user must route.
+//
+// Connectivity is NOT computed here — it comes from the shared kernel via
+// `board-connectivity.ts`, so the ratsnest, DRC's `UNCONNECTED_NET` and the
+// dangling checks always agree on what "connected" means. This file only
+// projects the kernel's components onto logical pins and runs Prim's algorithm
+// (O(N^2) — fine for hundreds of components per net).
+//
+// Contract: docs/pcb-hardening/01-connectivity-contract.md §5.
 
 import type {
-  PcbBoardCutout,
-  PcbBoardOutline,
-  PcbCopperLayerId,
-  PcbDesignRules,
-  PcbFreeHole,
-  PcbFreePad,
   PcbNetClass,
-  PcbPlacedPart,
   PcbPointMm,
-  PcbTrace,
-  PcbVia,
+  RatsnestEndpoint,
   RatsnestSegment,
 } from "../../../../sdks/designer";
-import type { NetPadCorrelation, PadRef } from "./net-pad-correlation";
-import { GND_NAMES, resolveNetClassId } from "./net-class-resolver";
-import { pointToPolylineDistance } from "../../../../shared/pcb-geometry/pcb-trace-geometry";
+import type {
+  CopperItem,
+  CopperPadAnchor,
+  CopperRecords,
+} from "../../../../shared/pcb-connectivity";
 import {
-  buildCopperFillPadGroups,
-  resolveCopperFillClearanceMm,
-} from "../../../../shared/rendering/copper-fill/copper-fill-geometry";
+  computeBoardConnectivity,
+  type BoardConnectivityInput,
+} from "./board-connectivity";
+import { resolveNetClassId } from "./net-class-resolver";
+
+export type ComputeRatsnestContext = BoardConnectivityInput & {
+  /** Schematic net id → human net name for net-class auto-assignment. */
+  netNames: Map<string, string>;
+  /** Net classes available on the board (drives color routing). */
+  netClasses: ReadonlyArray<PcbNetClass>;
+  /** Explicit per-net → net-class overrides (netId → netClassId). */
+  perNetClassAssignments?: Record<string, string>;
+};
 
 function distSq(a: PcbPointMm, b: PcbPointMm): number {
   const dx = a.x - b.x;
@@ -29,213 +41,103 @@ function distSq(a: PcbPointMm, b: PcbPointMm): number {
   return dx * dx + dy * dy;
 }
 
-/** Tolerance for considering two coordinates "touching" (mm, ~1µm). */
-const TOUCH_EPS_MM = 0.001;
-
-function pointsTouch(a: PcbPointMm, b: PcbPointMm): boolean {
-  return distSq(a, b) < TOUCH_EPS_MM * TOUCH_EPS_MM;
+/**
+ * One node the ratsnest can draw an airwire to: a copper shape of a pin, or —
+ * when every shape of that pin was rejected as degenerate copper — the pin's
+ * record position, so the pin is still counted and its open still reported.
+ */
+interface PinShape {
+  anchor: CopperPadAnchor;
+  center: PcbPointMm;
+  /** Item key, or a synthetic one for a pin with no surviving copper. */
+  key: string;
 }
 
-class UnionFind {
-  private parent = new Map<string, string>();
-  add(key: string): void {
-    if (!this.parent.has(key)) this.parent.set(key, key);
-  }
-  find(key: string): string {
-    let root = key;
-    while (this.parent.get(root) !== root) {
+/** Total order on pin shapes: `(center.x, center.y, key)`. */
+function comparePads(a: PinShape, b: PinShape): number {
+  if (a.center.x !== b.center.x) return a.center.x - b.center.x;
+  if (a.center.y !== b.center.y) return a.center.y - b.center.y;
+  return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+}
+
+/** Logical pin identity — every copper shape of one pin shares it. */
+function anchorId(anchor: CopperPadAnchor): string {
+  return anchor.kind === "pad"
+    ? `pad:${JSON.stringify([anchor.placementId, anchor.padNumber])}`
+    : `freePad:${JSON.stringify(anchor.freePadId)}`;
+}
+
+function endpointOf(anchor: CopperPadAnchor): RatsnestEndpoint {
+  return anchor.kind === "pad"
+    ? {
+        kind: "pad",
+        placementId: anchor.placementId,
+        padNumber: anchor.padNumber,
+      }
+    : { kind: "freePad", freePadId: anchor.freePadId };
+}
+
+/** Union-find over kernel component ids (used to merge one pin's shapes). */
+class ComponentMerge {
+  private parent = new Map<number, number>();
+  find(id: number): number {
+    let root = id;
+    while ((this.parent.get(root) ?? root) !== root) {
       root = this.parent.get(root)!;
     }
-    let cursor = key;
-    while (cursor !== root) {
-      const next = this.parent.get(cursor)!;
-      this.parent.set(cursor, root);
-      cursor = next;
+    let walk = id;
+    while (walk !== root) {
+      const next = this.parent.get(walk) ?? walk;
+      this.parent.set(walk, root);
+      walk = next;
     }
     return root;
   }
-  union(a: string, b: string): void {
-    this.add(a);
-    this.add(b);
+  union(a: number, b: number): void {
     const ra = this.find(a);
     const rb = this.find(b);
-    if (ra !== rb) this.parent.set(ra, rb);
+    if (ra !== rb) this.parent.set(Math.max(ra, rb), Math.min(ra, rb));
   }
-}
-
-function padKey(pad: PadRef): string {
-  return `pad:${pad.placementId}:${pad.padNumber}`;
 }
 
 /**
- * For each net, group pads into connected components via routed traces+vias on that net.
- * Returns a map from net id → array of pad-component-representatives (one PadRef per component).
- * If a net has 0 routed connections, every pad is its own component.
+ * Kernel components restricted to this net's pads, with all copper shapes of
+ * one logical pin merged (the component body itself joins them — contract §2).
+ * Returns one representative pad item per merged component, sorted.
  */
-export function groupPadsByConnectivity(
-  netId: string,
-  pads: PadRef[],
-  traces: PcbTrace[],
-  vias: PcbVia[],
-  /** Pad-key groups (`${placementId}|${padNumber}`) joined by a same-net pour. */
-  pourGroups?: string[][],
-  opts?: {
-    /**
-     * Accept a trace endpoint anywhere inside the pad's copper AABB, not only
-     * within 1 µm of pad center. Flag `pcb.padShapeConnectivity`.
-     */
-    padShapeTouch?: boolean;
-  },
-): PadRef[][] {
-  const uf = new UnionFind();
-  for (const pad of pads) uf.add(padKey(pad));
-
-  const netTraces = traces.filter((t) => t.netId === netId);
-  const netVias = vias.filter((v) => v.netId === netId);
-
-  // Pour-aware: union all pads sharing a filled copper island. A ground/power
-  // plane connects its pads exactly as a routed trace would, so the MST below
-  // collapses them to one component and draws no airwire.
-  if (pourGroups && pourGroups.length > 0) {
-    const padById = new Map<string, PadRef>();
-    for (const pad of pads) {
-      padById.set(`${pad.placementId}|${pad.padNumber}`, pad);
-    }
-    for (const group of pourGroups) {
-      let anchor: PadRef | undefined;
-      for (const id of group) {
-        const pad = padById.get(id);
-        if (!pad) continue;
-        if (!anchor) anchor = pad;
-        else uf.union(padKey(anchor), padKey(pad));
-      }
-    }
+function representativesForNet(
+  pads: readonly PinShape[],
+  componentOf: ReadonlyMap<string, number>,
+): PinShape[] {
+  const merge = new ComponentMerge();
+  const byAnchor = new Map<string, number>();
+  const componentIdOf = new Map<string, number>();
+  // Pads outside the kernel's component map (degenerate copper) get their own
+  // synthetic component so they still show as an unconnected node.
+  let synthetic = -1;
+  for (const item of pads) {
+    const id = componentOf.get(item.key) ?? synthetic--;
+    componentIdOf.set(item.key, id);
+    const anchor = anchorId(item.anchor);
+    const seen = byAnchor.get(anchor);
+    if (seen === undefined) byAnchor.set(anchor, id);
+    else merge.union(seen, id);
   }
 
-  // Union pads ↔ trace endpoints
-  const padShapeTouch = opts?.padShapeTouch === true;
-  for (const trace of netTraces) {
-    const traceKey = `trace:${trace.id}`;
-    uf.add(traceKey);
-    const endpoints =
-      trace.pointsNm.length >= 2
-        ? [trace.pointsNm[0]!, trace.pointsNm[trace.pointsNm.length - 1]!]
-        : [];
-    for (const epNm of endpoints) {
-      const epMm: PcbPointMm = { x: epNm.x / 1_000_000, y: epNm.y / 1_000_000 };
-      for (const pad of pads) {
-        if (pointsTouch(pad.worldMm, epMm)) {
-          uf.union(traceKey, padKey(pad));
-          continue;
-        }
-        // Pad-shape connectivity: an endpoint inside the pad copper connects
-        // even when it misses the exact center (KiCad imports commonly end
-        // traces at pad edges).
-        if (padShapeTouch && pad.halfExtentsMm) {
-          const inX =
-            Math.abs(epMm.x - pad.worldMm.x) <=
-            pad.halfExtentsMm.x + TOUCH_EPS_MM;
-          const inY =
-            Math.abs(epMm.y - pad.worldMm.y) <=
-            pad.halfExtentsMm.y + TOUCH_EPS_MM;
-          if (inX && inY) uf.union(traceKey, padKey(pad));
-        }
-      }
-    }
+  const best = new Map<number, PinShape>();
+  for (const item of pads) {
+    const root = merge.find(componentIdOf.get(item.key)!);
+    const current = best.get(root);
+    if (!current || comparePads(item, current) < 0) best.set(root, item);
   }
-
-  // Chain traces sharing endpoints (trace ↔ trace)
-  for (let i = 0; i < netTraces.length; i++) {
-    const ti = netTraces[i]!;
-    const tiKey = `trace:${ti.id}`;
-    const tiEnds = [ti.pointsNm[0], ti.pointsNm[ti.pointsNm.length - 1]];
-    for (let j = i + 1; j < netTraces.length; j++) {
-      const tj = netTraces[j]!;
-      const tjKey = `trace:${tj.id}`;
-      const tjEnds = [tj.pointsNm[0], tj.pointsNm[tj.pointsNm.length - 1]];
-      for (const a of tiEnds) {
-        if (!a) continue;
-        for (const b of tjEnds) {
-          if (!b) continue;
-          if (a.x === b.x && a.y === b.y) uf.union(tiKey, tjKey);
-        }
-      }
-    }
-  }
-
-  // T-junctions: an endpoint landing on the INTERIOR of a same-layer sibling
-  // trace connects them (the route tool's same-net-copper finish produces
-  // exactly this geometry). Same layer only — cross-layer copper connects
-  // through vias, never by overlap. Endpoint-to-endpoint touch above keeps
-  // its historical layer-agnostic behavior.
-  for (const ta of netTraces) {
-    if (ta.pointsNm.length < 2) continue;
-    const taEnds = [ta.pointsNm[0]!, ta.pointsNm[ta.pointsNm.length - 1]!];
-    for (const tb of netTraces) {
-      if (tb.id === ta.id || tb.layer !== ta.layer) continue;
-      if (tb.pointsNm.length < 2) continue;
-      const tbMm: PcbPointMm[] = tb.pointsNm.map((p) => ({
-        x: p.x / 1_000_000,
-        y: p.y / 1_000_000,
-      }));
-      for (const ep of taEnds) {
-        const epMm: PcbPointMm = {
-          x: ep.x / 1_000_000,
-          y: ep.y / 1_000_000,
-        };
-        if (pointToPolylineDistance(epMm, tbMm).distance <= TOUCH_EPS_MM) {
-          uf.union(`trace:${ta.id}`, `trace:${tb.id}`);
-        }
-      }
-    }
-  }
-
-  // Union vias to traces whose endpoints land at the via center
-  for (const via of netVias) {
-    const viaKey = `via:${via.id}`;
-    uf.add(viaKey);
-    for (const trace of netTraces) {
-      const ends = [
-        trace.pointsNm[0],
-        trace.pointsNm[trace.pointsNm.length - 1],
-      ];
-      for (const ep of ends) {
-        if (!ep) continue;
-        const epMm: PcbPointMm = { x: ep.x / 1_000_000, y: ep.y / 1_000_000 };
-        if (pointsTouch(epMm, via.centerMm)) {
-          uf.union(`trace:${trace.id}`, viaKey);
-        }
-      }
-    }
-  }
-
-  // Group pads by component root
-  const groups = new Map<string, PadRef[]>();
-  for (const pad of pads) {
-    const root = uf.find(padKey(pad));
-    const list = groups.get(root) ?? [];
-    list.push(pad);
-    groups.set(root, list);
-  }
-  return [...groups.values()];
+  return [...best.values()].sort(comparePads);
 }
 
 function mstForRepresentatives(
   netId: string,
   netClassId: string,
-  components: PadRef[][],
+  reps: readonly PinShape[],
 ): RatsnestSegment[] {
-  // Pick one representative pad per component (smallest worldMm.x then y for determinism).
-  const reps = components
-    .map(
-      (comp) =>
-        [...comp].sort((a, b) =>
-          a.worldMm.x === b.worldMm.x
-            ? a.worldMm.y - b.worldMm.y
-            : a.worldMm.x - b.worldMm.x,
-        )[0]!,
-    )
-    .filter(Boolean);
   if (reps.length < 2) return [];
 
   const inTree = new Array<boolean>(reps.length).fill(false);
@@ -246,7 +148,7 @@ function mstForRepresentatives(
 
   inTree[0] = true;
   for (let i = 1; i < reps.length; i++) {
-    minDistSq[i] = distSq(reps[0]!.worldMm, reps[i]!.worldMm);
+    minDistSq[i] = distSq(reps[0]!.center, reps[i]!.center);
     parent[i] = 0;
   }
 
@@ -264,23 +166,20 @@ function mstForRepresentatives(
     if (nextIdx === -1) break;
 
     inTree[nextIdx] = true;
-    const parentIdx = parent[nextIdx]!;
-    const a = reps[parentIdx]!;
+    const a = reps[parent[nextIdx]!]!;
     const b = reps[nextIdx]!;
     segments.push({
       netId,
       netClassId,
-      fromMm: a.worldMm,
-      toMm: b.worldMm,
-      fromPlacementId: a.placementId,
-      fromPadNumber: a.padNumber,
-      toPlacementId: b.placementId,
-      toPadNumber: b.padNumber,
+      fromMm: a.center,
+      toMm: b.center,
+      from: endpointOf(a.anchor),
+      to: endpointOf(b.anchor),
     });
 
     for (let i = 0; i < reps.length; i++) {
       if (!inTree[i]) {
-        const d = distSq(reps[nextIdx]!.worldMm, reps[i]!.worldMm);
+        const d = distSq(b.center, reps[i]!.center);
         if (d < minDistSq[i]!) {
           minDistSq[i] = d;
           parent[i] = nextIdx;
@@ -292,121 +191,74 @@ function mstForRepresentatives(
   return segments;
 }
 
-/**
- * Inputs needed to compute filled copper-pour islands for pour-aware
- * connectivity. When present, pads tied together by a same-net pour are treated
- * as connected (no airwire), so a ground plane satisfies the net the same way a
- * routed trace would. Absent ⇒ legacy trace/via-only connectivity.
- */
-export interface RatsnestFillContext {
-  outline: PcbBoardOutline;
-  designRules: PcbDesignRules;
-  placements: ReadonlyArray<PcbPlacedPart>;
-  /** `${placementId}|${padNumber}` → netId (authoritative schematic map). */
-  padNetIds: ReadonlyMap<string, string>;
-  cutouts?: ReadonlyArray<PcbBoardCutout>;
-  freeHoles?: ReadonlyArray<PcbFreeHole>;
-  freePads?: ReadonlyArray<PcbFreePad>;
-  /**
-   * Enabled pours: board-wide (no `clipPolygonMm`) and explicit copper zones
-   * (clipped to their polygon). Each floods `netId` on `layer`.
-   */
-  pours: ReadonlyArray<{
-    layer: PcbCopperLayerId;
-    netId: string;
-    clipPolygonMm?: ReadonlyArray<PcbPointMm>;
-  }>;
-}
-
-export interface ComputeRatsnestContext {
-  /** Schematic net id → human net name for net-class auto-assignment. */
-  netNames: Map<string, string>;
-  /** Net classes available on the board (drives color routing). */
-  netClasses: ReadonlyArray<PcbNetClass>;
-  /** Explicit per-net → net-class overrides (netId → netClassId). */
-  perNetClassAssignments?: Record<string, string>;
-  /** Routed traces; ratsnest hides airwires already covered by routing. */
-  traces?: ReadonlyArray<PcbTrace>;
-  /** Routed vias; chain trace segments across layers when computing connectivity. */
-  vias?: ReadonlyArray<PcbVia>;
-  /** Copper-pour inputs; when present, same-net pours satisfy connectivity. */
-  fill?: RatsnestFillContext;
-  /** Pad-shape (AABB) endpoint acceptance — flag `pcb.padShapeConnectivity`. */
-  padShapeTouch?: boolean;
+/** Nets the ratsnest covers: schematic nets ∪ nets referenced by free pads. */
+function netIdsOf(ctx: ComputeRatsnestContext): string[] {
+  const nets = new Set<string>(ctx.padNetIds.values());
+  for (const freePad of ctx.freePads) {
+    if (freePad.netId) nets.add(freePad.netId);
+  }
+  return [...nets].sort();
 }
 
 /**
- * For each net, compute the groups of same-net footprint pads that a copper
- * pour electrically joins (`${placementId}|${padNumber}` keys). Returns
- * `netId → padKey[][]` (one inner array per filled island). Empty when no fill
- * context is supplied. Built once per projection and reused across nets.
+ * Pin shapes per net: every surviving pad item, plus a synthetic node for each
+ * pad RECORD whose pin contributed no item at all. Without the second pass a
+ * pin whose only copper shape is degenerate would vanish from its net, turning
+ * a two-pad net into a one-pad net that draws no airwire and raises no
+ * `UNCONNECTED_NET` — the defect would be invisible (Astra 4).
  */
-function computePourPadGroups(
-  fill: RatsnestFillContext,
-  traces: ReadonlyArray<PcbTrace>,
-  vias: ReadonlyArray<PcbVia>,
-): Map<string, string[][]> {
-  const byNet = new Map<string, string[][]>();
-  const clearanceMm = resolveCopperFillClearanceMm(fill.designRules.clearance);
-  for (const pour of fill.pours) {
-    const groups = buildCopperFillPadGroups({
-      layer: pour.layer,
-      outline: fill.outline,
-      placements: fill.placements,
-      traces,
-      vias,
-      pourNetId: pour.netId,
-      padNetIds: fill.padNetIds,
-      clearanceMm,
-      copperToBoardEdgeMm: fill.designRules.clearance.copperToBoardEdgeMm,
-      cutouts: fill.cutouts ?? [],
-      freeHoles: fill.freeHoles ?? [],
-      freePads: fill.freePads ?? [],
-      minThicknessMm: fill.designRules.minimums.traceWidthMm,
-      ...(pour.clipPolygonMm ? { clipPolygonMm: pour.clipPolygonMm } : {}),
+function pinShapesByNet(
+  items: readonly CopperItem[],
+  records: CopperRecords,
+): Map<string, PinShape[]> {
+  const byNet = new Map<string, PinShape[]>();
+  const push = (netId: string, shape: PinShape): void => {
+    const list = byNet.get(netId);
+    if (list) list.push(shape);
+    else byNet.set(netId, [shape]);
+  };
+  const covered = new Set<string>();
+  for (const item of items) {
+    if (item.kind !== "pad" || item.netId === null) continue;
+    covered.add(anchorId(item.anchor));
+    push(item.netId, {
+      anchor: item.anchor,
+      center: item.center,
+      key: item.key,
     });
-    if (groups.length === 0) continue;
-    const existing = byNet.get(pour.netId);
-    if (existing) existing.push(...groups);
-    else byNet.set(pour.netId, groups);
+  }
+  for (const record of records.pads) {
+    if (record.netId === null) continue;
+    const anchor = anchorId(record.anchor);
+    if (covered.has(anchor)) continue;
+    covered.add(anchor);
+    push(record.netId, {
+      anchor: record.anchor,
+      center: record.center,
+      key: `noCopper:${anchor}`,
+    });
   }
   return byNet;
 }
 
 export function computeRatsnest(
-  correlation: NetPadCorrelation,
   ctx: ComputeRatsnestContext,
 ): RatsnestSegment[] {
-  const traces = (ctx.traces ?? []) as PcbTrace[];
-  const vias = (ctx.vias ?? []) as PcbVia[];
-  const pourGroupsByNet =
-    ctx.fill && ctx.fill.pours.length > 0
-      ? computePourPadGroups(ctx.fill, traces, vias)
-      : undefined;
-  const result: RatsnestSegment[] = [];
-  for (const [netId, pads] of correlation.netPads) {
-    const netName = ctx.netNames.get(netId) ?? "";
-    // Ground nets are connected by the copper pour (ground plane) by
-    // convention, so their airwires are intentionally suppressed — showing
-    // a ratsnest for GND clutters the board with connections the fill
-    // provides. A board-wide GND pour also collapses these geometrically, but
-    // suppressing by name hides them even before a fill layer is enabled.
-    if (GND_NAMES.test(netName.trim())) continue;
+  const { items, result, records } = computeBoardConnectivity(ctx);
+  const padsByNet = pinShapesByNet(items, records);
+
+  const segments: RatsnestSegment[] = [];
+  for (const netId of netIdsOf(ctx)) {
+    const pads = padsByNet.get(netId);
+    if (!pads || pads.length < 2) continue;
     const classId = resolveNetClassId(
-      netName,
+      ctx.netNames.get(netId) ?? "",
       ctx.netClasses,
       ctx.perNetClassAssignments,
       netId,
     );
-    const components = groupPadsByConnectivity(
-      netId,
-      pads,
-      traces,
-      vias,
-      pourGroupsByNet?.get(netId),
-      { padShapeTouch: ctx.padShapeTouch === true },
-    );
-    result.push(...mstForRepresentatives(netId, classId, components));
+    const reps = representativesForNet(pads, result.componentOf);
+    segments.push(...mstForRepresentatives(netId, classId, reps));
   }
-  return result;
+  return segments;
 }

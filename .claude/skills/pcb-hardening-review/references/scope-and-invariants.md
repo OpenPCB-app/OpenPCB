@@ -11,8 +11,9 @@ not the source of truth.
 | DRC engine + checks | `src/modules/designer/backend/drc/` (`checks/*.ts`, `drc-context.ts`, `severity.ts`, `violation-id.ts`, `ipc2221-spacing.ts`), `src/shared/drc/rule-resolver.ts` | ✅✅ always eligible |
 | PCB geometry | `src/shared/pcb-geometry/` (`pcb-trace-geometry.ts`, `pcb-clearance-geometry.ts`, `pad-geometry.ts`, `pad-outline.ts`, `rotation.ts`) | ✅✅ |
 | Manual routing (route/walkaround/tune/bundle/diff-pair tools) — **not** the cloud auto-layout service | `src/shared/pcb-routing/` (`route-obstacles.ts`, `collision.ts`, `corner-fixup.ts`, `pull-tight.ts`, `walkaround.ts`, `auto-finish.ts`, `meander.ts`, `bundle-geometry.ts`), `src/modules/designer/frontend/pcb/tools/` | ✅✅ |
-| Ratsnest / connectivity | `src/modules/designer/backend/pcb/ratsnest.ts` (union-find MST builder), `pcb-pad-nets.ts` | ✅ |
-| Copper pours / polygon booleans | `src/shared/rendering/copper-fill/` (`copper-geometry-kernel.ts` — the Clipper2 kernel; real in-tree code, **not** a package shim, unlike most of `src/shared/rendering/`), `src/shared/rendering/pcb/` (`outline-geometry.ts`, `chain-edges.ts`, `contour-validation.ts`, `outline-manufacturability.ts`, `pcb-drills.ts`) | ✅✅ |
+| Ratsnest / connectivity | `src/shared/pcb-connectivity/` (`copper-records.ts`, `copper-items.ts`, `touch.ts`, `connectivity-graph.ts` — the one connectivity model, contract in `docs/pcb-hardening/01-connectivity-contract.md`), `src/modules/designer/backend/pcb/board-connectivity.ts` (items + pour nodes), `ratsnest.ts` (MST over kernel components) | ✅✅ |
+| Copper pours / polygon booleans | `src/shared/rendering/copper-fill/` (`copper-geometry-kernel.ts` — the Clipper2 kernel; real in-tree code, **not** a package shim, unlike most of `src/shared/rendering/`), `src/shared/rendering/pcb/` (`outline-geometry.ts`, `chain-edges.ts`, `contour-validation.ts`, `outline-manufacturability.ts`, `pcb-drills.ts`); since S5 the fill is specified by `docs/pcb-hardening/04-copper-pour-contract.md` (S1 records as the one copper geometry, S2 region extent, per-net clearance tier, precedence, pad-local thermals, `buildCopperFillIslands` → `{ ok | failed }` in the total order, per-net Gerber unions) | ✅✅ |
+| Copper zones / keepouts | `src/shared/pcb-areas/` (`zone-parse.ts`, `copper-zones.ts`, `keepout-predicates.ts`, `pour-params.ts`), the S4 consumers `drc/checks/{keepouts,zones,copper-pour}.ts`, `backend/pcb/placement-extent.ts`, `pcb-routing/route-obstacles.ts`, `frontend/pcb/drc/live-drc.ts` — contract `docs/pcb-hardening/03-zone-keepout-contract.md` (§13 legality); S5 consumers `drc/drc-context.ts` `pourResults()`, `export/gerber/writer.ts` `emitCopperPour`, `backend/pcb/board-snapshot-pours.ts`, zone holes (`zone-parse.ts` `zoneRegionValidity`) | ✅✅ |
 | ERC / electrical rules | `src/modules/designer/backend/erc/erc-engine.ts`, `src/shared/schematic-routing/` (`manhattan.ts`, `schematic-autoroute.ts`, `wire-obstacles.ts`, `crossing-gaps.ts`) | ✅✅ |
 | Signal integrity / length matching | `checks/signal-integrity.ts` (diff-pair skew/gap), `checks/length.ts`, `backend/pcb/diff-pair-resolver.ts` | ✅✅ |
 | Stackup / manufacturability / DFM | `checks/manufacturability.ts` (via/drill/annular/aspect-ratio, FAB tier), `checks/constraints.ts` (stackup) | ✅ |
@@ -34,27 +35,74 @@ are explicitly deterministic (no `Math.random`/`Date.now`). DRC (`backend/drc/`)
 mm-domain view for its checks (`drc-context.ts`). Always state which domain a packet's numbers are
 in — a bug can be a units mismatch at this exact boundary.
 
-## DRC invariants — verbatim from `src/modules/designer/AGENTS.md`, "## DRC"
+## DRC invariants — verbatim from `src/modules/designer/AGENTS.md`, "## DRC" (re-verified 2026-09-08, S6)
 
-> - **Only `clearanceMm` from `PcbNetClass` is enforced.** `traceWidthMm`, `viaDiameterMm`,
->   `viaDrillMm`, `defaultViaProtection` and `color` are **stored but unused by DRC** — they feed
->   route-tool defaults. A net class with a wider `traceWidthMm` produces **no** per-net min-width
->   violation. Do not assume per-net width or via geometry is validated anywhere.
-> - **Net class can only tighten.** Clearance resolves as `max(designRule, netA, netB)`. There is
->   no mechanism for a net class to relax a board rule.
-> - **Dispatch is a hardcoded array, not a registry.** The engine builds one `DrcContext` and
->   spreads seven pure `(ctx: DrcContext) => DrcViolationDraft[]` checks into a flat list. Adding a
->   check is trivial — a new file under `drc/checks/` plus one array entry. The real cost is always
->   the **rules-input schema**.
-> - **`DrcRuleClass` has exactly five values:** `clearance | constraint | connectivity |
->   manufacturability | structural`. There is **no `copper-pour` class** — pour islands report
->   under `structural`. Do not add a sixth without checking every consumer that switches on the
->   union.
-> - Violation ids are order-independent by construction (a hash over code plus **sorted** anchor
->   keys), which is what makes waivers survive re-runs.
+> - **Net-class enforcement is partial.** `clearanceMm` resolves through the clearance path for
+>   every net. `traceWidthMm`, `viaDiameterMm` and `viaDrillMm` are enforced by `checks/netclass.ts`
+>   (`NETCLASS_*`, severity warning) **only for nets deliberately classed — an explicit
+>   `perNetClassAssignments` entry or a GND/POWER name match**; nets that fall to the default class
+>   (`defaultNetClassId` = the first class in the stored array — the order is semantic) get no
+>   width/via check. `defaultViaProtection` and `color` feed route-tool defaults only. The
+>   `netClassId` stored on a trace or via is a creation-time hint; no legality consumer reads it.
+> - **One rule resolver** (`src/shared/drc/rule-resolver.ts` `createRuleResolver`, contract
+>   `docs/pcb-hardening/05-rule-semantics-contract.md`): explicit scoped `PcbDrcRule`s
+>   (priority-descending first match, **may relax** above the floor; `net`/`netClass` match on
+>   either item, `area` needs both evaluation points in the same polygon, pour pair kinds only
+>   through an explicit `pairKind` scope) → implicit `max(designRule[pairKind], netA, netB)` → the
+>   `minimums.clearanceMm` floor; scalar kinds resolve the same way with the board minimum as
+>   their floor and ARE enforced. Batch DRC, the live route gate, route obstacles, the pour
+>   composition and the via insert gate all consume it — there is no other clearance formula.
+>   Area scopes are evaluated on regions of constant membership, never at a representative point.
+>   Severity: `override → matched rule → DEFAULT_SEVERITY_BY_CODE`; drafts carry no severity
+>   literal. Invalid / partially ineffective rules are reported (`DRC_RULE_INVALID`,
+>   `DRC_RULE_INEFFECTIVE`). Clearance comparisons use `clearanceViolated` (0.5 nm float grace).
+> - **Dispatch is a hardcoded array, not a registry.** `runDrc` is one monolithic function: it
+>   builds one `DrcContext`, runs thirteen pure `(ctx: DrcContext) => DrcViolationDraft[]` checks
+>   into a flat list, then applies ignores, waivers, severity and ids in a single pass.
+>   `DrcContext` carries traces, pads, vias and holes, plus (S3a) the effective `copperZones` /
+>   `keepouts` and (S4) `copperAreaWarnings` and a lazily resolved `placementExtent(id)` — checks
+>   read those, never `projection.zones` / `projection.keepouts`.
+> - **`DrcRuleClass` has eight values:** `clearance | constraint | connectivity |
+>   manufacturability | structural | dfm | electrical | signal-integrity`. There is **no
+>   `copper-pour` class** — pour islands report under `structural`.
+> - Violation ids (v2) hash the code, the **sorted** anchor keys, the layer, and a 0.1 mm location
+>   bucket for pairwise codes — order-independent by construction. `measuredMm` is never hashed.
+> - **Connectivity has one model: `src/shared/pcb-connectivity/`.** Records (one geometry
+>   resolution per pad / free pad / trace / via) → fail-safe items → copper-overlap touch predicates
+>   → union-find graph with end-cap and via-layer contact records. Contract:
+>   `docs/pcb-hardening/01-connectivity-contract.md`. `pcb/ratsnest.ts` is an MST over kernel
+>   components (`pcb/board-connectivity.ts` adds one node per filled pour island, members from the
+>   fill kernel); `checks/dangling.ts` is a lookup into the contact records; `checks/connectivity.ts`
+>   reads the ratsnest. There is no net-name rule anywhere — GND shows airwires until a GND pour
+>   exists. Two layer policies share the one geometry: connectivity is fail-safe (a layer-invalid
+>   pad or via occupies no layer), DRC short detection clamps such items to every layer; the DRC-side
+>   graph (`ctx.connectivity()`) is always built from the fail-safe items. The remaining private
+>   answers to "is this copper connected" — copper-fill island anchoring (done in S5 — `ISOLATED_COPPER_ISLAND` reads the component), routed-length sums in
+>   `checks/length.ts` / `signal-integrity.ts` (S14), routing-obstacle and live-DRC pad layers (S8)
+>   — are scheduled, not sanctioned. Never add another.
 > - **Apply-time re-validation is a non-blocking backstop, not a gate.** Both cloud apply handlers
 >   run `runDrc` and report the result but do **not** reject a bad envelope and do **not** persist
 >   the report.
+
+Also verified against `src/sdks/designer/types.ts`: `PcbLayerCount` is `2 | 4 | … | 32` (multilayer
+is import-only — no UI writes it); `PcbViaType` is `through | blind | buried | micro` with span
+topology enforced by `VIA_LAYER_SPAN` (non-through only behind `pcb.advancedVias`). `PcbZone` v2
+and `PcbKeepout` are authored data as of S3b (`docs/pcb-hardening/03-zone-keepout-contract.md`
+§12): six commands with parsers and undo, Zone/Keepout tools, and the per-layer copper fill is a
+persisted board-zone row (`board:<layer>`), no longer view state. The full duplicate-model register (connectivity models — one
+kernel after S1 —, one clearance resolver after S6, the arc flatteners) is in
+`docs/pcb-hardening/00-ground-truth.md` §4 — cite it in any packet touching those boundaries.
+
+## Zone / keepout invariants — from `docs/pcb-hardening/03-zone-keepout-contract.md` (S3a)
+
+> A keepout `K` (ring, layers `Λ`, restrictions) is the **open interior** of its polygon on each
+> layer in `Λ`. Touching the boundary is allowed — a keepout has clearance 0, so copper whose edge
+> lies on the boundary (within `GEOM_EPS_MM`) is legal.
+
+> `collectCopperZones({ zones, layerCount, knownNetIds? }) → { zones: EffectiveCopperZone[], warnings }`
+> ... is the **only** place that decides which copper areas exist. ... every consumer reads
+> `collectCopperZones`; since S3b it reads persisted zone rows only (board zones are rows with
+> `region.kind === "board"` and id `board:<layer>`; there is no view-state input).
 
 ## Determinism contract — from `OpenPCB/docs/drc/OPEN_FINDINGS.md` §5.2
 
@@ -92,11 +140,13 @@ packet touches net-class resolution.
 
 ## Known open defect register
 
-`OpenPCB/docs/drc/OPEN_FINDINGS.md` is the live defect register — 19 confirmed open DRC bugs, each
-with a `test.todo` regression test (`rg -n "test\.todo" src/core/backend/tests/drc-audit-b*.test.ts`
-should show 20 lines / 19 unique ids; if the count drops without a finding being removed from the
-doc, the register is stale). **Always check this file for an overlapping finding before treating
-something as a new bug.**
+`OpenPCB/docs/drc/OPEN_FINDINGS.md` is the live defect register — 17 confirmed open DRC bugs
+(since Session 0, 2026-09-06), each with a `test.todo` regression test whose body is a real
+post-fix assertion (`rg -n "test\.todo\(" src/core/backend/tests/drc-audit-b*.test.ts` should
+show 17 call sites; if the count drops without a finding being removed from the doc, the register
+is stale). The program that schedules the fixes is `docs/pcb-hardening/PROGRAM.md`; the verified
+current-master inventory is `docs/pcb-hardening/00-ground-truth.md`. **Always check the register
+for an overlapping finding before treating something as a new bug.**
 
 The highest-severity, currently-unowned finding, quoted in full since it is the best worked
 example of the bug class this skill exists to catch — a check that looks correct in isolation but
@@ -127,10 +177,10 @@ is unsound across a boundary:
 > **Anchors.** Ratsnest builder (`pcb/ratsnest.ts`), GND name-suppression branch · default
 > `copperFillLayers` in `pcb-defaults.ts` · `checks/connectivity.ts` · `checks/copper-pour.ts`
 
-Other open milestones with owned findings, worth checking before a packet on the same area:
-**P4** (backend spatial index / rbush, byte-identity gate), **P7** (async DRC + live/batch
-parity), **P9** (DFM overlay: courtyard/silk/mask/sliver), **P12** (rules & severity UI, not
-started).
+Findings are owned by program sessions (see `PROGRAM.md`): connectivity B3-1/3/4/5/6 → S1;
+geometry B4-1/2/6/7 → S2; pours B3-9/10 → S5; live parity B5-LIVE-ROT-PAD / TH-PAD-SIDE → S8;
+B5-SYNC → S10; manufacturability B2-5/6/7 → S11. Check the owning session's scope before
+building a packet on the same area.
 
 ## Manufacturing/electrical constants
 

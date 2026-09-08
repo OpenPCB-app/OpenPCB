@@ -12,6 +12,7 @@
 import {
   type Point,
   projectPointToSegment,
+  segmentClosestPoints,
   segmentToSegmentDistance,
 } from "./pcb-trace-geometry";
 
@@ -81,6 +82,39 @@ export function polylineToPolygonDistance(
     const d = segmentToPolygonDistance(polyline[i - 1]!, polyline[i]!, ring);
     if (d < best) best = d;
     if (best === 0) return 0;
+  }
+  return best;
+}
+
+/**
+ * Like {@link segmentToPolygonDistance}, but also reports where the minimum is
+ * attained: `onSegment` on AB, `onRing` on the ring. Overlap (a crossing, or an
+ * endpoint inside the filled polygon) is distance 0, exactly as the distance
+ * form returns 0 — the two points then describe the contact, not a separation.
+ *
+ * S6 rule semantics §4.4 uses it for trace↔pad and trace↔via once a trace has
+ * been split into sub-segments of constant area membership.
+ */
+export function segmentToRingClosestPoints(
+  a: Point,
+  b: Point,
+  ring: readonly Point[],
+): { distance: number; onSegment: Point; onRing: Point } {
+  if (ring.length < 2) return { distance: Infinity, onSegment: a, onRing: a };
+  let best = { distance: Infinity, onSegment: a, onRing: ring[0]! };
+  for (let i = 0; i < ring.length; i += 1) {
+    const c = ring[i]!;
+    const d = ring[(i + 1) % ring.length]!;
+    const cp = segmentClosestPoints(a, b, c, d);
+    if (cp.distance < best.distance) {
+      best = { distance: cp.distance, onSegment: cp.a, onRing: cp.b };
+    }
+    if (best.distance === 0) return best;
+  }
+  // The segment never met the perimeter, so containment is the only remaining
+  // overlap: a segment wholly inside the filled polygon is at distance 0.
+  if (pointInPolygon(a, ring) || pointInPolygon(b, ring)) {
+    return { distance: 0, onSegment: a, onRing: best.onRing };
   }
   return best;
 }

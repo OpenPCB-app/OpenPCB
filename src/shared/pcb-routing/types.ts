@@ -18,6 +18,7 @@ export interface PointNm {
  * `id` is stable per source object so walkaround hysteresis can recognize the
  * same cluster across pointer moves:
  *   "trace:<traceId>:<segIndex>" | "pad:<placementId>|<padNumber>" | "via:<viaId>"
+ *     | "keepout:<keepoutId>"
  */
 export interface ObstacleRectNm {
   minX: number;

@@ -74,7 +74,6 @@ export function checkElectrical(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "TRACE_CURRENT_WIDTH",
         ruleClass: "electrical",
-        severity: "warning",
         message: `Trace ${t.widthMm.toFixed(3)} mm is below the IPC-2221 minimum ${req.toFixed(3)} mm for ${cls.currentA} A at ${tempRiseC} °C rise (${copperOz} oz)`,
         anchors: [{ kind: "trace", traceId: t.id }],
         locationMm: t.mid,
@@ -135,14 +134,12 @@ export function checkElectrical(ctx: DrcContext): DrcViolationDraft[] {
       const required = ipc2221SpacingMm(a.voltage - b.voltage, column(layer));
       // Skip when the ORDINARY clearance for this pair kind already dominates.
       const pk = pairKindOf(a.kind, b.kind);
-      const base = ctx.clearanceFor(
+      const base = ctx.resolver.clearance(
         pk,
         layer,
-        a.netId,
-        pointOf(ctx, a),
-        b.netId,
-        pointOf(ctx, b),
-      );
+        { netId: a.netId, pointMm: pointOf(ctx, a) },
+        { netId: b.netId, pointMm: pointOf(ctx, b) },
+      ).mm;
       if (required <= base) continue;
       if (aabbGap(a.bounds, b.bounds) > required) continue;
       const g = electricalGap(ctx, a, b, layer);
@@ -150,7 +147,6 @@ export function checkElectrical(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "CREEPAGE_DISTANCE",
         ruleClass: "electrical",
-        severity: "error",
         message: `IPC-2221 spacing ${g.gap.toFixed(3)} mm is below ${required.toFixed(3)} mm for ${Math.abs(a.voltage - b.voltage).toFixed(0)} V (${column(layer)})`,
         anchors: [anchorOf(ctx, a), anchorOf(ctx, b)],
         locationMm: g.location,

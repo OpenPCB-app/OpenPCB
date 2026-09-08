@@ -35,8 +35,59 @@ both are gated on manual QA on a real board before their dev flags can graduate.
       sets pair pitch and is stripped from the cloud BoardSnapshot to keep the wire schema stable.
 - [ ] **Skew tuning** = P5 Tune applied to the shorter leg. No extra code; usable once Tune passes QA.
 - [ ] **Release notes are required when graduating a dev flag.** Behaviour changes that must be
-      written up: snap tolerance moved to 8px/zoom (P2d), the `pcb.padShapeConnectivity` DRC shift,
-      and auto-finish / walkaround / lengthTuning / bundleRouting behaviour.
+      written up: snap tolerance moved to 8px/zoom (P2d), auto-finish / walkaround / lengthTuning /
+      bundleRouting behaviour, and the S1 connectivity changes (`docs/pcb-hardening/01-connectivity-contract.md`
+      §7: GND airwires + `UNCONNECTED_NET` when no pour exists, `pcb.padShapeConnectivity` retired in
+      favour of exact copper overlap, free-pad airwires, GND airwires now reach the cloud autorouter), and the S2 geometry changes
+      (`docs/pcb-hardening/02-geometry-contract.md` §6: off-board judged on copper with its width,
+      touching / tangent cutouts and edge-touching cutouts now `BOARD_OUTLINE_INVALID`, full-radius
+      rounded slots no longer falsely invalid, large circles flattened finer), and the S3a
+      zone/keepout changes (`docs/pcb-hardening/03-zone-keepout-contract.md`: KiCad rule areas now
+      import as keepouts, hatched fills import solid, hole zones import disabled, `connect_pads`
+      modes are honoured including `none`/thru-hole, the 3D preview follows the fill toggle and
+      shows zones, copper-pour keepouts subtract from fills, and a fill layer with no ground net no
+      longer pours a null-net plane), and the S3b authoring changes (`03-zone-keepout-contract.md`
+      §12: the per-layer copper fill is now a persisted board zone — the toggle is undoable, has a
+      net and pad-connection picker, migrates from the old view state on first load and enters the
+      cloud content digest, so in-flight auto-layout candidates for filled boards go stale once;
+      new Zone (Z) and Keepout (K) tools, zone/keepout selection, vertex editing and inspector;
+      disabled zones draw a dashed ghost outline), and the S4 legality changes
+      (`03-zone-keepout-contract.md` §13: four new DRC codes `KEEPOUT_VIOLATION`, `ZONE_OVERLAP`,
+      `ZONE_INVALID` (cannot be waived or ignored), `ZONE_EMPTY_FILL`; Gerber, the cloud snapshot,
+      the DRC island check, "clean up pour traces" and the ratsnest now honour copper-pour keepouts
+      exactly like the canvas — exported copper can shrink where a keepout was drawn; a stale zone
+      net no longer pours anywhere; the route tool avoids `tracks` keepouts, flags a route through
+      one as a conflict at commit, and refuses a via inside a `vias` keepout; "clean up pour
+      traces" now deletes only a trace that lies entirely inside one pour island — a trace that
+      bridges two islands or crosses a thermal-relief gap is kept, where it used to be deleted), and
+      the S5 copper-pour changes (`docs/pcb-hardening/04-copper-pour-contract.md`: pours are built
+      from the same copper geometry and layer rules as DRC — a `std` free pad now pours on inner
+      layers, a pad on an invalid layer is a void everywhere; the pour extent follows the S2 board
+      region; large circle pads, wide traces and drills now get their full clearance (the old
+      inscribed sampling could be short by ~5 ‰ of the radius); net-class clearances apply to pours;
+      zones of different nets on one layer carve each other by priority with a clearance band, so
+      overlapping zones no longer short; thermal spokes follow the pad's own axes (edge midpoints at
+      90°, rotated with the pad — every thermal pad looks different); the Gerber emits each net's
+      pours as one union with net attributes; "clean up pour traces" covers explicit zones too;
+      `ISOLATED_COPPER_ISLAND` now means "reaches no pad" and drops the mm² from `measuredMm`;
+      a zone whose fill fails reports `ZONE_FILL_FAILED` and ships no copper; zones can have cutouts
+      (Shift+Z) and KiCad zones with cutouts import enabled), and the S6 rule-semantics changes
+      (`docs/pcb-hardening/05-rule-semantics-contract.md` §12: scoped scalar rules — track width,
+      via diameter / drill, annular ring, hole-to-hole, edge clearance — now enforce (they were
+      stored but inert); area-scoped rules are evaluated along the whole trace, so a relaxation
+      that leaks past its area now fails; a matched rule's severity applies and the severity table
+      is the real default; `HOLE_TO_BOARD_EDGE` breaches are now `HOLE_OFF_BOARD`; the assistant's
+      DRC honours severity overrides; new boards get a 0.1 mm clearance floor; the design-rules
+      dialog no longer resets the IPC-2221 electrical parameters on save and exposes the floor and
+      the pour-to-copper clearance; pours are cleared per obstacle kind (a board whose pad rule is
+      below its trace rule pours closer to pads) and scoped rules reach fills only through an
+      explicit pour pair-kind scope; the route tool and the interactive commit gate honour the
+      neighbour's net class, scoped rules and the floor and refuse shorts, and they take the
+      pending trace's class from the net rather than the session; clearance comparisons forgive
+      0.5 nm of float noise at exact equality; stale (v1) waiver ids are pruned; malformed rules are
+      refused on save and persisted invalid / partially ineffective rules are reported
+      (`DRC_RULE_INVALID`, `DRC_RULE_INEFFECTIVE`); KiCad import maps the project's minimums and
+      per-net class assignments and warns when a `.kicad_dru` file is present).
 - [ ] Follow-up: migrate `/autoroute/apply` onto `pcb_commit_route`. Carries an open UX decision —
       per-op cherry-pick (today's route apply) versus all-or-nothing batch (today's place apply).
 - [ ] Follow-up: pad-bearing E2E fixture board covering Tab→accept, tune-a-trace, bundle
@@ -160,8 +211,9 @@ Linux (AppImage) auto-update already ship.
 - [ ] Global toast: lift the designer toast into `core/frontend`, surface `DesignerDrcView` and
       `model-conversion.ts` silent catches, and translate `problem+json` by extending
       `commandErrorMessage`.
-- [ ] DRC trust — remove or disable the broken thermal-relief check, fix the free-pad false
-      `UNCONNECTED_NET`, then re-run `drc-parity-harness`.
+- [ ] DRC trust — fix the free-pad false `UNCONNECTED_NET`, then re-run `drc-parity-harness`.
+      (The "broken thermal-relief check" half was a fill option, not a check; its world-frame spoke
+      bug was fixed in S5.)
 - [ ] KiCad ZIP import: aggregate size cap in `routes.ts` (mirror the opclib 256 MB limit).
 - [ ] Symbol-only import: warn or block on 0-pad components (`commit-kicad.ts`,
       `placeholder-footprint.ts`).
@@ -249,25 +301,40 @@ satisfied by the production Ed25519 signing key minted and trusted on 2026-07-27
 
 ---
 
-## 5. DRC production hardening (P0–P12)
+## 5. PCB correctness hardening (supersedes DRC P0–P12)
 
-Nine of thirteen milestones shipped: P0, P1, P2, P3, P5, P6, P8, P10, P11. Open: **P4, P7, P9,
-P12** plus the review follow-ups. Tracks: [E]ngine, [C]hecks, [I]nfra. Branch
-`feat/drc-p<N>-<slug>`.
+**The P0–P12 sequence is retired.** As of 2026-09-06 the work is scheduled as a 20-session
+correctness-hardening program in
+[`docs/pcb-hardening/PROGRAM.md`](docs/pcb-hardening/PROGRAM.md) (connectivity → geometry →
+zones/keepouts → pours → rule semantics → batch DRC → live/route parity → scaling → async →
+manufacturability → DFM → electrical → SI → high-speed runway → routing → trust gate), with the
+verified current-master inventory in
+[`docs/pcb-hardening/00-ground-truth.md`](docs/pcb-hardening/00-ground-truth.md). Sessions 0–2 are
+done (S2 geometry closed 2026-09-07); S3a done 2026-09-07; S3b (authoring tools) is next.
 
-**Binding decisions.** Full scope — core plus DFM plus electrical plus SI · scoped priority rules
-(first-match, *can relax*, board-minimum floor) · full multilayer 2–32 · breaking changes allowed
-with migration (violation-id v2, KiCad-aligned severities, live net-class resolution).
+**Binding decisions (unchanged).** Full scope — core plus DFM plus electrical plus SI · scoped
+priority rules (first-match, *can relax*, board-minimum floor) · full multilayer 2–32 · breaking
+changes allowed with migration (violation-id v2, KiCad-aligned severities, live net-class
+resolution).
 
-**Open bugs.** 19 audit findings remain unresolved and are tracked as `test.todo` in
-`drc-audit-b*.test.ts`. They are enumerated with mechanism and file anchors in
-[`docs/drc/OPEN_FINDINGS.md`](docs/drc/OPEN_FINDINGS.md) — do not restate them here.
+**Open bugs.** 8 audit findings remain unresolved (B2-9 and B5-LIVE-PADGEOMS closed in Session 0;
+B3-1/3/4/5/6 fixed in Session 1; B4-1/2/6/7 fixed in Session 2) and are tracked as `test.todo` with real post-fix assertions in `drc-audit-b*.test.ts`. They
+are enumerated with mechanism and anchors in
+[`docs/drc/OPEN_FINDINGS.md`](docs/drc/OPEN_FINDINGS.md) — do not restate them here. Every finding
+now has an owning session.
 
-- [ ] **B3-1 has no owner.** An unrouted `GND` net reports DRC-clean on a default board: GND-named
-      nets are dropped from the ratsnest *before* any pour-existence check, and with the default
-      empty `copperFillLayers` you get neither `UNCONNECTED_NET` nor `ISOLATED_COPPER_ISLAND`. It is
-      tracked as a regression test but appears in no milestone's "Owns" line. Rated HIGH, and an
-      existing test codifies the wrong behaviour. **Assign it.**
+The old milestone items below are kept for their design detail and map onto sessions as follows:
+P4 → S9 (spatial index) and S2 (containment on precomputed rings); P7 → S8 (engine relocation +
+live parity) and S10 (async execution); P9 → S12; P12 (rules/severity UI) stays a backlog UI item
+outside the program; review follow-ups → S6 (scalar scoped constraints, severity, waiver
+migration, area-scope precision) and S2 (cutout crossing-overlap).
+
+- [x] **Before S1:** `integ/trace-drag` decided 2026-09-06 — cherry-pick the 555-blinker fixture
+      (`a340ed2`) onto master, park the drag work (branch kept). See `00-ground-truth.md` §9.
+- [x] **S1 — connectivity (done 2026-09-06).** Contract, Astra ledgers and checklist in
+      [`docs/pcb-hardening/01-connectivity-contract.md`](docs/pcb-hardening/01-connectivity-contract.md).
+      Kernel `src/shared/pcb-connectivity/`; B3-1/3/4/5/6 live; register census 12. Next: S2
+      (geometry: B4-1/2/6/7 + the S1 residuals filed for S2 — circumscribed oval/roundrect arcs).
 
 - [ ] **P4** [I] **Backend spatial index.** rbush static trees per item kind (trace / pad / via /
       hole / edge-segment) held on the DRC context; the query ceiling must include `SHORT_EPS`.
@@ -299,8 +366,8 @@ with migration (violation-id v2, KiCad-aligned severities, live net-class resolu
       representative midpoint and can over-relax a long trace), and fix cutout crossing-overlap
       (vertex containment misses perpendicular crossing rects).
 
-**Program exit:** all 40 audit regressions live with zero `test.todo`, golden boards matching, and
-a 6-layer board routing and checking end-to-end.
+**Program exit:** all 40 audit regressions live with zero `test.todo`, golden boards matching, a
+6-layer board routing and checking end-to-end, and the S18 trust gate in `PROGRAM.md` passed.
 
 ---
 
@@ -352,8 +419,14 @@ Unscheduled. Nothing here is committed to a release.
       real fab attempt.
 - [ ] **ESLint + `eslint-plugin-boundaries`** for compile-time `core ← shared ← sdks ← modules`
       enforcement.
-- [ ] **Copper zones / keepouts.** Pour fill renders and exports to Gerber `G36/G37`;
-      KiCad-imported zones are outline-only; keepouts are still pending.
+- [ ] **Copper zones / keepouts.** S3a landed the `PcbZone` v2 / `PcbKeepout` data model, the one
+      `collectCopperZones`/`collectKeepouts` derivation, KiCad import (rule areas as keepouts) and
+      the `keepoutAffects` predicate (copper-pour subtraction wired in); see
+      `docs/pcb-hardening/03-zone-keepout-contract.md`. S3b (authoring tools + storage migration
+      of the fill toggle) and S4 (DRC codes, route obstacles + live check + via guard, fill-consumer
+      parity) and S5 (zone cutouts, precedence carve, pour correctness) are done. Open:
+      keepouts in the cloud snapshot wire contract (cloud session), a server-side route commit gate
+      (S8), exact circle-pad discs for keepout verdicts (S7).
 - [ ] Library variants / families / presets / provenance.
 - [ ] Symbol and footprint editor expansion — multi-unit, alternate graphical body styles.
 - [ ] OpenAPI codegen pipeline — revisit `gen:openapi` if and when frontend SDK regeneration is needed.

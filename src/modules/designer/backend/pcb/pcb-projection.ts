@@ -1,8 +1,14 @@
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
   DesignerPcbProjection,
-  PcbCopperLayerId,
+  DesignerSchematicProjection,
 } from "../../../../sdks/designer";
+import {
+  collectCopperZones,
+  collectKeepouts,
+  zonePourNets,
+} from "../../../../shared/pcb-areas";
+import { boardPourSpecs, buildBoardPourFills } from "./board-connectivity";
 import { loadSchematicProjection } from "../projection-read";
 import { correlateNetPads } from "./net-pad-correlation";
 import {
@@ -13,14 +19,30 @@ import {
   loadPcbOverlayTexts,
   loadPcbTraces,
   loadPcbVias,
+  loadPcbKeepouts,
   loadPcbZones,
+  migrateLegacyBoardFill,
   syncPcbPlacementsFromSchematic,
 } from "./pcb-store";
 import { computeRatsnest } from "./ratsnest";
-import { findGroundNetId } from "./net-class-resolver";
-import { isFeatureEnabled } from "../../../../core/contracts/feature-flags/backend";
 
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
+
+/**
+ * netId → net name for the design's schematic. The zone/keepout migration and
+ * every net-name binding read the same map, so a board zone's persisted net
+ * name is the one the schematic actually has.
+ */
+export function netNamesFromSchematic(
+  schematic: DesignerSchematicProjection | null,
+): Map<string, string> {
+  const netNames = new Map<string, string>();
+  if (!schematic) return netNames;
+  for (const net of schematic.nets) {
+    netNames.set(net.id, net.name);
+  }
+  return netNames;
+}
 
 export function loadPcbProjection(params: {
   db: DbClient;
@@ -28,12 +50,23 @@ export function loadPcbProjection(params: {
   revision: number;
   timestamp: string;
 }): DesignerPcbProjection {
+  const schematic = loadSchematicProjection(params.db, params.designId);
+  const netNames = netNamesFromSchematic(schematic);
+  // Lazy one-time upgrade of the legacy per-layer fill toggle into persisted
+  // board zone rows (contract §12.1) — BEFORE the zones are loaded below, and
+  // before `ensurePcbBoardSettings`, which resets an unparsable settings
+  // payload to defaults and would take the unread legacy keys with it.
+  migrateLegacyBoardFill(
+    params.db,
+    params.designId,
+    netNames,
+    params.timestamp,
+  );
   const board = ensurePcbBoardSettings(
     params.db,
     params.designId,
     params.timestamp,
   );
-  const schematic = loadSchematicProjection(params.db, params.designId);
 
   // Schematic primitives (GND/PWR/NET_PORTAL) are deliberately excluded from
   // PCB placements — they are not parts, have no footprint, and exist only on
@@ -58,12 +91,6 @@ export function loadPcbProjection(params: {
   const correlation = schematic
     ? correlateNetPads(schematic, placements)
     : { netPads: new Map(), warnings: [] };
-  const netNames = new Map<string, string>();
-  if (schematic) {
-    for (const net of schematic.nets) {
-      netNames.set(net.id, net.name);
-    }
-  }
   const rawTraces = loadPcbTraces(params.db, params.designId);
   const rawVias = loadPcbVias(params.db, params.designId);
 
@@ -101,9 +128,29 @@ export function loadPcbProjection(params: {
   // Bind zone netName → netId so imported/drawn copper zones participate in the
   // pour fill, connectivity and export (zones carry `netName` like traces but
   // were previously inert). `netId` starts unset, so `bindNetName` resolves it.
-  const zones = loadPcbZones(params.db, params.designId).map((zone) =>
-    bindNetName({ ...zone, netId: zone.netId ?? null }),
-  );
+  // A name that matches more than one schematic net (case-insensitively) is
+  // ambiguous: first-match would make the zone's net depend on net order
+  // (contract §3.2), so the zone stays unbound and warns.
+  const nameCounts = new Map<string, number>();
+  for (const name of netNames.values()) {
+    const key = name.trim().toUpperCase();
+    nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+  }
+  const zoneBindingWarnings: string[] = [];
+  const ambiguousZoneIds = new Set<string>();
+  const zoneRecords = loadPcbZones(params.db, params.designId);
+  const zones = zoneRecords.zones.map((zone) => {
+    const key = zone.netName?.trim().toUpperCase() ?? "";
+    if (!zone.netId && key && (nameCounts.get(key) ?? 0) > 1) {
+      ambiguousZoneIds.add(zone.id);
+      zoneBindingWarnings.push(
+        `zone_net_ambiguous: Zone ${zone.id} net "${zone.netName}" matches more than one schematic net.`,
+      );
+      return zone;
+    }
+    return bindNetName(zone);
+  });
+  const keepouts = loadPcbKeepouts(params.db, params.designId);
 
   // Flatten the schematic↔PCB pad correlation into a `${placementId}|${padNumber}`
   // → netId map so a pure consumer (DRC, copper pour) can resolve a footprint
@@ -115,60 +162,48 @@ export function loadPcbProjection(params: {
     }
   }
 
-  // Pour-aware connectivity: gather the enabled copper-pour layers and the net
-  // each floods, so a same-net plane satisfies the ratsnest the way a routed
-  // trace would (no spurious airwires / `UNCONNECTED_NET` for GND).
-  const fillLayers = new Set(board.viewState?.copperFillLayers ?? []);
-  // Copper fill is fixed policy: every enabled fill layer pours the GND net with
-  // a SOLID pad connection (no per-layer net picker / thermal option in the UI).
-  // Forced here on `board.viewState` so render, ratsnest and Gerber all agree.
-  // If the board has no GND net, the layer pours nothing (null → no merge).
-  if (board.viewState) {
-    const gndNetId = findGroundNetId(netNames);
-    const map = board.viewState.copperFillPourNetIds;
-    for (const layer of fillLayers) {
-      map[layer] = gndNetId;
-    }
-    board.viewState.copperFillPadConnection = "solid";
-  }
-  const pourNetIds = board.viewState?.copperFillPourNetIds ?? {};
-  const pours: Array<{
-    layer: PcbCopperLayerId;
-    netId: string;
-    clipPolygonMm?: Array<{ x: number; y: number }>;
-  }> = [];
-  for (const layer of fillLayers) {
-    const netId = pourNetIds[layer];
-    if (netId) pours.push({ layer, netId });
-  }
-  // Explicit copper zones connect their pads too (clipped to the zone polygon).
-  for (const zone of zones) {
-    if (zone.netId && zone.polygonPointsMm.length >= 3) {
-      pours.push({
-        layer: zone.layer,
-        netId: zone.netId,
-        clipPolygonMm: zone.polygonPointsMm,
-      });
-    }
-  }
+  // The ONE derivation of "which copper areas exist" (zone/keepout contract
+  // §3.1): explicit zones first, then the persisted board zone rows. Every
+  // other consumer (connectivity, DRC, snapshot, Gerber, canvas) reads the same
+  // list instead of re-assembling its own.
+  const keepoutAreas = collectKeepouts({
+    keepouts,
+    layerCount: board.layerCount,
+  });
+  const copperAreas = collectCopperZones({
+    zones,
+    layerCount: board.layerCount,
+    knownNetIds: new Set(netNames.keys()),
+  });
+  const copper = {
+    layerCount: board.layerCount,
+    placements,
+    padNetIds: new Map(Object.entries(padNets)),
+    freePads,
+    traces,
+    vias,
+  };
+  // ONE kernel run per net-bound zone (contract §9) — the ratsnest reasons
+  // about the very islands the fill produced, never a second fill of its own.
+  const pours = buildBoardPourFills(copper, {
+    outline: board.outline,
+    designRules: board.designRules,
+    cutouts: board.cutouts ?? [],
+    freeHoles,
+    pours: boardPourSpecs(
+      copperAreas.zones,
+      board.designRules,
+      keepoutAreas.keepouts,
+      zonePourNets(board, Object.fromEntries(netNames)),
+    ),
+  });
 
-  const ratsnest = computeRatsnest(correlation, {
+  const ratsnest = computeRatsnest({
+    ...copper,
     netNames,
     netClasses: board.netClasses,
     perNetClassAssignments: board.perNetClassAssignments,
-    traces,
-    vias,
-    padShapeTouch: isFeatureEnabled("pcb.padShapeConnectivity"),
-    fill: {
-      outline: board.outline,
-      designRules: board.designRules,
-      placements,
-      padNetIds: new Map(Object.entries(padNets)),
-      cutouts: board.cutouts ?? [],
-      freeHoles,
-      freePads,
-      pours,
-    },
+    pours,
   });
 
   return {
@@ -183,9 +218,35 @@ export function loadPcbProjection(params: {
     overlayTexts,
     overlayShapes,
     zones,
+    keepouts,
     ratsnest,
     netNames: Object.fromEntries(netNames),
     padNets,
-    warnings: correlation.warnings,
+    warnings: [
+      ...correlation.warnings,
+      // Zone / keepout derivation warnings (a zone off the stackup, an invalid
+      // ring, an unresolved net, a netless board fill) surface next to the
+      // correlation ones rather than being swallowed by the derivation.
+      ...zoneBindingWarnings,
+      // Read-time upgrade warnings (a v1 netless zone disabled, a hatched fill
+      // read as solid) are design data the user can act on, so they surface
+      // here instead of dying inside `loadPcbZones`.
+      ...zoneRecords.warnings.map(
+        (warning) => `${warning.code}: ${warning.detail}`,
+      ),
+      ...[...copperAreas.warnings, ...keepoutAreas.warnings]
+        // A zone already reported ambiguous would otherwise be reported twice:
+        // the binding pass leaves `netId` null, which the derivation then calls
+        // unresolved.
+        .filter(
+          (warning) =>
+            !(
+              warning.code === "zone_net_unresolved" &&
+              warning.id !== null &&
+              ambiguousZoneIds.has(warning.id)
+            ),
+        )
+        .map((warning) => `${warning.code}: ${warning.detail}`),
+    ],
   };
 }

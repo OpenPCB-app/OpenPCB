@@ -5,8 +5,18 @@
  * repo convention (see route-tool-state.test.ts).
  */
 import { describe, expect, test } from "bun:test";
+import os from "node:os";
+import path from "node:path";
+import type { DesignerCommandEnvelope, DesignerSDK } from "../../../sdks";
+import { MODULE_SDK_TOKENS } from "../../../sdks";
+import { resetSharedSqliteForTesting } from "../db/sqlite-client";
+import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
+import { createHttpServer } from "../http/create-http-server";
+import { ModuleRuntime } from "../modules/module-loader";
+import { ModuleRouterRegistry } from "../router/module-registry";
 import { runDrc } from "../../../modules/designer/backend/drc/drc-engine";
 import { runLiveDrc } from "../../../modules/designer/frontend/pcb/drc/live-drc";
+import { createRuleResolver } from "../../../shared/drc/rule-resolver";
 import {
   board,
   codes,
@@ -17,7 +27,44 @@ import {
   via,
 } from "./helpers/drc-fixtures";
 
+function isolateTestDb(testLabel: string): void {
+  resetSharedSqliteForTesting();
+  process.env.OPENPCB_DB_PATH = path.join(
+    os.tmpdir(),
+    `${testLabel}-${Date.now()}-${crypto.randomUUID()}.sqlite`,
+  );
+}
+
+async function createRuntimeAndServer() {
+  const repoRoot = path.resolve(import.meta.dir, "../../..");
+  const moduleRegistry = new ModuleRouterRegistry();
+  const moduleRuntime = new ModuleRuntime({
+    moduleRegistry,
+    workspaceRoot: repoRoot,
+  });
+  await moduleRuntime.bootstrap();
+  const server = createHttpServer({
+    diagnosticsStore: new DiagnosticsStore(),
+    moduleRegistry,
+    moduleRuntime,
+  });
+  return { moduleRuntime, server };
+}
+
 const MM = 1_000_000;
+
+/**
+ * The live gate resolves clearance through the SAME resolver as batch DRC
+ * (rule-semantics contract §9), so these fixtures build one from the fixture
+ * board rather than passing net classes and design rules by hand.
+ */
+function liveResolver() {
+  return createRuleResolver(
+    board(),
+    { n1: "A", n2: "B" },
+    { validCopperLayers: ["F.Cu", "B.Cu"] },
+  );
+}
 
 describe("audit B5 — architecture / waivers / live parity", () => {
   // Fixed in P2c (layer-invalid items still collision-checked; span non-waivable).
@@ -106,6 +153,29 @@ describe("audit B5 — architecture / waivers / live parity", () => {
 
   // Fix: P7 (live pads use true rotated rings via the shared batch builders).
   test.todo("B5-LIVE-ROT-PAD: rotated non-square pad is checked as rotated", () => {
+    // Rewritten: the previous geometry passed today for the wrong reason —
+    // its trace (y 3→7) fully overlapped BOTH the true rotated pad AND
+    // today's unrotated AABB, so it didn't distinguish the two models.
+    //
+    // U1 at (5,5) rotated 90°, pad 2.0×0.5 (local W×H). computePadGeoms
+    // does not swap width/height for rotation, so today's AABB stays
+    // 2.0×0.5 around the ROTATED center: x∈[4,6], y∈[4.75,5.25]. The TRUE
+    // rotated copper is 0.5×2.0: x∈[4.75,5.25], y∈[4,6].
+    //
+    // padClearance = max(netClass.clearanceMm, traceToPadMm) = 0.25;
+    // pendingHalf = 0.2/2 = 0.1 → required = 0.35 (live-drc.ts ~L145-150,
+    // ~L204).
+    //
+    // Pending trace: vertical centerline at x=5.35 (copper x∈[5.25,5.45]),
+    // from y=3 to y=4.3.
+    //   - Against the TRUE rotated pad (x∈[4.75,5.25], y∈[4,6]): x-gap is 0
+    //     (5.25 touches 5.25) and y overlaps 4.0–4.3 (≥0.2 mm overlap) — a
+    //     real violation post-fix.
+    //   - Against today's unrotated AABB (x∈[4,6], y∈[4.75,5.25]): the
+    //     centerline's x (5.35) is INSIDE the box's x-span, so the reported
+    //     gap is purely the y-distance from the segment's near end (4.3) to
+    //     the box's bottom edge (4.75) = 0.45 mm ≥ required (0.35) + 0.05 mm
+    //     margin — clean today.
     const parts = [
       placement("U1", {
         positionMm: { x: 5, y: 5 },
@@ -115,12 +185,9 @@ describe("audit B5 — architecture / waivers / live parity", () => {
       }),
     ];
     const violations = runLiveDrc({
-      // Pending trace along the pad's TRUE long axis (vertical after
-      // rotation), 0.35 mm from center: inside the rotated pad's clearance,
-      // outside today's unrotated AABB.
       traceNm: [
         { x: 5.35 * MM, y: 3 * MM },
-        { x: 5.35 * MM, y: 7 * MM },
+        { x: 5.35 * MM, y: 4.3 * MM },
       ],
       traceWidthMm: 0.2,
       netId: "n2",
@@ -128,9 +195,7 @@ describe("audit B5 — architecture / waivers / live parity", () => {
       traces: [],
       placements: parts,
       padNetMap: new Map([["U1|1", "n1"]]),
-      netClasses: board().netClasses,
-      netClassId: "default",
-      designRules: board().designRules,
+      resolver: liveResolver(),
     });
     expect(violations.length).toBeGreaterThan(0);
   });
@@ -155,17 +220,59 @@ describe("audit B5 — architecture / waivers / live parity", () => {
       traces: [],
       placements: parts,
       padNetMap: new Map([["U1|1", "n1"]]),
-      netClasses: board().netClasses,
-      netClassId: "default",
-      designRules: board().designRules,
+      resolver: liveResolver(),
     });
     expect(violations.length).toBeGreaterThan(0);
   });
 
-  // Fixed in working tree (computePadGeoms hoisted out of the segment loop);
-  // permanent guard = the P7 live/batch parity suite + kernel-count budget.
-  test.todo("B5-LIVE-PADGEOMS: pad geometry built once per live run", () => {
-    expect(true).toBe(true);
+  // Fixed (computePadGeoms hoisted; verified S0 2026-09-06). Residual
+  // per-cursor-move rebuild tracked in docs/pcb-hardening/00-ground-truth.md.
+  test("B5-LIVE-PADGEOMS: pad geometry built once per live run", () => {
+    let padsAccessCount = 0;
+    const parts = [
+      placement("U1", {
+        positionMm: { x: 5, y: 5 },
+        pads: [pad("1", { x: 0, y: 0 }, 1, 1)],
+      }),
+      placement("U2", {
+        positionMm: { x: 20, y: 5 },
+        pads: [pad("1", { x: 0, y: 0 }, 1, 1)],
+      }),
+    ];
+    for (const part of parts) {
+      const preview = part.footprint.preview!;
+      const realPads = preview.pads;
+      Object.defineProperty(preview, "pads", {
+        configurable: true,
+        get() {
+          padsAccessCount += 1;
+          return realPads;
+        },
+      });
+    }
+
+    runLiveDrc({
+      // 4 points → 3 pending segments; pad geometry must not be rebuilt once
+      // per segment.
+      traceNm: [
+        { x: 0 * MM, y: 0 * MM },
+        { x: 3 * MM, y: 0 * MM },
+        { x: 6 * MM, y: 0 * MM },
+        { x: 9 * MM, y: 0 * MM },
+      ],
+      traceWidthMm: 0.2,
+      netId: "n2",
+      layer: "F.Cu",
+      traces: [],
+      placements: parts,
+      padNetMap: new Map([
+        ["U1|1", "n1"],
+        ["U2|1", "n1"],
+      ]),
+      resolver: liveResolver(),
+    });
+
+    expect(padsAccessCount).toBe(parts.length);
   });
 
   // Fixed in P2 (stackup 2–32; 6-layer no longer silently degrades to 2).
@@ -182,9 +289,63 @@ describe("audit B5 — architecture / waivers / live parity", () => {
   });
 
   // Fix: P7 (async DRC task executor; run route stops blocking the loop).
-  test.todo("B5-SYNC: large-board DRC runs off the request path", () => {
+  test.todo("B5-SYNC: large-board DRC runs off the request path", async () => {
     // Architectural: asserted in the P7 task-executor tests (enqueue +
     // progress + cancel), not through runDrc itself.
-    expect(true).toBe(true);
+    //
+    // Per TODO.md P7 (§5): "the route runs synchronously at ≤2000 primitives
+    // and otherwise returns 202 {taskId}". No route-level test harness
+    // exists for /drc/run specifically, but the designer route module is
+    // exercised elsewhere over real HTTP (designer-autolayout-auth.test.ts)
+    // via `runtime.server.fetch(...)` against a bootstrapped ModuleRuntime —
+    // reused here rather than calling the handler function directly.
+    isolateTestDb("drc-audit-b5-sync");
+    const { moduleRuntime, server } = await createRuntimeAndServer();
+    const designerSdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+
+    const design = await designerSdk.createDesign({ name: "B5-SYNC" });
+    const initial = await designerSdk.getPcbProjection(design.id);
+    const netClassId = initial!.board.netClasses[0]!.id;
+
+    // >2000 copper primitives — one 2-point trace per command, well past
+    // the sync threshold. baseRevision: null skips the revision check so
+    // each dispatch doesn't need to track the running head revision.
+    const TRACE_COUNT = 2100;
+    for (let i = 0; i < TRACE_COUNT; i += 1) {
+      const y = i * 0.1;
+      const result = await designerSdk.dispatchCommand(design.id, {
+        commandId: `cmd-trace-${i}`,
+        sessionId: "s",
+        aggregateId: design.id,
+        baseRevision: null,
+        issuedAt: Date.now(),
+        command: {
+          type: "pcb_add_trace",
+          layer: "F.Cu",
+          pointsNm: [
+            { x: 0, y: Math.round(y * 1_000_000) },
+            { x: 1_000_000, y: Math.round(y * 1_000_000) },
+          ],
+          widthMm: 0.2,
+          netId: null,
+          netClassId,
+          segmentMode: "manhattan-90",
+        },
+      } satisfies DesignerCommandEnvelope);
+      expect(result.ok).toBe(true);
+    }
+
+    const res = await server.fetch(
+      new Request(
+        `http://localhost/api/modules/designer/designs/${design.id}/drc/run`,
+        { method: "POST" },
+      ),
+    );
+    // Today: always synchronous, always 200 with a report — this fails.
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as { taskId?: unknown };
+    expect(typeof body.taskId).toBe("string");
   });
 });

@@ -1,8 +1,5 @@
 import type { PcbNetClass } from "../../../../../sdks/designer";
-import {
-  netNameMatchesClassPattern,
-  resolveNetClassId,
-} from "../../pcb/net-class-resolver";
+import { netNameMatchesClassPattern } from "../../pcb/net-class-resolver";
 import { below, type DrcContext } from "../drc-context";
 import type { DrcViolationDraft } from "../types";
 
@@ -33,7 +30,9 @@ export function checkNetClass(ctx: DrcContext): DrcViolationDraft[] {
     const cached = cache.get(netId);
     if (cached !== undefined) return cached;
     const name = ctx.netNames[netId] ?? "";
-    const id = resolveNetClassId(name, board.netClasses, assignments, netId);
+    // One resolution of net → class for the whole run (contract §3): the
+    // resolver's, never a second copy of the chain.
+    const id = ctx.resolver.netClassIdOf(netId);
     // Intent gate: only enforce when the class came from an explicit
     // assignment or a name match — never the array-order fallback.
     const explicit =
@@ -51,7 +50,6 @@ export function checkNetClass(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "NETCLASS_TRACE_WIDTH",
         ruleClass: "constraint",
-        severity: "warning",
         message: `Trace ${t.widthMm.toFixed(3)} mm is narrower than net class "${cls.name}" width ${cls.traceWidthMm.toFixed(3)} mm`,
         anchors: [{ kind: "trace", traceId: t.id }],
         locationMm: t.mid,
@@ -69,7 +67,6 @@ export function checkNetClass(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "NETCLASS_VIA_DIAMETER",
         ruleClass: "constraint",
-        severity: "warning",
         message: `Via diameter ${vg.via.diameterMm.toFixed(3)} mm is smaller than net class "${cls.name}" ${cls.viaDiameterMm.toFixed(3)} mm`,
         anchors: [{ kind: "via", viaId: vg.via.id }],
         locationMm: vg.center,
@@ -81,7 +78,6 @@ export function checkNetClass(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "NETCLASS_VIA_DRILL",
         ruleClass: "constraint",
-        severity: "warning",
         message: `Via drill ${vg.via.drillMm.toFixed(3)} mm is smaller than net class "${cls.name}" ${cls.viaDrillMm.toFixed(3)} mm`,
         anchors: [{ kind: "via", viaId: vg.via.id }],
         locationMm: vg.center,

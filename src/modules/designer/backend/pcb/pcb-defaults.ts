@@ -13,15 +13,14 @@ export const DEFAULT_TRACE_PRESETS_MM: ReadonlyArray<number> = [
 
 /**
  * View state seed for fresh designs. Mirrors KiCad's defaults:
- * top view, normal display mode, ratsnest on, no copper-fill toggles.
+ * top view, normal display mode, ratsnest on. Copper fill is not display
+ * state — a fresh design simply has no board zone rows.
  * `layerPreset = "custom"` until the user picks a preset chip.
  */
 export function createDefaultPcbViewState(): PcbViewState {
   return {
     displayMode: "normal",
     viewSide: "top",
-    copperFillLayers: [],
-    copperFillPourNetIds: {},
     perLayerOpacity: {},
     layerPreset: "custom",
     ratsnestVisible: true,
@@ -65,6 +64,11 @@ export function createDefaultPcbBoardSettings(
         viaDiameterMm: 0.8,
         viaDrillMm: 0.4,
         holeToHoleMm: 0.25,
+        // The absolute clearance floor (rule-semantics contract §12 item 5).
+        // NEW boards only: existing boards, the golden fixtures and the DRC
+        // test fixtures keep the field absent (= 0), and the read path never
+        // invents it.
+        clearanceMm: 0.1,
       },
     },
     netClasses: [

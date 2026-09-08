@@ -5,6 +5,9 @@ import {
   hitVia,
   hitPlacement,
   hitPad,
+  hitKeepout,
+  hitZone,
+  zoneRings,
   padCopperLayer,
 } from "./pcb-hit";
 import type {
@@ -12,6 +15,8 @@ import type {
   PcbTrace,
   PcbVia,
   PcbCopperLayerId,
+  PcbKeepout,
+  PcbZone,
 } from "../../../../sdks";
 
 const makePlacement = (
@@ -537,6 +542,229 @@ describe("pcb-hit", () => {
       expect(
         padCopperLayer(frontPlacement, { layer: "F.Cu", drillDiameterMm: 0.8 }),
       ).toBeNull();
+    });
+  });
+
+  describe("hitZone / hitKeepout", () => {
+    const SQUARE = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+      { x: 0, y: 10 },
+    ];
+
+    const makeZone = (overrides: Partial<PcbZone> = {}): PcbZone => ({
+      id: "zone-1",
+      name: null,
+      enabled: true,
+      lockedAt: null,
+      layer: "F.Cu",
+      netId: null,
+      netName: null,
+      region: { kind: "polygon", pointsMm: SQUARE },
+      priority: 0,
+      ...overrides,
+    });
+
+    const makeKeepout = (
+      overrides: Partial<PcbKeepout> = {},
+    ): PcbKeepout => ({
+      id: "keepout-1",
+      name: null,
+      enabled: true,
+      lockedAt: null,
+      layers: ["F.Cu"],
+      pointsMm: SQUARE,
+      restrictions: {
+        tracks: true,
+        vias: true,
+        pads: true,
+        copperPour: true,
+        footprints: true,
+      },
+      ...overrides,
+    });
+
+    const allowAll = () => true;
+
+    test("hitZone finds a point near the ring edge", () => {
+      const zone = makeZone();
+      const hit = hitZone([zone], { x: 5, y: 0.1 }, {
+        toleranceMm: 0.5,
+        layerAllowed: allowAll,
+        activeLayer: null,
+      });
+      expect(hit?.zone).toBe(zone);
+      expect(hit?.ringIndex).toBe(0);
+    });
+
+    test("hitZone misses the interior — edge-only, never point-in-polygon", () => {
+      const zone = makeZone();
+      const hit = hitZone([zone], { x: 5, y: 5 }, {
+        toleranceMm: 0.5,
+        layerAllowed: allowAll,
+        activeLayer: null,
+      });
+      expect(hit).toBeNull();
+    });
+
+    test("hitZone skips a board-region zone", () => {
+      const board = makeZone({ region: { kind: "board" } });
+      const hit = hitZone([board], { x: 5, y: 0.1 }, {
+        toleranceMm: 0.5,
+        layerAllowed: allowAll,
+        activeLayer: null,
+      });
+      expect(hit).toBeNull();
+    });
+
+    test("hitZone respects layerAllowed", () => {
+      const zone = makeZone({ layer: "B.Cu" });
+      const hit = hitZone([zone], { x: 5, y: 0.1 }, {
+        toleranceMm: 0.5,
+        layerAllowed: (l) => l === "F.Cu",
+        activeLayer: null,
+      });
+      expect(hit).toBeNull();
+    });
+
+    test("hitZone stays hittable when disabled", () => {
+      const zone = makeZone({ enabled: false });
+      const hit = hitZone([zone], { x: 5, y: 0.1 }, {
+        toleranceMm: 0.5,
+        layerAllowed: allowAll,
+        activeLayer: null,
+      });
+      expect(hit?.zone).toBe(zone);
+    });
+
+    test("hitZone prefers the active layer over a closer edge on another layer", () => {
+      const front = makeZone({ id: "z-front", layer: "F.Cu" });
+      const back = makeZone({
+        id: "z-back",
+        layer: "B.Cu",
+        // Bottom edge sits exactly on the cursor — strictly closer than
+        // front's (distance 0.02) — yet the active-layer preference must
+        // still pick `front`.
+        region: {
+          kind: "polygon",
+          pointsMm: [
+            { x: 0, y: 0.02 },
+            { x: 10, y: 0.02 },
+            { x: 10, y: 10 },
+            { x: 0, y: 10 },
+          ],
+        },
+      });
+      const hit = hitZone([front, back], { x: 5, y: 0.02 }, {
+        toleranceMm: 0.5,
+        layerAllowed: allowAll,
+        activeLayer: "F.Cu",
+      });
+      expect(hit?.zone).toBe(front);
+    });
+
+    // Cutout rings are hit like the outer ring, addressed by `ringIndex`
+    // (copper-pour contract §11) — that index is what the vertex tools edit.
+    test("hitZone reports ringIndex i+1 for the i-th cutout", () => {
+      const zone = makeZone({
+        region: {
+          kind: "polygon",
+          pointsMm: SQUARE,
+          holesMm: [
+            [
+              { x: 2, y: 2 },
+              { x: 4, y: 2 },
+              { x: 4, y: 4 },
+              { x: 2, y: 4 },
+            ],
+            [
+              { x: 6, y: 6 },
+              { x: 8, y: 6 },
+              { x: 8, y: 8 },
+              { x: 6, y: 8 },
+            ],
+          ],
+        },
+      });
+      const opts = {
+        toleranceMm: 0.5,
+        layerAllowed: allowAll,
+        activeLayer: null,
+      };
+      expect(hitZone([zone], { x: 3, y: 2.1 }, opts)?.ringIndex).toBe(1);
+      expect(hitZone([zone], { x: 7, y: 6.1 }, opts)?.ringIndex).toBe(2);
+      expect(hitZone([zone], { x: 5, y: 0.1 }, opts)?.ringIndex).toBe(0);
+      // Still no interior hit: inside the cutout is inside no ring.
+      expect(hitZone([zone], { x: 3, y: 3 }, opts)).toBeNull();
+    });
+
+    test("zoneRings lists the outer ring first, then each cutout", () => {
+      const hole = [
+        { x: 2, y: 2 },
+        { x: 4, y: 2 },
+        { x: 4, y: 4 },
+        { x: 2, y: 4 },
+      ];
+      expect(
+        zoneRings(
+          makeZone({
+            region: { kind: "polygon", pointsMm: SQUARE, holesMm: [hole] },
+          }),
+        ),
+      ).toEqual([SQUARE, hole]);
+      expect(zoneRings(makeZone({ region: { kind: "board" } }))).toEqual([]);
+    });
+
+    test("hitKeepout allowed when any of its layers passes layerAllowed", () => {
+      const keepout = makeKeepout({ layers: ["In1.Cu", "F.Cu"] });
+      const hit = hitKeepout([keepout], { x: 5, y: 0.1 }, {
+        toleranceMm: 0.5,
+        layerAllowed: (l) => l === "F.Cu",
+        activeLayer: null,
+      });
+      expect(hit).toBe(keepout);
+    });
+
+    test("hitKeepout is null when no layer passes layerAllowed", () => {
+      const keepout = makeKeepout({ layers: ["In1.Cu"] });
+      const hit = hitKeepout([keepout], { x: 5, y: 0.1 }, {
+        toleranceMm: 0.5,
+        layerAllowed: (l) => l === "F.Cu",
+        activeLayer: null,
+      });
+      expect(hit).toBeNull();
+    });
+
+    test("hitAll orders zone/keepout hits after placements", () => {
+      const placement = makePlacement();
+      const zone = makeZone({ layer: "F.Cu" });
+      const keepout = makeKeepout({ layers: ["F.Cu"] });
+      const candidates = hitAll({
+        placements: [placement],
+        traces: [],
+        vias: [],
+        cursorMm: { x: 5, y: 0.1 },
+        activeLayer: "F.Cu",
+        zones: [zone],
+        keepouts: [keepout],
+      });
+      expect(candidates.map((c) => c.kind)).toEqual([
+        "placement",
+        "zone",
+        "keepout",
+      ]);
+    });
+
+    test("hitAll finds no zone/keepout when the arrays are omitted", () => {
+      const candidates = hitAll({
+        placements: [],
+        traces: [],
+        vias: [],
+        cursorMm: { x: 5, y: 0.1 },
+        activeLayer: "F.Cu",
+      });
+      expect(candidates).toEqual([]);
     });
   });
 });

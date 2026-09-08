@@ -8,7 +8,6 @@ import type {
   DesignerCommand,
   DesignerDispatchResult,
   DrcRuleClass,
-  PcbCopperLayerId,
   PcbDisplayMode,
   PcbLayerId,
   PcbLayerPreset,
@@ -22,7 +21,7 @@ import {
 
 /**
  * Unified PCB view store. Replaces the fragmented localStorage hooks that
- * previously held viewSide / displayMode / copperFillLayers. The store is
+ * previously held viewSide / displayMode / layer opacity. The store is
  * the single source of truth for the panel + scene; mutations dispatch a
  * debounced `pcb_set_view_state` command so the backend `board_settings`
  * row stays in sync (per-design durability).
@@ -41,8 +40,6 @@ import {
 const DEFAULT_VIEW_STATE: PcbViewState = {
   displayMode: "normal",
   viewSide: "top",
-  copperFillLayers: [],
-  copperFillPourNetIds: {},
   perLayerOpacity: {},
   layerPreset: "custom",
   ratsnestVisible: true,
@@ -120,10 +117,6 @@ interface PcbViewStoreActions {
   toggleRatsnestVisible(): void;
   setAlignmentGuidesVisible(visible: boolean): void;
   toggleAlignmentGuidesVisible(): void;
-  setCopperFillLayers(layers: ReadonlyArray<PcbCopperLayerId>): void;
-  toggleCopperFillLayer(layer: PcbCopperLayerId): void;
-  setCopperFillPourNet(layer: PcbCopperLayerId, netId: string | null): void;
-  setCopperFillPadConnection(connection: "solid" | "thermal"): void;
   setLayerOpacity(layer: PcbLayerId, opacity: number): void;
   setLayerPreset(preset: PcbLayerPreset): void;
   /**
@@ -308,44 +301,6 @@ export const usePcbViewStore = create<Store>((set, get) => ({
     get().setAlignmentGuidesVisible(
       !(get().viewState.alignmentGuidesVisible ?? true),
     );
-  },
-
-  setCopperFillLayers(layers) {
-    const seen = new Set<PcbCopperLayerId>();
-    const next: PcbCopperLayerId[] = [];
-    for (const id of layers) {
-      if (!seen.has(id)) {
-        seen.add(id);
-        next.push(id);
-      }
-    }
-    set((s) => ({ viewState: { ...s.viewState, copperFillLayers: next } }));
-    persistPatch({ copperFillLayers: next });
-  },
-
-  toggleCopperFillLayer(layer) {
-    const current = new Set(get().viewState.copperFillLayers);
-    if (current.has(layer)) current.delete(layer);
-    else current.add(layer);
-    get().setCopperFillLayers([...current]);
-  },
-
-  setCopperFillPourNet(layer, netId) {
-    const nextMap = {
-      ...get().viewState.copperFillPourNetIds,
-      [layer]: netId,
-    };
-    set((s) => ({
-      viewState: { ...s.viewState, copperFillPourNetIds: nextMap },
-    }));
-    persistPatch({ copperFillPourNetIds: { [layer]: netId } });
-  },
-
-  setCopperFillPadConnection(connection) {
-    set((s) => ({
-      viewState: { ...s.viewState, copperFillPadConnection: connection },
-    }));
-    persistPatch({ copperFillPadConnection: connection });
   },
 
   setLayerOpacity(layer, opacity) {

@@ -12,22 +12,41 @@ import type {
   DrcRuleCode,
   PcbBoardSettings,
   PcbDesignRules,
+  PcbDrcRule,
   PcbFreeHole,
   PcbFreePad,
   PcbNetClass,
   PcbPlacedPart,
   PcbTrace,
   PcbVia,
+  RatsnestEndpoint,
   RatsnestSegment,
 } from "../../../../sdks/designer";
 
 export const FIXTURE_TS = "2026-01-01T00:00:00.000Z";
 export const MM = 1_000_000;
 
+/**
+ * Fixtures are FLOOR-FREE (rule-semantics contract §12 item 5): new boards get
+ * `minimums.clearanceMm = 0.1`, but every DRC fixture and every golden was
+ * written before the floor existed and must keep resolving at exactly the
+ * value its own rules state. A fixture that wants the floor sets it explicitly.
+ */
+function withoutClearanceFloor(settings: PcbBoardSettings): PcbBoardSettings {
+  const { clearanceMm: _floor, ...minimums } = settings.designRules.minimums;
+  return {
+    ...settings,
+    designRules: { ...settings.designRules, minimums },
+  };
+}
+
 export function board(
   overrides: Partial<PcbBoardSettings> = {},
 ): PcbBoardSettings {
-  return { ...createDefaultPcbBoardSettings(FIXTURE_TS), ...overrides };
+  return {
+    ...withoutClearanceFloor(createDefaultPcbBoardSettings(FIXTURE_TS)),
+    ...overrides,
+  };
 }
 
 /** Board with deep-merged design-rule overrides. */
@@ -39,10 +58,14 @@ export function boardWithRules(rules: {
   fabricator?: PcbBoardSettings["fabricator"];
   layerCount?: PcbBoardSettings["layerCount"];
   boardThicknessMm?: number;
+  drcRules?: PcbDrcRule[];
+  outline?: PcbBoardSettings["outline"];
 }): PcbBoardSettings {
-  const base = createDefaultPcbBoardSettings(FIXTURE_TS);
+  const base = withoutClearanceFloor(createDefaultPcbBoardSettings(FIXTURE_TS));
   return {
     ...base,
+    ...(rules.drcRules !== undefined ? { drcRules: rules.drcRules } : {}),
+    ...(rules.outline !== undefined ? { outline: rules.outline } : {}),
     ...(rules.fabricator !== undefined ? { fabricator: rules.fabricator } : {}),
     ...(rules.layerCount !== undefined ? { layerCount: rules.layerCount } : {}),
     ...(rules.boardThicknessMm !== undefined
@@ -75,6 +98,7 @@ export function projection(
     overlayTexts: parts.overlayTexts ?? [],
     overlayShapes: parts.overlayShapes ?? [],
     zones: parts.zones ?? [],
+    keepouts: parts.keepouts ?? [],
     ratsnest: parts.ratsnest ?? [],
     netNames: parts.netNames ?? {},
     padNets: parts.padNets,
@@ -245,22 +269,15 @@ export function ratsSeg(
   netId: string,
   fromMm: { x: number; y: number },
   toMm: { x: number; y: number },
-  opts: {
-    fromPlacementId?: string;
-    fromPadNumber?: string;
-    toPlacementId?: string;
-    toPadNumber?: string;
-  } = {},
+  opts: { from?: RatsnestEndpoint; to?: RatsnestEndpoint } = {},
 ): RatsnestSegment {
   return {
     netId,
     netClassId: "default",
     fromMm,
     toMm,
-    fromPlacementId: opts.fromPlacementId ?? "U1",
-    fromPadNumber: opts.fromPadNumber ?? "1",
-    toPlacementId: opts.toPlacementId ?? "U2",
-    toPadNumber: opts.toPadNumber ?? "1",
+    from: opts.from ?? { kind: "pad", placementId: "U1", padNumber: "1" },
+    to: opts.to ?? { kind: "pad", placementId: "U2", padNumber: "1" },
   };
 }
 

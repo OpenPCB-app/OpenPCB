@@ -14,7 +14,6 @@ import {
   intersectD,
   unionD,
 } from "clipper2-ts";
-import * as THREE from "three";
 import type {
   ClipperMultiPolygon,
   ClipperPolygon,
@@ -28,16 +27,20 @@ import type {
  * Design rules (from the Codex gpt-5.5 review):
  *  - One integer grid end-to-end: `PRECISION = 4` decimals → 1e4 units/mm
  *    (0.1 µm), matching the legacy `CLIP_QUANT` so we never run two regimes.
- *  - FAIL CLOSED. Copper booleans that throw must yield *empty* copper, never
- *    an un-clearanced fallback (a fail-open difference returns subject-with-no-
- *    clearance → a DRC-unsafe short). Every op below returns `[]`/`[]shapes` on
- *    failure and warns once.
+ *  - FAIL CLOSED. Copper booleans that throw must never yield an un-clearanced
+ *    fallback (a fail-open difference returns subject-with-no-clearance → a
+ *    DRC-unsafe short). Every op below RETHROWS as `CopperKernelError` and
+ *    warns once: `[]` is a legitimate geometric answer for an erosion or a
+ *    difference, so swallowing a throw into `[]` made a lost thermal knockout
+ *    indistinguishable from "no relief needed" and flooded the pad solid
+ *    (copper-pour contract §3, §8, Astra run 1 #9). The pour turns the throw
+ *    into `status: "failed"` at its own boundary.
  *  - Re-nesting via Clipper `PolyTree` (non-zero fill), never by feeding flat
  *    rings through a union and guessing hole-ness from winding.
  */
 
 // Clipper2 *D ("double") API works in mm and quantizes to `precision` decimals.
-const PRECISION = 4; // 1e4 units/mm — 0.1 µm grid (matches legacy CLIP_QUANT)
+export const PRECISION = 4; // 1e4 units/mm — 0.1 µm grid (matches legacy CLIP_QUANT)
 // Round-join chord error at routing zoom. Exported so the pour can compensate:
 // the polygonal offset's chords lie INSIDE the ideal Minkowski offset by up to
 // this amount, so clearance offsets must over-shoot by ~this to stay exact.
@@ -63,21 +66,28 @@ export function polyToPathsD(poly: ClipperPolygon): PathsD {
 
 // --- Fail-closed primitives -------------------------------------------------
 
+/** A clipper operation threw. The caller decides what "no answer" means. */
+export class CopperKernelError extends Error {
+  readonly op: string;
+  override readonly cause: unknown;
+  constructor(op: string, cause: unknown) {
+    super(`[copper-kernel] ${op} failed`);
+    this.name = "CopperKernelError";
+    this.op = op;
+    this.cause = cause;
+  }
+}
+
 let warned = false;
-function failClosed<T>(op: string, fn: () => T, fallback: T): T {
+function runOp<T>(op: string, fn: () => T): T {
   try {
     return fn();
   } catch (error) {
     if (!warned) {
       warned = true;
-      // Empty copper is the safe degrade: a missing pour never shorts nets,
-      // an un-clearanced pour does.
-      console.warn(
-        `[copper-kernel] ${op} failed; returning empty copper`,
-        error,
-      );
+      console.warn(`[copper-kernel] ${op} failed`, error);
     }
-    return fallback;
+    throw new CopperKernelError(op, error);
   }
 }
 
@@ -85,50 +95,39 @@ function failClosed<T>(op: string, fn: () => T, fallback: T): T {
 export function union(...groups: PathsD[]): PathsD {
   const subject = groups.flat();
   if (subject.length === 0) return [];
-  return failClosed(
-    "union",
-    () => unionD(subject, [], FillRule.NonZero, PRECISION),
-    [],
-  );
+  return runOp("union", () => unionD(subject, [], FillRule.NonZero, PRECISION));
 }
 
-/** subject − clip → flat PathsD. Empty on failure (fail closed). */
+/** subject − clip → flat PathsD. An empty result is a legitimate answer. */
 export function difference(subject: PathsD, clip: PathsD): PathsD {
   if (subject.length === 0) return [];
   if (clip.length === 0) return subject;
-  return failClosed(
-    "difference",
-    () => differenceD(subject, clip, FillRule.NonZero, PRECISION),
-    [],
+  return runOp("difference", () =>
+    differenceD(subject, clip, FillRule.NonZero, PRECISION),
   );
 }
 
-/** subject ∩ clip → flat PathsD. Empty on failure. */
+/** subject ∩ clip → flat PathsD. An empty result is a legitimate answer. */
 export function intersection(subject: PathsD, clip: PathsD): PathsD {
   if (subject.length === 0 || clip.length === 0) return [];
-  return failClosed(
-    "intersection",
-    () => intersectD(subject, clip, FillRule.NonZero, PRECISION),
-    [],
+  return runOp("intersection", () =>
+    intersectD(subject, clip, FillRule.NonZero, PRECISION),
   );
 }
 
 /** Offset (inflate δ>0 / deflate δ<0) with the given corner join. */
 function offset(paths: PathsD, deltaMm: number, joinType: JoinType): PathsD {
   if (paths.length === 0 || deltaMm === 0) return paths;
-  return failClosed(
-    "offset",
-    () =>
-      inflatePathsD(
-        paths,
-        deltaMm,
-        joinType,
-        EndType.Polygon,
-        MITER_LIMIT,
-        PRECISION,
-        ARC_TOLERANCE_MM,
-      ),
-    [],
+  return runOp("offset", () =>
+    inflatePathsD(
+      paths,
+      deltaMm,
+      joinType,
+      EndType.Polygon,
+      MITER_LIMIT,
+      PRECISION,
+      ARC_TOLERANCE_MM,
+    ),
   );
 }
 
@@ -159,7 +158,7 @@ export function area(paths: PathsD): number {
   return Math.abs(areaPathsD(paths));
 }
 
-// --- PolyTree → THREE.Shape[] (correct outer/hole nesting) ------------------
+// --- PolyTree → islands (correct outer/hole nesting) ------------------------
 
 function cleanRing(poly: PathD | null): ClipperRing | null {
   if (!poly || poly.length < 3) return null;
@@ -184,20 +183,9 @@ function cleanRing(poly: PathD | null): ClipperRing | null {
   return ring.length >= 3 ? ring : null;
 }
 
-function traceRing(target: THREE.Shape | THREE.Path, ring: ClipperRing): void {
-  const first = ring[0]!;
-  target.moveTo(first[0], first[1]);
-  for (let i = 1; i < ring.length; i += 1) {
-    const p = ring[i]!;
-    target.lineTo(p[0], p[1]);
-  }
-}
-
 export interface CopperIsland {
   /** [outer, ...holes] in mm — used for area + same-net connectivity tests. */
   paths: PathsD;
-  /** Ready for THREE.ShapeGeometry. */
-  shape: THREE.Shape;
   /** |outer| − Σ|holes|, mm². */
   areaMm2: number;
 }
@@ -211,21 +199,14 @@ function collectIsland(contour: PolyPathD, out: CopperIsland[]): void {
       descendIsland(contour.child(i), out);
     return;
   }
-  const shape = new THREE.Shape();
-  traceRing(shape, outer);
   const paths: PathsD = [outer.map(([x, y]) => ({ x, y }))];
   for (let i = 0; i < contour.count; i += 1) {
     const hole = contour.child(i);
     const holeRing = cleanRing(hole.poly);
-    if (holeRing) {
-      const path = new THREE.Path();
-      traceRing(path, holeRing);
-      shape.holes.push(path);
-      paths.push(holeRing.map(([x, y]) => ({ x, y })));
-    }
+    if (holeRing) paths.push(holeRing.map(([x, y]) => ({ x, y })));
     descendIsland(hole, out);
   }
-  out.push({ paths, shape, areaMm2: area(paths) });
+  out.push({ paths, areaMm2: area(paths) });
 }
 
 /** A hole's children are nested solid outers — emit them as their own islands. */
@@ -234,32 +215,23 @@ function descendIsland(hole: PolyPathD, out: CopperIsland[]): void {
 }
 
 /**
- * Normalize a flat ring set into per-island {outer+holes, shape, area} via a
- * non-zero PolyTree union, dropping degenerate rings. Fail closed → [] on error.
+ * Normalize a flat ring set into per-island {outer+holes, area} via a non-zero
+ * PolyTree union, dropping degenerate rings. Rethrows `CopperKernelError`.
  */
 export function splitIslands(paths: PathsD): CopperIsland[] {
   if (paths.length === 0) return [];
-  return failClosed(
-    "splitIslands",
-    () => {
-      const tree = new PolyTreeD();
-      booleanOpDWithPolyTree(
-        ClipType.Union,
-        paths,
-        null,
-        tree,
-        FillRule.NonZero,
-        PRECISION,
-      );
-      const out: CopperIsland[] = [];
-      for (let i = 0; i < tree.count; i += 1) collectIsland(tree.child(i), out);
-      return out;
-    },
-    [],
-  );
-}
-
-/** Strictly-nested THREE.Shapes for `paths` (one per island outer). */
-export function toShapes(paths: PathsD): THREE.Shape[] {
-  return splitIslands(paths).map((island) => island.shape);
+  return runOp("splitIslands", () => {
+    const tree = new PolyTreeD();
+    booleanOpDWithPolyTree(
+      ClipType.Union,
+      paths,
+      null,
+      tree,
+      FillRule.NonZero,
+      PRECISION,
+    );
+    const out: CopperIsland[] = [];
+    for (let i = 0; i < tree.count; i += 1) collectIsland(tree.child(i), out);
+    return out;
+  });
 }

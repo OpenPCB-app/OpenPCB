@@ -36,6 +36,7 @@ function projection(
     overlayTexts: [],
     overlayShapes: [],
     zones: [],
+    keepouts: [],
     ratsnest: [],
     netNames,
     warnings: [],

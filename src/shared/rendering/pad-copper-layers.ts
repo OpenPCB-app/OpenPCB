@@ -35,7 +35,18 @@ export function resolvePadCopperLayers(
     if (allCopperLayers.has(effective)) return new Set([effective]);
   }
 
-  const fallback: PcbCopperLayerId =
-    placement.layer === "B.Cu" ? "B.Cu" : "F.Cu";
-  return new Set([fallback]);
+  return new Set([placementSideLayer(placement)]);
+}
+
+/**
+ * THE one resolution of a placement's outer copper layer (`F.Cu` top, `B.Cu`
+ * bottom; zone/keepout contract §13.4). Every consumer that needs "which side
+ * is this part on" — SMD pad fallback, keepout `footprints` items, route
+ * obstacles, live DRC, the canvas, the cloud snapshot — calls this instead of
+ * re-deriving it from `placement.layer`.
+ */
+export function placementSideLayer(
+  placement: Pick<PcbPlacedPart, "layer">,
+): "F.Cu" | "B.Cu" {
+  return placement.layer === "B.Cu" ? "B.Cu" : "F.Cu";
 }

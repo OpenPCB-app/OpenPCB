@@ -2,7 +2,9 @@
  * Audit regression suite B4 — board-edge / off-board / hole-to-hole
  * (DRC_AUDIT_REPORT.md §4). Post-fix expectations; flip live per milestone.
  */
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import * as realOutlineGeometry from "../../../shared/pcb-geometry/outline-geometry";
+import { arcSegmentCount } from "../../../modules/designer/backend/pcb/outline-geometry";
 import { runDrc } from "../../../modules/designer/backend/drc/drc-engine";
 import type { PcbBoardSettings } from "../../../sdks/designer";
 import {
@@ -29,8 +31,9 @@ function board100(overrides: Partial<PcbBoardSettings> = {}): PcbBoardSettings {
 }
 
 describe("audit B4 — board checks", () => {
-  // Fix: P4 (edge checks move to exact segment geometry, not point sampling).
-  test.todo("B4-1: trace crossing a narrow cutout between samples is OFF-BOARD", () => {
+  // Fixed by the S2 geometry contract (checks/board.ts consumes the board
+  // region's stadiumInsideRegion instead of point sampling).
+  test("B4-1: trace crossing a narrow cutout between samples is OFF-BOARD", () => {
     const report = runDrc(
       projection({
         board: board100({
@@ -56,8 +59,8 @@ describe("audit B4 — board checks", () => {
     expect(codes(report)).toContain("COPPER_OFF_BOARD");
   });
 
-  // Fix: P4 (pad off-board must test edges/containment, not vertices only).
-  test.todo("B4-2: slot cutout passing through a pad interior is OFF-BOARD", () => {
+  // Fixed by the S2 geometry contract (pad off-board now tests polygonInsideRegion).
+  test("B4-2: slot cutout passing through a pad interior is OFF-BOARD", () => {
     const report = runDrc(
       projection({
         board: board100({
@@ -81,6 +84,95 @@ describe("audit B4 — board checks", () => {
           placement("U1", {
             pads: [pad("1", { x: 0, y: 0 }, 3, 3)],
           }),
+        ],
+        padNets: { "U1|1": "n1" },
+        netNames: { n1: "SIG" },
+      }),
+    );
+    expect(codes(report)).toContain("COPPER_OFF_BOARD");
+  });
+
+  // Cutout-vertex crossing case: a contour "diamond" cutout whose vertices are
+  // exactly on the trace's centerline.
+  test("B4-1b: trace crossing exactly through a cutout vertex is OFF-BOARD", () => {
+    const cutout = {
+      kind: "contour" as const,
+      widthMm: 4,
+      heightMm: 4,
+      centerMm: { x: 20, y: 0 },
+      start: { x: 18, y: 0 },
+      segments: [
+        { type: "line" as const, to: { x: 20, y: 2 } },
+        { type: "line" as const, to: { x: 22, y: 0 } },
+        { type: "line" as const, to: { x: 20, y: -2 } },
+        { type: "line" as const, to: { x: 18, y: 0 } },
+      ],
+    };
+    const report = runDrc(
+      projection({
+        board: board100({ cutouts: [{ id: "c1", shape: cutout }] }),
+        traces: [trace("t", "n1", [[-40, 0], [40, 0]], { widthMm: 1 })],
+        netNames: { n1: "SIG" },
+      }),
+    );
+    expect(codes(report)).toContain("COPPER_OFF_BOARD");
+  });
+
+  // A concave notch in a polygon outline: the pad's edges dip into the
+  // removed area even though it sits well within the outline's bounding box.
+  test("B4-2b: pad spanning a concave notch is OFF-BOARD", () => {
+    const outline = {
+      kind: "polygon" as const,
+      widthMm: 100,
+      heightMm: 100,
+      centerMm: { x: 0, y: 0 },
+      // 100×100 square with a 10-wide × 20-deep notch cut into the top edge.
+      pointsMm: [
+        { x: -50, y: -50 },
+        { x: 50, y: -50 },
+        { x: 50, y: 50 },
+        { x: 5, y: 50 },
+        { x: 5, y: 30 },
+        { x: -5, y: 30 },
+        { x: -5, y: 50 },
+        { x: -50, y: 50 },
+      ],
+    };
+    const report = runDrc(
+      projection({
+        board: { ...board(), outline },
+        placements: [
+          placement("U1", { pads: [pad("1", { x: 0, y: 45 }, 14, 2)] }),
+        ],
+        padNets: { "U1|1": "n1" },
+        netNames: { n1: "SIG" },
+      }),
+    );
+    expect(codes(report)).toContain("COPPER_OFF_BOARD");
+  });
+
+  // Astra finding 2: a pad exactly filling a cutout shares every edge with it,
+  // so no cutout vertex sits strictly inside the pad ring — the vertex-only
+  // test used to miss this entirely.
+  test("B4-2c: pad exactly filling a cutout is OFF-BOARD", () => {
+    const cutout = {
+      kind: "contour" as const,
+      widthMm: 4,
+      heightMm: 4,
+      centerMm: { x: 20, y: 0 },
+      start: { x: 18, y: -2 },
+      segments: [
+        { type: "line" as const, to: { x: 22, y: -2 } },
+        { type: "line" as const, to: { x: 22, y: 2 } },
+        { type: "line" as const, to: { x: 18, y: 2 } },
+        { type: "line" as const, to: { x: 18, y: -2 } },
+      ],
+    };
+    const report = runDrc(
+      projection({
+        board: board100({ cutouts: [{ id: "c1", shape: cutout }] }),
+        placements: [
+          placement("U1", { pads: [pad("1", { x: 20, y: 0 }, 4, 4)] }),
         ],
         padNets: { "U1|1": "n1" },
         netNames: { n1: "SIG" },
@@ -118,7 +210,8 @@ describe("audit B4 — board checks", () => {
         freeHoles: [freeHole("h1", { x: 49.2, y: 0 }, 3)],
       }),
     );
-    expect(codes(report).map(String)).toContain("HOLE_TO_BOARD_EDGE");
+    // The breach half of the code is HOLE_OFF_BOARD after S6 §7.
+    expect(codes(report).map(String)).toContain("HOLE_OFF_BOARD");
   });
 
   // Fixed in P5b (checks/outline.ts resurrects BOARD_OUTLINE_INVALID).
@@ -146,20 +239,709 @@ describe("audit B4 — board checks", () => {
     expect(codes(report)).toContain("BOARD_OUTLINE_INVALID");
   });
 
-  // Fix: P4 rider (flatten cutout arcs with outward-conservative sampling).
-  test.todo("B4-6: circular cutout polygonization does not under-measure", () => {
+  // Fixed by the S2 geometry contract §3 (circumscribed step rule for cutout
+  // arcs, one chord tolerance for every consumer).
+  test("B4-6: circular cutout polygonization does not under-measure", () => {
     // Inscribed-polygon flattening shrinks the hole by up to ~0.024 mm at
     // r = 20 (false-pass direction for copper-to-cutout-edge). Post-fix:
     // circumscribed (or tolerance-compensated) sampling for cutouts.
     // Fixture: copper at exactly edge-clearance from the TRUE circle must
     // flag. Written against the P4 edge-tree implementation.
-    expect(true).toBe(true);
+    //
+    // Deviation from the brief: a trace running the WHOLE way around the
+    // cutout does NOT reproduce the bug — polylineToRingEdgeDistance takes
+    // the true minimum over every trace-segment/ring-segment pair, and that
+    // minimum lands near a cutout-ring VERTEX (where the inscribed polygon
+    // touches the true circle exactly), correctly catching the violation
+    // regardless of the mid-chord error elsewhere. Confirmed via scratch
+    // probe: a 90-point loop at this same true gap is (correctly) flagged
+    // today. The under-measurement only surfaces when the copper is a SHORT
+    // segment confined to a single mid-chord region, with no ring vertex
+    // nearby to pull the sampled minimum back down to the true gap.
+    const radiusMm = 20;
+    const edgeReqMm = 0.5; // board().designRules.clearance.copperToBoardEdgeMm
+    const trueGapMm = edgeReqMm - 0.01; // 0.49 — a real violation
+    const halfWidthMm = 0.1; // trace width 0.2 / 2
+    const centerlineR = radiusMm + trueGapMm + halfWidthMm;
+    // The S2 contract replaced the old fixed 64-gon with the per-arc step
+    // rule (§3); recompute so the fixture still lands mid-chord.
+    const arcSegments = arcSegmentCount(radiusMm, 2 * Math.PI, "circumscribed");
+    const midAngle = Math.PI / arcSegments; // half of one step
+    const halfLenMm = 0.3;
+    const cx = Math.cos(midAngle) * centerlineR;
+    const cy = Math.sin(midAngle) * centerlineR;
+    const tx = -Math.sin(midAngle);
+    const ty = Math.cos(midAngle);
+    const p1: [number, number] = [cx - tx * halfLenMm, cy - ty * halfLenMm];
+    const p2: [number, number] = [cx + tx * halfLenMm, cy + ty * halfLenMm];
+
+    const report = runDrc(
+      projection({
+        board: board100({
+          cutouts: [
+            {
+              id: "c1",
+              shape: {
+                kind: "circle",
+                widthMm: radiusMm * 2,
+                heightMm: radiusMm * 2,
+                centerMm: { x: 0, y: 0 },
+              },
+            },
+          ],
+        }),
+        traces: [trace("t", "n1", [p1, p2], { widthMm: halfWidthMm * 2 })],
+        netNames: { n1: "SIG" },
+      }),
+    );
+    expect(codes(report)).toContain("COPPER_TO_BOARD_EDGE");
   });
 
-  // Fix: P4 (pointInFlattenedOutline on precomputed rings — perf only).
-  test.todo("B4-7: containment queries reuse the precomputed outline rings", () => {
-    // Structural/perf: covered by the P4 kernel-count assertions (the
-    // re-flatten-per-sample pattern disappears with the edge tree).
-    expect(true).toBe(true);
+  // Same under-measurement risk at a roundrect corner, not just a full circle.
+  test("B4-6b: roundrect cutout mid-corner does not under-measure", () => {
+    const cornerRadiusMm = 3;
+    const hw = 5; // half of the 10 mm roundrect
+    const cornerCenter = { x: hw - cornerRadiusMm, y: hw - cornerRadiusMm }; // (2,2)
+    const edgeReqMm = 0.5;
+    const trueGapMm = edgeReqMm - 0.01; // 0.49
+    const halfWidthMm = 0.1; // trace width 0.2 / 2
+    const centerlineR = cornerRadiusMm + trueGapMm + halfWidthMm;
+    const steps = arcSegmentCount(
+      cornerRadiusMm,
+      Math.PI / 2,
+      "circumscribed",
+    );
+    const stepAngle = Math.PI / 2 / steps;
+    // Corner sweeps from angle 0 to π/2 around cornerCenter; offset the
+    // nominal mid-sweep angle by half a step to land mid-chord.
+    const midAngle = Math.PI / 4 + stepAngle / 2;
+    const halfLenMm = 0.3;
+    const cx = cornerCenter.x + Math.cos(midAngle) * centerlineR;
+    const cy = cornerCenter.y + Math.sin(midAngle) * centerlineR;
+    const tx = -Math.sin(midAngle);
+    const ty = Math.cos(midAngle);
+    const p1: [number, number] = [cx - tx * halfLenMm, cy - ty * halfLenMm];
+    const p2: [number, number] = [cx + tx * halfLenMm, cy + ty * halfLenMm];
+
+    const report = runDrc(
+      projection({
+        board: board100({
+          cutouts: [
+            {
+              id: "c1",
+              shape: {
+                kind: "roundrect",
+                widthMm: 10,
+                heightMm: 10,
+                centerMm: { x: 0, y: 0 },
+                cornerRadiusMm,
+              },
+            },
+          ],
+        }),
+        traces: [trace("t", "n1", [p1, p2], { widthMm: halfWidthMm * 2 })],
+        netNames: { n1: "SIG" },
+      }),
+    );
+    expect(codes(report)).toContain("COPPER_TO_BOARD_EDGE");
+  });
+
+  test("B4-8: full-radius roundrect outline and cutout are valid", () => {
+    const outlineReport = runDrc(
+      projection({
+        board: {
+          ...board(),
+          outline: {
+            kind: "roundrect",
+            widthMm: 60,
+            heightMm: 40,
+            centerMm: { x: 0, y: 0 },
+            cornerRadiusMm: 20,
+          },
+        },
+      }),
+    );
+    expect(codes(outlineReport)).not.toContain("BOARD_OUTLINE_INVALID");
+
+    const cutoutReport = runDrc(
+      projection({
+        board: board100({
+          cutouts: [
+            {
+              id: "c1",
+              shape: {
+                kind: "roundrect",
+                widthMm: 10,
+                heightMm: 4,
+                centerMm: { x: 0, y: 0 },
+                cornerRadiusMm: 2,
+              },
+            },
+          ],
+        }),
+      }),
+    );
+    expect(codes(cutoutReport)).not.toContain("BOARD_OUTLINE_INVALID");
+  });
+
+  test("L-board: slot spanning the notch with every vertex on-board is invalid", () => {
+    // L outline: 100×100 square minus its top-right quadrant, re-entrant
+    // corner at the origin.
+    const outline = {
+      kind: "polygon" as const,
+      widthMm: 100,
+      heightMm: 100,
+      centerMm: { x: 0, y: 0 },
+      pointsMm: [
+        { x: -50, y: -50 },
+        { x: 50, y: -50 },
+        { x: 50, y: 0 },
+        { x: 0, y: 0 },
+        { x: 0, y: 50 },
+        { x: -50, y: 50 },
+      ],
+    };
+    // A thin rectangle rotated 45°, offset so all four corners land outside
+    // the forbidden (x>0 && y>0) quadrant, but its far edge's midpoint —
+    // (0.1, 0.1) — sits inside it. Verified via scratch probe
+    // (scratchpad/s2/wp3/probe2.ts "L-board notch"): every vertex individually
+    // passes a naive per-vertex containment test, but the edge crosses the
+    // outline's re-entrant corner, so only ringStrictlyInside's edge-contact
+    // clause (not its vertex clause) catches it.
+    const cutout = {
+      kind: "contour" as const,
+      widthMm: 4,
+      heightMm: 4,
+      centerMm: { x: -0.3, y: -0.3 },
+      start: { x: 1.51421356, y: -1.31421356 },
+      segments: [
+        { type: "line" as const, to: { x: 0.71421356, y: -2.11421356 } },
+        { type: "line" as const, to: { x: -2.11421356, y: 0.71421356 } },
+        { type: "line" as const, to: { x: -1.31421356, y: 1.51421356 } },
+        { type: "line" as const, to: { x: 1.51421356, y: -1.31421356 } },
+      ],
+    };
+    const report = runDrc(
+      projection({
+        board: { ...board(), outline, cutouts: [{ id: "c1", shape: cutout }] },
+      }),
+    );
+    expect(codes(report)).toContain("BOARD_OUTLINE_INVALID");
+  });
+
+  test("crossing thin cutouts are invalid", () => {
+    const report = runDrc(
+      projection({
+        board: board100({
+          cutouts: [
+            {
+              id: "a",
+              shape: {
+                kind: "roundrect",
+                widthMm: 20,
+                heightMm: 0.5,
+                centerMm: { x: 0, y: 0 },
+                cornerRadiusMm: 0.2,
+              },
+            },
+            {
+              id: "b",
+              shape: {
+                kind: "roundrect",
+                widthMm: 0.5,
+                heightMm: 20,
+                centerMm: { x: 0, y: 0 },
+                cornerRadiusMm: 0.2,
+              },
+            },
+          ],
+        }),
+      }),
+    );
+    expect(codes(report)).toContain("BOARD_OUTLINE_INVALID");
+  });
+
+  test("rectangular cutouts sharing an edge are invalid", () => {
+    const c1 = {
+      kind: "contour" as const,
+      widthMm: 2,
+      heightMm: 1,
+      centerMm: { x: 1, y: 0.5 },
+      start: { x: 0, y: 0 },
+      segments: [
+        { type: "line" as const, to: { x: 2, y: 0 } },
+        { type: "line" as const, to: { x: 2, y: 1 } },
+        { type: "line" as const, to: { x: 0, y: 1 } },
+        { type: "line" as const, to: { x: 0, y: 0 } },
+      ],
+    };
+    const c2 = {
+      kind: "contour" as const,
+      widthMm: 2,
+      heightMm: 1,
+      centerMm: { x: 2, y: 0.5 },
+      start: { x: 1, y: 0 },
+      segments: [
+        { type: "line" as const, to: { x: 3, y: 0 } },
+        { type: "line" as const, to: { x: 3, y: 1 } },
+        { type: "line" as const, to: { x: 1, y: 1 } },
+        { type: "line" as const, to: { x: 1, y: 0 } },
+      ],
+    };
+    const report = runDrc(
+      projection({
+        board: board100({
+          cutouts: [
+            { id: "a", shape: c1 },
+            { id: "b", shape: c2 },
+          ],
+        }),
+      }),
+    );
+    expect(codes(report)).toContain("BOARD_OUTLINE_INVALID");
+
+    const s1 = {
+      kind: "roundrect" as const,
+      widthMm: 2,
+      heightMm: 2,
+      centerMm: { x: 1, y: 1 },
+      cornerRadiusMm: 0,
+    };
+    const s2 = {
+      kind: "roundrect" as const,
+      widthMm: 2,
+      heightMm: 2,
+      centerMm: { x: 3, y: 1 },
+      cornerRadiusMm: 0,
+    };
+    const squaresReport = runDrc(
+      projection({
+        board: board100({
+          cutouts: [
+            { id: "a", shape: s1 },
+            { id: "b", shape: s2 },
+          ],
+        }),
+      }),
+    );
+    expect(codes(squaresReport)).toContain("BOARD_OUTLINE_INVALID");
+  });
+
+  test("tangent circular cutouts are invalid", () => {
+    const report = runDrc(
+      projection({
+        board: board100({
+          cutouts: [
+            {
+              id: "a",
+              shape: {
+                kind: "circle",
+                widthMm: 10,
+                heightMm: 10,
+                centerMm: { x: -5, y: 0 },
+              },
+            },
+            {
+              id: "b",
+              shape: {
+                kind: "circle",
+                widthMm: 10,
+                heightMm: 10,
+                centerMm: { x: 5, y: 0 },
+              },
+            },
+          ],
+        }),
+      }),
+    );
+    expect(codes(report)).toContain("BOARD_OUTLINE_INVALID");
+  });
+
+  test("cutout tangent to the board edge is invalid", () => {
+    const tangentReport = runDrc(
+      projection({
+        board: board100({
+          cutouts: [
+            {
+              id: "a",
+              shape: {
+                kind: "circle",
+                widthMm: 10,
+                heightMm: 10,
+                centerMm: { x: 45, y: 0 },
+              },
+            },
+          ],
+        }),
+      }),
+    );
+    expect(codes(tangentReport)).toContain("BOARD_OUTLINE_INVALID");
+
+    const clearReport = runDrc(
+      projection({
+        board: board100({
+          cutouts: [
+            {
+              id: "a",
+              shape: {
+                kind: "circle",
+                widthMm: 10,
+                heightMm: 10,
+                centerMm: { x: 44, y: 0 },
+              },
+            },
+          ],
+        }),
+      }),
+    );
+    expect(codes(clearReport)).not.toContain("BOARD_OUTLINE_INVALID");
+  });
+
+  test("circular cutout breaching a curved board by 0.005 mm is invalid", () => {
+    const outline = {
+      kind: "roundrect" as const,
+      widthMm: 60,
+      heightMm: 40,
+      centerMm: { x: 0, y: 0 },
+      cornerRadiusMm: 20,
+    };
+    // Corner arc centre (30-20, 20-20) = (10,0), radius 20; place the cutout
+    // centre on the 45° diagonal at distance (20 - 2 + 0.005) from it so its
+    // true circle crosses the corner arc by 0.005 mm.
+    const cornerCenter = { x: 10, y: 0 };
+    const dist = 20 - 2 + 0.005;
+    const cutoutCenter = {
+      x: cornerCenter.x + dist * Math.cos(Math.PI / 4),
+      y: cornerCenter.y + dist * Math.sin(Math.PI / 4),
+    };
+    const report = runDrc(
+      projection({
+        board: {
+          ...board(),
+          outline,
+          cutouts: [
+            {
+              id: "a",
+              shape: {
+                kind: "circle",
+                widthMm: 4,
+                heightMm: 4,
+                centerMm: cutoutCenter,
+              },
+            },
+          ],
+        },
+      }),
+    );
+    expect(codes(report)).toContain("BOARD_OUTLINE_INVALID");
+  });
+
+  test("slot hole whose end enters a cutout with centre on-board is an error", () => {
+    const report = runDrc(
+      projection({
+        board: board100({
+          cutouts: [
+            {
+              id: "a",
+              shape: {
+                kind: "circle",
+                widthMm: 4,
+                heightMm: 4,
+                centerMm: { x: 20, y: 0 },
+              },
+            },
+          ],
+        }),
+        freeHoles: [
+          {
+            id: "s",
+            centerMm: { x: 16, y: 0 },
+            drillMm: 1,
+            drillSlot: { lengthMm: 6, widthMm: 1, angleDeg: 0 },
+            lockedAt: null,
+          },
+        ],
+      }),
+    );
+    const v = report.violations.find((x) => x.code === "HOLE_OFF_BOARD");
+    expect(v).toBeDefined();
+    expect(v!.severity).toBe("error");
+  });
+
+  test("copper exactly tangent to the edge is on-board", () => {
+    const report = runDrc(
+      projection({
+        traces: [
+          trace("t", "n1", [[-20, 14.9], [20, 14.9]], { widthMm: 0.2 }),
+        ],
+        netNames: { n1: "SIG" },
+      }),
+    );
+    expect(codes(report)).toContain("COPPER_TO_BOARD_EDGE");
+    expect(codes(report)).not.toContain("COPPER_OFF_BOARD");
+  });
+
+  // Fixed by the S2 geometry contract (board region built once per context;
+  // containment goes through it instead of re-flattening per sampled point).
+  test("B4-7: board-region containment reuses the precomputed rings, independent of trace count", () => {
+    const polygonPointsMm = Array.from({ length: 20 }, (_, i) => {
+      const a = (i / 20) * Math.PI * 2;
+      return { x: Math.cos(a) * 10, y: Math.sin(a) * 10 };
+    });
+    const b: PcbBoardSettings = {
+      ...board(),
+      outline: {
+        kind: "polygon",
+        widthMm: 20,
+        heightMm: 20,
+        centerMm: { x: 0, y: 0 },
+        pointsMm: polygonPointsMm,
+      },
+    };
+    const makeTraces = (n: number) =>
+      Array.from({ length: n }, (_, i) =>
+        trace(`t${i}`, "n1", [
+          [i * 0.01, 0],
+          [i * 0.01 + 0.005, 0],
+        ]),
+      );
+    // Spy on the REAL kernel module (not the pcb/ shim): buildBoardRegion
+    // calls flattenOutline directly from ./outline-geometry within
+    // src/shared/pcb-geometry/, so the shim's re-exported binding is never
+    // the one invoked.
+    const spy = spyOn(realOutlineGeometry, "flattenOutline");
+    try {
+      runDrc(
+        projection({ board: b, traces: makeTraces(50), netNames: { n1: "SIG" } }),
+      );
+      const count50 = spy.mock.calls.length;
+      spy.mockClear();
+      runDrc(
+        projection({ board: b, traces: makeTraces(500), netNames: { n1: "SIG" } }),
+      );
+      const count500 = spy.mock.calls.length;
+      // Observed: 2 calls (one unbiased "none" flatten, one biased
+      // "board-inner" flatten) for the single outline ring, independent of
+      // trace count — the old per-sampled-point pointInOutline() re-flatten
+      // is gone.
+      expect(count500).toBe(count50);
+      expect(count50).toBeLessThanOrEqual(4);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // Astra §9.2: with edge clearance measured on the UNBIASED (inscribed)
+  // cutout chords, a true 0.4949999 mm gap read 0.5049 mm and passed the
+  // 0.5 mm rule at a chord midpoint. Clearance now measures the biased ring.
+  test("B4-6c: copper-to-cutout clearance is not over-measured at a chord midpoint", () => {
+    const radiusMm = 20;
+    const trueGapMm = 0.494999902;
+    const halfWidthMm = 0.1;
+    const centerlineR = radiusMm + trueGapMm + halfWidthMm;
+    const n = arcSegmentCount(radiusMm, Math.PI * 2, "inscribed");
+    const midAngle = Math.PI / n;
+    const halfLenMm = 0.3;
+    const cx = Math.cos(midAngle) * centerlineR;
+    const cy = Math.sin(midAngle) * centerlineR;
+    const tx = -Math.sin(midAngle);
+    const ty = Math.cos(midAngle);
+    const report = runDrc(
+      projection({
+        board: board100({
+          cutouts: [
+            {
+              id: "c1",
+              shape: {
+                kind: "circle",
+                widthMm: radiusMm * 2,
+                heightMm: radiusMm * 2,
+                centerMm: { x: 0, y: 0 },
+              },
+            },
+          ],
+        }),
+        traces: [
+          trace(
+            "t",
+            "n1",
+            [
+              [cx - tx * halfLenMm, cy - ty * halfLenMm],
+              [cx + tx * halfLenMm, cy + ty * halfLenMm],
+            ],
+            { widthMm: halfWidthMm * 2 },
+          ),
+        ],
+        netNames: { n1: "SIG" },
+      }),
+    );
+    expect(codes(report)).toContain("COPPER_TO_BOARD_EDGE");
+    expect(codes(report)).not.toContain("COPPER_OFF_BOARD");
+  });
+
+  // Astra §9.2: the pairwise cutout loop used to stop at the first partner, so
+  // authoring order changed how many BOARD_OUTLINE_INVALID drafts appeared.
+  test("cutout authoring order does not change the outline verdict multiset", () => {
+    const box = (id: string, x0: number, y0: number, x1: number, y1: number) => ({
+      id,
+      shape: {
+        kind: "contour" as const,
+        widthMm: x1 - x0,
+        heightMm: y1 - y0,
+        centerMm: { x: (x0 + x1) / 2, y: (y0 + y1) / 2 },
+        start: { x: x0, y: y0 },
+        segments: [
+          { type: "line" as const, to: { x: x1, y: y0 } },
+          { type: "line" as const, to: { x: x1, y: y1 } },
+          { type: "line" as const, to: { x: x0, y: y1 } },
+          { type: "line" as const, to: { x: x0, y: y0 } },
+        ],
+      },
+    });
+    const A = box("A", -3, -1, 3, 1);
+    const B = box("B", -2, -2, -1, 2);
+    const C = box("C", 1, -2, 2, 2);
+    const run = (cutouts: PcbBoardSettings["cutouts"]) =>
+      runDrc(projection({ board: board100({ cutouts }) }))
+        .violations.filter((v) => v.code === "BOARD_OUTLINE_INVALID")
+        .map((v) => v.id)
+        .sort();
+    const abc = run([A, B, C]);
+    const bca = run([B, C, A]);
+    expect(abc.length).toBe(2);
+    expect(bca).toEqual(abc);
+  });
+
+  // Astra §9.2 run 2, #1: a sliver-thin OUTER contour whose shallow arc
+  // flattens to one chord became a simple triangle on the wrong side of the
+  // board; copper 0.001 mm outside the true board passed. Look-ahead
+  // refinement (coarse ⊆ fine for an inward ring) now catches it.
+  test("sliver outer contour: copper outside the true board is OFF-BOARD", () => {
+    const sagitta = 0.005;
+    // 2 mm chord: r = (h² + s²) / 2s with half-chord h = 1.
+    const r = (1 + sagitta * sagitta) / (2 * sagitta);
+    const outline: PcbBoardSettings["outline"] = {
+      kind: "contour",
+      widthMm: 2,
+      heightMm: sagitta,
+      centerMm: { x: 1, y: 0.0025 },
+      start: { x: 0, y: 0 },
+      segments: [
+        { type: "arc", to: { x: 2, y: 0 }, centerMm: { x: 1, y: sagitta - r }, cw: true },
+        { type: "line", to: { x: 1, y: 0.002 } },
+        { type: "line", to: { x: 0, y: 0 } },
+      ],
+    };
+    const report = runDrc(
+      projection({
+        board: { ...board(), outline },
+        placements: [
+          placement("P", {
+            positionMm: { x: 1, y: 0.001 },
+            pads: [pad("1", { x: 0, y: 0 }, 0.2, 0.0004)],
+          }),
+        ],
+        padNets: { "P|1": "n1" },
+        netNames: { n1: "SIG" },
+      }),
+    );
+    expect(codes(report)).toContain("COPPER_OFF_BOARD");
+    expect(codes(report)).not.toContain("BOARD_OUTLINE_INVALID");
+  });
+
+  // Astra §9.2 run 2, #2: two lines cross the TRUE arc but miss its coarse
+  // chords, so both flattened rings were simple and validity said nothing.
+  test("a contour whose lines cross its true arc is invalid", () => {
+    const outline: PcbBoardSettings["outline"] = {
+      kind: "contour",
+      widthMm: 3,
+      heightMm: 3,
+      centerMm: { x: 1, y: -0.5 },
+      start: { x: 1, y: 0 },
+      segments: [
+        { type: "arc", to: { x: 0, y: 1 }, centerMm: { x: 0, y: 0 }, cw: false },
+        { type: "line", to: { x: 2, y: -2 } },
+        { type: "line", to: { x: 1.1, y: 0.2 } },
+        { type: "line", to: { x: 0.99, y: 0.1 } },
+        { type: "line", to: { x: 1.1, y: 0.05 } },
+        { type: "line", to: { x: 1, y: 0 } },
+      ],
+    };
+    const report = runDrc(projection({ board: { ...board(), outline } }));
+    expect(codes(report)).toContain("BOARD_OUTLINE_INVALID");
+  });
+
+  // Astra §9.2 run 2, #4: a single-point trace skipped both board checks.
+  test("a single-point trace outside the board is OFF-BOARD", () => {
+    const report = runDrc(
+      projection({
+        board: board100(),
+        traces: [trace("t", "n1", [[60, 0]], { widthMm: 0.2 })],
+        netNames: { n1: "SIG" },
+      }),
+    );
+    expect(codes(report)).toContain("COPPER_OFF_BOARD");
+  });
+
+  // Astra §9.2 run 2, #5: a zero-area cutout's early return skipped its pair
+  // comparisons, so [D, B] and [B, D] reported different counts.
+  test("a degenerate cutout does not make the verdict order-dependent", () => {
+    const D = {
+      id: "D",
+      shape: {
+        kind: "contour" as const,
+        widthMm: 2,
+        heightMm: 0,
+        centerMm: { x: 1, y: 0 },
+        start: { x: 0, y: 0 },
+        segments: [
+          { type: "line" as const, to: { x: 1, y: 0 } },
+          { type: "line" as const, to: { x: 2, y: 0 } },
+          { type: "line" as const, to: { x: 0, y: 0 } },
+        ],
+      },
+    };
+    const B = {
+      id: "B",
+      shape: {
+        kind: "contour" as const,
+        widthMm: 4,
+        heightMm: 2,
+        centerMm: { x: 1, y: 0 },
+        start: { x: -1, y: -1 },
+        segments: [
+          { type: "line" as const, to: { x: 3, y: -1 } },
+          { type: "line" as const, to: { x: 3, y: 1 } },
+          { type: "line" as const, to: { x: -1, y: 1 } },
+          { type: "line" as const, to: { x: -1, y: -1 } },
+        ],
+      },
+    };
+    const run = (cutouts: PcbBoardSettings["cutouts"]) =>
+      runDrc(projection({ board: board100({ cutouts }) }))
+        .violations.filter((v) => v.code === "BOARD_OUTLINE_INVALID")
+        .map((v) => v.id)
+        .sort();
+    expect(run([D, B])).toEqual(run([B, D]));
+  });
+
+  // Astra §9.2 run 2, #7: a NaN vertex made every comparison false and the
+  // outline read as valid.
+  test("a non-finite outline vertex is invalid", () => {
+    const outline: PcbBoardSettings["outline"] = {
+      kind: "polygon",
+      widthMm: 10,
+      heightMm: 10,
+      centerMm: { x: 5, y: 5 },
+      pointsMm: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: Number.NaN, y: 5 },
+        { x: 10, y: 10 },
+        { x: 0, y: 10 },
+      ],
+    };
+    const report = runDrc(projection({ board: { ...board(), outline } }));
+    expect(codes(report)).toContain("BOARD_OUTLINE_INVALID");
   });
 });

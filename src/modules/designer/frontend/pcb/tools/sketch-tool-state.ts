@@ -11,9 +11,21 @@ import type { PcbPointMm } from "../../../../../sdks";
  * Coordinates are millimetres (board-outline space), not the nanometres the
  * trace router uses.
  */
+/**
+ * What the sketch is being drawn for. Board-shape sketching predates S3b and
+ * stays the default so existing `{ kind: "start", pointMm }` call sites keep
+ * compiling; zone/keepout tools pass `target` explicitly (contract §12.3).
+ * `"zoneHole"` sketches a cutout of one existing polygon zone (copper-pour
+ * contract §11) and is the one target that needs a subject.
+ */
+export type SketchTarget = "boardShape" | "zone" | "keepout" | "zoneHole";
+
 export interface SketchSession {
   /** Committed polygon vertices, in click order. `verticesMm[0]` is the start. */
   verticesMm: PcbPointMm[];
+  target: SketchTarget;
+  /** Zone the cutout belongs to. Set only when `target === "zoneHole"`. */
+  parentZoneId?: string;
 }
 
 export type SketchToolState =
@@ -21,7 +33,12 @@ export type SketchToolState =
   | { kind: "drawing"; session: SketchSession };
 
 export type SketchToolEvent =
-  | { kind: "start"; pointMm: PcbPointMm }
+  | {
+      kind: "start";
+      pointMm: PcbPointMm;
+      target?: SketchTarget;
+      parentZoneId?: string;
+    }
   | { kind: "commit-vertex"; pointMm: PcbPointMm }
   | { kind: "undo-vertex" }
   | { kind: "cancel" };
@@ -41,7 +58,16 @@ export function sketchToolReducer(
 ): SketchToolState {
   switch (event.kind) {
     case "start":
-      return { kind: "drawing", session: { verticesMm: [event.pointMm] } };
+      return {
+        kind: "drawing",
+        session: {
+          verticesMm: [event.pointMm],
+          target: event.target ?? "boardShape",
+          ...(event.parentZoneId === undefined
+            ? {}
+            : { parentZoneId: event.parentZoneId }),
+        },
+      };
     case "cancel":
       return { kind: "idle" };
     default:
@@ -56,13 +82,16 @@ export function sketchToolReducer(
       if (samePoint(last, event.pointMm)) return state;
       return {
         kind: "drawing",
-        session: { verticesMm: [...verts, event.pointMm] },
+        session: { ...state.session, verticesMm: [...verts, event.pointMm] },
       };
     }
     case "undo-vertex": {
       const verts = state.session.verticesMm.slice(0, -1);
       if (verts.length === 0) return { kind: "idle" };
-      return { kind: "drawing", session: { verticesMm: verts } };
+      return {
+        kind: "drawing",
+        session: { ...state.session, verticesMm: verts },
+      };
     }
     default:
       return state;

@@ -1,4 +1,18 @@
-import type { PcbPointMm, RatsnestSegment } from "../../../../../sdks/designer";
+import type {
+  PcbPointMm,
+  RatsnestEndpoint,
+  RatsnestSegment,
+} from "../../../../../sdks/designer";
+
+/**
+ * Stable key per airwire endpoint. Free pads are prefixed so a free-pad id can
+ * never alias a `placementId|padNumber` footprint key.
+ */
+function endpointKey(endpoint: RatsnestEndpoint): string {
+  return endpoint.kind === "pad"
+    ? `${endpoint.placementId}|${endpoint.padNumber}`
+    : `freepad:${endpoint.freePadId}`;
+}
 
 /**
  * Closest open pad on `netId` per the ratsnest — the pad the dynamic ratsnest
@@ -14,8 +28,8 @@ export function nearestRatsnestPad(input: {
   const pads = new Map<string, PcbPointMm>();
   for (const seg of input.ratsnest) {
     if (seg.netId !== input.netId) continue;
-    const fromKey = `${seg.fromPlacementId}|${seg.fromPadNumber}`;
-    const toKey = `${seg.toPlacementId}|${seg.toPadNumber}`;
+    const fromKey = endpointKey(seg.from);
+    const toKey = endpointKey(seg.to);
     if (!pads.has(fromKey)) pads.set(fromKey, seg.fromMm);
     if (!pads.has(toKey)) pads.set(toKey, seg.toMm);
   }

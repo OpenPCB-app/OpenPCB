@@ -142,6 +142,7 @@ function makeGetPcbStateTool(ctx: CoreBackendModuleContext): AiTool {
           traces: pcb.traces.length,
           vias: pcb.vias.length,
           zones: pcb.zones.length,
+          keepouts: pcb.keepouts.length,
           freeHoles: pcb.freeHoles.length,
           freePads: pcb.freePads.length,
           unroutedConnections: pcb.ratsnest.length,

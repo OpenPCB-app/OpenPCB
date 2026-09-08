@@ -19,7 +19,7 @@ interface RouteHudRowsProps {
   model: RouteHudModel | null;
   /** Non-null after a finish attempt was blocked by the DRC commit gate. */
   blockedConflictCount: number | null;
-  /** Session-scoped override: commit despite clearance conflicts. */
+  /** Session-scoped override: commit despite DRC conflicts. */
   allowDrcViolations: boolean;
   onToggleAllowDrcViolations: () => void;
   /** Active auto-finish proposal (dimmed path awaiting explicit accept). */
@@ -28,6 +28,8 @@ interface RouteHudRowsProps {
   onDismissAutoFinish?: () => void;
   /** Transient auto-finish failure notice ("No clean path — route manually"). */
   autoFinishNotice?: string | null;
+  /** Transient route refusal ("Via blocked by keepout ..."); nothing changed. */
+  routeNotice?: string | null;
 }
 
 function formatMm(value: number): string {
@@ -187,11 +189,13 @@ export function RouteHudRows({
   onAcceptAutoFinish,
   onDismissAutoFinish,
   autoFinishNotice = null,
+  routeNotice = null,
 }: RouteHudRowsProps): ReactElement | null {
   const hints = model?.hints ?? [];
   const hasRows =
     autoFinishProposal !== null ||
     autoFinishNotice !== null ||
+    routeNotice !== null ||
     (blockedConflictCount !== null && !allowDrcViolations) ||
     allowDrcViolations ||
     hints.length > 0;
@@ -232,7 +236,7 @@ export function RouteHudRows({
       {blockedConflictCount !== null && !allowDrcViolations ? (
         <PcbParamRow className="text-status-danger">
           <span role="alert">
-            Commit blocked: {blockedConflictCount} clearance conflict
+            Commit blocked: {blockedConflictCount} DRC conflict
             {blockedConflictCount === 1 ? "" : "s"} — fix the route or
           </span>
           <button
@@ -244,9 +248,14 @@ export function RouteHudRows({
           </button>
         </PcbParamRow>
       ) : null}
+      {routeNotice ? (
+        <PcbParamRow className="text-status-danger">
+          <span role="alert">{routeNotice}</span>
+        </PcbParamRow>
+      ) : null}
       {allowDrcViolations ? (
         <PcbParamRow className="text-status-warning">
-          <span>DRC override ON — commits may violate clearance</span>
+          <span>DRC override ON — commits may violate design rules</span>
           <button
             type="button"
             className={INLINE_BUTTON}

@@ -21,7 +21,15 @@ import type {
   PcbLayerCount,
   PcbLayerId,
   PcbLayerPreset,
+  PcbZone,
+  PcbZoneNetRef,
+  PcbZonePadConnection,
 } from "../../../../sdks";
+import { NetSelect } from "./PcbSelectionInspector";
+import {
+  boardZoneForLayer,
+  hasEnabledBoardZone,
+} from "./tools/board-zone-controls";
 import {
   PCB_LAYER_COLORS,
   PCB_LAYER_PRESETS,
@@ -51,8 +59,19 @@ interface PcbLayersPanelProps {
   layerCount?: PcbLayerCount;
   displayMode?: PcbDisplayMode;
   onSetDisplayMode?: (mode: PcbDisplayMode) => void;
-  copperFillLayers?: ReadonlyArray<PcbCopperLayerId>;
-  onToggleCopperFillLayer?: (layer: PcbCopperLayerId) => void;
+  /**
+   * Persisted board zones — the per-layer copper-fill control IS a board
+   * zone's lifecycle control (contract §12.3). Polygon zones are ignored.
+   */
+  boardZones?: ReadonlyArray<PcbZone>;
+  onToggleBoardZone?: (layer: PcbCopperLayerId) => void;
+  onSetBoardZoneNet?: (layer: PcbCopperLayerId, net: PcbZoneNetRef) => void;
+  onSetBoardZonePadConnection?: (
+    layer: PcbCopperLayerId,
+    connection: PcbZonePadConnection,
+  ) => void;
+  /** Nets the board zone may pour, in the pour-picker order. */
+  nets?: ReadonlyArray<{ id: string; name: string }>;
   /** Delete same-net traces already fully covered by a pour (redundant routing). */
   onCleanupPourTraces?: () => void;
   /** Preset chip handler. Receives the preset id; "custom" should be ignored. */
@@ -123,6 +142,22 @@ function isCopperLayer(layer: PcbLayerId): layer is PcbCopperLayerId {
 const ROW_ICON_BUTTON =
   "shrink-0 rounded-control p-0.5 transition-colors [&_svg]:h-3 [&_svg]:w-3";
 
+const BOARD_ZONE_SELECT_CLASS =
+  "h-[18px] min-w-0 flex-1 rounded-control border border-border-control bg-surface-input px-1 text-2xs text-text-strong outline-none focus:border-selection";
+
+const BOARD_ZONE_PAD_CONNECTIONS: Array<{
+  value: PcbZonePadConnection;
+  label: string;
+}> = [
+  { value: "solid", label: "Solid" },
+  { value: "thermal", label: "Thermal" },
+  { value: "thruHoleThermal", label: "Thermal (THT)" },
+  { value: "none", label: "None" },
+];
+
+const EMPTY_BOARD_ZONES: ReadonlyArray<PcbZone> = [];
+const EMPTY_NETS: ReadonlyArray<{ id: string; name: string }> = [];
+
 /**
  * Hybrid layer panel — grouped tree with a KiCad-style display-mode cycle.
  * Group headers ("Top Layers", "Bottom Layers") toggle every child layer at
@@ -139,8 +174,11 @@ export function PcbLayersPanel({
   layerCount = 2,
   displayMode = "normal",
   onSetDisplayMode,
-  copperFillLayers = [],
-  onToggleCopperFillLayer,
+  boardZones = EMPTY_BOARD_ZONES,
+  onToggleBoardZone,
+  onSetBoardZoneNet,
+  onSetBoardZonePadConnection,
+  nets = EMPTY_NETS,
   onCleanupPourTraces,
   onSelectLayerPreset,
   perLayerOpacity,
@@ -170,10 +208,6 @@ export function PcbLayersPanel({
       return next;
     });
   }, []);
-  const copperFillSet = useMemo(
-    () => new Set(copperFillLayers),
-    [copperFillLayers],
-  );
   const [topOpen, setTopOpen] = useState(true);
   const [bottomOpen, setBottomOpen] = useState(true);
 
@@ -369,8 +403,11 @@ export function PcbLayersPanel({
           const isChild =
             TOP_CHILDREN.includes(node.id) || BOTTOM_CHILDREN.includes(node.id);
           const copperLayer = isCopperLayer(node.id) ? node.id : null;
-          const copperFillActive =
-            copperLayer !== null && copperFillSet.has(copperLayer);
+          const boardZone =
+            copperLayer !== null
+              ? boardZoneForLayer(boardZones, copperLayer)
+              : null;
+          const copperFillActive = boardZone?.enabled === true;
           const isSoloed = soloLayer === node.id;
           const opacityValue = perLayerOpacity?.[node.id] ?? 1;
           const opacityExpanded = expandedOpacityRows.has(node.id);
@@ -477,10 +514,11 @@ export function PcbLayersPanel({
                     <SlidersHorizontal />
                   </button>
                 ) : null}
-                {copperLayer !== null && onToggleCopperFillLayer ? (
+                {copperLayer !== null && onToggleBoardZone ? (
                   <button
                     type="button"
-                    onClick={() => onToggleCopperFillLayer(copperLayer)}
+                    data-testid={`copper-fill-toggle-${copperLayer}`}
+                    onClick={() => onToggleBoardZone(copperLayer)}
                     title={
                       copperFillActive
                         ? "Hide copper fills"
@@ -537,11 +575,54 @@ export function PcbLayersPanel({
                   </span>
                 </div>
               ) : null}
+              {/* Board-zone pour settings: only once the row exists — the
+                  Droplet toggle is what creates it (contract §12.3). */}
+              {opacityExpanded && copperLayer !== null && boardZone ? (
+                <div
+                  className={`flex h-[22px] items-center gap-2 pr-2 ${
+                    isChild ? "pl-6" : "pl-2"
+                  }`}
+                >
+                  <span className="text-2xs uppercase tracking-[.04em] text-text-caps">
+                    Pour
+                  </span>
+                  {onSetBoardZoneNet ? (
+                    <NetSelect
+                      value={{
+                        netId: boardZone.netId,
+                        netName: boardZone.netName,
+                      }}
+                      nets={nets}
+                      ariaLabel={`${node.label} pour net`}
+                      onChange={(net) => onSetBoardZoneNet(copperLayer, net)}
+                    />
+                  ) : null}
+                  {onSetBoardZonePadConnection ? (
+                    <select
+                      value={boardZone.padConnection ?? "solid"}
+                      aria-label={`${node.label} pad connection`}
+                      onChange={(e) =>
+                        onSetBoardZonePadConnection(
+                          copperLayer,
+                          e.target.value as PcbZonePadConnection,
+                        )
+                      }
+                      className={BOARD_ZONE_SELECT_CLASS}
+                    >
+                      {BOARD_ZONE_PAD_CONNECTIONS.map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           );
         })}
       </div>
-      {onCleanupPourTraces && copperFillLayers.length > 0 ? (
+      {onCleanupPourTraces && hasEnabledBoardZone(boardZones) ? (
         <div className="border-t border-border px-2 py-1.5">
           <button
             type="button"

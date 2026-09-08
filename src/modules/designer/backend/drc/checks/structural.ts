@@ -10,7 +10,6 @@ export function checkStructural(ctx: DrcContext): DrcViolationDraft[] {
       out.push({
         code: "PLACED_PART_MISSING_FOOTPRINT",
         ruleClass: "structural",
-        severity: "error",
         message: `Placed part ${p.reference} has no footprint pads — it cannot be routed or correlated to nets`,
         anchors: [{ kind: "placement", placementId: p.id }],
         locationMm: p.positionMm,

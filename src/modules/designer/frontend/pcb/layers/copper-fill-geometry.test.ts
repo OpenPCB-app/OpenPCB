@@ -8,13 +8,17 @@ import type {
 } from "../../../../../sdks";
 import type { FootprintRenderSourcePad } from "../../../../../shared/rendering";
 import {
-  buildCopperFillPadGroups,
+  buildCopperFillIslands,
   buildCopperFillPourPaths,
-  buildCopperFillPourShapes,
   isTraceCoveredByPour,
-  resolveCopperFillClearanceMm,
+  type CopperFillIsland,
   type CopperFillPourParams,
 } from "./copper-fill-geometry";
+import {
+  boardClearanceByPairKind,
+  DEFAULT_POUR_TO_COPPER_MM,
+} from "../../../../../shared/drc/rule-compile";
+import { islandsToShapes } from "../../../../../shared/rendering/copper-fill/copper-fill-shapes";
 
 const outline = {
   kind: "rect" as const,
@@ -185,9 +189,12 @@ function distPointToRect(
   return Math.hypot(dx, dy);
 }
 
-function buildPour(p: Partial<CopperFillPourParams> = {}): THREE.Shape[] {
-  return buildCopperFillPourShapes({
+function pourParams(
+  p: Partial<CopperFillPourParams> = {},
+): CopperFillPourParams {
+  return {
     layer: "F.Cu",
+    layerCount: 2,
     outline,
     placements: [],
     traces: noTraces,
@@ -195,44 +202,89 @@ function buildPour(p: Partial<CopperFillPourParams> = {}): THREE.Shape[] {
     pourNetId: null,
     padNetIds: emptyPadNets,
     clearanceMm: 0.5,
+    // No rules and no net class in these fixtures: the zone tier passed above
+    // is the whole resolution, so the per-obstacle term contributes nothing.
+    clearanceForItem: () => 0,
     copperToBoardEdgeMm: 0.5,
     // Default off so geometry is predictable; specific tests opt in.
     cornerRadiusMm: 0,
     minThicknessMm: 0,
     ...p,
-  });
+  };
+}
+
+/** Kept islands of an `ok` pour; a `failed` pour would surface as an empty list. */
+function islands(p: Partial<CopperFillPourParams> = {}): CopperFillIsland[] {
+  return buildCopperFillIslands(pourParams(p)).islands;
+}
+
+function buildPour(p: Partial<CopperFillPourParams> = {}): THREE.Shape[] {
+  return islandsToShapes(islands(p));
 }
 
 describe("copper fill geometry", () => {
-  test("uses a conservative zone-pour clearance floor", () => {
-    expect(
-      resolveCopperFillClearanceMm({
+  // S6: the pour's board tier is PER KIND — `max(pourToCopperMm ?? 0.5,
+  // traceToX)` — and lives in the rule resolver, not in the fill kernel
+  // (rule-semantics contract §4.1, §6). The kernel's old single maximum over
+  // all four board clearances is gone: a board whose `traceToPadMm` is below
+  // its `traceToTraceMm` now pours closer to pads than to traces, following
+  // the pad rule the way a trace does.
+  test("the pour board tier is per pair kind, floored by the 0.5 mm default", () => {
+    const low = boardClearanceByPairKind({
+      clearance: {
         traceToTraceMm: 0.2,
         traceToPadMm: 0.25,
         padToPadMm: 0.25,
         traceToViaMm: 0.2,
         viaToViaMm: 0.3,
         copperToBoardEdgeMm: 0.5,
-      }),
-    ).toBe(0.5);
-    expect(
-      resolveCopperFillClearanceMm({
+      },
+      minimums: {
+        traceWidthMm: 0.2,
+        drillSizeMm: 0.4,
+        annularRingMm: 0.2,
+        viaDiameterMm: 0.8,
+        viaDrillMm: 0.4,
+      },
+    });
+    expect(low.pourToTrace).toBe(DEFAULT_POUR_TO_COPPER_MM);
+    expect(low.pourToPad).toBe(DEFAULT_POUR_TO_COPPER_MM);
+    expect(low.pourToVia).toBe(DEFAULT_POUR_TO_COPPER_MM);
+    expect(low.pourToPour).toBe(DEFAULT_POUR_TO_COPPER_MM);
+
+    const wide = boardClearanceByPairKind({
+      clearance: {
         traceToTraceMm: 0.2,
         traceToPadMm: 0.6,
         padToPadMm: 0.25,
         traceToViaMm: 0.2,
         viaToViaMm: 0.3,
         copperToBoardEdgeMm: 0.5,
-      }),
-    ).toBe(0.6);
+      },
+      minimums: {
+        traceWidthMm: 0.2,
+        drillSizeMm: 0.4,
+        annularRingMm: 0.2,
+        viaDiameterMm: 0.8,
+        viaDrillMm: 0.4,
+      },
+    });
+    // Only the PAD kind follows the wider pad rule now.
+    expect(wide.pourToPad).toBe(0.6);
+    expect(wide.pourToTrace).toBe(DEFAULT_POUR_TO_COPPER_MM);
   });
+
+  // S5: the extent is the S2 board region offset inward by `e + ε`
+  // (ε = CLEARANCE_SAFETY_EPS_MM = 0.01), not the old analytic parametric
+  // inset by `e` — so a 20×10 board insets to 18.98×8.98 = 170.44 mm², not
+  // 19×9 = 171 (copper-pour contract §3.1).
+  const INSET_AREA_MM2 = 18.98 * 8.98;
 
   test("empty board floods to the edge-clearance inset", () => {
     const shapes = buildPour();
     expect(shapes).toHaveLength(1);
     expect(holeCount(shapes)).toBe(0);
-    // 20×10 inset by 0.5 all round = 19×9 = 171 mm².
-    expect(pourArea(shapes)).toBeCloseTo(171, 0);
+    expect(pourArea(shapes)).toBeCloseTo(INSET_AREA_MM2, 1);
   });
 
   test("different-net pad carves a clearance hole in the pour", () => {
@@ -240,7 +292,7 @@ describe("copper fill geometry", () => {
       placements: [placement([pad("1", { x: 0, y: 0 }, 1, 1)])],
     });
     expect(holeCount(shapes)).toBeGreaterThanOrEqual(1);
-    expect(pourArea(shapes)).toBeLessThan(171); // pad + clearance removed
+    expect(pourArea(shapes)).toBeLessThan(INSET_AREA_MM2); // pad + clearance removed
   });
 
   test("same-net pad merges into the pour (no clearance hole)", () => {
@@ -250,7 +302,7 @@ describe("copper fill geometry", () => {
       padNetIds: new Map([["U1-pcb|1", "GND"]]),
     });
     expect(holeCount(shapes)).toBe(0);
-    expect(pourArea(shapes)).toBeCloseTo(171, 0);
+    expect(pourArea(shapes)).toBeCloseTo(INSET_AREA_MM2, 1);
   });
 
   test("drill apertures are subtracted even for a same-net via", () => {
@@ -341,20 +393,24 @@ describe("copper fill geometry", () => {
     expect(minDist).toBeGreaterThanOrEqual(0.5 - 0.001);
   });
 
-  test("fails CLOSED (empty), never floods, when diff-net obstacles collapse", () => {
+  test("a degenerate different-net via is not copper, so it is not an obstacle", () => {
     // Control: a real different-net via yields a poured board (with a moat).
-    const ok = buildPour({ vias: [via({ netId: "OTHER" })], pourNetId: "GND" });
-    expect(ok.length).toBeGreaterThan(0);
-    // A degenerate (zero-extent) diff-net via is the fail-OPEN trigger class: the
-    // obstacle union collapses to [] just as a Clipper throw would. The guard
-    // must blank the pour, NOT flood the board un-clearanced. (Depends on Clipper
-    // collapsing a zero-area ring to [] — the same behavior the kernel's
-    // "degenerate ring → no shape" test relies on.)
+    const withVia = buildPour({
+      vias: [via({ netId: "OTHER" })],
+      pourNetId: "GND",
+    });
+    expect(withVia.length).toBeGreaterThan(0);
+    expect(pourArea(withVia)).toBeLessThan(INSET_AREA_MM2);
+    // S5: "degenerate copper is not copper" (S1 §2, copper-pour contract §4) —
+    // a zero-radius via holds no metal, so there is nothing to clear and the
+    // pour floods. Before S5 the kernel could not tell a degenerate obstacle
+    // from a collapsed boolean and blanked the fill for both; the collapse is
+    // now `status: "failed"` (see copper-fill-kernel-s5.test.ts).
     const shapes = buildPour({
       vias: [via({ diameterMm: 0, drillMm: 0, netId: "OTHER" })],
       pourNetId: "GND",
     });
-    expect(shapes).toHaveLength(0);
+    expect(pourArea(shapes)).toBeCloseTo(INSET_AREA_MM2, 1);
   });
 
   test("a different-net free pad carves a clearance hole in the pour", () => {
@@ -363,7 +419,7 @@ describe("copper fill geometry", () => {
       pourNetId: "GND",
     });
     expect(holeCount(shapes)).toBeGreaterThanOrEqual(1);
-    expect(pourArea(shapes)).toBeLessThan(171);
+    expect(pourArea(shapes)).toBeLessThan(INSET_AREA_MM2);
     const verts = holeVertices(shapes);
     const minDist = Math.min(
       ...verts.map((v) => distPointToRect(v.x, v.y, 0, 0, 0.5, 0.5)),
@@ -439,8 +495,11 @@ describe("copper fill thermal relief", () => {
   });
 });
 
-describe("copper fill connectivity (buildCopperFillPadGroups)", () => {
-  // Two same-net pads on one board-wide pour → one connected island group.
+// S5 replaced `buildCopperFillPadGroups` with per-island `memberKeys` on the
+// one result every consumer reads (copper-pour contract §8): two pad keys on
+// the same island are exactly what the old "group" meant.
+describe("copper fill connectivity (island memberKeys)", () => {
+  // Two same-net pads on one board-wide pour → one island holding both keys.
   const twoPads = placement([
     pad("1", { x: -6, y: 0 }, 2, 2),
     pad("2", { x: 6, y: 0 }, 2, 2),
@@ -449,60 +508,43 @@ describe("copper fill connectivity (buildCopperFillPadGroups)", () => {
     ["U1-pcb|1", "gnd"],
     ["U1-pcb|2", "gnd"],
   ]);
-  const base: CopperFillPourParams = {
-    layer: "F.Cu",
-    outline,
+  const bothPads = ['pad:["U1-pcb","1",0]', 'pad:["U1-pcb","2",0]'];
+  const base: Partial<CopperFillPourParams> = {
     placements: [twoPads],
-    traces: noTraces,
-    vias: noVias,
     pourNetId: "gnd",
     padNetIds: padNets,
-    clearanceMm: 0.5,
-    copperToBoardEdgeMm: 0.5,
-    cornerRadiusMm: 0,
-    minThicknessMm: 0,
   };
 
-  test("solid pour joins both same-net pads into one group", () => {
-    const groups = buildCopperFillPadGroups(base);
-    expect(groups).toHaveLength(1);
-    expect([...groups[0]!].sort()).toEqual(["U1-pcb|1", "U1-pcb|2"]);
+  test("solid pour joins both same-net pads into one island", () => {
+    const result = islands(base);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.memberKeys).toEqual(bothPads);
+    expect(result[0]!.attached).toBe(true);
   });
 
   test("thermal pour still joins both pads (spokes connect them)", () => {
-    const groups = buildCopperFillPadGroups({
+    const result = islands({
       ...base,
       padConnection: "thermal",
       thermalSpokeWidthMm: 0.4,
       thermalReliefGapMm: 0.4,
     });
-    expect(groups).toHaveLength(1);
-    expect([...groups[0]!].sort()).toEqual(["U1-pcb|1", "U1-pcb|2"]);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.memberKeys).toEqual(bothPads);
   });
 
-  test("a foreign-net pad is not grouped with the pour net", () => {
-    const groups = buildCopperFillPadGroups({
+  test("a foreign-net pad is not a member of the pour", () => {
+    const result = islands({
       ...base,
       pourNetId: "vcc", // pour net differs from the pads' "gnd"
     });
-    expect(groups).toHaveLength(0);
+    expect(result.flatMap((i) => i.memberKeys)).toEqual([]);
+    expect(result.every((i) => !i.attached)).toBe(true);
   });
 });
 
 describe("copper fill redundant-trace coverage (isTraceCoveredByPour)", () => {
-  const base: CopperFillPourParams = {
-    layer: "F.Cu",
-    outline,
-    placements: [],
-    traces: noTraces,
-    vias: noVias,
-    pourNetId: "gnd",
-    padNetIds: emptyPadNets,
-    clearanceMm: 0.5,
-    copperToBoardEdgeMm: 0.5,
-    cornerRadiusMm: 0,
-    minThicknessMm: 0,
-  };
+  const base: CopperFillPourParams = pourParams({ pourNetId: "gnd" });
   const trace = (netId: string): PcbTrace => ({
     id: `t-${netId}`,
     netId,
@@ -548,5 +590,220 @@ describe("copper fill zone clip (clipPolygonMm)", () => {
     // ≈ the 4×4 = 16 mm² clip (well inside the board, no obstacles).
     expect(zonedArea).toBeGreaterThan(10);
     expect(zonedArea).toBeLessThan(16.5);
+  });
+});
+
+describe("copper fill zone padConnection override", () => {
+  const padNets = new Map([["U1-pcb|1", "GND"]]);
+  // The connectivity item key the island-membership report uses for this pad.
+  const padKey = 'pad:["U1-pcb","1",0]';
+  // Same-net SMD pad (no drill) and same-net through-hole pad (0.8 mm drill).
+  const smd: Partial<CopperFillPourParams> = {
+    placements: [placement([pad("1", { x: 0, y: 0 }, 1, 1)])],
+    pourNetId: "GND",
+    padNetIds: padNets,
+  };
+  const tht: Partial<CopperFillPourParams> = {
+    placements: [
+      placement([pad("1", { x: 0, y: 0 }, 1.5, 1.5, { drillDiameterMm: 0.8 })]),
+    ],
+    pourNetId: "GND",
+    padNetIds: padNets,
+  };
+
+  // S5: `attached` IS `memberKeys.length > 0` on the one island result
+  // (copper-pour contract §8) — the separate anchors intersection is gone.
+  const anchored = (p: Partial<CopperFillPourParams>): boolean[] =>
+    islands(p).map((i) => i.attached);
+  const memberKeys = (p: Partial<CopperFillPourParams>): string[] =>
+    islands(p).flatMap((i) => i.memberKeys);
+
+  test("'solid' is the absent-override behaviour, unchanged", () => {
+    expect(
+      buildCopperFillPourPaths(pourParams({ ...smd, padConnection: "solid" })),
+    ).toEqual(buildCopperFillPourPaths(pourParams(smd)));
+    expect(
+      buildCopperFillPourPaths(pourParams({ ...tht, padConnection: "solid" })),
+    ).toEqual(buildCopperFillPourPaths(pourParams(tht)));
+    expect(anchored({ ...smd, padConnection: "solid" })).toEqual([true]);
+    expect(memberKeys({ ...smd, padConnection: "solid" })).toEqual([padKey]);
+  });
+
+  test("'none' treats a same-net pad as different-net copper", () => {
+    const p = { ...smd, padConnection: "none" as const };
+    const shapes = buildPour(p);
+    // A clearance halo (hole in the island), not a flood over the pad.
+    expect(holeCount(shapes)).toBe(1);
+    expect(pourArea(shapes)).toBeLessThan(pourArea(buildPour(smd)));
+    // …and the pad stops anchoring / joining the island (contract §6).
+    expect(anchored(p)).toEqual([false]);
+    expect(memberKeys(p)).toEqual([]);
+    expect(memberKeys(p)).toEqual([]);
+  });
+
+  test("'thruHoleThermal' relieves a drilled pad and drops an SMD one", () => {
+    const drilled = { ...tht, padConnection: "thruHoleThermal" as const };
+    const shapes = buildPour(drilled);
+    // 4 relief-gap arcs (the spokes bridge the gap) + the drill aperture.
+    expect(holeCount(shapes)).toBe(5);
+    expect(pourArea(shapes)).toBeLessThan(pourArea(buildPour(tht)));
+    // The pad still anchors and still joins the island through its spokes.
+    expect(anchored(drilled)).toEqual([true]);
+    expect(memberKeys(drilled)).toEqual([padKey]);
+    expect(buildCopperFillPourPaths(pourParams(drilled))).toEqual(
+      buildCopperFillPourPaths(
+        pourParams({ ...tht, padConnection: "thermal" }),
+      ),
+    );
+
+    const smdPad = { ...smd, padConnection: "thruHoleThermal" as const };
+    // No drill ⇒ resolves to "none": a clearance halo, no relief, no anchor.
+    expect(holeCount(buildPour(smdPad))).toBe(1);
+    expect(anchored(smdPad)).toEqual([false]);
+    expect(memberKeys(smdPad)).toEqual([]);
+    expect(buildCopperFillPourPaths(pourParams(smdPad))).toEqual(
+      buildCopperFillPourPaths(pourParams({ ...smd, padConnection: "none" })),
+    );
+  });
+});
+
+describe("copper fill zone islandRemoval override", () => {
+  // A different-net trace at x = -8 splits the 19×9 inset pour into a ~6.7 mm²
+  // strip and a ~150.7 mm² remainder. Neither is anchored: the "GND" pour has
+  // no same-net copper of its own.
+  const splitter: PcbTrace = {
+    id: "t-split",
+    netId: "VCC",
+    netClassId: "default",
+    layer: "F.Cu",
+    widthMm: 0.5,
+    pointsNm: [
+      { x: -8_000_000, y: -6_000_000 },
+      { x: -8_000_000, y: 6_000_000 },
+    ],
+    segmentMode: "manhattan-90",
+  };
+  // Same-net copper inside the large region, so that island IS anchored.
+  const anchor: PcbTrace = {
+    ...splitter,
+    id: "t-anchor",
+    netId: "GND",
+    pointsNm: [
+      { x: 0, y: 0 },
+      { x: 5_000_000, y: 0 },
+    ],
+  };
+  const split: Partial<CopperFillPourParams> = {
+    pourNetId: "GND",
+    traces: [splitter],
+  };
+
+  test("'never' keeps every unanchored island", () => {
+    expect(buildPour({ ...split, islandRemoval: "never" })).toHaveLength(2);
+  });
+
+  test("'always' removes every unanchored island", () => {
+    expect(buildPour({ ...split, islandRemoval: "always" })).toHaveLength(0);
+  });
+
+  test("'always' still keeps an anchored island", () => {
+    expect(
+      buildPour({
+        ...split,
+        traces: [splitter, anchor],
+        islandRemoval: "always",
+      }),
+    ).toHaveLength(1);
+  });
+
+  test("{ minAreaMm2 } keeps islands at or above the threshold", () => {
+    expect(
+      buildPour({ ...split, islandRemoval: { minAreaMm2: 5 } }),
+    ).toHaveLength(2);
+    expect(
+      buildPour({ ...split, islandRemoval: { minAreaMm2: 10 } }),
+    ).toHaveLength(1);
+  });
+
+  test("islandRemoval wins over an explicit minIslandAreaMm2", () => {
+    expect(
+      buildPour({
+        ...split,
+        minIslandAreaMm2: 1_000_000,
+        islandRemoval: "never",
+      }),
+    ).toHaveLength(2);
+    expect(
+      buildPour({ ...split, minIslandAreaMm2: 0, islandRemoval: "always" }),
+    ).toHaveLength(0);
+  });
+});
+
+describe("copper fill thermal relief on free pads", () => {
+  test("a thermally connected same-net free pad gets a relief gap like a footprint pad", () => {
+    const solid = buildPour({
+      freePads: [freePad({ netId: "GND" })],
+      pourNetId: "GND",
+      padConnection: "solid",
+    });
+    const thermal = buildPour({
+      freePads: [freePad({ netId: "GND" })],
+      pourNetId: "GND",
+      padConnection: "thermal",
+      thermalSpokeWidthMm: 0.4,
+      thermalReliefGapMm: 0.4,
+      thermalSpokeCount: 4,
+    });
+    expect(pourArea(thermal)).toBeLessThan(pourArea(solid));
+    expect(holeCount(thermal)).toBeGreaterThan(holeCount(solid));
+  });
+});
+
+describe("copper fill keepout subtraction (excludePolygonsMm)", () => {
+  const keepout = [
+    { x: -2, y: -2 },
+    { x: 2, y: -2 },
+    { x: 2, y: 2 },
+    { x: -2, y: 2 },
+  ];
+  test("a copper-pour keepout removes its interior from the pour", () => {
+    const plain = buildPour({});
+    const cut = buildPour({ excludePolygonsMm: [keepout] });
+    // 16 mm² removed, plus the one-grid-step guard band around it.
+    expect(pourArea(plain) - pourArea(cut)).toBeGreaterThan(16);
+    expect(pourArea(plain) - pourArea(cut)).toBeLessThan(16.01);
+    expect(holeCount(cut)).toBeGreaterThan(holeCount(plain));
+  });
+  test("the guard band keeps every pour vertex outside the keepout", () => {
+    const cut = buildPour({ excludePolygonsMm: [keepout] });
+    for (const shape of cut) {
+      for (const hole of shape.holes) {
+        for (const v of hole.getPoints()) {
+          const inside = v.x > -2 && v.x < 2 && v.y > -2 && v.y < 2;
+          expect(inside).toBe(false);
+        }
+      }
+    }
+  });
+  test("two overlapping keepouts with OPPOSITE winding still remove the union (Astra S4 #1)", () => {
+    // Under the non-zero fill rule two opposite-winding rings cancel where they
+    // overlap; the kernel must normalise them so both keepouts still apply.
+    const reversed = [...keepout].reverse();
+    const one = buildPour({ excludePolygonsMm: [keepout] });
+    const both = buildPour({ excludePolygonsMm: [keepout, reversed] });
+    expect(pourArea(both)).toBeCloseTo(pourArea(one), 6);
+    for (const shape of both) {
+      for (const hole of shape.holes) {
+        for (const v of hole.getPoints()) {
+          const inside = v.x > -2 && v.x < 2 && v.y > -2 && v.y < 2;
+          expect(inside).toBe(false);
+        }
+      }
+    }
+  });
+  test("a degenerate keepout ring is ignored", () => {
+    expect(pourArea(buildPour({ excludePolygonsMm: [[{ x: 0, y: 0 }, { x: 1, y: 1 }]] }))).toBe(
+      pourArea(buildPour({})),
+    );
   });
 });

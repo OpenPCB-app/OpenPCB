@@ -7,7 +7,8 @@ import { getActiveDesignId } from "./active-design";
 import { buildExportBundle } from "./export";
 import { pushCloudSnapshot, readLinkPublic } from "./cloud-sync";
 import { buildBoardSnapshot as buildBoardSnapshotFromProjection } from "./pcb/board-snapshot";
-import { runDrc } from "./drc/drc-engine";
+import { drcOptionsFromProjection, runDrc } from "./drc/drc-engine";
+import { buildRawFootprintLookup } from "./pcb/raw-footprint-lookup";
 import { runErc } from "./erc/erc-engine";
 import {
   commitKicadProjectImport,
@@ -70,12 +71,14 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
     runDrc: async (designId) => {
       const projection = await store.getPcbProjection(designId);
       if (!projection) return null;
-      const view = projection.board.viewState;
-      const options = {
-        ignoredRuleClasses: view?.drcIgnoredRuleClasses ?? [],
-        waivedIds: view?.drcWaivedViolationIds ?? [],
-      };
-      const report = runDrc(projection, options);
+      // The same defaults-from-projection the HTTP route gets (rule-semantics
+      // contract §8), so the assistant / MCP report equals the route's.
+      const options = drcOptionsFromProjection(projection);
+      // Same raw-footprint recovery the HTTP route does (contract §4); the
+      // lookup is per-run, so it is not part of the persisted options.
+      const report = runDrc(projection, {
+        lookupRawFootprint: await buildRawFootprintLookup(ctx, projection),
+      });
       await store.saveDrcResult(designId, report, options);
       return report;
     },

@@ -1,47 +1,22 @@
-import { pointInPolygon } from "../../pcb/pcb-clearance-geometry";
-import { segmentsIntersect, type Point } from "../../pcb/pcb-trace-geometry";
+import { ringsIntersect, ringStrictlyInside } from "../../pcb/board-region";
+import { ringSelfIntersects } from "../../pcb/segment-predicates";
+import { ringSignedArea } from "../../pcb/ring-utils";
+import type { Point } from "../../pcb/pcb-trace-geometry";
 import type { DrcContext } from "../drc-context";
 import type { DrcViolationDraft } from "../types";
-
-/** Signed area of a closed ring (shoelace); |area| ≈ 0 ⇒ degenerate. */
-function ringArea(ring: readonly Point[]): number {
-  let a = 0;
-  for (let i = 0; i < ring.length; i += 1) {
-    const p = ring[i]!;
-    const q = ring[(i + 1) % ring.length]!;
-    a += p.x * q.y - q.x * p.y;
-  }
-  return a / 2;
-}
-
-/**
- * True when any two NON-adjacent edges of the closed ring cross — a
- * self-intersecting (invalid) outline. O(n²); outline rings are small.
- */
-function ringSelfIntersects(ring: readonly Point[]): boolean {
-  const n = ring.length;
-  if (n < 4) return false;
-  for (let i = 0; i < n; i += 1) {
-    const a = ring[i]!;
-    const b = ring[(i + 1) % n]!;
-    for (let j = i + 1; j < n; j += 1) {
-      // Skip shared-vertex neighbors (adjacent edges + the wrap pair).
-      if (j === i || (j + 1) % n === i || (i + 1) % n === j) continue;
-      const c = ring[j]!;
-      const d = ring[(j + 1) % n]!;
-      if (segmentsIntersect(a, b, c, d)) return true;
-    }
-  }
-  return false;
-}
 
 /**
  * Board-outline validity (resurrects the dead BOARD_OUTLINE_INVALID code —
  * audit B4-5). Runs FIRST so a malformed outline contextualizes the noise the
- * edge/off-board checks would otherwise emit. Checks: the outline has area and
- * no self-intersection; each cutout has area, no self-intersection, lies
- * inside the outline, and doesn't overlap another cutout.
+ * edge/off-board checks would otherwise emit. Self-intersection and zero-area
+ * run on the UNBIASED, refined rings (§4 table — bias itself can introduce
+ * crossings); cutout-in-outline and cutout-separation run on the BIASED rings
+ * (§4, §6 — conservative: a true breach or contact is always caught).
  */
+function ringIsFinite(ring: readonly Point[]): boolean {
+  return ring.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+}
+
 export function checkOutline(ctx: DrcContext): DrcViolationDraft[] {
   const out: DrcViolationDraft[] = [];
   const outline = ctx.outlineRing;
@@ -50,15 +25,17 @@ export function checkOutline(ctx: DrcContext): DrcViolationDraft[] {
     out.push({
       code: "BOARD_OUTLINE_INVALID",
       ruleClass: "constraint",
-      severity: "error",
       message,
       anchors: [{ kind: "boardEdge" }],
       locationMm,
-      waivable: false,
     });
   };
 
-  if (outline.length < 3 || Math.abs(ringArea(outline)) < 1e-6) {
+  if (!ringIsFinite(outline)) {
+    emit("Board outline has a non-finite coordinate", outline[0] ?? { x: 0, y: 0 });
+    return out;
+  }
+  if (outline.length < 3 || Math.abs(ringSignedArea(outline)) < 1e-6) {
     emit("Board outline is empty or has zero area", outline[0] ?? { x: 0, y: 0 });
     return out; // nothing else is meaningful without a valid outer ring
   }
@@ -66,31 +43,58 @@ export function checkOutline(ctx: DrcContext): DrcViolationDraft[] {
     emit("Board outline self-intersects", outline[0]!);
   }
 
+  const degenerate = ctx.cutoutRings.map(
+    (cut) =>
+      !ringIsFinite(cut) ||
+      cut.length < 3 ||
+      Math.abs(ringSignedArea(cut)) < 1e-6,
+  );
   ctx.cutoutRings.forEach((cut, i) => {
     const where = cut[0] ?? outline[0]!;
-    if (cut.length < 3 || Math.abs(ringArea(cut)) < 1e-6) {
+    if (!ringIsFinite(cut)) {
+      emit(`Cutout ${i + 1} has a non-finite coordinate`, where);
+      return;
+    }
+    if (degenerate[i]) {
       emit(`Cutout ${i + 1} is empty or has zero area`, where);
       return;
     }
     if (ringSelfIntersects(cut)) {
       emit(`Cutout ${i + 1} self-intersects`, where);
     }
-    // Every cutout vertex must lie inside the outer outline.
-    if (!cut.every((p) => pointInPolygon(p, outline))) {
-      emit(`Cutout ${i + 1} extends outside the board outline`, where);
-    }
-    // Cutouts must not overlap each other (any vertex of one inside another).
-    for (let j = i + 1; j < ctx.cutoutRings.length; j += 1) {
-      const other = ctx.cutoutRings[j]!;
-      const overlaps =
-        cut.some((p) => pointInPolygon(p, other)) ||
-        other.some((p) => pointInPolygon(p, cut));
-      if (overlaps) {
-        emit(`Cutouts ${i + 1} and ${j + 1} overlap`, where);
-        break;
-      }
+    // Cutout must lie strictly inside the outer outline, on the biased rings —
+    // touching or crossing the edge leaves a zero-width or negative web.
+    if (!ringStrictlyInside(ctx.boardRegion.holes[i]!, ctx.boardRegion.outer)) {
+      emit(`Cutout ${i + 1} touches or extends outside the board outline`, where);
     }
   });
+  // Cutouts must not touch or overlap each other, on the biased rings. Every
+  // eligible pair is tested and reported, independent of the per-cutout early
+  // returns above, so the violation multiset does not depend on authoring order.
+  for (let i = 0; i < ctx.cutoutRings.length; i += 1) {
+    if (degenerate[i]) continue;
+    for (let j = i + 1; j < ctx.cutoutRings.length; j += 1) {
+      if (degenerate[j]) continue;
+      if (
+        ringsIntersect(ctx.boardRegion.holes[i]!, ctx.boardRegion.holes[j]!)
+      ) {
+        emit(
+          `Cutouts ${i + 1} and ${j + 1} touch or overlap`,
+          ctx.cutoutRings[i]![0] ?? outline[0]!,
+        );
+      }
+    }
+  }
+
+  // A ring whose biased flattening still self-crossed even at the refinement
+  // cap: below any manufacturable web, treated as invalid (§3, §6).
+  for (const idx of ctx.boardRegion.fallbacks) {
+    const message =
+      idx === 0
+        ? "Board outline is finer than the outline tolerance (0.01 mm)"
+        : `Cutout ${idx} is finer than the outline tolerance (0.01 mm)`;
+    emit(message, outline[0] ?? { x: 0, y: 0 });
+  }
 
   return out;
 }

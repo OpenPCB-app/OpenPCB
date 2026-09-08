@@ -1,0 +1,16 @@
+-- 0018_pcb_zone_v2_keepouts.sql
+--
+-- S3a zone/keepout model v2. Two payload-shape changes inside the existing
+-- `designer_pcb_entities` JSON-blob table:
+--   * kind `zone`    — v2 payload (region / enabled / priority / padConnection
+--                      / clearance + minWidth overrides / thermal /
+--                      islandRemoval). v1 rows are upgraded on READ by
+--                      `upgradePcbZoneRecord`, so no data is rewritten here.
+--   * kind `keepout` — new: KiCad rule areas (PcbKeepout).
+--
+-- Both live in the JSON column and the existing
+-- `designer_pcb_entities_design_kind_idx` already covers (designId, kind), so
+-- there is no DDL to run. As with 0009, this migration is a deliberate no-op
+-- that registers a marker row in `openpcb_migrations` so tooling can branch on
+-- "zone v2 + keepouts present" without inspecting JSON payloads.
+SELECT 1;

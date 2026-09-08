@@ -466,6 +466,13 @@ export function PcbBoardPanel({
             <PropertyRow label="Clearance" mono hint="mm">
               {formatMm(designRules?.clearance.traceToTraceMm)}
             </PropertyRow>
+            {/* The absolute floor: no scoped rule or net class may resolve
+                below it. Optional/additive — absent reads as 0. */}
+            <PropertyRow label="Clearance floor" mono hint="mm">
+              {formatMm(
+                designRules ? (designRules.minimums.clearanceMm ?? 0) : undefined,
+              )}
+            </PropertyRow>
             <PropertyRow label="Min track" mono hint="mm">
               {formatMm(designRules?.minimums.traceWidthMm)}
             </PropertyRow>

@@ -70,3 +70,7 @@ data/footprints/kicad-footprints-master-*.zip
 
 # graphify knowledge-graph output (generated)
 graphify-out/
+
+# Subagent scratch memory (session-local)
+.claude/agent-memory/
+src/core/backend/.claude/

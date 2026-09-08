@@ -30,6 +30,7 @@ export const DEFAULT_SEVERITY_BY_CODE: Record<DrcRuleCode, DrcSeverity> = {
   VIA_ASPECT_RATIO: "warning",
   HOLE_TO_HOLE: "warning",
   HOLE_TO_BOARD_EDGE: "warning",
+  HOLE_OFF_BOARD: "error",
   // fab-capability warnings
   FAB_TRACE_WIDTH: "warning",
   FAB_CLEARANCE: "warning",
@@ -48,6 +49,12 @@ export const DEFAULT_SEVERITY_BY_CODE: Record<DrcRuleCode, DrcSeverity> = {
   // connectivity
   UNCONNECTED_NET: "error",
   ISOLATED_COPPER_ISLAND: "warning",
+  // zones / keepouts (contract 03 §13.1)
+  KEEPOUT_VIOLATION: "error",
+  ZONE_OVERLAP: "error",
+  ZONE_INVALID: "error",
+  ZONE_EMPTY_FILL: "warning",
+  ZONE_FILL_FAILED: "error",
   // net-class advisories
   NETCLASS_TRACE_WIDTH: "warning",
   NETCLASS_VIA_DIAMETER: "warning",
@@ -64,7 +71,24 @@ export const DEFAULT_SEVERITY_BY_CODE: Record<DrcRuleCode, DrcSeverity> = {
   DIFF_PAIR_GAP: "error",
   DIFF_PAIR_SKEW: "warning",
   DIFF_PAIR_UNCOUPLED_LENGTH: "warning",
+  // rule validity (rule-semantics contract §10)
+  DRC_RULE_INVALID: "error",
+  DRC_RULE_INEFFECTIVE: "warning",
 };
+
+const SEVERITY_RANK: Record<DrcSeverity, number> = {
+  info: 0,
+  warning: 1,
+  error: 2,
+};
+
+/**
+ * Order for "the most severe of" — an aggregate over several violating layers
+ * or witnesses must never downgrade the worst of them (contract §4.3, §4.4).
+ */
+export function severityRank(severity: DrcSeverity): number {
+  return SEVERITY_RANK[severity];
+}
 
 /** Codes whose error severity is safety-critical and never overridable. */
 export const NON_OVERRIDABLE = new Set<DrcRuleCode>([
@@ -72,6 +96,15 @@ export const NON_OVERRIDABLE = new Set<DrcRuleCode>([
   "VIA_LAYER_SPAN",
   "PAD_LAYER_MISMATCH",
   "BOARD_OUTLINE_INVALID",
+  // A zone/keepout the derivation refused is a fail-OPEN hazard: a dropped
+  // keepout stops protecting anything, so the code cannot be silenced (§13.1).
+  "ZONE_INVALID",
+  // A bailed fill ships no copper at all (copper-pour contract §8): silencing
+  // it would hide a plane that simply is not in the artwork.
+  "ZONE_FILL_FAILED",
+  // A rule that could not be compiled is excluded from resolution: a dropped
+  // TIGHTENING rule is fail-open, so the user must see it (contract §10).
+  "DRC_RULE_INVALID",
 ]);
 
 /** Per-code severity overrides; `"ignore"` drops the violation entirely. */

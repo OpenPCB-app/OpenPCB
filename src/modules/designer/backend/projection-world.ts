@@ -22,11 +22,13 @@ import type {
   PcbBoardSettings,
   PcbFreeHole,
   PcbFreePad,
+  PcbKeepout,
   PcbOverlayShape,
   PcbOverlayText,
   PcbPlacedPart,
   PcbTrace,
   PcbVia,
+  PcbZone,
 } from "../../../sdks";
 import { normalizeRotationDeg } from "./commands/place-part";
 import { pointStrictlyInsideOrthogonalSegment } from "./routing/manhattan";
@@ -78,6 +80,14 @@ export type DesignerWorldComponent =
     }
   | {
       type: "designer.pcb_overlay_shape";
+      payload: Record<string, unknown>;
+    }
+  | {
+      type: "designer.pcb_zone";
+      payload: Record<string, unknown>;
+    }
+  | {
+      type: "designer.pcb_keepout";
       payload: Record<string, unknown>;
     };
 
@@ -222,7 +232,9 @@ function worldEntityComponents(
         snapshot.components.get("designer.pcb_free_hole") ??
         snapshot.components.get("designer.pcb_free_pad") ??
         snapshot.components.get("designer.pcb_overlay_text") ??
-        snapshot.components.get("designer.pcb_overlay_shape");
+        snapshot.components.get("designer.pcb_overlay_shape") ??
+        snapshot.components.get("designer.pcb_zone") ??
+        snapshot.components.get("designer.pcb_keepout");
       return component ? { entityId: snapshot.id, component } : null;
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
@@ -288,6 +300,10 @@ const PCB_FREE_HOLE_PREFIX = "pcb:free_hole:";
 const PCB_FREE_PAD_PREFIX = "pcb:free_pad:";
 const PCB_OVERLAY_TEXT_PREFIX = "pcb:overlay_text:";
 const PCB_OVERLAY_SHAPE_PREFIX = "pcb:overlay_shape:";
+// Keyed by the PAYLOAD id: a zone / keepout row id is a fresh uuid that
+// `replacePcbZones` re-mints on every history replay, so it is not stable.
+const PCB_ZONE_PREFIX = "pcb:zone:";
+const PCB_KEEPOUT_PREFIX = "pcb:keepout:";
 
 export interface DesignerCombinedState {
   schematic: DesignerSchematicProjection;
@@ -299,6 +315,8 @@ export interface DesignerCombinedState {
   freePads: PcbFreePad[];
   overlayTexts: PcbOverlayText[];
   overlayShapes: PcbOverlayShape[];
+  zones: PcbZone[];
+  keepouts: PcbKeepout[];
 }
 
 export function combinedStateToWorld(
@@ -384,6 +402,22 @@ export function combinedStateToWorld(
       payload: toPayloadRecord(overlay),
     });
   }
+  for (const zone of state.zones) {
+    const entityId = asEntityId(`${PCB_ZONE_PREFIX}${zone.id}`);
+    world.ensureEntity(entityId);
+    world.setComponent(entityId, {
+      type: "designer.pcb_zone",
+      payload: toPayloadRecord(zone),
+    });
+  }
+  for (const keepout of state.keepouts) {
+    const entityId = asEntityId(`${PCB_KEEPOUT_PREFIX}${keepout.id}`);
+    world.ensureEntity(entityId);
+    world.setComponent(entityId, {
+      type: "designer.pcb_keepout",
+      payload: toPayloadRecord(keepout),
+    });
+  }
   return world;
 }
 
@@ -404,6 +438,8 @@ export function combinedStateFromWorld(
   const freePads: PcbFreePad[] = [];
   const overlayTexts: PcbOverlayText[] = [];
   const overlayShapes: PcbOverlayShape[] = [];
+  const zones: PcbZone[] = [];
+  const keepouts: PcbKeepout[] = [];
   for (const snapshot of world.snapshots()) {
     const placementComp = snapshot.components.get("designer.pcb_placement");
     if (placementComp && placementComp.type === "designer.pcb_placement") {
@@ -450,6 +486,16 @@ export function combinedStateFromWorld(
       overlayShapes.push(
         overlayShapeComp.payload as unknown as PcbOverlayShape,
       );
+      continue;
+    }
+    const zoneComp = snapshot.components.get("designer.pcb_zone");
+    if (zoneComp && zoneComp.type === "designer.pcb_zone") {
+      zones.push(zoneComp.payload as unknown as PcbZone);
+      continue;
+    }
+    const keepoutComp = snapshot.components.get("designer.pcb_keepout");
+    if (keepoutComp && keepoutComp.type === "designer.pcb_keepout") {
+      keepouts.push(keepoutComp.payload as unknown as PcbKeepout);
     }
   }
   placements.sort((a, b) => a.id.localeCompare(b.id));
@@ -459,6 +505,8 @@ export function combinedStateFromWorld(
   freePads.sort((a, b) => a.id.localeCompare(b.id));
   overlayTexts.sort((a, b) => a.id.localeCompare(b.id));
   overlayShapes.sort((a, b) => a.id.localeCompare(b.id));
+  zones.sort((a, b) => a.id.localeCompare(b.id));
+  keepouts.sort((a, b) => a.id.localeCompare(b.id));
   return {
     schematic,
     pcb,
@@ -469,6 +517,8 @@ export function combinedStateFromWorld(
     freePads,
     overlayTexts,
     overlayShapes,
+    zones,
+    keepouts,
   };
 }
 

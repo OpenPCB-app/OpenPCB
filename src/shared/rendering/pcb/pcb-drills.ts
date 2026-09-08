@@ -1,4 +1,5 @@
 import type {
+  PcbDrillSlot,
   PcbFreeHole,
   PcbFreePad,
   PcbPlacedPart,
@@ -7,9 +8,48 @@ import type {
 } from "../../../sdks";
 import { placementMirrorX } from "../../../sdks/designer/pcb-helpers";
 
+/**
+ * Centreline of an oblong drill: the routed stadium runs from `a` to `b` with
+ * radius `widthMm / 2`. Same interpretation as the Excellon writer's `G85`
+ * slot and the DRC's `slotCenterline` — the three must agree or the fab routes
+ * something the board never cleared for.
+ */
+export interface DrillSlotCenterline {
+  a: PcbPointMm;
+  b: PcbPointMm;
+  widthMm: number;
+}
+
 export interface DrillInstance {
   centerMm: PcbPointMm;
   radiusMm: number;
+  /**
+   * Present when the drill is a routed slot rather than a round hit. Consumers
+   * that model a drill as a disc may ignore it; anything that must not overhang
+   * the real hole (the pour's apertures) has to clear the whole stadium.
+   */
+  slot?: DrillSlotCenterline;
+}
+
+/**
+ * The slot a `drillSlot` describes, or `null` for a round hole. `lengthMm` is
+ * the overall long dimension along `angleDeg`, so the cap centres are inset by
+ * `widthMm / 2`; `lengthMm <= widthMm` degenerates to a round hole.
+ */
+export function drillSlotCenterline(
+  centerMm: PcbPointMm,
+  drillSlot: PcbDrillSlot | null | undefined,
+): DrillSlotCenterline | null {
+  if (!drillSlot || drillSlot.lengthMm <= drillSlot.widthMm) return null;
+  const half = (drillSlot.lengthMm - drillSlot.widthMm) / 2;
+  const rad = (drillSlot.angleDeg * Math.PI) / 180;
+  const dx = Math.cos(rad) * half;
+  const dy = Math.sin(rad) * half;
+  return {
+    a: { x: centerMm.x - dx, y: centerMm.y - dy },
+    b: { x: centerMm.x + dx, y: centerMm.y + dy },
+    widthMm: drillSlot.widthMm,
+  };
 }
 
 function transformLocal(
@@ -77,12 +117,22 @@ export function collectDrills(
   }
   for (const hole of freeHoles) {
     if (hole.drillMm > 0) {
-      out.push({ centerMm: hole.centerMm, radiusMm: hole.drillMm / 2 });
+      const slot = drillSlotCenterline(hole.centerMm, hole.drillSlot);
+      out.push({
+        centerMm: hole.centerMm,
+        radiusMm: hole.drillMm / 2,
+        ...(slot ? { slot } : {}),
+      });
     }
   }
   for (const pad of freePads) {
     if (pad.drillMm !== null && pad.drillMm > 0) {
-      out.push({ centerMm: pad.centerMm, radiusMm: pad.drillMm / 2 });
+      const slot = drillSlotCenterline(pad.centerMm, pad.drillSlot);
+      out.push({
+        centerMm: pad.centerMm,
+        radiusMm: pad.drillMm / 2,
+        ...(slot ? { slot } : {}),
+      });
     }
   }
   return out;

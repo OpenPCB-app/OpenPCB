@@ -127,3 +127,24 @@ export function viaIntersectsRect(via: PcbVia, rect: BoundsMm): boolean {
   };
   return aabbOverlap(b, rect);
 }
+
+/** Closes a ring by appending its first vertex, for the polyline helpers below. */
+function closedRing(points: readonly PcbPointMm[]): PcbPointMm[] {
+  return points.length === 0 ? [] : [...points, points[0]!];
+}
+
+/** Every vertex of the closed ring lies inside `rect`. */
+export function ringContainedInRect(
+  points: readonly PcbPointMm[],
+  rect: BoundsMm,
+): boolean {
+  return polylineContainedInAabb(closedRing(points), rect);
+}
+
+/** The closed ring touches `rect` (any vertex inside or any edge crosses). */
+export function ringIntersectsRect(
+  points: readonly PcbPointMm[],
+  rect: BoundsMm,
+): boolean {
+  return polylineIntersectsAabb(closedRing(points), rect);
+}

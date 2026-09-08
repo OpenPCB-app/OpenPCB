@@ -56,6 +56,7 @@ function projection(
     overlayTexts: parts.overlayTexts ?? [],
     overlayShapes: parts.overlayShapes ?? [],
     zones: parts.zones ?? [],
+    keepouts: [],
     ratsnest: parts.ratsnest ?? [],
     netNames: parts.netNames ?? {},
     padNets: parts.padNets,
@@ -512,10 +513,8 @@ describe("runDrc — constraints + structural + connectivity", () => {
       netClassId: "default",
       fromMm: { x: 0, y: 0 },
       toMm: { x: 5, y: 0 },
-      fromPlacementId: "A",
-      fromPadNumber: "1",
-      toPlacementId: "B",
-      toPadNumber: "1",
+      from: { kind: "pad", placementId: "A", padNumber: "1" },
+      to: { kind: "pad", placementId: "B", padNumber: "1" },
     };
     const report = runDrc(
       projection({ ratsnest: [seg], netNames: { n1: "VCC" } }),
@@ -796,5 +795,359 @@ describe("runDrc — per-net class assignment", () => {
       }),
     );
     expect(codes(report)).toContain("TRACE_TO_TRACE_CLEARANCE");
+  });
+});
+
+/**
+ * S6 §8 — `runDrc` DEFAULTS its suppression options from the projection, so the
+ * HTTP routes, the SDK (assistant, MCP) and the cloud apply path all produce
+ * the same report for the same projection. An explicit option still wins.
+ */
+describe("S6 §8 — options default from the projection", () => {
+  function clearancePair(over: Partial<PcbBoardSettings> = {}) {
+    return projection({
+      board: { ...board(), ...over },
+      netNames: { n1: "A", n2: "B" },
+      traces: [
+        trace("a", "n1", [[0, 0], [10, 0]]),
+        trace("b", "n2", [[0, 0.4], [10, 0.4]]),
+      ],
+    });
+  }
+
+  test("board.drcSeverityOverrides is honoured with no options at all", () => {
+    const report = runDrc(
+      clearancePair({
+        drcSeverityOverrides: { TRACE_TO_TRACE_CLEARANCE: "warning" },
+      }),
+    );
+    const v = report.violations.find(
+      (x) => x.code === "TRACE_TO_TRACE_CLEARANCE",
+    );
+    expect(v!.severity).toBe("warning");
+  });
+
+  test("an explicit EMPTY override map wins over the board's", () => {
+    const report = runDrc(
+      clearancePair({
+        drcSeverityOverrides: { TRACE_TO_TRACE_CLEARANCE: "warning" },
+      }),
+      { severityOverrides: {} },
+    );
+    const v = report.violations.find(
+      (x) => x.code === "TRACE_TO_TRACE_CLEARANCE",
+    );
+    expect(v!.severity).toBe("error");
+  });
+
+  test("waivers and class ignores default from viewState", () => {
+    const base = runDrc(clearancePair());
+    const id = base.violations.find(
+      (v) => v.code === "TRACE_TO_TRACE_CLEARANCE",
+    )!.id;
+
+    const waived = runDrc(
+      clearancePair({
+        viewState: {
+          ...board().viewState!,
+          drcWaivedViolationIds: [id],
+        },
+      }),
+    );
+    expect(
+      waived.violations.find((v) => v.code === "TRACE_TO_TRACE_CLEARANCE")!
+        .waived,
+    ).toBe(true);
+    expect(waived.summary.errors).toBe(base.summary.errors - 1);
+
+    const ignored = runDrc(
+      clearancePair({
+        viewState: {
+          ...board().viewState!,
+          drcIgnoredRuleClasses: ["clearance"],
+        },
+      }),
+    );
+    expect(codes(ignored)).not.toContain("TRACE_TO_TRACE_CLEARANCE");
+    // An explicit empty array asks for the unfiltered report.
+    expect(
+      codes(
+        runDrc(
+          clearancePair({
+            viewState: {
+              ...board().viewState!,
+              drcIgnoredRuleClasses: ["clearance"],
+            },
+          }),
+          { ignoredRuleClasses: [] },
+        ),
+      ),
+    ).toContain("TRACE_TO_TRACE_CLEARANCE");
+  });
+});
+
+/** S6 §2.1 / §10 — every reason the resolver can refuse a rule for. */
+describe("S6 §2.1 — rule validity reporting", () => {
+  const ok = {
+    id: "r",
+    name: "Rule",
+    enabled: true,
+    priority: 1,
+    scopes: [],
+    constraint: { kind: "clearance" as const, mm: 0.5 },
+  };
+  const withRules = (drcRules: unknown[]) =>
+    projection({
+      board: {
+        ...board(),
+        drcRules: drcRules as PcbBoardSettings["drcRules"],
+      },
+      netNames: { n1: "A", n2: "B" },
+      traces: [
+        trace("a", "n1", [[0, 0], [10, 0]]),
+        trace("b", "n2", [[0, 0.6], [10, 0.6]]),
+      ],
+    });
+  const messageOf = (rules: unknown[], code: DrcRuleCode) =>
+    runDrc(withRules(rules)).violations.find((v) => v.code === code)?.message;
+
+  test("malformed: no id, no name, a bad constraint, a bad scope", () => {
+    expect(messageOf([{ ...ok, id: 123 }], "DRC_RULE_INVALID")).toContain(
+      "rule has no id",
+    );
+    expect(messageOf([{ ...ok, name: null }], "DRC_RULE_INVALID")).toContain(
+      "rule has no name",
+    );
+    expect(
+      messageOf(
+        [{ ...ok, constraint: { kind: "clearance", mm: -1 } }],
+        "DRC_RULE_INVALID",
+      ),
+    ).toContain("negative");
+    expect(
+      messageOf(
+        [{ ...ok, scopes: [{ kind: "net", netIds: "n1" }] }],
+        "DRC_RULE_INVALID",
+      ),
+    ).toContain("netIds");
+    expect(
+      messageOf(
+        [{ ...ok, scopes: [{ kind: "pairKind", pairKinds: ["nope"] }] }],
+        "DRC_RULE_INVALID",
+      ),
+    ).toContain("unknown pair kind");
+  });
+
+  test("duplicate_id: the first occurrence in array order is the one that keeps working", () => {
+    const report = runDrc(
+      withRules([
+        { ...ok, id: "dup", constraint: { kind: "clearance", mm: 0.5 } },
+        { ...ok, id: "dup", constraint: { kind: "clearance", mm: 5 } },
+      ]),
+    );
+    expect(
+      report.violations.find((v) => v.code === "DRC_RULE_INVALID")!.message,
+    ).toContain("already used");
+    // The 0.5 rule (the first) is the one that resolved, not the 5 mm dupe.
+    expect(
+      report.violations.find((v) => v.code === "TRACE_TO_TRACE_CLEARANCE")!
+        .requiredMm,
+    ).toBeCloseTo(0.5, 9);
+  });
+
+  test("a DISABLED row owns no id — an enabled rule may reuse it", () => {
+    // A disabled rule is absent (§2.1). Treating it as an id owner turned the
+    // rule that actually resolves into a `duplicate_id` drop — fail-OPEN for a
+    // tightening rule, and silent from the user's side because the disabled row
+    // reports nothing either.
+    const report = runDrc(
+      withRules([
+        { ...ok, id: "dup", enabled: false, constraint: { kind: "clearance", mm: 0.1 } },
+        { ...ok, id: "dup", enabled: true, constraint: { kind: "clearance", mm: 5 } },
+      ]),
+    );
+    expect(codes(report)).not.toContain("DRC_RULE_INVALID");
+    expect(
+      report.violations.find((v) => v.code === "TRACE_TO_TRACE_CLEARANCE")!
+        .requiredMm,
+    ).toBeCloseTo(5, 9);
+  });
+
+  test("area_polygon_invalid: too few points, zero area, self-intersecting", () => {
+    const area = (polygonMm: Array<{ x: number; y: number }>) => [
+      { ...ok, scopes: [{ kind: "area", polygonMm }] },
+    ];
+    expect(
+      messageOf(area([{ x: 0, y: 0 }, { x: 1, y: 0 }]), "DRC_RULE_INVALID"),
+    ).toContain("fewer than 3");
+    expect(
+      messageOf(
+        area([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }]),
+        "DRC_RULE_INVALID",
+      ),
+    ).toContain("degenerate");
+    expect(
+      messageOf(
+        // A bow-tie with NON-zero area, so it fails on self-intersection
+        // rather than on the degenerate-area test above it.
+        area([
+          { x: 0, y: 0 },
+          { x: 4, y: 4 },
+          { x: 4, y: 0 },
+          { x: 0, y: 3 },
+        ]),
+        "DRC_RULE_INVALID",
+      ),
+    ).toContain("self-intersects");
+  });
+
+  test("area_limit: the 32nd DISTINCT polygon invalidates its own rule", () => {
+    const areaRule = (i: number) => ({
+      ...ok,
+      id: `a${i}`,
+      name: `Area ${i}`,
+      scopes: [
+        {
+          kind: "area",
+          polygonMm: [
+            { x: i, y: 0 },
+            { x: i + 0.5, y: 0 },
+            { x: i + 0.5, y: 0.5 },
+            { x: i, y: 0.5 },
+          ],
+        },
+      ],
+    });
+    const rules = Array.from({ length: 32 }, (_, i) => areaRule(i));
+    const report = runDrc(withRules(rules));
+    const invalid = report.violations.filter(
+      (v) => v.code === "DRC_RULE_INVALID",
+    );
+    expect(invalid).toHaveLength(1);
+    expect(invalid[0]!.message).toContain("Area 31");
+    expect(invalid[0]!.message).toContain("31 distinct area polygons");
+    // 31 rules survive: the cap is on POLYGONS, not on rules.
+    expect(runDrc(withRules(rules.slice(0, 31))).violations).not.toContainEqual(
+      expect.objectContaining({ code: "DRC_RULE_INVALID" }),
+    );
+  });
+
+  test("scope_kind_not_allowed: pairKind on a scalar rule", () => {
+    expect(
+      messageOf(
+        [
+          {
+            ...ok,
+            constraint: { kind: "trackWidth", minMm: 0.3 },
+            scopes: [{ kind: "pairKind", pairKinds: ["traceToTrace"] }],
+          },
+        ],
+        "DRC_RULE_INVALID",
+      ),
+    ).toContain("no meaning on a trackWidth rule");
+  });
+
+  test("ineffective: unknown net, unknown class, unknown layer — the rule stays active", () => {
+    expect(
+      messageOf(
+        [{ ...ok, scopes: [{ kind: "net", netIds: ["ghost"] }] }],
+        "DRC_RULE_INEFFECTIVE",
+      ),
+    ).toContain("ghost");
+    expect(
+      messageOf(
+        [{ ...ok, scopes: [{ kind: "netClass", netClassIds: ["ghost"] }] }],
+        "DRC_RULE_INEFFECTIVE",
+      ),
+    ).toContain("ghost");
+    expect(
+      messageOf(
+        [{ ...ok, scopes: [{ kind: "layer", layers: ["In7.Cu"] }] }],
+        "DRC_RULE_INEFFECTIVE",
+      ),
+    ).toContain("In7.Cu");
+    // A rule scoped to an unknown net PLUS a real one still enforces.
+    expect(
+      codes(
+        runDrc(
+          withRules([
+            { ...ok, scopes: [{ kind: "net", netIds: ["ghost", "n1"] }] },
+          ]),
+        ),
+      ),
+    ).toContain("TRACE_TO_TRACE_CLEARANCE");
+  });
+
+  test("several reasons on ONE rule become ONE violation, not colliding ids", () => {
+    const report = runDrc(
+      withRules([
+        {
+          ...ok,
+          scopes: [
+            { kind: "net", netIds: ["ghost"] },
+            { kind: "layer", layers: ["In7.Cu"] },
+          ],
+        },
+      ]),
+    );
+    const hits = report.violations.filter(
+      (v) => v.code === "DRC_RULE_INEFFECTIVE",
+    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.message).toContain("ghost");
+    expect(hits[0]!.message).toContain("In7.Cu");
+    expect(new Set(report.violations.map((v) => v.id)).size).toBe(
+      report.violations.length,
+    );
+  });
+
+  test("a disabled rule is neither invalid nor ineffective — it is absent", () => {
+    const report = runDrc(
+      withRules([{ ...ok, enabled: false, constraint: { kind: "clearance", mm: -1 } }]),
+    );
+    expect(codes(report)).not.toContain("DRC_RULE_INVALID");
+    expect(codes(report)).not.toContain("DRC_RULE_INEFFECTIVE");
+  });
+
+  test("DRC_RULE_INVALID is non-overridable and non-waivable", () => {
+    const proj = withRules([{ ...ok, id: 123 }]);
+    const ignored = runDrc(proj, {
+      severityOverrides: { DRC_RULE_INVALID: "ignore" },
+      ignoredRuleClasses: ["structural"],
+    });
+    const v = ignored.violations.find((x) => x.code === "DRC_RULE_INVALID");
+    expect(v).toBeDefined();
+    expect(v!.severity).toBe("error");
+    expect(runDrc(proj, { waivedIds: [v!.id] }).violations.find(
+      (x) => x.code === "DRC_RULE_INVALID",
+    )!.waived).toBeUndefined();
+  });
+
+  test("determinism: reversed input arrays with area rules → identical id set", () => {
+    const p = withRules([
+      {
+        ...ok,
+        id: "area",
+        priority: 10,
+        scopes: [
+          {
+            kind: "area",
+            polygonMm: [
+              { x: 2, y: -2 },
+              { x: 8, y: -2 },
+              { x: 8, y: 2 },
+              { x: 2, y: 2 },
+            ],
+          },
+        ],
+        constraint: { kind: "clearance", mm: 0.1 },
+      },
+      { ...ok, id: "global", priority: 1, constraint: { kind: "clearance", mm: 0.9 } },
+    ]);
+    const forward = runDrc(p);
+    const reversed = runDrc({ ...p, traces: [...p.traces].reverse() });
+    expect(reversed.violations.map((v) => v.id).sort()).toEqual(
+      forward.violations.map((v) => v.id).sort(),
+    );
   });
 });

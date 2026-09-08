@@ -30,12 +30,22 @@ import type {
   PcbDrcRule,
   PcbDiffPair,
   PcbZone,
+  PcbKeepout,
   AutoLayoutConfig,
 } from "../../../../sdks/designer";
 import {
+  copperLayersForCount,
   parsePcbLayerCount,
   isCopperLayerId as isStackupCopperLayer,
 } from "../../../../sdks/designer";
+import { findGroundNetId } from "../../../../sdks/designer/ground-net";
+import { compileRuleSet } from "../../../../shared/drc/rule-compile";
+import { boardZoneId } from "../../../../shared/pcb-areas/copper-zones";
+import {
+  parsePcbKeepoutRecord,
+  upgradePcbZoneRecord,
+  type ZoneRecordWarning,
+} from "../../../../shared/pcb-areas/zone-parse";
 import { pcbEntities } from "../schema";
 import { asNumber, asRecord, asString } from "../value-guards";
 import {
@@ -54,6 +64,7 @@ const FREE_PAD_KIND = "free_pad";
 const OVERLAY_TEXT_KIND = "overlay_text";
 const OVERLAY_SHAPE_KIND = "overlay_shape";
 const ZONE_KIND = "zone";
+const KEEPOUT_KIND = "keepout";
 
 const OVERLAY_LAYERS: ReadonlySet<PcbOverlayLayer> = new Set<PcbOverlayLayer>([
   "F.SilkS",
@@ -173,36 +184,6 @@ function parseLayerPreset(value: unknown): PcbLayerPreset {
   return "custom";
 }
 
-function parseCopperFillLayers(value: unknown): PcbCopperLayerId[] {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set<PcbCopperLayerId>();
-  const out: PcbCopperLayerId[] = [];
-  for (const item of value) {
-    if (isCopperLayerId(item) && !seen.has(item)) {
-      seen.add(item);
-      out.push(item);
-    }
-  }
-  return out;
-}
-
-function parsePourNetIds(
-  value: unknown,
-): Partial<Record<PcbCopperLayerId, string | null>> {
-  const record = asRecord(value);
-  if (!record) return {};
-  const out: Partial<Record<PcbCopperLayerId, string | null>> = {};
-  for (const key of ["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"] as const) {
-    const raw = record[key];
-    if (raw === null) {
-      out[key] = null;
-    } else if (typeof raw === "string" && raw.length > 0) {
-      out[key] = raw;
-    }
-  }
-  return out;
-}
-
 function parsePerLayerOpacity(
   value: unknown,
 ): Partial<Record<PcbLayerId, number>> {
@@ -264,23 +245,57 @@ function parseViaProtection(value: unknown): PcbViaProtection {
     : "tented";
 }
 
-/** Validate persisted/edited design rules, falling back per-field. */
+/**
+ * Validate persisted/edited design rules, falling back per-field.
+ *
+ * The OPTIONAL keys (`holeToBoardEdgeMm`, `pourToCopperMm`,
+ * `minimums.clearanceMm`, `electrical`) are the only ones whose treatment
+ * depends on `mode` (rule-semantics contract §12 items 5 and 6):
+ *
+ * - `"read"` — a key absent from the payload stays absent. The read path never
+ *   invents a value an older board never stored.
+ * - `"update"` — a key absent from the payload keeps the STORED value, and an
+ *   explicit `null` clears it. The design-rules dialog sends the subset of the
+ *   shape it edits; before S6 every key it omitted was silently reset.
+ */
 function parseDesignRules(
   value: unknown,
   fallback: PcbDesignRules,
+  mode: "read" | "update",
 ): PcbDesignRules {
   const r = asRecord(value);
   if (!r) return fallback;
   const c = asRecord(r.clearance) ?? {};
   const m = asRecord(r.minimums) ?? {};
   const num = (v: unknown, d: number): number => asNumber(v) ?? d;
-  const e = asRecord(r.electrical);
-  const optNum = (v: unknown): number | undefined => {
+  /**
+   * `undefined` = the key is absent (mode decides), `null` = an explicit
+   * clear, a number = the new value. A non-numeric, non-null value is treated
+   * as absent, exactly as `asNumber` has always done.
+   */
+  const optNum = (
+    v: unknown,
+    stored: number | undefined,
+  ): number | undefined => {
+    if (v === null) return undefined;
     const n = asNumber(v);
-    return n === null ? undefined : n;
+    if (n !== null) return n;
+    return mode === "update" ? stored : undefined;
   };
-  const holeToBoardEdgeMm = optNum(c.holeToBoardEdgeMm);
-  const clearanceFloorMm = optNum(m.clearanceMm);
+  const holeToBoardEdgeMm = optNum(
+    c.holeToBoardEdgeMm,
+    fallback.clearance.holeToBoardEdgeMm,
+  );
+  const pourToCopperMm = optNum(
+    c.pourToCopperMm,
+    fallback.clearance.pourToCopperMm,
+  );
+  const clearanceFloorMm = optNum(m.clearanceMm, fallback.minimums.clearanceMm);
+  const e =
+    r.electrical === null
+      ? null
+      : (asRecord(r.electrical) ??
+        (mode === "update" ? (fallback.electrical ?? null) : null));
   return {
     clearance: {
       traceToTraceMm: num(c.traceToTraceMm, fallback.clearance.traceToTraceMm),
@@ -293,6 +308,7 @@ function parseDesignRules(
         fallback.clearance.copperToBoardEdgeMm,
       ),
       ...(holeToBoardEdgeMm !== undefined ? { holeToBoardEdgeMm } : {}),
+      ...(pourToCopperMm !== undefined ? { pourToCopperMm } : {}),
     },
     minimums: {
       traceWidthMm: num(m.traceWidthMm, fallback.minimums.traceWidthMm),
@@ -411,14 +427,6 @@ function parseLengthMatchGroups(value: unknown): PcbLengthMatchGroup[] {
     .filter((g): g is PcbLengthMatchGroup => g !== null);
 }
 
-function parsePadConnection(value: unknown): "solid" | "thermal" | undefined {
-  return value === "thermal"
-    ? "thermal"
-    : value === "solid"
-      ? "solid"
-      : undefined;
-}
-
 function parseBool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
@@ -491,9 +499,6 @@ function parseViewState(value: unknown): PcbViewState {
   return {
     displayMode: parseDisplayMode(record.displayMode),
     viewSide: parseViewSide(record.viewSide),
-    copperFillLayers: parseCopperFillLayers(record.copperFillLayers),
-    copperFillPourNetIds: parsePourNetIds(record.copperFillPourNetIds),
-    copperFillPadConnection: parsePadConnection(record.copperFillPadConnection),
     perLayerOpacity: parsePerLayerOpacity(record.perLayerOpacity),
     layerPreset: parseLayerPreset(record.layerPreset),
     ratsnestVisible:
@@ -503,7 +508,9 @@ function parseViewState(value: unknown): PcbViewState {
           ? true
           : defaults.ratsnestVisible,
     drcIgnoredRuleClasses: parseDrcRuleClasses(record.drcIgnoredRuleClasses),
-    drcWaivedViolationIds: parseStringArray(record.drcWaivedViolationIds),
+    drcWaivedViolationIds: pruneWaivedViolationIds(
+      parseStringArray(record.drcWaivedViolationIds),
+    ),
     autoLayoutConfig: parseAutoLayoutConfig(record.autoLayoutConfig),
   };
 }
@@ -515,16 +522,6 @@ function mergeViewState(
   return {
     displayMode: patch.displayMode ?? current.displayMode,
     viewSide: patch.viewSide ?? current.viewSide,
-    copperFillLayers: patch.copperFillLayers
-      ? parseCopperFillLayers(patch.copperFillLayers)
-      : current.copperFillLayers,
-    copperFillPourNetIds: patch.copperFillPourNetIds
-      ? { ...current.copperFillPourNetIds, ...patch.copperFillPourNetIds }
-      : current.copperFillPourNetIds,
-    copperFillPadConnection:
-      patch.copperFillPadConnection !== undefined
-        ? parsePadConnection(patch.copperFillPadConnection)
-        : current.copperFillPadConnection,
     perLayerOpacity: patch.perLayerOpacity
       ? { ...current.perLayerOpacity, ...patch.perLayerOpacity }
       : current.perLayerOpacity,
@@ -536,9 +533,11 @@ function mergeViewState(
     drcIgnoredRuleClasses: patch.drcIgnoredRuleClasses
       ? parseDrcRuleClasses(patch.drcIgnoredRuleClasses)
       : (current.drcIgnoredRuleClasses ?? []),
-    drcWaivedViolationIds: patch.drcWaivedViolationIds
-      ? parseStringArray(patch.drcWaivedViolationIds)
-      : (current.drcWaivedViolationIds ?? []),
+    drcWaivedViolationIds: pruneWaivedViolationIds(
+      patch.drcWaivedViolationIds
+        ? parseStringArray(patch.drcWaivedViolationIds)
+        : (current.drcWaivedViolationIds ?? []),
+    ),
     autoLayoutConfig:
       patch.autoLayoutConfig !== undefined
         ? parseAutoLayoutConfig(patch.autoLayoutConfig)
@@ -671,10 +670,10 @@ function parseBoardSettings(value: unknown): PcbBoardSettings | null {
     new Set(netClasses.map((c) => c.id)),
   );
   const lengthMatchGroups = parseLengthMatchGroups(record.lengthMatchGroups);
-  const drcSeverityOverrides = parseDrcSeverityOverrides(
-    record.drcSeverityOverrides,
+  const drcSeverityOverrides = migrateHoleEdgeOverride(
+    parseDrcSeverityOverrides(record.drcSeverityOverrides),
   );
-  const drcRules = parseDrcRules(record.drcRules);
+  const drcRules = parseDrcRules(record.drcRules).rules;
   const diffPairs = parseDiffPairs(record.diffPairs);
   return {
     ...defaults,
@@ -682,7 +681,7 @@ function parseBoardSettings(value: unknown): PcbBoardSettings | null {
     ...(cutouts !== undefined ? { cutouts } : {}),
     activeLayer,
     visibleLayers: parseVisibleLayers(record.visibleLayers),
-    designRules: parseDesignRules(record.designRules, defaults.designRules),
+    designRules: parseDesignRules(record.designRules, defaults.designRules, "read"),
     netClasses,
     ...(Object.keys(perNetClassAssignments).length > 0
       ? { perNetClassAssignments }
@@ -822,35 +821,116 @@ function parseDrcRuleScopes(value: unknown): PcbDrcRule["scopes"] | null {
   return out;
 }
 
-function parseDrcRules(value: unknown): PcbDrcRule[] {
-  if (!Array.isArray(value)) return [];
+/**
+ * One rule row that could not be parsed at all (rule-semantics §2.1
+ * `malformed`). The READ path drops these — the one remaining silent drop,
+ * because a persisted row that is not even shaped like a rule has no id to
+ * report against and no board has ever been observed with one. The UPDATE
+ * path is fail-closed: `pcb_set_design_rules` refuses the whole command with
+ * `INVALID_DRC_RULE` rather than dropping a tightening rule the author wrote.
+ */
+export interface DrcRuleParseIssue {
+  /** The row's `id` when it had a usable one, else its array index. */
+  ruleId: string;
+  index: number;
+  reason: string;
+  detail: string;
+}
+
+function parseDrcRules(value: unknown): {
+  rules: PcbDrcRule[];
+  invalid: DrcRuleParseIssue[];
+} {
+  if (!Array.isArray(value)) return { rules: [], invalid: [] };
   const out: PcbDrcRule[] = [];
-  for (const raw of value) {
-    if (!asRecord(raw)) continue;
-    const id = asString(raw.id);
-    const name = asString(raw.name);
-    const constraint = raw.constraint;
-    if (!id || !name || !asRecord(constraint)) continue;
+  const invalid: DrcRuleParseIssue[] = [];
+  for (const [index, raw] of value.entries()) {
+    const record = asRecord(raw);
+    const rowId = asString(record?.id) ?? String(index);
+    const reject = (detail: string): void => {
+      invalid.push({ ruleId: rowId, index, reason: "malformed", detail });
+    };
+    if (!record) {
+      reject("rule must be an object");
+      continue;
+    }
+    const id = asString(record.id);
+    const name = asString(record.name);
+    const constraint = record.constraint;
+    if (!id || !name || !asRecord(constraint)) {
+      reject("rule needs a non-empty string id, name and a constraint object");
+      continue;
+    }
     const constraintParsed = parseDrcRuleConstraint(constraint);
-    if (!constraintParsed) continue;
-    const priority = asNumber(raw.priority) ?? 0;
-    const scopes = parseDrcRuleScopes(raw.scopes);
-    if (scopes === null) continue; // a malformed scope invalidates the rule
+    if (!constraintParsed) {
+      reject("constraint kind is unknown or its value is missing / negative");
+      continue;
+    }
+    const priority = asNumber(record.priority) ?? 0;
+    const scopes = parseDrcRuleScopes(record.scopes);
+    if (scopes === null) {
+      reject("a scope has the wrong shape");
+      continue; // a malformed scope invalidates the rule
+    }
     out.push({
       id,
       name,
-      enabled: raw.enabled !== false,
+      enabled: record.enabled !== false,
       priority,
       scopes,
       constraint: constraintParsed,
-      ...(typeof raw.severity === "string" &&
-      ["error", "warning", "info"].includes(raw.severity)
-        ? { severity: raw.severity as PcbDrcRule["severity"] }
+      ...(typeof record.severity === "string" &&
+      ["error", "warning", "info"].includes(record.severity)
+        ? { severity: record.severity as PcbDrcRule["severity"] }
         : {}),
-      ...(asString(raw.comment) ? { comment: asString(raw.comment)! } : {}),
+      ...(asString(record.comment)
+        ? { comment: asString(record.comment)! }
+        : {}),
     });
   }
-  return out;
+  return { rules: out, invalid };
+}
+
+/**
+ * Fail-closed validation of a `drcRules` payload before it is persisted
+ * (rule-semantics contract §2.1): the parse-level `malformed` rows, then every
+ * STRUCTURAL problem the compiler reports (`duplicate_id`,
+ * `area_polygon_invalid`, `area_limit`, `scope_kind_not_allowed`). Ineffective
+ * rules — an unknown net, an unknown class, a clamped value — are NOT refused:
+ * they still resolve, and batch DRC reports them as `DRC_RULE_INEFFECTIVE`.
+ *
+ * `settings` is the board as stored and `update` the rest of the same command;
+ * the rules are compiled against the settings the command WILL produce (via
+ * `resolveDesignRuleFields`, the function `updatePcbDesignRules` writes with),
+ * never against the raw payload. The compiler needs the stackup to judge a
+ * `layer` scope and the net classes to judge a `netClass` one. Net references
+ * are not judged here — the store has no projection.
+ */
+export function validateDrcRulesForSave(
+  value: unknown,
+  settings: PcbBoardSettings,
+  update: {
+    designRules?: PcbDesignRules;
+    netClasses?: PcbNetClass[];
+    perNetClassAssignments?: Record<string, string>;
+  } = {},
+): { rules: PcbDrcRule[]; invalid: DrcRuleParseIssue[] } {
+  const { rules, invalid } = parseDrcRules(value);
+  if (invalid.length > 0) return { rules, invalid };
+  const resolved = resolveDesignRuleFields(settings, update);
+  const compiled = compileRuleSet(
+    { ...settings, ...resolved, drcRules: rules },
+    { validCopperLayers: copperLayersForCount(settings.layerCount) },
+  );
+  const structural = compiled.problems
+    .filter((problem) => problem.kind === "invalid")
+    .map((problem) => ({
+      ruleId: problem.ruleId,
+      index: problem.ruleIndex,
+      reason: problem.reason,
+      detail: problem.detail,
+    }));
+  return { rules, invalid: structural };
 }
 function parseDrcSeverityOverrides(
   value: unknown,
@@ -863,6 +943,38 @@ function parseDrcSeverityOverrides(
     }
   }
   return out as PcbBoardSettings["drcSeverityOverrides"];
+}
+
+/**
+ * S6 split `HOLE_TO_BOARD_EDGE` (which carried both a breach and a near-miss)
+ * into `HOLE_OFF_BOARD` (error) and `HOLE_TO_BOARD_EDGE` (warning). An
+ * `"ignore"` a designer had put on the old code must keep suppressing the
+ * breach, so the entry is copied forward on READ when the new code has none
+ * (rule-semantics contract §12 item 3, Astra run 1 #13). The copy persists on
+ * the next settings write; the old entry is kept, since the near-miss code
+ * still exists.
+ */
+function migrateHoleEdgeOverride(
+  overrides: PcbBoardSettings["drcSeverityOverrides"],
+): PcbBoardSettings["drcSeverityOverrides"] {
+  if (!overrides) return overrides;
+  const map = overrides as Record<string, "error" | "warning" | "info" | "ignore">;
+  const legacy = map.HOLE_TO_BOARD_EDGE;
+  if (legacy === undefined || map.HOLE_OFF_BOARD !== undefined) return overrides;
+  return { ...map, HOLE_OFF_BOARD: legacy } as PcbBoardSettings["drcSeverityOverrides"];
+}
+
+/**
+ * Waiver ids are the v2 scheme `${CODE}-v2-${fnv1a64}` (rule-semantics §8). A
+ * v1 id cannot be mapped forward — the v1 hash omitted the layer and the
+ * location and the code that produced it is gone — so pruning is the only
+ * honest migration. Applied when the view state is read AND when it is
+ * patched, so a stale id can neither survive a reload nor be re-introduced.
+ */
+const WAIVER_ID_V2 = /^[A-Z_]+-v2-[0-9a-f]{16}$/;
+
+function pruneWaivedViolationIds(ids: readonly string[]): string[] {
+  return ids.filter((id) => WAIVER_ID_V2.test(id));
 }
 
 function parseFabricator(
@@ -1109,6 +1221,50 @@ export function updatePcbViewState(params: {
   return next;
 }
 
+/**
+ * The design-rule fields a `pcb_set_design_rules` payload WILL be persisted
+ * as. `updatePcbDesignRules` writes exactly this, and `validateDrcRulesForSave`
+ * compiles against exactly this — one function, so the rules a command is
+ * judged against can never be a different shape from the rules it stores.
+ *
+ * That matters because the HTTP parser forwards `designRules` / `netClasses`
+ * shape-only: a payload carrying just `{ clearance: { traceToTraceMm } }` is a
+ * legal command, and handing that straight to the rule compiler would read
+ * `minimums.clearanceMm` off `undefined`.
+ */
+function resolveDesignRuleFields(
+  settings: PcbBoardSettings,
+  params: {
+    designRules?: PcbDesignRules;
+    netClasses?: PcbNetClass[];
+    perNetClassAssignments?: Record<string, string>;
+  },
+): {
+  designRules: PcbDesignRules;
+  netClasses: PcbNetClass[];
+  perNetClassAssignments: Record<string, string> | undefined;
+} {
+  const netClasses = params.netClasses
+    ? parseNetClasses(params.netClasses, settings.netClasses)
+    : settings.netClasses;
+  // Validate any incoming assignment map against the resulting class set (so a
+  // removed class drops its assignments). A full map replaces the existing one.
+  const validClassIds = new Set(netClasses.map((c) => c.id));
+  return {
+    designRules: params.designRules
+      ? parseDesignRules(params.designRules, settings.designRules, "update")
+      : settings.designRules,
+    netClasses,
+    perNetClassAssignments:
+      params.perNetClassAssignments !== undefined
+        ? parsePerNetClassAssignments(
+            params.perNetClassAssignments,
+            validClassIds,
+          )
+        : settings.perNetClassAssignments,
+  };
+}
+
 export function updatePcbDesignRules(params: {
   db: DbClient;
   designId: string;
@@ -1127,25 +1283,12 @@ export function updatePcbDesignRules(params: {
     params.designId,
     params.timestamp,
   );
-  const nextNetClasses = params.netClasses
-    ? parseNetClasses(params.netClasses, settings.netClasses)
-    : settings.netClasses;
-  // Validate any incoming assignment map against the resulting class set (so a
-  // removed class drops its assignments). A full map replaces the existing one.
-  const validClassIds = new Set(nextNetClasses.map((c) => c.id));
+  const resolved = resolveDesignRuleFields(settings, params);
   const next: PcbBoardSettings = {
     ...settings,
-    designRules: params.designRules
-      ? parseDesignRules(params.designRules, settings.designRules)
-      : settings.designRules,
-    netClasses: nextNetClasses,
-    perNetClassAssignments:
-      params.perNetClassAssignments !== undefined
-        ? parsePerNetClassAssignments(
-            params.perNetClassAssignments,
-            validClassIds,
-          )
-        : settings.perNetClassAssignments,
+    designRules: resolved.designRules,
+    netClasses: resolved.netClasses,
+    perNetClassAssignments: resolved.perNetClassAssignments,
     // A provided array fully replaces the stored rules (re-validated). An
     // empty result overrides the spread with undefined, which JSON
     // serialization drops — that's how rules are cleared.
@@ -1168,7 +1311,9 @@ export function updatePcbDesignRules(params: {
       : {}),
     ...(params.drcRules !== undefined
       ? (() => {
-          const parsed = parseDrcRules(params.drcRules);
+          // Malformed rows never reach here: `pcb_set_design_rules` refuses the
+          // whole command with `INVALID_DRC_RULE` first (§2.1).
+          const parsed = parseDrcRules(params.drcRules).rules;
           return { drcRules: parsed.length > 0 ? parsed : undefined };
         })()
       : {}),
@@ -2399,48 +2544,18 @@ export function replacePcbOverlayShapes(
   }
 }
 
-// ───────────────────────── Zones (KiCad import) ─────────────────────────
+// ───────────────────────── Zones and keepouts ─────────────────────────
 
-function parseZone(value: unknown): PcbZone | null {
-  const record = asRecord(value);
-  if (!record) return null;
-  const id = asString(record.id);
-  const layerRaw = asString(record.layer);
-  if (!id || !isCopperLayer(layerRaw)) return null;
-  const netName =
-    record.netName === undefined
-      ? null
-      : record.netName === null
-        ? null
-        : asString(record.netName);
-  const fillTypeRaw = asString(record.fillType);
-  const fillType: PcbZone["fillType"] =
-    fillTypeRaw === "hatched" ? "hatched" : "solid";
-  const hatchEdgeMm = asNumber(record.hatchEdgeMm) ?? 0.5;
-  const pointsRaw = Array.isArray(record.polygonPointsMm)
-    ? record.polygonPointsMm
-    : null;
-  if (!pointsRaw) return null;
-  const polygonPointsMm: Array<{ x: number; y: number }> = [];
-  for (const raw of pointsRaw) {
-    const r = asRecord(raw);
-    const x = asNumber(r?.x);
-    const y = asNumber(r?.y);
-    if (x === null || y === null) return null;
-    polygonPointsMm.push({ x, y });
-  }
-  if (polygonPointsMm.length < 3) return null;
-  return {
-    id,
-    netName: netName ?? null,
-    layer: layerRaw,
-    polygonPointsMm,
-    hatchEdgeMm,
-    fillType,
-  };
-}
-
-export function loadPcbZones(db: DbClient, designId: string): PcbZone[] {
+/**
+ * Zone rows are read through the ONE upgrade path (S3a contract §2.1) so a v1
+ * payload becomes a v2 record identically here, in the golden loader and in
+ * any future paste/import. Warnings travel with the rows; the projection
+ * decides what to surface.
+ */
+export function loadPcbZones(
+  db: DbClient,
+  designId: string,
+): { zones: PcbZone[]; warnings: ZoneRecordWarning[] } {
   const rows = db
     .select()
     .from(pcbEntities)
@@ -2448,14 +2563,23 @@ export function loadPcbZones(db: DbClient, designId: string): PcbZone[] {
       and(eq(pcbEntities.designId, designId), eq(pcbEntities.kind, ZONE_KIND)),
     )
     .all();
-  const out: PcbZone[] = [];
+  const zones: PcbZone[] = [];
+  const warnings: ZoneRecordWarning[] = [];
   for (const row of rows) {
-    const parsed = parseZone(parsePayload(row.payloadJson));
-    if (parsed) out.push(parsed);
+    const upgraded = upgradePcbZoneRecord(parsePayload(row.payloadJson));
+    warnings.push(...upgraded.warnings);
+    if (upgraded.zone) zones.push(upgraded.zone);
   }
-  return out;
+  return { zones, warnings };
 }
 
+/**
+ * `designer_pcb_entities.id` is a GLOBAL primary key, so the row id is a fresh
+ * uuid and the entity id (`board:<layer>` or a uuid) lives only in the payload
+ * — otherwise two designs could not both hold a `board:F.Cu` zone. Readers
+ * never depend on the row id; update/delete resolve it by payload id within
+ * the design (contract §12.1).
+ */
 export function insertPcbZone(
   db: DbClient,
   designId: string,
@@ -2464,7 +2588,7 @@ export function insertPcbZone(
 ): void {
   db.insert(pcbEntities)
     .values({
-      id: zone.id,
+      id: crypto.randomUUID(),
       designId,
       kind: ZONE_KIND,
       payloadJson: JSON.stringify(zone),
@@ -2488,4 +2612,265 @@ export function replacePcbZones(
   for (const zone of zones) {
     insertPcbZone(db, designId, zone, timestamp);
   }
+}
+
+/**
+ * Resolve one zone by its PAYLOAD id (the entity id) within a design, returning
+ * the row id the writers need. Row ids are uuids, so this scan is the only way
+ * back from an entity id to its row.
+ */
+export function loadPcbZoneRowById(
+  db: DbClient,
+  designId: string,
+  zoneId: string,
+): { rowId: string; zone: PcbZone } | null {
+  const rows = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(eq(pcbEntities.designId, designId), eq(pcbEntities.kind, ZONE_KIND)),
+    )
+    .all();
+  for (const row of rows) {
+    const upgraded = upgradePcbZoneRecord(parsePayload(row.payloadJson));
+    if (upgraded.zone && upgraded.zone.id === zoneId) {
+      return { rowId: row.id, zone: upgraded.zone };
+    }
+  }
+  return null;
+}
+
+export function updatePcbZone(
+  db: DbClient,
+  rowId: string,
+  zone: PcbZone,
+  timestamp: string,
+): void {
+  db.update(pcbEntities)
+    .set({ payloadJson: JSON.stringify(zone), updatedAt: timestamp })
+    .where(eq(pcbEntities.id, rowId))
+    .run();
+}
+
+export function deletePcbZone(db: DbClient, rowId: string): void {
+  db.delete(pcbEntities).where(eq(pcbEntities.id, rowId)).run();
+}
+
+function parseKeepout(value: unknown): PcbKeepout | null {
+  return parsePcbKeepoutRecord(value);
+}
+
+export function loadPcbKeepouts(db: DbClient, designId: string): PcbKeepout[] {
+  const rows = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, KEEPOUT_KIND),
+      ),
+    )
+    .all();
+  const out: PcbKeepout[] = [];
+  for (const row of rows) {
+    const parsed = parseKeepout(parsePayload(row.payloadJson));
+    if (parsed) out.push(parsed);
+  }
+  return out;
+}
+
+/** Row id is a fresh uuid; the entity id lives in the payload (see `insertPcbZone`). */
+export function insertPcbKeepout(
+  db: DbClient,
+  designId: string,
+  keepout: PcbKeepout,
+  timestamp: string,
+): void {
+  db.insert(pcbEntities)
+    .values({
+      id: crypto.randomUUID(),
+      designId,
+      kind: KEEPOUT_KIND,
+      payloadJson: JSON.stringify(keepout),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .run();
+}
+
+export function replacePcbKeepouts(
+  db: DbClient,
+  designId: string,
+  keepouts: PcbKeepout[],
+  timestamp: string,
+): void {
+  db.delete(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, KEEPOUT_KIND),
+      ),
+    )
+    .run();
+  for (const keepout of keepouts) {
+    insertPcbKeepout(db, designId, keepout, timestamp);
+  }
+}
+
+/** Keepout twin of `loadPcbZoneRowById` — resolve by payload id, return the row id. */
+export function loadPcbKeepoutRowById(
+  db: DbClient,
+  designId: string,
+  keepoutId: string,
+): { rowId: string; keepout: PcbKeepout } | null {
+  const rows = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, KEEPOUT_KIND),
+      ),
+    )
+    .all();
+  for (const row of rows) {
+    const parsed = parseKeepout(parsePayload(row.payloadJson));
+    if (parsed && parsed.id === keepoutId) {
+      return { rowId: row.id, keepout: parsed };
+    }
+  }
+  return null;
+}
+
+export function updatePcbKeepout(
+  db: DbClient,
+  rowId: string,
+  keepout: PcbKeepout,
+  timestamp: string,
+): void {
+  db.update(pcbEntities)
+    .set({ payloadJson: JSON.stringify(keepout), updatedAt: timestamp })
+    .where(eq(pcbEntities.id, rowId))
+    .run();
+}
+
+export function deletePcbKeepout(db: DbClient, rowId: string): void {
+  db.delete(pcbEntities).where(eq(pcbEntities.id, rowId)).run();
+}
+
+// ───────────────── Legacy board-fill migration (contract §12.1) ─────────────
+
+/**
+ * The RAW `board_settings` payload, unparsed. The migration below must see the
+ * legacy `copperFill*` keys that `parseBoardSettings` no longer reads, and must
+ * write back the raw record so unknown fields survive.
+ */
+export function readRawBoardSettingsRow(
+  db: DbClient,
+  designId: string,
+): { rowId: string; raw: Record<string, unknown> } | null {
+  const row = db
+    .select()
+    .from(pcbEntities)
+    .where(
+      and(
+        eq(pcbEntities.designId, designId),
+        eq(pcbEntities.kind, BOARD_SETTINGS_KIND),
+      ),
+    )
+    .get();
+  if (!row) return null;
+  const raw = asRecord(parsePayload(row.payloadJson));
+  if (!raw) return null;
+  return { rowId: row.id, raw };
+}
+
+/** Copper layer ids from a legacy `viewState.copperFillLayers` array. */
+function readLegacyFillLayers(value: unknown): PcbCopperLayerId[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<PcbCopperLayerId>();
+  const out: PcbCopperLayerId[] = [];
+  for (const item of value) {
+    if (isCopperLayerId(item) && !seen.has(item)) {
+      seen.add(item);
+      out.push(item);
+    }
+  }
+  return out;
+}
+
+/**
+ * One-time, lazy migration of the legacy per-layer copper-fill view state into
+ * persisted board zone rows (contract §12.1). Every entry point that can write
+ * board settings calls it FIRST, because every settings writer re-serialises the
+ * parsed record and would otherwise silently drop the unread legacy keys.
+ *
+ * The legacy policy poured "the net whose name matches GND_NAMES", so the row
+ * persists that net's real NAME (net ids are ephemeral); with no ground net the
+ * hint is `"GND"`, which pours nothing until such a net exists.
+ *
+ * Idempotent, no revision bump, no history entry. Returns whether it wrote.
+ */
+export function migrateLegacyBoardFill(
+  db: DbClient,
+  designId: string,
+  netNames: ReadonlyMap<string, string>,
+  timestamp: string,
+): boolean {
+  const row = readRawBoardSettingsRow(db, designId);
+  if (!row) return false;
+  const viewState = asRecord(row.raw.viewState);
+  if (!viewState) return false;
+  if (
+    viewState.copperFillLayers === undefined &&
+    viewState.copperFillPourNetIds === undefined &&
+    viewState.copperFillPadConnection === undefined
+  ) {
+    return false;
+  }
+
+  const stackup = copperLayersForCount(parseLayerCount(row.raw.layerCount));
+  // EVERY zone id, not just the board rows: a polygon row that already holds
+  // the reserved `board:<layer>` id would otherwise let the migration insert a
+  // colliding second row (both then drop, fail-closed, with no copper).
+  const existingZoneIds = new Set(
+    loadPcbZones(db, designId).zones.map((zone) => zone.id),
+  );
+  const gndNetId = findGroundNetId(netNames);
+  const gndNetName =
+    gndNetId !== null ? (netNames.get(gndNetId) ?? "GND") : "GND";
+  const fillLayers = new Set(readLegacyFillLayers(viewState.copperFillLayers));
+
+  for (const layer of stackup) {
+    if (!fillLayers.has(layer)) continue;
+    const id = boardZoneId(layer);
+    if (existingZoneIds.has(id)) continue;
+    insertPcbZone(
+      db,
+      designId,
+      {
+        id,
+        name: null,
+        enabled: true,
+        lockedAt: null,
+        layer,
+        netId: null,
+        netName: gndNetName,
+        region: { kind: "board" },
+        priority: 0,
+        padConnection: "solid",
+      },
+      timestamp,
+    );
+  }
+
+  delete viewState.copperFillLayers;
+  delete viewState.copperFillPourNetIds;
+  delete viewState.copperFillPadConnection;
+  // The RAW record, never the parsed settings: unknown fields must survive.
+  db.update(pcbEntities)
+    .set({ payloadJson: JSON.stringify(row.raw), updatedAt: timestamp })
+    .where(eq(pcbEntities.id, row.rowId))
+    .run();
+  return true;
 }

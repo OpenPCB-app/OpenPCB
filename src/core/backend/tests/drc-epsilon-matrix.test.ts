@@ -3,8 +3,9 @@
  * engine (DRC_AUDIT_REPORT.md §3.1) as executable rows:
  *
  *   R1  below(v, limit) = v < limit − 1e-6   — manufacturability/board minimums
- *   R2  below(gap, required)                 — clearance tier (unified in P1;
- *       exact-spec passes AND sub-eps deficits are forgiven)
+ *   R2  clearanceViolated(gap, required) = gap < required − 5e-7 — clearance
+ *       tier (S6 §1: exact-spec passes, including when the double that derived
+ *       the gap lands a few ulps short; a 1 nm deficit still fires)
  *   R3  gap <= SHORT_EPS_MM (1e-4, inclusive) — short tier
  *   R4  below()/exceeds() in fab validators + aspect ratio (unified in P1;
  *       kills the (0.7−0.4)/2 float false positive, audit B2-1)
@@ -18,6 +19,7 @@ import type {
   DesignerPcbProjection,
   DrcRuleCode,
 } from "../../../sdks/designer";
+import { clearanceViolated } from "../../../shared/pcb-geometry/tolerance";
 import {
   boardWithRules,
   codes,
@@ -106,6 +108,34 @@ const ROWS: MatrixRow[] = [
     regime: "R2",
     build: () => bareClearancePair(0.327, 0.2000005),
     expectCodes: [],
+  },
+  {
+    // S6 §1 / Astra run 1 #10: `0.3 − (0.1 + 0.1) === 0.09999999999999998`,
+    // which a bare `<` rejects against a 0.1 mm rule at exact physical
+    // equality. The 0.5 nm grace of `clearanceViolated` is exactly this case.
+    name: "R2 clearance: derived-float equality (0.3 − 0.1 − 0.1 vs 0.1) → clean",
+    regime: "R2",
+    build: () =>
+      projection({
+        board: boardWithRules({
+          fabricator: "custom",
+          clearance: { traceToTraceMm: 0.1 },
+        }),
+        traces: [
+          trace("a", null, [[0, 0], [10, 0]], { netClassId: "nc-none" }),
+          trace("b", null, [[0, 0.3], [10, 0.3]], { netClassId: "nc-none" }),
+        ],
+      }),
+    expectCodes: [],
+  },
+  {
+    // P-A2: the grace is 0.5 nm, so the smallest deficit the nanometre
+    // coordinate grid can even express — 1 nm — still fires. This is the row
+    // that stops `clearanceViolated`'s tolerance from being widened.
+    name: "R2 clearance: deficit exactly 1 nm (the grid quantum) → fires",
+    regime: "R2",
+    build: () => bareClearancePair(0.326999),
+    expectCodes: ["TRACE_TO_TRACE_CLEARANCE"],
   },
   {
     name: "R2 clearance: gap = rule − 2 µm → fires (outside any grace)",
@@ -231,4 +261,28 @@ describe("DRC epsilon boundary matrix", () => {
       expect(got).toEqual([...row.expectCodes].sort());
     });
   }
+});
+
+/**
+ * The R2 boundary stated directly on the helper, so a change to the tolerance
+ * fails here whatever the fixtures happen to round to (S6 §1, probes P-A0..A2).
+ */
+describe("R2 boundary — clearanceViolated", () => {
+  test("P-A0: exact equality is clean", () => {
+    expect(clearanceViolated(0.127, 0.127)).toBe(false);
+  });
+
+  test("P-A1: derived-float equality is clean (0.3 − 0.1 − 0.1 vs 0.1)", () => {
+    expect(0.3 - (0.1 + 0.1)).toBe(0.09999999999999998); // pin the arithmetic
+    expect(clearanceViolated(0.3 - (0.1 + 0.1), 0.1)).toBe(false);
+  });
+
+  test("P-A2: a 1 nm deficit — the smallest the grid expresses — fires", () => {
+    expect(clearanceViolated(0.127 - 1e-6, 0.127)).toBe(true);
+  });
+
+  test("the grace is half a nanometre, not more", () => {
+    expect(clearanceViolated(0.127 - 4e-7, 0.127)).toBe(false);
+    expect(clearanceViolated(0.127 - 6e-7, 0.127)).toBe(true);
+  });
 });

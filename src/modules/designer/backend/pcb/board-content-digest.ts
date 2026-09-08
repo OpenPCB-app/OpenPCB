@@ -121,6 +121,9 @@ function digestInput(projection: DesignerPcbProjection): unknown {
       netName: v.netName ?? null,
     })),
     zones: byKey(projection.zones ?? [], (z) => z.id),
+    // Fail-closed: a keepout changes what is legal, so it must invalidate a
+    // cached route/placement the way a zone does.
+    keepouts: byKey(projection.keepouts ?? [], (k) => k.id),
     freeHoles: byKey(projection.freeHoles ?? [], (h) => h.id),
     freePads: byKey(projection.freePads ?? [], (p) => p.id),
   };

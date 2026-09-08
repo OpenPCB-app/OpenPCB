@@ -227,6 +227,7 @@ describe("3D board geometry utilities", () => {
       overlayTexts: [],
       overlayShapes: [],
       zones: [],
+      keepouts: [],
       ratsnest: [],
       netNames: {},
       warnings: [],

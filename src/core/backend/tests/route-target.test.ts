@@ -12,10 +12,8 @@ function seg(
     netClassId: "default",
     fromMm: { x: from.x, y: from.y },
     toMm: { x: to.x, y: to.y },
-    fromPlacementId: from.pl,
-    fromPadNumber: from.pad,
-    toPlacementId: to.pl,
-    toPadNumber: to.pad,
+    from: { kind: "pad", placementId: from.pl, padNumber: from.pad },
+    to: { kind: "pad", placementId: to.pl, padNumber: to.pad },
   };
 }
 
@@ -81,6 +79,25 @@ describe("nearestRatsnestPad", () => {
       fromMm: { x: 0, y: 0 },
     });
     expect(hit?.padId).toBe("a|1");
+  });
+
+  test("a free-pad endpoint keys as freepad:<id>", () => {
+    const ratsnest: RatsnestSegment[] = [
+      {
+        netId: "net-c",
+        netClassId: "default",
+        fromMm: { x: 0, y: 0 },
+        toMm: { x: 10, y: 0 },
+        from: { kind: "freePad", freePadId: "tp1" },
+        to: { kind: "pad", placementId: "u1", padNumber: "1" },
+      },
+    ];
+    const hit = nearestRatsnestPad({
+      ratsnest,
+      netId: "net-c",
+      fromMm: { x: 1, y: 0 },
+    });
+    expect(hit).toEqual({ padId: "freepad:tp1", centerMm: { x: 0, y: 0 } });
   });
 
   test("no pads on net or all excluded yields null", () => {

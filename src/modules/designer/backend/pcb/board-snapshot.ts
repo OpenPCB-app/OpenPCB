@@ -22,6 +22,7 @@ import type {
   PcbDrillSlot,
   SnapshotCopperLayerId,
   PlaceOptions,
+  RatsnestTarget,
   RouteOptions,
   SnapshotPlacement,
   ViaObstacle,
@@ -29,8 +30,10 @@ import type {
 import { resolveNetClassId } from "./net-class-resolver";
 import { flattenCutout, flattenOutline } from "./outline-geometry";
 import { placementPads } from "./pad-geometry";
+import { placementSideLayer } from "../../../../shared/rendering/pad-copper-layers";
 import { freePadOutlineWorldMm, padOutlineWorldMm } from "./pad-outline";
 import { buildSnapshotPourIslands } from "./board-snapshot-pours";
+import { collectKeepouts } from "../../../../shared/pcb-areas/copper-zones";
 import {
   placementCourtyardWorldMm,
   type RawFootprintLookup,
@@ -68,16 +71,6 @@ function copperLayerOf(layer: string): SnapshotCopperLayerId | null {
   return (STACKUP_ORDER as string[]).includes(layer)
     ? (layer as SnapshotCopperLayerId)
     : null;
-}
-
-/**
- * A component sits on an OUTER layer — the contract's `Placement.layer` is `F.Cu | B.Cu`,
- * narrower than the copper-layer vocabulary used for pads, traces and vias. Anything else
- * (a corrupt projection, an inner-layer value) resolves to the front side rather than
- * emitting a value the service would reject at submit.
- */
-function placementSideOf(layer: string): "F.Cu" | "B.Cu" {
-  return layer === "B.Cu" ? "B.Cu" : "F.Cu";
 }
 
 /**
@@ -295,9 +288,34 @@ export function buildBoardSnapshot(
   ];
 
   // ── ratsnest targets (filtered to routable, minus excluded) ────────────
-  const ratsnest = projection.ratsnest.filter(
+  const selectedRatsnest = projection.ratsnest.filter(
     (seg) => routableSet.has(seg.netClassId) && !excludedSet.has(seg.netId),
   );
+  // The generated `RatsnestTarget` contract carries footprint-pad endpoints
+  // only, so a free-pad-anchored airwire cannot be expressed — drop it and say
+  // so rather than inventing a placement id.
+  const ratsnest: RatsnestTarget[] = selectedRatsnest.flatMap((seg) =>
+    seg.from.kind === "pad" && seg.to.kind === "pad"
+      ? [
+          {
+            netId: seg.netId,
+            netClassId: seg.netClassId,
+            fromMm: seg.fromMm,
+            toMm: seg.toMm,
+            fromPlacementId: seg.from.placementId,
+            fromPadNumber: seg.from.padNumber,
+            toPlacementId: seg.to.placementId,
+            toPadNumber: seg.to.padNumber,
+          },
+        ]
+      : [],
+  );
+  const droppedFreePadTargets = selectedRatsnest.length - ratsnest.length;
+  if (droppedFreePadTargets > 0) {
+    warnings.push(
+      `${droppedFreePadTargets} airwire(s) anchored on free pads were not sent to the autorouter (the cloud target schema carries footprint pads only).`,
+    );
+  }
 
   // ── net-class assignments (pre-resolve every known net) ────────────────
   const netAssignments: Record<string, string> = {};
@@ -318,7 +336,12 @@ export function buildBoardSnapshot(
     return {
       id: p.id,
       reference: p.reference,
-      layer: placementSideOf(p.layer),
+      // A component sits on an OUTER layer — the contract's `Placement.layer` is
+      // `F.Cu | B.Cu`, narrower than the copper vocabulary used for pads, traces and
+      // vias. `placementSideLayer` is the ONE resolution of that side (zone/keepout
+      // contract §13.4); anything else (a corrupt projection, an inner-layer value)
+      // resolves to the front rather than emitting a value the service would reject.
+      layer: placementSideLayer(p),
       // Pass through the current transform for cloud-auto-place (the autorouter ignores
       // these). positionMm is the footprint origin; rotationDeg may be non-cardinal.
       positionMm: p.positionMm,
@@ -341,7 +364,9 @@ export function buildBoardSnapshot(
     );
   }
 
-  const pours = opts.serializePours ? buildSnapshotPourIslands(projection) : [];
+  const pours = opts.serializePours
+    ? buildSnapshotPourIslands(projection, warnings)
+    : [];
   // Not "the router can't use pours" (Phase 5 pour-aware routing ships) — this call
   // simply didn't send them, e.g. `serializePours` was off by explicit request, or the
   // routes.ts caller's capability negotiation resolved to `false` (see that file's
@@ -352,6 +377,21 @@ export function buildBoardSnapshot(
       `Design has ${projection.zones.length} copper ${
         projection.zones.length === 1 ? "zone" : "zones"
       } — pours were not sent to the autorouter for this request. Routing ignores them; you may need to re-pour after applying.`,
+    );
+  }
+  // Keepouts are still not part of the wire contract (§13.5) — the autorouter
+  // never sees them and cannot honour them, so say so rather than letting a rule
+  // area look enforced. The apply-time DRC report now surfaces `KEEPOUT_VIOLATION`
+  // for a cloud route, which stays non-gating like every apply path.
+  const keepoutCount = collectKeepouts({
+    keepouts: projection.keepouts,
+    layerCount: projection.board.layerCount,
+  }).keepouts.length;
+  if (keepoutCount > 0) {
+    warnings.push(
+      keepoutCount === 1
+        ? "1 keepout is not sent to the autorouter; routing ignores it."
+        : `${keepoutCount} keepouts are not sent to the autorouter; routing ignores them.`,
     );
   }
   if (ratsnest.length === 0) {
@@ -373,8 +413,18 @@ export function buildBoardSnapshot(
       boardThicknessMm: board.boardThicknessMm ?? DEFAULT_BOARD_THICKNESS_MM,
     },
     designRules: {
-      clearance: board.designRules.clearance,
-      minimums: board.designRules.minimums,
+      // Strip the desktop-only S6 keys the same way the net classes below
+      // strip theirs: `ClearanceRules` / `MinimumRules` in the vendored
+      // `board-snapshot.generated.ts` declare neither, and the wire schema is
+      // byte-stable. The cloud router routes at the implicit tier and never
+      // sees scoped rules or the clearance floor; the desktop re-validates
+      // with the full resolver on apply (rule-semantics contract §13, §9).
+      clearance: (({ pourToCopperMm: _pour, ...clearance }) => clearance)(
+        board.designRules.clearance,
+      ),
+      minimums: (({ clearanceMm: _floor, ...minimums }) => minimums)(
+        board.designRules.minimums,
+      ),
       fabPresetId: board.fabricator,
     },
     // Strip desktop-only routing hints (diff-pair gap) — the cloud wire

@@ -11,6 +11,8 @@ export interface PcbSelection {
   readonly freeHoleIds?: ReadonlySet<string>;
   readonly freePadIds?: ReadonlySet<string>;
   readonly overlayTextIds?: ReadonlySet<string>;
+  readonly zoneIds?: ReadonlySet<string>;
+  readonly keepoutIds?: ReadonlySet<string>;
 }
 
 const EMPTY_SET: ReadonlySet<string> = new Set<string>();
@@ -27,6 +29,14 @@ function textIds(s: PcbSelection): ReadonlySet<string> {
   return s.overlayTextIds ?? EMPTY_SET;
 }
 
+function zoneIds(s: PcbSelection): ReadonlySet<string> {
+  return s.zoneIds ?? EMPTY_SET;
+}
+
+function keepoutIds(s: PcbSelection): ReadonlySet<string> {
+  return s.keepoutIds ?? EMPTY_SET;
+}
+
 export function emptyPcbSelection(): PcbSelection {
   return {
     placementIds: new Set<string>(),
@@ -35,6 +45,8 @@ export function emptyPcbSelection(): PcbSelection {
     freeHoleIds: new Set<string>(),
     freePadIds: new Set<string>(),
     overlayTextIds: new Set<string>(),
+    zoneIds: new Set<string>(),
+    keepoutIds: new Set<string>(),
   };
 }
 
@@ -46,6 +58,8 @@ export function clonePcbSelection(s: PcbSelection): PcbSelection {
     freeHoleIds: new Set(holeIds(s)),
     freePadIds: new Set(padIds(s)),
     overlayTextIds: new Set(textIds(s)),
+    zoneIds: new Set(zoneIds(s)),
+    keepoutIds: new Set(keepoutIds(s)),
   };
 }
 
@@ -57,7 +71,9 @@ export function pcbSelectionCount(s: PcbSelection): number {
     s.viaIds.size +
     holeIds(s).size +
     padIds(s).size +
-    textIds(s).size
+    textIds(s).size +
+    zoneIds(s).size +
+    keepoutIds(s).size
   );
 }
 
@@ -68,7 +84,9 @@ export function isPcbSelectionEmpty(s: PcbSelection): boolean {
     s.viaIds.size === 0 &&
     holeIds(s).size === 0 &&
     padIds(s).size === 0 &&
-    textIds(s).size === 0
+    textIds(s).size === 0 &&
+    zoneIds(s).size === 0 &&
+    keepoutIds(s).size === 0
   );
 }
 
@@ -83,6 +101,8 @@ export function pcbSelectionUnion(
     freeHoleIds: new Set([...holeIds(a), ...holeIds(b)]),
     freePadIds: new Set([...padIds(a), ...padIds(b)]),
     overlayTextIds: new Set([...textIds(a), ...textIds(b)]),
+    zoneIds: new Set([...zoneIds(a), ...zoneIds(b)]),
+    keepoutIds: new Set([...keepoutIds(a), ...keepoutIds(b)]),
   };
 }
 
@@ -126,4 +146,18 @@ export function toggleOverlayText(s: PcbSelection, id: string): PcbSelection {
   if (next.has(id)) next.delete(id);
   else next.add(id);
   return { ...s, overlayTextIds: next };
+}
+
+export function toggleZone(s: PcbSelection, id: string): PcbSelection {
+  const next = new Set(zoneIds(s));
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  return { ...s, zoneIds: next };
+}
+
+export function toggleKeepout(s: PcbSelection, id: string): PcbSelection {
+  const next = new Set(keepoutIds(s));
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  return { ...s, keepoutIds: next };
 }

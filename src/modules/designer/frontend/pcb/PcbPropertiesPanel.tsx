@@ -1,4 +1,12 @@
-import { CircuitBoard, Circle, Package, Square, Type } from "lucide-react";
+import {
+  Ban,
+  CircuitBoard,
+  Circle,
+  LayoutGrid,
+  Package,
+  Square,
+  Type,
+} from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import type { DesignerPcbProjection } from "../../../../sdks";
 import { PanelSectionHeader } from "@shared/frontend/ui/panel-section-header";
@@ -11,7 +19,9 @@ import {
 import {
   FreeHolePanel,
   FreePadPanel,
+  KeepoutPanel,
   OverlayTextPanel,
+  ZonePanel,
   type PcbInspectorSelection,
 } from "./PcbSelectionInspector";
 import type { PcbSelection } from "./pcb-selection";
@@ -49,6 +59,18 @@ interface PcbPropertiesPanelProps {
     >[0],
   ): Promise<void>;
   onDeleteOverlayText(id: string): Promise<void>;
+  /** Nets available to a zone, in the same order the pour pickers use. */
+  nets: ReadonlyArray<{ id: string; name: string }>;
+  onUpdateZone(
+    id: string,
+    patch: Parameters<React.ComponentProps<typeof ZonePanel>["onUpdate"]>[0],
+  ): Promise<void>;
+  onDeleteZone(id: string): Promise<void>;
+  onUpdateKeepout(
+    id: string,
+    patch: Parameters<React.ComponentProps<typeof KeepoutPanel>["onUpdate"]>[0],
+  ): Promise<void>;
+  onDeleteKeepout(id: string): Promise<void>;
 }
 
 function DockHeader({
@@ -112,6 +134,11 @@ export function PcbPropertiesPanel({
   onDeleteFreePad,
   onUpdateOverlayText,
   onDeleteOverlayText,
+  nets,
+  onUpdateZone,
+  onDeleteZone,
+  onUpdateKeepout,
+  onDeleteKeepout,
 }: PcbPropertiesPanelProps): ReactElement {
   const placementIds = [...selection.placementIds];
   const counts: Array<[string, number]> = [
@@ -121,6 +148,8 @@ export function PcbPropertiesPanel({
     ["Holes", selection.freeHoleIds?.size ?? 0],
     ["Pads", selection.freePadIds?.size ?? 0],
     ["Texts", selection.overlayTextIds?.size ?? 0],
+    ["Zones", selection.zoneIds?.size ?? 0],
+    ["Keepouts", selection.keepoutIds?.size ?? 0],
   ];
   const total = counts.reduce((sum, [, n]) => sum + n, 0);
 
@@ -181,6 +210,48 @@ export function PcbPropertiesPanel({
                 onUpdateOverlayText(inspectorSelection.text.id, patch)
               }
               onDelete={() => onDeleteOverlayText(inspectorSelection.text.id)}
+            />
+          </div>
+        );
+      case "zone":
+        return (
+          <div className="flex min-h-0 flex-col">
+            <DockHeader
+              icon={<LayoutGrid />}
+              title={
+                inspectorSelection.zone.name ??
+                (inspectorSelection.zone.region.kind === "board"
+                  ? "Board zone"
+                  : "Zone")
+              }
+              kind={inspectorSelection.zone.layer}
+            />
+            <ZonePanel
+              zone={inspectorSelection.zone}
+              nets={nets}
+              layerCount={projection.board.layerCount}
+              onUpdate={(patch) =>
+                onUpdateZone(inspectorSelection.zone.id, patch)
+              }
+              onDelete={() => onDeleteZone(inspectorSelection.zone.id)}
+            />
+          </div>
+        );
+      case "keepout":
+        return (
+          <div className="flex min-h-0 flex-col">
+            <DockHeader
+              icon={<Ban />}
+              title={inspectorSelection.keepout.name ?? "Keepout"}
+              kind={inspectorSelection.keepout.layers.join(", ")}
+            />
+            <KeepoutPanel
+              keepout={inspectorSelection.keepout}
+              layerCount={projection.board.layerCount}
+              onUpdate={(patch) =>
+                onUpdateKeepout(inspectorSelection.keepout.id, patch)
+              }
+              onDelete={() => onDeleteKeepout(inspectorSelection.keepout.id)}
             />
           </div>
         );

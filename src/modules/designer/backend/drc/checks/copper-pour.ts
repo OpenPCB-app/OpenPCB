@@ -1,102 +1,136 @@
-import type { PcbCopperLayerId } from "../../../../../sdks/designer";
-import {
-  buildCopperFillIslandReport,
-  resolveCopperFillClearanceMm,
-} from "../../../../../shared/rendering/copper-fill/copper-fill-geometry";
+import { pourItemKey } from "../../../../../shared/pcb-connectivity";
+import type { EffectiveCopperZone } from "../../../../../shared/pcb-areas";
+import type { CopperFillIsland } from "../../../../../shared/rendering/copper-fill/copper-fill-geometry";
+import type { PcbPointMm } from "../../../../../sdks/designer";
 import type { DrcContext } from "../drc-context";
 import type { DrcViolationDraft } from "../types";
+import { zoneDisplayName } from "../zone-label";
+
+const ORIGIN: PcbPointMm = { x: 0, y: 0 };
+
+/** Where a zone's own violations are marked: its first vertex, else the board. */
+function zoneLocation(ctx: DrcContext, zone: EffectiveCopperZone): PcbPointMm {
+  if (zone.region.kind === "polygon") {
+    return zone.region.pointsMm[0] ?? ctx.outlineRing[0] ?? ORIGIN;
+  }
+  return ctx.outlineRing[0] ?? ORIGIN;
+}
 
 /**
- * Copper-pour DRC: flag floating (isolated) pour copper. A pour island kept
- * only by its area — touching no same-net pad/trace/via — is electrically dead
- * copper (an EMI antenna / acid-trap on real boards), so it warrants a warning.
- * The connectivity self-correction for ground planes lives in the ratsnest
- * (a same-net pour satisfies the net), so `UNCONNECTED_NET` already clears
- * without a check here.
+ * Copper-pour DRC (copper-pour contract §10): the pours are filled ONCE per run
+ * by `ctx.pourResults()`, so the islands judged here are exactly the islands
+ * connectivity, the Gerber and the snapshot ship. Three verdicts:
+ *
+ *  - `ZONE_FILL_FAILED` — the kernel bailed (§8). The zone ships no copper for
+ *    a reason that is not its geometry, so this is an error and never waivable.
+ *  - `ZONE_EMPTY_FILL` — `ok` with zero islands: a legitimate "this zone pours
+ *    nothing" (off-board, swallowed by clearance, eroded by min width).
+ *  - `ISOLATED_COPPER_ISLAND` — a kept island whose S1 COMPONENT contains no
+ *    pad (audit B3-10). The kernel's `attached` flag is the island-REMOVAL
+ *    criterion — it says the island touches same-net bare copper, which a
+ *    floating trace stub satisfies. Electrical deadness is a question about the
+ *    component, and only `ctx.connectivity()` can answer it.
+ *
+ * Net-less zones (§3.2) pour manufactured copper that joins no net graph: they
+ * can be empty or failed, never isolated.
  */
 export function checkCopperPour(ctx: DrcContext): DrcViolationDraft[] {
-  const view = ctx.projection.board.viewState;
-  const proj = ctx.projection;
-  const dr = ctx.designRules;
-  const padNetIds = new Map(Object.entries(proj.padNets ?? {}));
   const out: DrcViolationDraft[] = [];
-
-  for (const layer of view?.copperFillLayers ?? []) {
-    const pourNetId = view?.copperFillPourNetIds[layer];
-    if (!pourNetId) continue;
-    const islands = buildCopperFillIslandReport({
-      layer: layer as PcbCopperLayerId,
-      outline: proj.board.outline,
-      placements: proj.placements,
-      traces: proj.traces,
-      vias: proj.vias,
-      pourNetId,
-      padNetIds,
-      clearanceMm: resolveCopperFillClearanceMm(dr.clearance),
-      copperToBoardEdgeMm: dr.clearance.copperToBoardEdgeMm,
-      cutouts: proj.board.cutouts,
-      freeHoles: proj.freeHoles,
-      freePads: proj.freePads,
-      minThicknessMm: dr.minimums.traceWidthMm,
-      padConnection: view?.copperFillPadConnection ?? "solid",
-    });
-    const isolated = islands.filter((i) => !i.anchored);
-    if (isolated.length === 0) continue;
-    // Aggregate per (layer, net): the violation id hashes code + anchors, so
-    // distinct islands sharing the net anchor would collide. Report one warning
-    // located at the largest isolated island.
-    const largest = isolated.reduce((a, b) => (b.areaMm2 > a.areaMm2 ? b : a));
-    const totalMm2 = isolated.reduce((sum, i) => sum + i.areaMm2, 0);
-    const netName = ctx.netNames[pourNetId] ?? pourNetId;
-    out.push({
-      code: "ISOLATED_COPPER_ISLAND",
-      ruleClass: "structural",
-      severity: "warning",
-      message: `${isolated.length} isolated ${netName} copper island${isolated.length > 1 ? "s" : ""} on ${layer} (${totalMm2.toFixed(1)} mm² total) connect to no same-net pad — floating/dead copper`,
-      anchors: [{ kind: "net", netId: pourNetId }],
-      locationMm: largest.centerMm,
-      layer: layer as PcbCopperLayerId,
-      measuredMm: largest.areaMm2,
-    });
-  }
-
-  // Explicit copper zones (audit B3-8): rendered + Gerber-exported but never
-  // pour-checked before. Same island analysis, anchored on the zone so ids
-  // don't collide across zones/layers.
-  for (const zone of proj.zones) {
-    if (!zone.netId || zone.polygonPointsMm.length < 3) continue;
-    const islands = buildCopperFillIslandReport({
-      layer: zone.layer,
-      outline: proj.board.outline,
-      placements: proj.placements,
-      traces: proj.traces,
-      vias: proj.vias,
-      pourNetId: zone.netId,
-      padNetIds,
-      clearanceMm: resolveCopperFillClearanceMm(dr.clearance),
-      copperToBoardEdgeMm: dr.clearance.copperToBoardEdgeMm,
-      cutouts: proj.board.cutouts,
-      freeHoles: proj.freeHoles,
-      freePads: proj.freePads,
-      minThicknessMm: dr.minimums.traceWidthMm,
-      padConnection: zone.connection ?? view?.copperFillPadConnection ?? "solid",
-      clipPolygonMm: zone.polygonPointsMm,
-    });
-    const isolated = islands.filter((i) => !i.anchored);
-    if (isolated.length === 0) continue;
-    const largest = isolated.reduce((a, b) => (b.areaMm2 > a.areaMm2 ? b : a));
-    const totalMm2 = isolated.reduce((sum, i) => sum + i.areaMm2, 0);
-    const netName = ctx.netNames[zone.netId] ?? zone.netName ?? zone.netId;
-    out.push({
-      code: "ISOLATED_COPPER_ISLAND",
-      ruleClass: "structural",
-      severity: "warning",
-      message: `${isolated.length} isolated ${netName} zone island${isolated.length > 1 ? "s" : ""} on ${zone.layer} (${totalMm2.toFixed(1)} mm² total) connect to no same-net pad — floating/dead copper`,
-      anchors: [{ kind: "zone", zoneId: zone.id }],
-      locationMm: largest.centerMm,
-      layer: zone.layer,
-      measuredMm: largest.areaMm2,
-    });
+  // Net-bound zones in derivation order — the same list `ensureConnectivity`
+  // builds its pour nodes from, so `pourIndex` below is the connectivity one.
+  let pourIndex = -1;
+  for (const { zone, result } of ctx.pourResults()) {
+    if (zone.netId !== null) pourIndex += 1;
+    if (result.status === "failed") {
+      out.push({
+        code: "ZONE_FILL_FAILED",
+        ruleClass: "structural",
+        message: `Zone "${zoneDisplayName(ctx, zone)}" on ${zone.layer} could not be filled (${result.reason}) — it ships no copper`,
+        anchors: [{ kind: "zone", zoneId: zone.id }],
+        locationMm: zoneLocation(ctx, zone),
+        layer: zone.layer,
+      });
+      continue;
+    }
+    if (result.islands.length === 0) {
+      out.push({
+        code: "ZONE_EMPTY_FILL",
+        ruleClass: "structural",
+        message: `Zone "${zoneDisplayName(ctx, zone)}" on ${zone.layer} pours no copper`,
+        anchors: [{ kind: "zone", zoneId: zone.id }],
+        locationMm: zoneLocation(ctx, zone),
+        layer: zone.layer,
+      });
+      continue;
+    }
+    const netId = zone.netId;
+    if (netId === null) continue;
+    const dead = deadIslands(ctx, zone, netId, pourIndex, result.islands);
+    if (dead.length === 0) continue;
+    out.push(deadCopperDraft(ctx, zone, netId, dead));
   }
   return out;
+}
+
+/**
+ * The islands of this pour whose component reaches no pad. An island absent
+ * from `componentOf` is dead too: the map holds every net-bound item, so a
+ * missing key means the island produced no connectivity node at all — copper
+ * that is manufactured and connected to nothing.
+ */
+function deadIslands(
+  ctx: DrcContext,
+  zone: EffectiveCopperZone,
+  netId: string,
+  pourIndex: number,
+  islands: readonly CopperFillIsland[],
+): CopperFillIsland[] {
+  const { components, componentOf } = ctx.connectivity();
+  const dead: CopperFillIsland[] = [];
+  islands.forEach((island, index) => {
+    const key = pourItemKey(zone.layer, netId, pourIndex, index);
+    const componentId = componentOf.get(key);
+    if (componentId === undefined) {
+      dead.push(island);
+      return;
+    }
+    const itemKeys = components[componentId]?.itemKeys ?? [];
+    const reachesPad = itemKeys.some(
+      (k) => k.startsWith("pad:") || k.startsWith("freepad:"),
+    );
+    if (!reachesPad) dead.push(island);
+  });
+  return dead;
+}
+
+/**
+ * One aggregated warning per zone. The violation id hashes code + anchors, so
+ * per-island drafts sharing an anchor would collide; the count and the total
+ * area go in the message and `measuredMm` is OMITTED (audit B3-9 — that field
+ * is contractually a length, and an area is not one).
+ */
+function deadCopperDraft(
+  ctx: DrcContext,
+  zone: EffectiveCopperZone,
+  netId: string,
+  dead: readonly CopperFillIsland[],
+): DrcViolationDraft {
+  const largest = dead.reduce((a, b) => (b.areaMm2 > a.areaMm2 ? b : a));
+  const totalMm2 = dead.reduce((sum, i) => sum + i.areaMm2, 0);
+  const netName = ctx.netNames[netId] ?? netId;
+  // The anchor decides the violation id and therefore the user's waivers: a
+  // board zone is anchored on its net (there is at most one per layer), an
+  // explicit zone on the zone itself so ids don't collide across zones.
+  const isBoardZone = zone.sourceKind === "board";
+  const noun = isBoardZone ? "copper" : "zone";
+  return {
+    code: "ISOLATED_COPPER_ISLAND",
+    ruleClass: "structural",
+    message: `${dead.length} isolated ${netName} ${noun} island${dead.length > 1 ? "s" : ""} on ${zone.layer} (${totalMm2.toFixed(1)} mm² total) reach no pad — dead copper`,
+    anchors: [
+      isBoardZone ? { kind: "net", netId } : { kind: "zone", zoneId: zone.id },
+    ],
+    locationMm: largest.centerMm,
+    layer: zone.layer,
+  };
 }
