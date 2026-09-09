@@ -48,7 +48,8 @@ correlation); of a free pad = `freePad.netId`; of a trace / via = its `netId`; o
 pour net. Items with a null net belong to no net graph — they never join a component and never
 manufacture connectivity between named nets (a null-net trace joining two pads leaves their
 airwire in place: this is deliberate assignment uncertainty, not a physical claim; DRC reports the
-same overlap as a different-net contact). Contact records follow today's `dangling.ts` rule,
+same overlap as a different-net contact, and since S7 a null-net item that touches copper of two
+or more known nets is reported as `NET_SHORT_CIRCUIT` — `06-batch-drc-contract.md` §4). Contact records follow today's `dangling.ts` rule,
 which is **asymmetric**: a null-net end cap or via is "in contact" with any copper it touches; a
 named-net end cap or via is in contact only with same-net copper. Null-net copper never rescues a
 named-net stub.

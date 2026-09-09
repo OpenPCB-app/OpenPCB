@@ -14,6 +14,7 @@ import type {
   PcbVia,
   PcbViewSide,
 } from "../../../../../sdks";
+import { copperToHoleClearanceMm } from "../../../../../shared/drc/rule-resolver";
 import type { ZonePourParams } from "../../../../../shared/pcb-areas/pour-params";
 import { RENDER_ORDER } from "../../../../../shared/frontend/canvas/layers";
 import { copperLayerColor } from "../pcb-layer-colors";
@@ -138,6 +139,7 @@ export function CopperFillLayer({
           clearanceMm,
           clearanceForItem,
           copperToBoardEdgeMm: designRules.clearance.copperToBoardEdgeMm,
+          copperToHoleMm: copperToHoleClearanceMm(designRules),
           cutouts,
           freeHoles,
           freePads,

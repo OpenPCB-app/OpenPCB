@@ -2267,6 +2267,7 @@ export function PcbScene({
               key={`free-pad:${layer}`}
               freePads={renderFreePads}
               layer={layer}
+              layerCount={projection.board.layerCount}
               viewSide={viewSide}
               selectedFreePadIds={selection?.freePadIds}
               opacity={

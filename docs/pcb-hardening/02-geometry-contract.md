@@ -246,16 +246,18 @@ manufacturable lives there.
 
 Accepted false-positive band: near an arc, the biased region is up to `MAX_CHORD_DEVIATION_MM`
 inside the true board, so copper exactly tangent to a curved edge can be reported off-board or
-short of clearance by that much. This is the price of one polygonal model; S7 may add an exact
-second-chance test inside the band.
+short of clearance by that much. This is the price of one polygonal model; the exact second-chance
+test inside the band is deferred to S12 (user decision 2026-09-08, S7) and recorded as a limit in
+`06-batch-drc-contract.md` §5.
 
 `pointInOutline` survives for the frontend resize warning, implemented on
 `regionContainsPoint` with the default flattening; its count of items outside may change at exact
 edges because the region is closed.
 
 Later consumers, recorded here so they do not re-derive geometry: S5 builds the fill extent from
-`buildBoardRegion`; S7 adopts the exact disc for circular pads in both edge and clearance checks and
-the signed edge clearance; S8/S16 give the router board-edge and cutout obstacles from the same
+`buildBoardRegion`; S7 adopted the exact disc for circular pads in the edge, clearance, keepout and
+creepage checks and made `COPPER_TO_BOARD_EDGE.measuredMm` signed (negative when the copper is not
+inside the region); S8/S16 give the router board-edge and cutout obstacles from the same
 region; S12 decides whether Gerber emits true arcs, adds exact-arc contour validity, and owns the
 minimum-web / connected-material checks that outline validity does not make (`findNarrowestSlot`).
 
@@ -263,7 +265,7 @@ minimum-web / connected-material checks that outline validity does not make (`fi
 
 | Site | Divergence | Owner |
 |---|---|---|
-| `pad-outline.ts` `arc` / `ellipseRing` | pad arcs circumscribed by pushing both endpoints out, fixed 48/6 chords; conservative for clearance and connectivity, moving them shifts every pad ring by micrometres | S7 with a golden refresh |
+| `pad-outline.ts` `arc` / `ellipseRing` | pad arcs circumscribed by pushing both endpoints out, fixed 48/6 chords; conservative for clearance and connectivity, moving them shifts every pad ring by micrometres | S7 resolved the CIRCLE case without touching the sampler: every DRC check consumes the record's exact `disc` (`drc/pair-gap.ts`); ovals / roundrects keep the circumscribed ring (S11) |
 | `pcb-routing/collision.ts` `segmentIntersectsRectNm` | nm domain, Liang–Barsky, open interior (boundary contact legal); already uses the clipped-midpoint technique of §5 | S8/S16 name one convention for live/batch parity |
 | copper-fill `addArc`, `buildTraceSegmentStadium`, `buildDiscRing` (`VIA_MAX_ERROR_MM = 0.005`), `padDisc` | fixed-count inscribed samplers and a second chord tolerance; `padDisc` duplicates the S1 disc predicate | S5 |
 | `courtyard.ts` `pushCircle` | 16-chord inscribed hull | S12 |

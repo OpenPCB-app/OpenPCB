@@ -12,7 +12,11 @@
  * - Missing / non-copper `pad.layer` → the placement's own side (SMD default).
  */
 import { flipLayerSide } from "@openpcb/r3f-eda-canvas/scene/layer-side";
-import type { PcbCopperLayerId, PcbPlacedPart } from "../../sdks/designer";
+import type {
+  PcbCopperLayerId,
+  PcbFreePad,
+  PcbPlacedPart,
+} from "../../sdks/designer";
 import { isCopperLayerId } from "../../sdks/designer";
 import type { FootprintRenderSourcePad } from "./index";
 
@@ -36,6 +40,37 @@ export function resolvePadCopperLayers(
   }
 
   return new Set([placementSideLayer(placement)]);
+}
+
+/**
+ * THE free-pad copper-layer model (SDK doc on `PcbFreePadType`): `hole` is an
+ * NPTH and carries no copper at all; `std` is plated through and occupies every
+ * copper layer of the stackup; `smd` / `conn` occupy exactly the one layer they
+ * declare. Consumed by the copper records, the Gerber writer and the canvas
+ * layer, so artwork, connectivity, the pour and DRC cannot disagree about which
+ * layers a free pad's copper is on.
+ *
+ * `declaredLayerInvalid` means the declared layer is off this stackup (an inner
+ * layer on a 2-layer board, or a non-copper id that reached persistence). The
+ * layer is still reported — as itself when it is a copper id at all, else
+ * `F.Cu` — so the consumer's own layer policy (clamp for DRC, fail-safe for
+ * connectivity) decides what to do with it, exactly as before.
+ */
+export function freePadCopperLayers(
+  pad: PcbFreePad,
+  allCopperLayers: ReadonlySet<PcbCopperLayerId>,
+): { layers: PcbCopperLayerId[]; declaredLayerInvalid: boolean } {
+  if (pad.padType === "hole") return { layers: [], declaredLayerInvalid: false };
+  if (pad.padType === "std") {
+    return { layers: [...allCopperLayers], declaredLayerInvalid: false };
+  }
+  if (allCopperLayers.has(pad.layer)) {
+    return { layers: [pad.layer], declaredLayerInvalid: false };
+  }
+  return {
+    layers: [isCopperLayerId(pad.layer) ? pad.layer : "F.Cu"],
+    declaredLayerInvalid: true,
+  };
 }
 
 /**

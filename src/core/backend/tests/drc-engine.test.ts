@@ -11,7 +11,6 @@ import type {
   PcbPlacedPart,
   PcbTrace,
   PcbVia,
-  RatsnestSegment,
 } from "../../../sdks/designer";
 
 const TS = "2026-01-01T00:00:00.000Z";
@@ -507,17 +506,25 @@ describe("runDrc — constraints + structural + connectivity", () => {
     expect(codes(report)).toContain("PLACED_PART_MISSING_FOOTPRINT");
   });
 
-  test("unconnected net from remaining ratsnest", () => {
-    const seg: RatsnestSegment = {
-      netId: "n1",
-      netClassId: "default",
-      fromMm: { x: 0, y: 0 },
-      toMm: { x: 5, y: 0 },
-      from: { kind: "pad", placementId: "A", padNumber: "1" },
-      to: { kind: "pad", placementId: "B", padNumber: "1" },
-    };
+  test("unconnected net from the engine's own ratsnest", () => {
+    // Two pads on one net with no copper between them. The engine derives the
+    // ratsnest from its OWN connectivity (contract 06 §1), so this reports
+    // whether or not the projection carries a `ratsnest` field.
     const report = runDrc(
-      projection({ ratsnest: [seg], netNames: { n1: "VCC" } }),
+      projection({
+        placements: [
+          placement("A", {
+            positionMm: { x: 0, y: 0 },
+            pads: [rectPad("1", { x: 0, y: 0 }, 1, 1)],
+          }),
+          placement("B", {
+            positionMm: { x: 5, y: 0 },
+            pads: [rectPad("1", { x: 0, y: 0 }, 1, 1)],
+          }),
+        ],
+        padNets: { "A|1": "n1", "B|1": "n1" },
+        netNames: { n1: "VCC" },
+      }),
     );
     const unconnected = report.violations.filter(
       (v) => v.code === "UNCONNECTED_NET",

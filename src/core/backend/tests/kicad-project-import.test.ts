@@ -129,6 +129,7 @@ function buildSampleProjectEntries(): Array<{ name: string; bytes: Uint8Array }>
           min_via_annular_width: 0.13,
           min_hole_to_hole: 0.25,
           min_copper_edge_clearance: 0.4,
+          min_hole_clearance: 0.35,
         },
       },
     },
@@ -292,6 +293,8 @@ describe("KiCad project import (F3)", () => {
       minViaAnnularMm: 0.13,
       minHoleToHoleMm: 0.25,
       minCopperEdgeClearanceMm: 0.4,
+      // S7 — `min_hole_clearance` is OpenPCB's copper ↔ hole rule (contract 06 §4).
+      minHoleClearanceMm: 0.35,
     });
     // `classes[].nets` (v6) and exact `netclass_patterns` (v7/8) fold into one
     // net-name → class-name map; the wildcard pattern warns instead.
@@ -352,6 +355,7 @@ describe("KiCad project import (F3)", () => {
     expect(rules.minimums.annularRingMm).toBe(0.13);
     expect(rules.minimums.holeToHoleMm).toBe(0.25);
     expect(rules.clearance.copperToBoardEdgeMm).toBe(0.4);
+    expect(rules.clearance.copperToHoleMm).toBe(0.35);
     expect(rules.clearance.traceToTraceMm).toBe(0.2);
     expect(rules.clearance.traceToPadMm).toBe(0.2);
     expect(rules.clearance.padToPadMm).toBe(0.2);
@@ -384,6 +388,25 @@ describe("KiCad project import (F3)", () => {
   // The mirror branch, one step earlier: an assignment naming a class the
   // PROJECT does not declare is skipped at inspect time, so it never reaches
   // the commit-side resolver at all.
+  test("inspect leaves `minHoleClearanceMm` absent when the project has no `min_hole_clearance`", async () => {
+    // S7 (contract 06 §4): the field is optional on both the report and the
+    // board — an absent KiCad value must not become 0 or the edge rule here.
+    const zip = buildProjectZipWith({
+      meta: { filename: "blinky.kicad_pro", version: 1 },
+      board: {
+        design_settings: {
+          rules: { min_clearance: 0.1, min_copper_edge_clearance: 0.4 },
+        },
+      },
+      net_settings: { classes: [] },
+    });
+    const files = resolveProjectFiles(zip);
+    const report = await buildInspectReport(files, async () => null);
+    expect(report.designRules?.minCopperEdgeClearanceMm).toBe(0.4);
+    expect(report.designRules?.minHoleClearanceMm).toBeUndefined();
+    expect("minHoleClearanceMm" in (report.designRules ?? {})).toBe(false);
+  });
+
   test("inspect skips an assignment naming an undeclared net class, with a warning", async () => {
     const zip = buildProjectZipWith({
       meta: { filename: "blinky.kicad_pro", version: 1 },

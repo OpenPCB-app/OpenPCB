@@ -27,10 +27,15 @@ import type {
   SnapshotPlacement,
   ViaObstacle,
 } from "../../../../sdks/designer";
+import { DEFAULT_BOARD_THICKNESS_MM } from "../../../../sdks/designer";
 import { resolveNetClassId } from "./net-class-resolver";
 import { flattenCutout, flattenOutline } from "./outline-geometry";
 import { placementPads } from "./pad-geometry";
-import { placementSideLayer } from "../../../../shared/rendering/pad-copper-layers";
+import {
+  freePadCopperLayers,
+  placementSideLayer,
+} from "../../../../shared/rendering/pad-copper-layers";
+import { freePadDrill } from "../../../../shared/rendering/pcb/pcb-drills";
 import { freePadOutlineWorldMm, padOutlineWorldMm } from "./pad-outline";
 import { buildSnapshotPourIslands } from "./board-snapshot-pours";
 import { collectKeepouts } from "../../../../shared/pcb-areas/copper-zones";
@@ -53,7 +58,6 @@ function toSnapshotLayer(layer: string): SnapshotCopperLayerId | null {
     ? (layer as SnapshotCopperLayerId)
     : null;
 }
-const DEFAULT_BOARD_THICKNESS_MM = 1.6;
 // Mirrors the service's `SCHEMA_VERSION` (cloud-auto-layout app/contracts/snapshot.py).
 // Bump the minor version when a new optional field ships; the service treats
 // schemaVersion as hash-neutral, so producer/consumer can drift on minors freely.
@@ -199,34 +203,38 @@ export function buildBoardSnapshot(
     }
   }
   const freeHolesFromPads: FreeHole[] = [];
+  const validCopperLayerSet = new Set<PcbCopperLayerId>(validCopperLayers);
   for (const freePad of projection.freePads) {
-    if (freePad.padType === "hole") {
-      // NPTH: no copper, but the drilled opening is still a real obstacle — emit it
-      // as a free hole so the router doesn't route straight through it (previously
-      // silently dropped here, a data-loss bug).
+    // Every NON-PLATED drill is a real obstacle, whatever the pad type says: an
+    // `smd` / `conn` pad's drill reaches the fab as an NPTH hit exactly like a
+    // `hole` pad's (contract 06 §2), so it comes from the ONE drill derivation
+    // rather than from `padType`. The drilled opening is emitted as a free hole
+    // so the router doesn't route straight through it.
+    const drill = freePadDrill(freePad);
+    if (drill && !drill.plated) {
       freeHolesFromPads.push({
         id: `free:${freePad.id}`,
         centerMm: freePad.centerMm,
         drillMm: resolveHoleDrillMm(
-          freePad.drillMm ?? 0,
+          drill.drillMm,
           freePad.drillSlot,
           `free:${freePad.id}`,
           warnings,
         ),
       });
-      continue;
     }
-    const layers: SnapshotCopperLayerId[] =
-      freePad.padType === "std"
-        ? validCopperLayers
-        : [copperLayerOf(freePad.layer) ?? "F.Cu"];
+    // The ONE free-pad copper-layer model: `hole` carries no copper (no rings),
+    // `std` spans the stackup, `smd` / `conn` occupy the one layer they declare.
+    // A layer outside the snapshot's 2/4 stackup degrades to F.Cu as before.
+    const { layers } = freePadCopperLayers(freePad, validCopperLayerSet);
+    if (layers.length === 0) continue;
     const ring = freePadOutlineWorldMm(freePad);
     for (const layer of layers) {
       padOutlines.push({
         placementId: `free:${freePad.id}`,
         padNumber: freePad.id,
         netId: freePad.netId,
-        layer,
+        layer: copperLayerOf(layer) ?? "F.Cu",
         ring,
         isConnectable: freePad.netId !== null,
       });
@@ -419,9 +427,11 @@ export function buildBoardSnapshot(
       // byte-stable. The cloud router routes at the implicit tier and never
       // sees scoped rules or the clearance floor; the desktop re-validates
       // with the full resolver on apply (rule-semantics contract §13, §9).
-      clearance: (({ pourToCopperMm: _pour, ...clearance }) => clearance)(
-        board.designRules.clearance,
-      ),
+      clearance: (({
+        pourToCopperMm: _pour,
+        copperToHoleMm: _hole,
+        ...clearance
+      }) => clearance)(board.designRules.clearance),
       minimums: (({ clearanceMm: _floor, ...minimums }) => minimums)(
         board.designRules.minimums,
       ),

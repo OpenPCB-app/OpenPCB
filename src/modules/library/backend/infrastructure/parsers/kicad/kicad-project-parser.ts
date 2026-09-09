@@ -44,7 +44,8 @@ export interface ParsedKicadNetClassPattern {
  * KiCad's project-wide minimums (`board.design_settings.rules`), in mm. Every
  * field is optional: an older project may carry only some of them, and a
  * missing minimum must NOT be invented (rule-semantics contract §12.3).
- * `min_hole_clearance` (hole-to-copper) has no OpenPCB field yet (S11).
+ * `min_hole_clearance` maps to `clearance.copperToHoleMm` (batch-DRC contract
+ * 06 §4) — the copper-to-non-plated-drill rule.
  */
 export interface ParsedKicadProjectDesignRules {
   minClearanceMm?: number;
@@ -54,6 +55,8 @@ export interface ParsedKicadProjectDesignRules {
   minViaAnnularMm?: number;
   minHoleToHoleMm?: number;
   minCopperEdgeClearanceMm?: number;
+  /** `min_hole_clearance` — copper edge to a (non-plated) drill wall. */
+  minHoleClearanceMm?: number;
 }
 
 export interface ParsedKicadNetClass {
@@ -155,6 +158,7 @@ function extractProjectDesignRules(
   put("minViaAnnularMm", rules.min_via_annular_width);
   put("minHoleToHoleMm", rules.min_hole_to_hole);
   put("minCopperEdgeClearanceMm", rules.min_copper_edge_clearance);
+  put("minHoleClearanceMm", rules.min_hole_clearance);
   return out;
 }
 

@@ -46,6 +46,8 @@ export function anchorKey(a: DrcAnchor): string {
       return `k:${escapeStructuralIdSegment(a.keepoutId)}`;
     case "diffPair":
       return `dp:${escapeStructuralIdSegment(a.pNetId)}:${escapeStructuralIdSegment(a.nNetId)}`;
+    case "lengthGroup":
+      return `lg:${escapeStructuralIdSegment(a.groupId)}`;
     case "rule":
       return `r:${escapeStructuralIdSegment(a.ruleId)}`;
     case "boardEdge":
@@ -88,6 +90,11 @@ const LOCATION_HASHED_CODES = new Set<DrcRuleCode>([
   "FAB_CLEARANCE",
   "HOLE_TO_HOLE",
   "FAB_HOLE_TO_HOLE",
+  // Several hits on the outline / cutout set share the single `boardEdge`
+  // anchor, so only the location keeps them apart.
+  "OUTLINE_INTERNAL_RADIUS",
+  "OUTLINE_SLOT_WIDTH",
+  "BOARD_OUTLINE_INVALID",
 ]);
 
 /** 0.1 mm bucket: same-spot evolution keeps a waiver, a real move expires it. */

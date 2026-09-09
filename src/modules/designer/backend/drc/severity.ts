@@ -1,4 +1,8 @@
-import type { DrcRuleCode, DrcSeverity } from "../../../../sdks/designer";
+import type {
+  DrcRuleClass,
+  DrcRuleCode,
+  DrcSeverity,
+} from "../../../../sdks/designer";
 
 /**
  * Per-code severity policy (DRC_HARDENING_PLAN.md P3). The default table is the
@@ -20,6 +24,7 @@ export const DEFAULT_SEVERITY_BY_CODE: Record<DrcRuleCode, DrcSeverity> = {
   PAD_TO_VIA_CLEARANCE: "error",
   NET_SHORT_CIRCUIT: "error",
   COPPER_TO_BOARD_EDGE: "error",
+  COPPER_TO_HOLE: "error",
   COPPER_OFF_BOARD: "error",
   // manufacturability minimums
   TRACE_WIDTH_MIN: "error",
@@ -105,7 +110,81 @@ export const NON_OVERRIDABLE = new Set<DrcRuleCode>([
   // A rule that could not be compiled is excluded from resolution: a dropped
   // TIGHTENING rule is fail-open, so the user must see it (contract §10).
   "DRC_RULE_INVALID",
+  // A trace keeps its declared layer un-clamped (unlike pads / vias, which are
+  // checked on every valid layer when their declaration is off the stackup), so
+  // an invalid-layer trace's copper collides with nothing: this code is the ONLY
+  // guard that it exists at all. It cannot be waived or ignored (contract 06 §2).
+  "TRACE_LAYER_MISMATCH",
 ]);
+
+/**
+ * Per-code rule class — the last per-code fact that used to be a literal on
+ * every draft (contract 06 §6). Compiler-total, like the severity table: a new
+ * code has no class until it is listed here. Checks emit FACTS; the engine
+ * stamps the class, so two emit sites of one code can never disagree.
+ */
+export const RULE_CLASS_BY_CODE: Record<DrcRuleCode, DrcRuleClass> = {
+  // clearance
+  TRACE_TO_TRACE_CLEARANCE: "clearance",
+  TRACE_TO_PAD_CLEARANCE: "clearance",
+  TRACE_TO_VIA_CLEARANCE: "clearance",
+  VIA_TO_VIA_CLEARANCE: "clearance",
+  PAD_TO_PAD_CLEARANCE: "clearance",
+  PAD_TO_VIA_CLEARANCE: "clearance",
+  COPPER_TO_BOARD_EDGE: "clearance",
+  HOLE_TO_HOLE: "clearance",
+  COPPER_TO_HOLE: "clearance",
+  // constraint
+  TRACE_LAYER_MISMATCH: "constraint",
+  PAD_LAYER_MISMATCH: "constraint",
+  VIA_LAYER_SPAN: "constraint",
+  NETCLASS_TRACE_WIDTH: "constraint",
+  NETCLASS_VIA_DIAMETER: "constraint",
+  NETCLASS_VIA_DRILL: "constraint",
+  NET_LENGTH_OUT_OF_RANGE: "constraint",
+  BOARD_OUTLINE_INVALID: "constraint",
+  COPPER_OFF_BOARD: "constraint",
+  KEEPOUT_VIOLATION: "constraint",
+  ZONE_OVERLAP: "constraint",
+  // connectivity
+  UNCONNECTED_NET: "connectivity",
+  NET_SHORT_CIRCUIT: "connectivity",
+  // manufacturability
+  TRACE_WIDTH_MIN: "manufacturability",
+  VIA_DIAMETER_MIN: "manufacturability",
+  VIA_DRILL_MIN: "manufacturability",
+  DRILL_SIZE_MIN: "manufacturability",
+  ANNULAR_RING_MIN: "manufacturability",
+  FAB_TRACE_WIDTH: "manufacturability",
+  FAB_CLEARANCE: "manufacturability",
+  FAB_ANNULAR_RING: "manufacturability",
+  FAB_DRILL: "manufacturability",
+  FAB_HOLE_TO_HOLE: "manufacturability",
+  FAB_PAD: "manufacturability",
+  VIA_ASPECT_RATIO: "manufacturability",
+  OUTLINE_INTERNAL_RADIUS: "manufacturability",
+  OUTLINE_SLOT_WIDTH: "manufacturability",
+  // structural
+  PLACED_PART_MISSING_FOOTPRINT: "structural",
+  ISOLATED_COPPER_ISLAND: "structural",
+  ZONE_INVALID: "structural",
+  ZONE_EMPTY_FILL: "structural",
+  ZONE_FILL_FAILED: "structural",
+  DRC_RULE_INVALID: "structural",
+  DRC_RULE_INEFFECTIVE: "structural",
+  // dfm
+  HOLE_TO_BOARD_EDGE: "dfm",
+  HOLE_OFF_BOARD: "dfm",
+  TRACK_DANGLING: "dfm",
+  VIA_DANGLING: "dfm",
+  // electrical
+  CREEPAGE_DISTANCE: "electrical",
+  TRACE_CURRENT_WIDTH: "electrical",
+  // signal integrity
+  DIFF_PAIR_GAP: "signal-integrity",
+  DIFF_PAIR_SKEW: "signal-integrity",
+  DIFF_PAIR_UNCOUPLED_LENGTH: "signal-integrity",
+};
 
 /** Per-code severity overrides; `"ignore"` drops the violation entirely. */
 export type DrcSeverityOverrides = Partial<

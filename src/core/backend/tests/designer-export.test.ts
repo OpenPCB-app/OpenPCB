@@ -15,6 +15,7 @@ import {
   keepoutRow,
   polygonZoneRow,
 } from "./helpers/pcb-zone-fixtures";
+import { freePad } from "./helpers/drc-fixtures";
 import { textToStrokes } from "../../../modules/designer/backend/export/text/stroke-font";
 import { exportBundleName } from "../../../sdks/designer/pcb-helpers";
 import type {
@@ -781,6 +782,78 @@ describe("Excellon drill writer", () => {
     expect(out.trimEnd().endsWith("M30")).toBe(true);
     // No tool definitions.
     expect(out.match(/^T\d+C/gm) ?? []).toEqual([]);
+  });
+});
+
+// =========================================================================
+// Free pads: ONE drill / layer derivation (batch-DRC contract 06 §2)
+// =========================================================================
+
+describe("free-pad copper and drills follow one derivation", () => {
+  /** An NPTH pad, a single-sided `conn` pad and a drilled SMD pad. */
+  function withFreePads(): DesignerPcbProjection {
+    const proj = fixtureProjection();
+    proj.freePads = [
+      freePad("fp-hole", {
+        padType: "hole",
+        shape: "circle",
+        widthMm: 3,
+        heightMm: 3,
+        drillMm: 2,
+        center: { x: 6, y: 6 },
+      }),
+      freePad("fp-conn", {
+        padType: "conn",
+        layer: "B.Cu",
+        widthMm: 1,
+        heightMm: 1,
+        center: { x: 8, y: 6 },
+      }),
+      freePad("fp-smd-drilled", {
+        padType: "smd",
+        layer: "F.Cu",
+        shape: "circle",
+        widthMm: 1.6,
+        heightMm: 1.6,
+        drillMm: 0.9,
+        center: { x: 10, y: 6 },
+      }),
+    ];
+    return proj;
+  }
+
+  const FLASH_HOLE = "X6000000Y6000000D03*";
+  const FLASH_CONN = "X8000000Y6000000D03*";
+
+  test("a `hole` free pad is an NPTH — no copper on any copper layer", () => {
+    const proj = withFreePads();
+    // It used to flash copper on F.Cu and B.Cu: copper in the artwork that the
+    // records, the pour and DRC never saw, sitting on a non-plated drill.
+    expect(buildGerberLayer(proj, "copper.top", [])).not.toContain(FLASH_HOLE);
+    expect(buildGerberLayer(proj, "copper.bottom", [])).not.toContain(
+      FLASH_HOLE,
+    );
+    // The mask relief stays on both faces: an NPTH still wants its opening so
+    // the drill does not tear the mask edge (KiCad flashes it the same way).
+    expect(buildGerberLayer(proj, "mask.top", [])).toContain(FLASH_HOLE);
+    expect(buildGerberLayer(proj, "mask.bottom", [])).toContain(FLASH_HOLE);
+  });
+
+  test("a `conn` free pad flashes on its declared layer only", () => {
+    const proj = withFreePads();
+    expect(buildGerberLayer(proj, "copper.bottom", [])).toContain(FLASH_CONN);
+    expect(buildGerberLayer(proj, "copper.top", [])).not.toContain(FLASH_CONN);
+    expect(buildGerberLayer(proj, "mask.bottom", [])).toContain(FLASH_CONN);
+    expect(buildGerberLayer(proj, "mask.top", [])).not.toContain(FLASH_CONN);
+  });
+
+  test("a drilled `smd` free pad keeps its copper and drills as NPTH", () => {
+    const proj = withFreePads();
+    expect(buildGerberLayer(proj, "copper.top", [])).toContain(
+      "X10000000Y6000000D03*",
+    );
+    expect(buildExcellonDrill(proj, [], "NPTH")).toMatch(/T\d+C0\.900/);
+    expect(buildExcellonDrill(proj, [], "PTH")).not.toMatch(/T\d+C0\.900/);
   });
 });
 

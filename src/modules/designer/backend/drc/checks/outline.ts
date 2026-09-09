@@ -1,6 +1,10 @@
 import { ringsIntersect, ringStrictlyInside } from "../../pcb/board-region";
 import { ringSelfIntersects } from "../../pcb/segment-predicates";
-import { ringSignedArea } from "../../pcb/ring-utils";
+import { DEGENERATE_AREA_MM2, ringSignedArea } from "../../pcb/ring-utils";
+import {
+  boundsIntersectionCenter,
+  boundsOfPoints,
+} from "../../../../../shared/pcb-geometry/region-rings";
 import type { Point } from "../../pcb/pcb-trace-geometry";
 import type { DrcContext } from "../drc-context";
 import type { DrcViolationDraft } from "../types";
@@ -24,7 +28,6 @@ export function checkOutline(ctx: DrcContext): DrcViolationDraft[] {
   const emit = (message: string, locationMm: Point) => {
     out.push({
       code: "BOARD_OUTLINE_INVALID",
-      ruleClass: "constraint",
       message,
       anchors: [{ kind: "boardEdge" }],
       locationMm,
@@ -35,7 +38,10 @@ export function checkOutline(ctx: DrcContext): DrcViolationDraft[] {
     emit("Board outline has a non-finite coordinate", outline[0] ?? { x: 0, y: 0 });
     return out;
   }
-  if (outline.length < 3 || Math.abs(ringSignedArea(outline)) < 1e-6) {
+  if (
+    outline.length < 3 ||
+    Math.abs(ringSignedArea(outline)) < DEGENERATE_AREA_MM2
+  ) {
     emit("Board outline is empty or has zero area", outline[0] ?? { x: 0, y: 0 });
     return out; // nothing else is meaningful without a valid outer ring
   }
@@ -47,7 +53,7 @@ export function checkOutline(ctx: DrcContext): DrcViolationDraft[] {
     (cut) =>
       !ringIsFinite(cut) ||
       cut.length < 3 ||
-      Math.abs(ringSignedArea(cut)) < 1e-6,
+      Math.abs(ringSignedArea(cut)) < DEGENERATE_AREA_MM2,
   );
   ctx.cutoutRings.forEach((cut, i) => {
     const where = cut[0] ?? outline[0]!;
@@ -78,9 +84,15 @@ export function checkOutline(ctx: DrcContext): DrcViolationDraft[] {
       if (
         ringsIntersect(ctx.boardRegion.holes[i]!, ctx.boardRegion.holes[j]!)
       ) {
+        // Marker = the centre of the two rings' box overlap: symmetric in the
+        // pair and distinct per pair, so two pairs sharing one cutout get two
+        // ids (the code is location-hashed, contract 06 §6).
         emit(
           `Cutouts ${i + 1} and ${j + 1} touch or overlap`,
-          ctx.cutoutRings[i]![0] ?? outline[0]!,
+          boundsIntersectionCenter(
+            boundsOfPoints(ctx.boardRegion.holes[i]!),
+            boundsOfPoints(ctx.boardRegion.holes[j]!),
+          ),
         );
       }
     }

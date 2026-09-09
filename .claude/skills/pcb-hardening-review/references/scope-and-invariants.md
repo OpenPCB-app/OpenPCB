@@ -117,15 +117,16 @@ kernel after S1 —, one clearance resolver after S6, the arc flatteners) is in
 
 ## Epsilon policy — from `OpenPCB/docs/drc/OPEN_FINDINGS.md` §5.1
 
-Four comparison regimes, unified in `src/modules/designer/backend/pcb/tolerance.ts`
-(`below`/`exceeds`, `DRC_EPS_MM = 1e-6`, `SHORT_EPS_MM = 1e-4`):
+Comparison regimes, unified in `src/shared/pcb-geometry/tolerance.ts` (`backend/pcb/tolerance.ts` is a
+re-export shim; `below`/`exceeds`, `DRC_EPS_MM = 1e-6`, `SHORT_EPS_MM = 1e-4`, `GEOM_EPS_MM = 5e-7`,
+`clearanceViolated`) — re-verified 2026-09-08 (S7), record in `docs/pcb-hardening/06-batch-drc-contract.md` §5:
 
 | Regime | Form | Applies to | Boundary behaviour |
 |---|---|---|---|
 | Minimums | `below(v, limit)` = `v < limit − 1e-6` | Manufacturability minimums, board checks | Exact-spec geometry passes; sub-nm float noise forgiven |
-| Clearance | bare `gap < required` | All clearance pairs, FAB tier | Exact equality passes; a 1 nm deficit errors — zero grace |
+| Clearance | `clearanceViolated(gap, required)` = `gap < required − GEOM_EPS_MM` (0.5 nm grace, S6) | All copper clearance pairs, copper-to-edge, copper-to-hole (S7) | Exact equality passes, derived floats forgiven; a 1 nm deficit still errors |
+| Fab capability | `below(gap, fabMin)` | `FAB_CLEARANCE`, `FAB_HOLE_TO_HOLE`, fab validators | Minimums regime, not the clearance one |
 | Short | `gap <= SHORT_EPS_MM` (1e-4), **inclusive** | Short tier | A gap of exactly 1e-4 mm is a short |
-| Fab validators | bare `<`/`>`, no epsilon | Fab preset comparisons | Has produced a real false positive on a derived float |
 
 If a packet touches any comparison logic, quote the relevant regime — do not let Astra assume a
 uniform epsilon.
@@ -140,11 +141,11 @@ packet touches net-class resolution.
 
 ## Known open defect register
 
-`OpenPCB/docs/drc/OPEN_FINDINGS.md` is the live defect register — 17 confirmed open DRC bugs
-(since Session 0, 2026-09-06), each with a `test.todo` regression test whose body is a real
-post-fix assertion (`rg -n "test\.todo\(" src/core/backend/tests/drc-audit-b*.test.ts` should
-show 17 call sites; if the count drops without a finding being removed from the doc, the register
-is stale). The program that schedules the fixes is `docs/pcb-hardening/PROGRAM.md`; the verified
+`OpenPCB/docs/drc/OPEN_FINDINGS.md` is the live defect register — 7 open DRC bugs remain after
+S0–S7 (B2-5/6/7 + B6-1 → S11, B5-LIVE-ROT-PAD / B5-LIVE-TH-PAD-SIDE → S8, B5-SYNC → S10), each
+with a `test.todo` regression test whose body is a real post-fix assertion (`rg -n "test\.todo\("
+src/core/backend/tests/drc-audit-b*.test.ts` should show 7 call sites; if the count drops without
+a finding being removed from the doc, the register is stale). The program that schedules the fixes is `docs/pcb-hardening/PROGRAM.md`; the verified
 current-master inventory is `docs/pcb-hardening/00-ground-truth.md`. **Always check the register
 for an overlapping finding before treating something as a new bug.**
 

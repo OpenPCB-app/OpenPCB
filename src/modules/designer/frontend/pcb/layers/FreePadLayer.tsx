@@ -1,6 +1,12 @@
 import { type ReactElement, useMemo } from "react";
 import { copperLayerColor } from "../pcb-layer-colors";
-import type { PcbCopperLayerId, PcbFreePad } from "../../../../../sdks";
+import type {
+  PcbCopperLayerId,
+  PcbFreePad,
+  PcbLayerCount,
+} from "../../../../../sdks";
+import { copperLayersForCount } from "../../../../../sdks";
+import { freePadCopperLayers } from "../../../../../shared/rendering/pad-copper-layers";
 import {
   PCB_LAYER_COLORS,
   effectiveRenderOrder,
@@ -14,6 +20,8 @@ interface FreePadLayerProps {
   freePads: ReadonlyArray<PcbFreePad>;
   /** Restrict rendering to pads on this layer. */
   layer: PcbCopperLayerId;
+  /** Stackup size — the layer set a `std` pad's copper spans. */
+  layerCount: PcbLayerCount;
   viewSide: "top" | "bottom";
   selectedFreePadIds?: ReadonlySet<string>;
   /** Per-layer opacity multiplier (slider / display-mode dim). */
@@ -23,25 +31,29 @@ interface FreePadLayerProps {
 /**
  * Free standing pads (not part of any footprint). Routes through the
  * existing `PadInstances` primitive — same renderer the footprint pads use.
- * STD pads visually span F.Cu + B.Cu by passing through with their stored
- * `layer` field; v1 stores one row per pad so call sites filter per-layer.
+ * Which layers a pad's copper occupies comes from the ONE free-pad layer model
+ * (`freePadCopperLayers`), so the canvas draws exactly the copper DRC, the
+ * pour and the Gerber writer see; v1 stores one row per pad, so call sites
+ * still filter per-layer.
  */
 export function FreePadLayer({
   freePads,
   layer,
+  layerCount,
   viewSide,
   selectedFreePadIds,
   opacity = 1,
 }: FreePadLayerProps): ReactElement | null {
+  const validCopperLayers = useMemo(
+    () => new Set<PcbCopperLayerId>(copperLayersForCount(layerCount)),
+    [layerCount],
+  );
   const pads = useMemo<PadData[]>(() => {
     const out: PadData[] = [];
     for (const pad of freePads) {
-      // STD pads contribute copper on both F.Cu and B.Cu; everything else is
-      // single-sided.
-      const padOnLayer =
-        pad.layer === layer ||
-        (pad.padType === "std" && (layer === "F.Cu" || layer === "B.Cu"));
-      if (!padOnLayer) continue;
+      if (!freePadCopperLayers(pad, validCopperLayers).layers.includes(layer)) {
+        continue;
+      }
       out.push({
         id: pad.id,
         x: pad.centerMm.x,
@@ -58,7 +70,7 @@ export function FreePadLayer({
       });
     }
     return out;
-  }, [freePads, layer, selectedFreePadIds]);
+  }, [freePads, layer, selectedFreePadIds, validCopperLayers]);
 
   if (pads.length === 0) return null;
 

@@ -140,7 +140,14 @@ batch, live gate, route obstacles, the pour composition, the via insert gate —
 `createRuleResolver` (`05-rule-semantics-contract.md` §9); the first three copies are deleted.
 [v at S6 close]
 
-### 4.3 Geometry predicates — after S2 (2026-09-07)
+### 4.3 Geometry predicates — after S2 (2026-09-07), pad model after S7 (2026-09-08)
+- Pad copper for DRC: **one** ring per pad (`copper-records.ts`, via `pad-outline.ts`) plus the
+  exact `disc` for a true circle; since S7 every DRC check consumes the disc through
+  `drc/pair-gap.ts` (clearance, creepage, copper-to-hole), `checks/board.ts` and
+  `checks/keepouts.ts` — the circumscribed 48-gon is no longer judged anywhere for circles.
+  Free-pad copper layers and free-pad drills each have **one** derivation
+  (`freePadCopperLayers`, `freePadDrill`) consumed by the records, DRC, the pour, the Gerber /
+  Excellon writers, the snapshot and the canvas (`06-batch-drc-contract.md` §2). [v at S7]
 - Point-in-polygon: **one** — `pcb-clearance-geometry.ts` `pointInPolygon` (the former
   `outline-geometry.ts` `pointInRing` is gone). Closed-set region containment lives in
   `pcb-geometry/board-region.ts` (`regionContainsPoint`, per ring, `GEOM_EPS_MM`). [v]
@@ -176,7 +183,7 @@ batch, live gate, route obstacles, the pour composition, the via insert gate —
 
 ## 5. Rule-code emit census
 
-43 codes in `DrcRuleCode` at S0 (the S0 census said 41 — a miscount, corrected in S6 against `git show HEAD`), 47 after S4, 48 after S5, **51 after S6** (the union and `DEFAULT_SEVERITY_BY_CODE` agree member for member) (`HOLE_OFF_BOARD` — `checks/board.ts`; `DRC_RULE_INVALID`, `DRC_RULE_INEFFECTIVE` — `checks/rules.ts`; S5: `ZONE_FILL_FAILED`, emitted by `checks/copper-pour.ts`; S4: `KEEPOUT_VIOLATION`, `ZONE_OVERLAP`, `ZONE_INVALID`,
+43 codes in `DrcRuleCode` at S0 (the S0 census said 41 — a miscount, corrected in S6 against `git show HEAD`), 47 after S4, 48 after S5, **51 after S6**, **52 after S7** (`COPPER_TO_HOLE` — `checks/copper-to-hole.ts`; the union, `DEFAULT_SEVERITY_BY_CODE`, `RULE_CLASS_BY_CODE`, `EMIT_SITE_BY_CODE` and `CODE_LABEL` are all `Record<DrcRuleCode, …>` and the S7 census test proves every code reachable on the corpus) (`HOLE_OFF_BOARD` — `checks/board.ts`; `DRC_RULE_INVALID`, `DRC_RULE_INEFFECTIVE` — `checks/rules.ts`; S5: `ZONE_FILL_FAILED`, emitted by `checks/copper-pour.ts`; S4: `KEEPOUT_VIOLATION`, `ZONE_OVERLAP`, `ZONE_INVALID`,
 `ZONE_EMPTY_FILL` — `checks/keepouts.ts`, `checks/zones.ts`, `checks/copper-pour.ts`); every code
 has an emit site under `drc/checks/`, a default severity in `severity.ts` and a label in
 `drc-labels.ts`; no emitted string is outside the union. [a] Two notes:
@@ -244,6 +251,10 @@ Frontend/shared specs: `copper-fill-geometry.test.ts` (23), `copper-fill-trace-g
 | `copper-fill-geometry.ts` `buildCopperFillPourPaths` comment | "backend-safe … no THREE" | the kernel module imports `three` at load [v] | resolved S5: `three` lives only in `copper-fill-shapes.ts` (`islandsToShapes`), the kernel and `copper-geometry-kernel.ts` no longer import it |
 | `checks/copper-pour.ts` doc comment | "a same-net pour satisfies the net, so `UNCONNECTED_NET` already clears" | false when no pour exists (B3-1) | corrected in S1 |
 | `README.md` L60 | "DRC runs live while you work" | live path covers trace–trace and trace–pad only | S8 (user-facing wording) |
+| `designer/AGENTS.md` "## DRC" | "thirteen" checks | 16 at S6 close, 17 after S7 | corrected in S7 |
+| `.claude/skills/pcb-hardening-review/references/scope-and-invariants.md` | clearance regime = bare `<`; "17 `test.todo`"; tolerance path | S6 moved clearance to `clearanceViolated`; 6 todo; the path is a shim | corrected in S7 |
+| `docs/drc/OPEN_FINDINGS.md` §5.1 / "Checking status" | FAB tier under the clearance regime; "8 call sites" | `clearance.ts` uses `below`; 6 | corrected in S7 |
+| `gerber/writer.ts` `freePadTouchesCopperLayer` | `hole` and `conn` free pads on F.Cu + B.Cu | SDK: `hole` has no copper, `conn` is single-layer — the artwork carried copper DRC never saw | fixed in S7 (`freePadCopperLayers`) |
 
 ## 8. Dependency map
 

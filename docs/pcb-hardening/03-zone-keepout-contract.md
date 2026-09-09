@@ -597,15 +597,15 @@ filed for a cloud session.
 
 ### 13.6 Stated limits
 
-- Circle pads reach `keepoutAffects` as their sampled world ring, not the exact disc the §4 table
-  names; the ring is circumscribed (`pad-outline.ts`), so the verdict errs towards "affected". S7's
-  pad-disc work closes it.
+- Resolved in S7: circle pads reach `keepoutAffects` as the exact disc the §4 table names
+  (`checks/keepouts.ts` passes the record's `disc`); non-circular pads keep the circumscribed ring.
 - Net-class clearances enter the fill since S5; scoped rules since S6, only through a pour `pairKind` scope. `ZONE_OVERLAP`
   tests polygon overlap only and, since S5's precedence carve, reports equal-priority pairs only.
 - Resolved in S5: one `buildCopperFillIslands` → `{ status: "ok" | "failed" }` for every consumer;
   a kernel bail is `ZONE_FILL_FAILED`, never `ZONE_EMPTY_FILL` (`04-copper-pour-contract.md` §8).
-- `preview.bounds` is built from pad `widthMm` / `heightMm`; whether it still bounds a `custom`
-  pad's world ring is unverified (R1) — S7's pad work checks it.
+- `preview.bounds` is built from pad `widthMm` / `heightMm`, and so is a `custom` pad's ring
+  (`pad-outline.ts` bounding rectangle) — the bounds contain the ring by construction (verified
+  and pinned in S7).
 - A trace whose points are all identical is a disc to batch DRC (`stadiumOverlapsRing` on a
   zero-length polyline) and nothing to the live check (it skips zero-length segments); such a trace
   is structurally invalid and reported by the width/structural checks, so the pair never reaches a

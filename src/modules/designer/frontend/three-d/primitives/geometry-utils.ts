@@ -8,6 +8,7 @@ import type {
   PcbVia,
   PcbViaProtection,
 } from "../../../../../sdks";
+import { DEFAULT_BOARD_THICKNESS_MM } from "../../../../../sdks";
 import { collectDrills } from "../../pcb/pcb-drills";
 import { graphicStrokeSegments } from "../../../../../shared/frontend/canvas/preview/geometry";
 import { flattenOutline } from "../../../backend/pcb/outline-geometry";
@@ -16,7 +17,9 @@ import type {
   PreviewLabel,
 } from "../../../../../shared/rendering";
 
-export const DEFAULT_BOARD_THICKNESS_MM = 1.6;
+// The ONE finished-thickness default (SDK), re-exported so the sibling 3D
+// primitives keep importing it from here.
+export { DEFAULT_BOARD_THICKNESS_MM };
 export const DEFAULT_COPPER_THICKNESS_MM = 0.035;
 export const DEFAULT_PAD_HEIGHT_MM = 0.05;
 export const DEFAULT_SILKSCREEN_HEIGHT_MM = 0.02;

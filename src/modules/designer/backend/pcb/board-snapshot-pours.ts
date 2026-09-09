@@ -4,6 +4,8 @@ import type {
   PourIsland,
   SnapshotCopperLayerId,
 } from "../../../../sdks/designer";
+import { copperToHoleClearanceMm } from "../../../../shared/drc/rule-resolver";
+import { ringSignedArea } from "../../../../shared/pcb-geometry/ring-utils";
 import { buildCopperFillIslands } from "../../../../shared/rendering/copper-fill/copper-fill-geometry";
 import {
   collectCopperZones,
@@ -62,6 +64,7 @@ export function buildSnapshotPourIslands(
     vias: projection.vias,
     padNetIds,
     copperToBoardEdgeMm: dr.clearance.copperToBoardEdgeMm,
+    copperToHoleMm: copperToHoleClearanceMm(dr),
     cutouts: projection.board.cutouts,
     freeHoles: projection.freeHoles,
     freePads: projection.freePads,
@@ -199,17 +202,6 @@ function removeClosingDuplicate(points: readonly PcbPointMm[]): PcbPointMm[] {
 
 function samePoint(a: PcbPointMm, b: PcbPointMm): boolean {
   return a.x === b.x && a.y === b.y;
-}
-
-function ringSignedArea(ring: readonly PcbPointMm[]): number {
-  let sum = 0;
-  for (let i = 0; i < ring.length; i += 1) {
-    const a = ring[i];
-    const b = ring[(i + 1) % ring.length];
-    if (!a || !b) continue;
-    sum += a.x * b.y - b.x * a.y;
-  }
-  return sum / 2;
 }
 
 function sourceSortKey(source: PourSource): string {

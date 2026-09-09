@@ -1,5 +1,7 @@
+import type { PcbBoardOutline } from "../../../../../sdks/designer";
 import {
   FAB_PRESETS,
+  type PcbFabPreset,
   validateHoleAgainstFab,
   validateTraceAgainstFab,
   validateViaAgainstFab,
@@ -7,7 +9,9 @@ import {
 import {
   boardSlotRing,
   findNarrowestSlot,
+  findParametricHoleSlot,
   findSmallInternalRadii,
+  type RingMaterialSide,
 } from "../../pcb/outline-manufacturability";
 import { below, type DrcContext } from "../drc-context";
 import { exceeds } from "../../pcb/tolerance";
@@ -36,7 +40,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
     if (below(t.widthMm, width.mm)) {
       out.push({
         code: "TRACE_WIDTH_MIN",
-        ruleClass: "manufacturability",
         ...(width.rule?.severity ? { ruleSeverity: width.rule.severity } : {}),
         message: `Trace width ${t.widthMm.toFixed(3)} mm is below the minimum ${width.mm.toFixed(3)} mm${ruleSuffix(width)}`,
         anchors: [{ kind: "trace", traceId: t.id }],
@@ -52,7 +55,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
     )) {
       out.push({
         code: "FAB_TRACE_WIDTH",
-        ruleClass: "manufacturability",
         message: v.message,
         anchors: [{ kind: "trace", traceId: t.id }],
         locationMm: t.mid,
@@ -79,7 +81,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
     if (below(via.diameterMm, viaDiameter.mm)) {
       out.push({
         code: "VIA_DIAMETER_MIN",
-        ruleClass: "manufacturability",
         ...(viaDiameter.rule?.severity
           ? { ruleSeverity: viaDiameter.rule.severity }
           : {}),
@@ -94,7 +95,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
     if (below(via.drillMm, viaDrill.mm)) {
       out.push({
         code: "VIA_DRILL_MIN",
-        ruleClass: "manufacturability",
         ...(viaDrill.rule?.severity
           ? { ruleSeverity: viaDrill.rule.severity }
           : {}),
@@ -111,7 +111,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
     if (below(annular, viaAnnular.mm)) {
       out.push({
         code: "ANNULAR_RING_MIN",
-        ruleClass: "manufacturability",
         ...(viaAnnular.rule?.severity
           ? { ruleSeverity: viaAnnular.rule.severity }
           : {}),
@@ -134,7 +133,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
             : "FAB_ANNULAR_RING";
       out.push({
         code,
-        ruleClass: "manufacturability",
         message: fv.message,
         anchors: [{ kind: "via", viaId: via.id }],
         locationMm: via.centerMm,
@@ -157,7 +155,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
       if (preset && exceeds(ratio, preset.maxAspectRatio)) {
         out.push({
           code: "VIA_ASPECT_RATIO",
-          ruleClass: "manufacturability",
           message: `Via aspect ratio ${ratio.toFixed(1)}:1 exceeds ${preset.name} maximum ${preset.maxAspectRatio}:1 (span ${effectiveThicknessMm.toFixed(2)} mm / drill ${via.drillMm.toFixed(3)} mm)`,
           anchors: [{ kind: "via", viaId: via.id }],
           locationMm: via.centerMm,
@@ -174,7 +171,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
     if (below(hole.drillMm, min.drillSizeMm)) {
       out.push({
         code: "DRILL_SIZE_MIN",
-        ruleClass: "manufacturability",
         message: `Drill size ${hole.drillMm.toFixed(3)} mm is below the minimum ${min.drillSizeMm.toFixed(3)} mm`,
         anchors: [hole.anchor],
         locationMm: hole.center,
@@ -187,7 +183,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
       if (below(annular, min.annularRingMm)) {
         out.push({
           code: "ANNULAR_RING_MIN",
-          ruleClass: "manufacturability",
           message: `Pad annular ring ${annular.toFixed(3)} mm is below the minimum ${min.annularRingMm.toFixed(3)} mm`,
           anchors: [hole.anchor],
           locationMm: hole.center,
@@ -206,7 +201,6 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
       )) {
         out.push({
           code: fv.rule === "minDrillMm" ? "FAB_DRILL" : "FAB_ANNULAR_RING",
-          ruleClass: "manufacturability",
           message: fv.message,
           anchors: [hole.anchor],
           locationMm: hole.center,
@@ -217,44 +211,89 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
     }
   }
 
-  // Board-outline milling limits (fab-sourced, advisory): internal corner radius
-  // + slot/neck width. Custom fab has no capability floor, so it's skipped.
+  // Milling limits (fab-sourced, advisory): internal corner radius + slot/neck
+  // width. Custom fab has no capability floor, so it's skipped.
   if (ctx.fabricator !== "custom") {
     const preset = FAB_PRESETS[ctx.fabricator];
     if (preset) {
-      for (const hit of findSmallInternalRadii(
-        ctx.projection.board.outline,
-        preset.minInternalRadiusMm,
-      )) {
-        out.push({
-          code: "OUTLINE_INTERNAL_RADIUS",
-          ruleClass: "manufacturability",
-          message: `Internal corner radius ${hit.radiusMm.toFixed(2)} mm < ${preset.name} min ${preset.minInternalRadiusMm.toFixed(2)} mm`,
-          anchors: [{ kind: "boardEdge" }],
-          locationMm: hit.locationMm,
-          measuredMm: hit.radiusMm,
-          requiredMm: preset.minInternalRadiusMm,
-        });
-      }
-      // Slot check on the coarse vertex ring (arcs as single edges) so a smooth
-      // curve's tessellation chords never read as a false narrow gap.
-      const slotRing = boardSlotRing(ctx.projection.board.outline);
-      const slot = slotRing
-        ? findNarrowestSlot(slotRing, preset.minSlotWidthMm)
-        : null;
-      if (slot) {
-        out.push({
-          code: "OUTLINE_SLOT_WIDTH",
-          ruleClass: "manufacturability",
-          message: `Board slot / neck ${slot.gapMm.toFixed(2)} mm < ${preset.name} min ${preset.minSlotWidthMm.toFixed(2)} mm`,
-          anchors: [{ kind: "boardEdge" }],
-          locationMm: slot.locationMm,
-          measuredMm: slot.gapMm,
-          requiredMm: preset.minSlotWidthMm,
-        });
-      }
+      const board = ctx.projection.board;
+      // The outer outline AND every cutout: a cutout is routed with the same
+      // bit, so a corner or a neck inside one is the same fab limit (contract
+      // 06 §3) — but the material is on the OTHER side of a cutout ring, which
+      // flips which corners the bit cannot reach. Both codes are
+      // location-hashed, so several hits on the shared `boardEdge` anchor stay
+      // distinct. The message carries the cutout id as well as its position,
+      // since reordering `board.cutouts` renumbers them.
+      out.push(...millingAdvisories(board.outline, preset, "", "inside"));
+      (board.cutouts ?? []).forEach((cutout, i) => {
+        out.push(
+          ...millingAdvisories(
+            cutout.shape,
+            preset,
+            `Cutout ${i + 1} (${cutout.id.slice(0, 6)}) `,
+            "outside",
+          ),
+        );
+      });
     }
   }
 
+  return out;
+}
+
+/**
+ * The two advisory milling hits for ONE milled contour. `subject` prefixes the
+ * message ("" for the board itself, "Cutout n (id) " for a cutout) — the
+ * board's wording is unchanged. `material` says which side of the ring the
+ * substrate is on; it decides which corners the bit cannot reach.
+ */
+function millingAdvisories(
+  shape: PcbBoardOutline,
+  preset: PcbFabPreset,
+  subject: string,
+  material: RingMaterialSide,
+): DrcViolationDraft[] {
+  const out: DrcViolationDraft[] = [];
+  const radiusLabel = subject
+    ? `${subject}internal corner radius`
+    : "Internal corner radius";
+  const slotLabel = subject ? `${subject}slot / neck` : "Board slot / neck";
+  for (const hit of findSmallInternalRadii(
+    shape,
+    preset.minInternalRadiusMm,
+    material,
+  )) {
+    out.push({
+      code: "OUTLINE_INTERNAL_RADIUS",
+      message: `${radiusLabel} ${hit.radiusMm.toFixed(2)} mm < ${preset.name} min ${preset.minInternalRadiusMm.toFixed(2)} mm`,
+      anchors: [{ kind: "boardEdge" }],
+      locationMm: hit.locationMm,
+      measuredMm: hit.radiusMm,
+      requiredMm: preset.minInternalRadiusMm,
+    });
+  }
+  // Slot check on the coarse vertex ring (arcs as single edges) so a smooth
+  // curve's tessellation chords never read as a false narrow gap. A parametric
+  // cutout has no such ring — its own narrowest dimension IS the void the
+  // cutter must fit into. `findNarrowestSlot` is side-agnostic: on a non-convex
+  // cutout it also measures a narrow MATERIAL web between two lobes of the
+  // void, which is the minimum-web limit S12 owns — reported here under the
+  // same advisory code, never silently passed (contract 06 §9).
+  const slotRing = boardSlotRing(shape);
+  const slot = slotRing
+    ? findNarrowestSlot(slotRing, preset.minSlotWidthMm)
+    : material === "outside"
+      ? findParametricHoleSlot(shape, preset.minSlotWidthMm)
+      : null;
+  if (slot) {
+    out.push({
+      code: "OUTLINE_SLOT_WIDTH",
+      message: `${slotLabel} ${slot.gapMm.toFixed(2)} mm < ${preset.name} min ${preset.minSlotWidthMm.toFixed(2)} mm`,
+      anchors: [{ kind: "boardEdge" }],
+      locationMm: slot.locationMm,
+      measuredMm: slot.gapMm,
+      requiredMm: preset.minSlotWidthMm,
+    });
+  }
   return out;
 }

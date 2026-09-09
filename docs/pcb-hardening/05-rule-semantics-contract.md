@@ -499,6 +499,8 @@ object (**needs verification** — every v9 file in the corpus has it empty).
 
 ## 13. Stated limits
 
+- `clearance.copperToHoleMm` (S7) is a board field read by `copperToHoleClearanceMm`, not a
+  resolver path — no hole pair kind exists for scoped rules (S11).
 - Scoped rules, the clearance floor and `pourToCopperMm` do not reach the cloud auto-layout
   (wire-contract boundary — the snapshot strips the two keys; the desktop apply path
   re-validates).

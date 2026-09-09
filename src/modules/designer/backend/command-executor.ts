@@ -146,6 +146,7 @@ import {
 } from "./pcb/pcb-projection";
 import { loadSchematicProjection } from "./projection-read";
 import {
+  copperToHoleClearanceMm,
   createRuleResolver,
   type RuleResolver,
 } from "../../../shared/drc/rule-resolver";
@@ -1151,6 +1152,7 @@ export function executeDesignerCommand({
           vias: proj.vias,
           padNetIds,
           copperToBoardEdgeMm: dr.clearance.copperToBoardEdgeMm,
+          copperToHoleMm: copperToHoleClearanceMm(dr),
           cutouts: proj.board.cutouts,
           freeHoles: proj.freeHoles,
           freePads: proj.freePads,

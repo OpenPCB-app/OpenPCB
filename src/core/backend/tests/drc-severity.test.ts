@@ -11,7 +11,15 @@ import {
 } from "../../../modules/designer/backend/drc/severity";
 import { computeViolationId } from "../../../modules/designer/backend/drc/violation-id";
 import { fixtureToProjection } from "./helpers/drc-golden";
-import { boardWithRules, codes, projection, trace, via } from "./helpers/drc-fixtures";
+import {
+  boardWithRules,
+  codes,
+  pad,
+  placement,
+  projection,
+  trace,
+  via,
+} from "./helpers/drc-fixtures";
 
 // Two different-net traces below the clearance rule → one clearance error.
 function clearancePair() {
@@ -35,19 +43,22 @@ describe("DRC severity — defaults", () => {
   });
 
   test("UNCONNECTED_NET defaults to error", () => {
+    // Two pads on one net with no copper between them; the engine derives the
+    // airwire itself (contract 06 §1) rather than trusting `projection.ratsnest`.
     const report = runDrc(
       projection({
         netNames: { n1: "SIG" },
-        ratsnest: [
-          {
-            netId: "n1",
-            netClassId: "default",
-            fromMm: { x: 0, y: 0 },
-            toMm: { x: 5, y: 0 },
-            from: { kind: "pad", placementId: "A", padNumber: "1" },
-            to: { kind: "pad", placementId: "B", padNumber: "1" },
-          },
+        placements: [
+          placement("A", {
+            positionMm: { x: 0, y: 0 },
+            pads: [pad("1", { x: 0, y: 0 }, 1, 1)],
+          }),
+          placement("B", {
+            positionMm: { x: 5, y: 0 },
+            pads: [pad("1", { x: 0, y: 0 }, 1, 1)],
+          }),
         ],
+        padNets: { "A|1": "n1", "B|1": "n1" },
       }),
     );
     const v = report.violations.find((x) => x.code === "UNCONNECTED_NET");

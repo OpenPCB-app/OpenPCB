@@ -1,4 +1,5 @@
 import { polylineLength } from "../../../../../shared/pcb-geometry/pcb-trace-geometry";
+import { canonicalTraces } from "../pair-gap";
 import type { DrcContext } from "../drc-context";
 import type { DrcViolationDraft } from "../types";
 
@@ -13,16 +14,19 @@ import type { DrcViolationDraft } from "../types";
  *   missing copper; a length rule only judges what exists.
  * - `longest` targets track the longest routed member, so only shorter nets
  *   can violate. `absolute` targets flag both directions.
- * - A net violating in several groups collides to one violation id (id =
- *   code + net anchor); acceptable — overlapping groups are a config smell.
+ * - A net violating in several groups yields ONE violation per group: the
+ *   group is a second anchor, so the ids stay distinct (contract 06 §6).
  */
 export function checkLength(ctx: DrcContext): DrcViolationDraft[] {
   const out: DrcViolationDraft[] = [];
   const groups = ctx.projection.board.lengthMatchGroups ?? [];
   if (groups.length === 0) return out;
 
+  // Float sums are order-dependent (0.1 + 0.1 + 0.3 ≠ 0.3 + 0.1 + 0.1 at the
+  // last bit), so accumulate in canonical trace order, never array order
+  // (contract 06 §7, Astra S7 #6).
   const lengthByNet = new Map<string, number>();
-  for (const t of ctx.traces) {
+  for (const t of canonicalTraces(ctx.traces)) {
     if (t.netId === null) continue;
     lengthByNet.set(
       t.netId,
@@ -49,13 +53,15 @@ export function checkLength(ctx: DrcContext): DrcViolationDraft[] {
       const netName = ctx.netNames[member.netId] ?? member.netId;
       out.push({
         code: "NET_LENGTH_OUT_OF_RANGE",
-        ruleClass: "constraint",
         message:
           `Net ${netName} routed ${member.lengthMm.toFixed(2)} mm — ` +
           `${tooShort ? "short of" : "over"} the '${group.name}' target ` +
           `${targetMm.toFixed(2)} mm by ${Math.abs(deltaMm).toFixed(2)} mm ` +
           `(tolerance ±${group.toleranceMm.toFixed(2)} mm)`,
-        anchors: [{ kind: "net", netId: member.netId }],
+        anchors: [
+          { kind: "net", netId: member.netId },
+          { kind: "lengthGroup", groupId: group.id },
+        ],
         measuredMm: member.lengthMm,
         requiredMm: targetMm,
       });

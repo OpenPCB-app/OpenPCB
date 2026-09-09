@@ -44,6 +44,7 @@ import {
 
 export {
   boardMinimumFor,
+  copperToHoleClearanceMm,
   DEFAULT_HOLE_TO_HOLE_MM,
   DEFAULT_POUR_TO_COPPER_MM,
   MAX_AREA_POLYGONS,

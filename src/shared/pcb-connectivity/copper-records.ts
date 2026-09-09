@@ -16,7 +16,11 @@ import type {
   PcbVia,
 } from "../../sdks/designer";
 import { copperLayersForCount, isCopperLayerId, viaSpanLayers } from "../../sdks/designer";
-import { resolvePadCopperLayers } from "../rendering/pad-copper-layers";
+import {
+  freePadCopperLayers,
+  resolvePadCopperLayers,
+} from "../rendering/pad-copper-layers";
+import { freePadDrill } from "../rendering/pcb/pcb-drills";
 import {
   padWorldPositionMm,
   placementMirrorX,
@@ -70,6 +74,14 @@ export interface PadCopperRecord {
    * arc radius recorded for S2.
    */
   disc?: { center: PcbPointMm; radiusMm: number };
+  /**
+   * False when `ring` is only a bounding-rectangle SUPERSET of the copper
+   * (`custom` / `trapezoid` — the render source carries no true outline). A
+   * consumer that would turn "these overlap" into a hard verdict (the DRC short
+   * tier) must not trust such a ring; the circumscribed arcs of ovals /
+   * roundrects (≤ 0.2 %·r) still count as exact.
+   */
+  exactShape: boolean;
   bounds: RingBounds;
   center: PcbPointMm;
   widthMm: number;
@@ -173,6 +185,7 @@ function footprintPadRecords(
           : placement.rotationDeg + pad.rotationDeg,
         mirrored: placementMirrorX(placement),
         ...discOf(pad.shape, pad.widthMm, pad.heightMm, center),
+        exactShape: pad.shape !== "custom" && pad.shape !== "trapezoid",
         bounds: ringBounds(ring),
         center,
         widthMm: pad.widthMm,
@@ -190,15 +203,13 @@ function freePadRecords(
 ): PadCopperRecord[] {
   const out: PadCopperRecord[] = [];
   for (const freePad of input.freePads) {
-    if (freePad.padType === "hole") continue; // NPTH: no copper, no record
-    const isStd = freePad.padType === "std";
-    // Any layer this stackup does not have is invalid — including a non-copper
-    // layer id, which the `PcbCopperLayerId` type does not actually keep out of
-    // persisted data.
-    const declaredLayerInvalid = !isStd && !valid.has(freePad.layer);
-    const resolvedLayers: PcbCopperLayerId[] = isStd
-      ? [...valid]
-      : [isCopperLayerId(freePad.layer) ? freePad.layer : "F.Cu"];
+    // The ONE free-pad layer model (`freePadCopperLayers`): a `hole` resolves to
+    // no layers at all, which is exactly the "NPTH: no copper, no record" skip.
+    const { layers: resolvedLayers, declaredLayerInvalid } = freePadCopperLayers(
+      freePad,
+      valid,
+    );
+    if (resolvedLayers.length === 0) continue;
     const ring = freePadOutlineWorldMm(freePad);
     out.push({
       anchor: { kind: "freePad", freePadId: freePad.id },
@@ -216,11 +227,15 @@ function freePadRecords(
         freePad.heightMm,
         freePad.centerMm,
       ),
+      // Free pads have no `custom` / `trapezoid` shape (SDK `PcbFreePadShape`).
+      exactShape: true,
       bounds: ringBounds(ring),
       center: freePad.centerMm,
       widthMm: freePad.widthMm,
       heightMm: freePad.heightMm,
-      drillMm: freePad.drillMm ?? 0,
+      // The ONE drill derivation (`freePadDrill`): a non-positive or absent
+      // drill is no drill, whatever the pad type declares.
+      drillMm: freePadDrill(freePad)?.drillMm ?? 0,
     });
   }
   return out;

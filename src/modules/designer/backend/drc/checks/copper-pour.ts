@@ -44,7 +44,6 @@ export function checkCopperPour(ctx: DrcContext): DrcViolationDraft[] {
     if (result.status === "failed") {
       out.push({
         code: "ZONE_FILL_FAILED",
-        ruleClass: "structural",
         message: `Zone "${zoneDisplayName(ctx, zone)}" on ${zone.layer} could not be filled (${result.reason}) — it ships no copper`,
         anchors: [{ kind: "zone", zoneId: zone.id }],
         locationMm: zoneLocation(ctx, zone),
@@ -55,7 +54,6 @@ export function checkCopperPour(ctx: DrcContext): DrcViolationDraft[] {
     if (result.islands.length === 0) {
       out.push({
         code: "ZONE_EMPTY_FILL",
-        ruleClass: "structural",
         message: `Zone "${zoneDisplayName(ctx, zone)}" on ${zone.layer} pours no copper`,
         anchors: [{ kind: "zone", zoneId: zone.id }],
         locationMm: zoneLocation(ctx, zone),
@@ -125,7 +123,6 @@ function deadCopperDraft(
   const noun = isBoardZone ? "copper" : "zone";
   return {
     code: "ISOLATED_COPPER_ISLAND",
-    ruleClass: "structural",
     message: `${dead.length} isolated ${netName} ${noun} island${dead.length > 1 ? "s" : ""} on ${zone.layer} (${totalMm2.toFixed(1)} mm² total) reach no pad — dead copper`,
     anchors: [
       isBoardZone ? { kind: "net", netId } : { kind: "zone", zoneId: zone.id },

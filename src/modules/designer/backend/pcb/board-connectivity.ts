@@ -20,6 +20,7 @@ import type {
   PcbTrace,
   PcbVia,
 } from "../../../../sdks/designer";
+import { copperToHoleClearanceMm } from "../../../../shared/drc/rule-resolver";
 import {
   pourParamsForZone,
   type EffectiveCopperZone,
@@ -146,6 +147,7 @@ export function buildBoardPourFills(
         vias: copper.vias,
         padNetIds: copper.padNetIds,
         copperToBoardEdgeMm: fill.designRules.clearance.copperToBoardEdgeMm,
+        copperToHoleMm: copperToHoleClearanceMm(fill.designRules),
         cutouts: fill.cutouts ?? [],
         freeHoles: fill.freeHoles ?? [],
         freePads: copper.freePads,

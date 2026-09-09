@@ -125,7 +125,7 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 | # | Session | Objective | Owns | Astra | Status |
 |---|---|---|---|---|---|
 | S6 | DRC rule semantics and scoped constraints | Complete, unambiguous rule resolution: board rules, net classes, scoped rules, precedence, relaxations, floors, pair kinds, layers, area scopes, severity, waivers, migrations. Every stored rule type has one documented resolution path; nothing appears supported while inert. | scalar scoped constraints not enforced; area-scope midpoint approximation; optional severity ignored; v1→v2 waiver migration | spec-attack xhigh (run 1: 15 findings, 14 accepted, 1 limit) | done 2026-09-08 (`05-rule-semantics-contract.md`) |
-| S7 | Authoritative batch DRC completeness | Audit every check against the hardened primitives: duplicated geometry/connectivity models, checks bypassing shared rule resolution, declared-but-unemitted codes, primitive types checks cannot see, unit inconsistencies, false-pass directions, ordering. Batch DRC becomes the reference implementation. | — | repository-grounded adversarial-verify xhigh | pending |
+| S7 | Authoritative batch DRC completeness | Audit every check against the hardened primitives: duplicated geometry/connectivity models, checks bypassing shared rule resolution, declared-but-unemitted codes, primitive types checks cannot see, unit inconsistencies, false-pass directions, ordering. Batch DRC becomes the reference implementation. | — | repository-grounded adversarial-verify xhigh (run 1: 8 findings — 5 fixed, 2 contract corrections, 1 registered B6-1) | done 2026-09-09 (`06-batch-drc-contract.md`) |
 | S8 | Live DRC and manual-route legality parity | A route legal interactively is legal when committed and batch-checked, and vice versa where practical. Engine relocation to `src/shared/drc/` behind shims so both paths share item builders and kernels. Decide whether route commit gets a server-side clearance gate. | B5-LIVE-ROT-PAD, B5-LIVE-TH-PAD-SIDE | spec-attack xhigh · adversarial-verify xhigh | pending |
 | S9 | DRC broad-phase scaling and determinism | Faster candidate discovery without changing meaning; exhaustive mode retained as oracle; byte-identical reports. Target 10k primitives under ~300 ms. | — | spec-attack xhigh; post optional | pending |
 | S10 | DRC execution responsiveness | Expensive DRC runs without blocking the app: lifecycle, cancellation, progress, concurrency, partial-result semantics, deterministic final output. | B5-SYNC | none by default | pending |
@@ -244,7 +244,7 @@ unmanufacturable board.
   `checks/copper-pour.ts` keeps computing islands independently in S1 (S5 consumes the kernel).
   Filed for later sessions from the S1 Astra/review ledger: fill-kernel layer predicates diverge
   from the contract for `std` free pads on inner layers and for vias without a layer count (S5);
-  no DRC check for copper over an NPTH hole (S11); pad plating attribute missing (S11);
+  no DRC check for copper over an NPTH hole (closed in S7: `COPPER_TO_HOLE`); pad plating attribute missing (S11);
   zero-neck corner contact and coincident duplicate traces (S12 DFM); segment-level broad-phase
   (S9); contact locations for length walks (S14); default-exclude GND-class nets from cloud
   autoroute targets? (cloud session).
@@ -464,6 +464,32 @@ unmanufacturable board.
   `computeViolationIdV1`, no product `netClasses[0]`, no severity literal in a check). Tree: 125
   files modified (+15669 / −4883), 223 entries incl. untracked, S0–S6 all uncommitted.
 
+- **S7 decisions (2026-09-08/09)** — user: `COPPER_TO_HOLE` now (optional `clearance.copperToHoleMm`,
+  absent = the edge rule the pour's NPTH halo has always used; KiCad `min_hole_clearance` maps to it),
+  `UNCONNECTED_NET` derived in-engine (`ratsnestFromConnectivity` split out of `computeRatsnest`), the
+  exact-arc second chance deferred to S12, one post-implementation Astra run. Fable: canonical report
+  (`(code, id)` sort, unique ids with a most-severe / largest-deficit dedupe, byte-identity under the
+  eight input reversals; `drcRules` order stays semantic for equal-priority ties), `drc/pair-gap.ts`
+  as the one gap kernel (exact `disc` for circles; `exactShape=false` bounding rects out of the
+  intra-footprint short tier), intra-footprint different-net overlap and null-net bridges are shorts,
+  one free-pad drill / layer derivation (`freePadDrill`, `freePadCopperLayers`) consumed by records,
+  DRC, pour, Gerber (NPTH `hole` pad flashes no copper, keeps mask relief), Excellon, snapshot, canvas,
+  `RULE_CLASS_BY_CODE` + `EMIT_SITE_BY_CODE` compiler-total with a corpus census gate
+  (`golden-census-2l`; every code but `ZONE_FILL_FAILED`), cutout milling advisories with material
+  outside the ring (winding from the flattened contour), signed `COPPER_TO_BOARD_EDGE.measuredMm`,
+  `TRACE_LAYER_MISMATCH` non-overridable, all eight class ignores persist, creepage skip only without
+  area rules and never inside a footprint, strictest IPC column, canonical trace order for length / SI
+  sums. Stated limits: footprint NPTH pads read as copper (no plating attribute, S11); connectivity's
+  circumscribed oval / roundrect rings can fabricate contact (S1/S2 limit, S11); slot width vs
+  `drillMm` split (S11); mask policy for drilled `smd` / `conn` pads (S12); chained null-net bridges;
+  Gerber pad rotation / ellipse (B6-1, S11). Goldens: `cutouts` +4, `pours` +2 (fixture artefacts:
+  overlapping footprint pads), `census` new, all six regenerated in canonical key order. Gates at
+  close: backend 2051 pass / 22 known library+assistant fails / 8 skip / 7 todo (2088); tsc 44; Vitest
+  531 + 1 todo; gen + gen:contracts clean; e2e zones + board-shape + routing 13 + 1 flag-skip.
+  Process: R1 (reviewer-critical) found a byte-identity hole, id collisions and a regression the
+  session itself introduced — run it on every pair loop with reversal probes; an implementer's
+  `git stash` around a tsc run briefly reverted the shared tree — forbid it in briefs; Astra run 1
+  (≈ 40 min, 235 k tokens) 8 findings, 5 fixed, 2 contract corrections, 1 registered (B6-1).
 ## Appendix — Session 0 amendments to the original program text
 
 The program above is the user's plan of 2026-09-06 with the following changes, each backed by the

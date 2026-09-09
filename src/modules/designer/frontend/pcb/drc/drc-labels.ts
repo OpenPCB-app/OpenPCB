@@ -45,6 +45,7 @@ export const CODE_LABEL: Record<DrcRuleCode, string> = {
   PAD_TO_VIA_CLEARANCE: "Pad-to-via clearance",
   COPPER_TO_BOARD_EDGE: "Copper too close to board edge",
   HOLE_TO_HOLE: "Hole-to-hole spacing",
+  COPPER_TO_HOLE: "Copper too close to a non-plated hole",
   VIA_LAYER_SPAN: "Invalid via layer span",
   VIA_ASPECT_RATIO: "Via aspect ratio too high",
   BOARD_OUTLINE_INVALID: "Invalid board outline",
@@ -111,6 +112,14 @@ export function resolveAnchorLabel(
       const p = projection?.netNames[anchor.pNetId] ?? anchor.pNetId.slice(0, 4);
       const n = projection?.netNames[anchor.nNetId] ?? anchor.nNetId.slice(0, 4);
       return `pair ${p}/${n}`;
+    }
+    case "lengthGroup": {
+      const group = projection?.board.lengthMatchGroups?.find(
+        (g) => g.id === anchor.groupId,
+      );
+      return group
+        ? `length group ${group.name}`
+        : `length group ${anchor.groupId.slice(0, 6)}`;
     }
     case "rule":
       return `rule ${anchor.ruleId.slice(0, 12)}`;

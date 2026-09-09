@@ -142,7 +142,7 @@ The circumscribed ring of an oval / roundrect / stadium pad exceeds the true cop
 `r·(sec(π/48) − 1) ≈ 0.2146 %` of the arc radius; membership on that ring can therefore call a
 fill that ends inside that band (≤ 2.1 µm for `r = 1 mm`) a contact — the same residual S1 and S2
 accepted for connectivity and DRC, kept here for parity with S1 rather than fixed with a second
-pad geometry; exact pad discs / arcs are S7's (Astra run 1 #3, accepted as the recorded S1 limit).
+pad geometry; exact discs for TRUE circles landed in DRC in S7 (`06-batch-drc-contract.md` §2), exact arcs for ovals / roundrects are S11's (Astra run 1 #3, accepted as the recorded S1 limit).
 
 ## 5. Clearances
 
@@ -192,7 +192,7 @@ below `w` is removed by §7 like any other neck (Astra run 1 Q7). Where two same
 on one pad with different pad-connection modes, the union of their copper is what is manufactured
 — a `solid` zone over a `thermal` zone floods the relief (Astra run 1 Q6, recorded).
 
-`trapezoid` / `custom` pads use their record ring (a bounding rectangle for `custom`, S7);
+`trapezoid` / `custom` pads use their record ring (a bounding rectangle for `custom`, S11);
 spokes are placed on that ring's frame.
 
 ## 7. Minimum width
@@ -331,9 +331,12 @@ depends on that beyond what the snapshot already pins.
 ## 13. Stated limits
 
 - The `0.5 mm` fill-clearance floor and the absence of rule-resolver / net-class / scoped
-  clearances in the fill (S6). NPTH halos use the edge rule (S11).
+  clearances in the fill (S6). NPTH halos use `copperToHoleClearanceMm` — `clearance.copperToHoleMm`
+  when set, else the edge rule — the same value batch DRC's `COPPER_TO_HOLE` compares against
+  (S7, `06-batch-drc-contract.md` §4); every non-plated free-pad drill gets the halo, not only
+  `hole`-type pads.
 - Spokes are not relocated when blocked (§6). `custom` / `trapezoid` pads pour against their
-  bounding ring (S7).
+  bounding ring (S11).
 - `ZONE_OVERLAP` and keepout / placement predicates ignore zone holes (§11).
 - The fill runs synchronously on the caller's thread (S10). Precedence is `O(Z²)` per layer and
   obstacle collection `O(items)` per pour without an index (S9).

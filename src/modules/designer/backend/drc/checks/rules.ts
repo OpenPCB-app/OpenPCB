@@ -22,13 +22,11 @@ export function checkRules(ctx: DrcContext): DrcViolationDraft[] {
   return [
     ...group(ctx.resolver.problems, "invalid").map(([id, problems]) => ({
       code: "DRC_RULE_INVALID" as const,
-      ruleClass: "structural" as const,
       message: `Rule "${labelOf(problems)}" cannot be applied: ${details(problems)}`,
       anchors: [{ kind: "rule" as const, ruleId: id }],
     })),
     ...group(ctx.resolver.problems, "ineffective").map(([id, problems]) => ({
       code: "DRC_RULE_INEFFECTIVE" as const,
-      ruleClass: "structural" as const,
       message: `Rule "${labelOf(problems)}" has no effect: ${details(problems)}`,
       anchors: [{ kind: "rule" as const, ruleId: id }],
     })),

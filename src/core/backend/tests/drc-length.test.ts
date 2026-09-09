@@ -90,7 +90,10 @@ describe("DRC length check", () => {
     const v = violations[0]!;
     expect(v.ruleClass).toBe("constraint");
     expect(v.severity).toBe("warning");
-    expect(v.anchors).toEqual([{ kind: "net", netId: "c" }]);
+    expect(v.anchors).toEqual([
+      { kind: "net", netId: "c" },
+      { kind: "lengthGroup", groupId: "g1" },
+    ]);
     expect(v.measuredMm).toBeCloseTo(7);
     expect(v.requiredMm).toBeCloseTo(10);
     expect(v.message).toContain("DQ3");
@@ -148,6 +151,33 @@ describe("DRC length check", () => {
     expect(byNet.get("long")!.message).toContain("over");
     expect(byNet.get("short")!.message).toContain("short of");
     expect(byNet.get("long")!.requiredMm).toBe(8);
+  });
+
+  test("a net in two groups yields one violation per group, distinct ids", () => {
+    const second: PcbLengthMatchGroup = {
+      ...GROUP_LONGEST,
+      id: "g2",
+      name: "DDR-B",
+    };
+    const violations = lengthViolations(
+      projection(
+        [GROUP_LONGEST, second],
+        [
+          trace("t-a", "a", 10, 0),
+          trace("t-c", "c", 7, 4), // 3 mm short in BOTH groups
+        ],
+      ),
+    );
+    expect(violations).toHaveLength(2);
+    // The report is sorted by (code, id), so compare the group set, not order.
+    expect(
+      violations
+        .map((v) =>
+          v.anchors[1]!.kind === "lengthGroup" ? v.anchors[1]!.groupId : "?",
+        )
+        .sort(),
+    ).toEqual(["g1", "g2"]);
+    expect(new Set(violations.map((v) => v.id)).size).toBe(2);
   });
 
   test("no groups → no length violations", () => {

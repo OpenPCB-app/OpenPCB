@@ -108,8 +108,10 @@ And a command field with no parser in `routes.ts` is silently dropped over HTTP.
   (`DRC_RULE_INVALID` non-overridable, `DRC_RULE_INEFFECTIVE`). Clearance comparisons use
   `clearanceViolated` (0.5 nm float grace).
 - **Dispatch is a hardcoded array, not a registry.** `runDrc` is one monolithic function: it builds
-  one `DrcContext`, runs thirteen pure `(ctx: DrcContext) => DrcViolationDraft[]` checks into a flat
-  list, then applies ignores, waivers, severity and ids in a single pass. Adding a check is a new
+  one `DrcContext`, runs seventeen pure `(ctx: DrcContext) => DrcViolationDraft[]` checks into a flat
+  list, then applies class, severity, ignores, waivers and ids in a single pass and sorts the report
+  by `(code, id)` (S7, `docs/pcb-hardening/06-batch-drc-contract.md` §6 — input order never changes
+  the report). Adding a check is a new
   file under `drc/checks/` plus one array entry. The real cost is always the **rules-input
   schema**: a new rule has no home on `PcbDesignRules` / `PcbNetClass` until you add one, wire the
   corresponding command field, and add a dialog section. `DrcContext` carries traces, pads, vias

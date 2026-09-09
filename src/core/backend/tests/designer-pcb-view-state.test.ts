@@ -175,6 +175,66 @@ describe("designer PCB view-state persistence", () => {
     expect(viewState?.drcIgnoredRuleClasses).toEqual(["manufacturability"]);
   });
 
+  // The store used to know only five of the eight DrcRuleClass values, so a
+  // persisted `dfm` / `electrical` / `signal-integrity` ignore was dropped on
+  // every read and every patch (S7 D11).
+  test("every rule class survives read + patch and suppresses its codes", async () => {
+    const { sdk, designId } = await createDesignerSdk("pcb-view-state-classes");
+    const ignored = ["dfm", "electrical", "signal-integrity"] as const;
+    const set = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-vs-classes", 0, {
+        type: "pcb_set_view_state",
+        patch: { drcIgnoredRuleClasses: [...ignored] },
+      }),
+    );
+    expect(set.ok).toBe(true);
+    const afterSet = await sdk.getPcbProjection(designId);
+    expect(afterSet?.board.viewState?.drcIgnoredRuleClasses).toEqual([
+      ...ignored,
+    ]);
+
+    // A patch that does not mention them must keep them (read path too).
+    const patched = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-vs-classes-2", afterSet?.revision ?? null, {
+        type: "pcb_set_view_state",
+        patch: { ratsnestVisible: false },
+      }),
+    );
+    expect(patched.ok).toBe(true);
+
+    // A lone trace is dangling at both ends — a `dfm` code, now suppressed.
+    const rev = (await sdk.getPcbProjection(designId))?.revision ?? null;
+    const added = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-vs-classes-trace", rev, {
+        type: "pcb_add_trace",
+        layer: "F.Cu",
+        pointsNm: [
+          { x: 0, y: 0 },
+          { x: 1_000_000, y: 0 },
+        ],
+        widthMm: 0.25,
+        netId: "n1",
+        netClassId: "default",
+        segmentMode: "manhattan-90",
+      }),
+    );
+    expect(added.ok).toBe(true);
+    const proj = (await sdk.getPcbProjection(designId))!;
+    expect(proj.board.viewState?.drcIgnoredRuleClasses).toEqual([...ignored]);
+    expect(
+      runDrc(proj).violations.some((v) => v.code === "TRACK_DANGLING"),
+    ).toBe(false);
+    // Control: the same board reports it once the class is no longer ignored.
+    expect(
+      runDrc(proj, { ignoredRuleClasses: [] }).violations.some(
+        (v) => v.code === "TRACK_DANGLING",
+      ),
+    ).toBe(true);
+  });
+
   test("autoLayoutConfig round-trips through pcb_set_view_state and is absent on new rows", async () => {
     const { sdk, designId } = await createDesignerSdk(
       "pcb-view-state-autolayout",
@@ -685,9 +745,12 @@ describe("designer PCB view-state persistence", () => {
 
   // The dialog sends `{ clearance, minimums }` only. Before S6 every optional
   // key it omitted was reset to the default (§12 item 6).
-  test("a dialog-shaped save preserves electrical, the floor and pourToCopperMm", async () => {
+  test("a dialog-shaped save preserves electrical, the floor and the optional clearances", async () => {
     const { sdk, designId } = await createDesignerSdk("pcb-rules-optional");
-    const rev0 = (await sdk.getPcbProjection(designId))?.revision ?? null;
+    const fresh = await sdk.getPcbProjection(designId);
+    // The read path never invents an optional key a board never stored.
+    expect(fresh?.board.designRules.clearance.copperToHoleMm).toBeUndefined();
+    const rev0 = fresh?.revision ?? null;
     const seeded = await sdk.dispatchCommand(
       designId,
       envelope(designId, "cmd-rules-seed", rev0, {
@@ -701,6 +764,7 @@ describe("designer PCB view-state persistence", () => {
             viaToViaMm: 0.3,
             copperToBoardEdgeMm: 0.5,
             pourToCopperMm: 0.45,
+            copperToHoleMm: 0.35,
           },
           minimums: {
             traceWidthMm: 0.2,
@@ -744,6 +808,7 @@ describe("designer PCB view-state persistence", () => {
     const kept = (await sdk.getPcbProjection(designId))?.board.designRules;
     expect(kept?.clearance.traceToTraceMm).toBe(0.3);
     expect(kept?.clearance.pourToCopperMm).toBe(0.45);
+    expect(kept?.clearance.copperToHoleMm).toBe(0.35);
     expect(kept?.minimums.clearanceMm).toBe(0.12);
     expect(kept?.electrical).toEqual({ tempRiseC: 20, copperWeightOz: 2 });
 
@@ -754,7 +819,11 @@ describe("designer PCB view-state persistence", () => {
       envelope(designId, "cmd-rules-clear", rev2, {
         type: "pcb_set_design_rules",
         designRules: {
-          clearance: { ...kept!.clearance, pourToCopperMm: null },
+          clearance: {
+            ...kept!.clearance,
+            pourToCopperMm: null,
+            copperToHoleMm: null,
+          },
           minimums: { ...kept!.minimums, clearanceMm: null },
           electrical: null,
         } as never,
@@ -763,6 +832,7 @@ describe("designer PCB view-state persistence", () => {
     expect(clearedResult.ok).toBe(true);
     const cleared = (await sdk.getPcbProjection(designId))?.board.designRules;
     expect(cleared?.clearance.pourToCopperMm).toBeUndefined();
+    expect(cleared?.clearance.copperToHoleMm).toBeUndefined();
     expect(cleared?.minimums.clearanceMm).toBeUndefined();
     expect(cleared?.electrical).toBeUndefined();
   });

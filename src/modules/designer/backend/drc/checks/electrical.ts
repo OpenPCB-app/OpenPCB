@@ -1,14 +1,10 @@
-import type { PcbCopperLayerId, PcbNetClass } from "../../../../../sdks/designer";
-import { resolveNetClassId } from "../../pcb/net-class-resolver";
-import {
-  circleToPolygonDistance,
-  polygonToPolygonDistance,
-  polylineToPolygonDistance,
-} from "../../pcb/pcb-clearance-geometry";
-import {
-  pointToPolylineDistance,
-  polylineToPolylineClosestPoints,
-} from "../../pcb/pcb-trace-geometry";
+import type {
+  DrcAnchor,
+  DrcPairKind,
+  PcbCopperLayerId,
+  PcbNetClass,
+  PcbPointMm,
+} from "../../../../../sdks/designer";
 import {
   ipc2221SpacingMm,
   requiredTraceWidthMm,
@@ -21,8 +17,18 @@ import {
   type DrcTrace,
   type DrcViaGeom,
 } from "../drc-context";
-import type { DrcAnchor, DrcPairKind } from "../../../../../sdks/designer";
+import type { RingBounds } from "../../pcb/pad-outline";
+import {
+  padPadGap,
+  padViaGap,
+  tracePadGap,
+  traceTraceGap,
+  traceViaGap,
+  viaViaGap,
+  type PairGap,
+} from "../pair-gap";
 import type { DrcViolationDraft } from "../types";
+import { anchorKey } from "../violation-id";
 
 /** Outer layers use the IPC-2221 external column; inner layers the internal. */
 function isInternalLayer(layer: PcbCopperLayerId): boolean {
@@ -39,21 +45,10 @@ export function checkElectrical(ctx: DrcContext): DrcViolationDraft[] {
   const out: DrcViolationDraft[] = [];
   const board = ctx.projection.board;
   const classById = new Map(board.netClasses.map((c) => [c.id, c]));
-  const cache = new Map<string, PcbNetClass | null>();
-  const classOf = (netId: string | null): PcbNetClass | null => {
-    if (!netId) return null;
-    const cached = cache.get(netId);
-    if (cached !== undefined) return cached;
-    const id = resolveNetClassId(
-      ctx.netNames[netId] ?? "",
-      board.netClasses,
-      board.perNetClassAssignments,
-      netId,
-    );
-    const cls = classById.get(id) ?? null;
-    cache.set(netId, cls);
-    return cls;
-  };
+  // The ONE net-class chain (contract 06 §1): the resolver's memoized live
+  // resolution, never a second `resolveNetClassId` call from here.
+  const classOf = (netId: string | null): PcbNetClass | null =>
+    classById.get(ctx.resolver.netClassIdOf(netId)) ?? null;
   const voltageOf = (netId: string | null): number =>
     classOf(netId)?.voltageV ?? 0;
 
@@ -73,7 +68,6 @@ export function checkElectrical(ctx: DrcContext): DrcViolationDraft[] {
     if (below(t.widthMm, req)) {
       out.push({
         code: "TRACE_CURRENT_WIDTH",
-        ruleClass: "electrical",
         message: `Trace ${t.widthMm.toFixed(3)} mm is below the IPC-2221 minimum ${req.toFixed(3)} mm for ${cls.currentA} A at ${tempRiseC} °C rise (${copperOz} oz)`,
         anchors: [{ kind: "trace", traceId: t.id }],
         locationMm: t.mid,
@@ -85,160 +79,235 @@ export function checkElectrical(ctx: DrcContext): DrcViolationDraft[] {
   }
 
   // ── creepage / HV clearance (IPC-2221 Table 6-1) ─────────────────────────
-  // Build one heterogeneous electrical-item list (traces/pads/vias) with each
-  // item's net voltage, then walk unordered pairs where AT LEAST ONE item has
-  // a non-zero voltage. This seeds creepage from HV pads/vias too (not just
-  // traces), handles negative voltages via |va - vb|, and — because it uses
-  // i < j — never double-emits an HV↔HV pair.
-  interface ElItem {
-    kind: "trace" | "pad" | "via";
-    idx: number;
-    netId: string | null;
-    voltage: number;
-    layers: readonly PcbCopperLayerId[];
-    bounds: { minX: number; minY: number; maxX: number; maxY: number };
-  }
+  out.push(...checkCreepage(ctx, voltageOf));
+  return out;
+}
+
+/**
+ * One heterogeneous electrical item (trace / pad / via) with its net voltage,
+ * its anchor and the canonical pair key.
+ */
+interface ElItem {
+  kind: "trace" | "pad" | "via";
+  idx: number;
+  netId: string | null;
+  voltage: number;
+  layers: readonly PcbCopperLayerId[];
+  bounds: RingBounds;
+  anchor: DrcAnchor;
+  /** Sorted-anchor key — the smaller one leads every pair (contract §11). */
+  key: string;
+  /** Representative point for the ordinary-clearance lookup. */
+  point: PcbPointMm;
+}
+
+const column = (layer: PcbCopperLayerId): "B1" | "B2" =>
+  isInternalLayer(layer) ? "B1" : "B2";
+
+function pairKindOf(a: ElItem["kind"], b: ElItem["kind"]): DrcPairKind {
+  const set = new Set([a, b]);
+  if (set.has("trace") && set.size === 1) return "traceToTrace";
+  if (set.has("trace") && set.has("pad")) return "traceToPad";
+  if (set.has("trace") && set.has("via")) return "traceToVia";
+  if (set.has("pad") && set.size === 1) return "padToPad";
+  if (set.has("pad") && set.has("via")) return "padToVia";
+  return "viaToVia";
+}
+
+function traceOf(ctx: DrcContext, it: ElItem): DrcTrace {
+  return ctx.traces[it.idx]!;
+}
+function padOf(ctx: DrcContext, it: ElItem): DrcPad {
+  return ctx.pads[it.idx]!;
+}
+function viaOf(ctx: DrcContext, it: ElItem): DrcViaGeom {
+  return ctx.vias[it.idx]!;
+}
+
+function buildElItems(
+  ctx: DrcContext,
+  voltageOf: (netId: string | null) => number,
+): ElItem[] {
   const items: ElItem[] = [];
-  ctx.traces.forEach((t, i) => {
-    if (t.pointsMm.length >= 2)
-      items.push({ kind: "trace", idx: i, netId: t.netId, voltage: voltageOf(t.netId), layers: [t.layer], bounds: t.bounds });
-  });
-  ctx.pads.forEach((p, i) =>
-    items.push({ kind: "pad", idx: i, netId: p.netId, voltage: voltageOf(p.netId), layers: p.layers, bounds: p.bounds }),
-  );
-  ctx.vias.forEach((v, i) =>
-    items.push({ kind: "via", idx: i, netId: v.netId, voltage: voltageOf(v.netId), layers: v.layers, bounds: v.bounds }),
-  );
-  if (!items.some((it) => it.voltage !== 0)) return out;
-
-  const column = (layer: PcbCopperLayerId): "B1" | "B2" =>
-    isInternalLayer(layer) ? "B1" : "B2";
-  const pairKindOf = (a: ElItem["kind"], b: ElItem["kind"]): DrcPairKind => {
-    const set = new Set([a, b]);
-    if (set.has("trace") && set.size === 1) return "traceToTrace";
-    if (set.has("trace") && set.has("pad")) return "traceToPad";
-    if (set.has("trace") && set.has("via")) return "traceToVia";
-    if (set.has("pad") && set.size === 1) return "padToPad";
-    if (set.has("pad") && set.has("via")) return "padToVia";
-    return "viaToVia";
+  const push = (item: Omit<ElItem, "key" | "voltage">): void => {
+    items.push({
+      ...item,
+      key: anchorKey(item.anchor),
+      voltage: voltageOf(item.netId),
+    });
   };
+  ctx.traces.forEach((t, idx) => {
+    if (t.pointsMm.length < 2) return;
+    push({
+      kind: "trace",
+      idx,
+      netId: t.netId,
+      layers: [t.layer],
+      bounds: t.bounds,
+      anchor: { kind: "trace", traceId: t.id },
+      point: t.mid,
+    });
+  });
+  ctx.pads.forEach((p, idx) => {
+    push({
+      kind: "pad",
+      idx,
+      netId: p.netId,
+      layers: p.layers,
+      bounds: p.bounds,
+      anchor: p.anchor,
+      point: p.center,
+    });
+  });
+  ctx.vias.forEach((v, idx) => {
+    push({
+      kind: "via",
+      idx,
+      netId: v.netId,
+      layers: v.layers,
+      bounds: v.bounds,
+      anchor: { kind: "via", viaId: v.via.id },
+      point: v.center,
+    });
+  });
+  return items;
+}
 
+/**
+ * The shared copper layers of a pair, in stackup order. An off-stackup layer
+ * (an un-clamped `TRACE_LAYER_MISMATCH` trace) sorts last instead of dropping
+ * out, so such a pair is still judged.
+ */
+function sharedLayers(
+  u: ElItem,
+  v: ElItem,
+  stackupIndex: ReadonlyMap<PcbCopperLayerId, number>,
+): PcbCopperLayerId[] {
+  const last = Number.MAX_SAFE_INTEGER;
+  return u.layers
+    .filter((l) => v.layers.includes(l))
+    .sort((x, y) => (stackupIndex.get(x) ?? last) - (stackupIndex.get(y) ?? last));
+}
+
+/**
+ * The IPC-2221 requirement for a pair: the MAXIMUM over every shared layer,
+ * not the first one found — an inner layer resolves to the looser B1 column,
+ * so a pad↔via pair sharing F.Cu and In1.Cu is bound by the outer B2 value.
+ * The reported layer is the first in stackup order that attains it.
+ */
+function strictestSpacing(
+  shared: readonly PcbCopperLayerId[],
+  voltageDiff: number,
+): { layer: PcbCopperLayerId; requiredMm: number } {
+  let layer = shared[0]!;
+  let requiredMm = ipc2221SpacingMm(voltageDiff, column(layer));
+  for (let i = 1; i < shared.length; i += 1) {
+    const l = shared[i]!;
+    const r = ipc2221SpacingMm(voltageDiff, column(l));
+    if (r > requiredMm) {
+      requiredMm = r;
+      layer = l;
+    }
+  }
+  return { layer, requiredMm };
+}
+
+/** Edge-to-edge gap + marker location, through the ONE gap module (§3). */
+function pairGapOf(ctx: DrcContext, a: ElItem, b: ElItem): PairGap {
+  if (a.kind === "trace") {
+    if (b.kind === "trace") return traceTraceGap(traceOf(ctx, a), traceOf(ctx, b));
+    if (b.kind === "pad") return tracePadGap(traceOf(ctx, a), padOf(ctx, b));
+    return traceViaGap(traceOf(ctx, a), viaOf(ctx, b));
+  }
+  if (a.kind === "pad") {
+    if (b.kind === "trace") return tracePadGap(traceOf(ctx, b), padOf(ctx, a));
+    if (b.kind === "pad") return padPadGap(padOf(ctx, a), padOf(ctx, b));
+    return padViaGap(padOf(ctx, a), viaOf(ctx, b));
+  }
+  if (b.kind === "trace") return traceViaGap(traceOf(ctx, b), viaOf(ctx, a));
+  if (b.kind === "pad") return padViaGap(padOf(ctx, b), viaOf(ctx, a));
+  return viaViaGap(viaOf(ctx, a), viaOf(ctx, b));
+}
+
+function creepageViolation(
+  ctx: DrcContext,
+  u: ElItem,
+  v: ElItem,
+  stackupIndex: ReadonlyMap<PcbCopperLayerId, number>,
+): DrcViolationDraft | null {
+  const shared = sharedLayers(u, v, stackupIndex);
+  if (shared.length === 0) return null;
+  const voltageDiff = u.voltage - v.voltage;
+  const { layer, requiredMm } = strictestSpacing(shared, voltageDiff);
+  // Skip when the ORDINARY clearance already dominates — but only WITHOUT area
+  // rules. Then net, class and layer scopes are constant over the pair, so the
+  // representative-point resolution is exact and the skip cannot hide anything.
+  // With area rules the closest approach may sit in a different region, where
+  // the ordinary rule is looser than it is at the representative points
+  // (rule-semantics contract §4.4), and the skip would suppress a real breach.
+  // …and never for two pads of ONE footprint: the ordinary clearance tier does
+  // not run inside a footprint (contract 06 §4), so nothing "already covers" the
+  // pair and the skip would be a complete miss (Astra S7 #2).
+  const sameFootprint =
+    u.anchor.kind === "pad" &&
+    v.anchor.kind === "pad" &&
+    u.anchor.placementId === v.anchor.placementId;
+  if (!ctx.resolver.hasAreaRules && !sameFootprint) {
+    const base = ctx.resolver.clearance(
+      pairKindOf(u.kind, v.kind),
+      layer,
+      { netId: u.netId, pointMm: u.point },
+      { netId: v.netId, pointMm: v.point },
+    ).mm;
+    if (requiredMm <= base) return null;
+  }
+  if (aabbGap(u.bounds, v.bounds) > requiredMm) return null;
+  const g = pairGapOf(ctx, u, v);
+  if (!below(g.gap, requiredMm)) return null;
+  return {
+    code: "CREEPAGE_DISTANCE",
+    message: `IPC-2221 spacing ${g.gap.toFixed(3)} mm is below ${requiredMm.toFixed(3)} mm for ${Math.abs(voltageDiff).toFixed(0)} V (${column(layer)})`,
+    anchors: [u.anchor, v.anchor],
+    locationMm: g.location,
+    layer,
+    measuredMm: g.gap,
+    requiredMm,
+  };
+}
+
+/**
+ * Walk unordered item pairs where AT LEAST ONE item has a non-zero voltage.
+ * This seeds creepage from HV pads/vias too (not just traces), handles negative
+ * voltages via |va - vb|, and — because it uses i < j — never double-emits an
+ * HV↔HV pair.
+ */
+function checkCreepage(
+  ctx: DrcContext,
+  voltageOf: (netId: string | null) => number,
+): DrcViolationDraft[] {
+  const out: DrcViolationDraft[] = [];
+  const items = buildElItems(ctx, voltageOf);
+  if (!items.some((it) => it.voltage !== 0)) return out;
+  const stackupIndex = new Map(
+    [...ctx.validCopperLayers].map((l, i) => [l, i] as const),
+  );
   for (let i = 0; i < items.length; i += 1) {
     const a = items[i]!;
     for (let j = i + 1; j < items.length; j += 1) {
       const b = items[j]!;
       if (a.voltage === 0 && b.voltage === 0) continue; // ordinary clearance
       if (a.netId !== null && a.netId === b.netId) continue;
-      const layer = a.layers.find((l) => b.layers.includes(l));
-      if (!layer) continue;
-      const required = ipc2221SpacingMm(a.voltage - b.voltage, column(layer));
-      // Skip when the ORDINARY clearance for this pair kind already dominates.
-      const pk = pairKindOf(a.kind, b.kind);
-      const base = ctx.resolver.clearance(
-        pk,
-        layer,
-        { netId: a.netId, pointMm: pointOf(ctx, a) },
-        { netId: b.netId, pointMm: pointOf(ctx, b) },
-      ).mm;
-      if (required <= base) continue;
-      if (aabbGap(a.bounds, b.bounds) > required) continue;
-      const g = electricalGap(ctx, a, b, layer);
-      if (g === null || !below(g.gap, required)) continue;
-      out.push({
-        code: "CREEPAGE_DISTANCE",
-        ruleClass: "electrical",
-        message: `IPC-2221 spacing ${g.gap.toFixed(3)} mm is below ${required.toFixed(3)} mm for ${Math.abs(a.voltage - b.voltage).toFixed(0)} V (${column(layer)})`,
-        anchors: [anchorOf(ctx, a), anchorOf(ctx, b)],
-        locationMm: g.location,
-        layer,
-        measuredMm: g.gap,
-        requiredMm: required,
-      });
+      // Canonical orientation (§11): the smaller anchor key leads, so the
+      // reported location cannot depend on the input array order.
+      const swap = a.key > b.key;
+      const draft = creepageViolation(
+        ctx,
+        swap ? b : a,
+        swap ? a : b,
+        stackupIndex,
+      );
+      if (draft) out.push(draft);
     }
   }
   return out;
-}
-
-interface ElItemLike {
-  kind: "trace" | "pad" | "via";
-  idx: number;
-}
-function traceOf(ctx: DrcContext, it: ElItemLike): DrcTrace {
-  return ctx.traces[it.idx]!;
-}
-function padOf(ctx: DrcContext, it: ElItemLike): DrcPad {
-  return ctx.pads[it.idx]!;
-}
-function viaOf(ctx: DrcContext, it: ElItemLike): DrcViaGeom {
-  return ctx.vias[it.idx]!;
-}
-function pointOf(ctx: DrcContext, it: ElItemLike): { x: number; y: number } {
-  if (it.kind === "trace") return traceOf(ctx, it).mid;
-  if (it.kind === "pad") return padOf(ctx, it).center;
-  return viaOf(ctx, it).center;
-}
-function anchorOf(ctx: DrcContext, it: ElItemLike): DrcAnchor {
-  if (it.kind === "trace") return { kind: "trace", traceId: traceOf(ctx, it).id };
-  if (it.kind === "pad") return padOf(ctx, it).anchor;
-  return { kind: "via", viaId: viaOf(ctx, it).via.id };
-}
-/** Edge-to-edge gap + marker location for a heterogeneous electrical pair. */
-function electricalGap(
-  ctx: DrcContext,
-  a: ElItemLike,
-  b: ElItemLike,
-  _layer: PcbCopperLayerId,
-): { gap: number; location: { x: number; y: number } } | null {
-  const t = (it: ElItemLike) => traceOf(ctx, it);
-  const p = (it: ElItemLike) => padOf(ctx, it);
-  const v = (it: ElItemLike) => viaOf(ctx, it);
-  if (a.kind === "trace" && b.kind === "trace") {
-    const c = polylineToPolylineClosestPoints(t(a).pointsMm, t(b).pointsMm);
-    return {
-      gap: c.distance - (t(a).halfWidthMm + t(b).halfWidthMm),
-      location: { x: (c.a.x + c.b.x) / 2, y: (c.a.y + c.b.y) / 2 },
-    };
-  }
-  const traceVsPad = (tr: DrcTrace, pd: DrcPad) => ({
-    gap: polylineToPolygonDistance(tr.pointsMm, pd.ring) - tr.halfWidthMm,
-    location: pd.center,
-  });
-  const traceVsVia = (tr: DrcTrace, vg: DrcViaGeom) => ({
-    gap:
-      pointToPolylineDistance(vg.center, tr.pointsMm).distance -
-      (tr.halfWidthMm + vg.radiusMm),
-    location: vg.center,
-  });
-  if (a.kind === "trace" && b.kind === "pad") return traceVsPad(t(a), p(b));
-  if (a.kind === "pad" && b.kind === "trace") return traceVsPad(t(b), p(a));
-  if (a.kind === "trace" && b.kind === "via") return traceVsVia(t(a), v(b));
-  if (a.kind === "via" && b.kind === "trace") return traceVsVia(t(b), v(a));
-  if (a.kind === "via" && b.kind === "via") {
-    const va = v(a);
-    const vb = v(b);
-    const d = Math.hypot(va.center.x - vb.center.x, va.center.y - vb.center.y);
-    return {
-      gap: d - (va.radiusMm + vb.radiusMm),
-      location: {
-        x: (va.center.x + vb.center.x) / 2,
-        y: (va.center.y + vb.center.y) / 2,
-      },
-    };
-  }
-  const padVsVia = (pd: DrcPad, vg: DrcViaGeom) => ({
-    gap: circleToPolygonDistance(vg.center, vg.radiusMm, pd.ring),
-    location: vg.center,
-  });
-  if (a.kind === "pad" && b.kind === "via") return padVsVia(p(a), v(b));
-  if (a.kind === "via" && b.kind === "pad") return padVsVia(p(b), v(a));
-  if (a.kind === "pad" && b.kind === "pad") {
-    return {
-      gap: polygonToPolygonDistance(p(a).ring, p(b).ring),
-      location: {
-        x: (p(a).center.x + p(b).center.x) / 2,
-        y: (p(a).center.y + p(b).center.y) / 2,
-      },
-    };
-  }
-  return null;
 }

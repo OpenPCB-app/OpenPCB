@@ -2,6 +2,7 @@ import type {
   DesignerPcbProjection,
   PcbBoardOutline,
 } from "../../../../../sdks/designer/types";
+import { DEFAULT_BOARD_THICKNESS_MM } from "../../../../../sdks/designer";
 import { flattenOutline } from "../../../../../shared/rendering/pcb/outline-geometry";
 
 /**
@@ -19,9 +20,6 @@ const SOFTWARE = {
   Application: "OpenPCB Manufacturing Export",
   Version: "0.1",
 } as const;
-
-// Default 2-layer FR4 finished thickness; no per-design thickness field yet.
-const DEFAULT_BOARD_THICKNESS_MM = 1.6;
 
 /**
  * Build the Ucamco Gerber Job File (`.gbrjob`) — a JSON sidecar describing the

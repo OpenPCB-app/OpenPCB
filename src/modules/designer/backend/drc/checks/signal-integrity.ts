@@ -1,12 +1,12 @@
 import type { PcbNetClass } from "../../../../../sdks/designer";
 import { resolveDiffPairs } from "../../pcb/diff-pair-resolver";
-import { resolveNetClassId } from "../../pcb/net-class-resolver";
 import {
   polylineLength,
   segmentToSegmentDistance,
   type Point,
 } from "../../pcb/pcb-trace-geometry";
 import { below, type DrcContext, type DrcTrace } from "../drc-context";
+import { canonicalTraces } from "../pair-gap";
 import type { DrcViolationDraft } from "../types";
 
 const DEFAULT_GAP_TOL_MM = 0.05;
@@ -28,17 +28,15 @@ export function checkSignalIntegrity(ctx: DrcContext): DrcViolationDraft[] {
   if (pairs.length === 0) return out;
 
   const classById = new Map(board.netClasses.map((c) => [c.id, c]));
-  const classOf = (netId: string): PcbNetClass | null => {
-    const id = resolveNetClassId(
-      ctx.netNames[netId] ?? "",
-      board.netClasses,
-      board.perNetClassAssignments,
-      netId,
-    );
-    return classById.get(id) ?? null;
-  };
+  // The ONE net-class chain (contract 06 §1) — the resolver's memoized live
+  // resolution, never a second `resolveNetClassId` call from here.
+  const classOf = (netId: string): PcbNetClass | null =>
+    classById.get(ctx.resolver.netClassIdOf(netId)) ?? null;
+  // Canonical trace order: the length sums and the `pTraces[0]` marker must
+  // not follow `ctx.traces` order (contract 06 §7, Astra S7 #6).
+  const ordered = canonicalTraces(ctx.traces);
   const tracesOfNet = (netId: string): DrcTrace[] =>
-    ctx.traces.filter((t) => t.netId === netId && t.pointsMm.length >= 2);
+    ordered.filter((t) => t.netId === netId && t.pointsMm.length >= 2);
   const netLength = (netId: string): number =>
     tracesOfNet(netId).reduce((sum, t) => sum + polylineLength(t.pointsMm), 0);
 
@@ -61,7 +59,6 @@ export function checkSignalIntegrity(ctx: DrcContext): DrcViolationDraft[] {
     if (skew > maxSkew) {
       out.push({
         code: "DIFF_PAIR_SKEW",
-        ruleClass: "signal-integrity",
         message: `Diff-pair ${dp.name} length skew ${skew.toFixed(3)} mm exceeds ${maxSkew.toFixed(3)} mm`,
         anchors: [anchor],
         locationMm: pTraces[0]!.mid,
@@ -109,7 +106,6 @@ export function checkSignalIntegrity(ctx: DrcContext): DrcViolationDraft[] {
     if (targetGap !== undefined && worstGapDev > gapTol) {
       out.push({
         code: "DIFF_PAIR_GAP",
-        ruleClass: "signal-integrity",
         message: `Diff-pair ${dp.name} coupled gap deviates ${worstGapDev.toFixed(3)} mm from target ${targetGap.toFixed(3)} mm`,
         anchors: [anchor],
         locationMm: worstGapPoint,
@@ -121,7 +117,6 @@ export function checkSignalIntegrity(ctx: DrcContext): DrcViolationDraft[] {
     if (uncoupled > maxUncoupled) {
       out.push({
         code: "DIFF_PAIR_UNCOUPLED_LENGTH",
-        ruleClass: "signal-integrity",
         message: `Diff-pair ${dp.name} has ${uncoupled.toFixed(2)} mm uncoupled (max ${maxUncoupled.toFixed(2)} mm)`,
         anchors: [anchor],
         locationMm: pTraces[0]!.mid,

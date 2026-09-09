@@ -11,8 +11,8 @@ import { placementMirrorX } from "../../../sdks/designer/pcb-helpers";
 /**
  * Centreline of an oblong drill: the routed stadium runs from `a` to `b` with
  * radius `widthMm / 2`. Same interpretation as the Excellon writer's `G85`
- * slot and the DRC's `slotCenterline` — the three must agree or the fab routes
- * something the board never cleared for.
+ * slot and the DRC's `DrcHole.slot` — every consumer reads it from HERE, or the
+ * fab routes something the board never cleared for.
  */
 export interface DrillSlotCenterline {
   a: PcbPointMm;
@@ -49,6 +49,33 @@ export function drillSlotCenterline(
     a: { x: centerMm.x - dx, y: centerMm.y - dy },
     b: { x: centerMm.x + dx, y: centerMm.y + dy },
     widthMm: drillSlot.widthMm,
+  };
+}
+
+/** A free pad's drill, as every consumer must see it. */
+export interface FreePadDrill {
+  drillMm: number;
+  /** Present when the drill is a routed slot rather than a round hit. */
+  slot?: DrillSlotCenterline;
+  /** Plated (`std`) — an `smd` / `conn` / `hole` drill is NPTH. */
+  plated: boolean;
+}
+
+/**
+ * THE one derivation of a free pad's drill — DRC holes, the pour apertures, the
+ * Excellon writer and the snapshot all read it (contract 06 §2). A drill is a
+ * drill whatever the pad type says: `smd` / `conn` pads persist one too, and it
+ * reaches the fab as a non-plated hit, so no consumer may filter on `padType`
+ * before asking this.
+ */
+export function freePadDrill(pad: PcbFreePad): FreePadDrill | null {
+  // `!(x > 0)` also rejects NaN / undefined from non-store producers (R1 #8).
+  if (pad.drillMm === null || !(pad.drillMm > 0)) return null;
+  const slot = drillSlotCenterline(pad.centerMm, pad.drillSlot);
+  return {
+    drillMm: pad.drillMm,
+    ...(slot ? { slot } : {}),
+    plated: pad.padType === "std",
   };
 }
 
@@ -126,12 +153,12 @@ export function collectDrills(
     }
   }
   for (const pad of freePads) {
-    if (pad.drillMm !== null && pad.drillMm > 0) {
-      const slot = drillSlotCenterline(pad.centerMm, pad.drillSlot);
+    const drill = freePadDrill(pad);
+    if (drill) {
       out.push({
         centerMm: pad.centerMm,
-        radiusMm: pad.drillMm / 2,
-        ...(slot ? { slot } : {}),
+        radiusMm: drill.drillMm / 2,
+        ...(drill.slot ? { slot: drill.slot } : {}),
       });
     }
   }

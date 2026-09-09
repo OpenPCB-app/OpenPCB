@@ -87,7 +87,18 @@ both are gated on manual QA on a real board before their dev flags can graduate.
       0.5 nm of float noise at exact equality; stale (v1) waiver ids are pruned; malformed rules are
       refused on save and persisted invalid / partially ineffective rules are reported
       (`DRC_RULE_INVALID`, `DRC_RULE_INEFFECTIVE`); KiCad import maps the project's minimums and
-      per-net class assignments and warns when a `.kicad_dru` file is present).
+      per-net class assignments and warns when a `.kicad_dru` file is present), and the S7 batch-DRC
+      changes (`docs/pcb-hardening/06-batch-drc-contract.md`: copper over a non-plated hole is now
+      `COPPER_TO_HOLE` (the pour's NPTH clearance, `clearance.copperToHoleMm` or the edge rule);
+      overlapping different-net pads inside one footprint and an unassigned trace / pad bridging two
+      nets are now shorts; circular pads are judged as exact discs (a ~0.2 %·r false-fail band is
+      gone); the DRC report is sorted by code then id and byte-stable under any input order (the
+      panel's within-severity order changes); `TRACE_LAYER_MISMATCH` can no longer be waived or
+      ignored; `COPPER_TO_BOARD_EDGE.measuredMm` is negative for copper past the edge; cutouts get
+      the milling advisories; every drilled free pad is a hole to DRC, the drill file and the pour
+      alike; an NPTH `hole` free pad no longer flashes copper in the Gerber and a `conn` pad flashes
+      on its declared layer only; class ignores for `dfm` / `electrical` / `signal-integrity` now
+      persist; `UNCONNECTED_NET` is derived by the engine itself).
 - [ ] Follow-up: migrate `/autoroute/apply` onto `pcb_commit_route`. Carries an open UX decision —
       per-op cherry-pick (today's route apply) versus all-or-nothing batch (today's place apply).
 - [ ] Follow-up: pad-bearing E2E fixture board covering Tab→accept, tune-a-trace, bundle
@@ -309,16 +320,17 @@ correctness-hardening program in
 zones/keepouts → pours → rule semantics → batch DRC → live/route parity → scaling → async →
 manufacturability → DFM → electrical → SI → high-speed runway → routing → trust gate), with the
 verified current-master inventory in
-[`docs/pcb-hardening/00-ground-truth.md`](docs/pcb-hardening/00-ground-truth.md). Sessions 0–2 are
-done (S2 geometry closed 2026-09-07); S3a done 2026-09-07; S3b (authoring tools) is next.
+[`docs/pcb-hardening/00-ground-truth.md`](docs/pcb-hardening/00-ground-truth.md). Sessions 0–6 are
+done (S6 rule semantics closed 2026-09-08); S7 (authoritative batch DRC) is in progress; S8
+(live / route parity) is next.
 
 **Binding decisions (unchanged).** Full scope — core plus DFM plus electrical plus SI · scoped
 priority rules (first-match, *can relax*, board-minimum floor) · full multilayer 2–32 · breaking
 changes allowed with migration (violation-id v2, KiCad-aligned severities, live net-class
 resolution).
 
-**Open bugs.** 8 audit findings remain unresolved (B2-9 and B5-LIVE-PADGEOMS closed in Session 0;
-B3-1/3/4/5/6 fixed in Session 1; B4-1/2/6/7 fixed in Session 2) and are tracked as `test.todo` with real post-fix assertions in `drc-audit-b*.test.ts`. They
+**Open bugs.** 6 audit findings remain unresolved (B2-9 and B5-LIVE-PADGEOMS closed in Session 0;
+B3-1/3/4/5/6 fixed in Session 1; B4-1/2/6/7 fixed in Session 2; B3-9/10 fixed in Session 5) and are tracked as `test.todo` with real post-fix assertions in `drc-audit-b*.test.ts`. They
 are enumerated with mechanism and anchors in
 [`docs/drc/OPEN_FINDINGS.md`](docs/drc/OPEN_FINDINGS.md) — do not restate them here. Every finding
 now has an owning session.
@@ -426,7 +438,7 @@ Unscheduled. Nothing here is committed to a release.
       of the fill toggle) and S4 (DRC codes, route obstacles + live check + via guard, fill-consumer
       parity) and S5 (zone cutouts, precedence carve, pour correctness) are done. Open:
       keepouts in the cloud snapshot wire contract (cloud session), a server-side route commit gate
-      (S8), exact circle-pad discs for keepout verdicts (S7).
+      (S8); exact circle-pad discs for keepout verdicts landed in S7.
 - [ ] Library variants / families / presets / provenance.
 - [ ] Symbol and footprint editor expansion — multi-unit, alternate graphical body styles.
 - [ ] OpenAPI codegen pipeline — revisit `gen:openapi` if and when frontend SDK regeneration is needed.

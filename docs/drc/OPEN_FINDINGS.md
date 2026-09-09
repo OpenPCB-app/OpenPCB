@@ -31,7 +31,7 @@ long as that correspondence holds:
 rg -n "test\.todo\(" src/core/backend/tests/drc-audit-b*.test.ts
 ```
 
-Expect **8 call sites, 8 unique bug ids**, and every body a real post-fix assertion
+Expect **7 call sites, 7 unique bug ids** (S5 closed B3-9 / B3-10; S7 added B6-1), and every body a real post-fix assertion
 (`rg "expect\(true\)\.toBe\(true\)"` over the same files must return nothing — Session 0 replaced
 the seven placeholder bodies; Sessions 1 and 2 flipped nine of them). When a fix lands, the `test.todo` becomes a real `test` and the
 finding leaves this document. If the count drops without a finding being removed here, the
@@ -174,6 +174,22 @@ itself is pure and correct; this is purely a placement problem.
 *Anchor:* the `POST /designs/:designId/drc/run` handler in `designer/backend/routes.ts`. Cite the
 route, not a line number — the handler has already drifted once.
 
+## S11 — export parity (raised by the S7 Astra run, 2026-09-09)
+
+### B6-1 — a non-orthogonally rotated pad ships un-rotated in the Gerber
+
+**Severity: HIGH** (a DRC-clean board can export copper where DRC saw none). `gerber/writer.ts`
+`padApertureShape` builds a pad's aperture from its own model: an orthogonal swap for rotations
+that are multiples of 90°, and NO rotation otherwise, so a 2 × 0.2 mm rectangle at 45° is flashed
+axis-aligned; an unequal-dimension `circle` uses `widthMm` only, while DRC judges the ellipse
+ring. The copper DRC evaluates (`padOutlineWorldMm`, the S1 record ring) and the copper the fab
+receives differ. Batch DRC is not at fault — the writer does not consume the one pad geometry.
+Fix direction (S11 exit gate "DRC's representation matches export"): flash from the world ring
+(Gerber `%LR` load rotation before the flash, or a rotated aperture macro / region), and give an
+unequal `circle` one interpretation across persistence, DRC and export. Regression:
+`drc-audit-b6.test.ts` B6-1. (Astra S7 #1 claimed the 90° case too; a probe showed the orthogonal
+swap is correct — only non-orthogonal rotations and ellipses diverge.)
+
 ## S11 — manufacturability, S5 — pours (formerly P9; the two pour findings were closed in S5)
 
 The DFM overlay checks P9 was to add (courtyard, silkscreen, mask, copper shape) are now S12 and
@@ -293,7 +309,8 @@ chosen* are the part that must survive:
 | Regime | Form | Applies to | Boundary behaviour |
 |---|---|---|---|
 | Minimums | `below(v, limit)` = `v < limit − 1e-6` | Manufacturability minimums, board checks | Exact-spec geometry passes; sub-nanometre float noise forgiven |
-| Clearance | `gap < required − GEOM_EPS_MM` (0.5 nm grace, S6 — `clearanceViolated` in `tolerance.ts`) | All clearance pairs, FAB tier | Exact equality passes, including the derived-float case `0.3 − (0.1 + 0.1)` that the former bare `<` failed; a 1 nm deficit still errors |
+| Clearance | `gap < required − GEOM_EPS_MM` (0.5 nm grace, S6 — `clearanceViolated` in `tolerance.ts`) | All copper clearance pairs, copper-to-edge, copper-to-hole (S7) | Exact equality passes, including the derived-float case `0.3 − (0.1 + 0.1)` that the former bare `<` failed; a 1 nm deficit still errors |
+| Fab capability | `below(gap, fabMin)` = the minimums regime | `FAB_CLEARANCE`, `FAB_HOLE_TO_HOLE`, the fab validators | Recorded in S7 (`06-batch-drc-contract.md` §5): the FAB tier never moved to the clearance regime — this table used to say it had |
 | Short | `gap <= SHORT_EPS_MM` (1e-4), **inclusive** | Short tier | A gap of exactly 1e-4 mm is a short |
 | Fab validators | bare `<` / `>`, no epsilon | Fab preset comparisons | Produced a real false positive on a derived float |
 

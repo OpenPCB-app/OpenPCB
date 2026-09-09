@@ -377,6 +377,11 @@ function buildBoardSettings(
   };
 }
 
+/** A KiCad minimum that is present; 0 is legitimate, so never truthiness. */
+function isFiniteNumber(v: number | undefined): v is number {
+  return typeof v === "number" && Number.isFinite(v);
+}
+
 /**
  * KiCad's project minimums and its `Default` class clearance → OpenPCB's
  * design rules (rule-semantics contract §12.3). Every mapping is 1:1 and every
@@ -396,7 +401,7 @@ function applyKicadDesignRules(
 ): PcbDesignRules {
   const rules = report.designRules ?? {};
   const num = (v: number | undefined, fallback: number): number =>
-    typeof v === "number" && Number.isFinite(v) ? v : fallback;
+    isFiniteNumber(v) ? v : fallback;
   const defaultClearanceMm = report.netClasses.find(
     (nc) => nc.name.toLowerCase() === "default",
   )?.clearanceMm;
@@ -419,9 +424,16 @@ function applyKicadDesignRules(
       rules.minCopperEdgeClearanceMm,
       base.clearance.copperToBoardEdgeMm,
     ),
+    // `min_hole_clearance` is KiCad's copper-to-hole rule — OpenPCB's
+    // `copperToHoleMm` (batch-DRC contract 06 §4). Optional on both sides: a
+    // project without it leaves the key absent, which reads as the copper ↔
+    // edge rule, so no board is retroactively tightened.
+    ...(isFiniteNumber(rules.minHoleClearanceMm)
+      ? { copperToHoleMm: rules.minHoleClearanceMm }
+      : {}),
   };
   // KiCad has ONE drill minimum; it floors both the plain drill and the via
-  // drill (§12.3). `min_hole_clearance` (hole-to-copper) has no field yet (S11).
+  // drill (§12.3).
   const drillMm = num(rules.minThroughHoleMm, base.minimums.drillSizeMm);
   const minimums: PcbDesignRules["minimums"] = {
     ...base.minimums,

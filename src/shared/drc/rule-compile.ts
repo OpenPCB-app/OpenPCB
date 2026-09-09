@@ -74,6 +74,16 @@ export const POUR_KINDS: ReadonlySet<DrcPairKind> = new Set<DrcPairKind>([
 /** Pour clearance against foreign copper when the board omits the field (§6). */
 export const DEFAULT_POUR_TO_COPPER_MM = 0.5;
 
+/**
+ * Copper-to-non-plated-drill clearance (mm): ONE value for DRC's
+ * `COPPER_TO_HOLE` and the pour's NPTH halo, so the report and the artwork
+ * agree by construction. No scoped rule reaches it — there is no hole pair kind
+ * yet (S11) — so this is a board-field read, not a resolver path.
+ */
+export function copperToHoleClearanceMm(rules: PcbDesignRules): number {
+  return rules.clearance.copperToHoleMm ?? rules.clearance.copperToBoardEdgeMm;
+}
+
 /** Board default for `minimums.holeToHoleMm` (§5.1). */
 export const DEFAULT_HOLE_TO_HOLE_MM = 0.25;
 

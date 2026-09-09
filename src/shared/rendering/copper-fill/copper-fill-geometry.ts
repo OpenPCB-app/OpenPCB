@@ -57,6 +57,7 @@ import {
 import {
   collectDrills,
   drillSlotCenterline,
+  freePadDrill,
   type DrillInstance,
 } from "../pcb/pcb-drills";
 import {
@@ -549,11 +550,15 @@ function collectApertures(
 }
 
 /**
- * Non-plated holes (mechanical mounting/tooling holes + free `hole`-type pads).
+ * Non-plated holes: mechanical mounting/tooling holes plus every free pad whose
+ * drill is NOT plated — which is every type but `std`, not just `hole`. An
+ * `smd` or `conn` pad that carries a drill reaches the fab as a non-plated hit
+ * (the ONE derivation, `freePadDrill`), so the pour has to clear its wall too.
+ *
  * Unlike plated vias/PTH pads — whose copper plates right to the barrel — a NPTH
  * needs a hole-to-copper clearance ring so the pour doesn't touch the bare
  * drilled edge. Returned as bare shapes (disc, or stadium for a routed slot);
- * the caller round-inflates them by the edge clearance (§5). (Plated apertures
+ * the caller round-inflates them by `copperToHoleMm` (§5). (Plated apertures
  * stay exact via `collectApertures`.)
  */
 function collectNonPlatedApertures(
@@ -574,16 +579,15 @@ function collectNonPlatedApertures(
     }
   }
   for (const pad of freePads) {
-    if (pad.padType === "hole" && pad.drillMm !== null && pad.drillMm > 0) {
-      const slot = drillSlotCenterline(pad.centerMm, pad.drillSlot);
-      out.push(
-        drillAperture({
-          centerMm: pad.centerMm,
-          radiusMm: pad.drillMm / 2,
-          ...(slot ? { slot } : {}),
-        }),
-      );
-    }
+    const drill = freePadDrill(pad);
+    if (!drill || drill.plated) continue;
+    out.push(
+      drillAperture({
+        centerMm: pad.centerMm,
+        radiusMm: drill.drillMm / 2,
+        ...(drill.slot ? { slot: drill.slot } : {}),
+      }),
+    );
   }
   return out;
 }
@@ -743,6 +747,15 @@ export interface CopperFillPourParams {
    */
   clearanceForItem: (item: CopperFillObstacle) => number;
   copperToBoardEdgeMm: number;
+  /**
+   * Clearance from poured copper to a NON-PLATED drill wall (mm) —
+   * `copperToHoleClearanceMm(designRules)`, the SAME helper DRC's
+   * `COPPER_TO_HOLE` reads (batch-DRC contract 06 §4), so the artwork and the
+   * report cannot disagree about a hole. ABSENT ⇒ `copperToBoardEdgeMm`, which
+   * is the pre-S7 behaviour: a non-plated wall is bare substrate, so the edge
+   * rule is what the fill has always applied to it.
+   */
+  copperToHoleMm?: number;
   cutouts?: ReadonlyArray<PcbBoardCutout>;
   freeHoles?: ReadonlyArray<PcbFreeHole>;
   freePads?: ReadonlyArray<PcbFreePad>;
@@ -1288,6 +1301,9 @@ function computePourIslands(
       vias: params.vias,
     });
   const stdFreePadIds = new Set(
+    // `std` by TYPE, not by `freePadDrill`: a std pad is drilled by definition
+    // whatever `drillMm` says (S3a), and a null drill must not cost it its
+    // thermal bond (R1 #3).
     freePads.filter((p) => p.padType === "std").map((p) => p.id),
   );
   const bare = collectBareCopper({
@@ -1320,11 +1336,13 @@ function computePourIslands(
     OUTPUT_GRID_STEP_MM,
     "drill aperture",
   );
-  // Non-plated holes get a hole-to-copper ring at the board-edge rule (§5); the
-  // bare hole itself is already subtracted via `aperturePaths`.
+  // Non-plated holes get a hole-to-copper ring (§5); the bare hole itself is
+  // already subtracted via `aperturePaths`. The value is DRC's
+  // `copperToHoleClearanceMm`, which defaults to the board-edge rule — so an
+  // absent key reproduces the pre-S7 artwork exactly.
   const npthHalo = dilateOrFail(
     multiPolyToPathsD(collectNonPlatedApertures(freeHoles, freePads)),
-    forbiddenDeltaMm(edge),
+    forbiddenDeltaMm(Math.max(0, params.copperToHoleMm ?? edge)),
     "non-plated hole",
   );
 

@@ -14,11 +14,13 @@ import type { DrcSeverityOverrides } from "./severity";
  * only when a scoped rule set the value the check compared against; for an
  * aggregate over several layers or witnesses it is the MOST severe of them, so
  * aggregation never downgrades. Non-waivability is likewise not a draft flag:
- * `NON_OVERRIDABLE` (severity.ts) is the single list.
+ * `NON_OVERRIDABLE` (severity.ts) is the single list, and neither is the rule
+ * class: it comes from `RULE_CLASS_BY_CODE` (contract 06 §6), so two emit sites
+ * of one code cannot file it under two different classes.
  */
 export type DrcViolationDraft = Omit<
   DrcViolation,
-  "id" | "waived" | "severity"
+  "id" | "waived" | "severity" | "ruleClass"
 > & {
   ruleSeverity?: DrcSeverity;
 };

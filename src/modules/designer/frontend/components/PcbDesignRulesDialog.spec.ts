@@ -44,6 +44,52 @@ describe("seedClearance", () => {
   });
 });
 
+describe("designRulesForSave — the optional copper ↔ hole clearance", () => {
+  test("an entered value round-trips onto the saved rules", () => {
+    const stored = rules();
+    const next = designRulesForSave(
+      stored,
+      { ...seedClearance(stored), copperToHoleMm: 0.35 },
+      stored.minimums,
+    );
+    expect(next.clearance.copperToHoleMm).toBe(0.35);
+  });
+
+  test("a stored value survives an untouched save", () => {
+    const stored = rules({
+      clearance: { ...rules().clearance, copperToHoleMm: 0.35 },
+    });
+    expect(seedClearance(stored).copperToHoleMm).toBe(0.35);
+    expect(
+      designRulesForSave(stored, seedClearance(stored), stored.minimums)
+        .clearance.copperToHoleMm,
+    ).toBe(0.35);
+  });
+
+  test("an emptied field sends `null` — the store's explicit clear", () => {
+    const stored = rules({
+      clearance: { ...rules().clearance, copperToHoleMm: 0.35 },
+    });
+    const next = designRulesForSave(
+      stored,
+      { ...seedClearance(stored), copperToHoleMm: null },
+      stored.minimums,
+    );
+    // An ABSENT key would instead keep the stored value on the update path.
+    expect(next.clearance.copperToHoleMm).toBeNull();
+  });
+
+  test("a board without the key never gains one", () => {
+    const stored = rules();
+    expect(seedClearance(stored).copperToHoleMm).toBeUndefined();
+    expect(
+      "copperToHoleMm" in
+        designRulesForSave(stored, seedClearance(stored), stored.minimums)
+          .clearance,
+    ).toBe(false);
+  });
+});
+
 describe("designRulesForSave", () => {
   test("keys the dialog does not edit survive the save", () => {
     const stored = rules({

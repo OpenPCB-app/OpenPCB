@@ -10,6 +10,7 @@ import type {
 } from "../../../../../shared/pcb-areas";
 import { ringsOverlapPositiveArea } from "../../../../../shared/pcb-geometry/area-overlap";
 import {
+  boundsIntersectionCenter,
   boundsMeet,
   boundsOfPoints,
   type RingBounds,
@@ -124,7 +125,6 @@ function warningDrafts(ctx: DrcContext): DrcViolationDraft[] {
     if (WARNING_KIND[warning.code] === "invalid") {
       out.push({
         code: "ZONE_INVALID",
-        ruleClass: "structural",
         message: warning.detail,
         anchors: [site.anchor],
         locationMm: site.locationMm,
@@ -134,7 +134,6 @@ function warningDrafts(ctx: DrcContext): DrcViolationDraft[] {
     }
     out.push({
       code: "ZONE_EMPTY_FILL",
-      ruleClass: "structural",
       message: warning.detail,
       anchors: [site.anchor],
       locationMm: site.locationMm,
@@ -142,15 +141,6 @@ function warningDrafts(ctx: DrcContext): DrcViolationDraft[] {
     });
   }
   return out;
-}
-
-/** Centre of the two AABBs' intersection rectangle — symmetric in a and b. */
-function boundsIntersectionCenter(a: RingBounds, b: RingBounds): PcbPointMm {
-  const minX = Math.max(a.minX, b.minX);
-  const maxX = Math.min(a.maxX, b.maxX);
-  const minY = Math.max(a.minY, b.minY);
-  const maxY = Math.min(a.maxY, b.maxY);
-  return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
 }
 
 interface OverlapCandidate {
@@ -196,7 +186,6 @@ function overlapDrafts(ctx: DrcContext): DrcViolationDraft[] {
       if (!ringsOverlapPositiveArea(a.ring, b.ring, GEOM_EPS_MM)) continue;
       out.push({
         code: "ZONE_OVERLAP",
-        ruleClass: "constraint",
         message: `Zones "${zoneDisplayName(ctx, a.zone)}" and "${zoneDisplayName(ctx, b.zone)}" overlap on ${a.zone.layer} with different nets and equal priority`,
         anchors: [
           { kind: "zone", zoneId: a.zone.id },

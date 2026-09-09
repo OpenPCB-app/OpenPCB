@@ -7,7 +7,12 @@ import type {
   PcbPointMm,
   PcbVia,
 } from "../../../../../sdks/designer/types";
-import { placementSideLayer } from "../../../../../shared/rendering/pad-copper-layers";
+import { copperLayersForCount } from "../../../../../sdks/designer/stackup";
+import { copperToHoleClearanceMm } from "../../../../../shared/drc/rule-resolver";
+import {
+  freePadCopperLayers,
+  placementSideLayer,
+} from "../../../../../shared/rendering/pad-copper-layers";
 import {
   ApertureTable,
   type AperFunction,
@@ -282,9 +287,14 @@ function emitCopper(
     }
   }
 
-  // 3. Free pads (F5 manually-dropped pads).
+  // 3. Free pads (F5 manually-dropped pads). Which layers a free pad's copper
+  //    occupies comes from THE one derivation the records, the pour and DRC
+  //    read — a `hole` pad flashes no copper at all (it is an NPTH; the artwork
+  //    used to put copper on both outer layers, which nothing else on the board
+  //    knew about) and an `smd` / `conn` pad flashes on its declared layer only.
+  const copperStackup = new Set(copperLayersForCount(proj.board.layerCount));
   for (const pad of proj.freePads) {
-    if (!freePadTouchesCopperLayer(pad, layer)) continue;
+    if (!freePadCopperLayers(pad, copperStackup).layers.includes(layer)) continue;
     const aperShape = freePadApertureShape(pad);
     if (!aperShape) {
       ctx.warnings.push(
@@ -362,6 +372,7 @@ function emitCopperPour(
     vias: ctx.proj.vias,
     padNetIds: ctx.padNetIds,
     copperToBoardEdgeMm: dr.clearance.copperToBoardEdgeMm,
+    copperToHoleMm: copperToHoleClearanceMm(dr),
     cutouts: board.cutouts,
     freeHoles: ctx.proj.freeHoles,
     freePads: ctx.proj.freePads,
@@ -587,22 +598,6 @@ function padApertureShape(
   }
 }
 
-function freePadTouchesCopperLayer(
-  pad: PcbFreePad,
-  layer: PcbCopperLayerId,
-): boolean {
-  if (pad.padType === "smd") return pad.layer === layer;
-  // Through-hole / std / conn — present on F.Cu + B.Cu.
-  if (
-    pad.padType === "std" ||
-    pad.padType === "hole" ||
-    pad.padType === "conn"
-  ) {
-    return layer === "F.Cu" || layer === "B.Cu";
-  }
-  return false;
-}
-
 function freePadApertureShape(pad: PcbFreePad): ApertureShape | null {
   switch (pad.shape) {
     case "circle":
@@ -665,8 +660,20 @@ function emitMask(
       out.push(`${xyOperand(center.x, center.y)}D03*`);
     }
   }
+  // A mask opening follows the copper (the one derivation) — a `conn` / `smd`
+  // pad opens the mask on its own layer only. The one exception is an NPTH
+  // `hole` pad: it carries no copper, but the drill still wants its mask
+  // relief on BOTH faces (KiCad flashes an NPTH pad's mask aperture the same
+  // way), so the mask edge is not torn by the drill.
+  const copperStackup = new Set(
+    copperLayersForCount(ctx.proj.board.layerCount),
+  );
   for (const pad of ctx.proj.freePads) {
-    if (!freePadTouchesCopperLayer(pad, layer)) continue;
+    const opens =
+      pad.padType === "hole"
+        ? layer === "F.Cu" || layer === "B.Cu"
+        : freePadCopperLayers(pad, copperStackup).layers.includes(layer);
+    if (!opens) continue;
     const aperShape = freePadApertureShape(pad);
     if (!aperShape) continue;
     const expansion = pad.solderMaskExpansionMm ?? expansionDefault;

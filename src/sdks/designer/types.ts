@@ -606,6 +606,13 @@ export interface PcbDesignRules {
      * as 0.5, the constant the fill kernel has always used.
      */
     pourToCopperMm?: number;
+    /**
+     * Copper-to-non-plated-drill clearance (mm): trace / pad / via copper edge
+     * to an NPTH drill wall (free holes and non-plated free-pad drills).
+     * Optional/additive; absent reads as `copperToBoardEdgeMm`, the value the
+     * pour has always applied to its NPTH halo (batch-DRC contract 06 §4).
+     */
+    copperToHoleMm?: number;
   };
   minimums: {
     traceWidthMm: number;
@@ -752,6 +759,14 @@ export interface PcbDiffPair {
   /** Max intra-pair length skew (mm); default 0.5. */
   maxSkewMm?: number;
 }
+
+/**
+ * The one default finished-board thickness (mm, standard FR4) for an absent
+ * `PcbBoardSettings.boardThicknessMm`. The DRC context, the cloud board
+ * snapshot, the Gerber job file and the 3D preview all read this constant
+ * instead of re-declaring 1.6.
+ */
+export const DEFAULT_BOARD_THICKNESS_MM = 1.6;
 
 export interface PcbLengthMatchGroup {
   id: string;
@@ -1134,10 +1149,14 @@ export interface PcbOverlayShape {
 
 /**
  * Free pad type. Drives which fields are valid + how the pad renders:
- *  - `smd`  : surface-mount, single layer, no drill.
+ *  - `smd`  : surface-mount, single layer — a `drillMm`, when present, is a
+ *             non-plated drill (Excellon NPTH, cleared like a free hole).
  *  - `hole` : non-plated through-hole (NPTH) — drill only, no copper.
- *  - `std`  : standard plated through-hole — drill + annular copper on both sides.
- *  - `conn` : connector / large-area paddle pad (no drill, can be polygon).
+ *  - `std`  : standard plated through-hole — drill + annular copper on EVERY
+ *             copper layer of the stackup (the one free-pad layer model).
+ *  - `conn` : connector / large-area paddle pad, single layer — a `drillMm`,
+ *             when present, is a non-plated drill (Excellon NPTH, cleared like
+ *             a free hole).
  */
 export type PcbFreePadType = "smd" | "hole" | "std" | "conn";
 
@@ -2271,6 +2290,12 @@ export type DrcAnchor =
   | { kind: "zone"; zoneId: string }
   | { kind: "keepout"; keepoutId: string }
   | { kind: "diffPair"; pNetId: string; nNetId: string }
+  /**
+   * A stored `PcbLengthMatchGroup` row. Carried as the SECOND anchor of
+   * `NET_LENGTH_OUT_OF_RANGE` so a net that belongs to several groups gets one
+   * violation id per group instead of one id for all of them.
+   */
+  | { kind: "lengthGroup"; groupId: string }
   /** A stored `PcbDrcRule` row — DRC_RULE_INVALID / DRC_RULE_INEFFECTIVE. */
   | { kind: "rule"; ruleId: string }
   | { kind: "boardEdge" };
@@ -2290,6 +2315,27 @@ export type DrcRuleClass =
   | "dfm"
   | "electrical"
   | "signal-integrity";
+
+/**
+ * Every `DrcRuleClass`, as a runtime list. Derived from a compiler-total record
+ * so adding a class to the union above fails to compile until this list is
+ * updated — a persisted class ignore is silently dropped by any consumer whose
+ * hand-written list lost a member.
+ */
+const DRC_RULE_CLASS_MEMBERS: Record<DrcRuleClass, true> = {
+  clearance: true,
+  constraint: true,
+  connectivity: true,
+  manufacturability: true,
+  structural: true,
+  dfm: true,
+  electrical: true,
+  "signal-integrity": true,
+};
+
+export const DRC_RULE_CLASSES: readonly DrcRuleClass[] = Object.keys(
+  DRC_RULE_CLASS_MEMBERS,
+) as DrcRuleClass[];
 
 /**
  * Stable, machine-readable violation codes. Every code below has an emit site
@@ -2340,6 +2386,10 @@ export type DrcRuleCode =
   | "PAD_TO_VIA_CLEARANCE"
   | "COPPER_TO_BOARD_EDGE"
   | "HOLE_TO_HOLE"
+  // Copper (trace / pad / via) too close to a NON-PLATED drill wall —
+  // the pair kind the pour has always cleared and DRC never judged
+  // (batch-DRC contract 06 §4).
+  | "COPPER_TO_HOLE"
   | "VIA_LAYER_SPAN"
   | "VIA_ASPECT_RATIO"
   | "BOARD_OUTLINE_INVALID"
@@ -2477,6 +2527,11 @@ export interface KicadProjectImportDesignRules {
   minViaAnnularMm?: number;
   minHoleToHoleMm?: number;
   minCopperEdgeClearanceMm?: number;
+  /**
+   * `min_hole_clearance` — copper edge to a (non-plated) drill wall; commits
+   * to `clearance.copperToHoleMm` (batch-DRC contract 06 §4).
+   */
+  minHoleClearanceMm?: number;
 }
 
 export interface KicadProjectImportComponentRow {

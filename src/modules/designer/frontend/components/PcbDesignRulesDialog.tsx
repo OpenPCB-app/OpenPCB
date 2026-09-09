@@ -43,6 +43,10 @@ const CLEARANCE_FIELDS: Array<{
   },
 ];
 
+const COPPER_TO_HOLE_TITLE =
+  "Copper edge to a non-plated drill wall (free holes and non-plated free-pad drills). " +
+  "Leave empty to follow the copper ↔ edge rule, which is what the pour has always applied.";
+
 const MINIMUM_FIELDS: Array<{
   key: keyof PcbDesignRules["minimums"];
   label: string;
@@ -77,16 +81,33 @@ export function seedClearance(
 }
 
 /**
+ * The clearance block a save SENDS. `copperToHoleMm` is the one field the
+ * dialog can clear, and the store's update parse keeps the stored value for an
+ * absent key — only an explicit `null` removes it — so an emptied input has to
+ * travel as `null` rather than as a dropped key.
+ */
+export type ClearanceForSave = Omit<
+  PcbDesignRules["clearance"],
+  "copperToHoleMm"
+> & { copperToHoleMm?: number | null };
+
+/**
  * The `designRules` a save sends: the STORED rules with the two blocks this
  * dialog edits replaced, so `electrical` — and any key added later — survives
  * a round-trip through the form (rule-semantics contract §9).
  */
 export function designRulesForSave(
   stored: PcbDesignRules,
-  clearance: PcbDesignRules["clearance"],
+  clearance: ClearanceForSave,
   minimums: PcbDesignRules["minimums"],
 ): PcbDesignRules {
-  return { ...stored, clearance, minimums };
+  return {
+    ...stored,
+    // `null` is a wire value the store understands (clear the key); the
+    // persisted shape it produces still satisfies `PcbDesignRules`.
+    clearance: clearance as PcbDesignRules["clearance"],
+    minimums,
+  };
 }
 
 function NumberField({
@@ -121,6 +142,50 @@ function NumberField({
   );
 }
 
+/**
+ * A clearance that may legitimately be ABSENT. Empty means "nothing stored" —
+ * the placeholder names the rule that applies instead, and the save sends
+ * `null` so the store clears the key rather than keeping the old value.
+ */
+function OptionalNumberField({
+  label,
+  value,
+  placeholderMm,
+  onChange,
+  title,
+}: {
+  label: string;
+  value: number | null;
+  placeholderMm: number;
+  onChange: (v: number | null) => void;
+  title?: string;
+}): ReactElement {
+  return (
+    <label
+      className="flex items-center justify-between gap-2 text-xs text-text-secondary"
+      {...(title ? { title } : {})}
+    >
+      <span>{label}</span>
+      <span className="flex items-center gap-1">
+        <input
+          type="number"
+          step={0.01}
+          min={0}
+          value={value ?? ""}
+          placeholder={placeholderMm.toFixed(2)}
+          onChange={(e) => {
+            const raw = e.target.value.trim();
+            const parsed = Number.parseFloat(raw);
+            onChange(raw === "" || Number.isNaN(parsed) ? null : parsed);
+          }}
+          className="w-20 rounded-control border border-border-control bg-surface-input px-1.5 py-0.5 text-right font-mono text-xs"
+        />
+        <span className="text-[10px] text-text-tertiary">mm</span>
+      </span>
+    </label>
+  );
+}
+
 export function PcbDesignRulesDialog({
   open,
   board,
@@ -128,7 +193,7 @@ export function PcbDesignRulesDialog({
   onClose,
   onSave,
 }: PcbDesignRulesDialogProps): ReactElement | null {
-  const [clearance, setClearance] = useState(
+  const [clearance, setClearance] = useState<ClearanceForSave>(
     seedClearance(board.designRules),
   );
   const [minimums, setMinimums] = useState(board.designRules.minimums);
@@ -252,6 +317,15 @@ export function PcbDesignRulesDialog({
                 onChange={(v) => setClearance((c) => ({ ...c, [f.key]: v }))}
               />
             ))}
+            <OptionalNumberField
+              label="Copper ↔ hole"
+              title={COPPER_TO_HOLE_TITLE}
+              value={clearance.copperToHoleMm ?? null}
+              placeholderMm={clearance.copperToBoardEdgeMm}
+              onChange={(v) =>
+                setClearance((c) => ({ ...c, copperToHoleMm: v }))
+              }
+            />
           </section>
 
           <section className="space-y-1.5">

@@ -33,6 +33,15 @@ export const EMPTY_BOUNDS: RingBounds = {
   maxY: -Infinity,
 };
 
+/** Centre of two AABBs' intersection rectangle — symmetric in a and b. */
+export function boundsIntersectionCenter(a: RingBounds, b: RingBounds): PcbPointMm {
+  const minX = Math.max(a.minX, b.minX);
+  const maxX = Math.min(a.maxX, b.maxX);
+  const minY = Math.max(a.minY, b.minY);
+  const maxY = Math.min(a.maxY, b.maxY);
+  return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+}
+
 export function boundsOfPoints(points: readonly PcbPointMm[]): RingBounds {
   if (points.length === 0) return { ...EMPTY_BOUNDS };
   let minX = Infinity;

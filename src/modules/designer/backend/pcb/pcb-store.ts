@@ -35,6 +35,7 @@ import type {
 } from "../../../../sdks/designer";
 import {
   copperLayersForCount,
+  DRC_RULE_CLASSES,
   parsePcbLayerCount,
   isCopperLayerId as isStackupCopperLayer,
 } from "../../../../sdks/designer";
@@ -199,14 +200,6 @@ function parsePerLayerOpacity(
   return out;
 }
 
-const DRC_RULE_CLASSES = new Set<DrcRuleClass>([
-  "clearance",
-  "constraint",
-  "connectivity",
-  "manufacturability",
-  "structural",
-]);
-
 function parseStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   const out: string[] = [];
@@ -216,13 +209,21 @@ function parseStringArray(value: unknown): string[] {
   return out;
 }
 
+/**
+ * The membership set comes from the SDK's `DRC_RULE_CLASSES` (derived from the
+ * `DrcRuleClass` union, so it is total by construction). The local copy this
+ * replaced listed five of the eight classes, and silently dropped a persisted
+ * `dfm` / `electrical` / `signal-integrity` ignore on every read and patch.
+ */
+const KNOWN_DRC_RULE_CLASSES = new Set<DrcRuleClass>(DRC_RULE_CLASSES);
+
 function parseDrcRuleClasses(value: unknown): DrcRuleClass[] {
   if (!Array.isArray(value)) return [];
   const out: DrcRuleClass[] = [];
   for (const item of value) {
     if (
       typeof item === "string" &&
-      DRC_RULE_CLASSES.has(item as DrcRuleClass)
+      KNOWN_DRC_RULE_CLASSES.has(item as DrcRuleClass)
     ) {
       out.push(item as DrcRuleClass);
     }
@@ -248,7 +249,7 @@ function parseViaProtection(value: unknown): PcbViaProtection {
 /**
  * Validate persisted/edited design rules, falling back per-field.
  *
- * The OPTIONAL keys (`holeToBoardEdgeMm`, `pourToCopperMm`,
+ * The OPTIONAL keys (`holeToBoardEdgeMm`, `pourToCopperMm`, `copperToHoleMm`,
  * `minimums.clearanceMm`, `electrical`) are the only ones whose treatment
  * depends on `mode` (rule-semantics contract §12 items 5 and 6):
  *
@@ -290,6 +291,10 @@ function parseDesignRules(
     c.pourToCopperMm,
     fallback.clearance.pourToCopperMm,
   );
+  const copperToHoleMm = optNum(
+    c.copperToHoleMm,
+    fallback.clearance.copperToHoleMm,
+  );
   const clearanceFloorMm = optNum(m.clearanceMm, fallback.minimums.clearanceMm);
   const e =
     r.electrical === null
@@ -309,6 +314,7 @@ function parseDesignRules(
       ),
       ...(holeToBoardEdgeMm !== undefined ? { holeToBoardEdgeMm } : {}),
       ...(pourToCopperMm !== undefined ? { pourToCopperMm } : {}),
+      ...(copperToHoleMm !== undefined ? { copperToHoleMm } : {}),
     },
     minimums: {
       traceWidthMm: num(m.traceWidthMm, fallback.minimums.traceWidthMm),

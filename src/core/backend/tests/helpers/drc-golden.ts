@@ -56,6 +56,9 @@ export function fixtureToProjection(fixture: any): DesignerPcbProjection {
   if (fixture.perNetClassAssignments)
     board.perNetClassAssignments = fixture.perNetClassAssignments;
   if (fixture.cutouts) board.cutouts = fixture.cutouts;
+  if (fixture.diffPairs) board.diffPairs = fixture.diffPairs;
+  if (fixture.lengthMatchGroups)
+    board.lengthMatchGroups = fixture.lengthMatchGroups;
   // Wide default outline so v1 fixtures are never accidentally off-board /
   // near the edge; v2 fixtures may supply a real outline.
   board.outline = fixture.outline ?? {

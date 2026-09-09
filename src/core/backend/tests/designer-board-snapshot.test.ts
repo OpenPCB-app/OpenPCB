@@ -286,13 +286,18 @@ describe("buildBoardSnapshot", () => {
       projection({
         board: board({
           designRules: {
-            clearance: { ...base.designRules.clearance, pourToCopperMm: 0.45 },
+            clearance: {
+              ...base.designRules.clearance,
+              pourToCopperMm: 0.45,
+              copperToHoleMm: 0.35,
+            },
             minimums: { ...base.designRules.minimums, clearanceMm: 0.12 },
           },
         }),
       }),
     );
     expect("pourToCopperMm" in snapshot.designRules.clearance).toBe(false);
+    expect("copperToHoleMm" in snapshot.designRules.clearance).toBe(false);
     expect("clearanceMm" in snapshot.designRules.minimums).toBe(false);
     // Everything else still ships verbatim.
     expect(snapshot.designRules.clearance.traceToTraceMm).toBe(
@@ -559,6 +564,55 @@ describe("buildBoardSnapshot", () => {
       centerMm: { x: 3, y: 4 },
       drillMm: 0.8,
     });
+  });
+
+  // S7 D3: the ONE drill derivation — a drill is a drill whatever `padType`
+  // says, and an `smd` / `conn` drill reaches the fab as a non-plated hit.
+  test("a drilled `smd` free pad is BOTH copper and a freeHole obstacle", () => {
+    const { snapshot } = buildBoardSnapshot(
+      projection({
+        freePads: [
+          freePad({
+            id: "tp1",
+            padType: "smd",
+            drillMm: 0.9,
+            centerMm: { x: 3, y: 4 },
+          }),
+        ],
+      }),
+    );
+    expect(snapshot.freeHoles).toHaveLength(1);
+    expect(snapshot.freeHoles![0]).toEqual({
+      id: "free:tp1",
+      centerMm: { x: 3, y: 4 },
+      drillMm: 0.9,
+    });
+    // Its copper is still one layer — the declared one.
+    expect(snapshot.padOutlines!.map((p) => p.layer)).toEqual(["F.Cu"]);
+  });
+
+  test("a `conn` free pad's copper is on the one layer it declares", () => {
+    const { snapshot } = buildBoardSnapshot(
+      projection({
+        freePads: [freePad({ id: "c1", padType: "conn", layer: "B.Cu" })],
+      }),
+    );
+    expect(snapshot.padOutlines!.map((p) => p.layer)).toEqual(["B.Cu"]);
+    // No drill → no obstacle.
+    expect(snapshot.freeHoles ?? []).toHaveLength(0);
+  });
+
+  test("a plated `std` free pad spans the stackup and is no NPTH obstacle", () => {
+    const { snapshot } = buildBoardSnapshot(
+      projection({
+        freePads: [freePad({ id: "s1", padType: "std", drillMm: 0.6 })],
+      }),
+    );
+    expect(snapshot.padOutlines!.map((p) => p.layer)).toEqual([
+      "F.Cu",
+      "B.Cu",
+    ]);
+    expect(snapshot.freeHoles ?? []).toHaveLength(0);
   });
 
   test("oblong free hole degrades drillMm to the slot length, with a warning", () => {

@@ -9,7 +9,6 @@ export function checkConstraints(ctx: DrcContext): DrcViolationDraft[] {
     if (!ctx.validCopperLayers.has(t.layer)) {
       out.push({
         code: "TRACE_LAYER_MISMATCH",
-        ruleClass: "constraint",
         message: `Trace is on ${t.layer}, which is not a routable copper layer for a ${layerCount}-layer board`,
         anchors: [{ kind: "trace", traceId: t.id }],
         locationMm: t.mid,
@@ -22,7 +21,6 @@ export function checkConstraints(ctx: DrcContext): DrcViolationDraft[] {
     if (pad.declaredLayerInvalid) {
       out.push({
         code: "PAD_LAYER_MISMATCH",
-        ruleClass: "constraint",
         message: `Pad is on a copper layer not valid for a ${layerCount}-layer board`,
         anchors: [pad.anchor],
         locationMm: pad.center,
@@ -39,7 +37,6 @@ export function checkConstraints(ctx: DrcContext): DrcViolationDraft[] {
         : `Via span ${vg.via.fromLayer} → ${vg.via.toLayer} is invalid for a "${vg.via.viaType}" via on a ${layerCount}-layer board`;
       out.push({
         code: "VIA_LAYER_SPAN",
-        ruleClass: "constraint",
         message,
         anchors: [{ kind: "via", viaId: vg.via.id }],
         locationMm: vg.center,

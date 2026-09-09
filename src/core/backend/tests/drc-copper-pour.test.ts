@@ -12,6 +12,7 @@ import { checkCopperPour } from "../../../modules/designer/backend/drc/checks/co
 import {
   DEFAULT_SEVERITY_BY_CODE,
   NON_OVERRIDABLE,
+  RULE_CLASS_BY_CODE,
 } from "../../../modules/designer/backend/drc/severity";
 import type { CopperFillResult } from "../../../shared/rendering/copper-fill/copper-fill-geometry";
 import type { DesignerPcbProjection, DrcReport } from "../../../sdks/designer";
@@ -60,9 +61,10 @@ describe("ZONE_FILL_FAILED", () => {
     expect(drafts).toHaveLength(1);
     const draft = drafts[0]!;
     expect(draft.code).toBe("ZONE_FILL_FAILED");
-    expect(draft.ruleClass).toBe("structural");
-    // Severity and non-waivability are the ENGINE's, not the draft's (S6 §7):
-    // checks emit facts, `DEFAULT_SEVERITY_BY_CODE` / `NON_OVERRIDABLE` decide.
+    // Class, severity and non-waivability are the ENGINE's, not the draft's
+    // (S6 §7, contract 06 §6): checks emit facts, `RULE_CLASS_BY_CODE` /
+    // `DEFAULT_SEVERITY_BY_CODE` / `NON_OVERRIDABLE` decide.
+    expect(RULE_CLASS_BY_CODE.ZONE_FILL_FAILED).toBe("structural");
     expect(draft.ruleSeverity).toBeUndefined();
     expect(DEFAULT_SEVERITY_BY_CODE.ZONE_FILL_FAILED).toBe("error");
     expect(NON_OVERRIDABLE.has("ZONE_FILL_FAILED")).toBe(true);

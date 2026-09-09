@@ -149,9 +149,17 @@ function buildItems(ctx: DrcContext): CandidateItem[] {
 
   for (const p of ctx.pads) {
     out.push({
-      // No `disc`: a circular pad reaches the predicate as its circumscribed
-      // sampled ring, which errs towards "affected" (§13.6).
-      item: { kind: "pad", layers: new Set(p.layers), ringMm: p.ring },
+      // A true circle passes its EXACT disc (§13.6 closed, contract 06 §2);
+      // every other pad reaches the predicate as its sampled ring, which
+      // circumscribes the shape and so errs towards "affected".
+      item: {
+        kind: "pad",
+        layers: new Set(p.layers),
+        ringMm: p.ring,
+        ...(p.disc
+          ? { disc: { centerMm: p.disc.center, radiusMm: p.disc.radiusMm } }
+          : {}),
+      },
       anchor: p.anchor,
       bounds: p.bounds,
       layers: p.layers,
@@ -213,7 +221,6 @@ export function checkKeepouts(ctx: DrcContext): DrcViolationDraft[] {
       const where = isTrace ? "" : ` on ${layer}`;
       out.push({
         code: "KEEPOUT_VIOLATION",
-        ruleClass: "constraint",
         message: `${subject} enters keepout "${label}"${where} (${forbidden} forbidden)`,
         anchors: [candidate.anchor, { kind: "keepout", keepoutId: keepout.id }],
         locationMm,

@@ -216,6 +216,7 @@ export type {
   BomSummary,
   CentroidRow,
 } from "./types";
+export { DEFAULT_BOARD_THICKNESS_MM, DRC_RULE_CLASSES } from "./types";
 export type { DesignerInvalidatedEvent } from "./events";
 export { placementMirrorX, exportBundleName } from "./pcb-helpers";
 

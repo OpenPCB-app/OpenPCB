@@ -1,7 +1,7 @@
 import { useMemo, type ReactElement } from "react";
 import * as THREE from "three";
 import type { DesignerPcbProjection } from "../../../../../sdks";
-import { collectDrills } from "../../pcb/pcb-drills";
+import { collectDrills, freePadDrill } from "../../pcb/pcb-drills";
 import { DEFAULT_BOARD_THICKNESS_MM } from "./geometry-utils";
 import { COPPER_COLOR, COPPER_METALNESS, COPPER_ROUGHNESS } from "./materials";
 
@@ -13,7 +13,7 @@ const BARREL_OVERHANG_MM = 0.05;
 
 /**
  * Copper barrels lining the wall of every **plated** through-hole — component
- * pad drills and plated free pads (`padType === "std"`). Open-ended cylinders,
+ * pad drills and plated free pads (`freePadDrill(pad).plated`). Open-ended cylinders,
  * so the hole center stays see-through to the real board cutout. Vias own their
  * barrel in `CopperVias`; free/mounting holes (NPTH) get none (open hole).
  */
@@ -25,8 +25,9 @@ export function CopperBarrels({
   boardThicknessMm?: number;
 }): ReactElement | null {
   const drills = useMemo(() => {
+    // Plated ⇔ the one drill derivation says so (`std`); a barrel is copper.
     const platedFreePads = projection.freePads.filter(
-      (pad) => pad.padType === "std",
+      (pad) => freePadDrill(pad)?.plated === true,
     );
     return collectDrills([], projection.placements, [], platedFreePads);
   }, [projection.placements, projection.freePads]);

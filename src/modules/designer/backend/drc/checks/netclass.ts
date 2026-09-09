@@ -49,7 +49,6 @@ export function checkNetClass(ctx: DrcContext): DrcViolationDraft[] {
     if (cls && below(t.widthMm, cls.traceWidthMm)) {
       out.push({
         code: "NETCLASS_TRACE_WIDTH",
-        ruleClass: "constraint",
         message: `Trace ${t.widthMm.toFixed(3)} mm is narrower than net class "${cls.name}" width ${cls.traceWidthMm.toFixed(3)} mm`,
         anchors: [{ kind: "trace", traceId: t.id }],
         locationMm: t.mid,
@@ -66,7 +65,6 @@ export function checkNetClass(ctx: DrcContext): DrcViolationDraft[] {
     if (below(vg.via.diameterMm, cls.viaDiameterMm)) {
       out.push({
         code: "NETCLASS_VIA_DIAMETER",
-        ruleClass: "constraint",
         message: `Via diameter ${vg.via.diameterMm.toFixed(3)} mm is smaller than net class "${cls.name}" ${cls.viaDiameterMm.toFixed(3)} mm`,
         anchors: [{ kind: "via", viaId: vg.via.id }],
         locationMm: vg.center,
@@ -77,7 +75,6 @@ export function checkNetClass(ctx: DrcContext): DrcViolationDraft[] {
     if (below(vg.via.drillMm, cls.viaDrillMm)) {
       out.push({
         code: "NETCLASS_VIA_DRILL",
-        ruleClass: "constraint",
         message: `Via drill ${vg.via.drillMm.toFixed(3)} mm is smaller than net class "${cls.name}" ${cls.viaDrillMm.toFixed(3)} mm`,
         anchors: [{ kind: "via", viaId: vg.via.id }],
         locationMm: vg.center,

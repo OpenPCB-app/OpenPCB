@@ -47,7 +47,6 @@ export function checkDangling(ctx: DrcContext): DrcViolationDraft[] {
       if (!end) continue;
       out.push({
         code: "TRACK_DANGLING",
-        ruleClass: "dfm",
         message: "Trace has a dangling (unconnected) end",
         anchors: [{ kind: "trace", traceId: item.id }],
         locationMm: { x: end.x, y: end.y },
@@ -68,7 +67,6 @@ export function checkDangling(ctx: DrcContext): DrcViolationDraft[] {
       if (connectedLayers < 2) {
         out.push({
           code: "VIA_DANGLING",
-          ruleClass: "dfm",
           message: `Via connects on only ${connectedLayers} layer${connectedLayers === 1 ? "" : "s"} (needs 2)`,
           anchors: [{ kind: "via", viaId: item.id }],
           locationMm: { x: item.center.x, y: item.center.y },

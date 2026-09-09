@@ -10,12 +10,14 @@
 // Contract: docs/pcb-hardening/01-connectivity-contract.md §5.
 
 import type {
+  PcbFreePad,
   PcbNetClass,
   PcbPointMm,
   RatsnestEndpoint,
   RatsnestSegment,
 } from "../../../../sdks/designer";
 import type {
+  ConnectivityResult,
   CopperItem,
   CopperPadAnchor,
   CopperRecords,
@@ -191,10 +193,18 @@ function mstForRepresentatives(
   return segments;
 }
 
-/** Nets the ratsnest covers: schematic nets ∪ nets referenced by free pads. */
-function netIdsOf(ctx: ComputeRatsnestContext): string[] {
-  const nets = new Set<string>(ctx.padNetIds.values());
-  for (const freePad of ctx.freePads) {
+/**
+ * Nets the ratsnest covers: schematic nets ∪ nets referenced by free pads.
+ * Exported because batch DRC derives its own ratsnest from an existing
+ * connectivity result (contract 06 §1) and must cover exactly the same nets —
+ * a second, hand-rolled net list is how the two paths would drift.
+ */
+export function ratsnestNetIds(input: {
+  padNetIds: ReadonlyMap<string, string>;
+  freePads: ReadonlyArray<PcbFreePad>;
+}): string[] {
+  const nets = new Set<string>(input.padNetIds.values());
+  for (const freePad of input.freePads) {
     if (freePad.netId) nets.add(freePad.netId);
   }
   return [...nets].sort();
@@ -241,24 +251,59 @@ function pinShapesByNet(
   return byNet;
 }
 
+/** Everything `computeRatsnest` is, once connectivity has already been run. */
+export interface RatsnestFromConnectivityInput {
+  items: readonly CopperItem[];
+  result: ConnectivityResult;
+  records: CopperRecords;
+  /** Schematic net id → human net name for net-class auto-assignment. */
+  netNames: Map<string, string>;
+  netClasses: ReadonlyArray<PcbNetClass>;
+  perNetClassAssignments?: Record<string, string>;
+  /** The nets to cover, from `ratsnestNetIds`. */
+  netIds: readonly string[];
+}
+
+/**
+ * The MST half of the ratsnest, over a connectivity result the caller already
+ * has. Split out of `computeRatsnest` so batch DRC can run it on the graph it
+ * built for its own checks (contract 06 §1) instead of re-running the kernel
+ * and the fills a second time — one model, one fill, one verdict.
+ */
+export function ratsnestFromConnectivity(
+  input: RatsnestFromConnectivityInput,
+): RatsnestSegment[] {
+  const padsByNet = pinShapesByNet(input.items, input.records);
+
+  const segments: RatsnestSegment[] = [];
+  for (const netId of input.netIds) {
+    const pads = padsByNet.get(netId);
+    if (!pads || pads.length < 2) continue;
+    const classId = resolveNetClassId(
+      input.netNames.get(netId) ?? "",
+      input.netClasses,
+      input.perNetClassAssignments,
+      netId,
+    );
+    const reps = representativesForNet(pads, input.result.componentOf);
+    segments.push(...mstForRepresentatives(netId, classId, reps));
+  }
+  return segments;
+}
+
 export function computeRatsnest(
   ctx: ComputeRatsnestContext,
 ): RatsnestSegment[] {
   const { items, result, records } = computeBoardConnectivity(ctx);
-  const padsByNet = pinShapesByNet(items, records);
-
-  const segments: RatsnestSegment[] = [];
-  for (const netId of netIdsOf(ctx)) {
-    const pads = padsByNet.get(netId);
-    if (!pads || pads.length < 2) continue;
-    const classId = resolveNetClassId(
-      ctx.netNames.get(netId) ?? "",
-      ctx.netClasses,
-      ctx.perNetClassAssignments,
-      netId,
-    );
-    const reps = representativesForNet(pads, result.componentOf);
-    segments.push(...mstForRepresentatives(netId, classId, reps));
-  }
-  return segments;
+  return ratsnestFromConnectivity({
+    items,
+    result,
+    records,
+    netNames: ctx.netNames,
+    netClasses: ctx.netClasses,
+    ...(ctx.perNetClassAssignments !== undefined
+      ? { perNetClassAssignments: ctx.perNetClassAssignments }
+      : {}),
+    netIds: ratsnestNetIds(ctx),
+  });
 }

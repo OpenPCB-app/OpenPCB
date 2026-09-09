@@ -1,0 +1,1764 @@
+{
+ "schemaVersion": 2,
+ "fabricator": "jlcpcb_2l",
+ "layerCount": 2,
+ "outline": {
+  "kind": "polygon",
+  "widthMm": 120,
+  "heightMm": 90,
+  "centerMm": {
+   "x": 0,
+   "y": 0
+  },
+  "pointsMm": [
+   {
+    "x": -60,
+    "y": -45
+   },
+   {
+    "x": 60,
+    "y": -45
+   },
+   {
+    "x": 60,
+    "y": 45
+   },
+   {
+    "x": 20,
+    "y": 45
+   },
+   {
+    "x": 20,
+    "y": 35
+   },
+   {
+    "x": 10,
+    "y": 35
+   },
+   {
+    "x": 10,
+    "y": 45
+   },
+   {
+    "x": -60,
+    "y": 45
+   },
+   {
+    "x": -60,
+    "y": 12.25
+   },
+   {
+    "x": -55,
+    "y": 12.25
+   },
+   {
+    "x": -55,
+    "y": 11.75
+   },
+   {
+    "x": -60,
+    "y": 11.75
+   }
+  ]
+ },
+ "cutouts": [
+  {
+   "id": "c_bad",
+   "shape": {
+    "kind": "circle",
+    "widthMm": 6,
+    "heightMm": 6,
+    "centerMm": {
+     "x": 0,
+     "y": -45
+    }
+   }
+  }
+ ],
+ "netNames": {
+  "hv1": "HV1",
+  "lv1": "LV1",
+  "hc1": "HC1",
+  "dp_p": "DP_P",
+  "dp_n": "DP_N",
+  "lg1": "LG1",
+  "zov_a": "ZOV_A",
+  "zov_b": "ZOV_B"
+ },
+ "placements": [
+  {
+   "id": "P_CLR",
+   "reference": "P_CLR",
+   "positionMm": {
+    "x": 3,
+    "y": -38.4
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 1,
+     "heightMm": 0.3,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "P_PV",
+   "reference": "P_PV",
+   "positionMm": {
+    "x": 18,
+    "y": -38
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 1,
+     "heightMm": 0.3,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "P_BADPAD",
+   "reference": "P_BADPAD",
+   "positionMm": {
+    "x": 42,
+    "y": -38
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 1,
+     "heightMm": 1,
+     "rotationDeg": 0,
+     "layer": "In1.Cu"
+    }
+   ]
+  },
+  {
+   "id": "P_EMPTY",
+   "reference": "P_EMPTY",
+   "positionMm": {
+    "x": 48,
+    "y": -38
+   },
+   "pads": []
+  },
+  {
+   "id": "P_KO",
+   "reference": "P_KO",
+   "positionMm": {
+    "x": -28,
+    "y": -8
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 1,
+     "heightMm": 1,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "P_BODY",
+   "reference": "P_BODY",
+   "positionMm": {
+    "x": -18,
+    "y": -8
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -3,
+      "y": 0
+     },
+     "widthMm": 0.6,
+     "heightMm": 0.6,
+     "rotationDeg": 0
+    }
+   ],
+   "graphics": [
+    {
+     "kind": "rect",
+     "layer": "F.CrtYd",
+     "x": -2,
+     "y": -2,
+     "width": 4,
+     "height": 4
+    }
+   ]
+  },
+  {
+   "id": "P_SHORT",
+   "reference": "P_SHORT",
+   "positionMm": {
+    "x": 22,
+    "y": -1
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.2,
+      "y": 0
+     },
+     "widthMm": 1,
+     "heightMm": 1,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.2,
+      "y": 0
+     },
+     "widthMm": 1,
+     "heightMm": 1,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "U_R1",
+   "reference": "U_R1",
+   "positionMm": {
+    "x": -50,
+    "y": 25
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -2.6
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -1.3
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-3",
+     "number": "3",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 0
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-4",
+     "number": "4",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 1.3000000000000003
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-5",
+     "number": "5",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 1.3000000000000003
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-6",
+     "number": "6",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 0
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-7",
+     "number": "7",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -1.3
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-8",
+     "number": "8",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -2.6
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "U_R2",
+   "reference": "U_R2",
+   "positionMm": {
+    "x": -30,
+    "y": 25
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -2.6
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -1.3
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-3",
+     "number": "3",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 0
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-4",
+     "number": "4",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 1.3000000000000003
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-5",
+     "number": "5",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 1.3000000000000003
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-6",
+     "number": "6",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 0
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-7",
+     "number": "7",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -1.3
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-8",
+     "number": "8",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -2.6
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "U_R3",
+   "reference": "U_R3",
+   "positionMm": {
+    "x": -10,
+    "y": 25
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -2.6
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -1.3
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-3",
+     "number": "3",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 0
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-4",
+     "number": "4",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 1.3000000000000003
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-5",
+     "number": "5",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 1.3000000000000003
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-6",
+     "number": "6",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 0
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-7",
+     "number": "7",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -1.3
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-8",
+     "number": "8",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -2.6
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "U_R4",
+   "reference": "U_R4",
+   "positionMm": {
+    "x": 5,
+    "y": 25
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -2.6
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -1.3
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-3",
+     "number": "3",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 0
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-4",
+     "number": "4",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 1.3000000000000003
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-5",
+     "number": "5",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 1.3000000000000003
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-6",
+     "number": "6",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 0
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-7",
+     "number": "7",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -1.3
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-8",
+     "number": "8",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -2.6
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "U_R5",
+   "reference": "U_R5",
+   "positionMm": {
+    "x": 30,
+    "y": 25
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -2.6
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -1.3
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-3",
+     "number": "3",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 0
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-4",
+     "number": "4",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 1.3000000000000003
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-5",
+     "number": "5",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 1.3000000000000003
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-6",
+     "number": "6",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 0
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-7",
+     "number": "7",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -1.3
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-8",
+     "number": "8",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -2.6
+     },
+     "widthMm": 1.2,
+     "heightMm": 0.5,
+     "rotationDeg": 0
+    }
+   ]
+  }
+ ],
+ "padNets": {
+  "P_CLR|1": "clrb",
+  "P_PV|1": "pva",
+  "P_BADPAD|1": "badpad",
+  "P_KO|1": "ko_pads",
+  "P_BODY|1": "ko_body",
+  "P_SHORT|1": "short_a",
+  "P_SHORT|2": "short_b",
+  "U_R1|1": "U_R1_1",
+  "U_R1|2": "U_R1_2",
+  "U_R1|3": "U_R1_3",
+  "U_R1|4": "U_R1_4",
+  "U_R1|5": "U_R1_5",
+  "U_R1|6": "U_R1_6",
+  "U_R1|7": "U_R1_7",
+  "U_R1|8": "U_R1_8",
+  "U_R2|1": "U_R2_1",
+  "U_R2|2": "U_R2_2",
+  "U_R2|3": "U_R2_3",
+  "U_R2|4": "U_R2_4",
+  "U_R2|5": "U_R2_5",
+  "U_R2|6": "U_R2_6",
+  "U_R2|7": "U_R2_7",
+  "U_R2|8": "U_R2_8",
+  "U_R3|1": "U_R3_1",
+  "U_R3|2": "U_R3_2",
+  "U_R3|3": "U_R3_3",
+  "U_R3|4": "U_R3_4",
+  "U_R3|5": "U_R3_5",
+  "U_R3|6": "U_R3_6",
+  "U_R3|7": "U_R3_7",
+  "U_R3|8": "U_R3_8",
+  "U_R4|1": "U_R4_1",
+  "U_R4|2": "U_R4_2",
+  "U_R4|3": "U_R4_3",
+  "U_R4|4": "U_R4_4",
+  "U_R4|5": "U_R4_5",
+  "U_R4|6": "U_R4_6",
+  "U_R4|7": "U_R4_7",
+  "U_R4|8": "U_R4_8",
+  "U_R5|1": "U_R5_1",
+  "U_R5|2": "U_R5_2",
+  "U_R5|3": "U_R5_3",
+  "U_R5|4": "U_R5_4",
+  "U_R5|5": "U_R5_5",
+  "U_R5|6": "U_R5_6",
+  "U_R5|7": "U_R5_7",
+  "U_R5|8": "U_R5_8"
+ },
+ "traces": [
+  {
+   "id": "t_over_hole",
+   "netId": "tnpth",
+   "layer": "F.Cu",
+   "widthMm": 0.4,
+   "pointsNm": [
+    [
+     -22000000,
+     -38000000
+    ],
+    [
+     -18000000,
+     -38000000
+    ]
+   ]
+  },
+  {
+   "id": "t_clr_a",
+   "netId": "clra",
+   "layer": "F.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     0,
+     -38000000
+    ],
+    [
+     6000000,
+     -38000000
+    ]
+   ]
+  },
+  {
+   "id": "t_clr_via",
+   "netId": "clrc",
+   "layer": "F.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     10000000,
+     -38000000
+    ],
+    [
+     14000000,
+     -38000000
+    ]
+   ]
+  },
+  {
+   "id": "t_fabclr_a",
+   "netId": "fabclr_a",
+   "layer": "F.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     24000000,
+     -38000000
+    ],
+    [
+     30000000,
+     -38000000
+    ]
+   ]
+  },
+  {
+   "id": "t_fabclr_b",
+   "netId": "fabclr_b",
+   "layer": "F.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     24000000,
+     -38280000
+    ],
+    [
+     30000000,
+     -38280000
+    ]
+   ]
+  },
+  {
+   "id": "t_bad_layer",
+   "netId": "badlayer",
+   "layer": "In1.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     34000000,
+     -38000000
+    ],
+    [
+     38000000,
+     -38000000
+    ]
+   ]
+  },
+  {
+   "id": "t_hv",
+   "netId": "hv1",
+   "layer": "F.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     -50000000,
+     -20000000
+    ],
+    [
+     -40000000,
+     -20000000
+    ]
+   ]
+  },
+  {
+   "id": "t_lv",
+   "netId": "lv1",
+   "layer": "F.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     -50000000,
+     -19500000
+    ],
+    [
+     -40000000,
+     -19500000
+    ]
+   ]
+  },
+  {
+   "id": "t_hc",
+   "netId": "hc1",
+   "layer": "F.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     -35000000,
+     -20000000
+    ],
+    [
+     -25000000,
+     -20000000
+    ]
+   ]
+  },
+  {
+   "id": "t_dp_p",
+   "netId": "dp_p",
+   "layer": "F.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     -20000000,
+     -20000000
+    ],
+    [
+     0,
+     -20000000
+    ]
+   ]
+  },
+  {
+   "id": "t_dp_n",
+   "netId": "dp_n",
+   "layer": "F.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     -20000000,
+     -20700000
+    ],
+    [
+     -18000000,
+     -20700000
+    ]
+   ]
+  },
+  {
+   "id": "t_lg",
+   "netId": "lg1",
+   "layer": "F.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     3000000,
+     -20000000
+    ],
+    [
+     6000000,
+     -20000000
+    ]
+   ]
+  },
+  {
+   "id": "t_ko_tracks",
+   "netId": "ko_tracks",
+   "layer": "F.Cu",
+   "widthMm": 0.3,
+   "pointsNm": [
+    [
+     -50000000,
+     -8000000
+    ],
+    [
+     -44000000,
+     -8000000
+    ]
+   ]
+  },
+  {
+   "id": "t_bridge_a",
+   "netId": "bridge_a",
+   "layer": "F.Cu",
+   "widthMm": 0.3,
+   "pointsNm": [
+    [
+     30000000,
+     -1000000
+    ],
+    [
+     33000000,
+     -1000000
+    ]
+   ]
+  },
+  {
+   "id": "t_bridge_b",
+   "netId": "bridge_b",
+   "layer": "F.Cu",
+   "widthMm": 0.3,
+   "pointsNm": [
+    [
+     35000000,
+     -1000000
+    ],
+    [
+     38000000,
+     -1000000
+    ]
+   ]
+  },
+  {
+   "id": "t_bridge_null",
+   "netId": null,
+   "layer": "F.Cu",
+   "widthMm": 0.3,
+   "pointsNm": [
+    [
+     33000000,
+     -1000000
+    ],
+    [
+     35000000,
+     -1000000
+    ]
+   ]
+  },
+  {
+   "id": "t_dangle",
+   "netId": "dangle1",
+   "layer": "F.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     0,
+     15000000
+    ],
+    [
+     4000000,
+     15000000
+    ]
+   ]
+  },
+  {
+   "id": "t_island_a",
+   "netId": "island1",
+   "layer": "F.Cu",
+   "widthMm": 0.3,
+   "pointsNm": [
+    [
+     10000000,
+     15000000
+    ],
+    [
+     14000000,
+     15000000
+    ]
+   ]
+  },
+  {
+   "id": "t_island_b",
+   "netId": "island1",
+   "layer": "F.Cu",
+   "widthMm": 0.3,
+   "pointsNm": [
+    [
+     14000000,
+     15000000
+    ],
+    [
+     14000000,
+     19000000
+    ]
+   ]
+  }
+ ],
+ "vias": [
+  {
+   "id": "via1",
+   "netId": "vman1",
+   "centerMm": [
+    -50000000,
+    -38000000
+   ],
+   "diameterMm": 0.3,
+   "drillMm": 0.1,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through"
+  },
+  {
+   "id": "via2",
+   "netId": "vman2",
+   "centerMm": [
+    -46000000,
+    -38000000
+   ],
+   "diameterMm": 0.2,
+   "drillMm": 0.15,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through"
+  },
+  {
+   "id": "via_layer_bad",
+   "netId": "vlayer",
+   "centerMm": [
+    -40000000,
+    -38000000
+   ],
+   "diameterMm": 0.8,
+   "drillMm": 0.4,
+   "fromLayer": "F.Cu",
+   "toLayer": "In1.Cu",
+   "viaType": "blind"
+  },
+  {
+   "id": "v_clr",
+   "netId": "clrd",
+   "centerMm": [
+    12000000,
+    -38550000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through"
+  },
+  {
+   "id": "v_pv",
+   "netId": "pvb",
+   "centerMm": [
+    18850000,
+    -38000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through"
+  },
+  {
+   "id": "v_ko",
+   "netId": "ko_vias",
+   "centerMm": [
+    -38000000,
+    -8000000
+   ],
+   "diameterMm": 0.8,
+   "drillMm": 0.4,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through"
+  },
+  {
+   "id": "via_dangle",
+   "netId": "dangle2",
+   "centerMm": [
+    0,
+    19000000
+   ],
+   "diameterMm": 0.8,
+   "drillMm": 0.4,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through"
+  }
+ ],
+ "freeHoles": [
+  {
+   "id": "hh_a1",
+   "centerMm": {
+    "x": -34,
+    "y": -38
+   },
+   "drillMm": 0.6
+  },
+  {
+   "id": "hh_a2",
+   "centerMm": {
+    "x": -34.8,
+    "y": -38
+   },
+   "drillMm": 0.6
+  },
+  {
+   "id": "hh_b1",
+   "centerMm": {
+    "x": -28,
+    "y": -38
+   },
+   "drillMm": 0.6
+  },
+  {
+   "id": "hh_b2",
+   "centerMm": {
+    "x": -29,
+    "y": -38
+   },
+   "drillMm": 0.6
+  },
+  {
+   "id": "npth_cross",
+   "centerMm": {
+    "x": -20,
+    "y": -38
+   },
+   "drillMm": 1
+  },
+  {
+   "id": "npth_slot",
+   "centerMm": {
+    "x": -14,
+    "y": -38
+   },
+   "drillMm": 0.6,
+   "drillSlot": {
+    "lengthMm": 3,
+    "widthMm": 0.6,
+    "angleDeg": 0
+   }
+  }
+ ],
+ "freePads": [
+  {
+   "id": "fp_smd_drilled",
+   "centerMm": {
+    "x": -8,
+    "y": -38
+   },
+   "rotationDeg": 0,
+   "padType": "smd",
+   "shape": "circle",
+   "widthMm": 1.2,
+   "heightMm": 1.2,
+   "drillMm": 0.5,
+   "layer": "F.Cu",
+   "netId": null
+  }
+ ],
+ "zones": [
+  {
+   "id": "z_ko_pour",
+   "name": "GndBack",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "B.Cu",
+   "netId": "ko_pour_net",
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": -10,
+      "y": -10
+     },
+     {
+      "x": -2,
+      "y": -10
+     },
+     {
+      "x": -2,
+      "y": -6
+     },
+     {
+      "x": -10,
+      "y": -6
+     }
+    ]
+   },
+   "priority": 0
+  },
+  {
+   "id": "z_ov_a",
+   "name": "OvA",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "F.Cu",
+   "netId": "zov_a",
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": 0,
+      "y": -6
+     },
+     {
+      "x": 10,
+      "y": -6
+     },
+     {
+      "x": 10,
+      "y": 4
+     },
+     {
+      "x": 0,
+      "y": 4
+     }
+    ]
+   },
+   "priority": 0
+  },
+  {
+   "id": "z_ov_b",
+   "name": "OvB",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "F.Cu",
+   "netId": "zov_b",
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": 6,
+      "y": -6
+     },
+     {
+      "x": 16,
+      "y": -6
+     },
+     {
+      "x": 16,
+      "y": 4
+     },
+     {
+      "x": 6,
+      "y": 4
+     }
+    ]
+   },
+   "priority": 0
+  },
+  {
+   "id": "z_off",
+   "name": "Off",
+   "enabled": true,
+   "lockedAt": null,
+   "layer": "F.Cu",
+   "netId": null,
+   "netName": null,
+   "region": {
+    "kind": "polygon",
+    "pointsMm": [
+     {
+      "x": 200,
+      "y": 200
+     },
+     {
+      "x": 210,
+      "y": 200
+     },
+     {
+      "x": 210,
+      "y": 210
+     },
+     {
+      "x": 200,
+      "y": 210
+     }
+    ]
+   },
+   "priority": 0
+  }
+ ],
+ "keepouts": [
+  {
+   "id": "k_tracks",
+   "name": "NoTracks",
+   "enabled": true,
+   "lockedAt": null,
+   "layers": [
+    "F.Cu"
+   ],
+   "pointsMm": [
+    {
+     "x": -49,
+     "y": -10
+    },
+    {
+     "x": -45,
+     "y": -10
+    },
+    {
+     "x": -45,
+     "y": -6
+    },
+    {
+     "x": -49,
+     "y": -6
+    }
+   ],
+   "restrictions": {
+    "tracks": true,
+    "vias": false,
+    "pads": false,
+    "copperPour": false,
+    "footprints": false
+   }
+  },
+  {
+   "id": "k_vias",
+   "name": "NoVias",
+   "enabled": true,
+   "lockedAt": null,
+   "layers": [
+    "F.Cu"
+   ],
+   "pointsMm": [
+    {
+     "x": -40,
+     "y": -10
+    },
+    {
+     "x": -36,
+     "y": -10
+    },
+    {
+     "x": -36,
+     "y": -6
+    },
+    {
+     "x": -40,
+     "y": -6
+    }
+   ],
+   "restrictions": {
+    "tracks": false,
+    "vias": true,
+    "pads": false,
+    "copperPour": false,
+    "footprints": false
+   }
+  },
+  {
+   "id": "k_pads",
+   "name": "NoPads",
+   "enabled": true,
+   "lockedAt": null,
+   "layers": [
+    "F.Cu"
+   ],
+   "pointsMm": [
+    {
+     "x": -30,
+     "y": -10
+    },
+    {
+     "x": -26,
+     "y": -10
+    },
+    {
+     "x": -26,
+     "y": -6
+    },
+    {
+     "x": -30,
+     "y": -6
+    }
+   ],
+   "restrictions": {
+    "tracks": false,
+    "vias": false,
+    "pads": true,
+    "copperPour": false,
+    "footprints": false
+   }
+  },
+  {
+   "id": "k_body",
+   "name": "NoBody",
+   "enabled": true,
+   "lockedAt": null,
+   "layers": [
+    "F.Cu"
+   ],
+   "pointsMm": [
+    {
+     "x": -19,
+     "y": -9
+    },
+    {
+     "x": -15,
+     "y": -9
+    },
+    {
+     "x": -15,
+     "y": -6
+    },
+    {
+     "x": -19,
+     "y": -6
+    }
+   ],
+   "restrictions": {
+    "tracks": false,
+    "vias": false,
+    "pads": false,
+    "copperPour": false,
+    "footprints": true
+   }
+  },
+  {
+   "id": "k_pour",
+   "name": "NoPour",
+   "enabled": true,
+   "lockedAt": null,
+   "layers": [
+    "B.Cu"
+   ],
+   "pointsMm": [
+    {
+     "x": -8,
+     "y": -9
+    },
+    {
+     "x": -4,
+     "y": -9
+    },
+    {
+     "x": -4,
+     "y": -7
+    },
+    {
+     "x": -8,
+     "y": -7
+    }
+   ],
+   "restrictions": {
+    "tracks": false,
+    "vias": false,
+    "pads": false,
+    "copperPour": true,
+    "footprints": false
+   }
+  }
+ ],
+ "netClasses": [
+  {
+   "id": "default",
+   "name": "Default",
+   "traceWidthMm": 0.2,
+   "clearanceMm": 0.25,
+   "viaDiameterMm": 0.8,
+   "viaDrillMm": 0.4,
+   "color": "#ccc",
+   "defaultViaProtection": "tented"
+  },
+  {
+   "id": "hv",
+   "name": "HV",
+   "traceWidthMm": 0.2,
+   "clearanceMm": 0.25,
+   "viaDiameterMm": 0.8,
+   "viaDrillMm": 0.4,
+   "color": "#f00",
+   "defaultViaProtection": "tented",
+   "voltageV": 230
+  },
+  {
+   "id": "hc",
+   "name": "HC",
+   "traceWidthMm": 0.2,
+   "clearanceMm": 0.25,
+   "viaDiameterMm": 0.8,
+   "viaDrillMm": 0.4,
+   "color": "#0f0",
+   "defaultViaProtection": "tented",
+   "currentA": 3
+  }
+ ],
+ "perNetClassAssignments": {
+  "hv1": "hv",
+  "hc1": "hc"
+ },
+ "diffPairs": [
+  {
+   "id": "dp1",
+   "name": "DP1",
+   "pNetId": "dp_p",
+   "nNetId": "dp_n",
+   "gapMm": 0.2,
+   "gapTolMm": 0.05,
+   "maxUncoupledMm": 15,
+   "maxSkewMm": 0.5
+  }
+ ],
+ "lengthMatchGroups": [
+  {
+   "id": "lg1grp",
+   "name": "LG1",
+   "netIds": [
+    "lg1"
+   ],
+   "target": {
+    "kind": "absolute",
+    "mm": 10
+   },
+   "toleranceMm": 1
+  }
+ ],
+ "drcRules": [
+  {
+   "id": "fab-clr-relax",
+   "name": "Fab clearance relax",
+   "enabled": true,
+   "priority": 20,
+   "scopes": [
+    {
+     "kind": "net",
+     "netIds": [
+      "fabclr_a"
+     ]
+    },
+    {
+     "kind": "pairKind",
+     "pairKinds": [
+      "traceToTrace"
+     ]
+    }
+   ],
+   "constraint": {
+    "kind": "clearance",
+    "mm": 0.05
+   }
+  },
+  {
+   "id": "bad-area",
+   "name": "Degenerate area",
+   "enabled": true,
+   "priority": 30,
+   "scopes": [
+    {
+     "kind": "area",
+     "polygonMm": [
+      {
+       "x": 90,
+       "y": 90
+      },
+      {
+       "x": 90.0001,
+       "y": 90
+      },
+      {
+       "x": 90.0001,
+       "y": 90.0001
+      }
+     ]
+    }
+   ],
+   "constraint": {
+    "kind": "clearance",
+    "mm": 0.4
+   }
+  },
+  {
+   "id": "ghost-net",
+   "name": "Ghost net",
+   "enabled": true,
+   "priority": 5,
+   "scopes": [
+    {
+     "kind": "net",
+     "netIds": [
+      "does_not_exist"
+     ]
+    }
+   ],
+   "constraint": {
+    "kind": "clearance",
+    "mm": 0.6
+   }
+  },
+  {
+   "id": "layer-scoped",
+   "name": "Back via spacing",
+   "enabled": true,
+   "priority": 3,
+   "scopes": [
+    {
+     "kind": "layer",
+     "layers": [
+      "B.Cu"
+     ]
+    },
+    {
+     "kind": "pairKind",
+     "pairKinds": [
+      "viaToVia"
+     ]
+    }
+   ],
+   "constraint": {
+    "kind": "clearance",
+    "mm": 1
+   }
+  }
+ ],
+ "computeRatsnest": true
+}

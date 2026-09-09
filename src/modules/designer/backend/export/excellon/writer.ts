@@ -3,6 +3,7 @@ import type {
   PcbDrillSlot,
   PcbPointMm,
 } from "../../../../../sdks/designer/types";
+import { freePadDrill } from "../../../../../shared/rendering/pcb/pcb-drills";
 import { projectLocal } from "../transform";
 
 /**
@@ -194,17 +195,26 @@ function collectDrillHits(proj: DesignerPcbProjection): DrillHit[] {
     }
   }
 
+  // THE one free-pad drill derivation (`freePadDrill`), so the drill file, the
+  // pour's apertures and DRC's holes are the same set of hits — plating
+  // included: only `std` is plated, every other type's drill is an NPTH.
   for (const pad of proj.freePads) {
-    const plated = pad.padType === "std";
-    if (pad.drillSlot) {
-      hits.push(slotHit(pad.centerMm, pad.drillSlot, plated));
-    } else if (pad.drillMm !== null && pad.drillMm > 0) {
-      hits.push({
-        centerMm: pad.centerMm,
-        diameterMm: pad.drillMm,
-        plated,
-      });
-    }
+    const drill = freePadDrill(pad);
+    if (!drill) continue;
+    hits.push(
+      drill.slot
+        ? {
+            centerMm: drill.slot.a,
+            slotEndMm: drill.slot.b,
+            diameterMm: drill.slot.widthMm,
+            plated: drill.plated,
+          }
+        : {
+            centerMm: pad.centerMm,
+            diameterMm: drill.drillMm,
+            plated: drill.plated,
+          },
+    );
   }
 
   return hits;

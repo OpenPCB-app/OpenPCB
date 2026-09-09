@@ -5,7 +5,10 @@
 // polygons grouped by the copper layer(s) they occupy (through-hole spans both
 // sides — fixes live-drc's "all pads on the active layer" approximation); vias
 // become circles spanning their barrel layers; every primitive carries an AABB
-// for the O(n²) broad-phase prefilter.
+// for the O(n²) broad-phase prefilter. Drilled holes come from the ONE drill
+// derivation (`freePadDrill`), so EVERY drilled free pad is a `DrcHole` —
+// including the `smd` / `conn` pads whose drill the Excellon writer and the
+// pour have always treated as a non-plated hit (contract 06 §2).
 
 import type {
   DesignerPcbProjection,
@@ -16,12 +19,14 @@ import type {
   PcbNetClass,
   PcbPointMm,
   PcbVia,
-  RatsnestSegment,
 } from "../../../../sdks/designer";
-import { isValidViaSpan } from "../../../../sdks/designer";
 import {
+  DEFAULT_BOARD_THICKNESS_MM,
+  isValidViaSpan,
+} from "../../../../sdks/designer";
+import {
+  copperToHoleClearanceMm,
   createRuleResolver,
-  DEFAULT_HOLE_TO_HOLE_MM,
   type RuleResolver,
 } from "../../../../shared/drc/rule-resolver";
 import {
@@ -31,7 +36,12 @@ import {
 import type {
   ConnectivityResult,
   CopperItem,
+  CopperRecords,
 } from "../../../../shared/pcb-connectivity";
+import {
+  drillSlotCenterline,
+  freePadDrill,
+} from "../../../../shared/rendering/pcb/pcb-drills";
 import {
   computeBoardConnectivity,
   type BoardPourFill,
@@ -56,9 +66,7 @@ import type { RingBounds } from "../pcb/pad-outline";
 import type { Point } from "../pcb/pcb-trace-geometry";
 
 /** Default minimums when a (pre-DRC) board lacks the optional rule field. */
-export { DEFAULT_HOLE_TO_HOLE_MM } from "../../../../shared/drc/rule-resolver";
 export const DEFAULT_HOLE_TO_BOARD_EDGE_MM = 0.3;
-export const DEFAULT_BOARD_THICKNESS_MM = 1.6;
 
 // The tolerance policy moved to pcb/tolerance.ts (P1 epsilon unification) so
 // fab validators and creation gates share it; re-exported here because every
@@ -83,6 +91,20 @@ export interface DrcPad {
   ring: PcbPointMm[];
   bounds: RingBounds;
   center: PcbPointMm;
+  /**
+   * Exact disc of a TRUE circular pad, carried straight from the copper record.
+   * `ring` circumscribes arcs (it inflates by sec(π/48) so DRC over-reports
+   * rather than misses), which is a ~0.2 %·r false-fail band on a circle; a
+   * check that has an exact circle path uses this instead. Absent for every
+   * non-circular pad.
+   */
+  disc?: { center: PcbPointMm; radiusMm: number };
+  /**
+   * False for a `custom` / `trapezoid` pad, whose `ring` is a bounding
+   * rectangle: a declared superset the clearance tiers may over-report on but
+   * the intra-footprint SHORT tier must not judge (contract 06 §4, R1 #4).
+   */
+  exactShape: boolean;
   /**
    * True when the pad declared an explicit copper layer not valid for this
    * stackup (e.g. In1.Cu on a 2-layer board). Flagged as PAD_LAYER_MISMATCH;
@@ -150,8 +172,6 @@ export interface DrcContext {
   holes: DrcHole[];
   /** Finished board thickness (mm); for via aspect-ratio. */
   boardThicknessMm: number;
-  /** Minimum edge-to-edge hole spacing (mm). */
-  holeToHoleMm: number;
   /** Minimum drill-edge-to-board-edge spacing (mm). */
   holeToBoardEdgeMm: number;
   /** Flattened board outline ring (mm) + internal cutout rings. */
@@ -181,7 +201,13 @@ export interface DrcContext {
    * it never re-derives.
    */
   copperAreaWarnings: readonly CopperAreaWarning[];
-  ratsnest: RatsnestSegment[];
+  /**
+   * The one copper-geometry resolution this run is built on. Exposed because
+   * `checks/connectivity.ts` derives its OWN ratsnest from `connectivity()` +
+   * these records (contract 06 §1) instead of trusting the caller's
+   * `projection.ratsnest`: one model, one fill, no second kernel run.
+   */
+  copperRecords: CopperRecords;
   netNames: Record<string, string>;
   /**
    * Clearance contribution of a net's class (mm), or 0 when the net / class is
@@ -243,27 +269,6 @@ function padAnchor(anchor: CopperPadAnchor): DrcAnchor {
         padNumber: anchor.padNumber,
       }
     : { kind: "freePad", freePadId: anchor.freePadId };
-}
-
-/**
- * Slot centerline for an oblong drill, or undefined for a round hole. The slot
- * runs `lengthMm` along `angleDeg` through `center`; endpoints are inset by
- * `widthMm/2` so a & b are the centers of the rounded caps.
- */
-function slotCenterline(
-  center: PcbPointMm,
-  drillSlot: { lengthMm: number; widthMm: number; angleDeg: number } | null | undefined,
-): { a: PcbPointMm; b: PcbPointMm; widthMm: number } | undefined {
-  if (!drillSlot || drillSlot.lengthMm <= drillSlot.widthMm) return undefined;
-  const half = (drillSlot.lengthMm - drillSlot.widthMm) / 2;
-  const rad = (drillSlot.angleDeg * Math.PI) / 180;
-  const dx = Math.cos(rad) * half;
-  const dy = Math.sin(rad) * half;
-  return {
-    a: { x: center.x - dx, y: center.y - dy },
-    b: { x: center.x + dx, y: center.y + dy },
-    widthMm: drillSlot.widthMm,
-  };
 }
 
 export function buildDrcContext(
@@ -339,6 +344,12 @@ export function buildDrcContext(
     ring: p.ring.map((v) => ({ x: v.x, y: v.y })),
     bounds: { ...p.bounds },
     center: { ...p.center },
+    // Copied, not aliased — same reason as every other field here: a check that
+    // mutated it in place would corrupt the connectivity records.
+    ...(p.disc
+      ? { disc: { center: { ...p.disc.center }, radiusMm: p.disc.radiusMm } }
+      : {}),
+    exactShape: p.exactShape,
     declaredLayerInvalid: p.declaredLayerInvalid,
   }));
 
@@ -357,29 +368,26 @@ export function buildDrcContext(
       padOdMm: Math.min(p.widthMm, p.heightMm),
     });
   }
+  // EVERY drilled free pad, not just `std` / `hole`: the drill of an `smd` or
+  // `conn` pad reaches the fab as a non-plated hit (contract 06 §2), so it must
+  // face the same minimum / spacing / edge checks as a free hole.
   for (const freePad of projection.freePads) {
-    const drill = freePad.drillMm ?? 0;
-    if (
-      drill > 0 &&
-      (freePad.padType === "std" || freePad.padType === "hole")
-    ) {
-      const isStd = freePad.padType === "std";
-      const padSlot = slotCenterline(freePad.centerMm, freePad.drillSlot);
-      holes.push({
-        anchor: { kind: "freePad", freePadId: freePad.id },
-        kind: isStd ? "pth" : "npth",
-        netId: isStd ? freePad.netId : null,
-        center: freePad.centerMm,
-        drillMm: drill,
-        ...(isStd
-          ? { padOdMm: Math.min(freePad.widthMm, freePad.heightMm) }
-          : {}),
-        ...(padSlot ? { slot: padSlot } : {}),
-      });
-    }
+    const drill = freePadDrill(freePad);
+    if (!drill) continue;
+    holes.push({
+      anchor: { kind: "freePad", freePadId: freePad.id },
+      kind: drill.plated ? "pth" : "npth",
+      netId: drill.plated ? freePad.netId : null,
+      center: freePad.centerMm,
+      drillMm: drill.drillMm,
+      ...(drill.plated
+        ? { padOdMm: Math.min(freePad.widthMm, freePad.heightMm) }
+        : {}),
+      ...(drill.slot ? { slot: drill.slot } : {}),
+    });
   }
   for (const hole of projection.freeHoles) {
-    const holeSlot = slotCenterline(hole.centerMm, hole.drillSlot);
+    const holeSlot = drillSlotCenterline(hole.centerMm, hole.drillSlot);
     holes.push({
       anchor: { kind: "freeHole", freeHoleId: hole.id },
       kind: "npth",
@@ -478,6 +486,7 @@ export function buildDrcContext(
           padNetIds,
           records,
           copperToBoardEdgeMm: board.designRules.clearance.copperToBoardEdgeMm,
+          copperToHoleMm: copperToHoleClearanceMm(board.designRules),
           cutouts,
           freeHoles: projection.freeHoles,
           freePads: projection.freePads,
@@ -528,8 +537,6 @@ export function buildDrcContext(
     vias,
     holes,
     boardThicknessMm: board.boardThicknessMm ?? DEFAULT_BOARD_THICKNESS_MM,
-    holeToHoleMm:
-      board.designRules.minimums.holeToHoleMm ?? DEFAULT_HOLE_TO_HOLE_MM,
     holeToBoardEdgeMm:
       board.designRules.clearance.holeToBoardEdgeMm ??
       DEFAULT_HOLE_TO_BOARD_EDGE_MM,
@@ -540,7 +547,7 @@ export function buildDrcContext(
     copperZones,
     keepouts,
     copperAreaWarnings,
-    ratsnest: projection.ratsnest,
+    copperRecords: records,
     netNames,
     netClassClearanceMm: resolver.netClassClearanceMm,
     netClassIdOf: resolver.netClassIdOf,

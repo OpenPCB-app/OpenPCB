@@ -2,6 +2,7 @@ import { useEffect, useMemo, type ReactElement } from "react";
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import type { DesignerPcbProjection } from "../../../../../sdks";
+import { copperToHoleClearanceMm } from "../../../../../shared/drc/rule-resolver";
 import {
   collectCopperZones,
   collectKeepouts,
@@ -104,6 +105,7 @@ export function CopperPour({
       vias: projection.vias,
       padNetIds,
       copperToBoardEdgeMm: designRules.clearance.copperToBoardEdgeMm,
+      copperToHoleMm: copperToHoleClearanceMm(designRules),
       cutouts: projection.board.cutouts,
       freeHoles: projection.freeHoles,
       freePads: projection.freePads,
