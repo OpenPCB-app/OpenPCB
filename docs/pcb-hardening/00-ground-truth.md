@@ -49,8 +49,8 @@ still open) · `placeholder→spec-written` (no assertion existed → real spec 
 | B2-6 | medium | manufacturability | S11 | live-fail [v] | b2 "B2-6" | `drc-context.ts` `padOdMm = min(width, height)` (two sites) | |
 | B2-7 | medium | manufacturability | S11 | live-fail [v] | b2 "B2-7" | `checks/manufacturability.ts` `VIA_ASPECT_RATIO` branch | |
 | B2-9 | — | epsilon/gates | **closed S0** | live-pass→flipped [v] | b2 "B2-9" (now `test`) | `command-executor.ts` `buildPcbViaForInsert` uses `below()` from `pcb/tolerance.ts` for diameter, drill and annular | Register §3's own criterion is met. New executor-level parity test written. |
-| B5-LIVE-ROT-PAD | high | live DRC | S8 | **weak-spec→rewritten** [v] | `drc-audit-b5.test.ts` "B5-LIVE-ROT-PAD" | `frontend/pcb/drc/live-drc.ts` `computePadGeoms` (unrotated `halfW`/`halfH`) | Old body passed because its trace at x=5.35 lies inside the *wider* unrotated 2.0 mm box. Defect confirmed open by source read; new geometry puts the trace along the true long axis where the AABB verdict is clean. |
-| B5-LIVE-TH-PAD-SIDE | high | live DRC | S8 | live-fail [v] | b5 "B5-LIVE-TH-PAD-SIDE" | `live-drc.ts` `computePadGeoms` `layer: placement.layer === "B.Cu" ? "B.Cu" : "F.Cu"` — comment above says the opposite | |
+| B5-LIVE-ROT-PAD | high | live DRC | **closed S8** | live-fail → fixed [v] | `drc-audit-b5.test.ts` "B5-LIVE-ROT-PAD" | `frontend/pcb/drc/live-drc.ts` `computePadGeoms` (unrotated `halfW`/`halfH`) | Old body passed because its trace at x=5.35 lies inside the *wider* unrotated 2.0 mm box. Defect confirmed open by source read; new geometry puts the trace along the true long axis where the AABB verdict is clean. Fixed 2026-09-09 (`07-live-parity-contract.md`): the live path is `checkPendingCopper` over the batch item builder; regressions flipped, plus `drc-live-parity.test.ts`. |
+| B5-LIVE-TH-PAD-SIDE | high | live DRC | **closed S8** | live-fail → fixed [v] | b5 "B5-LIVE-TH-PAD-SIDE" | `live-drc.ts` `computePadGeoms` `layer: placement.layer === "B.Cu" ? "B.Cu" : "F.Cu"` — comment above says the opposite | Fixed 2026-09-09 (`07-live-parity-contract.md`): the live path is `checkPendingCopper` over the batch item builder; regressions flipped, plus `drc-live-parity.test.ts`. |
 | B5-LIVE-PADGEOMS | perf | live DRC | **closed S0** | live-pass→flipped [v] | b5 "B5-LIVE-PADGEOMS" (now `test`) | `live-drc.ts` L152-154: `computePadGeoms` hoisted above the per-segment loop; `PcbCanvas.tsx` `useMemo` (~L4833-4880) broad-phase filters `neighborTraces`/`neighborPlacements` via `projectionIndex` before calling `runLiveDrc` [a] | **Residual, not a register entry:** pad geometry is still rebuilt once per cursor move because `routePreview` is in the memo's dependency array. Tracked for S8/S9. |
 | B5-SYNC | arch | DRC execution | S10 | placeholder→spec-written | b5 "B5-SYNC" | `designer/backend/routes.ts` `POST /designs/:designId/drc/run` runs `runDrc` inline (three inline call sites in that file) [v] | Spec: >2000 primitives → `202 { taskId }`. |
 
@@ -88,11 +88,11 @@ B3-5, B3-6 are live tests. `rg -n "expect\(true\)\.toBe\(true\)" src/core/backen
 | PCB geometry kernels | `src/shared/pcb-geometry/{pad-geometry,pad-outline,pcb-clearance-geometry,pcb-trace-geometry,rotation}.ts`; `src/shared/rendering/pcb/{outline-geometry,chain-edges,contour-validation,outline-manufacturability,pcb-drills}.ts`; `backend/pcb/courtyard.ts`; `backend/pcb/tolerance.ts` | `backend/pcb/{pad-geometry,pad-outline,pcb-clearance-geometry,pcb-trace-geometry,outline-geometry,chain-edges,contour-validation,outline-manufacturability}.ts` are 3–5-line `export *` shims [v]; `frontend/pcb/pcb-drills.ts` shims `shared/rendering/pcb/pcb-drills` | S2 |
 | Zones / keepouts | `src/shared/pcb-areas/{zone-parse,copper-zones,keepout-predicates,pour-params}.ts`, `src/shared/pcb-geometry/area-overlap.ts`, `pcb-store.ts` zone/keepout rows, `import/kicad-project/insert-pcb.ts`, parser `kicad-pcb-parser.ts` | — | S3a, S3b done / S4 pending |
 | Copper fill | `src/shared/rendering/copper-fill/{copper-geometry-kernel,copper-fill-geometry,copper-fill-trace-geometry}.ts` (clipper2-ts, fail-closed, `PRECISION = 4`) — real in-tree code, not a package shim | `frontend/pcb/layers/{copper-geometry-kernel,copper-fill-geometry,copper-fill-trace-geometry}.ts` re-export the shared files [a] | S5 |
-| DRC engine + context | `backend/drc/{drc-engine,drc-context,severity,violation-id,ipc2221-spacing,types}.ts`; 13 files under `backend/drc/checks/` | — | S6/S7 |
+| DRC engine + context | `backend/drc/{drc-engine,drc-context,severity,violation-id,ipc2221-spacing,types}.ts`; 13 files under `backend/drc/checks/` (S8 relocated the engine to `src/shared/drc/`; the old paths are re-export shims) | — | S6/S7 |
 | Rule resolution | `src/shared/drc/rule-resolver.ts`; `backend/pcb/net-class-resolver.ts` | — | S6 |
-| Live DRC | `frontend/pcb/drc/live-drc.ts` (trace–trace and trace–pad only; imports only `shared/pcb-geometry/pcb-trace-geometry`) [v] | — | S8 |
-| Routing legality / obstacles | `src/shared/pcb-routing/{route-obstacles,collision,corner-fixup,pull-tight,walkaround,auto-finish,meander,bundle-geometry}.ts`; `frontend/pcb/tools/*`; `frontend/pcb/PcbCanvas.tsx` (calls both `runLiveDrc` and `buildRouteObstacles`) | — | S8 (legality), S16/S17 (algorithms) |
-| Route commit (server) | `backend/command-executor.ts` `buildPcbTraceForInsert` / `buildPcbViaForInsert` / `pcb_commit_route` — structural validation + via minimums; fab violations `console.warn`; **no clearance/collision check** [a] | — | S8 |
+| Live DRC | `frontend/pcb/drc/live-drc.ts` (trace–trace and trace–pad only; imports only `shared/pcb-geometry/pcb-trace-geometry`) [v] — *S8: a thin adapter over `src/shared/drc/legality.ts` `checkPendingCopper`, no geometry of its own* | — | S8 (done) |
+| Routing legality / obstacles | `src/shared/pcb-routing/{route-obstacles,collision,corner-fixup,pull-tight,walkaround,auto-finish,meander,bundle-geometry}.ts`; `frontend/pcb/tools/*`; `frontend/pcb/PcbCanvas.tsx` (calls both `runLiveDrc` and `buildRouteObstacles`) — *S8: obstacles read the `LegalityContext` items (`07-live-parity-contract.md` §5)* | — | S8 (legality, done), S16/S17 (algorithms) |
+| Route commit (server) | `backend/command-executor.ts` `buildPcbTraceForInsert` / `buildPcbViaForInsert` / `pcb_commit_route` — structural validation + via minimums; fab violations `console.warn`; **no clearance/collision check** [a] — *S8: the five copper commands run `checkPendingCopper` on a context built from the dispatcher's rows and refuse the 07 §6 set unless `legality: "report" | "off"`* | — | S8 (done) |
 | Electrical / SI | `checks/electrical.ts`, `checks/signal-integrity.ts`, `checks/length.ts`, `backend/pcb/diff-pair-resolver.ts` | — | S13/S14 |
 | ERC | `backend/erc/erc-engine.ts` (`UNCONNECTED_INPUT_PIN`, `OUTPUT_OUTPUT_SHORT`, `NO_CONNECT_VIOLATION`; schematic-only) [a] | — | S13 (scope note only) |
 | Export | `backend/export/gerber/writer.ts` (own `padApertureShape`, pours via the shared fill kernel), `export/excellon/writer.ts` (slot-aware `G85`) [a] | — | S11/S12 |
@@ -128,7 +128,8 @@ sessions S5, S14 and S8. The S0 descriptions are kept below for the record.
    only; vias block every layer; no board edge, cutout or zone obstacles. [v] *S4: `tracks`
    keepouts are AABB superset obstacles, the live check runs the exact `keepoutAffects` per pending
    segment, and a `vias` keepout refuses a smart via (`03-zone-keepout-contract.md` §13.4). Board
-   edge / cutout obstacles remain S8/S16.*
+   edge / cutout obstacles remain S16 (S8 gave the gate edge / off-board through `boardItems`, and
+   the obstacles THT-on-every-layer pads, free pads and NPTH stadia from the context items).*
 
 ### 4.2 Clearance resolution — one copy after S6 (2026-09-08)
 Before S6 there were four: `src/shared/drc/rule-resolver.ts` (imported only by
@@ -155,7 +156,7 @@ batch, live gate, route obstacles, the pour composition, the via insert gate —
   `segmentsIntersect` (inclusive: crossing, T-touch, shared endpoint, collinear overlap) with
   `segmentsCrossTransversally` and `segmentContactParams` beside it; `pcb-trace-geometry.ts` and
   `outline-geometry.ts` re-export it. `pcb-routing/collision.ts` `segmentIntersectsRectNm` (nm,
-  Liang–Barsky, open interior) is documented as intentional until S8/S16 name one convention. [v]
+  Liang–Barsky, open interior) is the convention S8 named (`07-live-parity-contract.md` §5). [v]
 - Arc flattening: the S0 count of "seven" was wrong — **nine** in-scope samplers plus two in the
   library module. After S2 the outline path has **one** (`pcb-geometry/arc-chords.ts`:
   `arcSegmentCount` with bias-aware step rules and a θ ≤ π/2 floor, `arcChordPoints` inscribed /
@@ -247,10 +248,10 @@ Frontend/shared specs: `copper-fill-geometry.test.ts` (23), `copper-fill-trace-g
 | `src/sdks/designer/types.ts` ~L2096 | "P2 (declared, not yet implemented)" over 12 implemented codes | §5 | corrected in S0 |
 | `TODO.md` §5 | P0–P12 sequence; B3-1 unowned | superseded | pointer to PROGRAM.md; B3-1 → S1 |
 | `TODO.md` §4 "DRC trust" | "remove or disable the broken thermal-relief check" | no thermal-relief *check* exists; thermal relief is a fill option (`padConnection: "thermal"`) — the item's referent is unclear | resolved S5: there never was a check; the fill option's spokes sat at a fixed world angle, fixed in S5 (`04-copper-pour-contract.md` §6); the TODO.md item was rewritten |
-| `route-obstacles.ts` comment | "the one shared definition of the live-DRC clearance formula" | `live-drc.ts` inlines its own | S6/S8 |
+| `route-obstacles.ts` comment | "the one shared definition of the live-DRC clearance formula" | `live-drc.ts` inlines its own | resolved S8: neither has a formula — both read the context (07 §5, §8) |
 | `copper-fill-geometry.ts` `buildCopperFillPourPaths` comment | "backend-safe … no THREE" | the kernel module imports `three` at load [v] | resolved S5: `three` lives only in `copper-fill-shapes.ts` (`islandsToShapes`), the kernel and `copper-geometry-kernel.ts` no longer import it |
 | `checks/copper-pour.ts` doc comment | "a same-net pour satisfies the net, so `UNCONNECTED_NET` already clears" | false when no pour exists (B3-1) | corrected in S1 |
-| `README.md` L60 | "DRC runs live while you work" | live path covers trace–trace and trace–pad only | S8 (user-facing wording) |
+| `README.md` L60 | "DRC runs live while you work" | live path covers trace–trace and trace–pad only | resolved S8: the live gate is the batch pair kernel over the pending copper (07 §3 lists what it judges); README reworded |
 | `designer/AGENTS.md` "## DRC" | "thirteen" checks | 16 at S6 close, 17 after S7 | corrected in S7 |
 | `.claude/skills/pcb-hardening-review/references/scope-and-invariants.md` | clearance regime = bare `<`; "17 `test.todo`"; tolerance path | S6 moved clearance to `clearanceViolated`; 6 todo; the path is a shim | corrected in S7 |
 | `docs/drc/OPEN_FINDINGS.md` §5.1 / "Checking status" | FAB tier under the clearance regime; "8 call sites" | `clearance.ts` uses `below`; 6 | corrected in S7 |

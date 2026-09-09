@@ -7,8 +7,10 @@ exists ONLY to make the emit census a machine gate: together with
 and `golden-rules-2l`, the union of every emitted code across all six equals
 every `DrcRuleCode` member except `ZONE_FILL_FAILED` (documented exception
 below). Fabricator `jlcpcb_2l`, 2-layer, ≥ 80 primitives, ≥ 10 violations
-(the golden-suite non-triviality gates), 84 violations / 38 codes in this
-fixture alone, all ids unique.
+(the golden-suite non-triviality gates), 82 violations / 37 codes in this
+fixture alone (84 / 38 until S8: the bridge trace's two overlap rows left
+when touching unassigned copper became an extension — contract 06 §4), all
+ids unique.
 
 Outline: a polygon rectangle (120×90) with two deliberate milling features on
 the OUTER outline (not a cutout — S7's cutout-milling semantics were still
@@ -89,7 +91,10 @@ Deliberate violation-bearing items, by region (all F.Cu unless noted):
   `bridge_a`) and `t_bridge_b` (net `bridge_b`) do NOT touch each other;
   a null-net trace `t_bridge_null` sits between them and touches both ->
   `NET_SHORT_CIRCUIT` (null-net bridge variant, D6 — the two-net-touch
-  aggregation after the six clearance loops).
+  aggregation after the six clearance loops). Its two −0.300 mm overlaps
+  with the runs are NOT clearance rows since S8: touching unassigned copper
+  is an extension of what it touches (06 §4), so the fault is reported once,
+  as the bridge.
 - **Dangling / island (y=15..19, x=0..14):** `t_dangle` + `via_dangle`,
   each with no other copper on its net -> `TRACK_DANGLING` / `VIA_DANGLING`.
   `t_island_a`/`t_island_b`, a two-segment L on net `island1` with no pad or

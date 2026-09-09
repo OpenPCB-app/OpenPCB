@@ -135,6 +135,26 @@ export interface RuleResolver {
     aNetId: string | null,
     bNetId: string | null,
   ): number;
+  /**
+   * The pair's clearance with every AREA mask 0 — the value `clearance`
+   * returns anywhere outside every rule area. It is the SAME
+   * `resolveWithMasks(..., 0, ..., 0)` term `clearancePour` already computes,
+   * so there is no second resolution path: a `net` / `netClass` / `layer` /
+   * `pairKind`-scoped rule is honoured in full (its scopes hold wherever the
+   * route is), and only an `area` scope is dropped.
+   *
+   * The route obstacle builder needs it because it resolves a rect AT THE
+   * OBSTACLE (live-parity contract 07 §5, Astra run 1 #4): an `area` rule that
+   * relaxes the pair around the obstacle must not shrink the rect below what
+   * the pair requires when the routed trace itself sits OUTSIDE that area. An
+   * area TIGHTENING at the obstacle is larger and still wins.
+   */
+  clearanceOutsideAreas(
+    pairKind: DrcPairKind,
+    layer: PcbCopperLayerId,
+    aNetId: string | null,
+    bNetId: string | null,
+  ): ResolvedValue;
   scalar(kind: ScalarRuleKind, item: ScalarItem): ResolvedValue;
   /** `holeToHole` is the one scalar kind evaluated on a PAIR of items (§5.1). */
   scalarPair(
@@ -227,6 +247,22 @@ export function createRuleResolver(
     return mask;
   };
 
+  /**
+   * The implicit tier of a pair, unfloored (§4 step 2). The ONE expression
+   * `resolveWithMasks` falls back to and `clearanceBound` maxes over, so the
+   * fallback and the bound cannot drift.
+   */
+  const implicitTier = (
+    pairKind: DrcPairKind,
+    aNetId: string | null,
+    bNetId: string | null,
+  ): number =>
+    Math.max(
+      boardClearance[pairKind] ?? 0,
+      netClassClearanceMm(aNetId),
+      netClassClearanceMm(bNetId),
+    );
+
   const clearanceMemo = new Map<string, ResolvedValue>();
   const resolveWithMasks = (
     pairKind: DrcPairKind,
@@ -242,11 +278,7 @@ export function createRuleResolver(
     const key = `${pairKind}|${layer}|${netKey(aNetId)}${netKey(bNetId)}${maskA}|${maskB}`;
     const cached = clearanceMemo.get(key);
     if (cached !== undefined) return cached;
-    const implicit = Math.max(
-      boardClearance[pairKind] ?? 0,
-      netClassClearanceMm(aNetId),
-      netClassClearanceMm(bNetId),
-    );
+    const implicit = implicitTier(pairKind, aNetId, bNetId);
     const classA = netClassIdOf(aNetId);
     const classB = netClassIdOf(bNetId);
     const isPour = POUR_KINDS.has(pairKind);
@@ -397,12 +429,13 @@ export function createRuleResolver(
     },
     clearanceBound(pairKind, aNetId, bNetId) {
       return Math.max(
-        boardClearance[pairKind] ?? 0,
-        netClassClearanceMm(aNetId),
-        netClassClearanceMm(bNetId),
+        implicitTier(pairKind, aNetId, bNetId),
         compiled.maxClearanceRuleMm,
         floorMm,
       );
+    },
+    clearanceOutsideAreas(pairKind, layer, aNetId, bNetId) {
+      return resolveWithMasks(pairKind, layer, aNetId, 0, bNetId, 0);
     },
     scalar,
     scalarPair,

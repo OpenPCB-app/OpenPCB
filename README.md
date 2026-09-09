@@ -57,7 +57,9 @@ including custom board shapes with dimensioned sketching. Placements sync automa
 schematic, so the layout always reflects the current netlist. Length tuning, bundle routing and
 walkaround are present but still behind development flags while they finish manual QA.
 
-**Design rule checking.** DRC runs live while you work and as a batch check, with fabricator
+**Design rule checking.** The route tool checks every trace and via you draw with the same DRC
+kernel the batch check runs (clearance, shorts, holes, board edge, keepouts and the item
+minimums), refuses an illegal commit with the reason, and the batch check covers the rest, with fabricator
 profiles, net-class-aware clearance resolution, IPC-2221B-derived electrical checks, signal
 integrity checks for differential pairs, length matching, and stable violation identities so a
 waiver you grant stays granted. Violations carry the geometry that produced them, not just a

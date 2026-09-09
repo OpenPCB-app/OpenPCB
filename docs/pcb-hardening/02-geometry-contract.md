@@ -13,7 +13,7 @@ The question this session answers once, for every consumer:
 Scope: segment predicates, arc flattening, the board region, containment and overlap tests, and
 the DRC checks that consume them (`checks/board.ts`, `checks/outline.ts`). Out of scope: spatial
 indexing (S9), copper-fill extent (S5, consumes this region), Gerber true arcs (S12), route
-obstacles and live DRC (S8/S16), exact-disc clearance for circular pads (S7).
+obstacles and live DRC (S8 — `07-live-parity-contract.md`; edge / cutout obstacles S16), exact-disc clearance for circular pads (S7).
 
 Decisions taken with the user before this contract was written: off-board is judged on **copper
 with its width** and co-fires with edge clearance as today; arcs are handled by **one polygonal
@@ -257,7 +257,7 @@ edges because the region is closed.
 Later consumers, recorded here so they do not re-derive geometry: S5 builds the fill extent from
 `buildBoardRegion`; S7 adopted the exact disc for circular pads in the edge, clearance, keepout and
 creepage checks and made `COPPER_TO_BOARD_EDGE.measuredMm` signed (negative when the copper is not
-inside the region); S8/S16 give the router board-edge and cutout obstacles from the same
+inside the region); S8 made the live gate judge edge / off-board through the same region (`boardItems`); S16 gives the router board-edge and cutout obstacles from the same
 region; S12 decides whether Gerber emits true arcs, adds exact-arc contour validity, and owns the
 minimum-web / connected-material checks that outline validity does not make (`findNarrowestSlot`).
 
@@ -266,7 +266,7 @@ minimum-web / connected-material checks that outline validity does not make (`fi
 | Site | Divergence | Owner |
 |---|---|---|
 | `pad-outline.ts` `arc` / `ellipseRing` | pad arcs circumscribed by pushing both endpoints out, fixed 48/6 chords; conservative for clearance and connectivity, moving them shifts every pad ring by micrometres | S7 resolved the CIRCLE case without touching the sampler: every DRC check consumes the record's exact `disc` (`drc/pair-gap.ts`); ovals / roundrects keep the circumscribed ring (S11) |
-| `pcb-routing/collision.ts` `segmentIntersectsRectNm` | nm domain, Liang–Barsky, open interior (boundary contact legal); already uses the clipped-midpoint technique of §5 | S8/S16 name one convention for live/batch parity |
+| `pcb-routing/collision.ts` `segmentIntersectsRectNm` | nm domain, Liang–Barsky, open interior (boundary contact legal); already uses the clipped-midpoint technique of §5 | S8 named the convention (`07-live-parity-contract.md` §5): an obstacle rect is an outward-rounded superset of `item ⊕ max(required, implicit, SHORT_EPS + 1 nm)`, so boundary contact is always legal under `clearanceViolated` and above the inclusive short threshold; the verdict stays with the gate |
 | copper-fill `addArc`, `buildTraceSegmentStadium`, `buildDiscRing` (`VIA_MAX_ERROR_MM = 0.005`), `padDisc` | fixed-count inscribed samplers and a second chord tolerance; `padDisc` duplicates the S1 disc predicate | S5 |
 | `courtyard.ts` `pushCircle` | 16-chord inscribed hull | S12 |
 | `computeOutlineBboxMm` | boxes the inscribed ring (≤ 0.01 mm under-report at a bulge); feeds only the cached width/height | documented |

@@ -200,7 +200,7 @@ layer in `Λ`. Touching the boundary is allowed — a keepout has clearance 0, s
 on the boundary (within `GEOM_EPS_MM`) is legal. "Strictly inside" below means
 `strictlyInsideRing(p, K, eps)`: inside by ray cast **and** farther than `eps` from every edge.
 `keepoutAffects(K, item) → boolean` in `src/shared/pcb-areas/keepout-predicates.ts` is the only
-implementation; DRC (S4), the route commit gate (S4/S8) and the fill (S4/S5) call it. Routing may
+implementation; DRC (S4), the commit gate (S4; since S8 through `keepoutItems` inside `checkPendingCopper`, client and server) and the fill (S4/S5) call it. Routing may
 use a conservative superset (an AABB obstacle) for avoidance, never a subset.
 
 | item (mm) | affected iff |
@@ -582,7 +582,8 @@ rings, DRC island report, a covered-trace verdict that survives).
   is tested with `keepoutAffects` against every effective keepout with `restrictions.vias`; an
   affected via is refused with a HUD message and nothing changes.
 - The `pads` and `footprints` restrictions have no live check (no part-drag legality exists); batch
-  DRC reports them. There is still **no server-side commit gate** — S8 decides it.
+  DRC reports them. Since S8 every copper command runs the reference verdict server-side
+  (`07-live-parity-contract.md` §6) — `KEEPOUT_VIOLATION` is in its refuse set.
 - `placementSideLayer(placement)` (`src/shared/rendering/pad-copper-layers.ts`) is the one
   resolution of a placement's outer copper layer, used by the predicate items, the route obstacles,
   the live DRC, the canvas and the snapshot.

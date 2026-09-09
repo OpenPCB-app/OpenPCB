@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
+  PcbCommitLegality,
   DesignerCommand,
   DesignerDispatchResult,
   DesignerPcbAddKeepoutCommand,
@@ -16,11 +17,26 @@ import type {
   PcbTraceSegmentMode,
 } from "../../../../sdks";
 import {
-  collectKeepouts,
-  type EffectiveKeepout,
-} from "../../../../shared/pcb-areas/copper-zones";
+  buildDrcItems,
+  type LegalityContext,
+} from "../../../../shared/drc/drc-context";
+import type { EffectiveKeepout } from "../../../../shared/pcb-areas/copper-zones";
 import { createDesignerApi } from "../api";
 import { dispatchFailureMessage } from "./dispatch-failure";
+
+/** A dispatch failure with the result attached, so a caller can read a `PCB_COPPER_ILLEGAL` verdict. */
+export type DispatchRejectedError = Error & {
+  dispatchResult: DesignerDispatchResult & { ok: false };
+};
+
+function rejectedCommit(
+  op: string,
+  result: DesignerDispatchResult & { ok: false },
+): DispatchRejectedError {
+  const err = new Error(dispatchFailureMessage(op, result)) as DispatchRejectedError;
+  err.dispatchResult = result;
+  return err;
+}
 import { fallbackBoardBoundsFromProjection } from "../three-d/primitives/geometry-utils";
 import { useDesignerHighlight } from "../useDesignerHighlight";
 import { syncLayerPresetFromVisible, usePcbViewStore } from "./pcb-view-store";
@@ -432,6 +448,7 @@ export function usePcbWorkspace(params: {
       netId: string | null;
       netClassId: string;
       segmentMode: PcbTraceSegmentMode;
+      legality?: PcbCommitLegality;
     }) => {
       setError(null);
       try {
@@ -472,6 +489,7 @@ export function usePcbWorkspace(params: {
       netClassId: string;
       diameterMmOverride?: number;
       drillMmOverride?: number;
+      legality?: PcbCommitLegality;
     }) => {
       setError(null);
       try {
@@ -508,6 +526,7 @@ export function usePcbWorkspace(params: {
         diameterMmOverride?: number;
         drillMmOverride?: number;
       };
+      legality?: PcbCommitLegality;
     }) => {
       setError(null);
       try {
@@ -515,6 +534,7 @@ export function usePcbWorkspace(params: {
           type: "pcb_add_trace_via",
           trace: input.trace,
           via: input.via,
+          ...(input.legality ? { legality: input.legality } : {}),
         });
         if (!result.ok)
           throw new Error(dispatchFailureMessage("Trace/via", result));
@@ -550,6 +570,8 @@ export function usePcbWorkspace(params: {
         diameterMmOverride?: number;
         drillMmOverride?: number;
       }>;
+      /** Contract 07 §6: `report` while the DRC override is on, else the server refuses. */
+      legality?: PcbCommitLegality;
     }) => {
       setError(null);
       try {
@@ -557,9 +579,9 @@ export function usePcbWorkspace(params: {
           type: "pcb_commit_route",
           traces: input.traces,
           vias: input.vias,
+          ...(input.legality ? { legality: input.legality } : {}),
         });
-        if (!result.ok)
-          throw new Error(dispatchFailureMessage("Route", result));
+        if (!result.ok) throw rejectedCommit("Route", result);
         await refresh();
         await refreshHistory();
         return result.createdEntityId;
@@ -600,18 +622,32 @@ export function usePcbWorkspace(params: {
   );
 
   const updateTraceGeometry = useCallback(
-    async (traceId: string, pointsNm: Array<{ x: number; y: number }>) => {
+    async (
+      traceId: string,
+      pointsNm: Array<{ x: number; y: number }>,
+      legality?: PcbCommitLegality,
+    ): Promise<DesignerDispatchResult | null> => {
       setError(null);
       try {
-        await dispatchCommand({
+        const result = await dispatchCommand({
           type: "pcb_update_trace_geometry",
           traceId,
           pointsNm,
+          ...(legality ? { legality } : {}),
         });
+        // A refused reshape (contract 07 §6) is reported through the result,
+        // not thrown: the tune tool reads the violations off it.
+        // A copper refusal is the tune tool's to show (it reads the result);
+        // every other failure surfaces as the workspace error.
+        if (!result.ok && result.code !== "PCB_COPPER_ILLEGAL") {
+          setError(dispatchFailureMessage("Reshape", result));
+        }
         await refresh();
         await refreshHistory();
+        return result;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Reshape trace failed");
+        return null;
       }
     },
     [dispatchCommand, refresh, refreshHistory],
@@ -961,17 +997,47 @@ export function usePcbWorkspace(params: {
     return api.getDrcResult(designId);
   }, [api, designId]);
 
-  // THE one derivation of the effective keepouts for this projection (zone/
-  // keepout contract §4): enabled-filtered, ring-canonicalised, layers narrowed
-  // to the stackup. The scene, the route obstacles, the live DRC and the smart-
-  // via guard all read this list, so the canvas cannot disagree with itself.
-  const effectiveKeepouts = useMemo<readonly EffectiveKeepout[]>(() => {
-    if (!projection) return NO_KEEPOUTS;
-    return collectKeepouts({
-      keepouts: projection.keepouts ?? [],
-      layerCount: projection.board.layerCount,
-    }).keepouts;
-  }, [projection]);
+  /**
+   * THE one legality context of this projection (live-parity contract 07 §2,
+   * §7): every DRC item, the effective zones and keepouts, the board region,
+   * the ONE rule resolver, the clearance bound and the broad-phase grid, built
+   * O(board) ONCE per projection object and never per pointer move.
+   *
+   * The memo rests on the projection being an immutable snapshot replaced
+   * wholesale on every refresh (§7, Astra run 1 #8) — nothing mutates a
+   * projection's rules or copper in place, so object identity IS revision
+   * identity. The scene, the route obstacles, the live gate and the smart-via
+   * guard all read it, so the canvas cannot disagree with itself.
+   */
+  const legalityContext = useMemo<LegalityContext | null>(
+    () => (projection ? buildDrcItems(projection) : null),
+    [projection],
+  );
+
+  // The effective keepouts are the context's — one derivation, not a second
+  // `collectKeepouts` call beside it (zone/keepout contract §4).
+  const effectiveKeepouts: readonly EffectiveKeepout[] =
+    legalityContext?.keepouts ?? NO_KEEPOUTS;
+
+  /**
+   * Upper bound of ANY copper-to-copper clearance this board can resolve to —
+   * the context's own. Sizes the A* grid step and the meander leg floor, both
+   * of which are copper-to-copper questions. Legality never reads it.
+   */
+  const maxClearanceBoundMm = legalityContext?.maxClearanceBoundMm ?? 0;
+
+  /**
+   * How far ANY obstacle rect can reach past the item that produced it: the
+   * clearance bound OR the hole bound, whichever is larger. Every
+   * `buildRouteObstacles` query window must be padded by this — a board with a
+   * large `copperToHoleMm` puts an NPTH rect metres outside the clearance
+   * bound, and a window sized on `maxClearanceBoundMm` alone drops it while
+   * the gate still reports `COPPER_TO_HOLE`.
+   */
+  const maxObstacleReachMm = Math.max(
+    legalityContext?.maxClearanceBoundMm ?? 0,
+    legalityContext?.maxHoleBoundMm ?? 0,
+  );
 
   // Nets available to pour into, sorted by name (GND/PWR first for convenience).
   const pcbNets = useMemo<ReadonlyArray<{ id: string; name: string }>>(() => {
@@ -991,7 +1057,10 @@ export function usePcbWorkspace(params: {
 
   return {
     projection,
+    legalityContext,
     effectiveKeepouts,
+    maxClearanceBoundMm,
+    maxObstacleReachMm,
     loading,
     saving,
     error,

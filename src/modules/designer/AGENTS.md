@@ -23,7 +23,7 @@ code.
 | PCB read-only snapshot      | `backend/pcb/pcb-projection.ts`       |
 | Trace geometry validation   | `backend/pcb/pcb-trace-geometry.ts`   |
 | Ratsnest (MST net segments) | `backend/pcb/ratsnest.ts`             |
-| DRC engine + checks         | `backend/drc/`, `backend/drc/checks/` |
+| DRC engine + checks         | `src/shared/drc/`, `src/shared/drc/checks/` (S8 relocation; `backend/drc/` is re-export shims) |
 | Undo / redo                 | `backend/history-*.ts`                |
 | Dataset capture             | `backend/capture/`                    |
 | Schematic canvas            | `frontend/components/SchematicCanvas.tsx` |
@@ -147,8 +147,9 @@ And a command field with no parser in `routes.ts` is silently dropped over HTTP.
   pad or via occupies no layer), DRC short detection clamps such items to every layer; the DRC-side
   graph (`ctx.connectivity()`) is always built from the fail-safe items. The remaining private
   answers to "is this copper connected" — copper-fill island anchoring (S5), routed-length sums in
-  `checks/length.ts` / `signal-integrity.ts` (S14), routing-obstacle and live-DRC pad layers (S8)
-  — are scheduled, not sanctioned. Never add another.
+  `checks/length.ts` / `signal-integrity.ts` (S14) — are scheduled, not sanctioned (the
+  routing-obstacle and live-DRC pad layers were closed in S8: both read the `LegalityContext`
+  items). Never add another.
 - **Board geometry has one region: `src/shared/pcb-geometry/board-region.ts`.** `buildBoardRegion`
   flattens the outline and cutouts once per `runDrc` into a closed set (`ctx.boardRegion`); the
   legality build biases every arc toward the board side so the polygon is a subset of the true
@@ -211,9 +212,11 @@ an import-whitelist change or a library re-query.
   kernel itself is specified by `docs/pcb-hardening/04-copper-pour-contract.md` (S5): S1 records
   as the one copper geometry, the S2 region as the extent, `buildCopperFillIslands` →
   `{ status: "ok" | "failed", islands }` with islands in the total order. Routing: `tracks` keepouts are AABB
-  superset obstacles (`route-obstacles.ts`), `live-drc.ts` runs the exact predicate per pending
-  segment (`trace-keepout`), and `placeSmartVia` refuses a via inside a `vias` keepout. No
-  server-side route gate (S8). `placementSideLayer` (`shared/rendering/pad-copper-layers.ts`) is
+  superset obstacles (`route-obstacles.ts`, built from the `LegalityContext` items), and the live
+  gate, the smart-via guard, the tune guard and the SERVER commit gate all run
+  `checkPendingCopper` (`src/shared/drc/legality.ts`) — the batch pair kernel over the pending
+  copper, `KEEPOUT_VIOLATION` in its refuse set (`docs/pcb-hardening/07-live-parity-contract.md`).
+  `placementSideLayer` (`shared/rendering/pad-copper-layers.ts`) is
   the one side resolution. Contract: `docs/pcb-hardening/03-zone-keepout-contract.md` (§12
   authoring, §13 legality).
 

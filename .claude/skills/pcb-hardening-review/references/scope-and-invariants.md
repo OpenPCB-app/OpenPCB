@@ -8,7 +8,7 @@ not the source of truth.
 
 | Area | Path | Astra routing |
 |---|---|---|
-| DRC engine + checks | `src/modules/designer/backend/drc/` (`checks/*.ts`, `drc-context.ts`, `severity.ts`, `violation-id.ts`, `ipc2221-spacing.ts`), `src/shared/drc/rule-resolver.ts` | ✅✅ always eligible |
+| DRC engine + checks | `src/shared/drc/` (relocated in S8; `src/modules/designer/backend/drc/` is re-export shims) (`checks/*.ts`, `drc-context.ts`, `severity.ts`, `violation-id.ts`, `ipc2221-spacing.ts`), `src/shared/drc/rule-resolver.ts` | ✅✅ always eligible |
 | PCB geometry | `src/shared/pcb-geometry/` (`pcb-trace-geometry.ts`, `pcb-clearance-geometry.ts`, `pad-geometry.ts`, `pad-outline.ts`, `rotation.ts`) | ✅✅ |
 | Manual routing (route/walkaround/tune/bundle/diff-pair tools) — **not** the cloud auto-layout service | `src/shared/pcb-routing/` (`route-obstacles.ts`, `collision.ts`, `corner-fixup.ts`, `pull-tight.ts`, `walkaround.ts`, `auto-finish.ts`, `meander.ts`, `bundle-geometry.ts`), `src/modules/designer/frontend/pcb/tools/` | ✅✅ |
 | Ratsnest / connectivity | `src/shared/pcb-connectivity/` (`copper-records.ts`, `copper-items.ts`, `touch.ts`, `connectivity-graph.ts` — the one connectivity model, contract in `docs/pcb-hardening/01-connectivity-contract.md`), `src/modules/designer/backend/pcb/board-connectivity.ts` (items + pour nodes), `ratsnest.ts` (MST over kernel components) | ✅✅ |
@@ -31,7 +31,7 @@ Claude review:
 > Integer nanometres are the persisted unit everywhere.
 
 `src/shared/pcb-routing/` and `src/shared/schematic-routing/` operate in integer nanometres and
-are explicitly deterministic (no `Math.random`/`Date.now`). DRC (`backend/drc/`) converts to an
+are explicitly deterministic (no `Math.random`/`Date.now`). DRC (`src/shared/drc/`) converts to an
 mm-domain view for its checks (`drc-context.ts`). Always state which domain a packet's numbers are
 in — a bug can be a units mismatch at this exact boundary.
 
@@ -57,11 +57,17 @@ in — a bug can be a units mismatch at this exact boundary.
 >   literal. Invalid / partially ineffective rules are reported (`DRC_RULE_INVALID`,
 >   `DRC_RULE_INEFFECTIVE`). Clearance comparisons use `clearanceViolated` (0.5 nm float grace).
 > - **Dispatch is a hardcoded array, not a registry.** `runDrc` is one monolithic function: it
->   builds one `DrcContext`, runs thirteen pure `(ctx: DrcContext) => DrcViolationDraft[]` checks
->   into a flat list, then applies ignores, waivers, severity and ids in a single pass.
->   `DrcContext` carries traces, pads, vias and holes, plus (S3a) the effective `copperZones` /
->   `keepouts` and (S4) `copperAreaWarnings` and a lazily resolved `placementExtent(id)` — checks
->   read those, never `projection.zones` / `projection.keepouts`.
+>   builds one `DrcContext`, runs seventeen pure `(ctx: DrcContext) => DrcViolationDraft[]` checks
+>   into a flat list, then `finalizeReport` applies ignores, waivers, severity, ids, dedupe and the
+>   canonical `(code, id)` sort in a single pass. Since S8 `DrcContext extends LegalityContext`:
+>   `buildDrcItems` is the eager physical model (traces, pads, vias, holes under the clamp policy,
+>   the board region, the effective `copperZones` / `keepouts` / `copperAreaWarnings`, the
+>   resolver, a uniform-grid `near()` broad phase, the cached outline drafts) and `buildDrcContext`
+>   adds the lazy layer (`copperItems`, `connectivity`, `pourResults`, `placementExtent(id)`).
+>   Checks read those, never `projection.zones` / `projection.keepouts`. The live route gate and
+>   the server commit gate call `checkPendingCopper` (`src/shared/drc/legality.ts`), which runs the
+>   same pair bodies (`checks/clearance-judge.ts` `PairJudge`) and the same per-item forms over the
+>   pending copper — contract `docs/pcb-hardening/07-live-parity-contract.md`.
 > - **`DrcRuleClass` has eight values:** `clearance | constraint | connectivity |
 >   manufacturability | structural | dfm | electrical | signal-integrity`. There is **no
 >   `copper-pour` class** — pour islands report under `structural`.
@@ -78,7 +84,7 @@ in — a bug can be a units mismatch at this exact boundary.
 >   pad or via occupies no layer), DRC short detection clamps such items to every layer; the DRC-side
 >   graph (`ctx.connectivity()`) is always built from the fail-safe items. The remaining private
 >   answers to "is this copper connected" — copper-fill island anchoring (done in S5 — `ISOLATED_COPPER_ISLAND` reads the component), routed-length sums in
->   `checks/length.ts` / `signal-integrity.ts` (S14), routing-obstacle and live-DRC pad layers (S8)
+>   `checks/length.ts` / `signal-integrity.ts` (S14) — the routing-obstacle and live-DRC pad layers were closed in S8 (both read the `LegalityContext` items; contract `07-live-parity-contract.md`)
 >   — are scheduled, not sanctioned. Never add another.
 > - **Apply-time re-validation is a non-blocking backstop, not a gate.** Both cloud apply handlers
 >   run `runDrc` and report the result but do **not** reject a bad envelope and do **not** persist
@@ -141,10 +147,10 @@ packet touches net-class resolution.
 
 ## Known open defect register
 
-`OpenPCB/docs/drc/OPEN_FINDINGS.md` is the live defect register — 7 open DRC bugs remain after
-S0–S7 (B2-5/6/7 + B6-1 → S11, B5-LIVE-ROT-PAD / B5-LIVE-TH-PAD-SIDE → S8, B5-SYNC → S10), each
+`OpenPCB/docs/drc/OPEN_FINDINGS.md` is the live defect register — 6 open DRC bugs remain after
+S0–S8 (B2-5/6/7 + B6-1 → S11, B5-SYNC → S10, B7-1 → S13), each
 with a `test.todo` regression test whose body is a real post-fix assertion (`rg -n "test\.todo\("
-src/core/backend/tests/drc-audit-b*.test.ts` should show 7 call sites; if the count drops without
+src/core/backend/tests/drc-audit-b*.test.ts` should show 6 call sites; if the count drops without
 a finding being removed from the doc, the register is stale). The program that schedules the fixes is `docs/pcb-hardening/PROGRAM.md`; the verified
 current-master inventory is `docs/pcb-hardening/00-ground-truth.md`. **Always check the register
 for an overlapping finding before treating something as a new bug.**

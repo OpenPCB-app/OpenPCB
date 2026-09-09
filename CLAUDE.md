@@ -102,7 +102,9 @@ src/
 ├── sdks/               public inter-module contracts (assistant, designer, library, tasks)
 └── shared/
     ├── domain/             ECS world, commands, events, revision, patch/history infrastructure
-    ├── drc/                shared DRC primitives
+    ├── drc/                the DRC engine (relocated here in S8 — `drc-engine`, `drc-context`,
+    │                       `checks/`, `legality.ts` for the live / commit gate), rule resolver,
+    │                       fab presets; `modules/designer/backend/drc/` is re-export shims
     ├── pcb-connectivity/   copper connectivity kernel (records, items, touch, graph) — see
     │                       docs/pcb-hardening/01-connectivity-contract.md
     ├── pcb-areas/          copper zones + keepouts: v1→v2 upgrade, the ONE derivation of
@@ -414,7 +416,7 @@ detailed reference material — use them instead of guessing EDA conventions.
 | `/pcb-layout`        | Trace routing (Manhattan + 45°), vias, pad rendering, ratsnest (MST), board outline, placement, net classes, footprint rendering from KiCad payload, grid presets, Gerber export   |
 | `/r3f-eda-rendering` | **Any** visual rendering in EDA editors. R3F orthographic + demand rendering (`invalidate()`), render-order constants, InstancedMesh, LineSegments2, text, hit-testing patterns    |
 | `/eda-standards`     | IPC-2221B clearance tables, trace-width formula and lookup, manufacturer presets (JLCPCB / PCBWay), layer naming, via specs, copper weight, grid standards, DRC rule values. **Values only, no code patterns** |
-| `/pcb-hardening-review` | **Opt-in, explicit invocation only.** Delegates a DRC / PCB-geometry / manual-routing / copper-pour / ERC correctness question to GPT-6-Astra via the Codex CLI, read-only, attack-framed (finds counterexamples, specifies fixes — never writes code). Scoped only to `backend/drc/`, `shared/pcb-connectivity/`, `shared/pcb-geometry/`, `shared/pcb-routing/`, `shared/schematic-routing/` + `backend/erc/`, `shared/rendering/copper-fill/`. Refuses and redirects for anything else. |
+| `/pcb-hardening-review` | **Opt-in, explicit invocation only.** Delegates a DRC / PCB-geometry / manual-routing / copper-pour / ERC correctness question to GPT-6-Astra via the Codex CLI, read-only, attack-framed (finds counterexamples, specifies fixes — never writes code). Scoped only to `src/shared/drc/` (engine + checks; `backend/drc/` is shims), `shared/pcb-connectivity/`, `shared/pcb-geometry/`, `shared/pcb-routing/`, `shared/schematic-routing/` + `backend/erc/`, `shared/rendering/copper-fill/`. Refuses and redirects for anything else. |
 
 Selection guidance:
 

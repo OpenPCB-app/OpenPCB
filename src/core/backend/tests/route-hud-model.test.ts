@@ -71,7 +71,24 @@ describe("buildRouteHudModel", () => {
     expect(model.viaOverridden).toBe(false);
     expect(model.lengthMm).toBeCloseTo(10, 9);
     expect(model.drcConflictCount).toBe(0);
+    // Not passed ⇒ 0, so a caller that only counts blockers is unaffected.
+    expect(model.drcWarningCount).toBe(0);
     expect(model.hints.length).toBeGreaterThan(0);
+  });
+
+  test("conflicts and warnings are separate counts (contract 07 §6)", () => {
+    // `drcConflictCount` is the REFUSE set; `drcWarningCount` is the rest of
+    // the live verdict, which is reported but never blocks a commit.
+    const model = buildRouteHudModel({
+      session: session(),
+      previewPathNm: [],
+      netName: null,
+      netClass: NET_CLASS,
+      drcConflictCount: 1,
+      drcWarningCount: 3,
+    });
+    expect(model.drcConflictCount).toBe(1);
+    expect(model.drcWarningCount).toBe(3);
   });
 
   test("via overrides win over class defaults and are flagged", () => {

@@ -5,6 +5,15 @@ import type { TuneHudModel } from "./tools/tune-hud-model";
 interface TuneHudProps {
   /** Null while the Tune tool is idle (no trace picked yet). */
   model: TuneHudModel | null;
+  /**
+   * Commit-gate refusal (live-parity contract 07 §8) — the reshape was blocked
+   * by the live gate, or by the server after it. Null when the last commit was
+   * clean.
+   */
+  notice?: string | null;
+  /** Shared with the route tool's DRC override; `report` instead of `refuse`. */
+  allowDrcViolations?: boolean;
+  onToggleAllowDrcViolations?: () => void;
   /** Inline typed-target editor (the anti-KiCad-v8 in-tool override). */
   targetInputOpen: boolean;
   onOpenTargetInput: () => void;
@@ -25,6 +34,9 @@ const BAND_CLASS: Record<NonNullable<TuneHudModel["band"]>, string> = {
  */
 export function TuneHud({
   model,
+  notice = null,
+  allowDrcViolations = false,
+  onToggleAllowDrcViolations,
   targetInputOpen,
   onOpenTargetInput,
   onTargetInputSubmit,
@@ -157,6 +169,20 @@ export function TuneHud({
           ) : null}
         </span>
       </PcbParamRow>
+      {notice ? (
+        <PcbParamRow className="text-status-danger">
+          <span role="alert">{notice}</span>
+          {onToggleAllowDrcViolations && !allowDrcViolations ? (
+            <button
+              type="button"
+              className="cursor-pointer rounded-control px-1 underline decoration-dotted"
+              onClick={onToggleAllowDrcViolations}
+            >
+              allow violations
+            </button>
+          ) : null}
+        </PcbParamRow>
+      ) : null}
       <PcbParamRow className="text-text-disabled">
         <span>
           <kbd className="font-sans">drag</kbd> paint span

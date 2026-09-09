@@ -6,18 +6,22 @@ passes folded (§11); golden delta in §10; gates at close in `PROGRAM.md`.
 This contract states what batch DRC is: the reference legality implementation of OpenPCB. It
 fixes which inputs the engine trusts and which it derives, the item model every check reads, the
 complete inventory of checks and pair kinds with the kernels and comparison regimes they use,
-the shape of the report, and the limits that remain. Live DRC (S8), scaling (S9) and execution
-(S10) converge on this document; S11–S14 extend it. Session sequence and gates: `PROGRAM.md`.
+the shape of the report, and the limits that remain. Live DRC converged on it in S8
+(`07-live-parity-contract.md`: `checkPendingCopper` runs these checks' subject-set forms —
+`judgeCopperPairs`, `copperToHolePairs`, `boardItems` / `holePairs`, `keepoutItems` and the per-item
+scalars — through the same `finalizeReport`; the batch loops are unchanged and the clearance codes'
+emit site is `checks/clearance-judge.ts`); scaling (S9) and execution (S10) still converge on it;
+S11–S14 extend it. Session sequence and gates: `PROGRAM.md`.
 
 ## 0. Scope
 
-In scope: `src/modules/designer/backend/drc/` (`drc-engine.ts`, `drc-context.ts`, `pair-gap.ts`,
+In scope: `src/shared/drc/` — relocated there in S8 from `src/modules/designer/backend/drc/`, which is now re-export shims — (`drc-engine.ts`, `drc-context.ts`, `pair-gap.ts`,
 `code-registry.ts`, `severity.ts`, `violation-id.ts`, `checks/*`), the shared derivations it
 consumes (`src/shared/pcb-connectivity/copper-records.ts`, `src/shared/rendering/pcb/pcb-drills.ts`,
 `src/shared/rendering/pad-copper-layers.ts`, `src/shared/drc/`, `src/shared/pcb-geometry/`,
 `src/shared/pcb-areas/`, `src/shared/rendering/copper-fill/`), and the consumers of the report.
 
-Out of scope, with the owning session: live / route parity (S8), the broad phase (S9), async
+Out of scope, with the owning session: live / route parity (S8, `07-live-parity-contract.md`), the broad phase (S9), async
 execution (S10), slot / annular / aspect / plating models and scoped hole rules (S11), DFM
 overlays, exact-arc geometry and minimum-web checks (S12), electrical thresholds (S13), SI and
 length semantics (S14).
@@ -144,6 +148,17 @@ known nets emits `NET_SHORT_CIRCUIT` anchored on the item and the nets. Pairwise
 S1's: unassigned copper touching one net is an extension of it. Chains through two null-net items
 are a stated limit.
 
+Touching unassigned copper is one conductor (S8 correction, `07-live-parity-contract.md` §4):
+until S8 the clearance tier still judged a touching (null, null) pair and a touching (null, named)
+pair as different nets and reported a negative-gap `*_CLEARANCE` — a conductor violating clearance
+with itself, or with the net it extends. Since S8 `emit` returns before the clearance and fab tiers
+for any touching pair with a null side (the bridge record of a (null, named) touch is kept); a
+null-net item that is merely close (`0 < gap < required`) to any copper is still judged, since it
+may be a different conductor. The `census` golden carried such rows; §10 records the delta. What
+the extension does NOT yet do (Astra S8 run 2 #1, registered B7-1, owner S13): give the unassigned
+copper the rule tier of the net it extends — its pairs with other nets still resolve with the
+null-net (default) requirement.
+
 ## 5. Comparison regimes
 
 | Regime | Form | Used by |
@@ -264,6 +279,12 @@ goldens together provoke every code except `ZONE_FILL_FAILED` (kernel bail only;
 in the canonical code order (§6) — `areas` / `rules` / `small` changed in key order only, values
 identical to S6. Digests at close: `areas 99c49e…`, `census 7b3a5e…`, `cutouts 43fbd5…`,
 `pours ab2451…`, `rules ed0705…`, `small cd4b96…`.
+
+
+S8 (2026-09-09): the extension rule of §4 removed two `TRACE_TO_TRACE_CLEARANCE` rows from
+`golden-census-2l` (84 → 82; the bridge trace's overlaps with the runs it bridges; its short
+survives) — `07-live-parity-contract.md` §10. The other five goldens are byte-identical after S8's
+relocation and refactor.
 
 ## 11. Astra ledger
 

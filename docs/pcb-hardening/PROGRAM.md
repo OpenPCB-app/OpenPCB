@@ -126,7 +126,7 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 |---|---|---|---|---|---|
 | S6 | DRC rule semantics and scoped constraints | Complete, unambiguous rule resolution: board rules, net classes, scoped rules, precedence, relaxations, floors, pair kinds, layers, area scopes, severity, waivers, migrations. Every stored rule type has one documented resolution path; nothing appears supported while inert. | scalar scoped constraints not enforced; area-scope midpoint approximation; optional severity ignored; v1→v2 waiver migration | spec-attack xhigh (run 1: 15 findings, 14 accepted, 1 limit) | done 2026-09-08 (`05-rule-semantics-contract.md`) |
 | S7 | Authoritative batch DRC completeness | Audit every check against the hardened primitives: duplicated geometry/connectivity models, checks bypassing shared rule resolution, declared-but-unemitted codes, primitive types checks cannot see, unit inconsistencies, false-pass directions, ordering. Batch DRC becomes the reference implementation. | — | repository-grounded adversarial-verify xhigh (run 1: 8 findings — 5 fixed, 2 contract corrections, 1 registered B6-1) | done 2026-09-09 (`06-batch-drc-contract.md`) |
-| S8 | Live DRC and manual-route legality parity | A route legal interactively is legal when committed and batch-checked, and vice versa where practical. Engine relocation to `src/shared/drc/` behind shims so both paths share item builders and kernels. Decide whether route commit gets a server-side clearance gate. | B5-LIVE-ROT-PAD, B5-LIVE-TH-PAD-SIDE | spec-attack xhigh · adversarial-verify xhigh | pending |
+| S8 | Live DRC and manual-route legality parity | A route legal interactively is legal when committed and batch-checked, and vice versa where practical. Engine relocation to `src/shared/drc/` behind shims so both paths share item builders and kernels. Decide whether route commit gets a server-side clearance gate. | B5-LIVE-ROT-PAD, B5-LIVE-TH-PAD-SIDE | spec-attack xhigh (run 1: 9 findings, 7 accepted, 1 recorded as a guarantee, 1 bound) · repository-grounded adversarial-verify xhigh (run 2: 7 findings — 6 fixed, 1 registered B7-1 → S13) | done 2026-09-09 (`07-live-parity-contract.md`) |
 | S9 | DRC broad-phase scaling and determinism | Faster candidate discovery without changing meaning; exhaustive mode retained as oracle; byte-identical reports. Target 10k primitives under ~300 ms. | — | spec-attack xhigh; post optional | pending |
 | S10 | DRC execution responsiveness | Expensive DRC runs without blocking the app: lifecycle, cancellation, progress, concurrency, partial-result semantics, deterministic final output. | B5-SYNC | none by default | pending |
 
@@ -136,7 +136,7 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 |---|---|---|---|---|---|
 | S11 | Hole, pad and via manufacturability geometry | Drill geometry, slots, PTH/NPTH, annular geometry, via type/span, aspect semantics. DRC's model of manufactured holes matches export. | B2-5 (manufacturability half), B2-6, B2-7 | spec-attack xhigh · adversarial-verify xhigh | pending |
 | S12 | DFM overlays and production checks | Courtyard, silkscreen, mask bridges/slivers, copper slivers, acute angles — built at Gerber parity. | — (no overlay codes exist today) | spec-attack xhigh; post only for polygon-topology checks | pending |
-| S13 | Electrical-rule fidelity | Voltage difference, clearance/creepage semantics, external/internal assumptions, current vs width, layer-dependent assumptions, defaults, applicable pad/via/trace combinations, interaction with net classes and scoped rules. Precise modest claims over ambitious labels. | — | spec-attack xhigh · adversarial-verify xhigh | pending |
+| S13 | Electrical-rule fidelity | Voltage difference, clearance/creepage semantics, external/internal assumptions, current vs width, layer-dependent assumptions, defaults, applicable pad/via/trace combinations, interaction with net classes and scoped rules. Precise modest claims over ambitious labels. | B7-1 (unassigned copper does not inherit the rule tier of the net it extends — S8 Astra run 2) | spec-attack xhigh · adversarial-verify xhigh | pending |
 | S14 | SI v1 mathematical correctness | Routed length, branches/stubs, disconnected fragments, via contribution, coupled-span accounting, overlapping segments, gap measurement, diverging gap, layer transitions, pair ordering, determinism. Every reported SI number has a precise definition. | — | spec-attack xhigh · adversarial-verify xhigh | pending |
 | S15 | High-speed architecture runway | Identify contracts/data representations that would block credible future SI (stackup geometry, dielectrics, per-layer copper, reference planes, propagation delay, via barrel path, impedance targets, return-path continuity). Produce a compatibility document; change only what prevents a known dead end. | — | brainstorm xhigh (one call) | pending |
 
@@ -175,7 +175,14 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
   every declared code emitted and every emitted code declared.
 - **S8** — for equivalent geometry, live and batch agree on collision class, affected layer,
   required rule, legal/illegal boundary and measurement (`|measured_live − measured_batch| ≤
-  1e-9`); the route-commit gate decision is recorded and implemented.
+  1e-9`); the route-commit gate decision is recorded and implemented. *Met 2026-09-09: the live
+  path IS the batch pair kernel (`checkPendingCopper`), compared with `===` (the budget is
+  unused) on 192 leave-one-out items / 3 429 violations across the six goldens plus hand-built
+  fixtures for every pair kind; the server gate refuses the 07 §6 set unless `legality: "report" |
+  "off"`. Gates at close (after the Astra run-2 fixes): backend 2168 pass / 22 known library+assistant
+  fails / 8 skip / 6 todo (2204; the sixth todo is B7-1); tsc 44; Vitest 61 files 545 + 1 todo; gen +
+  gen:contracts clean; e2e zones + board-shape + routing + live-parity 15 passed + 1 flag-skip;
+  goldens byte-identical except the recorded census delta (84 → 82).*
 - **S9** — optimized and exhaustive modes agree byte-for-byte on representative medium boards;
   ordering stable; no false negatives introduced.
 - **S10** — expensive runs no longer block command dispatch or SSE; cancel leaves no partial
@@ -490,6 +497,26 @@ unmanufacturable board.
   session itself introduced — run it on every pair loop with reversal probes; an implementer's
   `git stash` around a tsc run briefly reverted the shared tree — forbid it in briefs; Astra run 1
   (≈ 40 min, 235 k tokens) 8 findings, 5 fixed, 2 contract corrections, 1 registered (B6-1).
+- **S8 decisions (2026-09-09)** — user: server-side commit gate = **refuse with explicit opt-out**
+  (`legality: "refuse" | "report" | "off"` on the five copper commands; the desktop sends `report`
+  while its DRC-override toggle is on; the cloud apply loops send `off`; assistant / MCP get the
+  reference verdict in the refusal), **full engine relocation** to `src/shared/drc/` behind
+  one-line shims (six pure backend deps moved with it; `board-connectivity` / `ratsnest` stay out
+  of the `pcb-connectivity` barrel), **tune commits join the gate now**, **live judges the full
+  pending-item code set** (contract 07 §3). Design: live legality = the batch pair bodies
+  (`PairJudge`) run on a per-revision `LegalityContext` (`buildDrcItems`, uniform-grid broad
+  phase) with the pending copper as the subject set (`checkPendingCopper`, `judgeCopperPairs`
+  with its own enumeration; batch loops verbatim); the parity statement is two clauses
+  (attribution equality + non-perturbation with `replaced(T)` bridges) compared with `===`; the
+  refuse set is an allow-list by code; the executor builds the gate context from the rows the
+  dispatcher already loaded (never `loadPcbProjection`, which writes); no truncation exemption;
+  obstacle inflation = `max(at obstacle, implicit, SHORT_EPS + 1 nm)`. Plan-critique pass (20
+  findings, 5 blockers) folded before implementation. Astra run 1 (spec-attack xhigh,
+  prompt-only, ≈16 min): 9 findings — 7 accepted (replaced-bridge clause, no truncation
+  exemption ×2, obstacle inflation ×2, `worseWitness` message tie-break, logical-anchor bridge
+  completion memoised per context), 1 rejected as a defect but recorded as the immutable-snapshot
+  guarantee the client memo rests on, 1 kept as a cost bound (`07-live-parity-contract.md` §11).
+
 ## Appendix — Session 0 amendments to the original program text
 
 The program above is the user's plan of 2026-09-06 with the following changes, each backed by the

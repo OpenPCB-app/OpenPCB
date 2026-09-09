@@ -8,9 +8,14 @@ import type {
   DesignerPin,
   DesignerPrimitive,
   DesignerSchematicProjection,
+  DrcViolation,
   LibraryComponentPlacementDetail,
+  PcbCommitLegality,
   PcbBoardOutline,
   PcbBoardSettings,
+  PcbPlacedPart,
+  PcbFreePad,
+  PcbFreeHole,
   PcbCopperLayerId,
   PcbKeepout,
   PcbTrace,
@@ -64,6 +69,7 @@ import {
   invalidPrimitive,
   invalidWirePath,
   okResult,
+  pcbCopperIllegal,
   pcbFreeHoleNotFound,
   pcbFreePadNotFound,
   pcbKeepoutNotFound,
@@ -141,16 +147,26 @@ import {
   sanitizePath as sanitizeTracePath,
 } from "./pcb/pcb-trace-geometry";
 import {
+  assemblePcbLegalityInput,
   loadPcbProjection,
   netNamesFromSchematic,
+  type PcbLegalityAssembly,
 } from "./pcb/pcb-projection";
 import { loadSchematicProjection } from "./projection-read";
+import {
+  buildDrcItems,
+  type LegalityContext,
+} from "../../../shared/drc/drc-context";
+import {
+  checkPendingCopper,
+  refusedViolations,
+} from "../../../shared/drc/legality";
 import {
   copperToHoleClearanceMm,
   createRuleResolver,
   type RuleResolver,
 } from "../../../shared/drc/rule-resolver";
-import { defaultNetClassId } from "../../../shared/pcb-areas/net-class-resolver";
+import { defaultNetClassId, effectiveNetClassId } from "../../../shared/pcb-areas/net-class-resolver";
 import {
   buildCopperFillIslands,
   isTraceCoveredByPour,
@@ -188,6 +204,24 @@ import {
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 type PinRow = typeof schematicPins.$inferSelect;
 
+/**
+ * The PCB rows `dispatchCommand` already loaded for its history snapshot
+ * before a `pcb_*` command runs. The copper commit gate (live-parity contract
+ * 07 §6) builds its legality context from THESE rows — never from
+ * `loadPcbProjection`, which migrates and syncs placements (writes) and would
+ * leak placement changes into the command's undo patch.
+ */
+export interface PcbRowsBefore {
+  board: PcbBoardSettings;
+  placements: PcbPlacedPart[];
+  traces: PcbTrace[];
+  vias: PcbVia[];
+  freeHoles: PcbFreeHole[];
+  freePads: PcbFreePad[];
+  zones: PcbZone[];
+  keepouts: PcbKeepout[];
+}
+
 export interface ExecuteDesignerCommandParams {
   tx: DbClient;
   designId: string;
@@ -196,6 +230,8 @@ export interface ExecuteDesignerCommandParams {
   projection: DesignerSchematicProjection;
   timestamp: string;
   placeComponentDetail: LibraryComponentPlacementDetail | null;
+  /** Present for every `pcb_*` command (see `PcbRowsBefore`). */
+  pcbBefore?: PcbRowsBefore;
 }
 
 function isFinitePoint(point: { x: number; y: number }): boolean {
@@ -430,22 +466,6 @@ type PcbViaInput = Omit<DesignerPcbAddViaCommand, "type"> & {
  * explicit non-default class is honored as-is. The frontend route session sets
  * this at session start; this guards programmatic inserts.
  */
-function effectiveNetClassId(
-  board: PcbBoardSettings,
-  netId: string | null,
-  requestedClassId: string,
-): string {
-  if (!netId) return requestedClassId;
-  const assigned = board.perNetClassAssignments?.[netId];
-  if (!assigned) return requestedClassId;
-  // ONE default-class helper (rule-semantics contract §3 step 3): the stored
-  // array order is semantic, so this must not drift from the resolver's.
-  const defaultId = defaultNetClassId(board.netClasses);
-  if (requestedClassId !== defaultId) return requestedClassId;
-  return board.netClasses.some((nc) => nc.id === assigned)
-    ? assigned
-    : requestedClassId;
-}
 
 function buildPcbTraceForInsert(
   input: PcbTraceInput,
@@ -772,15 +792,128 @@ function updatePartPinsAndConnectedWires(params: {
   });
 }
 
-export function executeDesignerCommand({
-  tx,
-  designId,
-  revision,
-  command,
-  projection,
-  timestamp,
-  placeComponentDetail,
-}: ExecuteDesignerCommandParams): DesignerDispatchResult {
+/** `refuse` is the default for every gated command (contract 07 §6). */
+function commandLegality(command: DesignerCommand): PcbCommitLegality {
+  return "legality" in command && command.legality !== undefined
+    ? command.legality
+    : "refuse";
+}
+
+interface EnvelopeLegality {
+  /**
+   * The context the gate judges against, or `null` for a non-`pcb_*` envelope
+   * and under `legality: "off"`, where no verdict is computed at all.
+   */
+  context(): LegalityContext | null;
+  /**
+   * A board trace row as the CONTEXT sees it — `bindNetName` has resolved its
+   * importer `netName` hint to a net id. A pending item must be built from the
+   * BOUND row: an imported trace carries `netId: null` + `netName: "GND"`, so an
+   * unbound pending copy would be null-net against copper the context has
+   * already bound to the GND net and would be judged against its own net. The
+   * PERSISTED row stays unbound — the stored hint is design data, not a
+   * derivation. `undefined` when no context exists, or the id is not a board row.
+   */
+  boundTrace(traceId: string): PcbTrace | undefined;
+}
+
+/**
+ * The legality derivation for THIS envelope, run at most once and only when a
+ * gated handler asks for it: from the rows `dispatchCommand` snapshotted, never
+ * from `loadPcbProjection` (contract 07 §6) — its placement sync writes, and
+ * those writes would land in the command's undo patch.
+ */
+function legalityFor(params: ExecuteDesignerCommandParams): EnvelopeLegality {
+  let assembly: PcbLegalityAssembly | null = null;
+  let context: LegalityContext | null = null;
+  let built = false;
+  const assemble = (): PcbLegalityAssembly | null => {
+    if (built) return assembly;
+    built = true;
+    const rows = params.pcbBefore;
+    if (!rows || commandLegality(params.command) === "off") return assembly;
+    assembly = assemblePcbLegalityInput({
+      schematic: params.projection,
+      ...rows,
+    });
+    context = buildDrcItems(assembly);
+    return assembly;
+  };
+  return {
+    context: () => {
+      assemble();
+      return context;
+    },
+    boundTrace: (traceId) =>
+      assemble()?.traces.find((trace) => trace.id === traceId),
+  };
+}
+
+/** The gate verdict: what blocks the commit, and how much it only warns about. */
+interface CopperVerdict {
+  refused: DrcViolation[];
+  warnings: number;
+}
+
+/**
+ * The reference DRC verdict on the copper a command is about to commit
+ * (contract 07 §6). `null` when no context exists (`legality: "off"`), which is
+ * also what keeps the `legality` field off that command's ok result.
+ * Suppressions are NOT passed: `checkPendingCopper` defaults them from the
+ * board's view state and severity overrides exactly as the report does.
+ */
+function gateCopper(
+  ctx: LegalityContext | null,
+  pending: { traces: PcbTrace[]; vias: PcbVia[] },
+  legality: PcbCommitLegality,
+  replaces?: readonly string[],
+): CopperVerdict | null {
+  if (!ctx || legality === "off") return null;
+  const violations = checkPendingCopper(
+    ctx,
+    pending,
+    replaces ? { replaces } : {},
+  );
+  const refused = refusedViolations(ctx, violations);
+  return { refused, warnings: violations.length - refused.length };
+}
+
+/**
+ * The refusal result when the gate blocks, or `null` to carry on with the
+ * insert — `report` computes the verdict and never blocks on it (§6).
+ */
+function copperRefusal(
+  verdict: CopperVerdict | null,
+  legality: PcbCommitLegality,
+): DesignerDispatchResult | null {
+  if (legality !== "refuse" || !verdict || verdict.refused.length === 0) {
+    return null;
+  }
+  return pcbCopperIllegal(verdict.refused);
+}
+
+/** Counts for the ok result; `undefined` leaves the field off entirely. */
+function legalityCounts(
+  verdict: CopperVerdict | null,
+): { refused: number; warnings: number } | undefined {
+  return verdict
+    ? { refused: verdict.refused.length, warnings: verdict.warnings }
+    : undefined;
+}
+
+export function executeDesignerCommand(
+  params: ExecuteDesignerCommandParams,
+): DesignerDispatchResult {
+  const {
+    tx,
+    designId,
+    revision,
+    command,
+    projection,
+    timestamp,
+    placeComponentDetail,
+  } = params;
+  const gate = legalityFor(params);
   if (command.type === "pcb_set_board_settings") {
     if (command.widthMm <= 0 || command.heightMm <= 0) {
       return invalidPcbBoardSettings("board width and height must be positive");
@@ -939,38 +1072,76 @@ export function executeDesignerCommand({
     const built = buildPcbTraceForInsert(command, board);
     if ("error" in built) return built.error;
     const { trace } = built;
+    // The gate judges the BUILT trace (its assigned id, its resolved width) and
+    // runs before the insert, so a refusal persists nothing (contract 07 §6).
+    const legality = commandLegality(command);
+    const verdict = gateCopper(
+      gate.context(),
+      { traces: [trace], vias: [] },
+      legality,
+    );
+    const refusal = copperRefusal(verdict, legality);
+    if (refusal) return refusal;
     insertPcbTrace(tx, designId, trace, timestamp);
-    return okResult(bumpRevision(tx, designId, revision, timestamp), trace.id);
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      trace.id,
+      legalityCounts(verdict),
+    );
   }
 
   if (command.type === "pcb_add_via") {
     const board = ensurePcbBoardSettings(tx, designId, timestamp);
+    const ctx = gate.context();
     const built = buildPcbViaForInsert(
       command,
       board,
-      ruleResolverFor(tx, designId, board),
+      // ONE resolver compile per envelope: the context already holds the one
+      // batch DRC would use. `ruleResolverFor` remains the `off` path.
+      ctx?.resolver ?? ruleResolverFor(tx, designId, board),
     );
     if ("error" in built) return built.error;
     const { via } = built;
+    const legality = commandLegality(command);
+    const verdict = gateCopper(ctx, { traces: [], vias: [via] }, legality);
+    const refusal = copperRefusal(verdict, legality);
+    if (refusal) return refusal;
     insertPcbVia(tx, designId, via, timestamp);
-    return okResult(bumpRevision(tx, designId, revision, timestamp), via.id);
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      via.id,
+      legalityCounts(verdict),
+    );
   }
 
   if (command.type === "pcb_add_trace_via") {
     const board = ensurePcbBoardSettings(tx, designId, timestamp);
+    const ctx = gate.context();
     const builtTrace = buildPcbTraceForInsert(command.trace, board);
     if ("error" in builtTrace) return builtTrace.error;
     const builtVia = buildPcbViaForInsert(
       command.via,
       board,
-      ruleResolverFor(tx, designId, board),
+      ctx?.resolver ?? ruleResolverFor(tx, designId, board),
     );
     if ("error" in builtVia) return builtVia.error;
+    // Trace and via are judged TOGETHER — they are one commit, so the via
+    // against its own trace is a same-net pair that skips, exactly as it will
+    // once both are on the board.
+    const legality = commandLegality(command);
+    const verdict = gateCopper(
+      ctx,
+      { traces: [builtTrace.trace], vias: [builtVia.via] },
+      legality,
+    );
+    const refusal = copperRefusal(verdict, legality);
+    if (refusal) return refusal;
     insertPcbTrace(tx, designId, builtTrace.trace, timestamp);
     insertPcbVia(tx, designId, builtVia.via, timestamp);
     return okResult(
       bumpRevision(tx, designId, revision, timestamp),
       builtVia.via.id,
+      legalityCounts(verdict),
     );
   }
 
@@ -984,19 +1155,26 @@ export function executeDesignerCommand({
     // Validate-all-then-insert-all: executor branches return error RESULTS
     // (they don't throw), so inserting before every item is validated would
     // persist a partial batch inside the committed transaction.
-    const traces = [];
+    const traces: PcbTrace[] = [];
     for (const traceInput of command.traces) {
       const built = buildPcbTraceForInsert(traceInput, board);
       if ("error" in built) return built.error;
       traces.push(built.trace);
     }
-    const vias = [];
-    const viaResolver = ruleResolverFor(tx, designId, board);
+    const vias: PcbVia[] = [];
+    const ctx = gate.context();
+    const viaResolver = ctx?.resolver ?? ruleResolverFor(tx, designId, board);
     for (const viaInput of command.vias) {
       const built = buildPcbViaForInsert(viaInput, board, viaResolver);
       if ("error" in built) return built.error;
       vias.push(built.via);
     }
+    // The whole batch is one subject set: the session's runs are judged against
+    // each other as well as against the board (contract 07 §4).
+    const legality = commandLegality(command);
+    const verdict = gateCopper(ctx, { traces, vias }, legality);
+    const refusal = copperRefusal(verdict, legality);
+    if (refusal) return refusal;
     for (const trace of traces) insertPcbTrace(tx, designId, trace, timestamp);
     for (const via of vias) insertPcbVia(tx, designId, via, timestamp);
     // Single-id result contract (see pcb_add_trace_via): downstream consumers
@@ -1004,6 +1182,7 @@ export function executeDesignerCommand({
     return okResult(
       bumpRevision(tx, designId, revision, timestamp),
       traces[0]?.id ?? vias[0]?.id ?? null,
+      legalityCounts(verdict),
     );
   }
 
@@ -1106,8 +1285,28 @@ export function executeDesignerCommand({
     }
     const reason = validateTracePath(sanitized, existing.segmentMode);
     if (reason) return invalidPcbTrace(reason);
+    // No truncation exemption (contract 07 §6, Astra run 1 #2/#3): a vertex
+    // subsequence is not a copper subset, and even a genuine prefix cut can
+    // move a surviving violation's hotspot past its waiver. `replaces` removes
+    // the trace's own row at enumeration, so it is not judged against itself.
+    // The JUDGED trace is the bound row (see `EnvelopeLegality.boundTrace`);
+    // the PERSISTED one is the raw row, which keeps its `netName` hint.
+    const legality = commandLegality(command);
+    const bound = gate.boundTrace(command.traceId) ?? existing;
+    const verdict = gateCopper(
+      gate.context(),
+      { traces: [{ ...bound, pointsNm: sanitized }], vias: [] },
+      legality,
+      [command.traceId],
+    );
+    const refusal = copperRefusal(verdict, legality);
+    if (refusal) return refusal;
     updatePcbTrace(tx, { ...existing, pointsNm: sanitized }, timestamp);
-    return okResult(bumpRevision(tx, designId, revision, timestamp), null);
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      null,
+      legalityCounts(verdict),
+    );
   }
 
   if (command.type === "pcb_cleanup_pour_traces") {
@@ -1646,15 +1845,26 @@ export function executeDesignerCommand({
 
   if (command.type === "pcb_add_manual_via") {
     const board = ensurePcbBoardSettings(tx, designId, timestamp);
+    const ctx = gate.context();
     const built = buildPcbViaForInsert(
       command,
       board,
-      ruleResolverFor(tx, designId, board),
+      ctx?.resolver ?? ruleResolverFor(tx, designId, board),
     );
     if ("error" in built) return built.error;
+    // Same builder, same copper, same gate as `pcb_add_via` — only the
+    // provenance differs, and a manually placed via shorts a net just as well.
     const via = { ...built.via, provenance: "manual" as const };
+    const legality = commandLegality(command);
+    const verdict = gateCopper(ctx, { traces: [], vias: [via] }, legality);
+    const refusal = copperRefusal(verdict, legality);
+    if (refusal) return refusal;
     insertPcbVia(tx, designId, via, timestamp);
-    return okResult(bumpRevision(tx, designId, revision, timestamp), via.id);
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      via.id,
+      legalityCounts(verdict),
+    );
   }
 
   if (command.type === "pcb_add_overlay_text") {

@@ -406,6 +406,9 @@ describe("designer PCB batch operations — one-undo invariant", () => {
     const netClassId = projection!.board.netClasses[0]!.id;
 
     // Blind F.Cu→B.Cu accepted (flag on in test builds), type persisted.
+    // `legality: "off"` because this is about the CREATION gate, which is
+    // deliberately permissive about span topology (audit B2-7) — the commit
+    // gate refuses the same via on `VIA_LAYER_SPAN` (contract 07 §6).
     const blind = await sdk.dispatchCommand(
       design.id,
       envelope(design.id, "cmd-blind-via", 0, {
@@ -416,6 +419,7 @@ describe("designer PCB batch operations — one-undo invariant", () => {
         fromLayer: "F.Cu" as PcbCopperLayerId,
         toLayer: "B.Cu" as PcbCopperLayerId,
         viaType: "blind" as const,
+        legality: "off",
       }),
     );
     expect(blind.ok).toBe(true);

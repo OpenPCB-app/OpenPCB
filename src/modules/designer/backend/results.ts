@@ -2,6 +2,7 @@ import type {
   DesignerCommandOkResult,
   DesignerDispatchResult,
   DesignerEntityKind,
+  DrcViolation,
   PcbCopperLayerId,
 } from "../../../sdks";
 import { isCopperLayerId } from "../../../sdks/designer";
@@ -17,6 +18,11 @@ export function parseDispatchResultJson(
       return null;
     }
     const createdEntityIdRaw = parsed.createdEntityId;
+    // The gate verdict is replayed verbatim: an idempotent retry answers with
+    // the verdict of the revision that actually committed (contract 07 §6).
+    const legalityRaw = asRecord(parsed.legality);
+    const refused = asNumber(legalityRaw?.refused);
+    const warnings = asNumber(legalityRaw?.warnings);
     return {
       ok: true,
       revision,
@@ -25,6 +31,9 @@ export function parseDispatchResultJson(
           ? createdEntityIdRaw
           : null,
       idempotent: true,
+      ...(refused !== null && warnings !== null
+        ? { legality: { refused, warnings } }
+        : {}),
     };
   }
 
@@ -166,6 +175,25 @@ export function parseDispatchResultJson(
   if (code === "PCB_KEEPOUT_NOT_FOUND") {
     const keepoutId = asString(parsed.keepoutId);
     return keepoutId ? { ok: false, code, keepoutId } : null;
+  }
+
+  if (code === "PCB_COPPER_ILLEGAL") {
+    const detail = asString(parsed.detail);
+    // The row was written by `pcbCopperIllegal` from this process's own DRC
+    // report, so the array is structurally trusted; only its presence is
+    // checked, as every other branch here checks its fields' presence.
+    const violations = parsed.violations;
+    if (!detail || !Array.isArray(violations)) return null;
+    // `violations` is capped, so the count is a field of its own; a row written
+    // before the cap existed has none, and its array IS the whole truth.
+    const refusedCount = asNumber(parsed.refusedCount) ?? violations.length;
+    return {
+      ok: false,
+      code,
+      detail,
+      violations: violations as DrcViolation[],
+      refusedCount,
+    };
   }
 
   if (code === "INVALID_DRC_RULE") {
@@ -312,9 +340,62 @@ export function duplicateReference(reference: string): DesignerDispatchResult {
   return { ok: false, code: "DUPLICATE_REFERENCE", reference };
 }
 
+/** `0.250`, or `?` for a violation that carries no measurement. */
+function mm(value: number | undefined): string {
+  return value === undefined ? "?" : value.toFixed(3);
+}
+
+/**
+ * One line naming what blocked the commit. The first three violations in the
+ * report's canonical `(code, id)` order, so the same board and the same pending
+ * copper always produce the same detail string.
+ */
+function copperIllegalDetail(violations: readonly DrcViolation[]): string {
+  const head = violations
+    .slice(0, 3)
+    .map((v) => `${v.code} (${mm(v.measuredMm)}/${mm(v.requiredMm)})`)
+    .join(", ");
+  const rest = violations.length > 3 ? ", …" : "";
+  return `${violations.length} DRC violation(s): ${head}${rest}`;
+}
+
+/**
+ * How many refused violations a refusal carries. A bundle route can cross a
+ * dense board in both directions, and the verdict is O(pending × board): the
+ * result is persisted verbatim in `command_log.result_json` and shipped over
+ * HTTP, so it must not grow with the board. The count is reported in full.
+ */
+const MAX_REPORTED_VIOLATIONS = 50;
+
+/**
+ * The copper commit gate's refusal (live-parity contract 07 §6): the command
+ * persisted nothing, and `violations` is the reference DRC verdict on the
+ * copper it would have committed, with the ids batch DRC would assign — the
+ * first 50 of them, in the canonical order `finalizeReport` sorted them into.
+ */
+export function pcbCopperIllegal(
+  violations: DrcViolation[],
+): DesignerDispatchResult {
+  return {
+    ok: false,
+    code: "PCB_COPPER_ILLEGAL",
+    detail: copperIllegalDetail(violations),
+    violations: violations.slice(0, MAX_REPORTED_VIOLATIONS),
+    refusedCount: violations.length,
+  };
+}
+
 export function okResult(
   revision: number,
   createdEntityId: string | null,
+  /** Gate verdict counts; omitted entirely under `legality: "off"` (§6). */
+  legality?: { refused: number; warnings: number },
 ): DesignerCommandOkResult {
-  return { ok: true, revision, createdEntityId, idempotent: false };
+  return {
+    ok: true,
+    revision,
+    createdEntityId,
+    idempotent: false,
+    ...(legality ? { legality } : {}),
+  };
 }

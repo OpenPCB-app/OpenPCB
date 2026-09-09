@@ -119,6 +119,7 @@ export type {
   DesignerPcbAddTraceViaCommand,
   DesignerPcbAddViaCommand,
   DesignerPcbCommitRouteCommand,
+  PcbCommitLegality,
   DesignerPcbApplyAutolayoutCandidateCommand,
   DesignerPcbCandidatePlacementOperation,
   DesignerPcbCandidateRouteOperation,

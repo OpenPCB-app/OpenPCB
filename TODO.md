@@ -98,7 +98,17 @@ both are gated on manual QA on a real board before their dev flags can graduate.
       the milling advisories; every drilled free pad is a hole to DRC, the drill file and the pour
       alike; an NPTH `hole` free pad no longer flashes copper in the Gerber and a `conn` pad flashes
       on its declared layer only; class ignores for `dfm` / `electrical` / `signal-integrity` now
-      persist; `UNCONNECTED_NET` is derived by the engine itself).
+      persist; `UNCONNECTED_NET` is derived by the engine itself), and the S8 live-parity changes
+      (`docs/pcb-hardening/07-live-parity-contract.md`: the route tool's live check, its commit
+      gate, the smart-via and tune guards now judge the pending copper with the batch DRC kernel —
+      every pair kind, shorts, the fab tier, NPTH holes, board edge / off-board, hole spacing,
+      keepouts and the item minimums, against exact rotated pads and through-hole barrels on every
+      layer; the HUD shows conflicts and warnings separately; the tune commit is gated like a route;
+      every copper command is judged server-side too and refused with `PCB_COPPER_ILLEGAL` unless
+      the DRC-override toggle is on (`legality: "report"`) — assistant / MCP routes get the same
+      verdict; two touching pieces of unassigned copper are one conductor and unassigned copper
+      touching a named net is an extension of it, so their overlaps are no longer clearance errors
+      (the census golden lost two rows); router obstacles follow the same items).
 - [ ] Follow-up: migrate `/autoroute/apply` onto `pcb_commit_route`. Carries an open UX decision —
       per-op cherry-pick (today's route apply) versus all-or-nothing batch (today's place apply).
 - [ ] Follow-up: pad-bearing E2E fixture board covering Tab→accept, tune-a-trace, bundle
@@ -320,9 +330,9 @@ correctness-hardening program in
 zones/keepouts → pours → rule semantics → batch DRC → live/route parity → scaling → async →
 manufacturability → DFM → electrical → SI → high-speed runway → routing → trust gate), with the
 verified current-master inventory in
-[`docs/pcb-hardening/00-ground-truth.md`](docs/pcb-hardening/00-ground-truth.md). Sessions 0–6 are
-done (S6 rule semantics closed 2026-09-08); S7 (authoritative batch DRC) is in progress; S8
-(live / route parity) is next.
+[`docs/pcb-hardening/00-ground-truth.md`](docs/pcb-hardening/00-ground-truth.md). Sessions 0–7 are
+done (S7 authoritative batch DRC closed 2026-09-09); S8 (live / route parity) closed 2026-09-09
+(`docs/pcb-hardening/07-live-parity-contract.md`); S9 (broad-phase scaling) is next.
 
 **Binding decisions (unchanged).** Full scope — core plus DFM plus electrical plus SI · scoped
 priority rules (first-match, *can relax*, board-minimum floor) · full multilayer 2–32 · breaking
@@ -330,7 +340,9 @@ changes allowed with migration (violation-id v2, KiCad-aligned severities, live 
 resolution).
 
 **Open bugs.** 6 audit findings remain unresolved (B2-9 and B5-LIVE-PADGEOMS closed in Session 0;
-B3-1/3/4/5/6 fixed in Session 1; B4-1/2/6/7 fixed in Session 2; B3-9/10 fixed in Session 5) and are tracked as `test.todo` with real post-fix assertions in `drc-audit-b*.test.ts`. They
+B3-1/3/4/5/6 fixed in Session 1; B4-1/2/6/7 fixed in Session 2; B3-9/10 fixed in Session 5;
+B6-1 registered in Session 7; B5-LIVE-ROT-PAD / B5-LIVE-TH-PAD-SIDE fixed and B7-1 registered in
+Session 8) and are tracked as `test.todo` with real post-fix assertions in `drc-audit-b*.test.ts`. They
 are enumerated with mechanism and anchors in
 [`docs/drc/OPEN_FINDINGS.md`](docs/drc/OPEN_FINDINGS.md) — do not restate them here. Every finding
 now has an owning session.

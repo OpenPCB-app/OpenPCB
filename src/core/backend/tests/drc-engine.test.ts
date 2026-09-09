@@ -234,7 +234,10 @@ describe("runDrc — clearance", () => {
     expect(realCodes(report)).toHaveLength(0);
   });
 
-  test("null-net overlap is a clearance error, not a short", () => {
+  // S8 (contract 06 §4 / 07 §4): unassigned copper that TOUCHES a named net is
+  // an extension of it — neither a clearance error (it was, until S8) nor a
+  // short. Only a null-net item that is merely close is still judged.
+  test("null-net overlap is an extension: neither a clearance error nor a short", () => {
     const report = runDrc(
       projection({
         traces: [
@@ -245,6 +248,26 @@ describe("runDrc — clearance", () => {
           trace("b", "n2", [
             [5, -5],
             [5, 5],
+          ]),
+        ],
+      }),
+    );
+    expect(codes(report)).not.toContain("TRACE_TO_TRACE_CLEARANCE");
+    expect(codes(report)).not.toContain("NET_SHORT_CIRCUIT");
+  });
+
+  test("null-net copper merely close to a named net is still a clearance error", () => {
+    const report = runDrc(
+      projection({
+        traces: [
+          trace("a", null, [
+            [0, 0],
+            [10, 0],
+          ]),
+          // 0.15 mm edge gap: not touching, below the 0.25 mm rule.
+          trace("b", "n2", [
+            [0, 0.35],
+            [10, 0.35],
           ]),
         ],
       }),
@@ -308,6 +331,9 @@ describe("runDrc — trace ↔ pad (mirror handling)", () => {
     const report = runDrc(
       projection({
         placements: [pl],
+        // Named pad: since S8 a null-net pad touched by a trace is an extension
+        // of it, and this test is about the mirror geometry, not that tier.
+        padNets: { "U1|1": "n1" },
         traces: [
           trace(
             "t",
@@ -321,7 +347,10 @@ describe("runDrc — trace ↔ pad (mirror handling)", () => {
         ],
       }),
     );
-    expect(codes(report)).toContain("TRACE_TO_PAD_CLEARANCE");
+    // The trace runs THROUGH the mirrored pad, so the contact is the short
+    // tier's verdict, not a clearance deficit — either proves the pad sits at
+    // world x = 8.
+    expect(codes(report)).toContain("NET_SHORT_CIRCUIT");
   });
 
   test("trace at the non-mirrored x is clear (proves X-mirror applied)", () => {

@@ -16,6 +16,7 @@ import type {
   DesignerCommentThreadStatus,
   DesignerCommentTodoStatus,
   DesignerDispatchResult,
+  DrcViolation,
   PcbBoardContour,
   PcbBoardOutline,
   PcbCopperLayerId,
@@ -32,7 +33,6 @@ import type {
   PlacePayloadSummary,
   PlacementResultEnvelope,
 } from "../../../../sdks";
-import { copperLayersForCount } from "../../../../sdks/designer";
 import { nmToSceneMm } from "../../../../shared/frontend/canvas/coords";
 import type { OpenpcbCapturePcbApi } from "../capture-bridge";
 import { EdaCanvas } from "../../../../shared/frontend/canvas/interaction/EdaCanvas";
@@ -149,7 +149,12 @@ import {
 } from "./guides/guide-types";
 import { computeRouteGuides } from "./guides/routing-engine";
 import type { BoundsMm } from "../../../../shared/rendering/types";
-import { runLiveDrc, type DrcViolation } from "./drc/live-drc";
+import {
+  blockingViolations,
+  pendingCopperFromSession,
+  runLiveDrc,
+} from "./drc/live-drc";
+import { useRafThrottledValue } from "./use-raf-throttled-value";
 import {
   initialRouteToolState,
   routeToolReducer,
@@ -212,7 +217,10 @@ import { CornerOpModal } from "./CornerOpModal";
 import { EdgeDimModal, type DimEditTarget } from "./EdgeDimModal";
 import { DxfImportModal } from "./import/DxfImportModal";
 import { findMeasureSnapTarget } from "./measure-snap";
-import { usePcbWorkspace } from "./usePcbWorkspace";
+import {
+  usePcbWorkspace,
+  type DispatchRejectedError,
+} from "./usePcbWorkspace";
 import { useDrcStore } from "./drc/drc-store";
 import { DRC_SEVERITY } from "./drc/drc-colors";
 import {
@@ -235,7 +243,6 @@ import { buildRouteHudModel, routeLengthMm } from "./tools/route-hud-model";
 import { buildPcbSpatialIndex, pointQueryBox } from "./spatial-index";
 import { nextRouteLayer } from "./tools/route-layer";
 import { nearestRatsnestPad } from "./tools/route-target";
-import { viaKeepoutBlock } from "./tools/route-keepouts";
 import {
   distanceAlongPolylineNm,
   initialTuneToolState,
@@ -267,7 +274,6 @@ import { generateMeander } from "../../../../shared/pcb-routing/meander";
 import { routeAutoFinish } from "../../../../shared/pcb-routing/auto-finish";
 import { walkaroundHead } from "../../../../shared/pcb-routing/walkaround";
 import { buildRouteObstacles } from "../../../../shared/pcb-routing/route-obstacles";
-import { createRuleResolver } from "../../../../shared/drc/rule-resolver";
 import { defaultNetClassId } from "../../../../shared/pcb-areas/net-class-resolver";
 import { useFeatureFlag } from "@/feature-flags";
 import { FlipHorizontal2 } from "lucide-react";
@@ -514,6 +520,12 @@ const EMPTY_PART_VALUES: ReadonlyMap<string, string> = new Map();
 const EMPTY_ZONES: ReadonlyArray<PcbZone> = [];
 const EMPTY_KEEPOUTS: ReadonlyArray<PcbKeepout> = [];
 const EMPTY_NET_NAMES: Readonly<Record<string, string>> = {};
+const EMPTY_VIOLATIONS: DrcViolation[] = [];
+/** Stable identity so the per-pointer-move memos keeping it as a dep settle. */
+const EMPTY_PENDING_COPPER: { traces: PcbTrace[]; vias: PcbVia[] } = {
+  traces: [],
+  vias: [],
+};
 
 /**
  * Status-bar hints (design D2 §9). These replace the floating hint strips that
@@ -530,6 +542,11 @@ const HINT_MEASURE_ACTIVE =
 const HINT_SKETCH_IDLE = "Click to place the first corner · Esc exit";
 const HINT_SKETCH_ACTIVE =
   "type Length · Tab ∠ angle · Shift 45° lock · Enter close/place · ⌫ undo · Esc cancel";
+
+/** Distinct DRC codes of a refusal, in report order — the notice's payload. */
+function violationCodeList(violations: readonly DrcViolation[]): string {
+  return [...new Set(violations.map((v) => v.code))].join(", ");
+}
 
 export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const gridEnabled = props.gridVisible ?? false;
@@ -700,6 +717,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     initialTuneToolState,
   );
   const [tuneTargetInputOpen, setTuneTargetInputOpen] = useState(false);
+  // Refusal notice of the tune commit gate (contract 07 §8), session-scoped.
+  const [tuneNotice, setTuneNotice] = useState<string | null>(null);
   // Trace under the cursor while the Tune tool is idle — pick affordance.
   const [tuneHoverTraceId, setTuneHoverTraceId] = useState<string | null>(
     null,
@@ -1336,49 +1355,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   // like real copper until the atomic commit lands. Ids are namespaced
   // `pending:` — they never reach the backend.
   const pendingRouteGeometry = useMemo(() => {
-    const empty = { traces: [] as PcbTrace[], vias: [] as PcbVia[] };
-    if (routeState.kind !== "routing") return empty;
-    const session = routeState.session;
-    if (session.boundaries.length === 0) return empty;
-    const netClass = workspace.projection?.board.netClasses.find(
-      (nc) => nc.id === session.netClassId,
-    );
-    const traces: PcbTrace[] = [];
-    const vias: PcbVia[] = [];
-    session.boundaries.forEach((b, i) => {
-      if (b.run) {
-        traces.push({
-          id: `pending:trace:${i}`,
-          netId: session.netId,
-          netClassId: session.netClassId,
-          layer: b.run.layer,
-          widthMm: b.run.widthMm,
-          pointsNm: b.run.pointsNm,
-          segmentMode: b.run.segmentMode,
-        });
-      }
-      if (b.via) {
-        vias.push({
-          id: `pending:via:${i}`,
-          netId: session.netId,
-          netClassId: session.netClassId,
-          centerMm: {
-            x: b.via.centerNm.x / NM_PER_MM,
-            y: b.via.centerNm.y / NM_PER_MM,
-          },
-          diameterMm:
-            b.via.diameterMmOverride ?? netClass?.viaDiameterMm ?? 0.8,
-          drillMm: b.via.drillMmOverride ?? netClass?.viaDrillMm ?? 0.4,
-          fromLayer: "F.Cu",
-          toLayer: "B.Cu",
-          viaType: "through",
-          protection: netClass?.defaultViaProtection ?? "tented",
-          provenance: "route",
-        });
-      }
-    });
-    return { traces, vias };
-  }, [routeState, workspace.projection?.board.netClasses]);
+    const board = workspace.projection?.board;
+    if (routeState.kind !== "routing" || !board) return EMPTY_PENDING_COPPER;
+    if (routeState.session.boundaries.length === 0) return EMPTY_PENDING_COPPER;
+    // The ONE session → pending-copper mapping, shared with the gate: what the
+    // scene draws and what `checkPendingCopper` judges are the same rows.
+    return pendingCopperFromSession(routeState.session, null, board);
+  }, [routeState, workspace.projection?.board]);
 
   // Broad-phase rbush index over committed copper, rebuilt per projection.
   // Prefilters the brute-force snap/DRC predicates — they stay authoritative.
@@ -1522,46 +1505,24 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   }, [workspace.projection?.board.netClasses]);
 
   /**
-   * The ONE rule resolver for this projection, built here and shared by every
-   * clearance consumer on the canvas: the live-DRC commit gate, the route
-   * preview gate and the obstacle inflation for auto-finish / walkaround /
-   * tune. Batch DRC builds an equivalent one from the same board, so the gate
-   * and the report cannot disagree (rule-semantics contract §9).
+   * The ONE legality context of this projection (live-parity contract 07 §2,
+   * §7), derived once in `usePcbWorkspace` and shared by every legality
+   * consumer on the canvas: the live gate, the commit gates for route / bundle
+   * / smart via / tune, and the obstacle inflation for auto-finish /
+   * walkaround / meander. Batch DRC builds the same context from the same
+   * board, so the gate and the report cannot disagree.
    *
-   * `knownNetIds` is deliberately omitted: it only decides whether a rule that
-   * references a missing net is REPORTED as ineffective, never what a rule
-   * resolves to (§2.1), and the gate reports no rule problems.
+   * `maxClearanceBoundMm` is the context's own upper bound of ANY
+   * copper-to-copper clearance; it sizes the A* grid step and the meander leg
+   * floor. `maxObstacleReachMm` additionally covers the HOLE bound — how far
+   * any obstacle rect can reach past the item that produced it — and is what
+   * every `buildRouteObstacles` query window is padded by. Legality reads
+   * neither: the per-obstacle requirement is resolved inside
+   * `buildRouteObstacles`, the verdict inside `runLiveDrc`.
    */
-  const ruleResolver = useMemo(() => {
-    const projection = workspace.projection;
-    if (!projection) return null;
-    return createRuleResolver(projection.board, projection.netNames ?? {}, {
-      validCopperLayers: copperLayersForCount(projection.board.layerCount),
-    });
-  }, [workspace.projection?.board, workspace.projection?.netNames]);
-
-  /**
-   * Upper bound of ANY clearance the resolver can return for a routed trace
-   * against ANY neighbour on this board: the board tier of both pair kinds the
-   * gate checks, every enabled rule's value and the floor (all folded into
-   * `clearanceBound`), plus the largest net-class clearance — because either
-   * item of a pair may raise the implicit tier and the neighbour's net is not
-   * known when a query window is sized (§4.1).
-   *
-   * Session-independent by construction, so it is memoised once here and used
-   * for every SIZING decision (broad-phase query boxes, the A* grid step, the
-   * meander leg floor). Legality never reads it: the per-obstacle requirement
-   * is resolved inside `buildRouteObstacles`, and the verdict inside
-   * `runLiveDrc`.
-   */
-  const maxClearanceBoundMm = useMemo(() => {
-    if (!ruleResolver || !workspace.projection) return 0;
-    return Math.max(
-      ruleResolver.clearanceBound("traceToTrace", null, null),
-      ruleResolver.clearanceBound("traceToPad", null, null),
-      ...workspace.projection.board.netClasses.map((c) => c.clearanceMm),
-    );
-  }, [ruleResolver, workspace.projection?.board.netClasses]);
+  const legalityContext = workspace.legalityContext;
+  const maxClearanceBoundMm = workspace.maxClearanceBoundMm;
+  const maxObstacleReachMm = workspace.maxObstacleReachMm;
 
   /**
    * Resolve a starting anchor: snaps to pad center if cursor is over a pad and
@@ -1742,39 +1703,52 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             : {}),
         }));
       if (traces.length === 0 && vias.length === 0) return;
-      // DRC commit gate: never persist a clearance violation by default.
-      // Checks EVERY run (accumulated + final) against committed copper;
-      // same-net copper is exempt inside runLiveDrc.
-      if (!allowDrcViolations && workspace.projection && ruleResolver) {
-        let conflictCount = 0;
-        for (const t of traces) {
-          conflictCount += runLiveDrc({
-            traceNm: t.pointsNm,
-            traceWidthMm: t.widthMm,
-            netId: session.netId,
-            layer: t.layer,
-            traces: workspace.projection.traces,
-            placements: workspace.projection.placements,
-            padNetMap: padToNet,
-            resolver: ruleResolver,
-            keepouts: effectiveKeepouts,
-          }).length;
-        }
-        if (conflictCount > 0) {
-          setBlockedConflictCount(conflictCount);
+      // The commit gate (contract 07 §8 site B): ONE `checkPendingCopper` over
+      // the WHOLE session — every run and via at once, so lane-to-lane and
+      // run-to-run pairs are judged too — against the board the context
+      // describes. Same-net copper is exempt inside the shared pair filters.
+      if (legalityContext && workspace.projection) {
+        const blocking = blockingViolations(
+          legalityContext,
+          runLiveDrc({
+            ctx: legalityContext,
+            pending: pendingCopperFromSession(
+              session,
+              finalRun.length >= 2 ? finalRun : null,
+              workspace.projection.board,
+            ),
+          }),
+        );
+        if (!allowDrcViolations && blocking.length > 0) {
+          setBlockedConflictCount(blocking.length);
           return;
         }
       }
       setBlockedConflictCount(null);
       try {
-        await workspace.commitRoute({ traces, vias });
+        // `report` while the override is on, else the server refuses (§6).
+        await workspace.commitRoute({
+          traces,
+          vias,
+          legality: allowDrcViolations ? "report" : "refuse",
+        });
         dispatchRoute({ kind: "cancel" });
-      } catch {
-        // Rejection surfaced via the workspace error toast; the session
+      } catch (err) {
+        // A server refusal means the live gate and the server disagreed (a
+        // parity bug) or the board changed under the session (a concurrent
+        // assistant / MCP edit) — surface its codes instead of swallowing it.
+        const rejected = (err as DispatchRejectedError | null)?.dispatchResult;
+        if (rejected?.code === "PCB_COPPER_ILLEGAL") {
+          setBlockedConflictCount(rejected.violations.length);
+          setRouteNotice(
+            `Commit rejected by DRC: ${violationCodeList(rejected.violations)}`,
+          );
+        }
+        // Otherwise surfaced via the workspace error toast; the session
         // intentionally survives for adjust-and-retry.
       }
     },
-    [allowDrcViolations, effectiveKeepouts, padToNet, ruleResolver, workspace],
+    [allowDrcViolations, legalityContext, workspace],
   );
 
   /**
@@ -1812,14 +1786,19 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
         return;
       }
       const targetNm = pointMmToNm(target.centerMm);
-      if (!ruleResolver) return;
+      if (!legalityContext) return;
       // Broad-phase: copper within the source→target corridor + headroom.
       // This box also bounds how far the A* corridor can grow. Copper beyond
       // it is invisible to the search (the corridor can outgrow the box when
       // edge obstacles extend it), so a proposal can theoretically cross
       // unqueried copper — accepted: the accept path re-runs the full DRC
       // gate before committing, so it fails visible, never silent.
-      const corridorPadMm = 5;
+      // The obstacle builder windows the context at halo 0, so the corridor
+      // must carry every requirement a pair can resolve to (contract 07 §5).
+      const corridorPadMm = Math.max(
+        5,
+        1 + maxObstacleReachMm + session.widthMm,
+      );
       const box = {
         minX: Math.min(sourceMm.x, target.centerMm.x) - corridorPadMm,
         minY: Math.min(sourceMm.y, target.centerMm.y) - corridorPadMm,
@@ -1829,19 +1808,13 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       const excludePadIds = new Set<string>([target.padId]);
       if (session.startPadId) excludePadIds.add(session.startPadId);
       const obstacles = buildRouteObstacles({
-        traces: [
-          ...projectionIndex.queryTraces(box),
-          ...pendingRouteGeometry.traces,
-        ],
-        placements: projectionIndex.queryPlacements(box),
-        vias: [...projectionIndex.queryVias(box), ...pendingRouteGeometry.vias],
+        ctx: legalityContext,
         layer: session.layer,
         netId: session.netId,
-        padNetMap: padToNet,
-        resolver: ruleResolver,
         routeWidthMm: session.widthMm,
         excludePadIds,
-        keepouts: effectiveKeepouts,
+        withinBounds: box,
+        extra: pendingRouteGeometry,
       });
       const result = routeAutoFinish({
         sourceNm,
@@ -1887,13 +1860,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     },
     [
       cursorMm,
-      effectiveKeepouts,
+      legalityContext,
       maxClearanceBoundMm,
-      padToNet,
+      maxObstacleReachMm,
       pendingRouteGeometry,
       projectionIndex,
       routeState,
-      ruleResolver,
       workspace.projection,
     ],
   );
@@ -2036,11 +2008,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       return null;
     }
     const session = tuneState.session;
+    const tuneExcludeTraceIds = new Set([tunedTrace.id]);
     const netTotalMm = tuneNetLengths.otherMm + tuneNetLengths.baselineMm;
     const targetExtraNm = Math.round(
       Math.max(0, tuneResolvedTargetMm - netTotalMm) * NM_PER_MM,
     );
-    if (!ruleResolver) return null;
+    if (!legalityContext) return null;
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -2056,7 +2029,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     // never tighter than some rule allows.
     const padMm =
       1 +
-      maxClearanceBoundMm +
+      maxObstacleReachMm +
       tunedTrace.widthMm +
       session.amplitudeNm / NM_PER_MM;
     const box = {
@@ -2066,17 +2039,15 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       maxY: maxY / NM_PER_MM + padMm,
     };
     const obstacles = buildRouteObstacles({
-      traces: projectionIndex
-        .queryTraces(box)
-        .filter((t) => t.id !== tunedTrace.id),
-      placements: projectionIndex.queryPlacements(box),
-      vias: projectionIndex.queryVias(box),
+      ctx: legalityContext,
       layer: tunedTrace.layer,
       netId: tunedTrace.netId,
-      padNetMap: padToNet,
-      resolver: ruleResolver,
       routeWidthMm: tunedTrace.widthMm,
-      keepouts: effectiveKeepouts,
+      withinBounds: box,
+      // The tuned trace is the SUBJECT, never its own obstacle. `sameNet`
+      // already drops it whenever its net is known; a null-net trace needs the
+      // id.
+      excludeTraceIds: tuneExcludeTraceIds,
     });
     // Adjacent serpentine legs must not violate clearance to each other.
     const spacingFloorNm = Math.round(
@@ -2094,11 +2065,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       minAmplitudeNm: Math.round(tunedTrace.widthMm * 2 * NM_PER_MM),
     });
   }, [
-    effectiveKeepouts,
-    padToNet,
+    legalityContext,
     maxClearanceBoundMm,
+    maxObstacleReachMm,
     projectionIndex,
-    ruleResolver,
     tuneNetLengths,
     tuneResolvedTargetMm,
     tunedTrace,
@@ -2116,10 +2086,52 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     ) {
       return;
     }
+    // The tune gate (contract 07 §8): the proposal is judged as the SAME trace
+    // with new points, so `replaces` drops the board's copy of it at
+    // enumeration — the reshape is never judged against its own baseline.
+    if (legalityContext) {
+      const blocking = blockingViolations(
+        legalityContext,
+        runLiveDrc({
+          ctx: legalityContext,
+          pending: {
+            traces: [{ ...tunedTrace, pointsNm: tuneProposal.pointsNm }],
+            vias: [],
+          },
+          replaces: [tunedTrace.id],
+        }),
+      );
+      if (!allowDrcViolations && blocking.length > 0) {
+        setTuneNotice(
+          `Blocked: ${blocking.length} DRC conflict${blocking.length === 1 ? "" : "s"} (${violationCodeList(blocking)})`,
+        );
+        return;
+      }
+    }
+    setTuneNotice(null);
     void workspace
-      .updateTraceGeometry(tunedTrace.id, tuneProposal.pointsNm)
-      .then(() => dispatchTune({ kind: "cancel" }));
-  }, [tuneProposal, tuneState, tunedTrace, workspace]);
+      .updateTraceGeometry(
+        tunedTrace.id,
+        tuneProposal.pointsNm,
+        allowDrcViolations ? "report" : "refuse",
+      )
+      .then((result) => {
+        if (result && !result.ok && result.code === "PCB_COPPER_ILLEGAL") {
+          setTuneNotice(
+            `Reshape rejected by DRC: ${violationCodeList(result.violations)}`,
+          );
+          return;
+        }
+        dispatchTune({ kind: "cancel" });
+      });
+  }, [
+    allowDrcViolations,
+    legalityContext,
+    tuneProposal,
+    tuneState,
+    tunedTrace,
+    workspace,
+  ]);
 
   // Sweeping span follows the cursor's projection onto the baseline.
   useEffect(() => {
@@ -2135,6 +2147,9 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   }, [cursorMm, toolMode, tuneState]);
 
   // Leaving tune mode always drops the session + inline editor + hover.
+  useEffect(() => {
+    setTuneNotice(null);
+  }, [tuneState]);
   useEffect(() => {
     if (toolMode !== "tune") {
       dispatchTune({ kind: "cancel" });
@@ -2335,40 +2350,35 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       );
       return;
     }
-    if (!ruleResolver) return;
-    let conflicts = 0;
-    bundlePreview.lanes.forEach((lane, i) => {
-      const otherLanes: PcbTrace[] = bundlePreview.lanes
-        .filter((_, j) => j !== i)
-        .map((other, j) => ({
-          id: `pending:bundle:${j}`,
-          netId: other.pad.netId,
-          netClassId: s.netClassId,
-          layer: s.layer,
-          widthMm: s.widthMm,
-          pointsNm: other.pointsNm,
-          segmentMode: s.segmentMode,
-        }));
-      conflicts += runLiveDrc({
-        traceNm: lane.pointsNm,
-        traceWidthMm: s.widthMm,
+    if (!legalityContext) return;
+    // ONE gate over EVERY lane at once (contract 07 §8 site C): the lanes are
+    // different nets, and `checkPendingCopper` judges pending × pending, so
+    // lane-to-lane pairs come out of the same call as lane-to-board.
+    const lanePending = {
+      traces: bundlePreview.lanes.map((lane, i) => ({
+        id: `pending:bundle:${i}`,
         netId: lane.pad.netId,
+        netClassId: s.netClassId,
         layer: s.layer,
-        traces: [...workspace.projection!.traces, ...otherLanes],
-        placements: workspace.projection!.placements,
-        padNetMap: padToNet,
-        resolver: ruleResolver,
-        keepouts: effectiveKeepouts,
-      }).length;
-    });
-    if (conflicts > 0) {
+        widthMm: s.widthMm,
+        pointsNm: lane.pointsNm,
+        segmentMode: s.segmentMode,
+      })),
+      vias: [],
+    };
+    const blocking = blockingViolations(
+      legalityContext,
+      runLiveDrc({ ctx: legalityContext, pending: lanePending }),
+    );
+    if (blocking.length > 0) {
       setBundleBlocked(
-        `${conflicts} DRC conflict${conflicts === 1 ? "" : "s"} — adjust the route or pitch`,
+        `${blocking.length} DRC conflict${blocking.length === 1 ? "" : "s"} — adjust the route or pitch`,
       );
       return;
     }
     setBundleBlocked(null);
     try {
+      // No override in v1 — bundles never commit dirty, so `refuse` always.
       await workspace.commitRoute({
         traces: bundlePreview.lanes.map((lane) => ({
           layer: s.layer,
@@ -2379,19 +2389,19 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
           segmentMode: s.segmentMode,
         })),
         vias: [],
+        legality: "refuse",
       });
       dispatchBundle({ kind: "cancel" });
-    } catch {
-      // Rejection surfaced via the workspace toast; session survives.
+    } catch (err) {
+      const rejected = (err as DispatchRejectedError | null)?.dispatchResult;
+      if (rejected?.code === "PCB_COPPER_ILLEGAL") {
+        setBundleBlocked(
+          `Commit rejected by DRC: ${violationCodeList(rejected.violations)}`,
+        );
+      }
+      // Otherwise surfaced via the workspace toast; the session survives.
     }
-  }, [
-    bundlePreview,
-    bundleState,
-    effectiveKeepouts,
-    padToNet,
-    ruleResolver,
-    workspace,
-  ]);
+  }, [bundlePreview, bundleState, legalityContext, workspace]);
 
   // Session-scoped: leaving bundle mode drops everything; any session change
   // clears a stale block reason; the last-good lane cache dies with the session.
@@ -2466,33 +2476,42 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     ): boolean => {
       const snapped = snapPoint(cursorMm);
       const viaCenterNm = pointMmToNm(snapped);
-      // Via guard (zone/keepout contract §13.4): the disc the preview draws —
-      // the same diameter `pendingRouteGeometry` renders, and the THROUGH span
-      // it commits (every copper layer, which is also the fail-closed answer
-      // when the stackup is unknown) — must clear every `vias` keepout.
+      // Via guard (contract 07 §8): the FULL refuse set on the via the session
+      // would commit — keepouts, clearance to copper on any layer it spans,
+      // hole spacing, the board edge and its own minimums — not the
+      // keepout-only predicate this replaced. The centre tested is the one the
+      // session COMMITS (nm-quantised), not the mm double before it.
       const projection = workspace.projection;
-      if (projection && effectiveKeepouts.length > 0) {
+      if (projection && legalityContext) {
         const netClass = projection.board.netClasses.find(
           (nc) => nc.id === session.netClassId,
         );
-        // Test the centre the session COMMITS (nm-quantised), not the mm
-        // double before quantisation — the two differ by ≤ 0.5 nm, inside the
-        // disc predicate's fail-open eps band.
-        const blocking = viaKeepoutBlock(effectiveKeepouts, {
+        const candidate: PcbVia = {
+          id: "pending:via:candidate",
+          netId: session.netId,
+          netClassId: session.netClassId,
           centerMm: {
             x: viaCenterNm.x / NM_PER_MM,
             y: viaCenterNm.y / NM_PER_MM,
           },
           diameterMm:
             session.viaDiameterMmOverride ?? netClass?.viaDiameterMm ?? 0.8,
-          layers: new Set<PcbCopperLayerId>(
-            copperLayersForCount(projection.board.layerCount),
-          ),
-        });
-        if (blocking) {
-          setRouteNotice(
-            `Via blocked by keepout ${blocking.name ? `"${blocking.name}"` : blocking.id}`,
-          );
+          drillMm: session.viaDrillMmOverride ?? netClass?.viaDrillMm ?? 0.4,
+          fromLayer: "F.Cu",
+          toLayer: "B.Cu",
+          viaType: "through",
+          protection: netClass?.defaultViaProtection ?? "tented",
+          provenance: "route",
+        };
+        const blocking = blockingViolations(
+          legalityContext,
+          runLiveDrc({
+            ctx: legalityContext,
+            pending: { traces: [], vias: [candidate] },
+          }),
+        );
+        if (blocking.length > 0) {
+          setRouteNotice(`Via blocked: ${violationCodeList(blocking)}`);
           return false;
         }
       }
@@ -2518,7 +2537,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       });
       return true;
     },
-    [effectiveKeepouts, snapPoint, workspace.projection],
+    [legalityContext, snapPoint, workspace.projection],
   );
 
   // Width preset list (from board settings, fallback to net-class default).
@@ -5090,16 +5109,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     let detourAnchorsNm: PointNm[] | null = null;
     let walkChoice: { clusterSignature: string; side: "cw" | "ccw" } | null =
       null;
-    if (
-      walkaroundEnabled &&
-      workspace.projection &&
-      projectionIndex &&
-      ruleResolver
-    ) {
+    if (walkaroundEnabled && workspace.projection && legalityContext) {
       const headStartNm = committedAnchors[committedAnchors.length - 1]!;
       // Corridor padding only: the board-wide upper bound, so the query window
       // can never be too small for a neighbour of any net class.
-      const headPadMm = 1 + maxClearanceBoundMm + session.widthMm;
+      const headPadMm = 1 + maxObstacleReachMm + session.widthMm;
       const box = {
         minX: Math.min(headStartNm.x, cursorNm.x) / NM_PER_MM - headPadMm,
         minY: Math.min(headStartNm.y, cursorNm.y) / NM_PER_MM - headPadMm,
@@ -5108,18 +5122,12 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       };
       const obstaclesFor = (b: typeof box) =>
         buildRouteObstacles({
-          traces: [
-            ...projectionIndex.queryTraces(b),
-            ...pendingRouteGeometry.traces,
-          ],
-          placements: projectionIndex.queryPlacements(b),
-          vias: [...projectionIndex.queryVias(b), ...pendingRouteGeometry.vias],
+          ctx: legalityContext,
           layer: session.layer,
           netId: session.netId,
-          padNetMap: padToNet,
-          resolver: ruleResolver,
           routeWidthMm: session.widthMm,
-          keepouts: effectiveKeepouts,
+          withinBounds: b,
+          extra: pendingRouteGeometry,
           ...(session.startPadId !== undefined
             ? { excludePadIds: new Set([session.startPadId]) }
             : {}),
@@ -5186,14 +5194,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     };
   }, [
     cursorMm,
-    effectiveKeepouts,
-    maxClearanceBoundMm,
-    padToNet,
+    legalityContext,
+    maxObstacleReachMm,
     pendingRouteGeometry,
-    projectionIndex,
     resolveRouteAnchor,
     routeState,
-    ruleResolver,
     walkaroundEnabled,
     workspace.projection,
   ]);
@@ -5204,70 +5209,60 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     walkChoiceRef.current = routePreview?.walkChoice ?? null;
   }, [routePreview]);
 
-  // Live DRC for the in-progress trace.
-  const drcViolations: DrcViolation[] = useMemo(() => {
+  /**
+   * Live legality, site A (contract 07 §8): ONE `checkPendingCopper` over the
+   * WHOLE session — every finished run, every via and the ghost together —
+   * exactly the subject set `finishRoute` submits, so the HUD's count and the
+   * commit gate's count are the same number by construction.
+   *
+   * It used to be two memos (finished runs, then the ghost) concatenated by
+   * violation id. That double-counted a null-net bridge whose MARKER moves
+   * between the two subject sets — a multi-shape unassigned pin where the
+   * ghost touches an earlier-sorting shape gets a different location-hashed id
+   * in the whole-session verdict than in the finished-runs one, so the HUD
+   * showed two conflicts where the commit showed one. One call, one verdict.
+   *
+   * There is NO rbush window here: the broad phase is the context's own
+   * uniform grid, queried inside `checkPendingCopper` at exactly the halo
+   * every requirement on this board can reach — so a conflict can no longer
+   * hide outside a hand-sized query box. The call feeds off the rAF-throttled
+   * preview, so it runs at most once per animation frame; the ghost RENDER
+   * reads `routePreview` directly and is never throttled.
+   */
+  const throttledRoutePreview = useRafThrottledValue(routePreview);
+
+  const drcViolations = useMemo<DrcViolation[]>(() => {
     if (
-      !routePreview ||
       routeState.kind !== "routing" ||
-      !workspace.projection ||
-      !ruleResolver
-    )
-      return [];
-    // Broad-phase: only copper near the ghost's bbox reaches the exact
-    // distance checks. The inflation must cover the widest requirement any
-    // rule on this board can resolve to, or a real conflict outside the window
-    // would never be MARKED — a scoped rule is uncapped, so a fixed constant
-    // is not safe (the commit gate at `finishRoute` still sees every trace, so
-    // nothing illegal can commit either way).
-    let neighborTraces = workspace.projection.traces;
-    let neighborPlacements = workspace.projection.placements;
-    if (projectionIndex) {
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-      for (const p of routePreview.pointsNm) {
-        if (p.x < minX) minX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y > maxY) maxY = p.y;
-      }
-      const inflateMm = Math.max(
-        // Keep the historical 5 mm halo on ordinary boards, where the bound is
-        // well under it — the marker set is then unchanged.
-        5,
-        maxClearanceBoundMm + routeState.session.widthMm / 2 + 1,
-      );
-      const box = {
-        minX: minX / NM_PER_MM - inflateMm,
-        minY: minY / NM_PER_MM - inflateMm,
-        maxX: maxX / NM_PER_MM + inflateMm,
-        maxY: maxY / NM_PER_MM + inflateMm,
-      };
-      neighborTraces = projectionIndex.queryTraces(box);
-      neighborPlacements = projectionIndex.queryPlacements(box);
+      !legalityContext ||
+      !workspace.projection
+    ) {
+      return EMPTY_VIOLATIONS;
     }
-    return runLiveDrc({
-      traceNm: routePreview.pointsNm,
-      traceWidthMm: routeState.session.widthMm,
-      netId: routeState.session.netId,
-      layer: routeState.session.layer,
-      traces: neighborTraces,
-      placements: neighborPlacements,
-      padNetMap: padToNet,
-      resolver: ruleResolver,
-      keepouts: effectiveKeepouts,
-    });
+    const pending = pendingCopperFromSession(
+      routeState.session,
+      throttledRoutePreview?.pointsNm ?? null,
+      workspace.projection.board,
+    );
+    if (pending.traces.length === 0 && pending.vias.length === 0) {
+      return EMPTY_VIOLATIONS;
+    }
+    return runLiveDrc({ ctx: legalityContext, pending });
   }, [
-    effectiveKeepouts,
-    maxClearanceBoundMm,
-    padToNet,
-    projectionIndex,
-    routePreview,
+    legalityContext,
     routeState,
-    ruleResolver,
+    throttledRoutePreview,
     workspace.projection,
   ]);
+
+  /** The subset a `refuse` commit would be rejected for; the HUD's "conflicts". */
+  const drcBlocking = useMemo<DrcViolation[]>(
+    () =>
+      legalityContext
+        ? blockingViolations(legalityContext, drcViolations)
+        : EMPTY_VIOLATIONS,
+    [drcViolations, legalityContext],
+  );
 
   // Length-match gauge (pcb.lengthTuning): when the session net belongs to a
   // group, resolve its target + the net's already-committed copper so the HUD
@@ -5323,13 +5318,15 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       previewPathNm: routePreview?.pointsNm ?? sessionAnchors(session),
       netName,
       netClass,
-      drcConflictCount: drcViolations.length,
+      drcConflictCount: drcBlocking.length,
+      drcWarningCount: drcViolations.length - drcBlocking.length,
       autoFinishEnabled,
       detourActive: (routePreview?.detourAnchorsNm?.length ?? 0) > 0,
       lengthTarget: routeLengthTarget,
     });
   }, [
     autoFinishEnabled,
+    drcBlocking.length,
     drcViolations.length,
     routeLengthTarget,
     routePreview,
@@ -5366,8 +5363,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const onDrcCountChange = props.onDrcCountChange;
   const routing = routeState.kind === "routing";
   useEffect(() => {
-    onDrcCountChange?.(routing ? drcViolations.length : null);
-  }, [routing, drcViolations.length, onDrcCountChange]);
+    onDrcCountChange?.(routing ? drcBlocking.length : null);
+  }, [routing, drcBlocking.length, onDrcCountChange]);
 
   const onSelectionCountChange = props.onSelectionCountChange;
   const selectionCount = pcbSelectionCount(selection);
@@ -6661,6 +6658,11 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
             ) : toolMode === "tune" && !previewActive ? (
               <TuneHud
                 model={tuneHudModel}
+                notice={tuneNotice}
+                allowDrcViolations={allowDrcViolations}
+                onToggleAllowDrcViolations={() =>
+                  setAllowDrcViolations((prev) => !prev)
+                }
                 targetInputOpen={tuneTargetInputOpen}
                 onOpenTargetInput={() => setTuneTargetInputOpen(true)}
                 onTargetInputSubmit={(t) =>

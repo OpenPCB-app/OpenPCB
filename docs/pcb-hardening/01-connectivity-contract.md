@@ -6,7 +6,7 @@ B3-1, B3-3, B3-4, B3-5, B3-6.
 
 This document is the authoritative statement of what "electrically connected" means in OpenPCB's
 PCB editor. Every consumer — ratsnest, `UNCONNECTED_NET`, `TRACK_DANGLING` / `VIA_DANGLING`,
-and later the copper-fill anchoring (S5), routed-length (S14) and routing legality (S8/S16) —
+and later the copper-fill anchoring (S5), routed-length (S14) and routing legality (S8: the live gate is the batch pair kernel, `07-live-parity-contract.md`; S16 for the router) —
 must derive its answer from the kernel in `src/shared/pcb-connectivity/`, never from a private
 predicate.
 

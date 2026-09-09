@@ -35,11 +35,11 @@ const TYPES_PATH = path.resolve(
 );
 const CHECKS_DIR = path.resolve(
   import.meta.dir,
-  "../../../modules/designer/backend/drc/checks",
+  "../../../shared/drc/checks",
 );
 const VIOLATION_ID_PATH = path.resolve(
   import.meta.dir,
-  "../../../modules/designer/backend/drc/violation-id.ts",
+  "../../../shared/drc/violation-id.ts",
 );
 const DRC_LABELS_PATH = path.resolve(
   import.meta.dir,

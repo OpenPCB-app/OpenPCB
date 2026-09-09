@@ -719,7 +719,7 @@ export function createDesignerStore(
             netNamesFromSchematic(projection),
             timestamp,
           );
-          const pcbBefore = isPcbCommand
+          const pcbBefore_ = isPcbCommand
             ? ensurePcbBoardSettings(tx, designId, timestamp)
             : null;
           const placementsBefore = isPcbCommand
@@ -747,6 +747,22 @@ export function createDesignerStore(
           const keepoutsBefore = isPcbCommand
             ? loadPcbKeepouts(tx, designId)
             : null;
+          // The rows above, handed to the copper commit gate (contract 07 §6)
+          // so it never loads a projection inside the transaction.
+          const pcbBefore =
+            pcbBefore_ && placementsBefore && tracesBefore && viasBefore &&
+            freeHolesBefore && freePadsBefore && zonesBefore && keepoutsBefore
+              ? {
+                  board: pcbBefore_,
+                  placements: placementsBefore,
+                  traces: tracesBefore,
+                  vias: viasBefore,
+                  freeHoles: freeHolesBefore,
+                  freePads: freePadsBefore,
+                  zones: zonesBefore,
+                  keepouts: keepoutsBefore,
+                }
+              : undefined;
           const result = executeDesignerCommand({
             tx,
             designId,
@@ -755,6 +771,7 @@ export function createDesignerStore(
             projection,
             timestamp,
             placeComponentDetail,
+            ...(pcbBefore ? { pcbBefore } : {}),
           });
 
           // View-only commands mutate display state in board_settings.viewState
@@ -766,7 +783,7 @@ export function createDesignerStore(
           if (result.ok && !isViewOnlyCommand) {
             const nextProjection = loadSchematicProjection(tx, designId);
             if (nextProjection) {
-              if (pcbBefore) {
+              if (pcbBefore_) {
                 const pcbAfter = ensurePcbBoardSettings(
                   tx,
                   designId,
@@ -784,7 +801,7 @@ export function createDesignerStore(
                 const patchSet = buildCombinedHistoryPatchSet(
                   {
                     schematic: projection,
-                    pcb: pcbBefore,
+                    pcb: pcbBefore_,
                     placements: placementsBefore ?? [],
                     traces: tracesBefore ?? [],
                     vias: viasBefore ?? [],
@@ -889,7 +906,18 @@ export function createDesignerStore(
         }
 
         return result;
-      } catch {
+      } catch (error) {
+        // The returned shape stays a conflict — a caller retrying is the right
+        // recovery either way — but a THROW is not a conflict: an aborted
+        // transaction (a DRC kernel throw inside the commit gate, a constraint)
+        // would otherwise be indistinguishable from a lost race, with nothing
+        // in the log to attribute it to.
+        ctx.logger.error("designer: dispatchCommand threw", {
+          designId,
+          commandId: envelope.commandId,
+          commandType: envelope.command.type,
+          error: error instanceof Error ? error.message : String(error),
+        });
         const racedLog = db
           .select()
           .from(commandLog)

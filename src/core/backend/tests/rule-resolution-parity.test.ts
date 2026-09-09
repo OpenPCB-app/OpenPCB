@@ -16,6 +16,7 @@ import { describe, expect, test } from "bun:test";
 import { runDrc } from "../../../modules/designer/backend/drc/drc-engine";
 import { buildDrcContext } from "../../../modules/designer/backend/drc/drc-context";
 import { runLiveDrc } from "../../../modules/designer/frontend/pcb/drc/live-drc";
+import { buildDrcItems } from "../../../shared/drc/drc-context";
 import { createRuleResolver } from "../../../shared/drc/rule-resolver";
 import {
   pourParamsForZone,
@@ -194,34 +195,85 @@ describe("one resolution — batch DRC, the resolver and the pour agree", () => 
 
   test("the live route gate agrees with batch on the same trace pair", () => {
     const proj = fixtureProjection();
-    const resolver = createRuleResolver(proj.board, proj.netNames, {
-      validCopperLayers: copperLayersForCount(proj.board.layerCount),
-    });
     const batch = forTrace(clearanceViolations(), "t_in_a");
     expect(batch.code).toBe("TRACE_TO_TRACE_CLEARANCE");
 
-    // Re-route `t_in_a` as a PENDING trace against the rest of the board: the
-    // gate must refuse it at exactly the number batch reports, not at the
-    // board rule (which it used before S6) and not at the floor.
+    // Re-route `t_in_a` as PENDING copper against the same board, with
+    // `replaces` dropping the committed copy: the gate must refuse it at
+    // exactly the number batch reports, not at the board rule (which it used
+    // before S6) and not at the floor.
     const live = runLiveDrc({
-      traceNm: PENDING_PATH_MM.map(([x, y]) => ({
-        x: Math.round(x * MM),
-        y: Math.round(y * MM),
-      })),
-      traceWidthMm: 0.2,
-      netId: "na",
-      layer: "F.Cu",
-      traces: proj.traces.filter((t) => t.id !== "t_in_a"),
-      placements: proj.placements,
-      padNetMap: new Map(),
-      resolver,
+      ctx: buildDrcItems(proj),
+      pending: {
+        traces: [
+          {
+            id: "pending:trace:0",
+            netId: "na",
+            netClassId: "default",
+            layer: "F.Cu",
+            widthMm: 0.2,
+            pointsNm: PENDING_PATH_MM.map(([x, y]) => ({
+              x: Math.round(x * MM),
+              y: Math.round(y * MM),
+            })),
+            segmentMode: "manhattan-45",
+          },
+        ],
+        vias: [],
+      },
+      replaces: ["t_in_a"],
     });
-    const gate = live.find((v) => v.type === "trace-trace");
+    const gate = live.find((v) => v.code === "TRACE_TO_TRACE_CLEARANCE");
     expect(gate).toBeDefined();
     expect(gate!.requiredMm).toBe(batch.requiredMm!);
-    expect(gate!.distanceMm).toBe(batch.measuredMm!);
+    expect(gate!.measuredMm).toBe(batch.measuredMm!);
     // Not vacuous: the agreed number is the rule's, not either fallback.
     expect(gate!.requiredMm).toBeCloseTo(0.15, 9);
+  });
+
+  test("clearanceOutsideAreas is `clearance` with every area mask 0", () => {
+    // The obstacle builder's floor (live-parity contract 07 §5, Astra run 1
+    // #4). It must EQUAL the resolution at a point outside every area, and be
+    // at least the resolution inside a relaxing one — otherwise a rect
+    // resolved at the obstacle could shrink below what the pair needs where
+    // the route actually is. Only `area` scopes are dropped: every other scope
+    // holds wherever the route is and stays in the answer.
+    const proj = fixtureProjection();
+    const resolver = createRuleResolver(proj.board, proj.netNames, {
+      validCopperLayers: copperLayersForCount(proj.board.layerCount),
+    });
+    const outsideAreas = resolver.clearanceOutsideAreas(
+      "traceToTrace",
+      "F.Cu",
+      "na",
+      "nb",
+    );
+    // No non-area rule matches this pair, so it falls to the implicit tier:
+    // max(board 0.25, class(na) 0.25, class(nb) 0.8) floored by 0.12 → 0.8.
+    expect(outsideAreas.rule).toBeNull();
+    expect(outsideAreas.mm).toBeCloseTo(0.8, 9);
+
+    // At a point outside every area: identical, to the bit.
+    const outside = resolver.clearance(
+      "traceToTrace",
+      "F.Cu",
+      { netId: "na", pointMm: { x: 12, y: 0 } },
+      { netId: "nb", pointMm: { x: 12, y: 0.33 } },
+    );
+    expect(outside.rule).toBeNull();
+    expect(outside.mm).toBe(outsideAreas.mm);
+
+    // Inside the relaxing area the explicit tier is lower, so the
+    // outside-areas value is the floor the obstacle rect must not drop below.
+    const inside = resolver.clearance(
+      "traceToTrace",
+      "F.Cu",
+      { netId: "na", pointMm: { x: -12, y: 0 } },
+      { netId: "nb", pointMm: { x: -12, y: 0.33 } },
+    );
+    expect(inside.rule?.id).toBe("bga");
+    expect(outsideAreas.mm).toBeGreaterThanOrEqual(inside.mm);
+    expect(inside.mm).toBeCloseTo(0.15, 9);
   });
 
   test("the pour's clearanceForItem is the resolver's pour resolution", () => {

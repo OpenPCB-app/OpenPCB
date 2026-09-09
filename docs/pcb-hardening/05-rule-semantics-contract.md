@@ -18,7 +18,7 @@ assistant), and the migrations the change implies.
 
 Out of scope, with the owning session: the geometry a rule is compared against (S2), zone and
 keepout legality (S3a/S4), pour geometry (S5), check completeness beyond rule sourcing (S7), live
-DRC coverage of vias / shorts / board edge (S8), scaling (S9), execution (S10), slot / annular /
+live DRC coverage of vias / shorts / board edge (closed in S8 — `07-live-parity-contract.md`), scaling (S9), execution (S10), slot / annular /
 aspect models (S11), DFM overlays (S12), electrical and SI thresholds (S13/S14). A scoped-rules
 editor and a severity-override UI are filed, not built (user decision 2026-09-08).
 
@@ -409,9 +409,9 @@ limit.
 | Consumer | Reads | Resolution | Divergence from batch (explicit) |
 |---|---|---|---|
 | Batch DRC (`drc-context.ts`, `checks/*`) | `createRuleResolver(board, netNames)` | §4, §5, §6, §7 | — (reference) |
-| Live DRC (`live-drc.ts`, the route commit gate) | the same resolver, built once per projection | trace–trace and trace–pad: every (pending segment, neighbour segment / pad) pair under the §4.4 split-and-resolve procedure (Astra run 1 #11), pending class from the net (§3), plus the short tier (`gap <= SHORT_EPS_MM` between different known nets refuses the commit — Astra run 1 #12) | checks only those two pair kinds and no edge / via checks — S8 scope. Trace–trace: the clearance and short verdicts equal batch's exactly (R2 probe: `distanceMm` / `requiredMm` = batch `measuredMm` / `requiredMm`, with and without an area rule). Trace–pad: the REQUIREMENT equals batch's; the GAP is still measured against the un-rotated pad AABB on the placement's side layer (B5-LIVE-ROT-PAD / B5-LIVE-TH-PAD-SIDE, S8), so a through-hole pad on a top-side part is invisible to a B.Cu route until S8 |
-| Route obstacles (`route-obstacles.ts`) | the same resolver | each obstacle inflated by `clearance(K, L, {pending net, p_M}, {obstacle net, p_M})` with `K` by obstacle kind (`traceToVia` for vias — today they use the trace value) | a search heuristic: both area points sit at the obstacle, so a relaxation applies whenever the obstacle is inside the area. It never decides legality — the live gate does (S16 may refine) |
-| Via insert gate (`buildPcbViaForInsert`) | `scalar(viaDiameter / viaDrill / annularRing, via)` | §5 | no neighbour clearance at insert (S8) |
+| Live DRC (`live-drc.ts` → `checkPendingCopper`, the route commit gate, the smart-via and tune guards) | the context's resolver (`buildDrcItems`, one per projection) | since S8 the SAME pair bodies batch runs (`PairJudge`, `judgeCopperPairs`) over the pending copper as the subject set — every pair kind, the short and fab tiers, copper-to-hole, edge / off-board, hole pairs, keepouts and the per-item scalars (`07-live-parity-contract.md` §3) | none by construction: `measuredMm` / `requiredMm` / code / layer / message equal batch's with `===` (07 §1); ids differ only through the client's `pending:<n>` ids |
+| Route obstacles (`route-obstacles.ts`) | the context's resolver | each obstacle inflated by `max(clearance(K, L, {pending net, p_M}, {obstacle net, p_M}), clearanceOutsideAreas(K, L, pending net, obstacle net), SHORT_EPS_MM + 1 nm)` with `K` by obstacle kind (S8, 07 §5) | a search heuristic over a superset: the at-obstacle term keeps area tightenings, the masks-0 term (net / class / layer scopes still applied, only `area` scopes off) stops an area relaxation from shrinking the rect below what a route outside the area needs while a net-scoped relaxation still shrinks it. It never decides legality — the gate does (S16 may refine) |
+| Via insert gate (`buildPcbViaForInsert`) | `scalar(viaDiameter / viaDrill / annularRing, via)` through the gate context's resolver | §5 | neighbour clearance is the S8 commit gate's job (07 §6) — every copper command runs `checkPendingCopper` before insert |
 | Copper pour (`pour-params.ts`) | the same resolver | §6 | — |
 | Cloud snapshot (`board-snapshot.ts`) | `clearance` WITHOUT `pourToCopperMm`, `minimums` WITHOUT the floor (both stripped — the vendored `SnapshotDesignRules` schema declares neither and is byte-stable), stripped net classes, resolved class per net | the cloud router sees the implicit tier only | scoped rules, the floor and the pour rule are not in the wire contract; apply-time DRC (desktop, batch) re-validates — recorded boundary (cloud session) |
 | KiCad import | `.kicad_pro` `net_settings.classes[]` (+ `nets` v6 / `netclass_patterns` v7-8 / `netclass_assignments` v9), `board.design_settings.rules` | §12.3 | `.kicad_dru` custom rules are not imported — warning `kicad_custom_rules_ignored` |
@@ -507,8 +507,8 @@ object (**needs verification** — every v9 file in the corpus has it empty).
 - `annularRing` rules apply to vias only; THT pad rings and slots are S11 (B2-5, B2-6).
 - `holeToHole` net / class scopes never match an NPTH (null net) — only `layer` / `area` scopes
   and the unscoped rule reach it.
-- The router's obstacle inflation is a heuristic (§9); the live gate covers trace–trace and
-  trace–pad only (S8 widens it).
+- The router's obstacle inflation is a heuristic (§9); the live gate covers the whole pending-item
+  code set since S8 (07 §3).
 - Waiver drift within the 0.1 mm location bucket (§8).
 - No UI for scoped rules or severity overrides; no assistant rule tools.
 - `padToVia` has no board field of its own.

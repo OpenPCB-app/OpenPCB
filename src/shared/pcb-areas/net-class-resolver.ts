@@ -1,7 +1,7 @@
 // Map a net's name to a PcbNetClass id by pattern.
 // Used when no explicit per-net assignment UI exists yet.
 
-import type { PcbNetClass } from "../../sdks/designer";
+import type { PcbBoardSettings, PcbNetClass } from "../../sdks/designer";
 import { GND_NAMES } from "../../sdks/designer/ground-net";
 
 export { GND_NAMES, findGroundNetId } from "../../sdks/designer/ground-net";
@@ -68,4 +68,27 @@ export function resolveNetClassId(
     }
   }
   return classIdForName(netName, netClasses);
+}
+
+/**
+ * The net class a copper command COMMITS with (rule-semantics contract §3
+ * step 3): a per-net assignment upgrades the DEFAULT class the route tool
+ * offered, never an explicit non-default choice. One helper for the server
+ * builders (`buildPcbTraceForInsert` / `buildPcbViaForInsert`) and the live
+ * session mapper (`pendingCopperFromSession`), so the copper the client judges
+ * carries the class the server will store (live-parity contract 07 §6).
+ */
+export function effectiveNetClassId(
+  board: PcbBoardSettings,
+  netId: string | null,
+  requestedClassId: string,
+): string {
+  if (!netId) return requestedClassId;
+  const assigned = board.perNetClassAssignments?.[netId];
+  if (!assigned) return requestedClassId;
+  const defaultId = defaultNetClassId(board.netClasses);
+  if (requestedClassId !== defaultId) return requestedClassId;
+  return board.netClasses.some((nc) => nc.id === assigned)
+    ? assigned
+    : requestedClassId;
 }

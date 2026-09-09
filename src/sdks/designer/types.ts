@@ -1595,6 +1595,16 @@ export interface DesignerPcbSetVisibleLayersCommand {
   visibleLayers: ReadonlyArray<PcbLayerId>;
 }
 
+/**
+ * How a copper-creating command treats the reference DRC verdict on the copper
+ * it commits (live-parity contract 07 §6). `refuse` (default): a violation in
+ * the refuse set rejects the command with `PCB_COPPER_ILLEGAL`; `report`: the
+ * verdict is computed and counted on the ok result, never refuses — the desktop
+ * sends it while its "allow violations" override is on; `off`: no verdict is
+ * computed — the cloud apply paths, which are judged by the post-apply report.
+ */
+export type PcbCommitLegality = "refuse" | "report" | "off";
+
 export interface DesignerPcbAddTraceCommand {
   type: "pcb_add_trace";
   layer: PcbCopperLayerId;
@@ -1603,6 +1613,7 @@ export interface DesignerPcbAddTraceCommand {
   netId: string | null;
   netClassId: string;
   segmentMode: PcbTraceSegmentMode;
+  legality?: PcbCommitLegality;
 }
 
 export interface DesignerPcbAddViaCommand {
@@ -1623,12 +1634,14 @@ export interface DesignerPcbAddViaCommand {
   fromLayer?: PcbCopperLayerId;
   toLayer?: PcbCopperLayerId;
   viaType?: PcbViaType;
+  legality?: PcbCommitLegality;
 }
 
 export interface DesignerPcbAddTraceViaCommand {
   type: "pcb_add_trace_via";
-  trace: Omit<DesignerPcbAddTraceCommand, "type">;
-  via: Omit<DesignerPcbAddViaCommand, "type">;
+  trace: Omit<DesignerPcbAddTraceCommand, "type" | "legality">;
+  via: Omit<DesignerPcbAddViaCommand, "type" | "legality">;
+  legality?: PcbCommitLegality;
 }
 
 /**
@@ -1640,8 +1653,9 @@ export interface DesignerPcbAddTraceViaCommand {
  */
 export interface DesignerPcbCommitRouteCommand {
   type: "pcb_commit_route";
-  traces: Array<Omit<DesignerPcbAddTraceCommand, "type">>;
-  vias: Array<Omit<DesignerPcbAddViaCommand, "type">>;
+  traces: Array<Omit<DesignerPcbAddTraceCommand, "type" | "legality">>;
+  vias: Array<Omit<DesignerPcbAddViaCommand, "type" | "legality">>;
+  legality?: PcbCommitLegality;
 }
 
 /**
@@ -1710,6 +1724,7 @@ export interface DesignerPcbUpdateTraceGeometryCommand {
   type: "pcb_update_trace_geometry";
   traceId: string;
   pointsNm: Array<{ x: number; y: number }>;
+  legality?: PcbCommitLegality;
 }
 
 /**
@@ -1844,6 +1859,7 @@ export interface DesignerPcbAddManualViaCommand {
   netClassId: string;
   diameterMmOverride?: number;
   drillMmOverride?: number;
+  legality?: PcbCommitLegality;
 }
 
 export interface DesignerPcbAddOverlayTextCommand {
@@ -2085,10 +2101,33 @@ export interface DesignerCommandOkResult {
   revision: number;
   createdEntityId: string | null;
   idempotent?: boolean;
+  /**
+   * Reference-DRC verdict counts for the copper a gated command committed
+   * (contract 07 §6): `refused` is 0 on an ok result under `legality: "refuse"`
+   * and the would-be refusal count under `"report"`; `warnings` counts the rest
+   * of the live code set. Counts only — the command log persists results
+   * verbatim, and a replay returns the original revision's verdict.
+   */
+  legality?: { refused: number; warnings: number };
 }
 
 export type DesignerDispatchResult =
   | DesignerCommandOkResult
+  | {
+      ok: false;
+      code: "PCB_COPPER_ILLEGAL";
+      detail: string;
+      /**
+       * The refused violations (contract 07 §6 refuse set), ids as batch would
+       * assign them — **capped at the first 50** in the report's canonical
+       * `(code, id)` order, so one command-log row and one HTTP body stay
+       * bounded however much copper a batch crosses. `refusedCount` is the
+       * truth about how many there were; `violations.length` is not.
+       */
+      violations: DrcViolation[];
+      /** Total refused violations. `violations` lists at most the first 50. */
+      refusedCount: number;
+    }
   | {
       ok: false;
       code: "REVISION_CONFLICT";
@@ -2339,7 +2378,7 @@ export const DRC_RULE_CLASSES: readonly DrcRuleClass[] = Object.keys(
 
 /**
  * Stable, machine-readable violation codes. Every code below has an emit site
- * under `src/modules/designer/backend/drc/checks/` and a label in
+ * under `src/shared/drc/checks/` (S8 relocation) and a label in
  * `drc-labels.ts` (verified 2026-09-07); the P1/P2 group comments are
  * historical milestone labels, not implementation status.
  */
@@ -2415,7 +2454,8 @@ export type DrcRuleCode =
 
 export interface DrcViolation {
   /**
-   * Stable id = hash(code + sorted anchor keys). Order-independent and stable
+   * Stable id = hash(code + sorted anchor keys + layer + a 0.1 mm location bucket for
+   * hot-spot codes) — v2, see `violation-id.ts`. Order-independent and stable
    * across re-runs so a persisted waiver keeps matching the same violation.
    */
   id: string;

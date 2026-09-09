@@ -15,8 +15,11 @@ import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
 import { runDrc } from "../../../modules/designer/backend/drc/drc-engine";
-import { runLiveDrc } from "../../../modules/designer/frontend/pcb/drc/live-drc";
-import { createRuleResolver } from "../../../shared/drc/rule-resolver";
+import {
+  blockingViolations,
+  runLiveDrc,
+} from "../../../modules/designer/frontend/pcb/drc/live-drc";
+import { buildDrcItems } from "../../../shared/drc/drc-context";
 import {
   board,
   codes,
@@ -58,12 +61,36 @@ const MM = 1_000_000;
  * (rule-semantics contract §9), so these fixtures build one from the fixture
  * board rather than passing net classes and design rules by hand.
  */
-function liveResolver() {
-  return createRuleResolver(
-    board(),
-    { n1: "A", n2: "B" },
-    { validCopperLayers: ["F.Cu", "B.Cu"] },
+/**
+ * The ONE legality context the live gate judges against (live-parity contract
+ * 07 §2) — the same `buildDrcItems` batch DRC builds, so these live cases and
+ * the report read one physical model.
+ */
+function liveContext(parts: Parameters<typeof projection>[0] = {}) {
+  return buildDrcItems(
+    projection({ board: board(), netNames: { n1: "A", n2: "B" }, ...parts }),
   );
+}
+
+/** A pending run under the cursor, as the route tool would submit it. */
+function pendingRun(
+  pointsNm: Array<{ x: number; y: number }>,
+  opts: { netId?: string | null; layer?: "F.Cu" | "B.Cu"; widthMm?: number } = {},
+) {
+  return {
+    traces: [
+      {
+        id: "pending:trace:0",
+        netId: opts.netId ?? null,
+        netClassId: "default",
+        layer: opts.layer ?? ("F.Cu" as const),
+        widthMm: opts.widthMm ?? 0.2,
+        pointsNm,
+        segmentMode: "manhattan-45" as const,
+      },
+    ],
+    vias: [],
+  };
 }
 
 describe("audit B5 — architecture / waivers / live parity", () => {
@@ -152,7 +179,7 @@ describe("audit B5 — architecture / waivers / live parity", () => {
   });
 
   // Fix: P7 (live pads use true rotated rings via the shared batch builders).
-  test.todo("B5-LIVE-ROT-PAD: rotated non-square pad is checked as rotated", () => {
+  test("B5-LIVE-ROT-PAD: rotated non-square pad is checked as rotated", () => {
     // Rewritten: the previous geometry passed today for the wrong reason —
     // its trace (y 3→7) fully overlapped BOTH the true rotated pad AND
     // today's unrotated AABB, so it didn't distinguish the two models.
@@ -184,24 +211,23 @@ describe("audit B5 — architecture / waivers / live parity", () => {
         pads: [pad("1", { x: 0, y: 0 }, 2.0, 0.5)],
       }),
     ];
+    const ctx = liveContext({ placements: parts, padNets: { "U1|1": "n1" } });
     const violations = runLiveDrc({
-      traceNm: [
-        { x: 5.35 * MM, y: 3 * MM },
-        { x: 5.35 * MM, y: 4.3 * MM },
-      ],
-      traceWidthMm: 0.2,
-      netId: "n2",
-      layer: "F.Cu",
-      traces: [],
-      placements: parts,
-      padNetMap: new Map([["U1|1", "n1"]]),
-      resolver: liveResolver(),
+      ctx,
+      pending: pendingRun(
+        [
+          { x: 5.35 * MM, y: 3 * MM },
+          { x: 5.35 * MM, y: 4.3 * MM },
+        ],
+        { netId: "n2" },
+      ),
     });
-    expect(violations.length).toBeGreaterThan(0);
+    expect(blockingViolations(ctx, violations).length).toBeGreaterThan(0);
+    expect(violations.some((v) => v.code === "TRACE_TO_PAD_CLEARANCE" || v.code === "NET_SHORT_CIRCUIT")).toBe(true);
   });
 
   // Fix: P7 (live TH pads span both sides, like the batch context).
-  test.todo("B5-LIVE-TH-PAD-SIDE: routing B.Cu sees top-side THT barrels", () => {
+  test("B5-LIVE-TH-PAD-SIDE: routing B.Cu sees top-side THT barrels", () => {
     const parts = [
       placement("U1", {
         positionMm: { x: 5, y: 5 },
@@ -209,25 +235,26 @@ describe("audit B5 — architecture / waivers / live parity", () => {
         pads: [pad("1", { x: 0, y: 0 }, 1.6, 1.6, { drillDiameterMm: 0.8 })],
       }),
     ];
+    const ctx = liveContext({ placements: parts, padNets: { "U1|1": "n1" } });
     const violations = runLiveDrc({
-      traceNm: [
-        { x: 3 * MM, y: 5 * MM },
-        { x: 7 * MM, y: 5 * MM },
-      ],
-      traceWidthMm: 0.2,
-      netId: "n2",
-      layer: "B.Cu", // opposite side of the placement
-      traces: [],
-      placements: parts,
-      padNetMap: new Map([["U1|1", "n1"]]),
-      resolver: liveResolver(),
+      ctx,
+      pending: pendingRun(
+        [
+          { x: 3 * MM, y: 5 * MM },
+          { x: 7 * MM, y: 5 * MM },
+        ],
+        // Opposite side of the placement.
+        { netId: "n2", layer: "B.Cu" },
+      ),
     });
-    expect(violations.length).toBeGreaterThan(0);
+    expect(blockingViolations(ctx, violations).length).toBeGreaterThan(0);
+    expect(violations.some((v) => v.code === "TRACE_TO_PAD_CLEARANCE" || v.code === "NET_SHORT_CIRCUIT")).toBe(true);
   });
 
-  // Fixed (computePadGeoms hoisted; verified S0 2026-09-06). Residual
-  // per-cursor-move rebuild tracked in docs/pcb-hardening/00-ground-truth.md.
-  test("B5-LIVE-PADGEOMS: pad geometry built once per live run", () => {
+  // Closed in S8: pad geometry is not built by the gate at all any more. It
+  // lives in the per-projection `LegalityContext`, so a pointer move pays for
+  // the pending copper only (live-parity contract 07 §7).
+  test("B5-LIVE-PADGEOMS: the gate reads pad geometry, never rebuilds it", () => {
     let padsAccessCount = 0;
     const parts = [
       placement("U1", {
@@ -251,28 +278,31 @@ describe("audit B5 — architecture / waivers / live parity", () => {
       });
     }
 
-    runLiveDrc({
-      // 4 points → 3 pending segments; pad geometry must not be rebuilt once
-      // per segment.
-      traceNm: [
-        { x: 0 * MM, y: 0 * MM },
-        { x: 3 * MM, y: 0 * MM },
-        { x: 6 * MM, y: 0 * MM },
-        { x: 9 * MM, y: 0 * MM },
-      ],
-      traceWidthMm: 0.2,
-      netId: "n2",
-      layer: "F.Cu",
-      traces: [],
+    const ctx = liveContext({
       placements: parts,
-      padNetMap: new Map([
-        ["U1|1", "n1"],
-        ["U2|1", "n1"],
-      ]),
-      resolver: liveResolver(),
+      padNets: { "U1|1": "n1", "U2|1": "n1" },
     });
+    const afterContextBuild = padsAccessCount;
+    expect(afterContextBuild).toBeGreaterThan(0);
 
-    expect(padsAccessCount).toBe(parts.length);
+    // 4 points → 3 pending segments, and three separate pointer moves: not one
+    // further read of a footprint's preview.
+    for (let i = 0; i < 3; i += 1) {
+      runLiveDrc({
+        ctx,
+        pending: pendingRun(
+          [
+            { x: 0 * MM, y: i * MM },
+            { x: 3 * MM, y: i * MM },
+            { x: 6 * MM, y: i * MM },
+            { x: 9 * MM, y: i * MM },
+          ],
+          { netId: "n2" },
+        ),
+      });
+    }
+
+    expect(padsAccessCount).toBe(afterContextBuild);
   });
 
   // Fixed in P2 (stackup 2–32; 6-layer no longer silently degrades to 2).

@@ -31,7 +31,7 @@ long as that correspondence holds:
 rg -n "test\.todo\(" src/core/backend/tests/drc-audit-b*.test.ts
 ```
 
-Expect **7 call sites, 7 unique bug ids** (S5 closed B3-9 / B3-10; S7 added B6-1), and every body a real post-fix assertion
+Expect **6 call sites, 6 unique bug ids** (S5 closed B3-9 / B3-10; S7 added B6-1; S8 closed B5-LIVE-ROT-PAD / B5-LIVE-TH-PAD-SIDE and added B7-1), and every body a real post-fix assertion
 (`rg "expect\(true\)\.toBe\(true\)"` over the same files must return nothing — Session 0 replaced
 the seven placeholder bodies; Sessions 1 and 2 flipped nine of them). When a fix lands, the `test.todo` becomes a real `test` and the
 finding leaves this document. If the count drops without a finding being removed here, the
@@ -147,23 +147,33 @@ findings: B2-9 (the via gate already consumes `pcb/tolerance.ts`) and B5-LIVE-PA
 per-segment rebuild is gone; the residual per-cursor-move rebuild is noted in
 `docs/pcb-hardening/00-ground-truth.md` §1 for S8/S9).
 
-### B5-LIVE-ROT-PAD — live pad boxes never swap dimensions under rotation
+### B5-LIVE-ROT-PAD and B5-LIVE-TH-PAD-SIDE — closed in S8 (2026-09-09)
 
-Batch DRC uses the exact rotated pad polygon. Live DRC models each pad as an **unrotated
-axis-aligned box**, transforming only the pad's centre. A 2.0 × 0.5 mm pad rotated 90° is
-therefore checked as if it were still 2.0 wide and 0.5 tall. Result: live-clean, batch-error along
-the pad's true long axis — and spurious live errors on circular pads, where the box overstates the
-copper. Reproduced.
+Both were properties of a second pad model in `frontend/pcb/drc/live-drc.ts` (an unrotated AABB on
+the placement's side layer). S8 deleted that model: the live check, the commit gates, the smart-via
+and tune guards and the server-side commit gate all call `checkPendingCopper`
+(`src/shared/drc/legality.ts`), which builds the pending copper with the batch item builder and
+judges it with the batch pair bodies against a `LegalityContext` built from the same records
+(`docs/pcb-hardening/07-live-parity-contract.md`). Live regressions: `drc-audit-b5.test.ts`
+"B5-LIVE-ROT-PAD" / "B5-LIVE-TH-PAD-SIDE" (now `test`), plus the parity harness
+`drc-live-parity.test.ts` (leave-one-out over the six goldens, attribution fixtures, obstacle
+superset, server ↔ live through the runtime).
 
-*Anchor:* `frontend/pcb/drc/live-drc.ts`, pad AABB construction.
+### B7-1 — unassigned copper does not inherit the rule tier of the net it extends (S13)
 
-### B5-LIVE-TH-PAD-SIDE — live gives every pad exactly one layer
+Since S8 (`06-batch-drc-contract.md` §4) a null-net item touching exactly one named net is an
+extension of that net: its overlap with that net is no longer a clearance error. But its pairs
+with every OTHER net still resolve with the null-net requirement — the board default, no class,
+no net-scoped rule — so a net-less trace that starts on a 2 mm-class net and passes 0.5 mm from
+another net is clean in batch and at the live / server gates alike (Astra S8 run 2 #1; parity holds,
+the verdict is wrong on both sides). Pre-existing before S8 (the null tier was the default then
+too); the extension wording made it explicit. The fix is a post-bridge pass that re-resolves the
+pairs of every null-net item touching exactly one net as that net, with the attribution changes
+that follow (the pair's anchors stay the null item's).
 
-Live DRC assigns each pad a single layer equal to its placement side. Through-hole pads span all
-copper layers in the batch model. So while routing B.Cu, every top-placed THT barrel is invisible
-to live checking. The code comment immediately above this logic states the opposite intent.
-
-*Anchor:* `frontend/pcb/drc/live-drc.ts`, pad layer assignment.
+*Anchor:* `src/shared/drc/checks/clearance-judge.ts` `emit` (the extension return) and
+`checks/clearance.ts` bridge pass; `docs/pcb-hardening/07-live-parity-contract.md` §9.
+*Regression:* `drc-audit-b7.test.ts` "B7-1" (`test.todo`).
 
 ### B5-SYNC — the full O(n²) batch run executes synchronously in the HTTP handler
 
@@ -423,26 +433,18 @@ For contrast, KiCad's `DRC_RTREE` gives approximately O(n log n) queries.
 The conclusion the audit reached and that still holds: this is a scaling problem, not a
 correctness problem. A spatial index is a prerequisite for large boards, not for correct results.
 
-## 5.5 Live-versus-batch divergence inventory
+## 5.5 Live-versus-batch divergence — closed in S8
 
-This inventory *is* P7's acceptance criteria. Live DRC implements only trace-to-trace (with
-correct edge maths) and trace-to-pad. Everything else is batch-only. The user-facing pattern is
-**live-clean, commit, batch-error**.
-
-| Aspect | Batch | Live |
-|---|---|---|
-| Short tier | Yes | Absent |
-| FAB tier | Yes | Absent |
-| Vias | Checked | Never checked — a via placed mid-route gets zero live checking |
-| Board edge / off-board / width / manufacturability | Yes | Absent |
-| Pad geometry | Exact rotated polygon (`padOutlineWorldMm`) | Unrotated AABB (B5-LIVE-ROT-PAD) |
-| THT pad layers | All copper layers | Placement side only (B5-LIVE-TH-PAD-SIDE) |
-| Neighbour net class | Resolved | Ignored |
-| Reported number | Edge gap vs rule | Centreline distance vs required + half-widths |
-| Tests | Extensive | **Zero** |
-
-P7's parity gate is `|measured_live − measured_batch| ≤ 1e-9`, achieved by making both paths call
-the same item builders and clearance kernels rather than by fixing the live path in place.
+The inventory this section used to carry (short tier, fab tier, vias, edge, pad geometry, THT
+layers, neighbour class, reported number — all batch-only or approximated live) is gone: since S8
+the live path IS the batch pair kernel over the pending copper. The contract is
+`docs/pcb-hardening/07-live-parity-contract.md` §1 — two clauses, compared with `===` on
+`measuredMm` / `requiredMm` (the old `≤ 1e-9` budget is unused): attribution (the live verdict
+equals the batch violations that name the pending copper, plus the bridges it grows) and
+non-perturbation (committing the copper changes no other verdict, except the bridge it replaces).
+The remaining, declared limits are 07 §9: codes outside the live set (electrical, SI, dangling,
+board-wide), obstacles as AABB heuristics, unsynced placements invisible to the server gate, the
+client's `pending:<n>` ids.
 
 ## 5.6 Waiver semantics and drift
 

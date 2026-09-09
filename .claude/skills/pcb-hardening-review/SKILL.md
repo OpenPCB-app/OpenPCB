@@ -39,7 +39,7 @@ invariants. Summary — in scope only if the target is one of:
 
 | Area | Path |
 |---|---|
-| DRC engine + checks | `src/modules/designer/backend/drc/`, `src/shared/drc/rule-resolver.ts` |
+| DRC engine + checks | `src/shared/drc/` (engine, `checks/`, `legality.ts`, `rule-resolver.ts`; re-export shims remain at `src/modules/designer/backend/drc/`) |
 | PCB geometry | `src/shared/pcb-geometry/` |
 | Manual routing (route/walkaround/tune/bundle/diff-pair) — **not** cloud auto-layout | `src/shared/pcb-routing/`, `src/modules/designer/frontend/pcb/tools/` |
 | Ratsnest / connectivity | `src/shared/pcb-connectivity/` (the kernel), `src/modules/designer/backend/pcb/{ratsnest,board-connectivity}.ts` |

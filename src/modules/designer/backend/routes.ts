@@ -44,6 +44,7 @@ import type {
   DesignerMovePartCommand,
   DesignerMovePrimitiveCommand,
   DesignerPcbAddTraceCommand,
+  PcbCommitLegality,
   DesignerPcbAddTraceViaCommand,
   DesignerPcbApplyAutolayoutCandidateCommand,
   DesignerPcbCommitRouteCommand,
@@ -1243,6 +1244,50 @@ const PCB_TRACE_SEGMENT_MODES = new Set<string>([
   "manhattan-45",
 ]);
 
+/** Copper commands the reference-DRC commit gate judges (contract 07 §6). */
+const COPPER_GATED_COMMANDS = new Set<string>([
+  "pcb_add_trace",
+  "pcb_add_via",
+  "pcb_add_manual_via",
+  "pcb_add_trace_via",
+  "pcb_commit_route",
+  "pcb_update_trace_geometry",
+]);
+
+/**
+ * The cloud apply loops dispatch every op with the copper gate off: cloud
+ * output is judged by the post-apply batch report, never refused per op
+ * (contract 07 §6 recorded boundary).
+ */
+function withLegalityOff<T>(command: T): T {
+  // The op payload is unvalidated here (`parseCommandEnvelope` rejects it just
+  // after); a non-object must reach that rejection, not throw on `.type`.
+  if (typeof command !== "object" || command === null) return command;
+  const type = (command as { type?: unknown }).type;
+  if (typeof type !== "string" || !COPPER_GATED_COMMANDS.has(type)) return command;
+  return { ...command, legality: "off" as const };
+}
+
+const PCB_COMMIT_LEGALITY = new Set<string>(["refuse", "report", "off"]);
+
+/**
+ * The optional `legality` field of a copper-creating command (contract 07 §6).
+ * Absent means the executor's default (`refuse`); anything else must be one of
+ * the three modes — an unparsed field would otherwise be dropped over HTTP.
+ */
+function parseLegality(
+  raw: Record<string, unknown>,
+): { legality: PcbCommitLegality } | Record<string, never> {
+  if (raw.legality === undefined) return {};
+  const legality = asString(raw.legality);
+  if (!legality || !PCB_COMMIT_LEGALITY.has(legality)) {
+    throw new ValidationError(
+      "command.legality must be 'refuse', 'report' or 'off'",
+    );
+  }
+  return { legality: legality as PcbCommitLegality };
+}
+
 function parsePcbAddTraceCommand(
   raw: Record<string, unknown>,
 ): DesignerPcbAddTraceCommand {
@@ -1286,6 +1331,7 @@ function parsePcbAddTraceCommand(
     netId,
     netClassId,
     segmentMode: segmentMode as PcbTraceSegmentMode,
+    ...parseLegality(raw),
   };
 }
 
@@ -1359,6 +1405,7 @@ function parsePcbAddViaCommand(
     ...(fromLayer !== undefined ? { fromLayer } : {}),
     ...(toLayer !== undefined ? { toLayer } : {}),
     ...(viaType !== undefined ? { viaType } : {}),
+    ...parseLegality(raw),
   };
 }
 
@@ -1394,7 +1441,7 @@ function parsePcbAddTraceViaCommand(
       ? { drillMmOverride: parsedVia.drillMmOverride }
       : {}),
   };
-  return { type: "pcb_add_trace_via", trace, via };
+  return { type: "pcb_add_trace_via", trace, via, ...parseLegality(raw) };
 }
 
 /** Sanity cap per array — a routing session never legitimately exceeds this. */
@@ -1457,7 +1504,7 @@ function parsePcbCommitRouteCommand(
       ...(parsed.viaType !== undefined ? { viaType: parsed.viaType } : {}),
     };
   });
-  return { type: "pcb_commit_route", traces, vias };
+  return { type: "pcb_commit_route", traces, vias, ...parseLegality(raw) };
 }
 
 /**
@@ -1611,7 +1658,12 @@ function parsePcbUpdateTraceGeometryCommand(
   const pointsNm = raw.pointsNm.map((point, i) =>
     parsePointNm(point, `command.pointsNm[${i}]`),
   );
-  return { type: "pcb_update_trace_geometry", traceId, pointsNm };
+  return {
+    type: "pcb_update_trace_geometry",
+    traceId,
+    pointsNm,
+    ...parseLegality(raw),
+  };
 }
 
 function parsePcbSetViewStateCommand(
@@ -2581,6 +2633,7 @@ function parsePcbAddManualViaCommand(
     ...(base.drillMmOverride !== undefined
       ? { drillMmOverride: base.drillMmOverride }
       : {}),
+    ...parseLegality(raw),
   };
 }
 
@@ -3343,7 +3396,7 @@ export function registerRoutes(
             aggregateId: designId,
             issuedAt: Date.now(),
             baseRevision: null,
-            command: op.payload,
+            command: withLegalityOff(op.payload),
           });
           const result = await store.dispatchCommand(
             designId,
@@ -3474,7 +3527,7 @@ export function registerRoutes(
               aggregateId: designId,
               issuedAt: Date.now(),
               baseRevision: null,
-              command: op.payload,
+              command: withLegalityOff(op.payload),
             });
           } catch {
             failures.push({ opId: op.id, code: "invalid_command" });

@@ -171,6 +171,15 @@ export function RouteHudStatus({
           ? "clear"
           : `${model.drcConflictCount} conflict${model.drcConflictCount === 1 ? "" : "s"}`}
       </span>
+      {model.drcWarningCount > 0 ? (
+        <span
+          title="Reported by DRC but never blocking (contract 07 §6)"
+          className="text-text-tertiary"
+        >
+          {model.drcWarningCount} warning
+          {model.drcWarningCount === 1 ? "" : "s"}
+        </span>
+      ) : null}
     </span>
   );
 }

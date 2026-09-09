@@ -49,7 +49,16 @@ export interface RouteHudModel {
     toleranceMm: number;
     totalMm: number;
   } | null;
+  /**
+   * Violations a `refuse` commit would be REJECTED for (live-parity contract
+   * 07 §6 refuse set) — the HUD's "conflicts".
+   */
   drcConflictCount: number;
+  /**
+   * The rest of the live verdict: codes in `L` that are reported but never
+   * block (fab tiers, hole-to-hole, the netclass/manufacturability scalars).
+   */
+  drcWarningCount: number;
   /** Ghost head is currently bending around an obstacle (walkaround). */
   detourActive: boolean;
   hints: readonly RouteKeyBinding[];
@@ -62,6 +71,8 @@ export function buildRouteHudModel(input: {
   netName: string | null;
   netClass: PcbNetClass | null;
   drcConflictCount: number;
+  /** Non-blocking violations of the same verdict; defaults to 0. */
+  drcWarningCount?: number;
   /** pcb.routeAutoFinish flag — shows/hides the Tab hint. */
   autoFinishEnabled?: boolean;
   /** Walkaround detour currently shaping the ghost head. */
@@ -107,6 +118,7 @@ export function buildRouteHudModel(input: {
         }
       : null,
     drcConflictCount: input.drcConflictCount,
+    drcWarningCount: input.drcWarningCount ?? 0,
     detourActive: input.detourActive === true,
     hints: routeKeyHints({
       routing: true,
