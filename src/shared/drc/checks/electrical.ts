@@ -124,12 +124,29 @@ function viaOf(ctx: DrcContext, it: ElItem): DrcViaGeom {
   return ctx.vias[it.idx]!;
 }
 
+/**
+ * The creepage items plus the reverse map the indexed enumeration needs: a
+ * broad-phase query answers with CONTEXT indices, and only some context items
+ * become `ElItem`s (a trace under two points does not).
+ */
+interface ElItems {
+  items: ElItem[];
+  /** ElItem index by context index, per kind; `-1` where there is no item. */
+  indexOf: Record<ElItem["kind"], number[]>;
+}
+
 function buildElItems(
   ctx: DrcContext,
   voltageOf: (netId: string | null) => number,
-): ElItem[] {
+): ElItems {
   const items: ElItem[] = [];
+  const indexOf: Record<ElItem["kind"], number[]> = {
+    trace: new Array<number>(ctx.traces.length).fill(-1),
+    pad: new Array<number>(ctx.pads.length).fill(-1),
+    via: new Array<number>(ctx.vias.length).fill(-1),
+  };
   const push = (item: Omit<ElItem, "key" | "voltage">): void => {
+    indexOf[item.kind][item.idx] = items.length;
     items.push({
       ...item,
       key: anchorKey(item.anchor),
@@ -170,7 +187,7 @@ function buildElItems(
       point: v.center,
     });
   });
-  return items;
+  return { items, indexOf };
 }
 
 /**
@@ -239,6 +256,13 @@ function creepageViolation(
   if (shared.length === 0) return null;
   const voltageDiff = u.voltage - v.voltage;
   const { layer, requiredMm } = strictestSpacing(shared, voltageDiff);
+  // Hoisted ahead of the resolver work (08 §4). Both boxes contain their shape,
+  // so the box gap is a LOWER bound of the real one: a pair whose BOXES are
+  // already farther apart than the requirement cannot be below it. The branch
+  // below returns `null` too, so the order of the two is results-neutral — and
+  // with the indexed enumeration seeding far more pairs per HV item, this is
+  // the test that must run first.
+  if (aabbGap(u.bounds, v.bounds) > requiredMm) return null;
   // Skip when the ORDINARY clearance already dominates — but only WITHOUT area
   // rules. Then net, class and layer scopes are constant over the pair, so the
   // representative-point resolution is exact and the skip cannot hide anything.
@@ -261,7 +285,6 @@ function creepageViolation(
     ).mm;
     if (requiredMm <= base) return null;
   }
-  if (aabbGap(u.bounds, v.bounds) > requiredMm) return null;
   const g = pairGapOf(ctx, u, v);
   if (!below(g.gap, requiredMm)) return null;
   return {
@@ -286,11 +309,27 @@ function checkCreepage(
   voltageOf: (netId: string | null) => number,
 ): DrcViolationDraft[] {
   const out: DrcViolationDraft[] = [];
-  const items = buildElItems(ctx, voltageOf);
+  const { items, indexOf } = buildElItems(ctx, voltageOf);
   if (!items.some((it) => it.voltage !== 0)) return out;
   const stackupIndex = new Map(
     [...ctx.validCopperLayers].map((l, i) => [l, i] as const),
   );
+  // Mode `"exhaustive"` keeps the pre-S9 i<j loop as the oracle (08 §3).
+  if (ctx.broadPhase === "exhaustive") {
+    checkCreepageExhaustive(ctx, items, stackupIndex, out);
+    return out;
+  }
+  checkCreepageIndexed(ctx, items, indexOf, stackupIndex, out);
+  return out;
+}
+
+/** The pre-S9 O(n²) pair loop, MOVED VERBATIM (08 §3) — the oracle. */
+function checkCreepageExhaustive(
+  ctx: DrcContext,
+  items: readonly ElItem[],
+  stackupIndex: ReadonlyMap<PcbCopperLayerId, number>,
+  out: DrcViolationDraft[],
+): void {
   for (let i = 0; i < items.length; i += 1) {
     const a = items[i]!;
     for (let j = i + 1; j < items.length; j += 1) {
@@ -309,5 +348,72 @@ function checkCreepage(
       if (draft) out.push(draft);
     }
   }
-  return out;
+}
+
+/** The grid kind that holds one `ElItem` kind's context array. */
+const EL_GRID_KIND: Record<ElItem["kind"], "traces" | "pads" | "vias"> = {
+  trace: "traces",
+  pad: "pads",
+  via: "vias",
+};
+
+const EL_KINDS = ["trace", "pad", "via"] as const;
+
+/**
+ * The same pair set, seeded from the HV items only (08 §4). A pair needs at
+ * least one non-zero voltage, so every pair the i<j loop judges has an HV side
+ * to seed it — and the seed's candidates are a superset of every item whose
+ * copper is within `maxCreepageBoundMm`, which bounds every `requiredMm` a pair
+ * can resolve to. A pair the index drops therefore has a copper gap above its
+ * own requirement, and `below(gap, requiredMm)` would have returned null.
+ *
+ * An (HV, HV) pair is seeded from BOTH sides, so it is judged only from the one
+ * that is smaller in `(key, ElItem index)`. The key alone is not total: the
+ * several copper shapes of one pin share one anchor key (Astra A1 #5), and
+ * dropping such a pair — or judging it twice — would change the report.
+ */
+function checkCreepageIndexed(
+  ctx: DrcContext,
+  items: readonly ElItem[],
+  indexOf: Record<ElItem["kind"], number[]>,
+  stackupIndex: ReadonlyMap<PcbCopperLayerId, number>,
+  out: DrcViolationDraft[],
+): void {
+  const halo = ctx.maxCreepageBoundMm;
+  for (let ai = 0; ai < items.length; ai += 1) {
+    const a = items[ai]!;
+    if (a.voltage === 0) continue;
+    // A trace subject asks with its polyline, every other with its box (§2.1).
+    const aTrace = a.kind === "trace" ? ctx.traces[a.idx]! : null;
+    for (const kind of EL_KINDS) {
+      const candidates = aTrace
+        ? ctx.nearPolyline(
+            EL_GRID_KIND[kind],
+            aTrace.pointsMm,
+            aTrace.halfWidthMm,
+            halo,
+          )
+        : ctx.near(EL_GRID_KIND[kind], a.bounds, halo);
+      const map = indexOf[kind];
+      for (const ci of candidates) {
+        const bi = map[ci]!;
+        if (bi < 0 || bi === ai) continue;
+        const b = items[bi]!;
+        if (b.voltage !== 0 && (b.key < a.key || (b.key === a.key && bi < ai))) {
+          continue;
+        }
+        if (a.netId !== null && a.netId === b.netId) continue;
+        // Canonical orientation (§11): the smaller anchor key leads, so the
+        // reported location cannot depend on the input array order.
+        const swap = a.key > b.key;
+        const draft = creepageViolation(
+          ctx,
+          swap ? b : a,
+          swap ? a : b,
+          stackupIndex,
+        );
+        if (draft) out.push(draft);
+      }
+    }
+  }
 }

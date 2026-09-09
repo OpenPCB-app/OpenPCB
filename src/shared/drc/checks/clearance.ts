@@ -5,6 +5,7 @@
 // general form is not a second implementation — they are two enumerations over
 // the same bodies.
 
+import type { PcbPointMm } from "../../../sdks/designer";
 import type { RingBounds } from "../../pcb-geometry/pad-outline";
 import {
   layersOverlap,
@@ -37,6 +38,25 @@ export { createPairJudge } from "./clearance-judge";
 
 export function checkClearance(ctx: DrcContext): DrcViolationDraft[] {
   const out: DrcViolationDraft[] = [];
+  // Mode `"exhaustive"` keeps the pre-S9 loops as the oracle (08 §3); the grid
+  // enumeration is the default. Both reach the same drafts (§1 L1): a pair the
+  // index drops has copper farther apart than `maxClearanceBoundMm`, which
+  // bounds every requirement, the fab floor and `SHORT_EPS_MM` — so no tier of
+  // the shared bodies fires and no bridge is banked.
+  if (ctx.broadPhase === "exhaustive") checkClearanceExhaustive(ctx, out);
+  else checkClearanceIndexed(ctx, out);
+  return out;
+}
+
+/**
+ * The pre-S9 six loops, MOVED VERBATIM (08 §3) — the O(n²) `i<j` / nested scans
+ * with `farApart` per pair. Kept in the tree as the oracle the broad-phase
+ * harness diffs the grid enumeration against; nothing inside it may change.
+ */
+function checkClearanceExhaustive(
+  ctx: DrcContext,
+  out: DrcViolationDraft[],
+): void {
   const judge = createPairJudge(ctx, out);
 
   // --- trace ↔ trace (same layer) ---
@@ -123,16 +143,149 @@ export function checkClearance(ctx: DrcContext): DrcViolationDraft[] {
 
   // --- null-net bridges (contract 06 §4) ---
   judge.flushBridges();
+}
 
-  return out;
+/**
+ * The same six kinds in the same order, over the grid instead of the arrays
+ * (08 §4). Every guard, its order and the per-pair body are the exhaustive
+ * ones — the ONLY difference is which `j` the inner loop visits.
+ *
+ * A trace subject asks with its POLYLINE (`nearPolyline`), so a long diagonal's
+ * empty AABB corners cost nothing; a via / pad subject asks with its box. The
+ * symmetric kinds keep `j > i`, which is what makes each unordered pair reach
+ * the body exactly once — the grid is symmetric, so both sides would otherwise
+ * enumerate it.
+ */
+function checkClearanceIndexed(
+  ctx: DrcContext,
+  out: DrcViolationDraft[],
+): void {
+  const judge = createPairJudge(ctx, out);
+  const halo = ctx.maxClearanceBoundMm;
+
+  // --- trace ↔ trace (same layer) ---
+  for (let i = 0; i < ctx.traces.length; i += 1) {
+    const a = ctx.traces[i]!;
+    if (a.pointsMm.length < 2) continue;
+    for (const j of ctx.nearPolyline(
+      "traces",
+      a.pointsMm,
+      a.halfWidthMm,
+      halo,
+    )) {
+      if (j <= i) continue;
+      const b = ctx.traces[j]!;
+      if (b.pointsMm.length < 2) continue;
+      if (a.layer !== b.layer) continue;
+      if (sameNet(a.netId, b.netId)) continue;
+      if (judge.farApart(a.bounds, b.bounds, "traceToTrace", a.netId, b.netId)) {
+        continue;
+      }
+      judge.traceTrace(a, b);
+    }
+  }
+
+  // --- trace ↔ pad (pad occupies the trace's layer) ---
+  for (const t of ctx.traces) {
+    if (t.pointsMm.length < 2) continue;
+    for (const j of ctx.nearPolyline(
+      "pads",
+      t.pointsMm,
+      t.halfWidthMm,
+      halo,
+    )) {
+      const pad = ctx.pads[j]!;
+      if (!pad.layers.includes(t.layer)) continue;
+      if (sameNet(t.netId, pad.netId)) continue;
+      if (judge.farApart(t.bounds, pad.bounds, "traceToPad", t.netId, pad.netId)) {
+        continue;
+      }
+      judge.tracePad(t, pad);
+    }
+  }
+
+  // --- trace ↔ via (via barrel crosses the trace's layer) ---
+  for (const t of ctx.traces) {
+    if (t.pointsMm.length < 2) continue;
+    for (const j of ctx.nearPolyline(
+      "vias",
+      t.pointsMm,
+      t.halfWidthMm,
+      halo,
+    )) {
+      const vg = ctx.vias[j]!;
+      if (!vg.layers.includes(t.layer)) continue;
+      if (sameNet(t.netId, vg.netId)) continue;
+      if (judge.farApart(t.bounds, vg.bounds, "traceToVia", t.netId, vg.netId)) {
+        continue;
+      }
+      judge.traceVia(t, vg);
+    }
+  }
+
+  // --- via ↔ via (P2) ---
+  for (let i = 0; i < ctx.vias.length; i += 1) {
+    const a = ctx.vias[i]!;
+    for (const j of ctx.near("vias", a.bounds, halo)) {
+      if (j <= i) continue;
+      const b = ctx.vias[j]!;
+      if (!layersOverlap(a.layers, b.layers)) continue;
+      if (sameNet(a.netId, b.netId)) continue;
+      if (judge.farApart(a.bounds, b.bounds, "viaToVia", a.netId, b.netId)) continue;
+      judge.viaVia(a, b);
+    }
+  }
+
+  // --- pad ↔ pad (P2). The intra-footprint short-tier-only rule is the
+  // judge's, so both enumerations get it unchanged. ---
+  for (let i = 0; i < ctx.pads.length; i += 1) {
+    const a = ctx.pads[i]!;
+    for (const j of ctx.near("pads", a.bounds, halo)) {
+      if (j <= i) continue;
+      const b = ctx.pads[j]!;
+      if (!layersOverlap(a.layers, b.layers)) continue;
+      if (sameNet(a.netId, b.netId)) continue;
+      if (judge.farApart(a.bounds, b.bounds, "padToPad", a.netId, b.netId)) continue;
+      judge.padPad(a, b);
+    }
+  }
+
+  // --- pad ↔ via (P2) ---
+  for (const pad of ctx.pads) {
+    for (const j of ctx.near("vias", pad.bounds, halo)) {
+      const vg = ctx.vias[j]!;
+      if (!layersOverlap(pad.layers, vg.layers)) continue;
+      if (sameNet(pad.netId, vg.netId)) continue;
+      if (judge.farApart(pad.bounds, vg.bounds, "padToVia", pad.netId, vg.netId)) {
+        continue;
+      }
+      judge.padVia(pad, vg);
+    }
+  }
+
+  // --- null-net bridges (contract 06 §4) ---
+  judge.flushBridges();
 }
 
 // --- the general subject-set form ------------------------------------------
 
 type ItemKind = "traces" | "pads" | "vias";
 
-/** Candidate indices into `others[kind]` — the grid, or every index. */
-type Pick = (kind: ItemKind, count: number, bounds: RingBounds) => readonly number[];
+/**
+ * Candidate indices into `others[kind]` — the grid, or every index. Two forms,
+ * because the grid files a trace per sub-segment (broad-phase contract 08
+ * §2.1): a TRACE subject asks with its polyline, so a long diagonal's empty
+ * AABB corners cost nothing; a via / pad subject asks with its box.
+ */
+interface Pick {
+  box(kind: ItemKind, count: number, bounds: RingBounds): readonly number[];
+  polyline(
+    kind: ItemKind,
+    count: number,
+    pointsMm: readonly PcbPointMm[],
+    halfWidthMm: number,
+  ): readonly number[];
+}
 
 function allIndices(count: number): number[] {
   const out: number[] = [];
@@ -140,7 +293,10 @@ function allIndices(count: number): number[] {
   return out;
 }
 
-const ALL_PICK: Pick = (_kind, count) => allIndices(count);
+const ALL_PICK: Pick = {
+  box: (_kind, count) => allIndices(count),
+  polyline: (_kind, count) => allIndices(count),
+};
 
 function judgeTraceAgainst(
   judge: PairJudge,
@@ -150,7 +306,12 @@ function judgeTraceAgainst(
   replaces?: ReadonlySet<string>,
 ): void {
   if (t.pointsMm.length < 2) return;
-  for (const i of pick("traces", others.traces.length, t.bounds)) {
+  for (const i of pick.polyline(
+    "traces",
+    others.traces.length,
+    t.pointsMm,
+    t.halfWidthMm,
+  )) {
     const b = others.traces[i]!;
     if (b === t) continue;
     if (replaces?.has(b.id)) continue;
@@ -162,7 +323,12 @@ function judgeTraceAgainst(
     }
     judge.traceTrace(t, b);
   }
-  for (const i of pick("pads", others.pads.length, t.bounds)) {
+  for (const i of pick.polyline(
+    "pads",
+    others.pads.length,
+    t.pointsMm,
+    t.halfWidthMm,
+  )) {
     const pad = others.pads[i]!;
     if (!pad.layers.includes(t.layer)) continue;
     if (sameNet(t.netId, pad.netId)) continue;
@@ -171,7 +337,12 @@ function judgeTraceAgainst(
     }
     judge.tracePad(t, pad);
   }
-  for (const i of pick("vias", others.vias.length, t.bounds)) {
+  for (const i of pick.polyline(
+    "vias",
+    others.vias.length,
+    t.pointsMm,
+    t.halfWidthMm,
+  )) {
     const vg = others.vias[i]!;
     if (replaces?.has(vg.via.id)) continue;
     if (!vg.layers.includes(t.layer)) continue;
@@ -190,7 +361,7 @@ function judgeViaAgainst(
   pick: Pick,
   replaces?: ReadonlySet<string>,
 ): void {
-  for (const i of pick("traces", others.traces.length, vg.bounds)) {
+  for (const i of pick.box("traces", others.traces.length, vg.bounds)) {
     const t = others.traces[i]!;
     if (replaces?.has(t.id)) continue;
     if (t.pointsMm.length < 2) continue;
@@ -201,7 +372,7 @@ function judgeViaAgainst(
     }
     judge.traceVia(t, vg);
   }
-  for (const i of pick("pads", others.pads.length, vg.bounds)) {
+  for (const i of pick.box("pads", others.pads.length, vg.bounds)) {
     const pad = others.pads[i]!;
     if (!layersOverlap(pad.layers, vg.layers)) continue;
     if (sameNet(pad.netId, vg.netId)) continue;
@@ -210,7 +381,7 @@ function judgeViaAgainst(
     }
     judge.padVia(pad, vg);
   }
-  for (const i of pick("vias", others.vias.length, vg.bounds)) {
+  for (const i of pick.box("vias", others.vias.length, vg.bounds)) {
     const b = others.vias[i]!;
     if (b === vg) continue;
     if (replaces?.has(b.via.id)) continue;
@@ -230,7 +401,7 @@ function judgePadAgainst(
   pick: Pick,
   replaces?: ReadonlySet<string>,
 ): void {
-  for (const i of pick("traces", others.traces.length, pad.bounds)) {
+  for (const i of pick.box("traces", others.traces.length, pad.bounds)) {
     const t = others.traces[i]!;
     if (replaces?.has(t.id)) continue;
     if (t.pointsMm.length < 2) continue;
@@ -241,7 +412,7 @@ function judgePadAgainst(
     }
     judge.tracePad(t, pad);
   }
-  for (const i of pick("pads", others.pads.length, pad.bounds)) {
+  for (const i of pick.box("pads", others.pads.length, pad.bounds)) {
     const b = others.pads[i]!;
     if (b === pad) continue;
     if (!layersOverlap(pad.layers, b.layers)) continue;
@@ -251,7 +422,7 @@ function judgePadAgainst(
     }
     judge.padPad(pad, b);
   }
-  for (const i of pick("vias", others.vias.length, pad.bounds)) {
+  for (const i of pick.box("vias", others.vias.length, pad.bounds)) {
     const vg = others.vias[i]!;
     if (replaces?.has(vg.via.id)) continue;
     if (!layersOverlap(pad.layers, vg.layers)) continue;
@@ -463,9 +634,22 @@ export function judgeCopperPairs(
     others.traces === ctx.traces &&
     others.pads === ctx.pads &&
     others.vias === ctx.vias;
-  const pick: Pick = gridded
-    ? (kind, _count, bounds) => ctx.near(kind, bounds, ctx.maxClearanceBoundMm)
-    : ALL_PICK;
+  // Mode `"exhaustive"` keeps the pre-S9 full scan as the oracle (08 §3); the
+  // grid is the default and both reach the same verdicts (§1 L1).
+  const pick: Pick =
+    gridded && ctx.broadPhase !== "exhaustive"
+      ? {
+          box: (kind, _count, bounds) =>
+            ctx.near(kind, bounds, ctx.maxClearanceBoundMm),
+          polyline: (kind, _count, pointsMm, halfWidthMm) =>
+            ctx.nearPolyline(
+              kind,
+              pointsMm,
+              halfWidthMm,
+              ctx.maxClearanceBoundMm,
+            ),
+        }
+      : ALL_PICK;
 
   for (const t of subjects.traces) judgeTraceAgainst(judge, t, others, pick, replaces);
   for (const vg of subjects.vias) judgeViaAgainst(judge, vg, others, pick, replaces);

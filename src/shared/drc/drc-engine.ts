@@ -107,14 +107,22 @@ function worseWitness(a: DrcViolation, b: DrcViolation): boolean {
   return la.y < lb.y;
 }
 
-export function runDrc(
+/**
+ * Every draft the checks produce, BEFORE `finalizeReport` drops class-ignored
+ * and severity-ignored drafts and keeps one witness per id.
+ *
+ * Exported for the broad-phase oracle (contract 08 §1, §7): two DIFFERENT draft
+ * sets could in principle finalise to equal report bytes, so the harness
+ * compares the pre-finalise multiset across the two `broadPhase` modes first.
+ * `runDrc` is this function plus `finalizeReport` — there is no second list.
+ */
+export function drcDrafts(
   projection: DesignerPcbProjection,
   options: DrcOptions = {},
-): DrcReport {
+): DrcViolationDraft[] {
   const ctx = buildDrcContext(projection, options);
-  const viewState = projection.board.viewState;
 
-  const drafts = [
+  return [
     // A rule table the resolver refused contextualises every verdict after it,
     // so it is reported first (contract §10).
     ...checkRules(ctx),
@@ -139,6 +147,25 @@ export function runDrc(
     ...checkBoard(ctx),
     ...checkKeepouts(ctx),
   ];
+}
+
+/** `{ locationMm }` of the smaller marker (x, then y); a missing one loses. */
+function smallerLocation(
+  a: DrcViolation["locationMm"],
+  b: DrcViolation["locationMm"],
+): { locationMm?: DrcViolation["locationMm"] } {
+  if (a === undefined) return b === undefined ? {} : { locationMm: b };
+  if (b === undefined) return { locationMm: a };
+  if (a.x !== b.x) return { locationMm: a.x < b.x ? a : b };
+  return { locationMm: a.y <= b.y ? a : b };
+}
+
+export function runDrc(
+  projection: DesignerPcbProjection,
+  options: DrcOptions = {},
+): DrcReport {
+  const viewState = projection.board.viewState;
+  const drafts = drcDrafts(projection, options);
 
   return finalizeReport(drafts, {
     designId: projection.designId,
@@ -251,9 +278,15 @@ export function finalizeReport(
       continue;
     }
     const messages = new Set([...last.message.split("; "), v.message]);
+    // The survivor's LOCATION must not follow draft order either (06 §6): two
+    // copper shapes of one pin inside a keepout are two unmeasured drafts under
+    // one id with different markers, and `...last` kept whichever the
+    // footprint's pad order put first (Astra S9 A2 #2). Same rule as the
+    // measured group's last rung — the smaller marker, x then y.
     unique[unique.length - 1] = {
       ...last,
       message: [...messages].sort().join("; "),
+      ...(smallerLocation(last.locationMm, v.locationMm)),
     };
   }
   // Tallied from the SORTED, de-duplicated list, so the key insertion order is

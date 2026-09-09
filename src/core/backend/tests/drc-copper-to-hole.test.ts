@@ -61,9 +61,11 @@ describe("COPPER_TO_HOLE — copper against a non-plated drill", () => {
       { copperToBoardEdgeMm: 0.5 },
     );
     expect(found).toHaveLength(1);
+    // Canonical anchor orientation (06 §7, S9): the smaller anchor key leads,
+    // and `fh:h` sorts before `t:t`.
     expect(found[0]!.anchors).toEqual([
-      { kind: "trace", traceId: "t" },
       { kind: "freeHole", freeHoleId: "h" },
+      { kind: "trace", traceId: "t" },
     ]);
     expect(found[0]!.layer).toBe("F.Cu");
     expect(found[0]!.locationMm).toEqual({ x: 0, y: 0 });
@@ -159,9 +161,10 @@ describe("COPPER_TO_HOLE — copper against a non-plated drill", () => {
       { copperToBoardEdgeMm: 0.5 },
     );
     expect(foreign).toHaveLength(1);
+    // `fp:fp` sorts before `t:t` (canonical orientation, 06 §7).
     expect(foreign[0]!.anchors).toEqual([
-      { kind: "trace", traceId: "t" },
       { kind: "freePad", freePadId: "fp" },
+      { kind: "trace", traceId: "t" },
     ]);
   });
 
@@ -180,13 +183,14 @@ describe("COPPER_TO_HOLE — copper against a non-plated drill", () => {
       { copperToBoardEdgeMm: 0.5 },
     );
     const pairs = found.map((v) => v.anchors);
+    // Canonical orientation (06 §7): `fh:h1` < `fp:fp`, `fh:h2` < `v:v`.
     expect(pairs).toContainEqual([
-      { kind: "freePad", freePadId: "fp" },
       { kind: "freeHole", freeHoleId: "h1" },
+      { kind: "freePad", freePadId: "fp" },
     ]);
     expect(pairs).toContainEqual([
-      { kind: "via", viaId: "v" },
       { kind: "freeHole", freeHoleId: "h2" },
+      { kind: "via", viaId: "v" },
     ]);
     // A drill is through-stack and a pad / via spans layers of its own, so
     // neither report carries one.

@@ -10,7 +10,9 @@ the shape of the report, and the limits that remain. Live DRC converged on it in
 (`07-live-parity-contract.md`: `checkPendingCopper` runs these checks' subject-set forms —
 `judgeCopperPairs`, `copperToHolePairs`, `boardItems` / `holePairs`, `keepoutItems` and the per-item
 scalars — through the same `finalizeReport`; the batch loops are unchanged and the clearance codes'
-emit site is `checks/clearance-judge.ts`); scaling (S9) and execution (S10) still converge on it;
+emit site is `checks/clearance-judge.ts`); S9 moved candidate discovery into two indexes with the
+pre-S9 enumerations kept as the oracle (`08-broad-phase-contract.md`: byte-identical reports in both
+modes); execution (S10) still converges on it;
 S11–S14 extend it. Session sequence and gates: `PROGRAM.md`.
 
 ## 0. Scope
@@ -21,7 +23,7 @@ consumes (`src/shared/pcb-connectivity/copper-records.ts`, `src/shared/rendering
 `src/shared/rendering/pad-copper-layers.ts`, `src/shared/drc/`, `src/shared/pcb-geometry/`,
 `src/shared/pcb-areas/`, `src/shared/rendering/copper-fill/`), and the consumers of the report.
 
-Out of scope, with the owning session: live / route parity (S8, `07-live-parity-contract.md`), the broad phase (S9), async
+Out of scope, with the owning session: live / route parity (S8, `07-live-parity-contract.md`), the broad phase (S9, `08-broad-phase-contract.md`), async
 execution (S10), slot / annular / aspect / plating models and scoped hole rules (S11), DFM
 overlays, exact-arc geometry and minimum-web checks (S12), electrical thresholds (S13), SI and
 length semantics (S14).
@@ -217,7 +219,9 @@ computation runs in the canonical orientation (the item with the smaller sorted 
 every per-net accumulation and "first trace" witness walks the traces in canonical id order
 (`canonicalTraces` — float sums are not associative, Astra S7 #6), so witnesses, locations and
 measured values do not depend on iteration order, and the canonical sort removes the last order
-dependence. One deliberate exception: the ORDER of `drcRules` is part of their meaning — two
+dependence. S9 closed the one pair check that had no canonical orientation: `COPPER_TO_HOLE`
+now leads with the smaller anchor key too (two coincident drilled free pads tied on every survivor
+field and reported `anchors` in visit order — `08-broad-phase-contract.md` §9). One deliberate exception: the ORDER of `drcRules` is part of their meaning — two
 enabled rules of equal priority resolve by array index (rule-semantics contract §2 / §4.1), so
 reversing a table that contains such a tie is a different rule table, not a presentation change
 (Astra S7 #7). The caveat in `OPEN_FINDINGS.md` §5.2 is retired.
@@ -248,7 +252,10 @@ default from the projection (05 §8); none re-orders or re-derives.
   DRC-clean board can export a short (Astra S7 #1, register entry B6-1, S11: "DRC's representation
   matches export").
 - Two problems that hash to one id collapse into one row (§6); the survivor is the most severe,
-  then the largest deficit against its own requirement (Astra S7 #4).
+  then the largest deficit against its own requirement (Astra S7 #4). Since S9 an UNMEASURED group
+  keeps the smaller marker (x, then y) alongside its merged messages — before, `...last` kept
+  whichever draft came first, so two copper shapes of one pin inside a keepout reported the marker
+  the footprint's pad order put first (Astra S9 A2 #2, `08-broad-phase-contract.md` §11).
 - Invalid-layer traces are not clamped (§2); the guard is non-waivable.
 - Pour copper is never re-measured against foreign copper (§4).
 - Chained null-net shorts (§4).

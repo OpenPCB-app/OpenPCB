@@ -103,7 +103,10 @@ src/
 └── shared/
     ├── domain/             ECS world, commands, events, revision, patch/history infrastructure
     ├── drc/                the DRC engine (relocated here in S8 — `drc-engine`, `drc-context`,
-    │                       `checks/`, `legality.ts` for the live / commit gate), rule resolver,
+    │                       `checks/`, `legality.ts` for the live / commit gate, `broad-phase.ts`
+    │                       — the S9 grid; `DrcOptions.broadPhase: "grid" | "exhaustive"` keeps
+    │                       the pre-S9 loops as the oracle, see
+    │                       docs/pcb-hardening/08-broad-phase-contract.md), rule resolver,
     │                       fab presets; `modules/designer/backend/drc/` is re-export shims
     ├── pcb-connectivity/   copper connectivity kernel (records, items, touch, graph) — see
     │                       docs/pcb-hardening/01-connectivity-contract.md
@@ -112,8 +115,10 @@ src/
     │                       keepout predicate, pour-parameter composition — see
     │                       docs/pcb-hardening/03-zone-keepout-contract.md
     ├── pcb-geometry/       PCB geometry: segment predicates, arc chords, outline flattening, the
-    │                       board region, area overlap (area-overlap.ts) (+ tolerance.ts: the
-    │                       single epsilon policy) — see docs/pcb-hardening/02-geometry-contract.md.
+    │                       board region (+ region-index.ts: the S9 boundary-edge index its
+    │                       predicates take as an optional argument), area overlap
+    │                       (area-overlap.ts) (+ tolerance.ts: the single epsilon policy) — see
+    │                       docs/pcb-hardening/02-geometry-contract.md.
     │                       `rendering/pcb/outline-geometry.ts` and `backend/pcb/outline-geometry.ts`
     │                       are re-export shims over it
     ├── pcb-routing/        PCB routing

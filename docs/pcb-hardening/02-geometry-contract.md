@@ -225,7 +225,12 @@ manufacturable lives there.
 - Broad phase without an index — per-ring bounds: an object is tested only against rings whose
   eps-inflated bounds meet its own; an object meeting no ring's boundary bounds is decided by one
   point test. Cost is linear in the edges of the rings it is near. Pathological inputs (hundreds
-  of comb-shaped cutouts with hundreds of chords each) stay quadratic until S9 adds the index.
+  of comb-shaped cutouts with hundreds of chords each) were quadratic until S9 added the
+  boundary-edge index (`08-broad-phase-contract.md` §2.2: `edgesNear` for distances and contact
+  parameters, a row-band table for the ray parity; the unindexed functions stay as the oracle). S9
+  also corrected one degeneracy: a ring of fewer than two vertices (a zero-size cutout canonicalises
+  to one) files no boundary edge, so the region-level distances agree with the per-ring helpers,
+  which already returned `Infinity` for it.
 - `ringsIntersect(A, B)` — closed-set contact: a vertex of one inside-or-on the other, or any edge
   pair `segmentsIntersect` (inclusive). Complete for closed polygons: interiors that meet without
   any vertex containment must have crossing or touching edges.

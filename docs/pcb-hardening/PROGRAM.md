@@ -127,7 +127,7 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 | S6 | DRC rule semantics and scoped constraints | Complete, unambiguous rule resolution: board rules, net classes, scoped rules, precedence, relaxations, floors, pair kinds, layers, area scopes, severity, waivers, migrations. Every stored rule type has one documented resolution path; nothing appears supported while inert. | scalar scoped constraints not enforced; area-scope midpoint approximation; optional severity ignored; v1→v2 waiver migration | spec-attack xhigh (run 1: 15 findings, 14 accepted, 1 limit) | done 2026-09-08 (`05-rule-semantics-contract.md`) |
 | S7 | Authoritative batch DRC completeness | Audit every check against the hardened primitives: duplicated geometry/connectivity models, checks bypassing shared rule resolution, declared-but-unemitted codes, primitive types checks cannot see, unit inconsistencies, false-pass directions, ordering. Batch DRC becomes the reference implementation. | — | repository-grounded adversarial-verify xhigh (run 1: 8 findings — 5 fixed, 2 contract corrections, 1 registered B6-1) | done 2026-09-09 (`06-batch-drc-contract.md`) |
 | S8 | Live DRC and manual-route legality parity | A route legal interactively is legal when committed and batch-checked, and vice versa where practical. Engine relocation to `src/shared/drc/` behind shims so both paths share item builders and kernels. Decide whether route commit gets a server-side clearance gate. | B5-LIVE-ROT-PAD, B5-LIVE-TH-PAD-SIDE | spec-attack xhigh (run 1: 9 findings, 7 accepted, 1 recorded as a guarantee, 1 bound) · repository-grounded adversarial-verify xhigh (run 2: 7 findings — 6 fixed, 1 registered B7-1 → S13) | done 2026-09-09 (`07-live-parity-contract.md`) |
-| S9 | DRC broad-phase scaling and determinism | Faster candidate discovery without changing meaning; exhaustive mode retained as oracle; byte-identical reports. Target 10k primitives under ~300 ms. | — | spec-attack xhigh; post optional | pending |
+| S9 | DRC broad-phase scaling and determinism | Faster candidate discovery without changing meaning; exhaustive mode retained as oracle; byte-identical reports. Target 10k primitives under ~300 ms. | — | spec-attack xhigh · adversarial-verify xhigh (user decision 2026-09-09: post run regardless) | done 2026-09-09 (`08-broad-phase-contract.md`) |
 | S10 | DRC execution responsiveness | Expensive DRC runs without blocking the app: lifecycle, cancellation, progress, concurrency, partial-result semantics, deterministic final output. | B5-SYNC | none by default | pending |
 
 ### Stage C — manufacturing and electrical trust
@@ -184,7 +184,19 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
   gen:contracts clean; e2e zones + board-shape + routing + live-parity 15 passed + 1 flag-skip;
   goldens byte-identical except the recorded census delta (84 → 82).*
 - **S9** — optimized and exhaustive modes agree byte-for-byte on representative medium boards;
-  ordering stable; no false negatives introduced.
+  ordering stable; no false negatives introduced. *Evidence at close (2026-09-09): the two-mode
+  oracle harness (`drc-broad-phase-oracle.test.ts`) asserts equal pre-finalise draft multisets AND
+  byte-identical reports on the six goldens, the determinism fixture with its eight reversals, an
+  18-board seeded corpus (300 / 1 500 / 5 000 items; every generator feature on ≥ 2 boards) and the
+  Astra / review micro-fixtures; a halved-halo mutation is caught at the gate and in every batch
+  check; the halo inequalities hold at every area centroid and item centre of the corpus; the
+  corpus's own code union (28) is a floor. Bench on this machine: 10k primitives `runDrc` 3.5 s →
+  196 ms (`checkClearance` 1 035 → 48 ms, `checkBoard` 2 130 → 26 ms), `buildDrcItems` 14 ms,
+  census 11 ms. Ordering: the six `.expected.json` shasums unchanged; the one pre-existing
+  canonicality hole (`COPPER_TO_HOLE` anchors in visit order) and the unmeasured-survivor marker
+  are canonical now. Gates: backend 2318 pass / 22 known library+assistant fails / 8 skip / 6
+  todo (2354); tsc 44; Vitest 61 files 545 + 1 todo; gen + gen:contracts clean; e2e routing +
+  live-parity 4 + 1 flag-skip.*
 - **S10** — expensive runs no longer block command dispatch or SSE; cancel leaves no partial
   persistence; B5-SYNC regression live.
 - **S11** — DRC's representation of drilled and plated structures matches what export emits,
@@ -215,7 +227,7 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 | S6 | high/xhigh once |
 | S7 | xhigh post (repository-grounded) |
 | S8 | **xhigh pre + xhigh post** |
-| S9 | xhigh pre; post optional |
+| S9 | **xhigh pre + xhigh post** (user decision 2026-09-09) |
 | S10 | none normally |
 | S11 | **xhigh pre + xhigh post** |
 | S12 | xhigh pre |
@@ -516,6 +528,42 @@ unmanufacturable board.
   exemption ×2, obstacle inflation ×2, `worseWitness` message tie-break, logical-anchor bridge
   completion memoised per context), 1 rejected as a defect but recorded as the immutable-snapshot
   guarantee the client memo rests on, 1 kept as a cost bound (`07-live-parity-contract.md` §11).
+- **S9 decisions (2026-09-09)** — user: S8 committed first (`00e7da8`), both Astra runs (the
+  program had the post-run optional), creepage candidate discovery included (rules untouched).
+  Fable: **candidate discovery through two indexes built once per context** — the S8 grid becomes
+  grid v2 (trace entries filed per sub-segment of ≤ `CELL_MM`, a `nearPolyline` query for trace
+  subjects, distinct-cell / piece / query caps and a safe-integer bail that all fail OPEN, a fixed
+  query slack) and a new boundary-edge index on the board region (`region-index.ts`: `edgesNear`
+  for distances and contact parameters, a row-band table for the ray parity; the region predicates
+  take it as an optional trailing argument and are the pre-S9 functions without it) — while every
+  verdict is reached by the unchanged bodies; **the pre-S9 enumerations are moved verbatim behind
+  `DrcOptions.broadPhase: "exhaustive"` as the permanent oracle** (option-only: tests and
+  `scripts/drc-bench.ts`); identity is stated as three lemmas (pair superset under halos that
+  bound every resolvable requirement; min-over-subset with one primitive in one argument order,
+  unhaloed where a value is reported; ray parity over a closed row band with the ring loop's
+  operand order) and proven at the draft level, not only the report level. Each halo is an
+  explicit max over the terms the checks compare against and a tested inequality. Recorded
+  corrections in both modes: a ring of fewer than two vertices files no boundary edge;
+  `COPPER_TO_HOLE` anchors lead with the smaller key; an unmeasured same-id survivor keeps the
+  smaller marker. Plan-critique (Opus, 17 findings incl. 5 blockers) folded before the contract.
+  Astra run 1 (spec-attack xhigh, prompt-only, 11 min): 7 findings — 5 accepted (one-point trace
+  entries, PIP operand orientation, safe-integer cell indices, `(key, index)` creepage ownership,
+  row-band caps), 1 rejected on the source (obstacle rects are per segment), 1 addressed by the
+  halo property test. R1 (`reviewer-critical`, 1 500 adversarial boards): 2 blockers
+  (`COPPER_TO_HOLE` anchor order; a one-vertex outer ring's `nearRing`), 2 majors (NaN voltage in
+  the creepage halo; multiplicity cell count oversizing 350 mm traces), 4 minors. R2 (`reviewer`):
+  1 blocker (the draft-level assertion could silently disable itself), 7 harness-coverage majors.
+  Astra run 2 (adversarial-verify xhigh, repository-grounded, 14 min): 5 findings — 1 blocker
+  accepted (the R1 NaN fix made the halo propagate to the 2.5 mm band, below what a finite 800 V
+  pair needs — the halo now fails open to `Infinity`), 2 accepted (unmeasured survivor marker; the
+  boundary fixture's arithmetic), 1 rejected as the documented 06 §7 exception (now an explicit
+  test), 1 low accepted (piece memo). Stated limits: PIP linear per row band; `cellMm` not
+  threaded to `buildDrcItems`; `edgeTests` counts sites; the slack is absolute; pours,
+  `signal-integrity`, `outline`, `zones`, the area sub-segment products and the server context
+  memo (S10) unchanged. Process: the S8 lesson held — a Plan-critique agent before the user
+  questions, Astra before code, two reviewers on disjoint surfaces, every finding probed before
+  acceptance; the Bash cwd persisting inside `&&` chains cost three wrong `tsc` counts (21 vs 44)
+  — always `cd` back to the root in the same command.
 
 ## Appendix — Session 0 amendments to the original program text
 

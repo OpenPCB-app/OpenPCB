@@ -408,13 +408,23 @@ A pure tighten-only model cannot express the BGA-fanout relaxation that Altium's
 uses as its worked example. That is why the hardening program's scoped rule engine explicitly
 allows relaxation above a board-minimum floor (§6.1).
 
-## 5.4 Scaling arithmetic
+## 5.4 Scaling arithmetic — superseded by S9 (2026-09-09)
 
-There is no R-tree, quadtree or grid in the DRC path (grep-verified at audit time; P4 adds one).
-Clearance is six pair loops — T²/2, T·P, T·V, V²/2, P²/2, P·V — behind a linear AABB gap
-prefilter which is itself O(n²). The exact kernel `polylineToPolylineClosestPoints` is
-O(segA · segB), which is a 25–400× multiplier on close 45°-routed pairs. `HOLE_TO_HOLE` has no
-prefilter at all. Board checks are O(primitives × outline vertices) and re-flatten the outline per
+**As of S9** (`docs/pcb-hardening/08-broad-phase-contract.md`) candidate discovery runs through two
+indexes built once per context — a per-kind uniform grid with per-sub-segment trace entries, and a
+boundary-edge index on the board region — while every verdict is still reached by the unchanged
+bodies and comparisons. The pre-S9 enumerations stay in the tree behind `broadPhase: "exhaustive"`
+as the oracle, and a harness proves byte-identical reports and equal pre-finalise draft multisets in
+both modes on every golden, the determinism fixture and a seeded corpus. Measured on a synthetic
+10 000-primitive board (this machine): `checkClearance` 1 035 → 35 ms, `checkBoard` 2 130 → 25 ms,
+`runDrc` 3.5 s → 136 ms (the 300 ms target). The paragraph below is the pre-S9 record, kept for
+the arithmetic it explains.
+
+Pre-S9: there was no R-tree, quadtree or grid in the batch DRC path.
+Clearance was six pair loops — T²/2, T·P, T·V, V²/2, P²/2, P·V — behind a linear AABB gap
+prefilter which was itself O(n²). The exact kernel `polylineToPolylineClosestPoints` is
+O(segA · segB), which is a 25–400× multiplier on close 45°-routed pairs. `HOLE_TO_HOLE` had no
+prefilter at all. Board checks were O(primitives × outline vertices) and re-flattened the outline per
 sampled point (B4-7).
 
 | Copper primitives | Pair visits | Wall time | Verdict |
@@ -430,8 +440,8 @@ broad-phase filtered by `PcbCanvas.tsx`; a per-cursor-move rebuild remains and i
 S8/S9 in `docs/pcb-hardening/00-ground-truth.md`).
 For contrast, KiCad's `DRC_RTREE` gives approximately O(n log n) queries.
 
-The conclusion the audit reached and that still holds: this is a scaling problem, not a
-correctness problem. A spatial index is a prerequisite for large boards, not for correct results.
+The conclusion the audit reached held: this was a scaling problem, not a correctness problem, and
+S9 closed it without changing a verdict. What remains is execution placement — B5-SYNC (S10).
 
 ## 5.5 Live-versus-batch divergence — closed in S8
 

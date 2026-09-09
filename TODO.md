@@ -332,7 +332,9 @@ manufacturability → DFM → electrical → SI → high-speed runway → routin
 verified current-master inventory in
 [`docs/pcb-hardening/00-ground-truth.md`](docs/pcb-hardening/00-ground-truth.md). Sessions 0–7 are
 done (S7 authoritative batch DRC closed 2026-09-09); S8 (live / route parity) closed 2026-09-09
-(`docs/pcb-hardening/07-live-parity-contract.md`); S9 (broad-phase scaling) is next.
+(`docs/pcb-hardening/07-live-parity-contract.md`); S9 (broad-phase scaling and determinism) closed
+2026-09-09 (`docs/pcb-hardening/08-broad-phase-contract.md`: 10k primitives 3.5 s → 136 ms,
+byte-identical to the exhaustive oracle); S10 (DRC execution responsiveness, B5-SYNC) is next.
 
 **Binding decisions (unchanged).** Full scope — core plus DFM plus electrical plus SI · scoped
 priority rules (first-match, *can relax*, board-minimum floor) · full multilayer 2–32 · breaking
@@ -360,13 +362,11 @@ migration, area-scope precision) and S2 (cutout crossing-overlap).
       Kernel `src/shared/pcb-connectivity/`; B3-1/3/4/5/6 live; register census 12. Next: S2
       (geometry: B4-1/2/6/7 + the S1 residuals filed for S2 — circumscribed oval/roundrect arcs).
 
-- [ ] **P4** [I] **Backend spatial index.** rbush static trees per item kind (trace / pad / via /
-      hole / edge-segment) held on the DRC context; the query ceiling must include `SHORT_EPS`.
-      Query plus index-sorted candidates must preserve `(i asc, j asc)` emit order so reports stay
-      byte-identical — that byte-identity is the gate. `broadPhase: 'rtree' | 'exhaustive'` stays in
-      permanently as an oracle, not as a migration switch. Also `pointInFlattenedOutline` over
-      precomputed rings, `scripts/drc-bench.ts`, kernel-count assertions, and a fuzz pass.
-      Depends on P2. Target: 10k primitives under 300 ms.
+- [x] **P4** [I] **Backend spatial index** — done as S9 (2026-09-09), without rbush: a
+      dependency-free uniform grid (per-sub-segment trace entries) plus a boundary-edge index,
+      `DrcOptions.broadPhase: "grid" | "exhaustive"` kept permanently as the oracle, `scripts/drc-bench.ts`,
+      pair-count stats and a seeded fuzz corpus; 10k primitives in 136 ms
+      (`docs/pcb-hardening/08-broad-phase-contract.md`).
 - [ ] **P7** [I] **Async DRC + engine relocation + live/batch parity.** A `'designer.drc'`
       TaskRuntime executor (scope id `drc:<designId>`) with slice-yield every 256 items and between
       groups, SSE progress and `AbortSignal` cancel; the route runs synchronously at ≤2000

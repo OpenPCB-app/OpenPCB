@@ -46,10 +46,10 @@ export interface BuildObstaclesInput {
    */
   excludeTraceIds?: ReadonlySet<string>;
   /**
-   * Corridor window (mm). When given, only items whose AABB meets it become
-   * rects — the context's own grid broad phase, which is a SUPERSET of the
-   * window, so a rect is never dropped that the window contains. Absent means
-   * the whole board.
+   * Corridor window (mm). When given, only the items the context's grid returns
+   * for it become rects — queried with the builder's OWN halo (broad-phase
+   * contract 08 §8), so every item whose copper can constrain a path inside the
+   * window is a rect, whatever the caller padded. Absent means the whole board.
    */
   withinBounds?: RingBounds;
   /**
@@ -180,12 +180,26 @@ export function buildRouteObstacles(
     extraVias = items.vias;
   }
 
+  /**
+   * The builder's OWN halo (contract 08 §8): an item omitted here must not be
+   * able to constrain a path inside the window, and the widest rect any item
+   * can produce is `required + halfWidth + routeHalf` with `required` bounded
+   * by `maxClearanceBoundMm` (copper pairs) or `maxHoleBoundMm` (drills). A
+   * dropped item's copper is therefore farther than `reach + routeHalf` from
+   * every window point, so no rect of its is missing from the window. The
+   * callers' own `1 + reach + width` padding of `withinBounds` stays; this is
+   * the floor under it, not a replacement.
+   */
+  const obstacleHaloMm =
+    Math.max(ctx.maxClearanceBoundMm, ctx.maxHoleBoundMm, shortFloorMm) +
+    routeHalfMm;
+
   const near = <T>(
     kind: "traces" | "pads" | "vias" | "holes",
     items: readonly T[],
   ): readonly T[] => {
     if (!withinBounds) return items;
-    return ctx.near(kind, withinBounds, 0).map((i) => items[i]!);
+    return ctx.near(kind, withinBounds, obstacleHaloMm).map((i) => items[i]!);
   };
 
   /**

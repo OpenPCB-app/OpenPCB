@@ -2,6 +2,8 @@ import {
   discInsideRegion,
   polygonInsideRegion,
   regionBoundaryDistancePoint,
+  regionBoundaryDistancePolyline,
+  regionBoundaryDistanceRing,
   regionContainsPoint,
   stadiumInsideRegion,
 } from "../../pcb-geometry/board-region";
@@ -76,6 +78,21 @@ export function boardItems(
   items: ItemSet & { holes: readonly DrcHole[] },
   opts: { out: DrcViolationDraft[] },
 ): void {
+  // Mode `"exhaustive"` keeps the pre-S9 per-ring helpers and the unindexed
+  // predicates as the oracle (08 §3); the boundary-edge index is the default.
+  // Both read the same float: every distance here is a `min` over the region's
+  // edges by ONE primitive in ONE argument order, and a float `min` does not
+  // care whether the edges were grouped by ring (§1 L2).
+  if (ctx.broadPhase === "exhaustive") boardItemsExhaustive(ctx, items, opts);
+  else boardItemsIndexed(ctx, items, opts);
+}
+
+/** The pre-S9 body, MOVED VERBATIM (08 §3) — the oracle. */
+function boardItemsExhaustive(
+  ctx: LegalityContext,
+  items: ItemSet & { holes: readonly DrcHole[] },
+  opts: { out: DrcViolationDraft[] },
+): void {
   const out = opts.out;
   const region = ctx.boardRegion;
   // Edge clearance measures against the BIASED region rings too: on an arc the
@@ -87,6 +104,8 @@ export function boardItems(
   const edgeDistToBoundary = (
     compute: (ring: readonly { x: number; y: number }[]) => number,
   ): number => {
+    // One boundary-distance site (08 §7) — the counter is written, never read.
+    if (ctx.stats) ctx.stats.edgeTests += 1;
     let best = Infinity;
     for (const ring of rings) {
       const d = compute(ring);
@@ -107,6 +126,7 @@ export function boardItems(
     let worst = 0;
     for (const p of ring) {
       if (regionContainsPoint(region, p)) continue;
+      if (ctx.stats) ctx.stats.edgeTests += 1;
       const d = regionBoundaryDistancePoint(region, p);
       if (d > worst) worst = d;
     }
@@ -277,6 +297,245 @@ export function boardItems(
 }
 
 /**
+ * The same sites in the same order, through the boundary-edge index (08 §4).
+ *
+ * The per-ring `edgeDistToBoundary` fold is gone: `regionBoundaryDistance*`
+ * already takes the min over EVERY ring's edges with the same primitive in the
+ * same argument order, so the float is the exhaustive one (§1 L2).
+ *
+ * Each site is queried with the halo of §5 — the requirement bound plus the
+ * copper's OWN extent, because the reported gap subtracts that extent. Above
+ * the halo the index may return no edge at all and the distance comes back
+ * `Infinity`; that is a value no comparison at or below the halo can tell from
+ * the true min, and the two sites that REPORT a distance instead of comparing
+ * it (a hole that is not inside the region, an outside pad vertex's
+ * penetration) are queried UNHALOED for exactly that reason.
+ */
+function boardItemsIndexed(
+  ctx: LegalityContext,
+  items: ItemSet & { holes: readonly DrcHole[] },
+  opts: { out: DrcViolationDraft[] },
+): void {
+  const out = opts.out;
+  const region = ctx.boardRegion;
+  const index = ctx.regionIndex;
+  const edgeHalo = ctx.maxEdgeBoundMm;
+  const stats = ctx.stats;
+
+  const signed = (gap: number, inside: boolean, penetration = 0): number =>
+    inside ? gap : -Math.max(Math.abs(gap), penetration, GEOM_EPS_MM);
+  const ringPenetration = (ring: readonly PcbPointMm[]): number => {
+    let worst = 0;
+    for (const p of ring) {
+      if (regionContainsPoint(region, p, GEOM_EPS_MM, index)) continue;
+      // Reported magnitude, never compared — the FULL min, no halo (§5).
+      if (stats) stats.edgeTests += 1;
+      const d = regionBoundaryDistancePoint(region, p, index);
+      if (d > worst) worst = d;
+    }
+    return worst;
+  };
+
+  for (const t of items.traces) {
+    if (t.pointsMm.length === 0) continue;
+    // A single-point trace is a disc of copper, not a free pass: measure and
+    // contain it as one (Astra §9.2 #4 — it used to skip both checks).
+    const single = t.pointsMm.length === 1 ? t.pointsMm[0]! : null;
+    if (stats) stats.edgeTests += 1;
+    const gap =
+      (single
+        ? regionBoundaryDistancePoint(
+            region,
+            single,
+            index,
+            edgeHalo + t.halfWidthMm,
+          )
+        : regionBoundaryDistancePolyline(
+            region,
+            t.pointsMm,
+            index,
+            edgeHalo + t.halfWidthMm,
+          )) - t.halfWidthMm;
+    const inside = stadiumInsideRegion(
+      region,
+      t.pointsMm,
+      t.halfWidthMm,
+      GEOM_EPS_MM,
+      index,
+    );
+    const traceEdge = ctx.resolver.scalar("edgeClearance", {
+      netId: t.netId,
+      layers: [t.layer],
+      geometry: {
+        kind: "polyline",
+        pointsMm: t.pointsMm,
+        halfWidthMm: t.halfWidthMm,
+      },
+    });
+    if (clearanceViolated(gap, traceEdge.mm)) {
+      out.push({
+        code: "COPPER_TO_BOARD_EDGE",
+        ...(traceEdge.rule?.severity
+          ? { ruleSeverity: traceEdge.rule.severity }
+          : {}),
+        message: `Trace is ${gap.toFixed(3)} mm from the board edge (min ${traceEdge.mm.toFixed(3)} mm)${ruleSuffix(traceEdge)}`,
+        anchors: [{ kind: "trace", traceId: t.id }],
+        locationMm: t.mid,
+        layer: t.layer,
+        measuredMm: signed(gap, inside),
+        requiredMm: traceEdge.mm,
+      });
+    }
+    if (!inside) {
+      out.push({
+        code: "COPPER_OFF_BOARD",
+        message: "Trace extends outside the board outline",
+        anchors: [{ kind: "trace", traceId: t.id }],
+        locationMm: t.mid,
+        layer: t.layer,
+      });
+    }
+  }
+
+  for (const vg of items.vias) {
+    if (stats) stats.edgeTests += 1;
+    const gap =
+      regionBoundaryDistancePoint(
+        region,
+        vg.center,
+        index,
+        edgeHalo + vg.radiusMm,
+      ) - vg.radiusMm;
+    const inside = discInsideRegion(
+      region,
+      vg.center,
+      vg.radiusMm,
+      GEOM_EPS_MM,
+      index,
+    );
+    const viaEdge = ctx.resolver.scalar("edgeClearance", {
+      netId: vg.netId,
+      layers: vg.layers,
+      geometry: { kind: "disc", center: vg.center, radiusMm: vg.radiusMm },
+    });
+    if (clearanceViolated(gap, viaEdge.mm)) {
+      out.push({
+        code: "COPPER_TO_BOARD_EDGE",
+        ...(viaEdge.rule?.severity ? { ruleSeverity: viaEdge.rule.severity } : {}),
+        message: `Via is ${gap.toFixed(3)} mm from the board edge (min ${viaEdge.mm.toFixed(3)} mm)${ruleSuffix(viaEdge)}`,
+        anchors: [{ kind: "via", viaId: vg.via.id }],
+        locationMm: vg.center,
+        measuredMm: signed(gap, inside),
+        requiredMm: viaEdge.mm,
+      });
+    }
+    if (!inside) {
+      out.push({
+        code: "COPPER_OFF_BOARD",
+        message: "Via is outside the board outline",
+        anchors: [{ kind: "via", viaId: vg.via.id }],
+        locationMm: vg.center,
+      });
+    }
+  }
+
+  for (const pad of items.pads) {
+    const disc = pad.disc;
+    if (stats) stats.edgeTests += 1;
+    // A ring pad's gap is edge-to-edge already, so it needs no extent added to
+    // the halo; a disc pad's gap subtracts its radius, so its halo carries it.
+    const gap = disc
+      ? regionBoundaryDistancePoint(
+          region,
+          disc.center,
+          index,
+          edgeHalo + disc.radiusMm,
+        ) - disc.radiusMm
+      : regionBoundaryDistanceRing(region, pad.ring, index, edgeHalo);
+    const inside = disc
+      ? discInsideRegion(region, disc.center, disc.radiusMm, GEOM_EPS_MM, index)
+      : polygonInsideRegion(region, pad.ring, GEOM_EPS_MM, index);
+    const padEdge = ctx.resolver.scalar("edgeClearance", {
+      netId: pad.netId,
+      layers: pad.layers,
+      geometry: { kind: "ring", ring: pad.ring },
+    });
+    if (clearanceViolated(gap, padEdge.mm)) {
+      out.push({
+        code: "COPPER_TO_BOARD_EDGE",
+        ...(padEdge.rule?.severity ? { ruleSeverity: padEdge.rule.severity } : {}),
+        message: `Pad is ${gap.toFixed(3)} mm from the board edge (min ${padEdge.mm.toFixed(3)} mm)${ruleSuffix(padEdge)}`,
+        anchors: [pad.anchor],
+        locationMm: pad.center,
+        measuredMm: signed(gap, inside, disc ? 0 : ringPenetration(pad.ring)),
+        requiredMm: padEdge.mm,
+      });
+    }
+    if (!inside) {
+      out.push({
+        code: "COPPER_OFF_BOARD",
+        message: "Pad is outside the board outline",
+        anchors: [pad.anchor],
+        locationMm: pad.center,
+      });
+    }
+  }
+
+  const holeEdgeReq = ctx.holeToBoardEdgeMm;
+  for (const hole of items.holes) {
+    const radius = hole.slot ? hole.slot.widthMm / 2 : hole.drillMm / 2;
+    // Containment decides which halo the distance may be taken with, so it is
+    // resolved FIRST here: an off-board hole REPORTS its gap (§5), so that gap
+    // has to be the full min, while an inside hole only ever compares it.
+    const inside = hole.slot
+      ? stadiumInsideRegion(
+          region,
+          [hole.slot.a, hole.slot.b],
+          hole.slot.widthMm / 2,
+          GEOM_EPS_MM,
+          index,
+        )
+      : discInsideRegion(
+          region,
+          hole.center,
+          hole.drillMm / 2,
+          GEOM_EPS_MM,
+          index,
+        );
+    const halo = inside ? edgeHalo + radius : undefined;
+    if (stats) stats.edgeTests += 1;
+    const edgeDist = hole.slot
+      ? regionBoundaryDistancePolyline(
+          region,
+          [hole.slot.a, hole.slot.b],
+          index,
+          halo,
+        )
+      : regionBoundaryDistancePoint(region, hole.center, index, halo);
+    const gap = edgeDist - radius;
+    if (!inside) {
+      out.push({
+        code: "HOLE_OFF_BOARD",
+        message: `Hole breaches the board edge (${gap.toFixed(3)} mm)`,
+        anchors: [hole.anchor],
+        locationMm: hole.center,
+        measuredMm: gap,
+        requiredMm: holeEdgeReq,
+      });
+    } else if (below(gap, holeEdgeReq)) {
+      out.push({
+        code: "HOLE_TO_BOARD_EDGE",
+        message: `Hole is ${gap.toFixed(3)} mm from the board edge (min ${holeEdgeReq.toFixed(3)} mm)`,
+        anchors: [hole.anchor],
+        locationMm: hole.center,
+        measuredMm: gap,
+        requiredMm: holeEdgeReq,
+      });
+    }
+  }
+}
+
+/**
  * Hole ↔ hole spacing (mechanical; skip holes of the same footprint) plus the
  * fab tier, for one subject set against one other set (07 §3). Coincident
  * drills (centers within ~1 µm) on the SAME net are a via dropped onto a
@@ -401,13 +660,22 @@ export function holePairs(
     }
   };
 
+  // The board's own O(H²) self pass is the one S9 indexes (08 §4); a pending
+  // subject set against the board's holes was already gridded before S9, so
+  // `"exhaustive"` restores only the pre-S9 double loop below (§3).
+  const selfGridded =
+    self && subjects === ctx.holes && ctx.broadPhase !== "exhaustive";
+
   for (let i = 0; i < subjects.length; i += 1) {
-    if (gridded) {
+    if (gridded || selfGridded) {
       for (const j of ctx.near(
         "holes",
         holeBounds(subjects[i]!),
         ctx.maxHoleBoundMm,
       )) {
+        // `j > i` is what `j = i + 1` gave the self loop: the grid is symmetric
+        // and would otherwise offer the same unordered pair from both sides.
+        if (selfGridded && j <= i) continue;
         judgePair(i, j);
       }
       continue;

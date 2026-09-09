@@ -18,7 +18,13 @@ import {
 import { GEOM_EPS_MM } from "../../pcb-geometry/tolerance";
 import { polylineToPolylineClosestPoints } from "../../pcb-geometry/pcb-trace-geometry";
 import { placementSideLayer } from "../../rendering/pad-copper-layers";
-import type { DrcContext, LegalityContext } from "../drc-context";
+import type {
+  DrcContext,
+  DrcPad,
+  DrcTrace,
+  DrcViaGeom,
+  LegalityContext,
+} from "../drc-context";
 import type { ItemSet } from "./clearance-judge";
 import type { DrcViolationDraft } from "../types";
 
@@ -106,6 +112,69 @@ function traceWitness(
   return fallback;
 }
 
+/**
+ * The per-item candidate constructors. ONE definition each, so the linear list
+ * and the indexed enumeration cannot build a candidate two ways (08 §4).
+ * `null` = the item contributes no candidate.
+ */
+function traceCandidate(t: DrcTrace): CandidateItem | null {
+  if (t.pointsMm.length === 0) return null;
+  return {
+    item: {
+      kind: "trace",
+      layer: t.layer,
+      pointsMm: t.pointsMm,
+      widthMm: t.widthMm,
+    },
+    anchor: { kind: "trace", traceId: t.id },
+    bounds: t.bounds,
+    layers: [t.layer],
+    subject: "Trace",
+    point: t.mid,
+    polylineMm: t.pointsMm,
+  };
+}
+
+function viaCandidate(v: DrcViaGeom): CandidateItem {
+  return {
+    item: {
+      kind: "via",
+      layers: new Set(v.layers),
+      centerMm: v.center,
+      diameterMm: v.radiusMm * 2,
+    },
+    anchor: { kind: "via", viaId: v.via.id },
+    bounds: v.bounds,
+    layers: v.layers,
+    subject: "Via",
+    point: v.center,
+  };
+}
+
+function padCandidate(
+  p: DrcPad,
+  referenceOf: (id: string) => string,
+): CandidateItem {
+  return {
+    // A true circle passes its EXACT disc (§13.6 closed, contract 06 §2);
+    // every other pad reaches the predicate as its sampled ring, which
+    // circumscribes the shape and so errs towards "affected".
+    item: {
+      kind: "pad",
+      layers: new Set(p.layers),
+      ringMm: p.ring,
+      ...(p.disc
+        ? { disc: { centerMm: p.disc.center, radiusMm: p.disc.radiusMm } }
+        : {}),
+    },
+    anchor: p.anchor,
+    bounds: p.bounds,
+    layers: p.layers,
+    subject: padSubject(p.anchor, referenceOf),
+    point: p.center,
+  };
+}
+
 /** The copper candidates of one item set — traces, vias and pads (§4). */
 function copperCandidates(
   ctx: LegalityContext,
@@ -118,59 +187,13 @@ function copperCandidates(
   const out: CandidateItem[] = [];
 
   for (const t of items.traces) {
-    if (t.pointsMm.length === 0) continue;
-    out.push({
-      item: {
-        kind: "trace",
-        layer: t.layer,
-        pointsMm: t.pointsMm,
-        widthMm: t.widthMm,
-      },
-      anchor: { kind: "trace", traceId: t.id },
-      bounds: t.bounds,
-      layers: [t.layer],
-      subject: "Trace",
-      point: t.mid,
-      polylineMm: t.pointsMm,
-    });
+    const candidate = traceCandidate(t);
+    if (candidate) out.push(candidate);
   }
 
-  for (const v of items.vias) {
-    out.push({
-      item: {
-        kind: "via",
-        layers: new Set(v.layers),
-        centerMm: v.center,
-        diameterMm: v.radiusMm * 2,
-      },
-      anchor: { kind: "via", viaId: v.via.id },
-      bounds: v.bounds,
-      layers: v.layers,
-      subject: "Via",
-      point: v.center,
-    });
-  }
+  for (const v of items.vias) out.push(viaCandidate(v));
 
-  for (const p of items.pads) {
-    out.push({
-      // A true circle passes its EXACT disc (§13.6 closed, contract 06 §2);
-      // every other pad reaches the predicate as its sampled ring, which
-      // circumscribes the shape and so errs towards "affected".
-      item: {
-        kind: "pad",
-        layers: new Set(p.layers),
-        ringMm: p.ring,
-        ...(p.disc
-          ? { disc: { centerMm: p.disc.center, radiusMm: p.disc.radiusMm } }
-          : {}),
-      },
-      anchor: p.anchor,
-      bounds: p.bounds,
-      layers: p.layers,
-      subject: padSubject(p.anchor, referenceOf),
-      point: p.center,
-    });
-  }
+  for (const p of items.pads) out.push(padCandidate(p, referenceOf));
 
   return out;
 }
@@ -200,6 +223,50 @@ function placementCandidates(ctx: DrcContext): CandidateItem[] {
   return out;
 }
 
+/**
+ * The verdict for ONE (keepout, candidate) pair — the whole of the check's
+ * geometry and message. Both enumerations call exactly this, so they can differ
+ * only in which candidates they list (08 §4).
+ */
+function judgeKeepoutPair(
+  stackup: readonly PcbCopperLayerId[],
+  keepout: EffectiveKeepout,
+  keepoutBounds: RingBounds,
+  label: string,
+  candidate: CandidateItem,
+  out: DrcViolationDraft[],
+): void {
+  if (!boundsMeet(candidate.bounds, keepoutBounds, GEOM_EPS_MM)) return;
+  if (!keepoutAffects(keepout, candidate.item)) return;
+  const layer =
+    candidate.item.kind === "trace"
+      ? candidate.item.layer
+      : sharedLayer(stackup, candidate.layers, keepout);
+  const locationMm = candidate.polylineMm
+    ? traceWitness(candidate.polylineMm, keepout, candidate.point)
+    : candidate.point;
+  const forbidden =
+    candidate.item.kind === "trace"
+      ? "tracks"
+      : candidate.item.kind === "via"
+        ? "vias"
+        : candidate.item.kind === "pad"
+          ? "pads"
+          : "footprints";
+  // A trace names its layer up front (it has exactly one); every other item
+  // names the layer the verdict was reached on, after the keepout.
+  const isTrace = candidate.item.kind === "trace";
+  const subject = isTrace ? `Trace on ${layer}` : candidate.subject;
+  const where = isTrace ? "" : ` on ${layer}`;
+  out.push({
+    code: "KEEPOUT_VIOLATION",
+    message: `${subject} enters keepout "${label}"${where} (${forbidden} forbidden)`,
+    anchors: [candidate.anchor, { kind: "keepout", keepoutId: keepout.id }],
+    locationMm,
+    layer,
+  });
+}
+
 function judgeKeepouts(
   ctx: LegalityContext,
   items: readonly CandidateItem[],
@@ -211,35 +278,69 @@ function judgeKeepouts(
     const keepoutBounds = boundsOfPoints(keepout.pointsMm);
     const label = keepoutLabel(keepout);
     for (const candidate of items) {
-      if (!boundsMeet(candidate.bounds, keepoutBounds, GEOM_EPS_MM)) continue;
-      if (!keepoutAffects(keepout, candidate.item)) continue;
-      const layer =
-        candidate.item.kind === "trace"
-          ? candidate.item.layer
-          : sharedLayer(stackup, candidate.layers, keepout);
-      const locationMm = candidate.polylineMm
-        ? traceWitness(candidate.polylineMm, keepout, candidate.point)
-        : candidate.point;
-      const forbidden =
-        candidate.item.kind === "trace"
-          ? "tracks"
-          : candidate.item.kind === "via"
-            ? "vias"
-            : candidate.item.kind === "pad"
-              ? "pads"
-              : "footprints";
-      // A trace names its layer up front (it has exactly one); every other item
-      // names the layer the verdict was reached on, after the keepout.
-      const isTrace = candidate.item.kind === "trace";
-      const subject = isTrace ? `Trace on ${layer}` : candidate.subject;
-      const where = isTrace ? "" : ` on ${layer}`;
-      out.push({
-        code: "KEEPOUT_VIOLATION",
-        message: `${subject} enters keepout "${label}"${where} (${forbidden} forbidden)`,
-        anchors: [candidate.anchor, { kind: "keepout", keepoutId: keepout.id }],
-        locationMm,
-        layer,
-      });
+      judgeKeepoutPair(stackup, keepout, keepoutBounds, label, candidate, out);
+    }
+  }
+}
+
+/**
+ * The same keepout order and the same kind order (traces, vias, pads, then the
+ * placements), over the grid instead of the whole candidate list (08 §4).
+ *
+ * The query halo is ZERO: the exact filter this check has always applied is
+ * `boundsMeet(item, keepoutBounds, GEOM_EPS_MM)`, and a query already pads by
+ * `GEOM_EPS_MM` plus the grid's own slack. For pads and vias the filed bounds
+ * ARE the AABB the filter tests, so the result is a superset of it outright.
+ * For traces the grid is geometry-tight (§2.1) — but `keepoutAffects` answers
+ * yes only when the trace's stadium overlaps the keepout's ring, which lies
+ * inside `keepoutBounds`, so a trace whose copper never reaches that box could
+ * not have produced a draft in the linear enumeration either.
+ *
+ * Candidates are built per hit, from the SAME constructors the linear list
+ * uses, so no draft field can drift between the two.
+ */
+function judgeKeepoutsIndexed(
+  ctx: LegalityContext,
+  items: ItemSet,
+  placements: readonly CandidateItem[],
+  out: DrcViolationDraft[],
+): void {
+  const stackup = copperLayersForCount(ctx.layerCount);
+  const referenceOf = (placementId: string): string =>
+    ctx.placementReference(placementId);
+
+  for (const keepout of ctx.keepouts) {
+    const keepoutBounds = boundsOfPoints(keepout.pointsMm);
+    const label = keepoutLabel(keepout);
+    for (const i of ctx.near("traces", keepoutBounds, 0)) {
+      const candidate = traceCandidate(items.traces[i]!);
+      if (!candidate) continue;
+      judgeKeepoutPair(stackup, keepout, keepoutBounds, label, candidate, out);
+    }
+    for (const i of ctx.near("vias", keepoutBounds, 0)) {
+      judgeKeepoutPair(
+        stackup,
+        keepout,
+        keepoutBounds,
+        label,
+        viaCandidate(items.vias[i]!),
+        out,
+      );
+    }
+    for (const i of ctx.near("pads", keepoutBounds, 0)) {
+      judgeKeepoutPair(
+        stackup,
+        keepout,
+        keepoutBounds,
+        label,
+        padCandidate(items.pads[i]!, referenceOf),
+        out,
+      );
+    }
+    // Placements are not a grid kind (they are not copper) — listed linearly,
+    // and only by the batch check: a part move has no live gate (07 §9).
+    for (const candidate of placements) {
+      judgeKeepoutPair(stackup, keepout, keepoutBounds, label, candidate, out);
     }
   }
 }
@@ -251,19 +352,31 @@ export function keepoutItems(
   opts: { out: DrcViolationDraft[] },
 ): void {
   if (ctx.keepouts.length === 0) return;
-  judgeKeepouts(ctx, copperCandidates(ctx, items), opts.out);
+  // The grid indexes the CONTEXT's arrays; a pending subject set is enumerated
+  // linearly, which the same per-pair body makes equivalent.
+  const gridded =
+    ctx.broadPhase !== "exhaustive" &&
+    items.traces === ctx.traces &&
+    items.pads === ctx.pads &&
+    items.vias === ctx.vias;
+  if (gridded) judgeKeepoutsIndexed(ctx, items, [], opts.out);
+  else judgeKeepouts(ctx, copperCandidates(ctx, items), opts.out);
 }
 
 export function checkKeepouts(ctx: DrcContext): DrcViolationDraft[] {
   if (ctx.keepouts.length === 0) return [];
   const out: DrcViolationDraft[] = [];
-  // ONE candidate list, in the order the check has always built it (copper,
-  // then placements), so the draft order — and with it the engine's same-id
-  // survivor — is unchanged.
-  judgeKeepouts(
-    ctx,
-    [...copperCandidates(ctx, ctx), ...placementCandidates(ctx)],
-    out,
-  );
+  if (ctx.broadPhase === "exhaustive") {
+    // ONE candidate list, in the order the check has always built it (copper,
+    // then placements), so the draft order — and with it the engine's same-id
+    // survivor — is unchanged.
+    judgeKeepouts(
+      ctx,
+      [...copperCandidates(ctx, ctx), ...placementCandidates(ctx)],
+      out,
+    );
+    return out;
+  }
+  judgeKeepoutsIndexed(ctx, ctx, placementCandidates(ctx), out);
   return out;
 }

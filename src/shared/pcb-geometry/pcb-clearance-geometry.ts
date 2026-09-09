@@ -34,6 +34,38 @@ export function pointInPolygon(point: Point, ring: readonly Point[]): boolean {
   return inside;
 }
 
+/**
+ * The crossing parity of {@link pointInPolygon} evaluated over a SUBSET of a
+ * ring's edges — the row band of `point.y` (broad-phase contract 08 §2.2).
+ * Only straddling edges contribute and the toggle is a commutative XOR, so any
+ * superset of the straddling set in any order gives the same boolean (§1 L3).
+ *
+ * OPERAND ORDER IS LOAD-BEARING (Astra A1 #3): the ring loop above walks
+ * `a = ring[i]`, `b = ring[i - 1]` — the LATER vertex is `a` — while a
+ * `RegionEdge` stores `(a, b) = (ring[k], ring[k + 1])`. The crossing
+ * expression is symmetric in a and b mathematically but NOT bit for bit, and a
+ * point a few 1e-7 mm from an edge can flip the parity, so the operands are
+ * swapped back here to reproduce the ring loop's exact float.
+ */
+export function pointInPolygonEdges(
+  point: Point,
+  edges: readonly { a: Point; b: Point }[],
+): boolean {
+  let inside = false;
+  for (const e of edges) {
+    const a = e.b;
+    const b = e.a;
+    const straddles = a.y > point.y !== b.y > point.y;
+    if (
+      straddles &&
+      point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x
+    ) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
 /** Minimum distance from a point to a closed polygon ring. 0 if inside. */
 export function pointToPolygonDistance(
   point: Point,

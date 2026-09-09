@@ -611,7 +611,9 @@ filed for a cloud session.
   zero-length polyline) and nothing to the live check (it skips zero-length segments); such a trace
   is structurally invalid and reported by the width/structural checks, so the pair never reaches a
   committed route (Astra S4 note).
-- `checkKeepouts` and the live check are `O(items × keepouts)` on bounds; S9 owns an index.
+- `checkKeepouts` enumerates per keepout through the S9 grid (`08-broad-phase-contract.md` §4:
+  `near(kind, keepoutBounds, 0)`, then the placements linearly); the live `keepoutItems` form indexes
+  when its items are the context's. `keepoutAffects` itself is unchanged.
 - A keepout dropped by the derivation for a reason that has no DRC mapping cannot exist (the mapping
   is total), but a keepout that is *disabled* affects nothing and reports nothing — by design.
 

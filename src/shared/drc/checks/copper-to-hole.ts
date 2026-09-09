@@ -86,14 +86,18 @@ export function copperToHolePairs(
   const required = copperToHoleClearanceMm(ctx.designRules);
   const subjects = copperSubjects(copper);
   if (subjects.length === 0) return;
-  // The grid pays off only when the COPPER side is a small subject set: the
-  // batch check (board copper × board holes) keeps its hole-outer loop, whose
-  // draft order the report has always had, and S9 owns its broad phase.
+  // The grid indexes the CONTEXT's holes; any other `holes` falls back to the
+  // hole-outer scan, which the exact `aabbGap` re-test in `judge` makes
+  // equivalent. The batch call (board copper × board holes) now takes the
+  // subject-outer branch too (08 §4) — except in `"exhaustive"` mode, where the
+  // pre-S9 hole-outer scan below is the oracle (§3). A pending subject set was
+  // already gridded before S9, so exhaustive leaves that path alone.
   const copperIsBoard =
     copper.traces === ctx.traces &&
     copper.pads === ctx.pads &&
     copper.vias === ctx.vias;
-  const gridded = holes === ctx.holes && !copperIsBoard;
+  const gridded =
+    holes === ctx.holes && (!copperIsBoard || ctx.broadPhase !== "exhaustive");
 
   const judge = (s: CopperSubject, hole: DrcHole, holeKey: string): void => {
     // A drilled free pad's OWN hole is not a pair: its copper is placed on
@@ -107,10 +111,17 @@ export function copperToHolePairs(
     if (aabbGap(s.bounds, holeBounds(hole)) > required + GEOM_EPS_MM) return;
     const { gap } = copperHoleGap(s.item, hole);
     if (!clearanceViolated(gap, required)) return;
+    // Canonical anchor orientation (contract 06 §7): the smaller anchor key
+    // leads. This was the one pair check without it — two coincident drilled
+    // free pads are each other's copper AND hole, their two drafts hash to one
+    // id and tie on every field the survivor order compares, so the reported
+    // `anchors` followed draft order, which the S9 mode switch reverses (R1 #1).
+    const anchors: [DrcAnchor, DrcAnchor] =
+      s.key < holeKey ? [s.anchor, hole.anchor] : [hole.anchor, s.anchor];
     out.push({
       code: "COPPER_TO_HOLE",
       message: `${s.subject} is ${gap.toFixed(3)} mm from a non-plated hole (min ${required.toFixed(3)} mm)`,
-      anchors: [s.anchor, hole.anchor],
+      anchors,
       locationMm: hole.center,
       ...(s.layer ? { layer: s.layer } : {}),
       measuredMm: gap,

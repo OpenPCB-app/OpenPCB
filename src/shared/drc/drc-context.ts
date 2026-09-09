@@ -30,14 +30,18 @@ import {
   DEFAULT_BOARD_THICKNESS_MM,
   isValidViaSpan,
 } from "../../sdks/designer";
-import { createBroadPhase, type BroadPhase } from "./broad-phase";
+import {
+  createBroadPhase,
+  type BroadPhaseNear,
+  type BroadPhaseNearPolyline,
+} from "./broad-phase";
 // Type-only (erased at runtime): `checks/clearance-judge.ts` imports values
 // from this module, so a value import here would be a real cycle.
 import type { BridgeEntry } from "./checks/clearance-judge";
 import { outlineProblems } from "./checks/outline";
 import { anchorKey } from "./violation-id";
 import { FAB_PRESETS } from "./fab-presets";
-import { SHORT_EPS_MM } from "../pcb-geometry/tolerance";
+import { GEOM_EPS_MM, SHORT_EPS_MM } from "../pcb-geometry/tolerance";
 import {
   boardMinimumFor,
   copperToHoleClearanceMm,
@@ -75,8 +79,18 @@ import {
   type CopperFillResult,
 } from "../rendering/copper-fill/copper-fill-geometry";
 import { buildBoardRegion, type BoardRegion } from "../pcb-geometry/board-region";
+import {
+  buildRegionIndex,
+  type RegionIndex,
+} from "../pcb-geometry/region-index";
+import { ipc2221SpacingMm } from "./ipc2221-spacing";
 import { placementKeepoutExtentMm } from "../pcb-geometry/placement-extent";
-import type { DrcOptions, DrcViolationDraft } from "./types";
+import type {
+  DrcBroadPhaseMode,
+  DrcOptions,
+  DrcRunStats,
+  DrcViolationDraft,
+} from "./types";
 import type { RingBounds } from "../pcb-geometry/pad-outline";
 import type { Point } from "../pcb-geometry/pcb-trace-geometry";
 
@@ -313,11 +327,49 @@ export interface LegalityContext {
    */
   outlineInvalid: boolean;
   /**
+   * The halo of the board-edge tiers: `copperToBoardEdgeMm`, the resolved
+   * `holeToBoardEdgeMm` and every `edgeClearance` rule's `minMm` (enabled or
+   * not — a larger bound is always superset-safe). The one halo the boundary
+   * edge index may be queried with where the value is COMPARED (08 §5).
+   */
+  maxEdgeBoundMm: number;
+  /**
+   * The creepage halo: `ipc2221SpacingMm(max(V ∪ {0}) − min(V ∪ {0}), "B2")`
+   * over every net class's `voltageV`, plus the geometry epsilon. A pair's
+   * voltage difference is `u.voltage − v.voltage` with one side possibly 0 V,
+   * so the widest difference is max − min over `V ∪ {0}`; `ipc2221SpacingMm` is
+   * monotone in |ΔV| and the B2 column dominates B1 on every band (08 §5).
+   */
+  maxCreepageBoundMm: number;
+  /**
+   * Which enumeration the checks discover candidates with (08 §3).
+   * `"exhaustive"` keeps the pre-S9 loops as the oracle; both modes report the
+   * same bytes.
+   */
+  broadPhase: DrcBroadPhaseMode;
+  /**
    * Grid broad phase over the four item arrays — a SUPERSET of every item
    * within the halo, so a caller that follows it with the exact `aabbGap`
    * filter reaches the batch verdict.
    */
-  near: BroadPhase;
+  near: BroadPhaseNear;
+  /**
+   * The polyline form of {@link near}, for a TRACE subject: the union of the
+   * subject's own sub-segment boxes (08 §2.1). Tighter than the subject's AABB
+   * on a diagonal, and a superset of every item whose copper is within the
+   * halo — which is all the pair bodies need (§1 L1).
+   */
+  nearPolyline: BroadPhaseNearPolyline;
+  /**
+   * Boundary-edge index over `boardRegion` (08 §2.2) — the region predicates'
+   * optional trailing argument. Built once with the context.
+   */
+  regionIndex: RegionIndex;
+  /**
+   * Enumeration counters for the oracle harness and the bench (08 §7), or
+   * `undefined`. Written, never read: a run with stats reports the same bytes.
+   */
+  stats: DrcRunStats | undefined;
   /**
    * Memo of an unassigned BOARD item's own null-net touches, by anchor key
    * (07 §7): the bridge completion is a function of the board alone, so a
@@ -589,6 +641,56 @@ function maxHoleBound(board: PcbBoardSettings): number {
   return max;
 }
 
+/**
+ * The board-edge halo: `scalar("edgeClearance", …).mm` is either an
+ * `edgeClearance` rule's value or the board value, so the max over both bounds
+ * every value the edge tiers can compare against. Disabled and invalid rules
+ * are included on purpose — a larger bound is always superset-safe.
+ */
+function maxEdgeBound(
+  board: PcbBoardSettings,
+  holeToBoardEdgeMm: number,
+): number {
+  let max = Math.max(
+    board.designRules.clearance.copperToBoardEdgeMm,
+    holeToBoardEdgeMm,
+  );
+  for (const rule of board.drcRules ?? []) {
+    if (rule.constraint.kind === "edgeClearance") {
+      max = Math.max(max, rule.constraint.minMm);
+    }
+  }
+  return max;
+}
+
+/**
+ * The creepage halo: the IPC-2221 B2 spacing of the WIDEST voltage difference
+ * any pair on this board can present. One side of a pair may be an unassigned
+ * or classless net at 0 V, so the difference is bounded by
+ * `max(V ∪ {0}) − min(V ∪ {0})` (not `max|V|`); `ipc2221SpacingMm` is monotone
+ * non-decreasing in |ΔV| and B2 ≥ B1 on every band, and `strictestSpacing`
+ * maxes over the layer column — so B2 at the widest difference bounds it.
+ */
+function maxCreepageBound(board: PcbBoardSettings): number {
+  let lo = 0;
+  let hi = 0;
+  for (const cls of board.netClasses) {
+    const v = cls.voltageV ?? 0;
+    // A non-finite voltage anywhere on the board makes the halo FAIL OPEN:
+    // `Infinity` turns every creepage query into "every index". Skipping it
+    // left the halo at the finite classes' value while the NaN pair still
+    // demanded the 2.5 mm band (R1 #3); PROPAGATING it was worse — a NaN
+    // difference resolves to that 2.5 mm band, which is BELOW what a finite
+    // pair on the same board can require (an 800 V pair needs 4 mm), so the
+    // finite pair was silently dropped (Astra A2 #1). Only an infinite halo
+    // bounds both.
+    if (!Number.isFinite(v)) return Number.POSITIVE_INFINITY;
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  return ipc2221SpacingMm(hi - lo, "B2") + GEOM_EPS_MM;
+}
+
 /** The drill's own extent: the disc, or the slot stadium, as a box. */
 export function holeBounds(hole: DrcHole): RingBounds {
   if (hole.slot) {
@@ -615,7 +717,10 @@ export function holeBounds(hole: DrcHole): RingBounds {
  * pour, no projection — everything a pending-copper judgement needs and
  * nothing that costs a fill.
  */
-export function buildDrcItems(input: LegalityInput): LegalityContext {
+export function buildDrcItems(
+  input: LegalityInput,
+  options: Pick<DrcOptions, "broadPhase" | "stats"> = {},
+): LegalityContext {
   const { board } = input;
   const cutouts = board.cutouts ?? [];
   // The S2 legality region (contract §4): biased so every arc's chord lies on
@@ -687,6 +792,18 @@ export function buildDrcItems(input: LegalityInput): LegalityContext {
     knownNetIds,
   });
 
+  const holeToBoardEdgeMm =
+    board.designRules.clearance.holeToBoardEdgeMm ??
+    DEFAULT_HOLE_TO_BOARD_EDGE_MM;
+  // One grid, two query forms: the trace entries are per sub-segment, so the
+  // polyline form has to come out of the SAME build as the box form (08 §2.1).
+  const broadPhase = createBroadPhase({
+    traces,
+    pads: pads.map((p) => p.bounds),
+    vias: vias.map((v) => v.bounds),
+    holes: holes.map(holeBounds),
+  });
+
   const legality: LegalityContext = {
     board,
     placements: input.placements,
@@ -701,9 +818,7 @@ export function buildDrcItems(input: LegalityInput): LegalityContext {
     holes,
     holeKeys: holes.map((h) => anchorKey(h.anchor)),
     boardThicknessMm: board.boardThicknessMm ?? DEFAULT_BOARD_THICKNESS_MM,
-    holeToBoardEdgeMm:
-      board.designRules.clearance.holeToBoardEdgeMm ??
-      DEFAULT_HOLE_TO_BOARD_EDGE_MM,
+    holeToBoardEdgeMm,
     // Already canonicalised by buildBoardRegion — no second flatten.
     outlineRing: boardRegion.unbiasedOuter,
     cutoutRings: boardRegion.unbiasedHoles,
@@ -718,16 +833,17 @@ export function buildDrcItems(input: LegalityInput): LegalityContext {
     resolver,
     maxClearanceBoundMm: maxClearanceBound(board, resolver),
     maxHoleBoundMm: maxHoleBound(board),
+    maxEdgeBoundMm: maxEdgeBound(board, holeToBoardEdgeMm),
+    maxCreepageBoundMm: maxCreepageBound(board),
+    broadPhase: options.broadPhase ?? "grid",
     // Filled immediately below — `outlineProblems` needs the region fields this
     // very object carries, so the one computation runs after the literal.
     outlineDrafts: [],
     outlineInvalid: false,
-    near: createBroadPhase({
-      traces: traces.map((t) => t.bounds),
-      pads: pads.map((p) => p.bounds),
-      vias: vias.map((v) => v.bounds),
-      holes: holes.map(holeBounds),
-    }),
+    near: broadPhase.near,
+    nearPolyline: broadPhase.nearPolyline,
+    regionIndex: buildRegionIndex(boardRegion),
+    stats: options.stats,
     boardBridgeCache: new Map(),
     itemsByAnchorKey() {
       if (anchorIndex === undefined) {
@@ -774,7 +890,10 @@ export function buildDrcContext(
   projection: DesignerPcbProjection,
   options: DrcOptions = {},
 ): DrcContext {
-  const legality = buildDrcItems(projection);
+  const legality = buildDrcItems(projection, {
+    broadPhase: options.broadPhase,
+    stats: options.stats,
+  });
   const { board } = projection;
   const cutouts = board.cutouts ?? [];
   const {

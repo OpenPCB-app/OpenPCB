@@ -77,7 +77,8 @@ never expects a live id to match a batch id, a waiver or a marker.
 - **Item builder split (D2).** `buildDrcItems(input)` is the eager physical model: copper
   records → `DrcTrace[]` / `DrcPad[]` / `DrcViaGeom[]` / `DrcHole[]` under the clamp policy,
   `boardRegion`, effective zones / keepouts / warnings, the resolver, valid layers, net names,
-  fab, plus a dependency-free uniform-grid broad phase `near(kind, bounds)` over the four item
+  fab, plus a dependency-free uniform-grid broad phase `near(kind, bounds)` / `nearPolyline` (S9:
+  per-sub-segment trace entries, contract 08 §2.1) over the four item
   arrays. `LegalityContext = ReturnType<typeof buildDrcItems>`; `buildDrcContext` adds the lazy
   layer (`copperItems`, `connectivity`, `pourResults`, `placementExtent`) and `DrcContext extends
   LegalityContext`. `input` is either a projection or the row form the dispatcher already holds
@@ -264,9 +265,12 @@ gate or not.
 - The gate is O(pending × near) with the grid broad phase, plus the memoised bridge completion
   (§4). Pathological inputs — a pending trace touching many overlapping unassigned items that each
   touch many named items, giant traces covering thousands of grid cells, thousands of keepouts —
-  are bounded by geometry, not by the design (Astra run 1 #9; measured in §10, indexed in S9).
-  The batch loops keep `farApart` over the arrays unchanged this session (S9). Site A runs at most
-  once per animation frame; throttling bounds frequency, not the cost of one frame.
+  are bounded by geometry, not by the design (Astra run 1 #9; measured in §10). Since S9 the batch
+  loops enumerate through the same grid (`08-broad-phase-contract.md` §4; the pre-S9 loops stay
+  behind `broadPhase: "exhaustive"` as the oracle), trace entries are filed per sub-segment and a
+  trace subject queries with its polyline (`nearPolyline`), and `judgeCopperPairs` honours the mode.
+  Site A runs at most once per animation frame; throttling bounds frequency, not the cost of one
+  frame.
 - Recorded at close (§10): context build and gate time on `golden-census-2l` and on a synthetic
   5 000-item board; target gate < 2 ms per pointer move at 5 000 items.
 
@@ -292,7 +296,7 @@ gate or not.
 - Obstacles stay AABB heuristics; no board-edge / cutout obstacles (S16); the S6 §9 area-rule
   divergence stays.
 - `pcb_apply_autolayout_candidate` is not gated (filed); the server rebuilds the context per
-  envelope (memo per revision is S9 / S10).
+  envelope (memo per revision is S10).
 - Client-minted ids are not adopted; live ids never match batch ids, waivers or markers (§1).
 - The assistant's proposal apply does not yet show a refusal's detail (filed).
 - Marker ties and the multi-shape-pad bridge marker (§1 exceptions).

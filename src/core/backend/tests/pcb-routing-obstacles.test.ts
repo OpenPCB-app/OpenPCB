@@ -471,10 +471,11 @@ describe("buildRouteObstacles — vias and non-plated holes", () => {
   });
 
   test("a large copperToHole puts the hole rect OUTSIDE the clearance bound", () => {
-    // The corridor window must be padded by `max(maxClearanceBoundMm,
-    // maxHoleBoundMm)`, not by the clearance bound alone: with a 5 mm
-    // copper-to-hole rule an NPTH 3 mm off the corridor is a real conflict the
-    // gate reports, but a clearance-sized window never even sees the hole.
+    // With a 5 mm copper-to-hole rule an NPTH 3 mm off the corridor is a real
+    // conflict the gate reports. Since S9 the BUILDER carries the halo
+    // (broad-phase contract 08 §8) — `max(maxClearanceBoundMm,
+    // maxHoleBoundMm) + routeHalf` — so the hole becomes a rect from either
+    // window, and a caller that under-pads no longer loses it.
     const board = boardWithRules({
       clearance: { traceToTraceMm: 0.2, traceToPadMm: 0.25, copperToHoleMm: 5 },
       netClasses: [netClass("default", 0), netClass("wide", 0.8)],
@@ -492,15 +493,15 @@ describe("buildRouteObstacles — vias and non-plated holes", () => {
     const routeWidthMm = 0.3;
     const padFor = (reachMm: number) => 1 + reachMm + routeWidthMm;
 
-    // Clearance bound only: the hole is invisible to the search.
+    // A clearance-sized window: the builder's own halo still reaches the hole.
     expect(
       buildRouteObstacles({
         ...BASE,
         ctx,
         routeWidthMm,
         withinBounds: corridor(padFor(ctx.maxClearanceBoundMm)),
-      }),
-    ).toEqual([]);
+      }).map((r) => r.id),
+    ).toEqual(["hole:h1"]);
 
     // The obstacle reach (max of the two bounds): the hole rect is there.
     const reachMm = Math.max(ctx.maxClearanceBoundMm, ctx.maxHoleBoundMm);

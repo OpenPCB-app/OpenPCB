@@ -495,6 +495,7 @@ export function createPairJudge(
 
   return {
     traceTrace(a, b) {
+      if (ctx.stats) ctx.stats.pairsJudged.traceToTrace += 1;
       // Canonical orientation (§11), for BOTH branches: the item with the
       // smaller sorted anchor key leads. The split branch needs it for its
       // (u, v) tie-break, and the fast path needs it just as much — the kernel
@@ -566,6 +567,7 @@ export function createPairJudge(
     },
 
     tracePad(t, pad) {
+      if (ctx.stats) ctx.stats.pairsJudged.traceToPad += 1;
       const padItem = item(pad.netId, pad.center);
       const candidates: Candidate[] = [];
       if (!needsSplit(t) && !resolver.boundsMeetAnyArea(pad.bounds)) {
@@ -616,6 +618,7 @@ export function createPairJudge(
     },
 
     traceVia(t, vg) {
+      if (ctx.stats) ctx.stats.pairsJudged.traceToVia += 1;
       const viaItem = item(vg.netId, vg.center);
       const candidates: Candidate[] = [];
       if (!needsSplit(t) && !resolver.boundsMeetAnyArea(vg.bounds)) {
@@ -664,6 +667,7 @@ export function createPairJudge(
     },
 
     viaVia(a, b) {
+      if (ctx.stats) ctx.stats.pairsJudged.viaToVia += 1;
       const shared = a.layers.filter((l) => b.layers.includes(l));
       if (shared.length === 0) return;
       // Canonical orientation (§11), as trace↔trace already does: the item with
@@ -694,6 +698,7 @@ export function createPairJudge(
     },
 
     padPad(a, b) {
+      if (ctx.stats) ctx.stats.pairsJudged.padToPad += 1;
       const sameFootprint =
         a.anchor.kind === "pad" &&
         b.anchor.kind === "pad" &&
@@ -726,6 +731,7 @@ export function createPairJudge(
     },
 
     padVia(pad, vg) {
+      if (ctx.stats) ctx.stats.pairsJudged.padToVia += 1;
       // The pair is canonical BY CONSTRUCTION — the two sides have different
       // kinds, so `padViaGap` and the resolver always take the pad first
       // whatever order the arrays arrive in; there is nothing to sort. The via
@@ -751,6 +757,7 @@ export function createPairJudge(
     },
 
     farApart(boundsA, boundsB, pairKind, netA, netB) {
+      if (ctx.stats) ctx.stats.prefilterTests += 1;
       // The grace is what makes the prefilter CONSERVATIVE at the threshold
       // (Astra R2 #2). `aabbGap` is mathematically <= the true gap, but it is a
       // different float computation: two 0.2 mm traces exactly 200 100 nm apart

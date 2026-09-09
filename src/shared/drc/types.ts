@@ -1,4 +1,5 @@
 import type {
+  DrcPairKind,
   DrcRuleClass,
   DrcSeverity,
   DrcViolation,
@@ -25,6 +26,47 @@ export type DrcViolationDraft = Omit<
   ruleSeverity?: DrcSeverity;
 };
 
+/**
+ * Which enumeration the checks discover candidate pairs and edges with
+ * (broad-phase contract 08 §3). `"exhaustive"` selects the pre-S9 loops, kept
+ * verbatim as the oracle — tests and `scripts/drc-bench.ts` only: no env flag,
+ * no HTTP option, no UI. Both modes produce byte-identical reports (§1).
+ */
+export type DrcBroadPhaseMode = "grid" | "exhaustive";
+
+/**
+ * Enumeration counters (contract 08 §7). Off by default, written by the
+ * enumerations and the shared pair bodies, NEVER read by a check — a run with
+ * stats must produce the same report as one without.
+ */
+export interface DrcRunStats {
+  /** `farApart` calls: the pairs an enumeration offered the exact prefilter. */
+  prefilterTests: number;
+  /** Pairs that reached a per-pair body, by pair kind. */
+  pairsJudged: Record<DrcPairKind, number>;
+  /** Boundary-edge distance evaluations. */
+  edgeTests: number;
+}
+
+export function createDrcRunStats(): DrcRunStats {
+  return {
+    prefilterTests: 0,
+    pairsJudged: {
+      traceToTrace: 0,
+      traceToPad: 0,
+      traceToVia: 0,
+      padToPad: 0,
+      padToVia: 0,
+      viaToVia: 0,
+      pourToTrace: 0,
+      pourToPad: 0,
+      pourToVia: 0,
+      pourToPour: 0,
+    },
+    edgeTests: 0,
+  };
+}
+
 /** Per-run engine options, sourced by the route from `board.viewState`. */
 export interface DrcOptions {
   /** Rule-classes the user ignores wholesale — not emitted at all. */
@@ -40,4 +82,8 @@ export interface DrcOptions {
    * extent falls back to the preview bounds — still a superset, just coarser.
    */
   lookupRawFootprint?: RawFootprintLookup;
+  /** Candidate discovery mode (contract 08 §3). Default `"grid"`. */
+  broadPhase?: DrcBroadPhaseMode;
+  /** Counter sink for the oracle harness and the bench; results-neutral. */
+  stats?: DrcRunStats;
 }

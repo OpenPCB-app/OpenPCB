@@ -514,7 +514,8 @@ object (**needs verification** — every v9 file in the corpus has it empty).
 - `padToVia` has no board field of its own.
 - Area scopes never relax a pour; an area tightening around an obstacle widens its whole halo
   (§6 rule 2) — the exact clipped-halo fill is filed.
-- Per-sub-segment evaluation is `O(n·m·(R+V))` for the pairs that meet an area polygon (S9).
+- Per-sub-segment evaluation is `O(n·m·(R+V))` for the pairs that meet an area polygon — a per-pair
+  cost, not candidate discovery, so S9 left it (`08-broad-phase-contract.md` §0); recorded limit.
 
 ## 14. Golden delta
 

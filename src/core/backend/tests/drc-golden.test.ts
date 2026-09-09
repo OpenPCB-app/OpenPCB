@@ -75,6 +75,27 @@ describe("DRC golden boards", () => {
         expect(v.ruleClass).toBe(RULE_CLASS_BY_CODE[v.code]);
       }
     });
+
+    // Broad-phase contract 08 §10: every golden byte-identical in exhaustive
+    // mode too — the same expected summary / counts / ids.
+    test(`${name} matches its expected report (exhaustive broad phase)`, async () => {
+      const fixture = JSON.parse(
+        await Bun.file(path.join(GOLDEN_DIR, file)).text(),
+      );
+      const expected = JSON.parse(
+        await Bun.file(
+          path.join(GOLDEN_DIR, `${name}.expected.json`),
+        ).text(),
+      );
+      const projection = fixtureToProjection(fixture);
+      const report = runDrc(projection, { broadPhase: "exhaustive" });
+
+      expect(report.summary).toEqual(expected.summary);
+      expect(report.countsByCode).toEqual(expected.countsByCode);
+      expect(report.violations.map((v) => v.id).sort()).toEqual(
+        expected.violationIds,
+      );
+    });
   }
 
   test("corpus union: every DrcRuleCode is provoked, except the documented exceptions", () => {

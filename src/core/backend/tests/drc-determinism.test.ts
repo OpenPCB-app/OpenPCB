@@ -1,7 +1,8 @@
 /**
  * DRC determinism contract (DRC_AUDIT_REPORT.md §3.3, Appendix A; batch-DRC
  * contract 06 §7 — S7 WP4 supersedes the array-reversal probe with a
- * byte-identity promise per array):
+ * byte-identity promise per array; broad-phase contract 08 §6 extends it to
+ * both broad-phase modes):
  *
  *  1. Identical input (independent clones) → byte-identical full report,
  *     including violation ids, anchors, locations, messages, summary and
@@ -14,321 +15,201 @@
  *     order, and the canonical `(code, id)` sort removes the last order
  *     dependence. A byte difference here is a WP3-A canonical-orientation bug
  *     to report, not a tolerance to loosen.
+ *  3. Every one of the above holds in BOTH broad-phase modes (08 §6), and the
+ *     grid-mode report is byte-identical to the exhaustive-mode report for
+ *     the base fixture and every reversal (08 §1).
  *
  * The fixture does not set `projection.ratsnest` — the engine derives its own
  * ratsnest from its own connectivity result (contract §1, D7); trusting the
  * caller-supplied field would test nothing the engine actually reads.
+ *
+ * `buildFixture` / `reversed*` / `singleReversalBuilders` / `REVERSIBLE_KEYS`
+ * moved to `helpers/drc-determinism-fixture.ts` (WP4 R2) so
+ * `drc-broad-phase-oracle.test.ts` imports the fixture from a plain helper
+ * module instead of a sibling `.test.ts` — `bun test drc-determinism` then
+ * reports only this file's own tests.
  */
 import { describe, expect, test } from "bun:test";
-import { runDrc } from "../../../modules/designer/backend/drc/drc-engine";
-import type {
-  DesignerPcbProjection,
-  PcbDrcRule,
-  PcbKeepout,
-  PcbZone,
-} from "../../../sdks/designer";
+import { runDrc } from "../../../shared/drc/drc-engine";
+import type { DrcOptions } from "../../../shared/drc/types";
+import type { DesignerPcbProjection } from "../../../sdks/designer";
+import { boardWithRules, projection, sortedIds, trace } from "./helpers/drc-fixtures";
 import {
-  boardWithRules,
-  freeHole,
-  freePad,
-  pad,
-  placement,
-  projection,
-  sortedIds,
-  trace,
-  via,
-} from "./helpers/drc-fixtures";
+  buildFixture,
+  reversedEverything,
+  singleReversalBuilders,
+} from "./helpers/drc-determinism-fixture";
 
-const ZONES: PcbZone[] = [
-  {
-    id: "z1",
-    name: "Z1",
-    enabled: true,
-    lockedAt: null,
-    layer: "F.Cu",
-    netId: null,
-    netName: null,
-    region: {
-      kind: "polygon",
-      pointsMm: [
-        { x: -40, y: -40 },
-        { x: -35, y: -40 },
-        { x: -35, y: -35 },
-        { x: -40, y: -35 },
-      ],
-    },
-    priority: 0,
-  },
-  {
-    id: "z2",
-    name: "Z2",
-    enabled: true,
-    lockedAt: null,
-    layer: "B.Cu",
-    netId: null,
-    netName: null,
-    region: {
-      kind: "polygon",
-      pointsMm: [
-        { x: -30, y: -40 },
-        { x: -25, y: -40 },
-        { x: -25, y: -35 },
-        { x: -30, y: -35 },
-      ],
-    },
-    priority: 0,
-  },
-];
+const MODES: readonly DrcOptions["broadPhase"][] = ["grid", "exhaustive"];
 
-const KEEPOUTS: PcbKeepout[] = [
-  {
-    id: "k1",
-    name: "K1",
-    enabled: true,
-    lockedAt: null,
-    layers: ["F.Cu"],
-    pointsMm: [
-      { x: -20, y: -40 },
-      { x: -15, y: -40 },
-      { x: -15, y: -35 },
-      { x: -20, y: -35 },
-    ],
-    restrictions: { tracks: false, vias: false, pads: false, copperPour: false, footprints: false },
-  },
-  {
-    id: "k2",
-    name: "K2",
-    enabled: true,
-    lockedAt: null,
-    layers: ["F.Cu"],
-    pointsMm: [
-      { x: -10, y: -40 },
-      { x: -5, y: -40 },
-      { x: -5, y: -35 },
-      { x: -10, y: -35 },
-    ],
-    restrictions: { tracks: false, vias: false, pads: false, copperPour: false, footprints: false },
-  },
-];
+for (const mode of MODES) {
+  const opts: DrcOptions = mode === "grid" ? {} : { broadPhase: mode };
 
-const DRC_RULES: PcbDrcRule[] = [
-  {
-    id: "r1",
-    name: "R1",
-    enabled: true,
-    priority: 10,
-    scopes: [{ kind: "net", netIds: ["n1"] }],
-    constraint: { kind: "edgeClearance", minMm: 0.6 },
-  },
-  {
-    id: "r2",
-    name: "R2",
-    enabled: true,
-    priority: 5,
-    scopes: [{ kind: "net", netIds: ["n3"] }],
-    constraint: { kind: "clearance", mm: 0.15 },
-  },
-];
+  describe(`DRC determinism (${mode ?? "grid"})`, () => {
+    test("fixture is non-trivial (>=5 violations, >=3 codes)", () => {
+      const report = runDrc(buildFixture(), opts);
+      expect(report.violations.length).toBeGreaterThanOrEqual(5);
+      const codes = new Set(report.violations.map((v) => v.code));
+      expect(codes.size).toBeGreaterThanOrEqual(3);
+    });
 
-/**
- * Non-trivial fixture: 3 nets, both outer layers, a clearance breach, two
- * different-net crossings (shorts), an under-width trace, trace-to-pad
- * breaches, a via-to-via breach, a hole-to-hole breach and an unconnected net
- * (derived by the engine, not supplied). Also carries >= 2 free pads, >= 2
- * free holes, >= 2 zones, >= 2 keepouts and >= 2 drcRules, so every array
- * the contract names is reversible non-trivially. >= 5 violations across
- * >= 3 distinct codes so a silent fixture regression cannot hollow the
- * byte-identity assertion out.
- */
-function buildFixture(): DesignerPcbProjection {
-  return projection({
-    board: boardWithRules({
-      clearance: { traceToTraceMm: 0.25, viaToViaMm: 0.3, traceToPadMm: 0.25 },
-      minimums: { traceWidthMm: 0.2 },
-      drcRules: DRC_RULES,
-    }),
-    netNames: { n1: "VCC", n2: "SIG_A", n3: "SIG_B" },
-    traces: [
-      // n1/n2 parallel pair on F.Cu with 0.2 mm edge gap (< 0.25 rule).
-      trace("tA", "n1", [
-        [0, 0],
-        [10, 0],
-      ]),
-      trace("tB", "n2", [
-        [0, 0.4],
-        [10, 0.4],
-      ]),
-      // n3 crosses both -> two different-net shorts.
-      trace("tC", "n3", [
-        [5, -2],
-        [5, 2],
-      ]),
-      // Under-width trace on B.Cu (0.1 < 0.2 min).
-      trace("tD", "n2", [[0, 5], [10, 5]], { widthMm: 0.1, layer: "B.Cu" }),
-      // Trace running close under both U1 pads.
-      trace("tE", "n2", [
-        [19, 10.15],
-        [23, 10.15],
-      ]),
-    ],
-    vias: [
-      via("v1", { netId: "n1", center: { x: 30, y: 0 } }),
-      // 0.1 mm edge gap to v1 (< 0.3 viaToVia rule).
-      via("v2", { netId: "n2", center: { x: 30, y: 0.9 } }),
-    ],
-    placements: [
-      placement("U1", {
-        positionMm: { x: 20, y: 10 },
-        pads: [pad("1", { x: 0, y: 0 }, 1, 1), pad("2", { x: 2, y: 0 }, 1, 1)],
-      }),
-      // A second n1 pad, unconnected to tA / v1 / U1.1 -> UNCONNECTED_NET,
-      // derived by the engine's own connectivity (contract §1, D7).
-      placement("U2", {
-        positionMm: { x: -20, y: 10 },
-        pads: [pad("1", { x: 0, y: 0 }, 1, 1)],
-      }),
-    ],
-    padNets: { "U1|1": "n1", "U1|2": "n3", "U2|1": "n1" },
-    // Far enough apart to carry no hole-to-hole PAIR violation between them —
-    // `board.ts`'s hole-to-hole loop does not yet canonicalize its anchor
-    // order the way the clearance pair loops do (a WP3-A gap; see the S7 WP4
-    // implementer report), so a pair violation here would make this reversal
-    // fixture depend on that gap instead of testing genuine determinism. Each
-    // hole still carries its own per-item DRILL_SIZE_MIN violation.
-    freeHoles: [
-      freeHole("fh1", { x: -40, y: 20 }, 0.1),
-      freeHole("fh2", { x: -40, y: 26 }, 0.1),
-    ],
-    freePads: [
-      freePad("fp1", { center: { x: -40, y: 30 }, netId: null }),
-      freePad("fp2", { center: { x: -35, y: 30 }, netId: null }),
-    ],
-    zones: ZONES,
-    keepouts: KEEPOUTS,
+    test("identical input -> byte-identical full report", () => {
+      const fixture = buildFixture();
+      const r1 = runDrc(structuredClone(fixture), opts);
+      const r2 = runDrc(structuredClone(fixture), opts);
+      const s1 = JSON.stringify(r1);
+      const s2 = JSON.stringify(r2);
+      // Buffer compare = byte identity incl. key order, not deep equality.
+      expect(Buffer.compare(Buffer.from(s1), Buffer.from(s2))).toBe(0);
+    });
+
+    test("re-serialized fixture (JSON round-trip) -> byte-identical report", () => {
+      const fixture = buildFixture();
+      const viaJson = JSON.parse(
+        JSON.stringify(fixture),
+      ) as DesignerPcbProjection;
+      expect(JSON.stringify(runDrc(viaJson, opts))).toBe(
+        JSON.stringify(runDrc(fixture, opts)),
+      );
+    });
+
+    const baseline = JSON.stringify(runDrc(buildFixture(), opts));
+
+    for (const [name, build] of singleReversalBuilders()) {
+      test(`reversing ${name} alone -> byte-identical JSON.stringify(report)`, () => {
+        const s = JSON.stringify(runDrc(build(), opts));
+        expect(s).toBe(baseline);
+      });
+    }
+
+    test("reversing all eight arrays together -> byte-identical JSON.stringify(report)", () => {
+      const s = JSON.stringify(runDrc(reversedEverything(), opts));
+      expect(s).toBe(baseline);
+    });
+
+    test("reversed input arrays -> identical id multiset and counts", () => {
+      const r1 = runDrc(buildFixture(), opts);
+      const r2 = runDrc(reversedEverything(), opts);
+      expect(sortedIds(r2)).toEqual(sortedIds(r1));
+      expect(r2.summary).toEqual(r1.summary);
+      // Value equality (key order may legitimately differ across input orders).
+      expect(r2.countsByCode).toEqual(r1.countsByCode);
+    });
+
+    test("reversed input preserves per-id content (message, location, severity)", () => {
+      const byId = (vs: ReturnType<typeof runDrc>["violations"]) =>
+        new Map(vs.map((v) => [v.id, v]));
+      const m1 = byId(runDrc(buildFixture(), opts).violations);
+      const m2 = byId(runDrc(reversedEverything(), opts).violations);
+      expect(m2.size).toBe(m1.size);
+      for (const [id, v1] of m1) {
+        const v2 = m2.get(id);
+        expect(v2).toBeDefined();
+        expect(v2!.code).toBe(v1.code);
+        expect(v2!.severity).toBe(v1.severity);
+        expect(v2!.message).toBe(v1.message);
+        const l1 = v1.locationMm;
+        const l2 = v2!.locationMm;
+        expect(l1).toBeDefined();
+        expect(l2).toBeDefined();
+        expect(l2!.x).toBe(l1!.x);
+        expect(l2!.y).toBe(l1!.y);
+        expect(v2!.measuredMm ?? null).toBe(v1.measuredMm ?? null);
+        expect(v2!.requiredMm ?? null).toBe(v1.requiredMm ?? null);
+      }
+    });
   });
 }
 
-type ReversibleKey =
-  | "traces"
-  | "vias"
-  | "placements"
-  | "freePads"
-  | "freeHoles"
-  | "zones"
-  | "keepouts";
+describe("DRC determinism: grid mode == exhaustive mode (08 §1)", () => {
+  const gridBaseline = JSON.stringify(runDrc(buildFixture()));
 
-/** Reverse exactly the named top-level arrays of a fresh fixture clone. */
-function reversed(keys: readonly ReversibleKey[]): DesignerPcbProjection {
-  const p = buildFixture();
-  for (const key of keys) {
-    (p[key] as unknown[]) = [...(p[key] as unknown[])].reverse();
-  }
-  if (keys.length === 0) return p;
-  return p;
-}
-
-function reversedDrcRules(): DesignerPcbProjection {
-  const p = buildFixture();
-  p.board = { ...p.board, drcRules: [...(p.board.drcRules ?? [])].reverse() };
-  return p;
-}
-
-function reversedEverything(): DesignerPcbProjection {
-  const p = reversed([
-    "traces",
-    "vias",
-    "placements",
-    "freePads",
-    "freeHoles",
-    "zones",
-    "keepouts",
-  ]);
-  p.board = { ...p.board, drcRules: [...(p.board.drcRules ?? [])].reverse() };
-  return p;
-}
-
-describe("DRC determinism", () => {
-  test("fixture is non-trivial (>=5 violations, >=3 codes)", () => {
-    const report = runDrc(buildFixture());
-    expect(report.violations.length).toBeGreaterThanOrEqual(5);
-    const codes = new Set(report.violations.map((v) => v.code));
-    expect(codes.size).toBeGreaterThanOrEqual(3);
-  });
-
-  test("identical input -> byte-identical full report", () => {
-    const fixture = buildFixture();
-    const r1 = runDrc(structuredClone(fixture));
-    const r2 = runDrc(structuredClone(fixture));
-    const s1 = JSON.stringify(r1);
-    const s2 = JSON.stringify(r2);
-    // Buffer compare = byte identity incl. key order, not deep equality.
-    expect(Buffer.compare(Buffer.from(s1), Buffer.from(s2))).toBe(0);
-  });
-
-  test("re-serialized fixture (JSON round-trip) -> byte-identical report", () => {
-    const fixture = buildFixture();
-    const viaJson = JSON.parse(
-      JSON.stringify(fixture),
-    ) as DesignerPcbProjection;
-    expect(JSON.stringify(runDrc(viaJson))).toBe(
-      JSON.stringify(runDrc(fixture)),
+  test("base fixture: grid and exhaustive reports are byte-identical", () => {
+    expect(JSON.stringify(runDrc(buildFixture(), { broadPhase: "exhaustive" }))).toBe(
+      gridBaseline,
     );
   });
 
-  const baseline = JSON.stringify(runDrc(buildFixture()));
-
-  const singleReversals: Array<[string, () => DesignerPcbProjection]> = [
-    ["traces", () => reversed(["traces"])],
-    ["vias", () => reversed(["vias"])],
-    ["placements", () => reversed(["placements"])],
-    ["freePads", () => reversed(["freePads"])],
-    ["freeHoles", () => reversed(["freeHoles"])],
-    ["zones", () => reversed(["zones"])],
-    ["keepouts", () => reversed(["keepouts"])],
-    ["drcRules", reversedDrcRules],
-  ];
-
-  for (const [name, build] of singleReversals) {
-    test(`reversing ${name} alone -> byte-identical JSON.stringify(report)`, () => {
-      const s = JSON.stringify(runDrc(build()));
-      expect(s).toBe(baseline);
+  for (const [name, build] of singleReversalBuilders()) {
+    test(`reversing ${name} alone: grid and exhaustive reports are byte-identical`, () => {
+      const p = build();
+      expect(JSON.stringify(runDrc(p, { broadPhase: "exhaustive" }))).toBe(
+        JSON.stringify(runDrc(p)),
+      );
     });
   }
 
-  test("reversing all eight arrays together -> byte-identical JSON.stringify(report)", () => {
-    const s = JSON.stringify(runDrc(reversedEverything()));
-    expect(s).toBe(baseline);
+  test("reversing all eight arrays: grid and exhaustive reports are byte-identical", () => {
+    const p = reversedEverything();
+    expect(JSON.stringify(runDrc(p, { broadPhase: "exhaustive" }))).toBe(
+      JSON.stringify(runDrc(p)),
+    );
   });
+});
 
-  test("reversed input arrays -> identical id multiset and counts", () => {
-    const r1 = runDrc(buildFixture());
-    const r2 = runDrc(reversedEverything());
-    expect(sortedIds(r2)).toEqual(sortedIds(r1));
-    expect(r2.summary).toEqual(r1.summary);
-    // Value equality (key order may legitimately differ across input orders).
-    expect(r2.countsByCode).toEqual(r1.countsByCode);
-  });
+describe("equal-priority rules resolve by array index — the documented exception (contract 06 §7)", () => {
+  // Astra A2 #3: `drcRules` reversal is documented as NOT byte-identical when
+  // two enabled rules share the SAME priority and BOTH match a pair —
+  // "highest priority first-match wins" (rule-semantics contract) falls back
+  // to array (index) order on a tie, so reversing the array can genuinely
+  // change which rule wins. This is the one array the determinism contract
+  // does NOT promise reversal-invariance for; this test pins that the
+  // difference is real (not a bug) AND that both broad-phase modes agree on
+  // whichever rule wins.
+  const relax = {
+    id: "relax",
+    name: "Relax",
+    enabled: true,
+    priority: 0,
+    scopes: [],
+    constraint: { kind: "clearance" as const, mm: 0.1 },
+  };
+  const tighten = {
+    id: "tighten",
+    name: "Tighten",
+    enabled: true,
+    priority: 0,
+    scopes: [],
+    constraint: { kind: "clearance" as const, mm: 1 },
+  };
 
-  test("reversed input preserves per-id content (message, location, severity)", () => {
-    const byId = (vs: ReturnType<typeof runDrc>["violations"]) =>
-      new Map(vs.map((v) => [v.id, v]));
-    const m1 = byId(runDrc(buildFixture()).violations);
-    const m2 = byId(runDrc(reversedEverything()).violations);
-    expect(m2.size).toBe(m1.size);
-    for (const [id, v1] of m1) {
-      const v2 = m2.get(id);
-      expect(v2).toBeDefined();
-      expect(v2!.code).toBe(v1.code);
-      expect(v2!.severity).toBe(v1.severity);
-      expect(v2!.message).toBe(v1.message);
-      const l1 = v1.locationMm;
-      const l2 = v2!.locationMm;
-      expect(l1).toBeDefined();
-      expect(l2).toBeDefined();
-      expect(l2!.x).toBe(l1!.x);
-      expect(l2!.y).toBe(l1!.y);
-      expect(v2!.measuredMm ?? null).toBe(v1.measuredMm ?? null);
-      expect(v2!.requiredMm ?? null).toBe(v1.requiredMm ?? null);
+  // Two different-net 0.2mm traces at centrelines y=0 and y=0.7: edge gap
+  // 0.7 - 0.1 - 0.1 = 0.5mm — clears a 0.1mm requirement, violates a 1mm one.
+  function build(rules: readonly [typeof relax, typeof tighten]): DesignerPcbProjection {
+    return projection({
+      board: boardWithRules({ drcRules: [...rules] }),
+      netNames: { a: "A", b: "B" },
+      traces: [
+        trace("t1", "a", [[0, 0], [10, 0]], { widthMm: 0.2 }),
+        trace("t2", "b", [[0, 0.7], [10, 0.7]], { widthMm: 0.2 }),
+      ],
+    });
+  }
+
+  test("relaxation-first: no clearance draft; tightening-first: TRACE_TO_TRACE_CLEARANCE required 1mm — identically in both modes", () => {
+    const relaxationFirst = build([relax, tighten]);
+    const tighteningFirst = build([tighten, relax]);
+
+    for (const opts of [{}, { broadPhase: "exhaustive" as const }]) {
+      const relaxReport = runDrc(relaxationFirst, opts);
+      const tightenReport = runDrc(tighteningFirst, opts);
+
+      // The reversal genuinely changes the report — the documented exception.
+      expect(JSON.stringify(relaxReport)).not.toBe(JSON.stringify(tightenReport));
+
+      expect(
+        relaxReport.violations.map((v) => v.code),
+        `relaxation-first (${JSON.stringify(opts)}): expected no clearance draft`,
+      ).not.toContain("TRACE_TO_TRACE_CLEARANCE");
+
+      const tightenViolation = tightenReport.violations.find(
+        (v) => v.code === "TRACE_TO_TRACE_CLEARANCE",
+      );
+      expect(
+        tightenViolation,
+        `tightening-first (${JSON.stringify(opts)}): expected TRACE_TO_TRACE_CLEARANCE`,
+      ).toBeDefined();
+      expect(tightenViolation!.requiredMm).toBe(1);
     }
   });
 });

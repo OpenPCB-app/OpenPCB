@@ -8,8 +8,8 @@ not the source of truth.
 
 | Area | Path | Astra routing |
 |---|---|---|
-| DRC engine + checks | `src/shared/drc/` (relocated in S8; `src/modules/designer/backend/drc/` is re-export shims) (`checks/*.ts`, `drc-context.ts`, `severity.ts`, `violation-id.ts`, `ipc2221-spacing.ts`), `src/shared/drc/rule-resolver.ts` | ✅✅ always eligible |
-| PCB geometry | `src/shared/pcb-geometry/` (`pcb-trace-geometry.ts`, `pcb-clearance-geometry.ts`, `pad-geometry.ts`, `pad-outline.ts`, `rotation.ts`) | ✅✅ |
+| DRC engine + checks | `src/shared/drc/` (relocated in S8; `src/modules/designer/backend/drc/` is re-export shims) (`checks/*.ts`, `drc-context.ts`, `severity.ts`, `violation-id.ts`, `ipc2221-spacing.ts`, `legality.ts`, `broad-phase.ts` — the S9 grid, contract `docs/pcb-hardening/08-broad-phase-contract.md`), `src/shared/drc/rule-resolver.ts` | ✅✅ always eligible |
+| PCB geometry | `src/shared/pcb-geometry/` (`pcb-trace-geometry.ts`, `pcb-clearance-geometry.ts`, `pad-geometry.ts`, `pad-outline.ts`, `rotation.ts`, `board-region.ts`, `region-rings.ts`, `region-index.ts` — the S9 boundary-edge index) | ✅✅ |
 | Manual routing (route/walkaround/tune/bundle/diff-pair tools) — **not** the cloud auto-layout service | `src/shared/pcb-routing/` (`route-obstacles.ts`, `collision.ts`, `corner-fixup.ts`, `pull-tight.ts`, `walkaround.ts`, `auto-finish.ts`, `meander.ts`, `bundle-geometry.ts`), `src/modules/designer/frontend/pcb/tools/` | ✅✅ |
 | Ratsnest / connectivity | `src/shared/pcb-connectivity/` (`copper-records.ts`, `copper-items.ts`, `touch.ts`, `connectivity-graph.ts` — the one connectivity model, contract in `docs/pcb-hardening/01-connectivity-contract.md`), `src/modules/designer/backend/pcb/board-connectivity.ts` (items + pour nodes), `ratsnest.ts` (MST over kernel components) | ✅✅ |
 | Copper pours / polygon booleans | `src/shared/rendering/copper-fill/` (`copper-geometry-kernel.ts` — the Clipper2 kernel; real in-tree code, **not** a package shim, unlike most of `src/shared/rendering/`), `src/shared/rendering/pcb/` (`outline-geometry.ts`, `chain-edges.ts`, `contour-validation.ts`, `outline-manufacturability.ts`, `pcb-drills.ts`); since S5 the fill is specified by `docs/pcb-hardening/04-copper-pour-contract.md` (S1 records as the one copper geometry, S2 region extent, per-net clearance tier, precedence, pad-local thermals, `buildCopperFillIslands` → `{ ok | failed }` in the total order, per-net Gerber unions) | ✅✅ |
@@ -68,6 +68,16 @@ in — a bug can be a units mismatch at this exact boundary.
 >   the server commit gate call `checkPendingCopper` (`src/shared/drc/legality.ts`), which runs the
 >   same pair bodies (`checks/clearance-judge.ts` `PairJudge`) and the same per-item forms over the
 >   pending copper — contract `docs/pcb-hardening/07-live-parity-contract.md`.
+> - **Candidate discovery is indexed; the exhaustive enumeration is the oracle (S9,
+>   `docs/pcb-hardening/08-broad-phase-contract.md`).** `buildDrcItems` builds a per-kind uniform
+>   grid (`broad-phase.ts`: `near` / `nearPolyline`, trace entries filed per sub-segment) and a
+>   boundary-edge index on the board region (`pcb-geometry/region-index.ts`); the clearance,
+>   copper-to-hole, hole-pair, board-edge, keepout and creepage checks enumerate their candidates
+>   through them under halos that bound every resolvable requirement. `DrcOptions.broadPhase:
+>   "grid" | "exhaustive"` (default `grid`; tests and `scripts/drc-bench.ts` only) selects the pre-S9
+>   loops, kept verbatim: both modes produce identical pre-finalise drafts and byte-identical
+>   reports (`drc-broad-phase-oracle.test.ts`). A new check that enumerates pairs must take its
+>   candidates from the context's index and prove the halo, or run unindexed and say so.
 > - **`DrcRuleClass` has eight values:** `clearance | constraint | connectivity |
 >   manufacturability | structural | dfm | electrical | signal-integrity`. There is **no
 >   `copper-pour` class** — pour islands report under `structural`.

@@ -116,6 +116,16 @@ And a command field with no parser in `routes.ts` is silently dropped over HTTP.
   schema**: a new rule has no home on `PcbDesignRules` / `PcbNetClass` until you add one, wire the
   corresponding command field, and add a dialog section. `DrcContext` carries traces, pads, vias
   and holes only — pours and zones are read from the projection inside the checks that need them.
+- **Candidate discovery is indexed; the exhaustive enumeration is the oracle (S9,
+  `docs/pcb-hardening/08-broad-phase-contract.md`).** `buildDrcItems` builds a per-kind uniform
+  grid (`broad-phase.ts`: `near` / `nearPolyline`, trace entries filed per sub-segment) and a
+  boundary-edge index on the board region (`pcb-geometry/region-index.ts`); the clearance,
+  copper-to-hole, hole-pair, board-edge, keepout and creepage checks enumerate their candidates
+  through them under halos that bound every resolvable requirement. `DrcOptions.broadPhase:
+  "grid" | "exhaustive"` (default `grid`; tests and `scripts/drc-bench.ts` only) selects the pre-S9
+  loops, kept verbatim: both modes produce identical pre-finalise drafts and byte-identical
+  reports (`drc-broad-phase-oracle.test.ts`). A new check that enumerates pairs must take its
+  candidates from the context's index and prove the halo, or run unindexed and say so.
   As of S3a it also carries `copperZones` (the effective `collectCopperZones` list) and `keepouts`;
   since S4 also `copperAreaWarnings` (the derivation's own warnings — `ZONE_INVALID` /
   `ZONE_EMPTY_FILL` are a total mapping of them, never a re-derivation) and a lazily cached

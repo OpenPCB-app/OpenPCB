@@ -9,9 +9,10 @@
  * not the codes.
  */
 import { describe, expect, test } from "bun:test";
-import { aabbGap, buildDrcItems } from "../../../shared/drc/drc-context";
+import { buildDrcItems } from "../../../shared/drc/drc-context";
 import { createBroadPhase } from "../../../shared/drc/broad-phase";
 import { finalizeReport, runDrc } from "../../../shared/drc/drc-engine";
+import { traceTraceGap } from "../../../shared/drc/pair-gap";
 import {
   checkPendingCopper,
   pendingItems,
@@ -697,7 +698,14 @@ describe("the broad phase is a superset of the exact prefilter", () => {
     };
   }
 
-  test("200 items: every pair within the halo is returned", () => {
+  // The v2 grid files a trace PER SUB-SEGMENT (broad-phase contract 08 §2.1),
+  // so `near`/`nearPolyline` are no longer a superset of the AABB-within-halo
+  // set for traces — the empty corners of a long diagonal's box are
+  // deliberately unindexed. What they ARE a superset of is every trace whose
+  // COPPER is within the halo, which is the only thing the pair bodies need
+  // (§1 L1): a pair the query drops has a true gap above every threshold any
+  // tier compares against, so it emits nothing in either mode.
+  test("200 items: every trace whose copper is within the halo is returned", () => {
     const rnd = lcg(20260909);
     const traces = Array.from({ length: 200 }, (_, i) => {
       const x = rnd() * 46 - 23;
@@ -713,11 +721,12 @@ describe("the broad phase is a superset of the exact prefilter", () => {
     expect(ctx.traces).toHaveLength(200);
     const halo = ctx.maxClearanceBoundMm;
     for (let i = 0; i < ctx.traces.length; i += 1) {
-      const found = new Set(ctx.near("traces", ctx.traces[i]!.bounds, halo));
+      const a = ctx.traces[i]!;
+      const found = new Set(
+        ctx.nearPolyline("traces", a.pointsMm, a.halfWidthMm, halo),
+      );
       for (let j = 0; j < ctx.traces.length; j += 1) {
-        if (aabbGap(ctx.traces[i]!.bounds, ctx.traces[j]!.bounds) > halo) {
-          continue;
-        }
+        if (traceTraceGap(a, ctx.traces[j]!).gap > halo) continue;
         expect(found.has(j)).toBe(true);
       }
     }
@@ -734,8 +743,11 @@ describe("the broad phase is a superset of the exact prefilter", () => {
         ],
       }),
     );
-    const hits = ctx.near("traces", ctx.traces[1]!.bounds, 5);
-    expect(hits).toEqual([0, 1, 2]);
+    expect(ctx.near("traces", ctx.traces[1]!.bounds, 5)).toEqual([0, 1, 2]);
+    const t = ctx.traces[1]!;
+    expect(
+      ctx.nearPolyline("traces", t.pointsMm, t.halfWidthMm, 5),
+    ).toEqual([0, 1, 2]);
   });
 });
 
@@ -1013,34 +1025,47 @@ describe("the broad phase fails OPEN on boxes it cannot index", () => {
     maxY,
   });
   const empty = { traces: [], pads: [], vias: [], holes: [] } as const;
+  /** A zero-width trace along the box's diagonal — the v2 entry shape (§2.1). */
+  const diagonal = (b: ReturnType<typeof box>) => ({
+    pointsMm: [
+      { x: b.minX, y: b.minY },
+      { x: b.maxX, y: b.maxY },
+    ],
+    halfWidthMm: 0,
+    bounds: b,
+  });
 
   test("a NaN item box is returned by every query, unfiltered", () => {
-    const near = createBroadPhase({
+    const bp = createBroadPhase({
       ...empty,
-      traces: [box(0, 0, 1, 1), box(NaN, NaN, NaN, NaN), box(50, 50, 51, 51)],
+      traces: [
+        diagonal(box(0, 0, 1, 1)),
+        diagonal(box(NaN, NaN, NaN, NaN)),
+        diagonal(box(50, 50, 51, 51)),
+      ],
     });
     // `boundsMeet` against a NaN box is false in both directions, so filtering
     // it would DROP a pair `aabbGap` still judges.
-    expect(near("traces", box(0, 0, 1, 1), 0.1)).toEqual([0, 1]);
-    expect(near("traces", box(900, 900, 901, 901), 0.1)).toEqual([1]);
+    expect(bp.near("traces", box(0, 0, 1, 1), 0.1)).toEqual([0, 1]);
+    expect(bp.near("traces", box(900, 900, 901, 901), 0.1)).toEqual([1]);
   });
 
   test("an item spanning too many cells is returned by every query", () => {
     // 4000 mm across at a 2 mm cell = 2000 columns, past MAX_CELLS_PER_ITEM.
-    const near = createBroadPhase({
+    const bp = createBroadPhase({
       ...empty,
       vias: [box(0, 0, 1, 1), box(-2000, -2000, 2000, 2000)],
     });
-    expect(near("vias", box(500, 500, 501, 501), 0)).toEqual([1]);
-    expect(near("vias", box(0, 0, 1, 1), 0)).toEqual([0, 1]);
+    expect(bp.near("vias", box(500, 500, 501, 501), 0)).toEqual([1]);
+    expect(bp.near("vias", box(0, 0, 1, 1), 0)).toEqual([0, 1]);
   });
 
   test("a query box that cannot be indexed returns everything", () => {
-    const near = createBroadPhase({
+    const bp = createBroadPhase({
       ...empty,
       pads: [box(0, 0, 1, 1), box(10, 10, 11, 11)],
     });
-    expect(near("pads", box(NaN, 0, 1, 1), 0.1)).toEqual([0, 1]);
+    expect(bp.near("pads", box(NaN, 0, 1, 1), 0.1)).toEqual([0, 1]);
   });
 
   test("a via with a NaN centre still reaches the pair enumeration", () => {
