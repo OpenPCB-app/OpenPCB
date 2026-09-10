@@ -77,10 +77,13 @@ via is matched on its resolved span. A layer-invalid record is a different-net o
 layer of the fill (no phantom merge, no short) — `04-copper-pour-contract.md` §4. The former
 `freePadOnLayer` is gone; `viaCrossesLayer` survives only for the canvas.
 
-**Plating assumption.** The data model has no plated/unplated attribute. A drilled footprint pad
-and a `*.Cu` pad are treated as plated (vertical conduction through the barrel), as are `std`
-free pads. NPTH footprint pads must reach the model without copper; an undrilled `*.Cu` pad
-without plating cannot be expressed today. Recorded for S11 (hole model).
+**Plating (S11, `10-manufacturability-contract.md` §2).** A footprint pad carries `plated?`
+(absent = plated); a drilled footprint pad, a `*.Cu` pad and a `std` free pad are plated and
+conduct through the barrel. An UNPLATED pad (`plated: false`, KiCad `np_thru_hole`) whose copper
+lies inside its drill has no copper record at all; one with a copper ring keeps a record but the
+kernel builds one NULL-net item per copper layer, so the rings never conduct between faces and a
+net bound to such a pad keeps a permanent airwire (`NPTH_PAD_NET` names the cause). An undrilled
+`*.Cu` pad without plating still cannot be expressed (recorded limit).
 
 ### Two layer policies, one geometry
 
@@ -217,8 +220,8 @@ proof" with 14 findings. Disposition after verification against source:
 | # | Finding (Astra) | Disposition | Evidence / action |
 |---|---|---|---|
 | 1 | ε = 1 µm turns designed sub-micron gaps into connections | **accepted** | ε → `1e-6` (float-noise only), §3 |
-| 2 | Layer occupancy ≠ vertical conduction (undrilled `*.Cu`, unplated drills) | **accepted as documented assumption**, owner S11 | no plating attribute in the data model; §2 "Plating assumption" |
-| 3 | NPTH / cutout voids can sever a trace the graph keeps whole | **rejected for S1**, filed | connectivity models designed copper; DRC today has **no** copper-over-NPTH check (`HOLE_TO_HOLE`, `HOLE_TO_BOARD_EDGE` only) — filed for S11; cutout crossing is B4-1 (S2) |
+| 2 | Layer occupancy ≠ vertical conduction (undrilled `*.Cu`, unplated drills) | **resolved in S11** (unplated drills: per-layer null-net items, contract 10 §2.4); undrilled `*.Cu` without plating stays a recorded limit | §2 "Plating" |
+| 3 | NPTH / cutout voids can sever a trace the graph keeps whole | **rejected for S1**, filed | connectivity models designed copper; DRC's copper-over-NPTH check is `COPPER_TO_HOLE` (S7), which since S11 also sees non-plated FOOTPRINT drills (contract 10 §1.3); cutout crossing is B4-1 (S2) |
 | 4 | Point/corner contact has zero conductive neck | **rejected for S1**, filed | topological contact is connection; neck width is a DFM sliver check (S12) |
 | 5 | Area-only island membership misses shared-edge contact | **accepted** | membership = positive-area intersection **or** edge distance ≤ ε, §3 |
 | 6 | Whole-trace self-exclusion makes a closed loop dangling | **accepted** | exclude only the incident segment, §4 |

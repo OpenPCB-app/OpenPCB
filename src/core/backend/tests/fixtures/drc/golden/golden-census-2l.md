@@ -7,9 +7,10 @@ exists ONLY to make the emit census a machine gate: together with
 and `golden-rules-2l`, the union of every emitted code across all six equals
 every `DrcRuleCode` member except `ZONE_FILL_FAILED` (documented exception
 below). Fabricator `jlcpcb_2l`, 2-layer, ≥ 80 primitives, ≥ 10 violations
-(the golden-suite non-triviality gates), 82 violations / 37 codes in this
-fixture alone (84 / 38 until S8: the bridge trace's two overlap rows left
-when touching unassigned copper became an extension — contract 06 §4), all
+(the golden-suite non-triviality gates), 84 violations / 37 codes in this
+fixture alone (82 / 37 from S8 to S10; 84 / 38 until S8: the bridge trace's
+two overlap rows left when touching unassigned copper became an extension —
+contract 06 §4; S11 added the two fab rows noted under "Hole pairs"), all
 ids unique.
 
 Outline: a polygon rectangle (120×90) with two deliberate milling features on
@@ -44,8 +45,17 @@ Deliberate violation-bearing items, by region (all F.Cu unless noted):
   passes, < jlcpcb_2l's 0.45 mm PTH/NPTH floor) -> `FAB_HOLE_TO_HOLE`.
   `npth_cross` (NPTH, drill 1.0) directly under `t_over_hole` (0.4 mm trace)
   -> `COPPER_TO_HOLE`. `npth_slot` — a 3×0.6 mm routed slot hole, standalone
-  (D3 slot-hole coverage). `fp_smd_drilled` — a drilled `smd` free pad (D3:
-  a drill on `smd`/`conn` is non-plated by the one derivation).
+  (D3 slot-hole coverage); since S11 also `FAB_DRILL` — a 0.6 mm non-plated
+  slot is under jlcpcb_2l's 1.0 mm `minNpthSlotWidthMm` (manufacturability
+  contract 10 §4; before S11 every hole was compared with the 0.15 mm via
+  drill floor whatever its kind or tool). `fp_smd_drilled` — a drilled `smd`
+  free pad (D3: a drill on `smd`/`conn` is non-plated by the one derivation);
+  since S11 also `FAB_ANNULAR_RING` — its 1.2 mm copper around a 0.5 mm NPTH
+  drill is a 0.35 mm ring under jlcpcb_2l's 0.45 mm `npthAnnularRingMm`
+  (contract 10 §4; before S11 NPTH rings had no fab ring check at all). In the
+  ARTWORK the same pad lost its `paste.top` aperture in S11: a record with a
+  drill, or an unplated one, gets no paste (contract 10 §6.4) — pinned by
+  `gerber-pad-parity.test.ts`, not by this report.
 - **Clearance pairs (y=-38, x=0..30):** `t_clr_a` vs pad `P_CLR.1`, 0.15 mm
   gap (< 0.25 mm) -> `TRACE_TO_PAD_CLEARANCE`. `t_clr_via` vs `v_clr`,
   0.15 mm gap -> `TRACE_TO_VIA_CLEARANCE`. Pad `P_PV.1` vs `v_pv`, 0.05 mm

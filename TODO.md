@@ -334,18 +334,32 @@ verified current-master inventory in
 done (S7 authoritative batch DRC closed 2026-09-09); S8 (live / route parity) closed 2026-09-09
 (`docs/pcb-hardening/07-live-parity-contract.md`); S9 (broad-phase scaling and determinism) closed
 2026-09-09 (`docs/pcb-hardening/08-broad-phase-contract.md`: 10k primitives 3.5 s → 195.5 ms,
-byte-identical to the exhaustive oracle); S10 (DRC execution responsiveness, B5-SYNC) is in
-progress (2026-09-09, `docs/pcb-hardening/09-execution-contract.md`).
+byte-identical to the exhaustive oracle); S10 (DRC execution responsiveness, B5-SYNC) closed
+2026-09-10 (`docs/pcb-hardening/09-execution-contract.md`: the batch run on a persistent worker
+thread, byte-identical; join / supersede / cancel / SSE; nothing persisted before completion); S11
+(hole, pad and via manufacturability) closed 2026-09-10
+(`docs/pcb-hardening/10-manufacturability-contract.md`: one drill derivation per object incl.
+footprint slots, drill offsets and plating; the exact annular-ring kernel; sourced fab rows;
+`VIA_TYPE_UNSUPPORTED` + export refusal for non-through vias; the Gerber flashing copper / mask /
+paste from the S1 records with rotated macros; a per-layer artwork parity harness). The matching
+`plated` / `drillSlotMm` / `drillOffsetMm` fields live UNCOMMITTED in the sibling `shared/`
+checkout (kicad-import + rendering-core); the tags `kicad-parsers-v0.1.4` / `kicad-import-v0.2.0`
+/ `rendering-core-v0.1.4`, the OpenPCB + CoreLibrary repin with a `package-lock.json` refresh
+(verify with a real `npm ci`) and the CoreLibrary `bun tools/rebuild-previews.ts` re-pack are a
+SEPARATE follow-up commit — until then new KiCad imports carry no plating / slot attributes and
+existing library rows are corrected at read time from their stored raw pad type. S12 (DFM
+overlays) is next.
 
 **Binding decisions (unchanged).** Full scope — core plus DFM plus electrical plus SI · scoped
 priority rules (first-match, *can relax*, board-minimum floor) · full multilayer 2–32 · breaking
 changes allowed with migration (violation-id v2, KiCad-aligned severities, live net-class
 resolution).
 
-**Open bugs.** 6 audit findings remain unresolved (B2-9 and B5-LIVE-PADGEOMS closed in Session 0;
-B3-1/3/4/5/6 fixed in Session 1; B4-1/2/6/7 fixed in Session 2; B3-9/10 fixed in Session 5;
-B6-1 registered in Session 7; B5-LIVE-ROT-PAD / B5-LIVE-TH-PAD-SIDE fixed and B7-1 registered in
-Session 8) and are tracked as `test.todo` with real post-fix assertions in `drc-audit-b*.test.ts`. They
+**Open bugs.** 1 audit finding remains unresolved — B7-1 (S13) — (B2-9 and B5-LIVE-PADGEOMS closed
+in Session 0; B3-1/3/4/5/6 fixed in Session 1; B4-1/2/6/7 fixed in Session 2; B3-9/10 fixed in
+Session 5; B6-1 registered in Session 7; B5-LIVE-ROT-PAD / B5-LIVE-TH-PAD-SIDE fixed and B7-1
+registered in Session 8; B5-SYNC fixed in Session 10; B2-5/6/7 and B6-1 fixed in Session 11) and
+is tracked as a `test.todo` with a real post-fix assertion in `drc-audit-b7.test.ts`. They
 are enumerated with mechanism and anchors in
 [`docs/drc/OPEN_FINDINGS.md`](docs/drc/OPEN_FINDINGS.md) — do not restate them here. Every finding
 now has an owning session.

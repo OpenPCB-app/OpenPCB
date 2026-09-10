@@ -175,6 +175,7 @@ export function buildRouteObstacles(
       ctx.layerCount,
       [],
       [],
+      [],
     );
     extraTraces = items.traces;
     extraVias = items.vias;

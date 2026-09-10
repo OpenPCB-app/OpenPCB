@@ -479,9 +479,18 @@ function parseVia(
   if (layerNames.length < 2) return null;
   const netOrdinal = getNumberValue(findNode(node, "net") ?? [], 1);
   if (netOrdinal === null) return null;
-  let type: "through" | "blind" | "micro" = "through";
-  if (findNode(node, "micro")) type = "micro";
-  else if (findNode(node, "blind")) type = "blind";
+  // KiCad board file format: `(via [blind | micro] (at …) (size …) (drill …)
+  // (layers …) …)` — the type is a BARE ATOM right after `via`, not a sub-list
+  // (dev-docs.kicad.org/en/file-formats/sexpr-pcb, "Via"). `findNode` matches
+  // only LIST children, so it never matched and every imported via came back
+  // `through`. There are only these two tokens: a BURIED via is written with
+  // the `blind` token, and the span tells the two apart (contract 10 §5.3).
+  const atoms = node.filter((child): child is string => typeof child === "string");
+  const type: "through" | "blind" | "micro" = atoms.includes("micro")
+    ? "micro"
+    : atoms.includes("blind")
+      ? "blind"
+      : "through";
   return {
     at,
     sizeMm,

@@ -22,14 +22,27 @@ import type {
  * JSON-encoded rather than concatenated because pad numbers are free text — a
  * pad literally numbered `1#2` would otherwise collide with the second shape of
  * pad `1`, and a separator character can appear in a placement id too.
+ *
+ * An UNPLATED pad's shape is keyed by a FOUR-tuple, one item per copper layer
+ * (manufacturability contract 10 §2.4): an unplated ring never conducts between
+ * faces, so a front trace and a back trace touching the two rings of one hole
+ * must land in two components. The DRC pad item and the violation-id anchor
+ * stay per pad — only the kernel splits.
  */
 export const padItemKey = (
   placementId: string,
   padNumber: string,
   occurrence = 0,
-): string => `pad:${JSON.stringify([placementId, padNumber, occurrence])}`;
+  layer?: PcbCopperLayerId,
+): string =>
+  `pad:${JSON.stringify(
+    layer === undefined
+      ? [placementId, padNumber, occurrence]
+      : [placementId, padNumber, occurrence, layer],
+  )}`;
 
-export const freePadItemKey = (id: string): string => `freepad:${id}`;
+export const freePadItemKey = (id: string, layer?: PcbCopperLayerId): string =>
+  layer === undefined ? `freepad:${id}` : `freepad:${id}:${layer}`;
 export const traceItemKey = (id: string): string => `trace:${id}`;
 export const viaItemKey = (id: string): string => `via:${id}`;
 /**
@@ -103,14 +116,18 @@ export type CopperItem =
   | ViaCopperItem
   | PourCopperItem;
 
-function padRecordKey(record: PadCopperRecord): string {
+function padRecordKey(
+  record: PadCopperRecord,
+  layer?: PcbCopperLayerId,
+): string {
   return record.anchor.kind === "pad"
     ? padItemKey(
         record.anchor.placementId,
         record.anchor.padNumber,
         record.occurrence,
+        layer,
       )
-    : freePadItemKey(record.anchor.freePadId);
+    : freePadItemKey(record.anchor.freePadId, layer);
 }
 
 /**
@@ -155,16 +172,41 @@ export function toCopperItems(records: CopperRecords): CopperItem[] {
   const used = new Set<string>();
   for (const pad of records.pads) {
     if (pad.ring.length < 3 || !(ringDoubleArea(pad.ring) > 0)) continue;
-    items.push({
-      kind: "pad",
-      key: uniqueKey(padRecordKey(pad), used),
-      netId: pad.netId,
-      layers: pad.declaredLayerInvalid ? [] : pad.resolvedLayers,
+    const layers = pad.declaredLayerInvalid ? [] : pad.resolvedLayers;
+    const common = {
+      kind: "pad" as const,
       ring: pad.ring,
       ...(pad.disc ? { disc: pad.disc } : {}),
       bounds: pad.bounds,
       center: pad.center,
       anchor: pad.anchor,
+    };
+    if (!pad.plated && layers.length >= 2) {
+      // One NULL-net item per copper layer (contract 10 §2.4). The ring may
+      // still be an unassigned extension of copper it touches on ITS layer
+      // (01 §2), but two rings on different faces are never one node — the
+      // previous single item let the ratsnest's logical-pin union hide an open
+      // through the barrel that is not there. The split exists ONLY to deny
+      // conduction BETWEEN faces: unplated copper on a single layer (a drilled
+      // `smd` / `conn` free pad — a test point with a probe hole) has no barrel
+      // to fake and keeps its net and its one item (Astra run 2). An unplated
+      // pad whose declared layer is off the stackup resolves to NO layer and
+      // therefore to no item at all: fail-safe, an extra airwire at worst.
+      for (const layer of layers) {
+        items.push({
+          ...common,
+          key: uniqueKey(padRecordKey(pad, layer), used),
+          netId: null,
+          layers: [layer],
+        });
+      }
+      continue;
+    }
+    items.push({
+      ...common,
+      key: uniqueKey(padRecordKey(pad), used),
+      netId: pad.netId,
+      layers,
     });
   }
   for (const trace of records.traces) {

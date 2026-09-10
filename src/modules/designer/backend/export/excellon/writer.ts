@@ -3,8 +3,12 @@ import type {
   PcbDrillSlot,
   PcbPointMm,
 } from "../../../../../sdks/designer/types";
-import { freePadDrill } from "../../../../../shared/rendering/pcb/pcb-drills";
-import { projectLocal } from "../transform";
+import {
+  footprintPadDrill,
+  freeHoleDrill,
+  freePadDrill,
+} from "../../../../../shared/rendering/pcb/pcb-drills";
+import { placementPads } from "../../../../../shared/pcb-geometry/pad-geometry";
 
 /**
  * Excellon 2 drill file writer.
@@ -172,27 +176,49 @@ function collectDrillHits(proj: DesignerPcbProjection): DrillHit[] {
     }
   }
 
+  // THE one footprint-pad drill derivation (`footprintPadDrill`, contract 10
+  // §1.1 / §6.3): the drill OFFSET is already in the centre, an oblong drill
+  // becomes a `G85` routed hit with the tool = slot width, and an unplated pad
+  // goes to the NPTH file. The old loop read `drillDiameterMm` directly,
+  // snapped the placement rotation to 90° steps and called every footprint
+  // hole plated.
   for (const placement of proj.placements) {
-    const pads = placement.footprint.preview?.pads ?? [];
-    for (const pad of pads) {
-      const drill = pad.drillDiameterMm ?? 0;
-      if (drill <= 0) continue;
-      const center = projectLocal(placement, pad.centerMm);
-      hits.push({ centerMm: center, diameterMm: drill, plated: true });
+    for (const pad of placementPads(placement)) {
+      const drill = footprintPadDrill(pad, placement);
+      if (!drill) continue;
+      hits.push(
+        drill.slot
+          ? {
+              centerMm: drill.slot.a,
+              slotEndMm: drill.slot.b,
+              diameterMm: drill.slot.widthMm,
+              plated: drill.plated,
+            }
+          : {
+              centerMm: drill.centerMm,
+              diameterMm: drill.drillMm,
+              plated: drill.plated,
+            },
+      );
     }
   }
 
+  // Free holes (F5 mounting holes) are NPTH by convention — THE one free-hole
+  // derivation, so the tool is the slot width and a degenerate slot is a round
+  // hit of that width, exactly as DRC models it (Astra run 2b #1).
   for (const hole of proj.freeHoles) {
-    // Free holes (F5 mounting holes) are NPTH by convention.
-    if (hole.drillSlot) {
-      hits.push(slotHit(hole.centerMm, hole.drillSlot, false));
-    } else if (hole.drillMm > 0) {
-      hits.push({
-        centerMm: hole.centerMm,
-        diameterMm: hole.drillMm,
-        plated: false,
-      });
-    }
+    const drill = freeHoleDrill(hole);
+    if (!drill) continue;
+    hits.push(
+      drill.slot
+        ? {
+            centerMm: drill.slot.a,
+            slotEndMm: drill.slot.b,
+            diameterMm: drill.slot.widthMm,
+            plated: false,
+          }
+        : { centerMm: drill.centerMm, diameterMm: drill.drillMm, plated: false },
+    );
   }
 
   // THE one free-pad drill derivation (`freePadDrill`), so the drill file, the

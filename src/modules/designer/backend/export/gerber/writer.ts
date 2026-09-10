@@ -3,27 +3,40 @@ import type {
   PcbBoardOutline,
   PcbCopperLayerId,
   PcbFreePad,
-  PcbPlacedPart,
   PcbPointMm,
   PcbVia,
 } from "../../../../../sdks/designer/types";
 import { copperLayersForCount } from "../../../../../sdks/designer/stackup";
 import { copperToHoleClearanceMm } from "../../../../../shared/drc/rule-resolver";
-import {
-  freePadCopperLayers,
-  placementSideLayer,
-} from "../../../../../shared/rendering/pad-copper-layers";
+import { freePadCopperLayers } from "../../../../../shared/rendering/pad-copper-layers";
 import {
   ApertureTable,
+  roundrectRadiusMm,
   type AperFunction,
   type ApertureShape,
 } from "../apertures";
-import {
-  effectivePadRotationDeg,
-  isOrthogonalSwap,
-  projectLocal,
-} from "../transform";
 import { gerberDim, xyOperand } from "../units";
+// The S1 copper records are the ONE resolution of pad copper the pour,
+// connectivity and DRC read; the artwork flashes from them too, so the fab
+// receives the geometry DRC judged (manufacturability contract 10 §6.1).
+import {
+  buildCopperRecords,
+  freePadItemKey,
+  padItemKey,
+  type CopperRecords,
+  type PadCopperRecord,
+} from "../../../../../shared/pcb-connectivity";
+import type { PadCopperShape } from "../../../../../shared/pcb-geometry/pad-annular";
+import {
+  freePadCopperShape,
+  padCopperShape,
+  placementPads,
+} from "../../../../../shared/pcb-geometry/pad-geometry";
+import {
+  footprintPadDrill,
+  freePadDrill,
+  type FootprintPadDrill,
+} from "../../../../../shared/rendering/pcb/pcb-drills";
 import { flattenOutline } from "../../../../../shared/rendering/pcb/outline-geometry";
 import { textToStrokes } from "../text/stroke-font";
 // Single source of truth for poured copper: the SAME kernel the canvas renders,
@@ -94,6 +107,82 @@ interface BuildContext {
    * §4), so the artwork carves exactly what the canvas and DRC do.
    */
   keepouts: readonly EffectiveKeepout[];
+  /**
+   * The S1 copper records of this projection, built ONCE per layer build and
+   * shared by the copper / mask / paste pad loops AND the pour (contract 10
+   * §6.1). A record carries the frame DRC judges: the world centre, the
+   * composed rotation, the mirror, the resolved copper layers (including the
+   * explicit-layer side flip a mirrored placement gets, which the mask loop
+   * used to miss) and the net. A copper-LESS unplated pad has NO record and
+   * therefore no flash (§2.3); its mask relief comes from `maskOnlyDrills`.
+   */
+  records: CopperRecords;
+  /**
+   * The pad's world frame + shape per record key. Records carry the geometry
+   * but not the shape KIND (`circle` / `rect` / …) or the roundrect ratio, and
+   * the aperture needs both.
+   */
+  padShapes: ReadonlyMap<string, PadCopperShape>;
+  /** `placementId` → refdes, for the `%TO.P` component-pad attribute. */
+  referenceById: ReadonlyMap<string, string>;
+  /** Free pads by id — `padType` and the per-pad expansions records omit. */
+  freePadById: ReadonlyMap<string, PcbFreePad>;
+  /**
+   * Copper-less unplated footprint drills (§2.3): no copper record, but the
+   * mask still opens on BOTH faces so the drill cannot tear the mask edge
+   * (§6.4 — the `hole` free-pad rule, applied to footprint pads).
+   */
+  maskOnlyDrills: readonly MaskOnlyDrill[];
+}
+
+/** A drilled footprint pad whose copper lies entirely inside the drill (§2.3). */
+interface MaskOnlyDrill {
+  drill: FootprintPadDrill;
+}
+
+/** Key of one pad record — the same identity `copper-items.ts` assigns. */
+function recordKey(record: PadCopperRecord): string {
+  return record.anchor.kind === "pad"
+    ? padItemKey(
+        record.anchor.placementId,
+        record.anchor.padNumber,
+        record.occurrence,
+      )
+    : freePadItemKey(record.anchor.freePadId);
+}
+
+/**
+ * Walk the pads in the SAME order and with the same per-number occurrence
+ * counter `footprintPadRecords` uses, so a pad's shape can be looked up by its
+ * record key — and a pad with no record is exactly a copper-less unplated pad.
+ */
+function buildPadIndex(
+  proj: DesignerPcbProjection,
+  records: CopperRecords,
+): {
+  padShapes: Map<string, PadCopperShape>;
+  maskOnlyDrills: MaskOnlyDrill[];
+} {
+  const recorded = new Set(records.pads.map(recordKey));
+  const padShapes = new Map<string, PadCopperShape>();
+  const maskOnlyDrills: MaskOnlyDrill[] = [];
+  for (const placement of proj.placements) {
+    const occurrenceByNumber = new Map<string, number>();
+    for (const pad of placementPads(placement)) {
+      const occurrence = occurrenceByNumber.get(pad.number) ?? 0;
+      occurrenceByNumber.set(pad.number, occurrence + 1);
+      const key = padItemKey(placement.id, pad.number, occurrence);
+      padShapes.set(key, padCopperShape(placement, pad));
+      if (recorded.has(key)) continue;
+      // No record ⇒ copper-less (§2.3). Its drill is still real.
+      const drill = footprintPadDrill(pad, placement);
+      if (drill && !drill.plated) maskOnlyDrills.push({ drill });
+    }
+  }
+  for (const freePad of proj.freePads) {
+    padShapes.set(freePadItemKey(freePad.id), freePadCopperShape(freePad));
+  }
+  return { padShapes, maskOnlyDrills };
 }
 
 export function buildGerberLayer(
@@ -102,14 +191,29 @@ export function buildGerberLayer(
   warnings: string[],
   createdAt: string = new Date().toISOString(),
 ): string {
+  const padNetIds = new Map(Object.entries(proj.padNets ?? {}));
+  const records = buildCopperRecords({
+    layerCount: proj.board.layerCount,
+    placements: proj.placements,
+    padNetIds,
+    freePads: proj.freePads,
+    traces: proj.traces,
+    vias: proj.vias,
+  });
+  const { padShapes, maskOnlyDrills } = buildPadIndex(proj, records);
   const ctx: BuildContext = {
     proj,
     warnings,
-    padNetIds: new Map(Object.entries(proj.padNets ?? {})),
+    padNetIds,
     keepouts: collectKeepouts({
       keepouts: proj.keepouts ?? [],
       layerCount: proj.board.layerCount,
     }).keepouts,
+    records,
+    padShapes,
+    referenceById: new Map(proj.placements.map((p) => [p.id, p.reference])),
+    freePadById: new Map(proj.freePads.map((p) => [p.id, p])),
+    maskOnlyDrills,
   };
   const aperTable = new ApertureTable();
   const body: string[] = [];
@@ -260,54 +364,36 @@ function emitCopper(
     emitClearAttr(out);
   }
 
-  // 2. Footprint pads (THT pads appear on every copper layer; SMD pads
-  //    appear on the placement's side only).
-  for (const placement of proj.placements) {
-    const pads = placement.footprint.preview?.pads ?? [];
-    for (const pad of pads) {
-      if (!padTouchesCopperLayer(pad, placement, layer)) continue;
-      const aperShape = padApertureShape(pad, placement);
-      if (!aperShape) {
-        ctx.warnings.push(
-          `Pad ${placement.reference}.${pad.number} shape '${pad.shape}' not supported by exporter yet`,
-        );
-        continue;
-      }
-      const fn: AperFunction =
-        (pad.drillDiameterMm ?? 0) > 0 ? "ComponentPad" : "SMDPad,CuDef";
-      const code = apers.allocate(aperShape, fn);
-      const center = projectLocal(placement, pad.centerMm);
-      emitNetAttr(out, resolveNetNameForPad(ctx, placement, pad.number));
-      out.push(
-        `%TO.P,${escapeAttr(placement.reference)},${escapeAttr(pad.number)}*%`,
-      );
-      out.push(`D${code}*`);
-      out.push(`${xyOperand(center.x, center.y)}D03*`);
-      emitClearAttr(out);
-    }
-  }
-
-  // 3. Free pads (F5 manually-dropped pads). Which layers a free pad's copper
-  //    occupies comes from THE one derivation the records, the pour and DRC
-  //    read — a `hole` pad flashes no copper at all (it is an NPTH; the artwork
-  //    used to put copper on both outer layers, which nothing else on the board
-  //    knew about) and an `smd` / `conn` pad flashes on its declared layer only.
-  const copperStackup = new Set(copperLayersForCount(proj.board.layerCount));
-  for (const pad of proj.freePads) {
-    if (!freePadCopperLayers(pad, copperStackup).layers.includes(layer)) continue;
-    const aperShape = freePadApertureShape(pad);
+  // 2. Pads — footprint pads in placement × preview order, then free pads,
+  //    flashed from the S1 copper RECORDS (contract 10 §6.1). The record
+  //    already resolved which copper layers the pad occupies (THT and `*.Cu`
+  //    on every layer, an explicit-layer SMD pad side-flipped on a mirrored
+  //    placement) and carries the world centre and composed rotation DRC
+  //    judges; the exporter's own transform snapped placement rotation to 90°
+  //    steps and negated instead of conjugating a mirrored pad's own angle.
+  //    A copper-less unplated pad has no record and therefore no flash (§2.3).
+  for (const record of ctx.records.pads) {
+    if (!record.resolvedLayers.includes(layer)) continue;
+    const aperShape = apertureFromRecord(ctx, record);
     if (!aperShape) {
-      ctx.warnings.push(
-        `Free pad ${pad.id} shape '${pad.shape}' not supported`,
-      );
+      ctx.warnings.push(unsupportedShapeWarning(ctx, record));
       continue;
     }
-    const fn: AperFunction =
-      pad.padType === "smd" ? "SMDPad,CuDef" : "ComponentPad";
+    const fn = copperAperFunction(ctx, record);
     const code = apers.allocate(aperShape, fn);
-    emitNetAttr(out, resolveNetName(ctx, pad.netId, null));
+    emitNetAttr(out, resolveNetName(ctx, record.netId, null));
+    // "Washer pads or any pads that are not part of a component cannot have a
+    // .P attached" (Ucamco spec 2022.02, `.P` object attribute), so a ringed
+    // NPTH pad flashes without one.
+    if (record.anchor.kind === "pad" && fn !== "WasherPad") {
+      out.push(
+        `%TO.P,${escapeAttr(
+          ctx.referenceById.get(record.anchor.placementId) ?? "",
+        )},${escapeAttr(record.anchor.padNumber)}*%`,
+      );
+    }
     out.push(`D${code}*`);
-    out.push(`${xyOperand(pad.centerMm.x, pad.centerMm.y)}D03*`);
+    out.push(`${xyOperand(record.center.x, record.center.y)}D03*`);
     emitClearAttr(out);
   }
 
@@ -367,6 +453,9 @@ function emitCopperPour(
   const common = {
     layerCount: board.layerCount,
     outline: board.outline,
+    // The SAME records the pad loops flash from — built once per layer build,
+    // never a second resolution of the same copper (contract 10 §6.1).
+    records: ctx.records,
     placements: ctx.proj.placements,
     traces: ctx.proj.traces,
     vias: ctx.proj.vias,
@@ -537,99 +626,161 @@ function viaTouchesLayer(via: PcbVia, layer: PcbCopperLayerId): boolean {
   return layerIdx >= lo && layerIdx <= hi;
 }
 
-function padTouchesCopperLayer(
-  pad: { drillDiameterMm?: number; layer?: string },
-  placement: PcbPlacedPart,
-  layer: PcbCopperLayerId,
-): boolean {
-  const drilled = (pad.drillDiameterMm ?? 0) > 0;
-  if (drilled) {
-    // THT pads appear on every copper layer.
-    return (
-      layer === "F.Cu" ||
-      layer === "B.Cu" ||
-      layer === "In1.Cu" ||
-      layer === "In2.Cu"
-    );
-  }
-  // SMD: choose side from placement layer + mirror, or from explicit pad.layer.
-  if (pad.layer && (pad.layer === "F.Cu" || pad.layer === "B.Cu")) {
-    return pad.layer === layer;
-  }
-  return placementSideLayer(placement) === layer;
+/**
+ * THE aperture of one copper record (contract 10 §6.2). The record's
+ * `rotationDeg` is the pad's COMPOSED world rotation with the mirror already
+ * conjugated into it (`placement ± pad`), and every S11 pad outline is
+ * symmetric about both of its local axes, so the mirror itself changes no
+ * aperture dimension — only that angle does.
+ *
+ * A multiple of 90° keeps the standard `C` / `R` / `O` / roundrect-macro
+ * aperture with the orthogonal width / height swap; any other angle becomes a
+ * rotated aperture macro. `custom` has no true outline in the render source
+ * and is not an S11 export input (§0), so it returns null and warns as before.
+ */
+function apertureFromRecord(
+  ctx: BuildContext,
+  record: PadCopperRecord,
+): ApertureShape | null {
+  const shape = ctx.padShapes.get(recordKey(record));
+  if (!shape) return null;
+  return apertureFromShape(shape, record.rotationDeg);
 }
 
-function padApertureShape(
-  pad: {
-    shape: string;
-    widthMm: number;
-    heightMm: number;
-    rotationDeg: number;
-    roundrectRatio?: number;
-  },
-  placement: PcbPlacedPart,
+/**
+ * The mask aperture of a `hole` free pad — an NPTH, so it owns no copper
+ * record (§2.3) while the drill still opens the mask on both faces. Its frame
+ * is the pad's own (a free pad is never mirrored and never placed).
+ */
+function freePadReliefShape(
+  ctx: BuildContext,
+  pad: PcbFreePad,
 ): ApertureShape | null {
-  const rot = effectivePadRotationDeg(placement, pad.rotationDeg);
-  const swap = isOrthogonalSwap(rot);
-  const w = swap ? pad.heightMm : pad.widthMm;
-  const h = swap ? pad.widthMm : pad.heightMm;
-  switch (pad.shape) {
+  const shape = ctx.padShapes.get(freePadItemKey(pad.id));
+  return shape ? apertureFromShape(shape, shape.rotationDeg) : null;
+}
+
+function apertureFromShape(
+  shape: PadCopperShape,
+  rotationDeg: number,
+): ApertureShape | null {
+  const angle = ((rotationDeg % 360) + 360) % 360;
+  const orthogonal = angle % 90 === 0;
+  const swap = orthogonal && (angle === 90 || angle === 270);
+  const w = swap ? shape.heightMm : shape.widthMm;
+  const h = swap ? shape.widthMm : shape.heightMm;
+  const rot = orthogonal ? {} : { rotationDeg: angle };
+  switch (shape.shape) {
+    // A `circle` pad is a disc of `widthMm` — the ONE interpretation (§7).
     case "circle":
-      return { kind: "circle", diameterMm: pad.widthMm };
-    case "rect":
-      return { kind: "rect", widthMm: w, heightMm: h };
+      return { kind: "circle", diameterMm: shape.widthMm };
     case "oval":
-      return { kind: "obround", widthMm: w, heightMm: h };
+      return { kind: "obround", widthMm: w, heightMm: h, ...rot };
     case "roundrect": {
-      const r = (pad.roundrectRatio ?? 0.25) * Math.min(w, h);
+      const r = roundrectRadiusMm(w, h, shape.roundrectRatio ?? 0.25);
       // Degrade to a plain rect when the corner radius rounds to zero —
       // otherwise the roundrect macro emits zero-diameter corner circles
       // that some parsers reject.
-      if (r < 1e-6) return { kind: "rect", widthMm: w, heightMm: h };
-      return { kind: "roundrect", widthMm: w, heightMm: h, radiusMm: r };
+      if (r < 1e-6) return { kind: "rect", widthMm: w, heightMm: h, ...rot };
+      return { kind: "roundrect", widthMm: w, heightMm: h, radiusMm: r, ...rot };
     }
+    // Trapezoid is a KiCad-imported pad shape the importer already degrades to
+    // its bounding rectangle at the source, which is what every other consumer
+    // (DRC, connectivity, the pour) sees too.
+    case "rect":
     case "trapezoid":
-      // Trapezoid is a KiCad-imported pad shape; approximate as the
-      // bounding rectangle so the pad still appears in copper. Slight
-      // copper overage is safer than a missing pad.
-      return { kind: "rect", widthMm: w, heightMm: h };
+      return { kind: "rect", widthMm: w, heightMm: h, ...rot };
     default:
       return null;
   }
 }
 
-function freePadApertureShape(pad: PcbFreePad): ApertureShape | null {
-  switch (pad.shape) {
-    case "circle":
-      return { kind: "circle", diameterMm: pad.widthMm };
-    case "rect":
-      return {
-        kind: "rect",
-        widthMm: pad.widthMm,
-        heightMm: pad.heightMm,
-      };
-    case "oval":
-      return {
-        kind: "obround",
-        widthMm: pad.widthMm,
-        heightMm: pad.heightMm,
-      };
-    case "roundrect": {
-      const r =
-        (pad.roundrectRatio ?? 0.25) * Math.min(pad.widthMm, pad.heightMm);
-      if (r < 1e-6) {
-        return { kind: "rect", widthMm: pad.widthMm, heightMm: pad.heightMm };
-      }
-      return {
-        kind: "roundrect",
-        widthMm: pad.widthMm,
-        heightMm: pad.heightMm,
-        radiusMm: r,
-      };
-    }
-    default:
-      return null;
+/** X2 aperture function of a pad record's copper (contract 10 §6.4). */
+function copperAperFunction(
+  ctx: BuildContext,
+  record: PadCopperRecord,
+): AperFunction {
+  if (record.anchor.kind === "freePad") {
+    const pad = ctx.freePadById.get(record.anchor.freePadId);
+    return pad?.padType === "smd" ? "SMDPad,CuDef" : "ComponentPad";
   }
+  if (record.drillMm > 0) {
+    // An unplated drill's copper is mechanical — a washer, not a lead pad.
+    return record.plated ? "ComponentPad" : "WasherPad";
+  }
+  return "SMDPad,CuDef";
+}
+
+function unsupportedShapeWarning(
+  ctx: BuildContext,
+  record: PadCopperRecord,
+): string {
+  const shape = ctx.padShapes.get(recordKey(record))?.shape ?? "unknown";
+  if (record.anchor.kind === "freePad") {
+    return `Free pad ${record.anchor.freePadId} shape '${shape}' not supported`;
+  }
+  const reference = ctx.referenceById.get(record.anchor.placementId) ?? "";
+  return `Pad ${reference}.${record.anchor.padNumber} shape '${shape}' not supported by exporter yet`;
+}
+
+/**
+ * Mask relief for a copper-less unplated pad (§6.4): the drilled void plus the
+ * mask expansion per side — a disc for a round hit, the routed stadium as an
+ * obround rotated to the slot axis. It comes from the DRILLED object because
+ * there is no copper record to inflate (Astra run 1 #8).
+ */
+/**
+ * The drill-derived relief of a `hole` free pad, when its drill is not already
+ * covered by the pad-shape opening: a routed slot always (the pad's declared
+ * size is a single hit's), or a round drill wider than the pad's narrow side.
+ * `null` when the pad-shape opening already covers the drill.
+ */
+function holeFreePadDrillRelief(
+  pad: PcbFreePad,
+  expansionMm: number,
+): ApertureShape | null {
+  if (pad.padType !== "hole") return null;
+  const drill = freePadDrill(pad);
+  if (!drill) return null;
+  const covered =
+    !drill.slot &&
+    drill.drillMm <= Math.min(pad.widthMm, pad.heightMm) + 1e-9;
+  if (covered) return null;
+  return drillReliefShape(
+    {
+      centerMm: pad.centerMm,
+      drillMm: drill.drillMm,
+      ...(drill.slot ? { slot: drill.slot } : {}),
+      plated: false,
+    },
+    expansionMm,
+  );
+}
+
+function drillReliefShape(
+  drill: FootprintPadDrill,
+  expansionMm: number,
+): ApertureShape {
+  const across = drill.drillMm + 2 * expansionMm;
+  if (!drill.slot) return { kind: "circle", diameterMm: across };
+  const dx = drill.slot.b.x - drill.slot.a.x;
+  const dy = drill.slot.b.y - drill.slot.a.y;
+  const along = Math.hypot(dx, dy) + across;
+  const angle = (((Math.atan2(dy, dx) * 180) / Math.PI) % 360 + 360) % 360;
+  if (angle % 90 === 0) {
+    const swap = angle === 90 || angle === 270;
+    return {
+      kind: "obround",
+      widthMm: swap ? across : along,
+      heightMm: swap ? along : across,
+    };
+  }
+  return {
+    kind: "obround",
+    widthMm: along,
+    heightMm: across,
+    rotationDeg: angle,
+  };
 }
 
 // =========================================================================
@@ -647,40 +798,72 @@ function emitMask(
   // overrides still win below); falls back to the typical 50 µm default.
   const expansionDefault = ctx.proj.board.solderMaskExpansionMm ?? 0.05;
 
-  for (const placement of ctx.proj.placements) {
-    const pads = placement.footprint.preview?.pads ?? [];
-    for (const pad of pads) {
-      if (!padTouchesCopperLayer(pad, placement, layer)) continue;
-      const aperShape = padApertureShape(pad, placement);
-      if (!aperShape) continue;
-      const expanded = inflateShape(aperShape, expansionDefault);
-      const code = apers.allocate(expanded, "SolderMask");
-      const center = projectLocal(placement, pad.centerMm);
-      out.push(`D${code}*`);
-      out.push(`${xyOperand(center.x, center.y)}D03*`);
-    }
+  // Footprint pads: the opening follows the RECORD's copper (contract §6.1),
+  // so a mirrored placement's explicit-layer SMD pad opens on the same face
+  // its copper flashed on — the old mask loop read `pad.layer` unflipped and
+  // opened the wrong side.
+  for (const record of ctx.records.pads) {
+    if (record.anchor.kind !== "pad") continue;
+    if (!record.resolvedLayers.includes(layer)) continue;
+    const aperShape = apertureFromRecord(ctx, record);
+    if (!aperShape) continue;
+    const code = apers.allocate(
+      inflateShape(aperShape, expansionDefault),
+      "SolderMask",
+    );
+    out.push(`D${code}*`);
+    out.push(`${xyOperand(record.center.x, record.center.y)}D03*`);
+  }
+  // A copper-LESS unplated footprint pad has no record to inflate, but its
+  // drill still wants relief on BOTH faces (§6.4) — the `hole` free-pad rule.
+  for (const entry of ctx.maskOnlyDrills) {
+    const code = apers.allocate(
+      drillReliefShape(entry.drill, expansionDefault),
+      "SolderMask",
+    );
+    out.push(`D${code}*`);
+    out.push(
+      `${xyOperand(entry.drill.centerMm.x, entry.drill.centerMm.y)}D03*`,
+    );
   }
   // A mask opening follows the copper (the one derivation) — a `conn` / `smd`
   // pad opens the mask on its own layer only. The one exception is an NPTH
-  // `hole` pad: it carries no copper, but the drill still wants its mask
-  // relief on BOTH faces (KiCad flashes an NPTH pad's mask aperture the same
-  // way), so the mask edge is not torn by the drill.
+  // `hole` pad: it carries no copper (and therefore no record), but the drill
+  // still wants its mask relief on BOTH faces (KiCad flashes an NPTH pad's
+  // mask aperture the same way), so the mask edge is not torn by the drill.
   const copperStackup = new Set(
     copperLayersForCount(ctx.proj.board.layerCount),
   );
+  const recordByKey = new Map(
+    ctx.records.pads.map((record) => [recordKey(record), record] as const),
+  );
   for (const pad of ctx.proj.freePads) {
+    const record = recordByKey.get(freePadItemKey(pad.id));
     const opens =
       pad.padType === "hole"
         ? layer === "F.Cu" || layer === "B.Cu"
-        : freePadCopperLayers(pad, copperStackup).layers.includes(layer);
+        : (record?.resolvedLayers ??
+            freePadCopperLayers(pad, copperStackup).layers).includes(layer);
     if (!opens) continue;
-    const aperShape = freePadApertureShape(pad);
+    const aperShape = record
+      ? apertureFromRecord(ctx, record)
+      : freePadReliefShape(ctx, pad);
     if (!aperShape) continue;
     const expansion = pad.solderMaskExpansionMm ?? expansionDefault;
     const expanded = inflateShape(aperShape, expansion);
     const code = apers.allocate(expanded, "SolderMask");
     out.push(`D${code}*`);
     out.push(`${xyOperand(pad.centerMm.x, pad.centerMm.y)}D03*`);
+    // A `hole` free pad's relief must also cover its DRILL (§6.4): a slot, or
+    // a drill larger than the pad's declared size, would otherwise leave mask
+    // over the void for the router to tear (Astra run 2b #3). The pad-shape
+    // opening above stays — a user may have declared a larger clearance.
+    const drillRelief = holeFreePadDrillRelief(pad, expansion);
+    if (drillRelief) {
+      const reliefCode = apers.allocate(drillRelief, "SolderMask");
+      out.push(`D${reliefCode}*`);
+      out.push(`${xyOperand(pad.centerMm.x, pad.centerMm.y)}D03*`);
+    }
   }
   // Vias on this side: only when not tented. v0 defaults to tented vias
   // (no mask opening). Skip unless explicitly untented.
@@ -696,6 +879,15 @@ function emitMask(
   }
 }
 
+/**
+ * Mask / paste expansion of `deltaMm` PER SIDE (contract 10 §6.2): `circle`
+ * and `oval` grow both dimensions by `2d` (a Euclidean offset); `roundrect`
+ * grows both dimensions by `2d` AND its corner radius by `d` (also Euclidean);
+ * `rect` grows both dimensions by `2d` and keeps SHARP corners — KiCad's
+ * convention for rectangular pads, whose corners therefore overshoot a true
+ * Euclidean offset by `d·(√2 − 1)`, deliberately. A rotated macro inflates the
+ * same dimensions and keeps its angle.
+ */
 function inflateShape(shape: ApertureShape, deltaMm: number): ApertureShape {
   const d = deltaMm * 2;
   switch (shape.kind) {
@@ -706,12 +898,18 @@ function inflateShape(shape: ApertureShape, deltaMm: number): ApertureShape {
         kind: "rect",
         widthMm: shape.widthMm + d,
         heightMm: shape.heightMm + d,
+        ...(shape.rotationDeg === undefined
+          ? {}
+          : { rotationDeg: shape.rotationDeg }),
       };
     case "obround":
       return {
         kind: "obround",
         widthMm: shape.widthMm + d,
         heightMm: shape.heightMm + d,
+        ...(shape.rotationDeg === undefined
+          ? {}
+          : { rotationDeg: shape.rotationDeg }),
       };
     case "roundrect":
       return {
@@ -719,6 +917,9 @@ function inflateShape(shape: ApertureShape, deltaMm: number): ApertureShape {
         widthMm: shape.widthMm + d,
         heightMm: shape.heightMm + d,
         radiusMm: shape.radiusMm + deltaMm,
+        ...(shape.rotationDeg === undefined
+          ? {}
+          : { rotationDeg: shape.rotationDeg }),
       };
   }
 }
@@ -737,32 +938,25 @@ function emitPaste(
   // Solder-paste stencil apertures: the board paste expansion (usually 0, or a
   // small NEGATIVE inset that shrinks the stencil opening) is applied per pad.
   const pasteExpansion = ctx.proj.board.solderPasteExpansionMm ?? 0;
-  // Paste applies to SMD pads only — THT pads get no paste aperture.
-  for (const placement of ctx.proj.placements) {
-    const pads = placement.footprint.preview?.pads ?? [];
-    for (const pad of pads) {
-      if ((pad.drillDiameterMm ?? 0) > 0) continue;
-      if (!padTouchesCopperLayer(pad, placement, layer)) continue;
-      const base = padApertureShape(pad, placement);
-      if (!base) continue;
-      const aperShape = expandPaste(base, pasteExpansion);
-      if (!aperShape) continue;
-      const code = apers.allocate(aperShape, "SolderPaste");
-      const center = projectLocal(placement, pad.centerMm);
-      out.push(`D${code}*`);
-      out.push(`${xyOperand(center.x, center.y)}D03*`);
+  // Paste applies to SMD records only (contract §6.4): a record carrying a
+  // drill — or an unplated one — is never stencilled, whatever else it is.
+  for (const record of ctx.records.pads) {
+    if (record.drillMm > 0 || !record.plated) continue;
+    if (!record.resolvedLayers.includes(layer)) continue;
+    if (
+      record.anchor.kind === "freePad" &&
+      ctx.freePadById.get(record.anchor.freePadId)?.padType !== "smd"
+    ) {
+      // A free pad declares its own kind; only `smd` is a stencilled pad.
+      continue;
     }
-  }
-  for (const pad of ctx.proj.freePads) {
-    if (pad.padType !== "smd") continue;
-    if (pad.layer !== layer) continue;
-    const base = freePadApertureShape(pad);
+    const base = apertureFromRecord(ctx, record);
     if (!base) continue;
     const aperShape = expandPaste(base, pasteExpansion);
     if (!aperShape) continue;
     const code = apers.allocate(aperShape, "SolderPaste");
     out.push(`D${code}*`);
-    out.push(`${xyOperand(pad.centerMm.x, pad.centerMm.y)}D03*`);
+    out.push(`${xyOperand(record.center.x, record.center.y)}D03*`);
   }
 }
 
@@ -951,15 +1145,7 @@ function resolveNetName(
   if (fallbackName) return fallbackName;
   return null;
 }
-
-function resolveNetNameForPad(
-  ctx: BuildContext,
-  placement: PcbPlacedPart,
-  padNumber: string,
-): string | null {
-  // The projection's own pad→net map. Null when the pad carries no net (a
-  // PCB-only design, or a pad the schematic never correlated).
-  const netId = ctx.padNetIds.get(`${placement.id}|${padNumber}`);
-  if (!netId) return null;
-  return ctx.proj.netNames[netId] ?? null;
-}
+// `resolveNetNameForPad` is gone: a footprint pad's net now comes off its
+// copper record, whose `netId` IS `padNetIds.get(`${placementId}|${number}`)`
+// (`footprintPadRecords`), so `resolveNetName(ctx, record.netId, null)` returns
+// exactly what the removed helper did — one lookup instead of two.

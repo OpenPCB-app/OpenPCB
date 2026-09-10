@@ -1,4 +1,4 @@
-import type { PcbFabricatorId } from "../../sdks/designer";
+import type { PcbFabricatorId, PcbViaType } from "../../sdks/designer";
 import { below } from "../pcb-geometry/tolerance";
 
 /**
@@ -16,8 +16,31 @@ import { below } from "../pcb-geometry/tolerance";
 export interface PcbFabPreset {
   id: Exclude<PcbFabricatorId, "custom">;
   name: string;
-  /** Minimum mechanical drill (mm) — applies to vias, PTH and NPTH holes. */
+  /**
+   * Minimum ROUND drill (mm) for a via or a PLATED component hole. NPTH holes
+   * have their own, larger floor (`minNpthDrillMm`) and slots have theirs
+   * (contract 10 §4) — this row never applied to them, whatever it used to say.
+   */
   minDrillMm: number;
+  /**
+   * Minimum ROUND drill (mm) for a NON-PLATED hole.
+   * JLCPCB "Minimum NPTH Hole Size: 0.50mm"; PCBWay NPTH "0.15-6.0mm"
+   * (`pcbway_std` keeps its 0.2 mm mechanical floor). Fetched 2026-09-10.
+   */
+  minNpthDrillMm: number;
+  /**
+   * Minimum routed-SLOT width (mm) for a PLATED slot.
+   * JLCPCB "Minimum Plated Slot Width 2-layer 0.5mm / Multi-layer 0.35mm";
+   * PCBWay "Plated slots ≥0.5mm". Fetched 2026-09-10.
+   */
+  minPlatedSlotWidthMm: number;
+  /**
+   * Minimum routed-SLOT width (mm) for a NON-PLATED slot.
+   * JLCPCB "Minimum Non-Plated Slot Width 1.0mm"; PCBWay "Non-plated slots
+   * ≥0.8mm". Fetched 2026-09-10. (Numerically today's `minSlotWidthMm`, which
+   * the outline milling advisory keeps for its own, different purpose.)
+   */
+  minNpthSlotWidthMm: number;
   /** Minimum VIA outer (pad) diameter (mm). */
   minPadMm: number;
   /**
@@ -28,11 +51,32 @@ export interface PcbFabPreset {
   minAnnularRingMm: number;
   /** Minimum COMPONENT-HOLE (PTH) annular ring per side (mm). */
   pthAnnularRingMm: number;
+  /**
+   * Minimum annular ring per side (mm) of a NON-PLATED hole that carries a
+   * copper ring. JLCPCB "NPTH Pad Annular Ring ≧0.45mm"; PCBWay states none, so
+   * the field is ABSENT there and no check runs. Fetched 2026-09-10.
+   */
+  npthAnnularRingMm?: number;
   /** Minimum trace width and clearance (mm). */
   minTraceWidthMm: number;
   minClearanceMm: number;
-  /** Maximum aspect ratio (board_thickness / drill_diameter) for through vias. */
+  /**
+   * Maximum aspect ratio (board_thickness / drill_diameter) for THROUGH vias.
+   * JLCPCB blog "Do not exceed 10:1 when plating through-holes"; PCBWay
+   * "Thickness to diameter ratio ≤8" standard, 10 for high difficulty. Fetched
+   * 2026-09-10. There is no per-layer thickness model and no preset states a
+   * limit for blind / buried / micro vias, so they get NO aspect verdict (§5.2).
+   */
   maxAspectRatio: number;
+  /**
+   * Via types the fabricator will build. JLCPCB: "Not supported. Currently we
+   * don't support Blind/Buried Vias, only make through holes."; PCBWay lists
+   * blind / buried only under separately quoted HDI rows, which are not
+   * modelled. Fetched 2026-09-10. Every preset is `{through}` — and
+   * `VIA_TYPE_UNSUPPORTED` fires on `custom` too, because the limit is
+   * OpenPCB's own single-plated-drill-file export (§5.1).
+   */
+  viaTypes: ReadonlySet<PcbViaType>;
   /** Minimum hole-edge-to-hole-edge spacing between VIA drills (mm). */
   holeToHoleViaMm: number;
   /** Minimum hole-edge-to-hole-edge spacing involving PTH/NPTH drills (mm). */
@@ -56,12 +100,17 @@ export const FAB_PRESETS: Record<PcbFabPreset["id"], PcbFabPreset> = {
     id: "jlcpcb_2l",
     name: "JLCPCB 2-layer",
     minDrillMm: 0.15,
+    minNpthDrillMm: 0.5,
+    minPlatedSlotWidthMm: 0.5,
+    minNpthSlotWidthMm: 1.0,
     minPadMm: 0.25,
     minAnnularRingMm: 0.05,
     pthAnnularRingMm: 0.18,
+    npthAnnularRingMm: 0.45,
     minTraceWidthMm: 0.1,
     minClearanceMm: 0.1,
     maxAspectRatio: 10,
+    viaTypes: new Set<PcbViaType>(["through"]),
     holeToHoleViaMm: 0.2,
     holeToHolePthMm: 0.45,
     boardEdgeRoutedMm: 0.2,
@@ -74,12 +123,17 @@ export const FAB_PRESETS: Record<PcbFabPreset["id"], PcbFabPreset> = {
     id: "jlcpcb_4l",
     name: "JLCPCB 4-layer",
     minDrillMm: 0.15,
+    minNpthDrillMm: 0.5,
+    minPlatedSlotWidthMm: 0.35,
+    minNpthSlotWidthMm: 1.0,
     minPadMm: 0.25,
     minAnnularRingMm: 0.05,
     pthAnnularRingMm: 0.15,
+    npthAnnularRingMm: 0.45,
     minTraceWidthMm: 0.0889,
     minClearanceMm: 0.0889,
     maxAspectRatio: 10,
+    viaTypes: new Set<PcbViaType>(["through"]),
     holeToHoleViaMm: 0.2,
     holeToHolePthMm: 0.45,
     boardEdgeRoutedMm: 0.2,
@@ -93,12 +147,16 @@ export const FAB_PRESETS: Record<PcbFabPreset["id"], PcbFabPreset> = {
     id: "pcbway_std",
     name: "PCBWay Standard",
     minDrillMm: 0.2,
+    minNpthDrillMm: 0.2,
+    minPlatedSlotWidthMm: 0.5,
+    minNpthSlotWidthMm: 1.0,
     minPadMm: 0.5,
     minAnnularRingMm: 0.15,
     pthAnnularRingMm: 0.15,
     minTraceWidthMm: 0.127,
     minClearanceMm: 0.127,
     maxAspectRatio: 8,
+    viaTypes: new Set<PcbViaType>(["through"]),
     holeToHoleViaMm: 0.25,
     holeToHolePthMm: 0.45,
     boardEdgeRoutedMm: 0.3,
@@ -111,12 +169,16 @@ export const FAB_PRESETS: Record<PcbFabPreset["id"], PcbFabPreset> = {
     id: "pcbway_advanced",
     name: "PCBWay Advanced",
     minDrillMm: 0.15,
+    minNpthDrillMm: 0.15,
+    minPlatedSlotWidthMm: 0.5,
+    minNpthSlotWidthMm: 0.8,
     minPadMm: 0.45,
     minAnnularRingMm: 0.1,
     pthAnnularRingMm: 0.15,
     minTraceWidthMm: 0.0889,
     minClearanceMm: 0.0889,
     maxAspectRatio: 10,
+    viaTypes: new Set<PcbViaType>(["through"]),
     holeToHoleViaMm: 0.2,
     holeToHolePthMm: 0.45,
     boardEdgeRoutedMm: 0.2,
@@ -128,11 +190,16 @@ export const FAB_PRESETS: Record<PcbFabPreset["id"], PcbFabPreset> = {
 };
 
 export interface FabRuleViolation {
+  /** The preset FIELD that was compared — the caller maps it to a rule code. */
   rule:
     | "minDrillMm"
+    | "minNpthDrillMm"
+    | "minPlatedSlotWidthMm"
+    | "minNpthSlotWidthMm"
     | "minPadMm"
     | "minAnnularRingMm"
     | "pthAnnularRingMm"
+    | "npthAnnularRingMm"
     | "minTraceWidthMm"
     | "minClearanceMm";
   fabValue: number;
@@ -201,34 +268,67 @@ export function validateTraceAgainstFab(
 }
 
 /**
- * Validate a plated component hole (TH footprint pad / free `std` pad)
- * against a fab preset: drill floor + PTH annular ring per side. NPTH holes
- * only get the drill floor (pass `padOdMm: undefined`).
+ * Validate a component hole (footprint pad / free pad / free hole) against a
+ * fab preset. The row depends on the hole KIND and the TOOL (contract 10 §4):
+ *
+ * | Hole | Round | Slot |
+ * |---|---|---|
+ * | pth (plated) | `minDrillMm` | `minPlatedSlotWidthMm` |
+ * | npth | `minNpthDrillMm` | `minNpthSlotWidthMm` |
+ *
+ * plus the annular ring per side when the hole carries one: `pthAnnularRingMm`
+ * for a plated hole, `npthAnnularRingMm` for a non-plated ring — the latter
+ * only when the preset states a value at all. Vias are validated by
+ * `validateViaAgainstFab` with the via-specific rows instead.
  */
 export function validateHoleAgainstFab(
-  hole: { drillMm: number; padOdMm?: number },
+  hole: {
+    kind: "pth" | "npth";
+    /** Tool diameter — the slot WIDTH when `slot` is true. */
+    drillMm: number;
+    slot: boolean;
+    annularRingMm?: number;
+  },
   fabId: PcbFabricatorId,
 ): FabRuleViolation[] {
   if (fabId === "custom") return [];
   const preset = FAB_PRESETS[fabId];
   if (!preset) return [];
   const violations: FabRuleViolation[] = [];
-  if (below(hole.drillMm, preset.minDrillMm)) {
+  const plated = hole.kind === "pth";
+  const drillRule: FabRuleViolation["rule"] = hole.slot
+    ? plated
+      ? "minPlatedSlotWidthMm"
+      : "minNpthSlotWidthMm"
+    : plated
+      ? "minDrillMm"
+      : "minNpthDrillMm";
+  const drillLimit = preset[drillRule];
+  if (below(hole.drillMm, drillLimit)) {
+    const subject = hole.slot
+      ? `${plated ? "Plated" : "Non-plated"} slot width`
+      : `${plated ? "Plated" : "Non-plated"} drill`;
     violations.push({
-      rule: "minDrillMm",
-      fabValue: preset.minDrillMm,
+      rule: drillRule,
+      fabValue: drillLimit,
       actualValue: hole.drillMm,
-      message: `Drill ${hole.drillMm.toFixed(3)} mm < ${preset.name} min ${preset.minDrillMm.toFixed(3)} mm`,
+      message: `${subject} ${hole.drillMm.toFixed(3)} mm < ${preset.name} ${drillRule} ${drillLimit.toFixed(3)} mm`,
     });
   }
-  if (hole.padOdMm !== undefined) {
-    const ar = (hole.padOdMm - hole.drillMm) / 2;
-    if (below(ar, preset.pthAnnularRingMm)) {
+  if (hole.annularRingMm !== undefined) {
+    const ringRule: FabRuleViolation["rule"] = plated
+      ? "pthAnnularRingMm"
+      : "npthAnnularRingMm";
+    const ringLimit = plated
+      ? preset.pthAnnularRingMm
+      : preset.npthAnnularRingMm;
+    // PCBWay states no NPTH ring minimum — absent means no check (§4).
+    if (ringLimit !== undefined && below(hole.annularRingMm, ringLimit)) {
       violations.push({
-        rule: "pthAnnularRingMm",
-        fabValue: preset.pthAnnularRingMm,
-        actualValue: ar,
-        message: `PTH annular ring ${ar.toFixed(3)} mm < ${preset.name} min ${preset.pthAnnularRingMm.toFixed(3)} mm`,
+        rule: ringRule,
+        fabValue: ringLimit,
+        actualValue: hole.annularRingMm,
+        message: `${plated ? "PTH" : "NPTH"} annular ring ${hole.annularRingMm.toFixed(3)} mm < ${preset.name} ${ringRule} ${ringLimit.toFixed(3)} mm`,
       });
     }
   }

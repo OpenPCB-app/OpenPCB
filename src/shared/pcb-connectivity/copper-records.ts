@@ -20,8 +20,14 @@ import {
   freePadCopperLayers,
   resolvePadCopperLayers,
 } from "../rendering/pad-copper-layers";
-import { freePadDrill } from "../rendering/pcb/pcb-drills";
 import {
+  footprintPadDrill,
+  freePadDrill,
+  padDrillFields,
+} from "../rendering/pcb/pcb-drills";
+import { copperInsideDrill } from "../pcb-geometry/pad-annular";
+import {
+  padCopperShape,
   padWorldPositionMm,
   placementMirrorX,
   placementPads,
@@ -88,6 +94,14 @@ export interface PadCopperRecord {
   heightMm: number;
   /** Drill diameter (mm); 0 = no drill. */
   drillMm: number;
+  /**
+   * The drill wall is plated (manufacturability contract 10 §2). An UNPLATED
+   * pad's copper is mechanical: it keeps whatever net `padNets` binds — so DRC
+   * clearance and the pour still see it as that net's copper — but the
+   * connectivity kernel gives it one NULL-net item per copper layer, because
+   * two rings of one unplated hole are never one node (§2.4).
+   */
+  plated: boolean;
 }
 
 export interface ViaCopperRecord {
@@ -138,14 +152,19 @@ function inflate(bounds: RingBounds, pad: number): RingBounds {
   };
 }
 
-/** Exact disc for a true circle; nothing for any other shape (see `disc`). */
+/**
+ * Exact disc for a circle; nothing for any other shape (see `disc`). A `circle`
+ * pad is a disc of `widthMm` whatever `heightMm` says — the ONE interpretation
+ * (contract 10 §7). It used to require `widthMm === heightMm`, which left an
+ * unequal circle judged as an ellipse RING by DRC while the Gerber flashed
+ * `widthMm` (B6-1's second half).
+ */
 function discOf(
   shape: string,
   widthMm: number,
-  heightMm: number,
   center: PcbPointMm,
 ): { disc?: { center: PcbPointMm; radiusMm: number } } {
-  if (shape !== "circle" || widthMm !== heightMm || widthMm <= 0) return {};
+  if (shape !== "circle" || !(widthMm > 0)) return {};
   return { disc: { center, radiusMm: widthMm / 2 } };
 }
 
@@ -160,6 +179,26 @@ function footprintPadRecords(
       const occurrence = occurrenceByNumber.get(pad.number) ?? 0;
       occurrenceByNumber.set(pad.number, occurrence + 1);
       const drill = pad.drillDiameterMm ?? 0;
+      const { plated } = padDrillFields(pad);
+      // A copper-LESS non-plated pad (contract 10 §2.3): its copper shape lies
+      // entirely inside the drilled void, so there is no copper to record — no
+      // flash, no net, no ratsnest endpoint. The HOLE still exists; it is
+      // derived from the drilled object, never from this record (§1.3).
+      if (!plated) {
+        const holeDrill = footprintPadDrill(pad, placement);
+        if (
+          holeDrill &&
+          copperInsideDrill(padCopperShape(placement, pad), {
+            centerMm: holeDrill.centerMm,
+            radiusMm: holeDrill.drillMm / 2,
+            ...(holeDrill.slot
+              ? { slot: { a: holeDrill.slot.a, b: holeDrill.slot.b } }
+              : {}),
+          })
+        ) {
+          continue;
+        }
+      }
       const resolved = resolvePadCopperLayers(pad, placement, valid);
       const declaredLayerInvalid =
         drill <= 0 &&
@@ -184,13 +223,14 @@ function footprintPadRecords(
           ? placement.rotationDeg - pad.rotationDeg
           : placement.rotationDeg + pad.rotationDeg,
         mirrored: placementMirrorX(placement),
-        ...discOf(pad.shape, pad.widthMm, pad.heightMm, center),
+        ...discOf(pad.shape, pad.widthMm, center),
         exactShape: pad.shape !== "custom" && pad.shape !== "trapezoid",
         bounds: ringBounds(ring),
         center,
         widthMm: pad.widthMm,
         heightMm: pad.heightMm,
         drillMm: drill,
+        plated,
       });
     }
   }
@@ -211,6 +251,9 @@ function freePadRecords(
     );
     if (resolvedLayers.length === 0) continue;
     const ring = freePadOutlineWorldMm(freePad);
+    // The ONE free-pad drill derivation (`freePadDrill`): a non-positive or
+    // absent drill is no drill, whatever the pad type declares.
+    const drill = freePadDrill(freePad);
     out.push({
       anchor: { kind: "freePad", freePadId: freePad.id },
       occurrence: 0,
@@ -221,21 +264,19 @@ function freePadRecords(
       // Free pads carry no placement transform — the ring is already world.
       rotationDeg: freePad.rotationDeg,
       mirrored: false,
-      ...discOf(
-        freePad.shape,
-        freePad.widthMm,
-        freePad.heightMm,
-        freePad.centerMm,
-      ),
+      ...discOf(freePad.shape, freePad.widthMm, freePad.centerMm),
       // Free pads have no `custom` / `trapezoid` shape (SDK `PcbFreePadShape`).
       exactShape: true,
       bounds: ringBounds(ring),
       center: freePad.centerMm,
       widthMm: freePad.widthMm,
       heightMm: freePad.heightMm,
-      // The ONE drill derivation (`freePadDrill`): a non-positive or absent
-      // drill is no drill, whatever the pad type declares.
-      drillMm: freePadDrill(freePad)?.drillMm ?? 0,
+      drillMm: drill?.drillMm ?? 0,
+      // A free pad has no unplated-WITH-copper case except an `smd` / `conn`
+      // pad that persists a drill: that hit reaches the fab non-plated
+      // (contract 06 §2), so its copper is mechanical too. An undrilled pad —
+      // and a `hole`, which never gets here — is plated by definition.
+      plated: !(drill && !drill.plated),
     });
   }
   return out;

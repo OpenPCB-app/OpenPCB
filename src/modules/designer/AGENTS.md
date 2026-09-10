@@ -116,6 +116,21 @@ And a command field with no parser in `routes.ts` is silently dropped over HTTP.
   schema**: a new rule has no home on `PcbDesignRules` / `PcbNetClass` until you add one, wire the
   corresponding command field, and add a dialog section. `DrcContext` carries traces, pads, vias
   and holes only — pours and zones are read from the projection inside the checks that need them.
+- **Holes come from the drilled objects, never from the copper records (S11,
+  `docs/pcb-hardening/10-manufacturability-contract.md`).** `footprintPadDrill(pad, placement)` /
+  `freePadDrill(pad)` / `drillSlotCenterline` (`src/shared/rendering/pcb/pcb-drills.ts`) are the ONE
+  derivation per object — position (drill offset applied), tool (the slot width for a slot), plating —
+  read by DRC, the live gate, route obstacles, the pour's NPTH halo, Excellon, the snapshot and
+  `collectDrills`. A footprint pad's `plated?` / `drillSlotMm?` / `drillOffsetMm?` are read ONLY through
+  `padDrillFields` (the pinned `@openpcb/rendering-core` does not declare them yet; absent = plated,
+  and an undrilled pad is always plated). The annular ring is `pad-annular.ts`'s exact signed-distance
+  kernel (`DrcHole.annularRingMm`; breakout `≤ GEOM_EPS_MM` is judged before any minimum); a
+  `circle` pad is a disc of `widthMm` everywhere. An unplated pad's copper ring is mechanical:
+  per-layer null-net kernel items (a net bound to it = permanent airwire + `NPTH_PAD_NET`), no pour
+  membership. `VIA_TYPE_UNSUPPORTED` fires for every non-through via on every fabricator (the export
+  writes one through-drill file and REFUSES such boards with a 422); `VIA_ASPECT_RATIO` is
+  `boardThicknessMm / drillMm` for through vias only. Fab rows in `fab-presets.ts` are sourced with
+  fetch dates — never add a number without its source.
 - **Candidate discovery is indexed; the exhaustive enumeration is the oracle (S9,
   `docs/pcb-hardening/08-broad-phase-contract.md`).** `buildDrcItems` builds a per-kind uniform
   grid (`broad-phase.ts`: `near` / `nearPolyline`, trace entries filed per sub-segment) and a

@@ -3,8 +3,11 @@
 // Mismatches surface via warnings in net-pad-correlation, never silently dropped.
 
 import type { FootprintRenderSourcePad } from "../rendering/types";
-import type { PcbPlacedPart, PcbPointMm } from "../../sdks/designer";
+import type { PcbFreePad, PcbPlacedPart, PcbPointMm } from "../../sdks/designer";
 import { placementMirrorX as sdkPlacementMirrorX } from "../../sdks/designer/pcb-helpers";
+// Type-only: `pad-annular.ts` imports `transformPadCenterMm` from here, so a
+// value import would close a runtime cycle.
+import type { PadCopperShape } from "./pad-annular";
 import { normalizeRotationDeg } from "./rotation";
 
 export function transformPadCenterMm(
@@ -64,6 +67,51 @@ export function placementPads(
   placement: PcbPlacedPart,
 ): readonly FootprintRenderSourcePad[] {
   return placement.footprint.preview?.pads ?? [];
+}
+
+/**
+ * THE one world frame of a footprint pad's copper (manufacturability contract
+ * 10 §3): the same centre, composed rotation and mirror `footprintPadRecords`
+ * stamps on the copper record. The copper record and the annular ring MUST read
+ * it from here, or the drill and the copper are judged in two different frames.
+ *
+ * `M·R(φ) = R(−φ)·M` is why a mirrored placement CONJUGATES the pad's own
+ * rotation instead of negating the sum.
+ */
+export function padCopperShape(
+  placement: PcbPlacedPart,
+  pad: FootprintRenderSourcePad,
+): PadCopperShape {
+  const mirrored = placementMirrorX(placement);
+  return {
+    shape: pad.shape,
+    widthMm: pad.widthMm,
+    heightMm: pad.heightMm,
+    ...(pad.roundrectRatio !== undefined
+      ? { roundrectRatio: pad.roundrectRatio }
+      : {}),
+    centerMm: padWorldPositionMm(placement, pad),
+    rotationDeg: mirrored
+      ? placement.rotationDeg - pad.rotationDeg
+      : placement.rotationDeg + pad.rotationDeg,
+    mirrored,
+  };
+}
+
+/** The same frame for a free pad: its ring is already world, never mirrored. */
+export function freePadCopperShape(freePad: PcbFreePad): PadCopperShape {
+  return {
+    shape: freePad.shape,
+    widthMm: freePad.widthMm,
+    heightMm: freePad.heightMm,
+    ...(freePad.roundrectRatio !== undefined &&
+    freePad.roundrectRatio !== null
+      ? { roundrectRatio: freePad.roundrectRatio }
+      : {}),
+    centerMm: freePad.centerMm,
+    rotationDeg: freePad.rotationDeg,
+    mirrored: false,
+  };
 }
 
 /**

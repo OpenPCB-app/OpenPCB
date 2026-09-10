@@ -55,6 +55,7 @@ export const EMIT_SITE_BY_CODE: Record<DrcRuleCode, { checks: readonly string[] 
   FAB_ANNULAR_RING: { checks: ["manufacturability"] },
   FAB_PAD: { checks: ["manufacturability"] },
   VIA_ASPECT_RATIO: { checks: ["manufacturability"] },
+  VIA_TYPE_UNSUPPORTED: { checks: ["manufacturability"] },
   OUTLINE_INTERNAL_RADIUS: { checks: ["manufacturability"] },
   OUTLINE_SLOT_WIDTH: { checks: ["manufacturability"] },
   // connectivity / pours
@@ -76,6 +77,7 @@ export const EMIT_SITE_BY_CODE: Record<DrcRuleCode, { checks: readonly string[] 
   DIFF_PAIR_UNCOUPLED_LENGTH: { checks: ["signal-integrity"] },
   // structural / rule validity
   PLACED_PART_MISSING_FOOTPRINT: { checks: ["structural"] },
+  NPTH_PAD_NET: { checks: ["structural"] },
   DRC_RULE_INVALID: { checks: ["rules"] },
   DRC_RULE_INEFFECTIVE: { checks: ["rules"] },
 };

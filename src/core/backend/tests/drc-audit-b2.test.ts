@@ -130,8 +130,9 @@ describe("audit B2 — manufacturability / fab presets", () => {
     expect(codes(pthReport)).toContain("FAB_ANNULAR_RING");
   });
 
-  // Fix: P5/A6 slot-aware DrcHole (template) + P2 follow-through (B2-5 proper).
-  test.todo("B2-5: slotted drills use slot geometry, not a round-hole model", () => {
+  // Fixed in S11: the annular ring is measured from the SLOT centreline, and a
+  // footprint pad carries its own slot (contract 10 §1.2, §3).
+  test("B2-5: slotted drills use slot geometry, not a round-hole model", () => {
     // Free std pad 2.0×1.0 with a 1.8×0.5 slot: true slot-end ring is
     // (2.0 − 1.8)/2 = 0.1 < 0.2 minimum. Round model sees (1.0 − 0.5)/2 = 0.25.
     const report = runDrc(
@@ -149,56 +150,174 @@ describe("audit B2 — manufacturability / fab presets", () => {
       }),
     );
     expect(codes(report)).toContain("ANNULAR_RING_MIN");
-  });
 
-  // Fix: unassigned (needs true trapezoid/custom pad outlines in the model —
-  // record in P9 overlays work). padOdMm = min(w,h) is a bbox for these.
-  test.todo("B2-6: trapezoid/custom pad annular uses true copper, not bbox", () => {
-    const report = runDrc(
+    // The same defect on a FOOTPRINT pad, which carried no slot at all before
+    // S11: `drillSlotMm` is KiCad's `(drill oval W H)` in the pad's local axes.
+    const footprint = runDrc(
       projection({
         placements: [
           placement("U1", {
             pads: [
-              // Trapezoid whose narrow flank leaves < 0.2 ring around a 1.7
-              // drill; bbox model sees (2.0 − 1.7)/2 = 0.15 < 0.2 anyway, so
-              // pick bbox-passing dims: bbox 2.2 → 0.25 ring, true ring less.
-              pad("1", { x: 0, y: 0 }, 2.2, 2.2, {
-                shape: "trapezoid",
-                drillDiameterMm: 1.7,
+              pad("1", { x: 0, y: 0 }, 2.0, 1.0, {
+                shape: "oval",
+                drillDiameterMm: 0.5,
+                drillSlotMm: { widthMm: 1.8, heightMm: 0.5 },
               }),
             ],
           }),
         ],
       }),
     );
-    expect(codes(report)).toContain("ANNULAR_RING_MIN");
+    expect(codes(footprint)).toContain("ANNULAR_RING_MIN");
+    // Without the slot the very same pad passes: the round model measures
+    // (1.0 − 0.5)/2 = 0.25 ≥ 0.2 and sees no defect.
+    const round = runDrc(
+      projection({
+        placements: [
+          placement("U1", {
+            pads: [
+              pad("1", { x: 0, y: 0 }, 2.0, 1.0, {
+                shape: "oval",
+                drillDiameterMm: 0.5,
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(codes(round)).not.toContain("ANNULAR_RING_MIN");
   });
 
-  // Fix: P2 (per-via-type aspect/support model) + P8 (profile fields).
-  test.todo("B2-7: blind via on a fab without blind-via support is flagged", () => {
+  // Fixed in S11: the ring is the exact copper width around the drill wall, not
+  // `(min(w, h) − drill) / 2` (contract 10 §3.1–§3.2).
+  // NOTE: `trapezoid` / `custom` outlines are still rectangles in every
+  // consumer — the importer degrades them at the source and S12 owns their
+  // fidelity (contract 10 §0), so this case uses the shapes S11 models exactly.
+  test("B2-6: annular ring is the true copper width around the drill, not a bounding box", () => {
+    // Oval 2.6 × 1.4 with a 2.3 × 0.9 slot. Bounding box: (1.4 − 0.9)/2 = 0.25,
+    // which passes the 0.2 minimum. True ring at a slot END: the copper's own
+    // cap centre is at ±0.6, the slot end at ±0.7, so the signed distance there
+    // is 0.7 − 0.1 = 0.6 and the ring is 0.6 − 0.45 = 0.15 < 0.2.
+    const slot = runDrc(
+      projection({
+        placements: [
+          placement("U1", {
+            pads: [
+              pad("1", { x: 0, y: 0 }, 2.6, 1.4, {
+                shape: "oval",
+                drillDiameterMm: 0.9,
+                drillSlotMm: { widthMm: 2.3, heightMm: 0.9 },
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(codes(slot)).toContain("ANNULAR_RING_MIN");
+
+    // An OFF-CENTRE drill: circle 2.0 with a 1.0 drill offset 0.4 mm. A centred
+    // model reads 0.5 and passes; the true ring is (1.0 − 0.4) − 0.5 = 0.1.
+    const offset = runDrc(
+      projection({
+        placements: [
+          placement("U1", {
+            pads: [
+              pad("1", { x: 0, y: 0 }, 2.0, 2.0, {
+                shape: "circle",
+                drillDiameterMm: 1.0,
+                drillOffsetMm: { x: 0.4, y: 0 },
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(codes(offset)).toContain("ANNULAR_RING_MIN");
+    const centred = runDrc(
+      projection({
+        placements: [
+          placement("U1", {
+            pads: [
+              pad("1", { x: 0, y: 0 }, 2.0, 2.0, {
+                shape: "circle",
+                drillDiameterMm: 1.0,
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(codes(centred)).not.toContain("ANNULAR_RING_MIN");
+  });
+
+  // Fixed in S11: a via OpenPCB cannot EXPORT is unmanufacturable on every
+  // fabricator, and only a through via gets an aspect verdict (contract 10 §5).
+  test("B2-7: blind via on a fab without blind-via support is flagged", () => {
+    const blindBoard = {
+      fabricator: "jlcpcb_4l" as const,
+      layerCount: 4 as const,
+      minimums: {
+        annularRingMm: 0.05,
+        viaDiameterMm: 0.3,
+        viaDrillMm: 0.15,
+        drillSizeMm: 0.15,
+      },
+    };
     const report = runDrc(
       projection({
-        board: boardWithRules({
-          fabricator: "jlcpcb_4l",
-          layerCount: 4,
-          minimums: {
-            annularRingMm: 0.05,
-            viaDiameterMm: 0.3,
-            viaDrillMm: 0.15,
-            drillSizeMm: 0.15,
-          },
-        }),
+        board: boardWithRules(blindBoard),
         vias: [
           via("v", {
             diameterMm: 0.3,
             drillMm: 0.15,
             fromLayer: "F.Cu",
             toLayer: "In1.Cu",
+            viaType: "blind",
           }),
         ],
       }),
     );
-    expect(codes(report).map(String)).toContain("VIA_TYPE_UNSUPPORTED");
+    expect(codes(report)).toContain("VIA_TYPE_UNSUPPORTED");
+    // No aspect verdict: there is no per-layer thickness model and no preset
+    // states a blind-via limit (§5.2).
+    expect(codes(report)).not.toContain("VIA_ASPECT_RATIO");
+
+    // `custom` is the FAB opt-out, but the limit here is OpenPCB's own drill
+    // export — one plated file, all through hits — so the code still fires.
+    const custom = runDrc(
+      projection({
+        board: boardWithRules({ ...blindBoard, fabricator: "custom" }),
+        vias: [
+          via("v", {
+            diameterMm: 0.3,
+            drillMm: 0.15,
+            fromLayer: "F.Cu",
+            toLayer: "In1.Cu",
+            viaType: "blind",
+          }),
+        ],
+      }),
+    );
+    expect(codes(custom)).toContain("VIA_TYPE_UNSUPPORTED");
+
+    // An INVALID span keeps VIA_LAYER_SPAN and gets nothing else: one code per
+    // defect (§5.1). A "blind" via touching both outer layers is such a span.
+    const badSpan = runDrc(
+      projection({
+        board: boardWithRules(blindBoard),
+        vias: [
+          via("v", {
+            diameterMm: 0.3,
+            drillMm: 0.15,
+            fromLayer: "F.Cu",
+            toLayer: "B.Cu",
+            viaType: "blind",
+          }),
+        ],
+      }),
+    );
+    expect(codes(badSpan)).toContain("VIA_LAYER_SPAN");
+    expect(codes(badSpan)).not.toContain("VIA_TYPE_UNSUPPORTED");
   });
 
   // Fixed in P8 (fab drill floor applies to ALL holes, not just vias).

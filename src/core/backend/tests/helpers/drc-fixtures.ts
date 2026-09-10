@@ -140,6 +140,7 @@ export function via(
     drillMm?: number;
     fromLayer?: PcbVia["fromLayer"];
     toLayer?: PcbVia["toLayer"];
+    viaType?: PcbVia["viaType"];
   } = {},
 ): PcbVia {
   return {
@@ -151,7 +152,7 @@ export function via(
     drillMm: opts.drillMm ?? 0.4,
     fromLayer: opts.fromLayer ?? "F.Cu",
     toLayer: opts.toLayer ?? "B.Cu",
-    viaType: "through",
+    viaType: opts.viaType ?? "through",
     protection: "tented",
     provenance: "route",
   };
@@ -209,6 +210,14 @@ export function pad(
     rotationDeg?: number;
     drillDiameterMm?: number;
     layer?: string;
+    roundrectRatio?: number;
+    // The three S11 drill attributes (manufacturability contract 10 §2.1).
+    // They are absent from the PINNED `@openpcb/rendering-core` pad type, so
+    // they are attached structurally here exactly as a real render source
+    // carries them; `padDrillFields` is the only place that reads them back.
+    plated?: boolean;
+    drillSlotMm?: { widthMm: number; heightMm: number };
+    drillOffsetMm?: { x: number; y: number };
   } = {},
 ): FootprintRenderSourcePad {
   return {
@@ -223,6 +232,16 @@ export function pad(
       ? { drillDiameterMm: opts.drillDiameterMm }
       : {}),
     ...(opts.layer !== undefined ? { layer: opts.layer } : {}),
+    ...(opts.roundrectRatio !== undefined
+      ? { roundrectRatio: opts.roundrectRatio }
+      : {}),
+    ...(opts.plated !== undefined ? { plated: opts.plated } : {}),
+    ...(opts.drillSlotMm !== undefined
+      ? { drillSlotMm: opts.drillSlotMm }
+      : {}),
+    ...(opts.drillOffsetMm !== undefined
+      ? { drillOffsetMm: opts.drillOffsetMm }
+      : {}),
   };
 }
 

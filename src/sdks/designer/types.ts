@@ -2411,6 +2411,9 @@ export type DrcRuleCode =
   | "DIFF_PAIR_SKEW"
   | "DIFF_PAIR_UNCOUPLED_LENGTH"
   | "PLACED_PART_MISSING_FOOTPRINT"
+  // A schematic net bound to a NON-PLATED pad, whose copper rings are
+  // mechanical and never conduct between faces (contract 10 §2.4).
+  | "NPTH_PAD_NET"
   | "FAB_TRACE_WIDTH"
   | "FAB_CLEARANCE"
   | "FAB_ANNULAR_RING"
@@ -2431,6 +2434,9 @@ export type DrcRuleCode =
   | "COPPER_TO_HOLE"
   | "VIA_LAYER_SPAN"
   | "VIA_ASPECT_RATIO"
+  // A via OpenPCB cannot export: the Excellon writer emits ONE plated drill
+  // file, so every plated hit is a through drill (contract 10 §5.1).
+  | "VIA_TYPE_UNSUPPORTED"
   | "BOARD_OUTLINE_INVALID"
   | "OUTLINE_INTERNAL_RADIUS"
   | "OUTLINE_SLOT_WIDTH"

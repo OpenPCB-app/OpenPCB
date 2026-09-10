@@ -15,7 +15,11 @@ import {
   keepoutRow,
   polygonZoneRow,
 } from "./helpers/pcb-zone-fixtures";
-import { freePad } from "./helpers/drc-fixtures";
+import { freePad, pad, placement, projection } from "./helpers/drc-fixtures";
+import { roundrectRadiusMm } from "../../../modules/designer/backend/export/apertures";
+import { padOutlineWorldMm } from "../../../shared/pcb-geometry/pad-outline";
+import { placementPads } from "../../../shared/pcb-geometry/pad-geometry";
+import { insidePrimitives, parseGerber } from "./helpers/gerber-parse";
 import { textToStrokes } from "../../../modules/designer/backend/export/text/stroke-font";
 import { exportBundleName } from "../../../sdks/designer/pcb-helpers";
 import type {
@@ -858,6 +862,277 @@ describe("free-pad copper and drills follow one derivation", () => {
 });
 
 // =========================================================================
+// S11 — drilled structures in the artwork (manufacturability contract 10 §6)
+// =========================================================================
+
+describe("S11 artwork: rotation, plating, slots", () => {
+  /** A one-pad board, so the aperture table is unambiguous. */
+  function padBoard(
+    source: ReturnType<typeof pad>,
+    opts: {
+      rotationDeg?: number;
+      layer?: "F.Cu" | "B.Cu";
+      mirrored?: boolean;
+    } = {},
+  ): DesignerPcbProjection {
+    return projection({
+      placements: [
+        placement("A", {
+          positionMm: { x: 10, y: 10 },
+          rotationDeg: opts.rotationDeg ?? 0,
+          layer: opts.layer ?? "F.Cu",
+          mirrored: opts.mirrored ?? false,
+          pads: [source],
+        }),
+      ],
+    });
+  }
+
+  test("a non-orthogonal rect / oval / roundrect each emit their macro", () => {
+    // rect → one centre-line primitive rotated in place.
+    const rect = buildGerberLayer(
+      padBoard(pad("1", { x: 0, y: 0 }, 2, 1, { rotationDeg: 30 })),
+      "copper.top",
+      [],
+    );
+    expect(rect).toContain("%AMROT_R_2_1_30*");
+    expect(rect).toContain("21,1,2,1,0,0,30*");
+    expect(rect).toMatch(/%ADD\d+ROT_R_2_1_30\*%/);
+
+    // oval → the straight body plus two PRE-ROTATED cap circles (a macro
+    // primitive rotates about the macro origin, not about its own centre).
+    const oval = buildGerberLayer(
+      padBoard(pad("1", { x: 0, y: 0 }, 2, 1, { shape: "oval", rotationDeg: 30 })),
+      "copper.top",
+      [],
+    );
+    expect(oval).toContain("%AMROT_O_2_1_30*");
+    expect(oval).toContain("21,1,1,1,0,0,30*");
+    expect(oval).toContain("1,1,1,-0.433013,-0.25*");
+    expect(oval).toContain("1,1,1,0.433013,0.25*");
+
+    // roundrect → two strips plus four pre-rotated corner circles.
+    const roundrect = buildGerberLayer(
+      padBoard(
+        pad("1", { x: 0, y: 0 }, 2, 1, {
+          shape: "roundrect",
+          roundrectRatio: 0.25,
+          rotationDeg: 30,
+        }),
+      ),
+      "copper.top",
+      [],
+    );
+    expect(roundrect).toContain("%AMROT_RR_2_1_0p25_30*");
+    expect(roundrect).toContain("21,1,2,0.5,0,0,30*");
+    expect(roundrect).toContain("21,1,1.5,1,0,0,30*");
+    expect((roundrect.match(/^1,1,0\.5,/gm) ?? []).length).toBe(4);
+  });
+
+  test("an orthogonal rotation still uses a standard aperture", () => {
+    const out = buildGerberLayer(
+      padBoard(pad("1", { x: 0, y: 0 }, 2, 1, { rotationDeg: 90 })),
+      "copper.top",
+      [],
+    );
+    expect(out).not.toContain("%AM");
+    expect(out).toMatch(/%ADD\d+R,1X2\*%/);
+  });
+
+  test("roundrect corner radius is clamped to the half-dimension (WP3 finding)", () => {
+    // A ratio above 0.5 rounds the corners past the half-width: the copper
+    // ring builder and the annular kernel both clamp at `min(w/2, h/2)`, so a
+    // 1 × 1 pad at ratio 0.9 IS a ⌀1 disc. The writer used to apply
+    // `ratio · min(w, h)` unclamped and flashed a 2.6 mm blob instead.
+    expect(roundrectRadiusMm(1, 1, 0.9)).toBeCloseTo(0.5, 12);
+    expect(roundrectRadiusMm(2, 1, 0.25)).toBeCloseTo(0.25, 12);
+    const proj = padBoard(
+      pad("1", { x: 0, y: 0 }, 1, 1, {
+        shape: "roundrect",
+        roundrectRatio: 0.9,
+      }),
+    );
+    const parsed = parseGerber(buildGerberLayer(proj, "copper.top", []));
+    const aperture = parsed.apertures.get(parsed.flashes[0]!.code)!;
+    // Inside the disc, outside it — the unclamped radius covered both.
+    expect(insidePrimitives(aperture.primitives, 0.49, 0)).toBe(true);
+    expect(insidePrimitives(aperture.primitives, 0.51, 0)).toBe(false);
+    expect(insidePrimitives(aperture.primitives, 0.36, 0.36)).toBe(false);
+    // …and it is the same copper the record ring carries (that ring
+    // CIRCUMSCRIBES its arcs by sec(pi/24), so the bound is 1 % of r).
+    const ring = padOutlineWorldMm(
+      proj.placements[0]!,
+      placementPads(proj.placements[0]!)[0]!,
+    );
+    const maxX = Math.max(...ring.map((p) => p.x)) - 10;
+    expect(maxX).toBeGreaterThan(0.5);
+    expect(maxX).toBeLessThan(0.5 * 1.01);
+  });
+
+  test("two ratios that CLAMP to the same radius share one macro and D-code", () => {
+    // The macro name and the aperture's canonical key are built from the
+    // CLAMPED radius, so 0.6 and 0.9 on a 1 x 1 pad are both r = 0.5 — one
+    // `%AM`, one `%ADD`, one flash aperture. Keying on the raw ratio would
+    // emit two macros describing the same disc.
+    expect(roundrectRadiusMm(1, 1, 0.6)).toBe(roundrectRadiusMm(1, 1, 0.9));
+    const proj = projection({
+      placements: [
+        placement("A", {
+          positionMm: { x: 10, y: 10 },
+          pads: [
+            pad("1", { x: -2, y: 0 }, 1, 1, {
+              shape: "roundrect",
+              roundrectRatio: 0.6,
+            }),
+            pad("2", { x: 2, y: 0 }, 1, 1, {
+              shape: "roundrect",
+              roundrectRatio: 0.9,
+            }),
+          ],
+        }),
+      ],
+    });
+    const out = buildGerberLayer(proj, "copper.top", []);
+    expect((out.match(/%AM/g) ?? []).length).toBe(1);
+    expect(out).toContain("%AMRR_1_1_0p5*");
+    const parsed = parseGerber(out);
+    expect(parsed.flashes).toHaveLength(2);
+    expect(parsed.flashes[0]!.code).toBe(parsed.flashes[1]!.code);
+
+    // Same for the ROTATED macro: the angle joins the clamped radius in the
+    // name, so one rotated pair also collapses to one macro.
+    const rotated = buildGerberLayer(
+      projection({
+        placements: [
+          placement("A", {
+            positionMm: { x: 10, y: 10 },
+            pads: [
+              pad("1", { x: -2, y: 0 }, 1, 1, {
+                shape: "roundrect",
+                roundrectRatio: 0.6,
+                rotationDeg: 30,
+              }),
+              pad("2", { x: 2, y: 0 }, 1, 1, {
+                shape: "roundrect",
+                roundrectRatio: 0.9,
+                rotationDeg: 30,
+              }),
+            ],
+          }),
+        ],
+      }),
+      "copper.top",
+      [],
+    );
+    expect((rotated.match(/%AM/g) ?? []).length).toBe(1);
+    expect(rotated).toContain("%AMROT_RR_1_1_0p5_30*");
+    const parsedRot = parseGerber(rotated);
+    expect(parsedRot.flashes[0]!.code).toBe(parsedRot.flashes[1]!.code);
+  });
+
+  test("a copper-less unplated pad flashes no copper but keeps mask relief", () => {
+    // A 3.2 mm circle around a 3.2 mm drill is entirely inside the drilled
+    // void (contract §2.3): no record, no flash, no net — and the drill still
+    // opens the mask on BOTH faces so it cannot tear the mask edge (§6.4).
+    const proj = padBoard(
+      pad("", { x: 0, y: 0 }, 3.2, 3.2, {
+        shape: "circle",
+        drillDiameterMm: 3.2,
+        plated: false,
+        layer: "*.Cu",
+      }),
+    );
+    expect(buildGerberLayer(proj, "copper.top", [])).not.toContain("D03*");
+    expect(buildGerberLayer(proj, "copper.bottom", [])).not.toContain("D03*");
+    for (const side of ["mask.top", "mask.bottom"] as const) {
+      const mask = buildGerberLayer(proj, side, []);
+      // 3.2 drill + 2 x the board's 0.075 mm expansion.
+      expect(mask).toMatch(/%ADD\d+C,3\.35\*%/);
+      expect(mask).toContain("X10000000Y10000000D03*");
+    }
+    // Paste never follows a drill.
+    expect(buildGerberLayer(proj, "paste.top", [])).not.toContain("D03*");
+    // NPTH, not PTH.
+    expect(buildExcellonDrill(proj, [], "NPTH")).toMatch(/T\d+C3\.200/);
+    expect(buildExcellonDrill(proj, [], "PTH")).not.toMatch(/T\d+C3\.200/);
+  });
+
+  test("an unplated pad WITH a ring flashes WasherPad and carries no .TO.P", () => {
+    // "A pad around a non-plated hole without electrical function" (Ucamco
+    // spec 2022.02) — and the same section forbids a `.P` on a washer pad.
+    const proj = padBoard(
+      pad("1", { x: 0, y: 0 }, 4, 4, {
+        shape: "circle",
+        drillDiameterMm: 3.2,
+        plated: false,
+        layer: "*.Cu",
+      }),
+    );
+    const out = buildGerberLayer(proj, "copper.top", []);
+    expect(out).toContain("%TA.AperFunction,WasherPad*%");
+    expect(out).toMatch(/%ADD\d+C,4\*%/);
+    expect(out).not.toContain("%TO.P,");
+    expect(buildExcellonDrill(proj, [], "NPTH")).toMatch(/T\d+C3\.200/);
+  });
+
+  test("a footprint slot is a G85 routed hit at the slot's tool width", () => {
+    // `drillSlotMm` is KiCad's `(drill oval W H)`: W along the pad's local X.
+    // Tool = min(W, H) = 0.5, centreline +/- (1.8 - 0.5) / 2 = 0.65 mm.
+    const proj = padBoard(
+      pad("1", { x: 0, y: 0 }, 2, 1, {
+        shape: "oval",
+        drillDiameterMm: 0.5,
+        drillSlotMm: { widthMm: 1.8, heightMm: 0.5 },
+      }),
+    );
+    const pth = buildExcellonDrill(proj, [], "PTH");
+    expect(pth).toContain("T1C0.500");
+    expect(pth).toContain("X9.3500Y10.0000G85X10.6500Y10.0000");
+  });
+
+  test("a drill OFFSET moves the hit, not the copper", () => {
+    const proj = padBoard(
+      pad("1", { x: 0, y: 0 }, 2, 2, {
+        shape: "circle",
+        drillDiameterMm: 1,
+        drillOffsetMm: { x: 0.4, y: 0 },
+      }),
+    );
+    expect(buildExcellonDrill(proj, [], "PTH")).toContain("X10.4000Y10.0000");
+    // The copper flash stays on the pad centre.
+    expect(buildGerberLayer(proj, "copper.top", [])).toContain(
+      "X10000000Y10000000D03*",
+    );
+  });
+
+  test("a mirrored placement flips an explicit-layer SMD pad's copper AND mask", () => {
+    // The mask loop used to read `pad.layer` unflipped, so a bottom-side
+    // placement opened the mask on the top face while its copper flashed on
+    // the bottom (contract §6.1).
+    const proj = padBoard(pad("1", { x: 0, y: 0 }, 1, 1, { layer: "F.Cu" }), {
+      layer: "B.Cu",
+      mirrored: true,
+    });
+    expect(buildGerberLayer(proj, "copper.bottom", [])).toContain("D03*");
+    expect(buildGerberLayer(proj, "copper.top", [])).not.toContain("D03*");
+    expect(buildGerberLayer(proj, "mask.bottom", [])).toContain("D03*");
+    expect(buildGerberLayer(proj, "mask.top", [])).not.toContain("D03*");
+    expect(buildGerberLayer(proj, "paste.bottom", [])).toContain("D03*");
+    expect(buildGerberLayer(proj, "paste.top", [])).not.toContain("D03*");
+  });
+
+  test("a non-orthogonal PLACEMENT rotation places the pad exactly", () => {
+    // `projectLocal` snapped the placement rotation to the nearest 90 deg, so a
+    // KiCad-imported 30 deg placement flashed its pads in the wrong place.
+    const proj = padBoard(pad("1", { x: 1, y: 0 }, 1, 1), { rotationDeg: 30 });
+    const parsed = parseGerber(buildGerberLayer(proj, "copper.top", []));
+    expect(parsed.flashes).toHaveLength(1);
+    expect(parsed.flashes[0]!.xMm).toBeCloseTo(10 + Math.cos(Math.PI / 6), 6);
+    expect(parsed.flashes[0]!.yMm).toBeCloseTo(10 + Math.sin(Math.PI / 6), 6);
+  });
+});
+
+// =========================================================================
 // BOM
 // =========================================================================
 
@@ -1190,6 +1465,61 @@ describe("export orchestrator", () => {
     });
     expect(result.artifacts.find((a) => a.kind === "csv.bom")).toBeUndefined();
     expect(result.artifacts.find((a) => a.kind === "csv.pnp")).toBeUndefined();
+  });
+
+  test("refuses a board carrying a non-through via", () => {
+    // Excellon writes ONE plated drill file, so a blind / buried / micro via
+    // would ship as a through drill — a board the fab builds differently from
+    // the one designed (contract 10 §5.1). The DRC counterpart is
+    // `VIA_TYPE_UNSUPPORTED`, which fires on every fabricator including
+    // `custom`; the export refusal must match it.
+    const proj = fixtureProjection();
+    proj.board.layerCount = 4;
+    proj.vias[0]!.viaType = "blind";
+    proj.vias[0]!.toLayer = "In1.Cu";
+    let thrown: unknown = null;
+    try {
+      buildExportBundle(proj, null);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    const err = thrown as Error & {
+      status?: number;
+      type?: string;
+      extras?: { viaIds?: string[] };
+    };
+    expect(err.status).toBe(422);
+    expect(err.type).toBe(
+      "https://openpcb.dev/problems/export-unsupported-via-type",
+    );
+    expect(err.message).toContain(
+      "OpenPCB's drill export writes through drills only",
+    );
+    expect(err.extras?.viaIds).toEqual(["v1"]);
+    // A through-via board still exports.
+    expect(buildExportBundle(fixtureProjection(), null).artifacts.length).toBe(
+      14,
+    );
+  });
+
+  test("job file reports the board's own thickness", () => {
+    // It used to report the 1.6 mm default for every board, so a 0.8 mm
+    // stackup reached the fab mislabelled (contract 10 §5.4).
+    const thin = fixtureProjection();
+    thin.board.boardThicknessMm = 0.8;
+    const jobOf = (proj: DesignerPcbProjection): Record<string, never> =>
+      JSON.parse(
+        buildExportBundle(proj, null).artifacts.find(
+          (a) => a.kind === "gerber.job",
+        )!.text,
+      );
+    expect((jobOf(thin) as never as { GeneralSpecs: { BoardThickness: number } })
+      .GeneralSpecs.BoardThickness).toBe(0.8);
+    const dflt = fixtureProjection();
+    delete dflt.board.boardThicknessMm;
+    expect((jobOf(dflt) as never as { GeneralSpecs: { BoardThickness: number } })
+      .GeneralSpecs.BoardThickness).toBe(1.6);
   });
 
   test("preflight warns on a hole below the fab-preset minimum drill", () => {

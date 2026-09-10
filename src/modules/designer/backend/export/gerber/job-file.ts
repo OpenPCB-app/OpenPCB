@@ -44,7 +44,13 @@ export function buildGerberJobFile(params: {
       },
       Size: { X: round3(size.x), Y: round3(size.y) },
       LayerNumber: pcb.board.layerCount,
-      BoardThickness: DEFAULT_BOARD_THICKNESS_MM,
+      // The board's OWN thickness — the same value the DRC aspect-ratio check
+      // divides by (manufacturability contract 10 §5.4). It used to report the
+      // 1.6 mm default for every board, so a 0.8 mm or 2.0 mm stackup reached
+      // the fab mislabelled.
+      BoardThickness: round3(
+        pcb.board.boardThicknessMm ?? DEFAULT_BOARD_THICKNESS_MM,
+      ),
     },
     FilesAttributes: files.map((file) => ({ ...file })),
   };

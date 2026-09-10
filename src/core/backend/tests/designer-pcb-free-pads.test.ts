@@ -189,6 +189,76 @@ describe("designer PCB free pads + manual vias (F5)", () => {
     expect(proj2?.freePads[0]?.netId).toBe("net-vcc");
   });
 
+  test("a `circle` free pad is persisted as a DISC (contract 10 §7)", async () => {
+    // An unequal `circle` used to be judged as an ellipse RING by DRC and
+    // flashed as `widthMm` by the Gerber — two answers to one question. The
+    // invariant has to hold on the PERSISTED row, on add AND on update.
+    isolateTestDb("free-pad-circle-disc");
+    const { moduleRuntime } = await createRuntime();
+    const sdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const design = await sdk.createDesign({ name: "Disc" });
+    const add = await sdk.dispatchCommand(
+      design.id,
+      envelope(design.id, "cmd-add", SESSION, 0, {
+        type: "pcb_add_free_pad",
+        centerMm: { x: 0, y: 0 },
+        rotationDeg: 0,
+        padType: "smd",
+        shape: "circle",
+        widthMm: 2,
+        heightMm: 1,
+        layer: "F.Cu",
+      }),
+    );
+    expect(add.ok).toBe(true);
+    if (!add.ok) return;
+    const proj1 = await sdk.getPcbProjection(design.id);
+    expect(proj1?.freePads[0]?.widthMm).toBe(2);
+    expect(proj1?.freePads[0]?.heightMm).toBe(2);
+
+    // Patching only the WIDTH must still collapse the height, because the
+    // merged pad is what gets persisted.
+    const widen = await sdk.dispatchCommand(
+      design.id,
+      envelope(design.id, "cmd-w", SESSION, proj1!.revision, {
+        type: "pcb_update_free_pad",
+        freePadId: add.createdEntityId!,
+        widthMm: 3,
+      }),
+    );
+    expect(widen.ok).toBe(true);
+    const proj2 = await sdk.getPcbProjection(design.id);
+    expect(proj2?.freePads[0]?.heightMm).toBe(3);
+
+    // …and so must patching only the SHAPE of a pad that was a rectangle.
+    const toRect = await sdk.dispatchCommand(
+      design.id,
+      envelope(design.id, "cmd-r", SESSION, proj2!.revision, {
+        type: "pcb_update_free_pad",
+        freePadId: add.createdEntityId!,
+        shape: "rect",
+        heightMm: 1,
+      }),
+    );
+    expect(toRect.ok).toBe(true);
+    const proj3 = await sdk.getPcbProjection(design.id);
+    expect(proj3?.freePads[0]?.heightMm).toBe(1);
+    const backToCircle = await sdk.dispatchCommand(
+      design.id,
+      envelope(design.id, "cmd-c", SESSION, proj3!.revision, {
+        type: "pcb_update_free_pad",
+        freePadId: add.createdEntityId!,
+        shape: "circle",
+      }),
+    );
+    expect(backToCircle.ok).toBe(true);
+    const proj4 = await sdk.getPcbProjection(design.id);
+    expect(proj4?.freePads[0]?.widthMm).toBe(3);
+    expect(proj4?.freePads[0]?.heightMm).toBe(3);
+  });
+
   test("delete free pad removes from projection", async () => {
     isolateTestDb("free-pad-delete");
     const { moduleRuntime } = await createRuntime();

@@ -57,9 +57,12 @@ import {
 import {
   collectDrills,
   drillSlotCenterline,
+  footprintPadDrill,
+  freeHoleDrill,
   freePadDrill,
   type DrillInstance,
 } from "../pcb/pcb-drills";
+import { placementPads } from "../../pcb-geometry/pad-geometry";
 import {
   buildDiscRing,
   buildThermalSpokes,
@@ -444,9 +447,19 @@ function collectBareCopper(input: BareCopperInput): BareCopper {
       record.drillMm > 0 ||
       (record.anchor.kind === "freePad" &&
         input.stdFreePadIds.has(record.anchor.freePadId));
-    const mode: ResolvedPadConnection = isSameNetAsPour(record.netId, pourNetId)
-      ? resolvePadConnection(padConnection, drilled)
-      : "none";
+    // An UNPLATED pad's copper ring is MECHANICAL (manufacturability contract
+    // 10 §2.4): the connectivity kernel keys such a record PER LAYER and gives
+    // every one of those items a NULL net, so no graph component can ever
+    // contain it — two rings of one unplated hole are not even each other's
+    // node. A ring the graph can never join must not anchor a pour or be
+    // joined by one: it takes the pour's ordinary clearance halo, never a
+    // thermal knockout and never a membership key. `padNets` may still bind it
+    // to a net (a numbered `np_thru_hole` pad); that is the design error
+    // `NPTH_PAD_NET` reports, not a licence to weld the pour to it.
+    const mode: ResolvedPadConnection =
+      record.plated && isSameNetAsPour(record.netId, pourNetId)
+        ? resolvePadConnection(padConnection, drilled)
+        : "none";
     if (mode === "none") {
       pushObstacle("pad", record.netId, record.center, poly);
       continue;
@@ -564,19 +577,19 @@ function collectApertures(
 function collectNonPlatedApertures(
   freeHoles: ReadonlyArray<PcbFreeHole>,
   freePads: ReadonlyArray<PcbFreePad>,
+  placements: ReadonlyArray<PcbPlacedPart>,
 ): ClipperPolygon[] {
   const out: ClipperPolygon[] = [];
   for (const hole of freeHoles) {
-    if (hole.drillMm > 0) {
-      const slot = drillSlotCenterline(hole.centerMm, hole.drillSlot);
-      out.push(
-        drillAperture({
-          centerMm: hole.centerMm,
-          radiusMm: hole.drillMm / 2,
-          ...(slot ? { slot } : {}),
-        }),
-      );
-    }
+    const drill = freeHoleDrill(hole);
+    if (!drill) continue;
+    out.push(
+      drillAperture({
+        centerMm: drill.centerMm,
+        radiusMm: drill.drillMm / 2,
+        ...(drill.slot ? { slot: drill.slot } : {}),
+      }),
+    );
   }
   for (const pad of freePads) {
     const drill = freePadDrill(pad);
@@ -588,6 +601,25 @@ function collectNonPlatedApertures(
         ...(drill.slot ? { slot: drill.slot } : {}),
       }),
     );
+  }
+  // Footprint pads carry non-plated drills too (`np_thru_hole`, mounting
+  // holes): the ONE derivation (`footprintPadDrill`, manufacturability
+  // contract 10 §1.1) so the pour clears a mounting hole's bare wall exactly
+  // as it clears a free hole's. The plated apertures — the bare holes
+  // themselves — already come through `collectApertures` -> `collectDrills`,
+  // which is slot-aware.
+  for (const placement of placements) {
+    for (const pad of placementPads(placement)) {
+      const drill = footprintPadDrill(pad, placement);
+      if (!drill || drill.plated) continue;
+      out.push(
+        drillAperture({
+          centerMm: drill.centerMm,
+          radiusMm: drill.drillMm / 2,
+          ...(drill.slot ? { slot: drill.slot } : {}),
+        }),
+      );
+    }
   }
   return out;
 }
@@ -1341,7 +1373,9 @@ function computePourIslands(
   // `copperToHoleClearanceMm`, which defaults to the board-edge rule — so an
   // absent key reproduces the pre-S7 artwork exactly.
   const npthHalo = dilateOrFail(
-    multiPolyToPathsD(collectNonPlatedApertures(freeHoles, freePads)),
+    multiPolyToPathsD(
+      collectNonPlatedApertures(freeHoles, freePads, params.placements),
+    ),
     forbiddenDeltaMm(Math.max(0, params.copperToHoleMm ?? edge)),
     "non-plated hole",
   );

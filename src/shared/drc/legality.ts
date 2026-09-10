@@ -88,6 +88,12 @@ export const LIVE_CODES: ReadonlySet<DrcRuleCode> = new Set<DrcRuleCode>([
   "DRILL_SIZE_MIN",
   "ANNULAR_RING_MIN",
   "VIA_ASPECT_RATIO",
+  // The sibling verdict of `VIA_ASPECT_RATIO`: a non-through via gets no
+  // aspect ratio and this instead (manufacturability contract 10 §5). It comes
+  // out of the SAME per-item body, so the pending gate reports it too — as a
+  // warning, not a refusal: the copper is legal, the drill FILE cannot carry
+  // it, and that is an export decision, not a routing one.
+  "VIA_TYPE_UNSUPPORTED",
   "FAB_TRACE_WIDTH",
   "FAB_DRILL",
   "FAB_ANNULAR_RING",
@@ -177,6 +183,7 @@ export function pendingItems(
     records,
     ctx.validCopperLayers,
     ctx.layerCount,
+    [],
     [],
     [],
   );

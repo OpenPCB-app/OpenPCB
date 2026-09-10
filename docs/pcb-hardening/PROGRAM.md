@@ -134,7 +134,7 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 
 | # | Session | Objective | Owns | Astra | Status |
 |---|---|---|---|---|---|
-| S11 | Hole, pad and via manufacturability geometry | Drill geometry, slots, PTH/NPTH, annular geometry, via type/span, aspect semantics. DRC's model of manufactured holes matches export. | B2-5 (manufacturability half), B2-6, B2-7 | spec-attack xhigh · adversarial-verify xhigh | pending |
+| S11 | Hole, pad and via manufacturability geometry | Drill geometry, slots, PTH/NPTH, annular geometry, via type/span, aspect semantics. DRC's model of manufactured holes matches export. | B2-5 (manufacturability half), B2-6, B2-7, B6-1 | spec-attack xhigh (run 1: 16 findings — 2 blockers accepted, 13 folded, 1 rejected) · repository-grounded adversarial-verify xhigh (run 2a cut by the usage limit, 3 folded from its trajectory; run 2b: 6 findings, all accepted) | done 2026-09-10 (`10-manufacturability-contract.md`) |
 | S12 | DFM overlays and production checks | Courtyard, silkscreen, mask bridges/slivers, copper slivers, acute angles — built at Gerber parity. | — (no overlay codes exist today) | spec-attack xhigh; post only for polygon-topology checks | pending |
 | S13 | Electrical-rule fidelity | Voltage difference, clearance/creepage semantics, external/internal assumptions, current vs width, layer-dependent assumptions, defaults, applicable pad/via/trace combinations, interaction with net classes and scoped rules. Precise modest claims over ambitious labels. | B7-1 (unassigned copper does not inherit the rule tier of the net it extends — S8 Astra run 2) | spec-attack xhigh · adversarial-verify xhigh | pending |
 | S14 | SI v1 mathematical correctness | Routed length, branches/stubs, disconnected fragments, via contribution, coupled-span accounting, overlapping segments, gap measurement, diverging gap, layer transitions, pair ordering, determinism. Every reported SI number has a precise definition. | — | spec-attack xhigh · adversarial-verify xhigh | pending |
@@ -215,7 +215,21 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
   `@openpcb/contracts/schemas/copilot` dir); e2e routing + live-parity + DRC + zones 13 + 1
   flag-skip.*
 - **S11** — DRC's representation of drilled and plated structures matches what export emits,
-  slots included.
+  slots included. *Evidence (2026-09-10): one drill derivation per object (`footprintPadDrill` /
+  `freePadDrill`) feeds DRC, the live gate, route obstacles, the pour's NPTH halo, Excellon, the
+  snapshot and `collectDrills`; `gerber-pad-parity.test.ts` holds every layer file of all seven
+  goldens to the record geometry within 2e-6 mm (1:1 flashes, copper / mask / paste) and the
+  Excellon hit SET to `ctx.holes` (position, tool, plating, slot ends); the annular ring is the
+  exact signed-distance kernel pinned to 1e-9 against an exact-primitive oracle (490 cases) and to
+  < 1e-6 against R1's independent sampler; B2-5 / B2-6 / B2-7 / B6-1 live (`test.todo` census
+  5 → 1); new `golden-holes-4l` (91 primitives, 29 violations: copper-less NPTH, NPTH rings, slots,
+  offset drill, blind via, 16:1 via, mirrored rotated pads); `golden-census-2l` re-baselined for
+  two attributed fab rows, the other five byte-identical; the export refuses non-through vias
+  (422). Gates: backend 2446 pass / 22 known library+assistant fails / 8 skip / 1 todo (2477);
+  tsc 44; Vitest 63 files 576 + 1 todo; gen + gen:contracts clean; `test:drc-worker-smoke`
+  byte-identical; `package-lock.json` untouched (034652c3); e2e DRC + routing + live-parity 5 +
+  1 flag-skip; golden shasums areas 99c49eb3 · census 15debab1 (two attributed fab rows) ·
+  cutouts 43fbd513 · holes-4l a431a463 (new) · pours ab245110 · rules ed0705e8 · small cd4b962e.*
 - **S12** — DFM checks use the same physical geometry export uses.
 - **S13** — no check claims more than its model proves; every electrical constant is sourced.
 - **S14** — every SI number has a precise mathematical definition and a testable interpretation.
@@ -601,6 +615,50 @@ unmanufacturable board.
   worker bundle on every watch rebuild and an unwired id-only smoke — both fixed; R2 in §11.
   Process: the frontend package ran in parallel with the worker package against the contract's
   wire table, and the run service after the worker — no rework between them.
+
+- **S11 (2026-09-10) — holes, pads and vias have one manufactured model.** Decisions (user):
+  S10 committed first (`523d8f8`); S11 committed BEFORE the sibling `shared/` tags (the new
+  render-source pad fields `plated?` / `drillSlotMm?` / `drillOffsetMm?` are optional and read
+  through one narrowing helper, `padDrillFields`, so the app passes its gates against the PINNED
+  packages; the tags `kicad-parsers-v0.1.4` / `kicad-import-v0.2.0` / `rendering-core-v0.1.4`, the
+  repin + `npm install` lock refresh + real `npm ci`, and the CoreLibrary `rebuild-previews` are a
+  separate follow-up commit); B6-1 = rotated aperture macros (no `%LR`); both Astra runs. Fable:
+  holes derive from the DRILLED OBJECTS, never from copper records (a copper-less NPTH pad is
+  still a hole); the annular ring = `min over the drill centreline of signed sdf − r_tool`
+  (analytic per shape, convex ⇒ endpoint minimum, breakout `≤ GEOM_EPS` judged before any
+  minimum); copper-less ⇔ the copper is contained in the drill (farthest-point bound, fail-safe);
+  an unplated pad's copper ring is mechanical — per-layer null-net kernel items, no pour
+  membership, a net bound to it = permanent airwire + `NPTH_PAD_NET`; legacy library rows derive
+  plating at read time from the stored raw KiCad pad type with an identity match; sourced fab
+  rows (`minNpthDrillMm`, plated / NPTH slot widths, `npthAnnularRingMm`, `viaTypes`; JLCPCB +
+  PCBWay pages fetched 2026-09-10); `VIA_TYPE_UNSUPPORTED` (error) for every non-through via on
+  every fabricator because the Excellon export writes one through-drill file — and the export
+  refuses such boards; `VIA_ASPECT_RATIO` = thickness / drill for through vias only (the linear
+  span model deleted); the Gerber flashes copper, mask and paste from the S1 records (rotated
+  macros, `WasherPad` per the Ucamco spec, the roundrect clamp shared with the ring builder); a
+  `circle` pad is a disc of `widthMm` everywhere; the `.kicad_pcb` importer reads the bare
+  `blind` / `micro` atom (buried by span); the job file reports the real thickness. Review:
+  plan-critique (Opus, 18 findings, 5 blockers) folded before code; Astra run 1 (spec-attack,
+  prompt-only, 16 findings: 2 blockers — a net-bound NPTH ring bridging faces through the
+  ratsnest pin union, and a blind via exported as a through drill — 13 folded, 1 rejected: the
+  same-id survivor is already total); R1 (`reviewer-critical`, 7 findings — 3 majors: the
+  unequal-circle ring vs disc, the ellipse containment, the free-pad slot tool width — all fixed
+  with `drc-s11-review-fixes.test.ts`); R2 (`reviewer`, accept, 6 minors — the holes golden
+  gained a mirrored 30° placement with rotated oval / roundrect / explicit-layer / slotted pads);
+  Astra run 2 (repository-grounded adversarial-verify): run 2a was cut off by the OpenAI usage
+  limit after ≈175 k tokens, its trajectory still yielded two accepted high findings (a net-bound
+  copper-less NPTH pad was silently unroutable; the per-layer split stripped the net from
+  single-layer drilled `smd` / `conn` free pads — both fixed, contract 10 §2.4) and a precision
+  statement (§6.3); run 2b, re-launched at the usage-window reset (user decision), completed with
+  6 findings, all accepted and fixed — free-hole slots judged on the row's `drillMm` instead of the
+  slot width (now `freeHoleDrill`, the one free-hole derivation), a degenerate footprint slot
+  falling back to `drillDiameterMm`, a slotted `hole` free pad's mask relief, the via annulus
+  escaping the breakout check at a 0-minimum, an empty legacy index token binding raw pad 0, and
+  an early dedupe of `NPTH_PAD_NET` breaking byte identity — regressions in
+  `drc-s11-review-fixes.test.ts`; ledger in contract 10 §12.5. Deferred with
+  owners (10 §0/§10): trapezoid / custom outlines (S12), per-span drill files and a stackup depth
+  model (S15 / export backlog), scoped hole rules (05 §13), slot authoring UI, canvas / 3D slot
+  and NPTH rendering, the editor "plated" toggle, PCBWay HDI presets.
 
 ## Appendix — Session 0 amendments to the original program text
 

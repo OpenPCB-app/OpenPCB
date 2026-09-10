@@ -35,7 +35,12 @@ import {
   freePadCopperLayers,
   placementSideLayer,
 } from "../../../../shared/rendering/pad-copper-layers";
-import { freePadDrill } from "../../../../shared/rendering/pcb/pcb-drills";
+import {
+  footprintPadDrill,
+  freeHoleDrill,
+  freePadDrill,
+  type FootprintPadDrill,
+} from "../../../../shared/rendering/pcb/pcb-drills";
 import { freePadOutlineWorldMm, padOutlineWorldMm } from "./pad-outline";
 import { buildSnapshotPourIslands } from "./board-snapshot-pours";
 import { collectKeepouts } from "../../../../shared/pcb-areas/copper-zones";
@@ -97,6 +102,25 @@ function resolveHoleDrillMm(
       `nominal drill size could under-cover the slot ends).`,
   );
   return drillSlot.lengthMm;
+}
+
+/**
+ * A footprint slot in the `PcbDrillSlot` shape `resolveHoleDrillMm` reads:
+ * `lengthMm` is the OVERALL long dimension (the centreline span plus the tool
+ * diameter) and `angleDeg` the centreline direction. Null for a round hit, so
+ * the caller degrades nothing.
+ */
+function footprintSlotDescriptor(
+  drill: FootprintPadDrill,
+): PcbDrillSlot | null {
+  if (!drill.slot) return null;
+  const dx = drill.slot.b.x - drill.slot.a.x;
+  const dy = drill.slot.b.y - drill.slot.a.y;
+  return {
+    lengthMm: Math.hypot(dx, dy) + drill.slot.widthMm,
+    widthMm: drill.slot.widthMm,
+    angleDeg: (Math.atan2(dy, dx) * 180) / Math.PI,
+  };
 }
 
 /**
@@ -203,6 +227,27 @@ export function buildBoardSnapshot(
     }
   }
   const freeHolesFromPads: FreeHole[] = [];
+  // A NON-PLATED footprint drill is an obstacle the router must not cross,
+  // exactly like a free hole (manufacturability contract 10 §8): mounting
+  // holes and `np_thru_hole` pads reach the fab as bare walls. The ONE
+  // derivation supplies the centre (drill offset applied) and the slot.
+  for (const placement of projection.placements) {
+    for (const pad of placementPads(placement)) {
+      const drill = footprintPadDrill(pad, placement);
+      if (!drill || drill.plated) continue;
+      const id = `npth:${placement.id}|${pad.number}`;
+      freeHolesFromPads.push({
+        id,
+        centerMm: drill.centerMm,
+        drillMm: resolveHoleDrillMm(
+          drill.drillMm,
+          footprintSlotDescriptor(drill),
+          id,
+          warnings,
+        ),
+      });
+    }
+  }
   const validCopperLayerSet = new Set<PcbCopperLayerId>(validCopperLayers);
   for (const freePad of projection.freePads) {
     // Every NON-PLATED drill is a real obstacle, whatever the pad type says: an
@@ -287,11 +332,20 @@ export function buildBoardSnapshot(
   });
 
   const freeHoles: FreeHole[] = [
-    ...projection.freeHoles.map((h) => ({
-      id: h.id,
-      centerMm: h.centerMm,
-      drillMm: resolveHoleDrillMm(h.drillMm, h.drillSlot, h.id, warnings),
-    })),
+    // THE one free-hole derivation: the tool is the slot width whenever a slot
+    // is declared (contract 10 §1.1); the slot still degrades to its long axis
+    // for the round keepout the wire contract carries.
+    ...projection.freeHoles.flatMap((h) => {
+      const drill = freeHoleDrill(h);
+      if (!drill) return [];
+      return [
+        {
+          id: h.id,
+          centerMm: drill.centerMm,
+          drillMm: resolveHoleDrillMm(drill.drillMm, h.drillSlot, h.id, warnings),
+        },
+      ];
+    }),
     ...freeHolesFromPads,
   ];
 

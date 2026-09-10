@@ -24,7 +24,7 @@ consumes (`src/shared/pcb-connectivity/copper-records.ts`, `src/shared/rendering
 `src/shared/pcb-areas/`, `src/shared/rendering/copper-fill/`), and the consumers of the report.
 
 Out of scope, with the owning session: live / route parity (S8, `07-live-parity-contract.md`), the broad phase (S9, `08-broad-phase-contract.md`), async
-execution (S10), slot / annular / aspect / plating models and scoped hole rules (S11), DFM
+execution (S10, contract 09), slot / annular / aspect / plating models (S11, contract 10; scoped hole rules stay open), DFM
 overlays, exact-arc geometry and minimum-web checks (S12), electrical thresholds (S13), SI and
 length semantics (S14).
 
@@ -66,7 +66,7 @@ and the outline for milling advisories, both non-copper).
 | `DrcTrace` | every trace record | round-capped polyline stadium (`pointsMm`, `halfWidthMm`), AABB inflated by the half width | its declared layer, **un-clamped** — an off-stackup layer raises `TRACE_LAYER_MISMATCH`, which is non-overridable and non-waivable (S7): the copper collides with nothing, so the code is its only guard |
 | `DrcPad` | every pad record: footprint pads and free pads (`smd` / `conn` on their declared layer, `std` on every copper layer, `hole` has no copper) | world ring (rotated, mirrored); **`disc`** for a true circle (S7 — the exact disc, not the circumscribed 48-gon); `custom` / `trapezoid` = bounding rectangle (declared superset, S11) | resolved layers; an off-stackup declaration → **clamp** to every valid layer (cannot mask a short) + `PAD_LAYER_MISMATCH` |
 | `DrcViaGeom` | every via | disc of `diameterMm / 2` | its span; an invalid span → clamp to every valid layer + `VIA_LAYER_SPAN` |
-| `DrcHole` | via barrels (`via`), footprint pads with a drill (`pth`), **every free pad with a drill** (`pth` iff `std`, else `npth` — S7; `smd` / `conn` drills used to be invisible although Excellon drilled them), free holes (`npth`) | disc of `drillMm / 2`, or the slot stadium (`slot`) for oblong free-pad / free-hole drills; footprint pads carry no slot field (S11, B2-5) | through every layer |
+| `DrcHole` | via barrels (`via`), footprint pads with a drill (`pth`, or `npth` when `plated: false` — S11), **every free pad with a drill** (`pth` iff `std`, else `npth` — S7), free holes (`npth`); since S11 derived from the DRILLED OBJECTS (`footprintPadDrill` / `freePadDrill`), never from the copper records, so a copper-less NPTH pad is still a hole | disc of `drillMm / 2` (the tool = the slot width), or the slot stadium (`slot`) for oblong drills — footprint slots and drill offsets included since S11; `annularRingMm` = the exact copper width around the wall (contract 10 §3) | through every layer |
 
 Connectivity items are built from the same records under the **fail-safe** policy (an invalid
 pad or via occupies no layer); the two policies share one geometry (S1 §2).
@@ -129,11 +129,9 @@ non-plated wall is a bare substrate edge, which is exactly the value the fill ha
 to its NPTH halo, so DRC and the pour agree by construction and an absent field changes nothing
 in the artwork. A copper item's own drill is not a pair (anchor identity). Plated drills are
 covered by their copper. No scoped rule reaches the value (S11 adds hole pair kinds).
-**Non-plated FOOTPRINT pads are not seen** (R1 #5): the footprint render source carries no
-plating attribute, so every drilled footprint pad is a `pth` hole with (fictitious) copper — a
-KiCad `np_thru_hole` mounting hole reaches DRC as copper, not as an NPTH obstacle; only free
-holes and non-plated free-pad drills are `COPPER_TO_HOLE` obstacles until S11 plumbs the pad
-type through. The release note says "free holes", not "mounting-hole footprints".
+Non-plated FOOTPRINT pads are seen since S11 (contract 10 §2): a `plated: false` pad (KiCad
+`np_thru_hole`, or a legacy row whose stored raw pad type says so) is an `npth` hole and a
+`COPPER_TO_HOLE` obstacle, and its copper — if any survives the drill — is a mechanical ring.
 
 Intra-footprint pads (S7): pads of one placement skip the clearance and fab tiers (spacing inside
 a footprint is the library's responsibility) but never the short tier — overlapping different-net
@@ -141,7 +139,7 @@ pads of one footprint are a dead short on the board. Symmetric with the hole↔h
 keeps overlapping drills of one footprint. Exception (R1 #4): a pair in which either pad is a
 `custom` / `trapezoid` bounding rectangle (`exactShape === false`) is not judged at all inside a
 footprint — its ring is a declared superset, and a short is non-waivable, so the pre-S7 skip
-stays until S11 models the true outline. Across footprints such pads keep today's (conservative)
+stays (trapezoid / custom outlines are S12 — the importer degrades them to rectangles at the source, contract 10 §0). Across footprints such pads keep today's (conservative)
 verdicts.
 
 Null-net bridges (S7): the clearance loops record, for every null-net item, each known net whose
@@ -180,7 +178,7 @@ curved edges — the exact-arc second chance is S12), the pour's circumscribed a
 approximation that biases the OTHER way lives in connectivity, not in a check: the circumscribed
 ring of an oval / roundrect pad (≤ 0.2 %·r) can fabricate contact between two same-net pads that
 are physically ≈ 2 µm apart, so `UNCONNECTED_NET` is not raised and — the pads being same-net — no
-clearance check sees them either (S1/S2 recorded limit; exact arcs for non-circles are S11's;
+clearance check sees them either (S1/S2 recorded limit; exact arcs for non-circles in CLEARANCE are S12's — the annular ring is exact since S11;
 Astra S7 #5). The AABB
 prefilter uses `clearanceBound` (board pair ∨ both classes ∨ rule maximum ∨ floor) ∨ `fabMin` ∨
 `SHORT_EPS_MM` over outward-inflated boxes — an upper bound of every value a pair can resolve to,
@@ -236,21 +234,19 @@ default from the projection (05 §8); none re-orders or re-derives.
 ## 9. Stated limits
 
 - `drillSizeMm`, the pad annular ring and `holeToBoardEdgeMm` read the board minimums directly —
-  no scalar kind exists, so no scoped rule can reach them (S11).
-- `custom` / `trapezoid` pads are bounding rectangles in every consumer (S11) — excluded from the
-  intra-footprint short tier (§4); footprint pads carry no oblong drill (S11, B2-5); no plating
-  attribute — non-plated footprint pads read as copper (S11, §4).
-- A slotted free-pad drill carries two widths (`drillMm` and `drillSlot.widthMm`); the SDK says
-  they are one value, the store does not enforce it, and consumers read one or the other
-  (Excellon tool and the gap kernel: the slot width; drill minimums and hole↔hole overlap:
-  `drillMm`). Reconciling the store is S11.
+  no scalar kind exists, so no scoped rule can reach them (contract 10 §0 keeps this open).
+- `custom` / `trapezoid` pads are bounding rectangles in every consumer (the importer degrades
+  them to `rect` at the source; S12) — excluded from the intra-footprint short tier (§4).
+  Footprint slots, drill offsets and the plating attribute are modelled since S11 (contract 10).
+- A slotted free-pad drill's two widths (`drillMm` and `drillSlot.widthMm`) are one value since
+  S11: the store hydrator enforces `drillMm === drillSlot.widthMm` (contract 10 §1.2).
 - A drilled `smd` / `conn` free pad opens the mask on its declared layer only, although its NPTH
   drill goes through both faces; a `hole` free pad opens both (mask policy, S12).
-- The Gerber writer flashes a pad from its OWN aperture model (`padApertureShape`: an orthogonal
-  swap for 90° multiples, no rotation otherwise; a `circle` uses `widthMm` only), not from the
-  world ring DRC judges — a non-orthogonally rotated rectangular pad ships un-rotated and a
-  DRC-clean board can export a short (Astra S7 #1, register entry B6-1, S11: "DRC's representation
-  matches export").
+- The Gerber writer flashes every pad (copper, mask, paste) from the S1 copper RECORDS since S11
+  (contract 10 §6): a non-orthogonal composed rotation becomes a rotated aperture macro, an
+  unequal `circle` is a disc of `widthMm` everywhere (10 §7), and a per-layer parity harness
+  (`gerber-pad-parity.test.ts`) holds the artwork to the record ring within 2e-6 mm on every
+  golden — B6-1 closed.
 - Two problems that hash to one id collapse into one row (§6); the survivor is the most severe,
   then the largest deficit against its own requirement (Astra S7 #4). Since S9 an UNMEASURED group
   keeps the smaller marker (x, then y) alongside its merged messages — before, `...last` kept

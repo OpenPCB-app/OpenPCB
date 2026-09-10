@@ -21,7 +21,7 @@ In scope: `src/shared/drc/` (the relocated engine, `legality.ts`, `fab-presets.t
 
 Out of scope, with the owning session: routing algorithms, walkaround, auto-finish, pull-tight,
 board-edge / cutout obstacles (S16), tune / bundle / diff-pair geometry (S17), the batch broad
-phase (S9), async execution / B5-SYNC (S10), slot / annular / plating models (S11), DFM (S12),
+phase (S9), async execution / B5-SYNC (S10, contract 09), slot / annular / plating models (S11, contract 10 — `VIA_TYPE_UNSUPPORTED` joined the live REPORTED set, not the refuse set), DFM (S12),
 electrical (S13), SI / length (S14), part-move / free-pad legality (none scheduled — batch reports).
 
 ## 1. The parity statement
@@ -231,7 +231,7 @@ a warning does not unblock it — only a suppression that removes it from the re
 per-code `ignore` override, a class ignore, or a waiver — R1 #4), so the gate follows the report
 exactly. Everything else in `L` is
 reported as a warning (so are overlapping drills of two vias — `HOLE_TO_HOLE` is a warning in
-batch; S11 owns hole semantics). Waived ⇒ not refused. A
+batch; hole semantics are contract 10). Waived ⇒ not refused. A
 class ignore applies to the gate as to the report — a user who ignores the `clearance` class has
 turned the hard block off for that class; the desktop HUD says so. Non-overridable codes always
 refuse. When the outline is invalid (`BOARD_OUTLINE_INVALID` would fire on this board),

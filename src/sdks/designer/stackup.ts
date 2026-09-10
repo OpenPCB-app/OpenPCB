@@ -138,19 +138,3 @@ export function isValidViaSpan(
   }
 }
 
-/**
- * Fraction of the board thickness a via barrel drills through, for the aspect
- * ratio. Linear over layer indices until a per-layer thickness model exists.
- */
-export function viaSpanDepthFraction(
-  from: PcbCopperLayerId,
-  to: PcbCopperLayerId,
-  count: PcbLayerCount,
-): number {
-  if (count <= 1) return 1;
-  const order = copperLayersForCount(count);
-  const fromIdx = order.indexOf(from);
-  const toIdx = order.indexOf(to);
-  if (fromIdx < 0 || toIdx < 0) return 1;
-  return Math.abs(toIdx - fromIdx) / (count - 1);
-}

@@ -20,7 +20,7 @@ import {
   type LegalityContext,
 } from "../drc-context";
 import type { ItemSet } from "./clearance-judge";
-import { exceeds } from "../../pcb-geometry/tolerance";
+import { exceeds, GEOM_EPS_MM } from "../../pcb-geometry/tolerance";
 import type { DrcViolationDraft } from "../types";
 import { ruleSuffix } from "../rule-message";
 
@@ -118,7 +118,19 @@ export function manufacturabilityItems(
     const annular = (via.diameterMm - via.drillMm) / 2;
     // `annularRing` rules reach vias only; THT pad rings stay board-only (S11).
     const viaAnnular = ctx.resolver.scalar("annularRing", viaItem);
-    if (below(annular, viaAnnular.mm)) {
+    // BREAKOUT FIRST (§3.3), for the via annulus exactly as for a pad: a ring
+    // of zero is no copper around the barrel, whatever the minimum says
+    // (Astra run 2b #4 — a minimum of 0 legalised it).
+    if (!(annular > GEOM_EPS_MM)) {
+      out.push({
+        code: "ANNULAR_RING_MIN",
+        message: `Drill breaks out of the via pad (annular ring ${annular.toFixed(3)} mm)`,
+        anchors: [{ kind: "via", viaId: via.id }],
+        locationMm: via.centerMm,
+        measuredMm: annular,
+        requiredMm: viaAnnular.mm,
+      });
+    } else if (below(annular, viaAnnular.mm)) {
       out.push({
         code: "ANNULAR_RING_MIN",
         ...(viaAnnular.rule?.severity
@@ -151,21 +163,46 @@ export function manufacturabilityItems(
       });
     }
 
-    // Via aspect ratio = effective span depth / drill (drilling limit,
-    // fab-specific). A through via drills the full board; a blind/buried via
-    // only drills the layers it spans, so scale board thickness by the fraction
-    // of the stackup it crosses (no per-layer thickness model yet — linear).
-    if (ctx.fabricator !== "custom" && via.drillMm > 0) {
-      const preset = FAB_PRESETS[ctx.fabricator];
-      const layerCount = ctx.validCopperLayers.size;
-      const spanFraction =
-        layerCount > 1 ? (vg.layers.length - 1) / (layerCount - 1) : 1;
-      const effectiveThicknessMm = ctx.boardThicknessMm * spanFraction;
-      const ratio = effectiveThicknessMm / via.drillMm;
-      if (preset && exceeds(ratio, preset.maxAspectRatio)) {
+    const preset =
+      ctx.fabricator === "custom" ? undefined : FAB_PRESETS[ctx.fabricator];
+
+    // Only a THROUGH via can be manufactured from an OpenPCB export: Excellon
+    // writes ONE plated drill file (`TF.FileFunction,Plated,1,<last>,PTH`), so
+    // every plated hit is a through drill and a blind / buried / micro via has
+    // no representation at all. That is a property of the EXPORT, so it holds
+    // on `custom` too (contract 10 §5.1). Emitted only when the span is valid
+    // for its type — one code per defect; an invalid span keeps VIA_LAYER_SPAN
+    // and gets nothing else.
+    if (
+      via.viaType !== "through" &&
+      !vg.layerSpanInvalid &&
+      !vg.viaTypeInvalid
+    ) {
+      out.push({
+        code: "VIA_TYPE_UNSUPPORTED",
+        message: `Via type "${via.viaType}" cannot be manufactured: OpenPCB's drill export writes through drills only${
+          preset ? `; ${preset.name} offers through-hole vias only` : ""
+        }; its drill depth is not evaluated`,
+        anchors: [{ kind: "via", viaId: via.id }],
+        locationMm: via.centerMm,
+      });
+    }
+
+    // Aspect ratio = board thickness / drill, for THROUGH vias only (§5.2):
+    // there is no per-layer thickness model, and no preset states a limit for
+    // a blind / buried / micro via — the former linear span scaling invented
+    // one and spared exactly the vias that cannot be built at all (B2-7).
+    if (
+      ctx.fabricator !== "custom" &&
+      preset &&
+      via.viaType === "through" &&
+      via.drillMm > 0
+    ) {
+      const ratio = ctx.boardThicknessMm / via.drillMm;
+      if (exceeds(ratio, preset.maxAspectRatio)) {
         out.push({
           code: "VIA_ASPECT_RATIO",
-          message: `Via aspect ratio ${ratio.toFixed(1)}:1 exceeds ${preset.name} maximum ${preset.maxAspectRatio}:1 (span ${effectiveThicknessMm.toFixed(2)} mm / drill ${via.drillMm.toFixed(3)} mm)`,
+          message: `Via aspect ratio ${ratio.toFixed(1)}:1 exceeds ${preset.name} maximum ${preset.maxAspectRatio}:1 (board thickness ${ctx.boardThicknessMm.toFixed(2)} mm / drill ${via.drillMm.toFixed(3)} mm)`,
           anchors: [{ kind: "via", viaId: via.id }],
           locationMm: via.centerMm,
         });
@@ -173,11 +210,13 @@ export function manufacturabilityItems(
     }
   }
 
-  // Per-hole minimum drill size (every drilled hole) + annular ring (plated
-  // pads that carry a known copper OD: TH footprint pads & free `std` pads).
-  // Vias are also in `ctx.holes`; their via-specific drill/annular minimums are
-  // handled above, but the global `drillSizeMm` floor still applies here.
+  // Per-hole minimum drill size (every drilled hole) + the exact annular ring
+  // of every hole that carries copper (contract 10 §3, §4). Vias are also in
+  // `ctx.holes`; their via-specific drill/annular minimums are handled above,
+  // but the global `drillSizeMm` floor still applies here.
   for (const hole of items.holes) {
+    // `drillMm` is the TOOL diameter — the slot WIDTH for a routed slot, which
+    // is what the drill/router bit actually has to be (§4).
     if (below(hole.drillMm, min.drillSizeMm)) {
       out.push({
         code: "DRILL_SIZE_MIN",
@@ -188,29 +227,52 @@ export function manufacturabilityItems(
         requiredMm: min.drillSizeMm,
       });
     }
-    if (hole.padOdMm !== undefined) {
-      const annular = (hole.padOdMm - hole.drillMm) / 2;
-      if (below(annular, min.annularRingMm)) {
+    const ring = hole.annularRingMm;
+    // A non-finite ring is bad data (a NaN pad dimension), not a breakout:
+    // degenerate copper is dropped upstream and gets no verdict here (R1 #5).
+    if (ring !== undefined && Number.isFinite(ring)) {
+      // BREAKOUT IS JUDGED FIRST (§3.3): a wall that touches or leaves the
+      // copper is a violation whatever `minimums.annularRingMm` says. A
+      // minimum of 0 plus `below()`'s 1 nm grace must not legalise copper that
+      // is not there.
+      if (!(ring > GEOM_EPS_MM)) {
         out.push({
           code: "ANNULAR_RING_MIN",
-          message: `Pad annular ring ${annular.toFixed(3)} mm is below the minimum ${min.annularRingMm.toFixed(3)} mm`,
+          message: `Drill breaks out of the pad copper (annular ring ${ring.toFixed(3)} mm)`,
           anchors: [hole.anchor],
           locationMm: hole.center,
-          measuredMm: annular,
+          measuredMm: ring,
+          requiredMm: min.annularRingMm,
+        });
+      } else if (below(ring, min.annularRingMm)) {
+        out.push({
+          code: "ANNULAR_RING_MIN",
+          message: `Pad annular ring ${ring.toFixed(3)} mm is below the minimum ${min.annularRingMm.toFixed(3)} mm`,
+          anchors: [hole.anchor],
+          locationMm: hole.center,
+          measuredMm: ring,
           requiredMm: min.annularRingMm,
         });
       }
     }
-    // Fab capability floors for PTH/NPTH drills + PTH annular rings (vias are
-    // validated with via-specific thresholds in the via loop above; P8 —
-    // audit B2-8: TH/free-hole drills previously got no fab check at all).
+    // Fab capability floors, by hole kind and tool (vias are validated with
+    // via-specific thresholds in the via loop above; P8 — audit B2-8:
+    // TH/free-hole drills previously got no fab check at all).
     if (hole.kind !== "via") {
       for (const fv of validateHoleAgainstFab(
-        { drillMm: hole.drillMm, padOdMm: hole.padOdMm },
+        {
+          kind: hole.kind,
+          drillMm: hole.drillMm,
+          slot: hole.slot !== undefined,
+          ...(ring !== undefined ? { annularRingMm: ring } : {}),
+        },
         ctx.fabricator,
       )) {
         out.push({
-          code: fv.rule === "minDrillMm" ? "FAB_DRILL" : "FAB_ANNULAR_RING",
+          code:
+            fv.rule === "pthAnnularRingMm" || fv.rule === "npthAnnularRingMm"
+              ? "FAB_ANNULAR_RING"
+              : "FAB_DRILL",
           message: fv.message,
           anchors: [hole.anchor],
           locationMm: hole.center,

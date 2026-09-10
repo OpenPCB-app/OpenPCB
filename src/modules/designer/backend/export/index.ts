@@ -19,6 +19,7 @@ import { buildGerberJobFile, type GerberJobFileAttr } from "./gerber/job-file";
 import { buildPnpCsv } from "./pnp/writer";
 import { runExportPreflight } from "./preflight";
 import { exportBundleName } from "../../../../sdks/designer/pcb-helpers";
+import { AppError } from "../../../../core/contracts/errors";
 
 /**
  * Manufacturing export orchestrator.
@@ -47,6 +48,23 @@ export function buildExportBundle(
 ): GerberExportResult {
   const warnings: string[] = [];
   const artifacts: GerberArtifact[] = [];
+
+  // Only a THROUGH via can be manufactured from this bundle: Excellon writes
+  // ONE plated drill file (`TF.FileFunction,Plated,1,<last>,PTH`), so every
+  // plated hit is a through drill and a blind / buried / micro via would ship
+  // as one — a board the fab builds differently from the one that was designed
+  // (manufacturability contract 10 §5.1; the precedent is the failed-fill
+  // refusal of the copper-pour contract §9). REFUSE before writing any file.
+  const unsupportedVias = pcb.vias.filter((via) => via.viaType !== "through");
+  if (unsupportedVias.length > 0) {
+    throw new AppError(
+      "OpenPCB's drill export writes through drills only; blind/buried/micro vias cannot be manufactured from this export",
+      422,
+      "Unsupported via type",
+      "https://openpcb.dev/problems/export-unsupported-via-type",
+      { viaIds: unsupportedVias.map((via) => via.id) },
+    );
+  }
 
   const bundleName = exportBundleName(pcb.designId);
   const includeInner =

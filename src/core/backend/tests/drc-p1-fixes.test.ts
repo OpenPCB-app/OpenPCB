@@ -66,6 +66,7 @@ function via(
     drillMm?: number;
     fromLayer?: PcbCopperLayerId;
     toLayer?: PcbCopperLayerId;
+    viaType?: PcbVia["viaType"];
   } = {},
 ): PcbVia {
   return {
@@ -77,7 +78,7 @@ function via(
     drillMm: opts.drillMm ?? 0.4,
     fromLayer: opts.fromLayer ?? "F.Cu",
     toLayer: opts.toLayer ?? "B.Cu",
-    viaType: "through",
+    viaType: opts.viaType ?? "through",
     protection: "tented",
     provenance: "route",
   };
@@ -351,13 +352,13 @@ describe("DRC P1 — C11 manufacturability coverage", () => {
     expect(codes(report)).toContain("ANNULAR_RING_MIN");
   });
 
-  test("via aspect ratio scales by span depth (blind via spared, through via flagged)", () => {
+  test("via aspect ratio is board thickness / drill, and only for THROUGH vias", () => {
     const b = board({
       layerCount: 4,
       boardThicknessMm: 5,
       fabricator: "jlcpcb_4l", // maxAspectRatio 10
     });
-    // Through via spans the full 5 mm → 12.5:1 > 10 → flagged.
+    // Through via: the drill crosses the whole 5 mm board -> 12.5:1 > 10.
     const through = runDrc(
       projection({
         board: b,
@@ -365,16 +366,26 @@ describe("DRC P1 — C11 manufacturability coverage", () => {
       }),
     );
     expect(codes(through)).toContain("VIA_ASPECT_RATIO");
-    // Blind via spans 1/3 of the stackup → ~1.67 mm → 4.2:1 < 10 → spared.
+    // Blind via: no per-layer thickness model and no preset limit, so NO
+    // aspect verdict at all (contract 10 §5.2). The former linear span scaling
+    // invented one — and spared exactly the vias that cannot be built (B2-7).
+    // What it gets instead is VIA_TYPE_UNSUPPORTED: OpenPCB's Excellon export
+    // writes one plated drill file, so every plated hit is a through drill.
     const blind = runDrc(
       projection({
         board: b,
         vias: [
-          via("v", { fromLayer: "F.Cu", toLayer: "In1.Cu", drillMm: 0.4 }),
+          via("v", {
+            fromLayer: "F.Cu",
+            toLayer: "In1.Cu",
+            drillMm: 0.4,
+            viaType: "blind",
+          }),
         ],
       }),
     );
     expect(codes(blind)).not.toContain("VIA_ASPECT_RATIO");
+    expect(codes(blind)).toContain("VIA_TYPE_UNSUPPORTED");
   });
 });
 

@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { collectDrills } from "../../../modules/designer/frontend/pcb/pcb-drills";
-import type { PcbPlacedPart, PcbVia } from "../../../sdks";
+import {
+  collectDrills,
+  footprintPadDrill,
+  padDrillFields,
+  type FootprintPadDrillFields,
+} from "../../../modules/designer/frontend/pcb/pcb-drills";
+import { padOutlineWorldMm } from "../../../shared/pcb-geometry/pad-outline";
+import type { PcbPlacedPart, PcbPointMm, PcbVia } from "../../../sdks";
 import type {
   FootprintRenderModel,
   FootprintRenderSourcePad,
@@ -210,5 +216,188 @@ describe("collectDrills", () => {
       ],
     );
     expect(drills).toEqual([]);
+  });
+});
+
+/**
+ * A render-source pad carrying the S11 drill attributes. They are absent from
+ * the PINNED `@openpcb/rendering-core` pad type (the sibling checkout has them,
+ * unreleased), which is exactly why every read goes through `padDrillFields` —
+ * contract 10 §2.1.
+ */
+type DrilledPad = FootprintRenderSourcePad & FootprintPadDrillFields;
+
+/** Angle of `a -> b`, folded into [0, 180) — a slot axis has no direction. */
+function axisDeg(a: PcbPointMm, b: PcbPointMm): number {
+  const deg = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+  return ((deg % 180) + 180) % 180;
+}
+
+describe("padDrillFields — the one narrowing read (contract 10 §2.1)", () => {
+  test("a pad with no attributes is plated, unslotted and uncentred", () => {
+    expect(padDrillFields(pad("1", { x: 0, y: 0 }, 0.8))).toEqual({
+      plated: true,
+      drillSlotMm: null,
+      drillOffsetMm: null,
+    });
+  });
+
+  test("only `plated: false` means non-plated; a (0,0) offset is no offset", () => {
+    const base = pad("1", { x: 0, y: 0 }, 0.8);
+    const withFields = (extra: FootprintPadDrillFields): DrilledPad => ({
+      ...base,
+      ...extra,
+    });
+    expect(padDrillFields(withFields({ plated: true })).plated).toBe(true);
+    expect(padDrillFields(withFields({ plated: false })).plated).toBe(false);
+    expect(
+      padDrillFields(withFields({ drillOffsetMm: { x: 0, y: 0 } }))
+        .drillOffsetMm,
+    ).toBeNull();
+    expect(
+      padDrillFields(withFields({ drillOffsetMm: { x: 0.4, y: 0 } }))
+        .drillOffsetMm,
+    ).toEqual({ x: 0.4, y: 0 });
+  });
+
+  test("a non-finite or non-positive slot dimension is no slot", () => {
+    const base = pad("1", { x: 0, y: 0 }, 0.8);
+    for (const bad of [
+      { widthMm: 0, heightMm: 0.5 },
+      { widthMm: 1.8, heightMm: 0 },
+      { widthMm: Number.NaN, heightMm: 0.5 },
+      { widthMm: 1.8, heightMm: Number.POSITIVE_INFINITY },
+    ]) {
+      const p: DrilledPad = { ...base, drillSlotMm: bad };
+      expect(padDrillFields(p).drillSlotMm).toBeNull();
+    }
+  });
+});
+
+describe("footprintPadDrill — the slot frame (contract 10 §1.2)", () => {
+  const slotted = (rotationDeg: number): DrilledPad => ({
+    ...pad("1", { x: 0, y: 0 }, 0.5),
+    rotationDeg,
+    drillSlotMm: { widthMm: 1.8, heightMm: 0.5 },
+  });
+
+  test("pad 45 deg on a placement 30 deg gives a 75 deg slot; mirrored gives -15", () => {
+    const pl = (mirrored: boolean): PcbPlacedPart =>
+      placement({
+        positionMm: { x: 0, y: 0 },
+        rotationDeg: 30,
+        mirrored,
+        pads: [slotted(45)],
+      });
+
+    const up = footprintPadDrill(slotted(45), pl(false))!;
+    expect(axisDeg(up.slot!.a, up.slot!.b)).toBeCloseTo(75, 9);
+    const mirroredDrill = footprintPadDrill(slotted(45), pl(true))!;
+    expect(axisDeg(mirroredDrill.slot!.a, mirroredDrill.slot!.b)).toBeCloseTo(
+      165,
+      9,
+    ); // -15 deg, folded into [0, 180)
+
+    // The SAME convention the copper takes: a thin `rect` pad of the slot's
+    // dimensions has its long axis along the slot's.
+    for (const mirrored of [false, true]) {
+      const thin = {
+        ...slotted(45),
+        shape: "rect" as const,
+        widthMm: 1.8,
+        heightMm: 0.5,
+      };
+      const ring = padOutlineWorldMm(pl(mirrored), thin);
+      // The rect ring is [-hw,-hh], [hw,-hh], [hw,hh], [-hw,hh]: the long axis
+      // runs between the midpoints of the two short edges.
+      const midA = {
+        x: (ring[0]!.x + ring[3]!.x) / 2,
+        y: (ring[0]!.y + ring[3]!.y) / 2,
+      };
+      const midB = {
+        x: (ring[1]!.x + ring[2]!.x) / 2,
+        y: (ring[1]!.y + ring[2]!.y) / 2,
+      };
+      const drill = footprintPadDrill(slotted(45), pl(mirrored))!;
+      expect(axisDeg(midA, midB)).toBeCloseTo(
+        axisDeg(drill.slot!.a, drill.slot!.b),
+        9,
+      );
+    }
+  });
+
+  test("the tool is the narrow axis and the centreline half-span is (max - min)/2", () => {
+    const drill = footprintPadDrill(
+      slotted(0),
+      placement({ pads: [slotted(0)] }),
+    )!;
+    expect(drill.drillMm).toBe(0.5);
+    expect(drill.slot!.widthMm).toBe(0.5);
+    expect(drill.slot!.a).toEqual({ x: -0.65, y: 0 });
+    expect(drill.slot!.b).toEqual({ x: 0.65, y: 0 });
+  });
+
+  test("a square slot degenerates to a round hit of the SLOT tool, not of drillDiameterMm", () => {
+    // Contract 10 §1.2 (Astra run 2b #2): a `(drill oval 0.5 0.5)` is routed
+    // with a 0.5 bit whatever the narrow-axis mirror in `drillDiameterMm` says
+    // — the centreline vanishes, the tool does not.
+    const p: DrilledPad = {
+      ...pad("1", { x: 0, y: 0 }, 0.8),
+      drillSlotMm: { widthMm: 0.5, heightMm: 0.5 },
+    };
+    const drill = footprintPadDrill(p, placement({ pads: [p] }))!;
+    expect(drill.slot).toBeUndefined();
+    expect(drill.drillMm).toBe(0.5);
+  });
+
+  test("a drill offset is a PAD-local vector through the composed frame", () => {
+    const offsetPad: DrilledPad = {
+      ...pad("1", { x: 0, y: 0 }, 0.8),
+      drillOffsetMm: { x: 0.4, y: 0 },
+    };
+    // Placement 90 deg, pad rotation 0 -> world rotation 90: (0.4, 0) -> (0, 0.4).
+    const upright = footprintPadDrill(
+      offsetPad,
+      placement({ rotationDeg: 90, pads: [offsetPad] }),
+    )!;
+    expect(upright.centerMm.x).toBeCloseTo(0, 12);
+    expect(upright.centerMm.y).toBeCloseTo(0.4, 12);
+    // Mirrored: reflect X first (0.4, 0) -> (-0.4, 0), then rotate 90 deg.
+    const mirrored = footprintPadDrill(
+      offsetPad,
+      placement({ rotationDeg: 90, mirrored: true, pads: [offsetPad] }),
+    )!;
+    expect(mirrored.centerMm.x).toBeCloseTo(0, 12);
+    expect(mirrored.centerMm.y).toBeCloseTo(-0.4, 12);
+  });
+
+  test("plating comes from the attribute; no positive drill is no drill", () => {
+    const npth: DrilledPad = { ...pad("1", { x: 0, y: 0 }, 0.8), plated: false };
+    expect(footprintPadDrill(npth, placement({ pads: [npth] }))!.plated).toBe(
+      false,
+    );
+    const dry = pad("1", { x: 0, y: 0 });
+    expect(footprintPadDrill(dry, placement({ pads: [dry] }))).toBeNull();
+    const zero = pad("1", { x: 0, y: 0 }, 0);
+    expect(footprintPadDrill(zero, placement({ pads: [zero] }))).toBeNull();
+  });
+
+  test("collectDrills carries the slot through and keeps its order", () => {
+    const p: DrilledPad = {
+      ...pad("1", { x: 2, y: 0 }, 0.5),
+      drillSlotMm: { widthMm: 1.8, heightMm: 0.5 },
+    };
+    const drills = collectDrills(
+      [via({ x: 0, y: 0 }, 0.4)],
+      [placement({ positionMm: { x: 10, y: 0 }, pads: [p] })],
+    );
+    expect(drills).toHaveLength(2);
+    expect(drills[1]!.centerMm).toEqual({ x: 12, y: 0 });
+    expect(drills[1]!.radiusMm).toBe(0.25);
+    expect(drills[1]!.slot).toEqual({
+      a: { x: 11.35, y: 0 },
+      b: { x: 12.65, y: 0 },
+      widthMm: 0.5,
+    });
   });
 });

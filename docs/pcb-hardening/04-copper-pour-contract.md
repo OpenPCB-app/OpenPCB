@@ -15,8 +15,10 @@ layer (S3a §5, enforced here), zone holes, and the parity of every consumer —
 cloud snapshot, connectivity, DRC, trace cleanup. Owns `OPEN_FINDINGS` B3-9 and B3-10.
 
 Out of scope, recorded as limits (§13): scoped `PcbDrcRule` clearances in the fill (S6; the net-class tier IS in, §5), the
-`0.5 mm` fill-clearance floor (S6), hole-to-copper clearance for NPTH (S11), execution off the
-main thread (S10), spatial acceleration (S9), Gerber true arcs (S12).
+`0.5 mm` fill-clearance floor (S6), execution off the main thread (S10, contract 09), spatial
+acceleration (S9), Gerber true arcs (S12). The NPTH halo covers every non-plated drill since S11
+(footprint `np_thru_hole` pads included — contract 10 §1.1 / §8), and an unplated pad's copper
+ring is never a pour member (contract 10 §2.4).
 
 ## 1. Vocabulary
 
@@ -150,7 +152,7 @@ pad geometry; exact discs for TRUE circles landed in DRC in S7 (`06-batch-drc-co
 |---|---|---|
 | pour ↔ different-net copper of net `M` | **S6:** `c(M) = max(zone.clearanceMm ?? 0, R(pourTo<kind(M)>, L, N, M))` where `R` is the one rule resolver (`05-rule-semantics-contract.md` §6): implicit tier `max(pourToCopperMm ?? 0.5, traceTo<kind>Mm, class(N), class(M))`, an explicit rule only through a `pairKind` scope naming the pour kind, area scopes never relax a pour, floor last | S3a §6 tighten-only. Before S6: `max(c_zone, class(N), class(M), floor)` with `c_zone = max(zone.clearanceMm ?? 0, max(0.5, traceToTrace, traceToPad, padToPad, traceToVia))` — one blunt maximum for every obstacle kind; the 0.5 constant became the board rule `pourToCopperMm` (absent = 0.5) |
 | pour ↔ board edge / cutout | `e = copperToBoardEdgeMm` | via the extent (§3.1) |
-| pour ↔ NPTH | `e` | no hole-to-copper rule exists in `PcbDesignRules`; the edge rule is the analogue of a routed hole (S11 revisits) |
+| pour ↔ NPTH | `copperToHoleMm ?? e` | `clearance.copperToHoleMm` since S7, the edge rule as its default; since S11 the halo also covers non-plated FOOTPRINT drills (`footprintPadDrill`, contract 10 §8) |
 | pour ↔ plated drill | 0 beyond the drill disc | the annulus is the pad's own copper |
 | pour ↔ `copperPour` keepout | 0 (+ one grid step) | S3a §4 |
 | pour ↔ other zone (different net) | `max(Z.clearanceMm ?? 0, Z'.clearanceMm ?? 0, R(pourToPour, L, net Z, net Z'))` around the other zone's *polygon* (S6, symmetric by construction) | §3.3, `05-rule-semantics-contract.md` §6 |
@@ -336,7 +338,10 @@ depends on that beyond what the snapshot already pins.
   (S7, `06-batch-drc-contract.md` §4); every non-plated free-pad drill gets the halo, not only
   `hole`-type pads.
 - Spokes are not relocated when blocked (§6). `custom` / `trapezoid` pads pour against their
-  bounding ring (S11).
+  bounding ring (the importer degrades them to rectangles at the source; S12).
+- An UNPLATED pad's copper ring (contract 10 §2.4) is never a pour member: no thermal / solid
+  connection is attempted and the ring receives the pour's ordinary clearance — the graph could
+  never join it (per-layer null-net items), so the artwork must not either (S11 R1 #6).
 - `ZONE_OVERLAP` and keepout / placement predicates ignore zone holes (§11).
 - The fill runs synchronously on the caller's thread, except inside a batch DRC run: S10 moved
   that run — its pours included — to a worker thread with a checkpoint before every zone

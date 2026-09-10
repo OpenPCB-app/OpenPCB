@@ -2005,11 +2005,14 @@ function parseFreeHole(value: unknown): PcbFreeHole | null {
     return null;
   }
   const lockedAtRaw = asString(record.lockedAt);
+  const drillSlot = parseDrillSlot(record.drillSlot);
   return {
     id,
     centerMm: { x: cx, y: cy },
-    drillMm,
-    drillSlot: parseDrillSlot(record.drillSlot),
+    // `drillMm` and `drillSlot.widthMm` are ONE value — the tool (contract 10
+    // §1.2); the slot width wins at hydration, as for free pads.
+    drillMm: drillSlot ? drillSlot.widthMm : drillMm,
+    drillSlot,
     lockedAt: lockedAtRaw ?? null,
   };
 }
@@ -2134,6 +2137,8 @@ function parseFreePad(value: unknown): PcbFreePad | null {
   const solderMaskExpansionMm = asNumber(record.solderMaskExpansionMm);
   const solderPasteExpansionMm = asNumber(record.solderPasteExpansionMm);
   const lockedAt = asString(record.lockedAt);
+  const drillSlot = parseDrillSlot(record.drillSlot);
+  const roundDrill = drillMm !== null && drillMm > 0 ? drillMm : null;
   return {
     id,
     centerMm: { x: cx, y: cy },
@@ -2141,10 +2146,18 @@ function parseFreePad(value: unknown): PcbFreePad | null {
     padType,
     shape,
     widthMm,
-    heightMm,
+    // A `circle` pad is a DISC of `widthMm` — the ONE interpretation
+    // (manufacturability contract 10 §7), applied at HYDRATION so a row
+    // persisted before the rule reads back as a disc too.
+    heightMm: shape === "circle" ? widthMm : heightMm,
     ...(roundrectRatio !== null ? { roundrectRatio } : {}),
-    drillMm: drillMm !== null && drillMm > 0 ? drillMm : null,
-    drillSlot: parseDrillSlot(record.drillSlot),
+    // `drillMm` and `drillSlot.widthMm` are ONE value — the tool diameter (the
+    // SDK has always said so; contract 10 §1.2). A slotted row's round
+    // `drillMm` is whatever the authoring path last wrote, so the slot width
+    // wins at hydration and no consumer can drill a different tool from the
+    // one the slot is routed with.
+    drillMm: drillSlot ? drillSlot.widthMm : roundDrill,
+    drillSlot,
     layer,
     netId: netId ?? null,
     solderMaskExpansionMm,

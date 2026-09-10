@@ -113,8 +113,13 @@ function shapeRingAroundOrigin(pad: ShapeInput): PcbPointMm[] {
   const hh = pad.heightMm / 2;
   let base: PcbPointMm[];
   switch (pad.shape) {
+    // A `circle` pad is a disc of `widthMm` — the ONE interpretation the
+    // record's exact `disc`, the annular kernel and the Gerber writer share
+    // (manufacturability contract 10 §7). An unequal height is a data defect
+    // the importer and the hydrator normalise; the ring never reads it, so
+    // `ring`, `bounds` and `disc` cannot disagree (S11 R1 #1).
     case "circle":
-      base = ellipseRing(hw, hh);
+      base = ellipseRing(hw, hw);
       break;
     case "oval":
       base = stadiumRing(pad.widthMm, pad.heightMm);

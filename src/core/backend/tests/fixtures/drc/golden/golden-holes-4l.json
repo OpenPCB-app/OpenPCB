@@ -1,0 +1,1463 @@
+{
+ "schemaVersion": 2,
+ "fabricator": "jlcpcb_4l",
+ "layerCount": 4,
+ "boardThicknessMm": 1.6,
+ "minimums": {
+  "traceWidthMm": 0.1,
+  "drillSizeMm": 0.1,
+  "annularRingMm": 0.2,
+  "viaDiameterMm": 0.3,
+  "viaDrillMm": 0.1,
+  "holeToHoleMm": 0.25
+ },
+ "netClasses": [
+  {
+   "id": "default",
+   "name": "Default",
+   "traceWidthMm": 0.1,
+   "clearanceMm": 0.1,
+   "viaDiameterMm": 0.3,
+   "viaDrillMm": 0.1,
+   "color": "#ccc",
+   "defaultViaProtection": "tented"
+  }
+ ],
+ "outline": {
+  "kind": "rect",
+  "widthMm": 80,
+  "heightMm": 60,
+  "centerMm": {
+   "x": 0,
+   "y": 0
+  }
+ },
+ "netNames": {
+  "shield": "SHIELD"
+ },
+ "placements": [
+  {
+   "id": "MH1",
+   "reference": "MH1",
+   "positionMm": {
+    "x": -30,
+    "y": 20
+   },
+   "pads": [
+    {
+     "id": "pad-np-0-0",
+     "number": "",
+     "shape": "circle",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 3.2,
+     "heightMm": 3.2,
+     "rotationDeg": 0,
+     "drillDiameterMm": 3.2,
+     "plated": false,
+     "layer": "*.Cu"
+    }
+   ]
+  },
+  {
+   "id": "MH2",
+   "reference": "MH2",
+   "positionMm": {
+    "x": 30,
+    "y": 20
+   },
+   "pads": [
+    {
+     "id": "pad-np-0-0",
+     "number": "",
+     "shape": "circle",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 4.0,
+     "heightMm": 4.0,
+     "rotationDeg": 0,
+     "drillDiameterMm": 3.2,
+     "plated": false,
+     "layer": "*.Cu"
+    }
+   ]
+  },
+  {
+   "id": "MH3",
+   "reference": "MH3",
+   "positionMm": {
+    "x": -30,
+    "y": -20
+   },
+   "pads": [
+    {
+     "id": "pad-1-0-0",
+     "number": "1",
+     "shape": "circle",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 4.0,
+     "heightMm": 4.0,
+     "rotationDeg": 0,
+     "drillDiameterMm": 3.2,
+     "plated": false,
+     "layer": "*.Cu"
+    }
+   ]
+  },
+  {
+   "id": "J9",
+   "reference": "J9",
+   "positionMm": {
+    "x": 0,
+    "y": 20
+   },
+   "pads": [
+    {
+     "id": "pad-1-0-0",
+     "number": "1",
+     "shape": "oval",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 2.0,
+     "heightMm": 1.0,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.5,
+     "drillSlotMm": {
+      "widthMm": 1.8,
+      "heightMm": 0.5
+     }
+    }
+   ]
+  },
+  {
+   "id": "MS1",
+   "reference": "MS1",
+   "positionMm": {
+    "x": -10,
+    "y": 20
+   },
+   "pads": [
+    {
+     "id": "pad-np-0-0",
+     "number": "",
+     "shape": "circle",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 0.3,
+     "heightMm": 0.3,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.3,
+     "plated": false,
+     "drillSlotMm": {
+      "widthMm": 1.5,
+      "heightMm": 0.3
+     }
+    }
+   ]
+  },
+  {
+   "id": "PS1",
+   "reference": "PS1",
+   "positionMm": {
+    "x": 10,
+    "y": 20
+   },
+   "pads": [
+    {
+     "id": "pad-1-0-0",
+     "number": "1",
+     "shape": "oval",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 2.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.3,
+     "drillSlotMm": {
+      "widthMm": 1.5,
+      "heightMm": 0.3
+     }
+    }
+   ]
+  },
+  {
+   "id": "OF1",
+   "reference": "OF1",
+   "positionMm": {
+    "x": -20,
+    "y": 10
+   },
+   "pads": [
+    {
+     "id": "pad-1-0-0",
+     "number": "1",
+     "shape": "circle",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 2.0,
+     "heightMm": 2.0,
+     "rotationDeg": 0,
+     "drillDiameterMm": 1.0,
+     "drillOffsetMm": {
+      "x": 0.4,
+      "y": 0.0
+     }
+    }
+   ]
+  },
+  {
+   "id": "RT1",
+   "reference": "RT1",
+   "positionMm": {
+    "x": 0,
+    "y": 10
+   },
+   "pads": [
+    {
+     "id": "pad-1-0-0",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 2.0,
+     "heightMm": 1.6,
+     "rotationDeg": 45,
+     "drillDiameterMm": 1.0
+    }
+   ],
+   "rotationDeg": 30
+  },
+  {
+   "id": "TP1",
+   "reference": "TP1",
+   "positionMm": {
+    "x": 30,
+    "y": -20
+   },
+   "pads": [
+    {
+     "id": "pad-1-0-0",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 1.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "U1",
+   "reference": "U1",
+   "positionMm": {
+    "x": 0,
+    "y": -10
+   },
+   "pads": [
+    {
+     "id": "pad-1--5.5-3.0",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -5.5,
+      "y": 3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-13--5.5--3.0",
+     "number": "13",
+     "shape": "rect",
+     "centerMm": {
+      "x": -5.5,
+      "y": -3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2--4.5-3.0",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": -4.5,
+      "y": 3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-14--4.5--3.0",
+     "number": "14",
+     "shape": "rect",
+     "centerMm": {
+      "x": -4.5,
+      "y": -3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-3--3.5-3.0",
+     "number": "3",
+     "shape": "rect",
+     "centerMm": {
+      "x": -3.5,
+      "y": 3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-15--3.5--3.0",
+     "number": "15",
+     "shape": "rect",
+     "centerMm": {
+      "x": -3.5,
+      "y": -3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-4--2.5-3.0",
+     "number": "4",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": 3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-16--2.5--3.0",
+     "number": "16",
+     "shape": "rect",
+     "centerMm": {
+      "x": -2.5,
+      "y": -3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-5--1.5-3.0",
+     "number": "5",
+     "shape": "rect",
+     "centerMm": {
+      "x": -1.5,
+      "y": 3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-17--1.5--3.0",
+     "number": "17",
+     "shape": "rect",
+     "centerMm": {
+      "x": -1.5,
+      "y": -3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-6--0.5-3.0",
+     "number": "6",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.5,
+      "y": 3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-18--0.5--3.0",
+     "number": "18",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.5,
+      "y": -3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-7-0.5-3.0",
+     "number": "7",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.5,
+      "y": 3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-19-0.5--3.0",
+     "number": "19",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.5,
+      "y": -3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-8-1.5-3.0",
+     "number": "8",
+     "shape": "rect",
+     "centerMm": {
+      "x": 1.5,
+      "y": 3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-20-1.5--3.0",
+     "number": "20",
+     "shape": "rect",
+     "centerMm": {
+      "x": 1.5,
+      "y": -3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-9-2.5-3.0",
+     "number": "9",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": 3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-21-2.5--3.0",
+     "number": "21",
+     "shape": "rect",
+     "centerMm": {
+      "x": 2.5,
+      "y": -3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-10-3.5-3.0",
+     "number": "10",
+     "shape": "rect",
+     "centerMm": {
+      "x": 3.5,
+      "y": 3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-22-3.5--3.0",
+     "number": "22",
+     "shape": "rect",
+     "centerMm": {
+      "x": 3.5,
+      "y": -3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-11-4.5-3.0",
+     "number": "11",
+     "shape": "rect",
+     "centerMm": {
+      "x": 4.5,
+      "y": 3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-23-4.5--3.0",
+     "number": "23",
+     "shape": "rect",
+     "centerMm": {
+      "x": 4.5,
+      "y": -3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-12-5.5-3.0",
+     "number": "12",
+     "shape": "rect",
+     "centerMm": {
+      "x": 5.5,
+      "y": 3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-24-5.5--3.0",
+     "number": "24",
+     "shape": "rect",
+     "centerMm": {
+      "x": 5.5,
+      "y": -3.0
+     },
+     "widthMm": 0.5,
+     "heightMm": 1.5,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "J1",
+   "reference": "J1",
+   "positionMm": {
+    "x": -25,
+    "y": -5
+   },
+   "pads": [
+    {
+     "id": "pad-1--11.43-0",
+     "number": "1",
+     "shape": "circle",
+     "centerMm": {
+      "x": -11.43,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-2--8.89-0",
+     "number": "2",
+     "shape": "circle",
+     "centerMm": {
+      "x": -8.89,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-3--6.35-0",
+     "number": "3",
+     "shape": "circle",
+     "centerMm": {
+      "x": -6.35,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-4--3.8099999999999996-0",
+     "number": "4",
+     "shape": "circle",
+     "centerMm": {
+      "x": -3.8099999999999996,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-5--1.2699999999999996-0",
+     "number": "5",
+     "shape": "circle",
+     "centerMm": {
+      "x": -1.2699999999999996,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-6-1.2699999999999996-0",
+     "number": "6",
+     "shape": "circle",
+     "centerMm": {
+      "x": 1.2699999999999996,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-7-3.8100000000000005-0",
+     "number": "7",
+     "shape": "circle",
+     "centerMm": {
+      "x": 3.8100000000000005,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-8-6.350000000000001-0",
+     "number": "8",
+     "shape": "circle",
+     "centerMm": {
+      "x": 6.350000000000001,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-9-8.89-0",
+     "number": "9",
+     "shape": "circle",
+     "centerMm": {
+      "x": 8.89,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-10-11.43-0",
+     "number": "10",
+     "shape": "circle",
+     "centerMm": {
+      "x": 11.43,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    }
+   ]
+  },
+  {
+   "id": "J2",
+   "reference": "J2",
+   "positionMm": {
+    "x": 25,
+    "y": -5
+   },
+   "pads": [
+    {
+     "id": "pad-1--11.43-0",
+     "number": "1",
+     "shape": "circle",
+     "centerMm": {
+      "x": -11.43,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-2--8.89-0",
+     "number": "2",
+     "shape": "circle",
+     "centerMm": {
+      "x": -8.89,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-3--6.35-0",
+     "number": "3",
+     "shape": "circle",
+     "centerMm": {
+      "x": -6.35,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-4--3.8099999999999996-0",
+     "number": "4",
+     "shape": "circle",
+     "centerMm": {
+      "x": -3.8099999999999996,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-5--1.2699999999999996-0",
+     "number": "5",
+     "shape": "circle",
+     "centerMm": {
+      "x": -1.2699999999999996,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-6-1.2699999999999996-0",
+     "number": "6",
+     "shape": "circle",
+     "centerMm": {
+      "x": 1.2699999999999996,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-7-3.8100000000000005-0",
+     "number": "7",
+     "shape": "circle",
+     "centerMm": {
+      "x": 3.8100000000000005,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-8-6.350000000000001-0",
+     "number": "8",
+     "shape": "circle",
+     "centerMm": {
+      "x": 6.350000000000001,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-9-8.89-0",
+     "number": "9",
+     "shape": "circle",
+     "centerMm": {
+      "x": 8.89,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    },
+    {
+     "id": "pad-10-11.43-0",
+     "number": "10",
+     "shape": "circle",
+     "centerMm": {
+      "x": 11.43,
+      "y": 0
+     },
+     "widthMm": 1.6,
+     "heightMm": 1.6,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.8
+    }
+   ]
+  },
+  {
+   "id": "R1",
+   "reference": "R1",
+   "positionMm": {
+    "x": -28,
+    "y": 27
+   },
+   "pads": [
+    {
+     "id": "pad-1--0.9-0",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2-0.9-0",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "R2",
+   "reference": "R2",
+   "positionMm": {
+    "x": -20,
+    "y": 27
+   },
+   "pads": [
+    {
+     "id": "pad-1--0.9-0",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2-0.9-0",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "R3",
+   "reference": "R3",
+   "positionMm": {
+    "x": -12,
+    "y": 27
+   },
+   "pads": [
+    {
+     "id": "pad-1--0.9-0",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2-0.9-0",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "R4",
+   "reference": "R4",
+   "positionMm": {
+    "x": -4,
+    "y": 27
+   },
+   "pads": [
+    {
+     "id": "pad-1--0.9-0",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2-0.9-0",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "R5",
+   "reference": "R5",
+   "positionMm": {
+    "x": 4,
+    "y": 27
+   },
+   "pads": [
+    {
+     "id": "pad-1--0.9-0",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2-0.9-0",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "R6",
+   "reference": "R6",
+   "positionMm": {
+    "x": 12,
+    "y": 27
+   },
+   "pads": [
+    {
+     "id": "pad-1--0.9-0",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2-0.9-0",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "R7",
+   "reference": "R7",
+   "positionMm": {
+    "x": 20,
+    "y": 27
+   },
+   "pads": [
+    {
+     "id": "pad-1--0.9-0",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2-0.9-0",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "R8",
+   "reference": "R8",
+   "positionMm": {
+    "x": 28,
+    "y": 27
+   },
+   "pads": [
+    {
+     "id": "pad-1--0.9-0",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": -0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    },
+    {
+     "id": "pad-2-0.9-0",
+     "number": "2",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0.9,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0
+    }
+   ]
+  },
+  {
+   "id": "RT2",
+   "reference": "RT2",
+   "positionMm": {
+    "x": 15,
+    "y": -24
+   },
+   "rotationDeg": 30,
+   "layer": "B.Cu",
+   "mirrored": true,
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "oval",
+     "centerMm": {
+      "x": -4,
+      "y": 0
+     },
+     "widthMm": 2.0,
+     "heightMm": 1.0,
+     "rotationDeg": 15
+    },
+    {
+     "id": "pad-2",
+     "number": "2",
+     "shape": "roundrect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 2.0,
+     "heightMm": 1.0,
+     "rotationDeg": 45,
+     "roundrectRatio": 0.25
+    },
+    {
+     "id": "pad-3",
+     "number": "3",
+     "shape": "rect",
+     "centerMm": {
+      "x": 4,
+      "y": 0
+     },
+     "widthMm": 1.0,
+     "heightMm": 0.6,
+     "rotationDeg": 0,
+     "layer": "F.Cu"
+    },
+    {
+     "id": "pad-4",
+     "number": "4",
+     "shape": "oval",
+     "centerMm": {
+      "x": 0,
+      "y": 3
+     },
+     "widthMm": 2.0,
+     "heightMm": 1.2,
+     "rotationDeg": 0,
+     "drillDiameterMm": 0.5,
+     "drillSlotMm": {
+      "widthMm": 1.4,
+      "heightMm": 0.5
+     }
+    }
+   ]
+  }
+ ],
+ "padNets": {
+  "MH3|1": "shield",
+  "TP1|1": "shield"
+ },
+ "traces": [
+  {
+   "id": "t_hole",
+   "netId": null,
+   "layer": "F.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     -34000000,
+     21800000
+    ],
+    [
+     -26000000,
+     21800000
+    ]
+   ]
+  },
+  {
+   "id": "t_a",
+   "netId": null,
+   "layer": "F.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     -30000000,
+     0
+    ],
+    [
+     30000000,
+     0
+    ]
+   ]
+  },
+  {
+   "id": "t_b",
+   "netId": null,
+   "layer": "In1.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     -30000000,
+     2000000
+    ],
+    [
+     30000000,
+     2000000
+    ]
+   ]
+  },
+  {
+   "id": "t_c",
+   "netId": null,
+   "layer": "In2.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     -30000000,
+     4000000
+    ],
+    [
+     30000000,
+     4000000
+    ]
+   ]
+  },
+  {
+   "id": "t_d",
+   "netId": null,
+   "layer": "B.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     -30000000,
+     6000000
+    ],
+    [
+     30000000,
+     6000000
+    ]
+   ]
+  },
+  {
+   "id": "t_e",
+   "netId": null,
+   "layer": "F.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     -38000000,
+     -12000000
+    ],
+    [
+     -38000000,
+     12000000
+    ]
+   ]
+  },
+  {
+   "id": "t_f",
+   "netId": null,
+   "layer": "B.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     38000000,
+     -12000000
+    ],
+    [
+     38000000,
+     12000000
+    ]
+   ]
+  },
+  {
+   "id": "t_g",
+   "netId": null,
+   "layer": "F.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     -16000000,
+     -25000000
+    ],
+    [
+     -14000000,
+     -25000000
+    ]
+   ]
+  },
+  {
+   "id": "t_h",
+   "netId": null,
+   "layer": "In1.Cu",
+   "widthMm": 0.2,
+   "pointsNm": [
+    [
+     14000000,
+     -25000000
+    ],
+    [
+     16000000,
+     -25000000
+    ]
+   ]
+  }
+ ],
+ "vias": [
+  {
+   "id": "v_blind",
+   "netId": null,
+   "centerMm": [
+    -10000000,
+    -25000000
+   ],
+   "diameterMm": 0.8,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "In1.Cu",
+   "viaType": "blind"
+  },
+  {
+   "id": "v_aspect",
+   "netId": null,
+   "centerMm": [
+    10000000,
+    -25000000
+   ],
+   "diameterMm": 0.6,
+   "drillMm": 0.1,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through"
+  },
+  {
+   "id": "v_ok1",
+   "netId": null,
+   "centerMm": [
+    -20000000,
+    -25000000
+   ],
+   "diameterMm": 1.0,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through"
+  },
+  {
+   "id": "v_ok2",
+   "netId": null,
+   "centerMm": [
+    0,
+    -25000000
+   ],
+   "diameterMm": 1.0,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through"
+  },
+  {
+   "id": "v_ok3",
+   "netId": null,
+   "centerMm": [
+    20000000,
+    -25000000
+   ],
+   "diameterMm": 1.0,
+   "drillMm": 0.3,
+   "fromLayer": "F.Cu",
+   "toLayer": "B.Cu",
+   "viaType": "through"
+  }
+ ],
+ "freeHoles": [
+  {
+   "id": "fh_small",
+   "centerMm": {
+    "x": -35,
+    "y": -25
+   },
+   "drillMm": 0.4,
+   "lockedAt": null
+  },
+  {
+   "id": "fh_ok",
+   "centerMm": {
+    "x": 35,
+    "y": -25
+   },
+   "drillMm": 1.0,
+   "lockedAt": null
+  }
+ ],
+ "freePads": [
+  {
+   "id": "tp_a",
+   "centerMm": {
+    "x": 35,
+    "y": 10
+   },
+   "rotationDeg": 0,
+   "padType": "smd",
+   "shape": "circle",
+   "widthMm": 1.5,
+   "heightMm": 1.5,
+   "drillMm": null,
+   "layer": "F.Cu",
+   "netId": null,
+   "solderMaskExpansionMm": null,
+   "solderPasteExpansionMm": null,
+   "lockedAt": null
+  },
+  {
+   "id": "tp_b",
+   "centerMm": {
+    "x": 35,
+    "y": 5
+   },
+   "rotationDeg": 0,
+   "padType": "smd",
+   "shape": "circle",
+   "widthMm": 1.5,
+   "heightMm": 1.5,
+   "drillMm": null,
+   "layer": "F.Cu",
+   "netId": null,
+   "solderMaskExpansionMm": null,
+   "solderPasteExpansionMm": null,
+   "lockedAt": null
+  }
+ ]
+}

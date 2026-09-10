@@ -121,7 +121,9 @@ src/
     │                       board region (+ region-index.ts: the S9 boundary-edge index its
     │                       predicates take as an optional argument), area overlap
     │                       (area-overlap.ts) (+ tolerance.ts: the single epsilon policy) — see
-    │                       docs/pcb-hardening/02-geometry-contract.md.
+    │                       docs/pcb-hardening/02-geometry-contract.md; pad-annular.ts — the S11
+    │                       annular-ring kernel (analytic signed distances, breakout, copper-in-drill
+    │                       containment), docs/pcb-hardening/10-manufacturability-contract.md §3.
     │                       `rendering/pcb/outline-geometry.ts` and `backend/pcb/outline-geometry.ts`
     │                       are re-export shims over it
     ├── pcb-routing/        PCB routing

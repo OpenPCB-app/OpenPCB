@@ -6,9 +6,11 @@
 // sides — fixes live-drc's "all pads on the active layer" approximation); vias
 // become circles spanning their barrel layers; every primitive carries an AABB
 // for the O(n²) broad-phase prefilter. Drilled holes come from the ONE drill
-// derivation (`freePadDrill`), so EVERY drilled free pad is a `DrcHole` —
-// including the `smd` / `conn` pads whose drill the Excellon writer and the
-// pour have always treated as a non-plated hit (contract 06 §2).
+// derivation per object (`footprintPadDrill` / `freePadDrill` /
+// `drillSlotCenterline`, contract 10 §1.1), so EVERY drilled pad is a `DrcHole`
+// whether or not it carries copper — including the `smd` / `conn` free pads
+// whose drill the Excellon writer and the pour have always treated as a
+// non-plated hit (contract 06 §2).
 
 import type {
   DesignerPcbProjection,
@@ -58,9 +60,19 @@ import type {
   CopperRecords,
 } from "../pcb-connectivity";
 import {
-  drillSlotCenterline,
+  footprintPadDrill,
+  freeHoleDrill,
   freePadDrill,
 } from "../rendering/pcb/pcb-drills";
+import {
+  annularRingMm,
+  type DrillGeometry,
+} from "../pcb-geometry/pad-annular";
+import {
+  freePadCopperShape,
+  padCopperShape,
+  placementPads,
+} from "../pcb-geometry/pad-geometry";
 import {
   computeBoardConnectivity,
   type BoardPourFill,
@@ -141,6 +153,12 @@ export interface DrcPad {
    * they cannot mask a short (audit B5-PAD-LAYER, B5-VIA-MASK).
    */
   declaredLayerInvalid: boolean;
+  /**
+   * The pad's drill wall is plated (contract 10 §2). False copper is
+   * mechanical: it keeps its net for clearance and the pour, but carries no
+   * connectivity — `checks/structural.ts` reports a net bound to such a pad.
+   */
+  plated: boolean;
 }
 
 export interface DrcViaGeom {
@@ -180,19 +198,25 @@ export interface DrcHole {
   /** Net the hole's copper belongs to (null for mechanical / NPTH holes). */
   netId: string | null;
   center: PcbPointMm;
+  /** Tool diameter (mm) — the slot WIDTH for a routed slot. */
   drillMm: number;
   /**
-   * Copper pad outer diameter (mm) for the annular-ring check. Set for plated
-   * pads with a defined copper extent (TH footprint pads, free `std` pads);
-   * undefined for vias (checked via `DrcViaGeom`) and bare mechanical holes.
-   */
-  padOdMm?: number;
-  /**
    * Slot centerline (mm) for oblong drills, so edge/spacing checks use the true
-   * slot geometry instead of a round-hole model (audit B2-5 template). Absent
-   * for round holes.
+   * slot geometry instead of a round-hole model (audit B2-5). Absent for round
+   * holes.
    */
   slot?: { a: PcbPointMm; b: PcbPointMm; widthMm: number };
+  /**
+   * The EXACT minimum copper width around the drill wall (manufacturability
+   * contract 10 §3), computed once here and carried on the hole. Set when the
+   * hole has copper around it — every `pth`, and an `npth` that owns a ring;
+   * undefined for vias (their concentric ring is judged on `DrcViaGeom`) and
+   * for copper-less holes. A NEGATIVE value is a breakout margin, not an exact
+   * wall measurement (§3.1). It replaces the pre-S11 bounding-box outer
+   * diameter, which mis-measured every oval, roundrect, rotated, offset or
+   * slotted pad (B2-6).
+   */
+  annularRingMm?: number;
 }
 
 /**
@@ -442,6 +466,18 @@ function padAnchor(anchor: CopperPadAnchor): DrcAnchor {
     : { kind: "freePad", freePadId: anchor.freePadId };
 }
 
+/** A drill derivation as the annular-ring kernel takes it (contract 10 §3). */
+function drillGeometry(
+  centerMm: PcbPointMm,
+  drill: { drillMm: number; slot?: { a: PcbPointMm; b: PcbPointMm } },
+): DrillGeometry {
+  return {
+    centerMm,
+    radiusMm: drill.drillMm / 2,
+    ...(drill.slot ? { slot: { a: drill.slot.a, b: drill.slot.b } } : {}),
+  };
+}
+
 /** The four DRC item arrays of one copper-record set, under the clamp policy. */
 export interface DrcItems {
   traces: DrcTrace[];
@@ -462,6 +498,7 @@ export function itemsFromRecords(
   layerCount: PcbLayerCount,
   freePads: readonly PcbFreePad[],
   freeHoles: readonly PcbFreeHole[],
+  placements: readonly PcbPlacedPart[],
 ): DrcItems {
   // Copy every array / point object out of the records at this boundary: the
   // same records also back the connectivity items (`copperItems()` below), and
@@ -497,22 +534,66 @@ export function itemsFromRecords(
       : {}),
     exactShape: p.exactShape,
     declaredLayerInvalid: p.declaredLayerInvalid,
+    plated: p.plated,
   }));
 
-  const holes: DrcHole[] = [];
-  // Footprint pads lead the record order, so this reproduces the old
-  // placement × pad hole order; free-pad holes follow below because the
-  // copper-less NPTH `hole` type has no copper record at all.
+  // Holes are derived from the DRILLED OBJECTS, never from the copper records
+  // (contract 10 §1.3): a drilled pad yields exactly one hole whether it has
+  // copper or not, so a copper-less non-plated pad still faces DRILL_SIZE_MIN,
+  // HOLE_TO_HOLE, HOLE_TO_BOARD_EDGE, HOLE_OFF_BOARD and COPPER_TO_HOLE. The
+  // records are consulted only for what the COPPER says: the net a plated pad
+  // carries, and whether an unplated pad owns a ring at all.
+  const padNetByAnchor = new Map<string, string | null>();
+  const recordedShapes = new Set<string>();
+  const recordedFreePads = new Set<string>();
   for (const p of records.pads) {
-    if (p.anchor.kind !== "pad" || p.drillMm <= 0) continue;
-    holes.push({
-      anchor: padAnchor(p.anchor),
-      kind: "pth",
-      netId: p.netId,
-      center: { ...p.center },
-      drillMm: p.drillMm,
-      padOdMm: Math.min(p.widthMm, p.heightMm),
-    });
+    if (p.anchor.kind !== "pad") {
+      recordedFreePads.add(p.anchor.freePadId);
+      continue;
+    }
+    const key = `${p.anchor.placementId}|${p.anchor.padNumber}`;
+    // First occurrence wins; every occurrence of one pin carries the same
+    // `padNets` net, so the choice is only about which object is read.
+    if (!padNetByAnchor.has(key)) padNetByAnchor.set(key, p.netId);
+    recordedShapes.add(`${key}|${p.occurrence}`);
+  }
+
+  const holes: DrcHole[] = [];
+  // Placements × preview pads, then free pads, then free holes, then vias
+  // (§1.3). Projection order, never sorted: the report's byte identity under
+  // input reversal comes from the canonical sort, not from the hole order.
+  for (const placement of placements) {
+    const occurrenceByNumber = new Map<string, number>();
+    for (const pad of placementPads(placement)) {
+      const occurrence = occurrenceByNumber.get(pad.number) ?? 0;
+      occurrenceByNumber.set(pad.number, occurrence + 1);
+      const drill = footprintPadDrill(pad, placement);
+      if (!drill) continue;
+      const anchorKey = `${placement.id}|${pad.number}`;
+      const hasRing =
+        drill.plated || recordedShapes.has(`${anchorKey}|${occurrence}`);
+      holes.push({
+        anchor: {
+          kind: "pad",
+          placementId: placement.id,
+          padNumber: pad.number,
+        },
+        kind: drill.plated ? "pth" : "npth",
+        // Unplated copper carries no net through the hole (§2.4).
+        netId: drill.plated ? (padNetByAnchor.get(anchorKey) ?? null) : null,
+        center: { ...drill.centerMm },
+        drillMm: drill.drillMm,
+        ...(drill.slot ? { slot: drill.slot } : {}),
+        ...(hasRing
+          ? {
+              annularRingMm: annularRingMm(
+                padCopperShape(placement, pad),
+                drillGeometry(drill.centerMm, drill),
+              ),
+            }
+          : {}),
+      });
+    }
   }
   // EVERY drilled free pad, not just `std` / `hole`: the drill of an `smd` or
   // `conn` pad reaches the fab as a non-plated hit (contract 06 §2), so it must
@@ -520,27 +601,38 @@ export function itemsFromRecords(
   for (const freePad of freePads) {
     const drill = freePadDrill(freePad);
     if (!drill) continue;
+    // A `hole` free pad has no copper record at all — no ring to measure.
+    const hasRing = drill.plated || recordedFreePads.has(freePad.id);
     holes.push({
       anchor: { kind: "freePad", freePadId: freePad.id },
       kind: drill.plated ? "pth" : "npth",
       netId: drill.plated ? freePad.netId : null,
       center: freePad.centerMm,
       drillMm: drill.drillMm,
-      ...(drill.plated
-        ? { padOdMm: Math.min(freePad.widthMm, freePad.heightMm) }
-        : {}),
       ...(drill.slot ? { slot: drill.slot } : {}),
+      ...(hasRing
+        ? {
+            annularRingMm: annularRingMm(
+              freePadCopperShape(freePad),
+              drillGeometry(freePad.centerMm, drill),
+            ),
+          }
+        : {}),
     });
   }
   for (const hole of freeHoles) {
-    const holeSlot = drillSlotCenterline(hole.centerMm, hole.drillSlot);
+    // THE one free-hole derivation: the tool is the slot width whenever a slot
+    // is declared, so DRC and Excellon can never disagree about the bit
+    // (Astra run 2b #1).
+    const drill = freeHoleDrill(hole);
+    if (!drill) continue;
     holes.push({
       anchor: { kind: "freeHole", freeHoleId: hole.id },
       kind: "npth",
       netId: null,
-      center: hole.centerMm,
-      drillMm: hole.drillMm,
-      ...(holeSlot ? { slot: holeSlot } : {}),
+      center: drill.centerMm,
+      drillMm: drill.drillMm,
+      ...(drill.slot ? { slot: drill.slot } : {}),
     });
   }
 
@@ -769,6 +861,7 @@ export function buildDrcItems(
     board.layerCount,
     input.freePads,
     input.freeHoles,
+    input.placements,
   );
 
   const netNames = input.netNames ?? {};

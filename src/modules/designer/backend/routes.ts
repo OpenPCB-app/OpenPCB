@@ -1908,7 +1908,10 @@ function parsePcbAddFreePadCommand(
     padType,
     shape,
     widthMm,
-    heightMm,
+    // A `circle` pad is a DISC of `widthMm` — the ONE interpretation
+    // (manufacturability contract 10 §7). An unequal circle used to be judged
+    // as an ellipse ring by DRC and flashed as `widthMm` by the Gerber.
+    heightMm: shape === "circle" ? widthMm : heightMm,
     layer,
   };
   if (raw.roundrectRatio !== undefined) {

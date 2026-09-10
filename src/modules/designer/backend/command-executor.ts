@@ -1770,7 +1770,10 @@ export function executeDesignerCommand(
       padType: command.padType,
       shape: command.shape,
       widthMm: command.widthMm,
-      heightMm: command.heightMm,
+      // The disc invariant again (contract 10 §7): the HTTP parser normalises
+      // too, but an in-process dispatch must not be able to persist an
+      // unequal circle either.
+      heightMm: command.shape === "circle" ? command.widthMm : command.heightMm,
       ...(command.roundrectRatio !== undefined
         ? { roundrectRatio: command.roundrectRatio }
         : {}),
@@ -1829,6 +1832,11 @@ export function executeDesignerCommand(
         ? {}
         : { lockedAt: command.locked ? timestamp : null }),
     };
+    // A `circle` pad is a DISC of `widthMm` (manufacturability contract 10
+    // §7). The invariant has to hold on the PERSISTED row, so it is resolved
+    // against the MERGED pad: patching the shape to `circle`, or the width of
+    // a pad that already is one, both have to collapse the height.
+    if (next.shape === "circle") next.heightMm = next.widthMm;
     updatePcbFreePad(tx, next, timestamp);
     return okResult(bumpRevision(tx, designId, revision, timestamp), null);
   }

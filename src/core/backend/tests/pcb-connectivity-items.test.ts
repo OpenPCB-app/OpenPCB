@@ -208,3 +208,138 @@ describe("copper records — traces and ordering", () => {
     expect(records.pads.map((p) => p.netId)).toEqual(["vcc", null]);
   });
 });
+
+/**
+ * An unplated pad's copper is mechanical (manufacturability contract 10 §2.4):
+ * the RECORD keeps the net so DRC clearance and the pour still see it, but the
+ * kernel splits it into one NULL-net item per copper layer, because two rings
+ * of one unplated hole are never one node.
+ */
+describe("copper records — unplated pads (contract 10 §2.4)", () => {
+  const npthPad = (opts: { number?: string } = {}) =>
+    pad(opts.number ?? "1", { x: 0, y: 0 }, 4, 4, {
+      shape: "circle",
+      drillDiameterMm: 3.2,
+      plated: false,
+      layer: "*.Cu",
+    });
+
+  test("a plated drilled pad is ONE item spanning every layer", () => {
+    const records = buildCopperRecords(
+      input({
+        placements: [
+          placement("U1", {
+            pads: [
+              pad("1", { x: 0, y: 0 }, 4, 4, {
+                shape: "circle",
+                drillDiameterMm: 3.2,
+                layer: "*.Cu",
+              }),
+            ],
+          }),
+        ],
+        padNetIds: new Map([["U1|1", "n1"]]),
+      }),
+    );
+    expect(records.pads[0]!.plated).toBe(true);
+    const items = toCopperItems(records);
+    expect(items).toHaveLength(1);
+    const item = itemByKey(items, padItemKey("U1", "1"));
+    expect(item.kind === "pad" && item.layers).toEqual(["F.Cu", "B.Cu"]);
+    expect(item.netId).toBe("n1");
+  });
+
+  test("an unplated ring is one NULL-net item PER copper layer", () => {
+    const records = buildCopperRecords(
+      input({
+        placements: [placement("U1", { pads: [npthPad()] })],
+        padNetIds: new Map([["U1|1", "n1"]]),
+      }),
+    );
+    // The record keeps the net (clearance and the pour still see the copper).
+    expect(records.pads[0]!.plated).toBe(false);
+    expect(records.pads[0]!.netId).toBe("n1");
+
+    const items = toCopperItems(records);
+    expect(items.map((i) => i.key)).toEqual([
+      padItemKey("U1", "1", 0, "F.Cu"),
+      padItemKey("U1", "1", 0, "B.Cu"),
+    ]);
+    for (const item of items) {
+      expect(item.netId).toBeNull();
+      expect(item.kind === "pad" && item.layers.length).toBe(1);
+      // The DRC anchor stays per PAD — only the kernel splits.
+      expect(item.kind === "pad" && item.anchor).toEqual({
+        kind: "pad",
+        placementId: "U1",
+        padNumber: "1",
+      });
+    }
+    // The 3-tuple key the pour's membership is built from matches NOTHING.
+    expect(items.some((i) => i.key === padItemKey("U1", "1"))).toBe(false);
+  });
+
+  test("a copper-LESS unplated pad has no record at all, plated or not", () => {
+    // Copper 3.2 inside a 3.2 drill (contract 10 §2.3).
+    const gone = buildCopperRecords(
+      input({
+        placements: [
+          placement("U1", {
+            pads: [
+              pad("1", { x: 0, y: 0 }, 3.2, 3.2, {
+                shape: "circle",
+                drillDiameterMm: 3.2,
+                plated: false,
+                layer: "*.Cu",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(gone.pads).toEqual([]);
+    // The same geometry PLATED keeps its record: containment only removes the
+    // copper of a non-plated pad.
+    const kept = buildCopperRecords(
+      input({
+        placements: [
+          placement("U1", {
+            pads: [
+              pad("1", { x: 0, y: 0 }, 3.2, 3.2, {
+                shape: "circle",
+                drillDiameterMm: 3.2,
+                layer: "*.Cu",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(kept.pads).toHaveLength(1);
+  });
+
+  test("a drilled smd free pad is an NPTH hit, but its single-layer copper keeps its net", () => {
+    // Contract 10 §2.4 (Astra run 2): the per-layer null-net split exists only
+    // to deny conduction BETWEEN faces. A drilled `smd` free pad has copper on
+    // exactly one layer — a test point with a probe hole — so there is no
+    // barrel to fake: it is `plated: false` for the hole model, yet it keeps
+    // its net and its one item.
+    const records = buildCopperRecords(
+      input({
+        freePads: [
+          freePad("fp-std", { padType: "std", drillMm: 0.8, netId: "n1" }),
+          freePad("fp-smd", { padType: "smd", drillMm: 0.5, netId: "n2" }),
+          freePad("fp-dry", { padType: "smd", netId: "n3" }),
+        ],
+      }),
+    );
+    expect(records.pads.map((p) => p.plated)).toEqual([true, false, true]);
+    const items = toCopperItems(records);
+    expect(items.map((i) => i.key)).toEqual([
+      freePadItemKey("fp-std"),
+      freePadItemKey("fp-smd"),
+      freePadItemKey("fp-dry"),
+    ]);
+    expect(items.map((i) => i.netId)).toEqual(["n1", "n2", "n3"]);
+  });
+});

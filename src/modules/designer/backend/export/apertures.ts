@@ -13,13 +13,64 @@ import { gerberDim } from "./units";
  * Rounded rectangles use an aperture macro (`AM`) generated on the fly
  * per (w,h,r) tuple. Polygon and custom-shape pads will also use macros
  * when they arrive (post-v0).
+ *
+ * ROTATION (manufacturability contract 10 §6.2). A standard `R` / `O`
+ * aperture is axis-aligned, so only a composed pad rotation that is a
+ * multiple of 90° can be expressed by one — with the width / height swap the
+ * CALLER has already applied for 90° / 270°. Any other angle is emitted as an
+ * aperture MACRO with the rotation baked into its primitives, which is what
+ * KiCad's own plotter does for a rotated pad. Rotation is CCW in degrees about
+ * the macro origin (the aperture centre), so a `21` centre-line primitive
+ * placed at (0, 0) rotates in place and every off-origin primitive centre
+ * (an oval cap, a roundrect corner) must be PRE-ROTATED by the same angle —
+ * the spec warns that a primitive rotates about the macro origin, not about
+ * its own centre. `%LR` is deliberately not used: it is a stateful graphics
+ * transform many fab front-ends still ignore.
  */
 
 export type ApertureShape =
   | { kind: "circle"; diameterMm: number }
-  | { kind: "rect"; widthMm: number; heightMm: number }
-  | { kind: "obround"; widthMm: number; heightMm: number }
-  | { kind: "roundrect"; widthMm: number; heightMm: number; radiusMm: number };
+  // `rotationDeg` absent (or a multiple of 90°, with the caller's orthogonal
+  // width / height swap already applied) ⇒ today's standard aperture. Any
+  // other angle ⇒ a rotated aperture macro (see the rotation note above).
+  | { kind: "rect"; widthMm: number; heightMm: number; rotationDeg?: number }
+  | { kind: "obround"; widthMm: number; heightMm: number; rotationDeg?: number }
+  | {
+      kind: "roundrect";
+      widthMm: number;
+      heightMm: number;
+      radiusMm: number;
+      rotationDeg?: number;
+    };
+
+/**
+ * THE corner radius of a `roundrect` pad, clamped exactly as the copper ring
+ * builder (`pad-outline.ts` `roundRectRing`) and the S11 annular-ring kernel
+ * (`pad-annular.ts` `roundrectRadiusMm`) clamp it: a ratio above 0.5 cannot
+ * round a corner past the half-width / half-height without eating the pad.
+ * The Gerber writer used to apply `ratio · min(w, h)` with NO half-dimension
+ * clamp, so for a ratio > 0.5 the artwork was a different shape from the
+ * copper DRC judged.
+ */
+export function roundrectRadiusMm(
+  widthMm: number,
+  heightMm: number,
+  ratio: number,
+): number {
+  return Math.min(ratio * Math.min(widthMm, heightMm), widthMm / 2, heightMm / 2);
+}
+
+/** Normalised CCW rotation of an aperture, in [0, 360). */
+function rotationOf(shape: ApertureShape): number {
+  if (shape.kind === "circle") return 0;
+  const raw = shape.rotationDeg ?? 0;
+  return ((raw % 360) + 360) % 360;
+}
+
+/** A shape that no standard aperture can express (a non-orthogonal rotation). */
+function needsRotationMacro(shape: ApertureShape): boolean {
+  return rotationOf(shape) % 90 !== 0;
+}
 
 /**
  * X2 aperture-function attribute (informational, but JLCPCB and other
@@ -29,6 +80,12 @@ export type ApertureShape =
  * Spec values used here:
  *  - SMDPad,CuDef        — SMD copper pad, copper-defined.
  *  - ComponentPad         — through-hole copper pad (PTH).
+ *  - WasherPad            — "A pad around a non-plated hole without electrical
+ *                           function." (Ucamco, The Gerber Layer Format
+ *                           Specification revision 2022.02, §5.6.10 aperture
+ *                           attribute `.AperFunction`.) The same section says
+ *                           washer pads carry no `.P` object attribute, so the
+ *                           writer omits `%TO.P` for them.
  *  - ViaPad               — copper annulus around a via drill.
  *  - Conductor            — trace segment.
  *  - Profile              — board outline (Edge.Cuts only).
@@ -39,6 +96,7 @@ export type ApertureShape =
 export type AperFunction =
   | "SMDPad,CuDef"
   | "ComponentPad"
+  | "WasherPad"
   | "ViaPad"
   | "Conductor"
   | "Profile"
@@ -68,7 +126,9 @@ export class ApertureTable {
     if (existing) return existing.code;
     const code = this.next++;
     this.byKey.set(key, { code, shape, aperFunction });
-    if (shape.kind === "roundrect") {
+    if (needsRotationMacro(shape)) {
+      this.ensureRotatedMacro(shape, rotationOf(shape));
+    } else if (shape.kind === "roundrect") {
       this.ensureRoundrectMacro(shape.widthMm, shape.heightMm, shape.radiusMm);
     }
     return code;
@@ -143,23 +203,152 @@ export class ApertureTable {
     // reference, KiCad-import) reject the mixed-encoding macro block.
     this.macros.set(name, lines.join("\r\n"));
   }
+
+  /**
+   * Aperture macro for a shape rotated by a non-orthogonal angle. Primitives
+   * rotate about the MACRO ORIGIN, so every off-origin centre is pre-rotated
+   * by the same angle and the primitive's own rotation parameter is used only
+   * for the axis-aligned bodies (`21` centre lines).
+   */
+  private ensureRotatedMacro(shape: ApertureShape, angleDeg: number): void {
+    const name = rotatedMacroName(shape, angleDeg);
+    if (this.macros.has(name)) return;
+    const lines: string[] = [`%AM${name}*`];
+    const a = gerberDim(angleDeg);
+    switch (shape.kind) {
+      case "circle":
+        // A disc is rotation-invariant; it never reaches this path.
+        return;
+      case "rect":
+        lines.push(
+          `21,1,${gerberDim(shape.widthMm)},${gerberDim(shape.heightMm)},0,0,${a}*`,
+        );
+        break;
+      case "obround": {
+        const w = shape.widthMm;
+        const h = shape.heightMm;
+        const tool = Math.min(w, h);
+        const span = Math.max(w, h) - tool;
+        if (span > 0) {
+          // Straight part: the full stadium minus its two caps.
+          const bodyW = w > h ? span : w;
+          const bodyH = w > h ? h : span;
+          lines.push(
+            `21,1,${gerberDim(bodyW)},${gerberDim(bodyH)},0,0,${a}*`,
+          );
+        }
+        // Cap centres: the long axis is X when w > h, else Y — a pad-local
+        // vector, so it is rotated by the same angle before it is written.
+        const half = span / 2;
+        const local: Array<[number, number]> =
+          w > h
+            ? [
+                [-half, 0],
+                [half, 0],
+              ]
+            : [
+                [0, -half],
+                [0, half],
+              ];
+        for (const [lx, ly] of local) {
+          const [cx, cy] = rotatePoint(lx, ly, angleDeg);
+          lines.push(
+            `1,1,${gerberDim(tool)},${gerberDim(cx)},${gerberDim(cy)}*`,
+          );
+        }
+        break;
+      }
+      case "roundrect": {
+        const w = shape.widthMm;
+        const h = shape.heightMm;
+        const r = clampRoundrectRadius(w, h, shape.radiusMm);
+        const hStripH = Math.max(0, h - 2 * r);
+        const vStripW = Math.max(0, w - 2 * r);
+        if (hStripH > 0) {
+          lines.push(`21,1,${gerberDim(w)},${gerberDim(hStripH)},0,0,${a}*`);
+        }
+        if (vStripW > 0) {
+          lines.push(`21,1,${gerberDim(vStripW)},${gerberDim(h)},0,0,${a}*`);
+        }
+        for (const [ox, oy] of roundrectCornerOffsets(w, h, r)) {
+          const [cx, cy] = rotatePoint(ox, oy, angleDeg);
+          lines.push(
+            `1,1,${gerberDim(2 * r)},${gerberDim(cx)},${gerberDim(cy)}*`,
+          );
+        }
+        break;
+      }
+    }
+    lines.push("%");
+    this.macros.set(name, lines.join("\r\n"));
+  }
+}
+
+/** Rotate a macro-frame point by `deg` CCW about the macro origin. */
+function rotatePoint(x: number, y: number, deg: number): [number, number] {
+  const r = (deg * Math.PI) / 180;
+  const c = Math.cos(r);
+  const s = Math.sin(r);
+  return [x * c - y * s, x * s + y * c];
+}
+
+function roundrectCornerOffsets(
+  w: number,
+  h: number,
+  r: number,
+): Array<[number, number]> {
+  return [
+    [-(w / 2 - r), -(h / 2 - r)],
+    [+(w / 2 - r), -(h / 2 - r)],
+    [-(w / 2 - r), +(h / 2 - r)],
+    [+(w / 2 - r), +(h / 2 - r)],
+  ];
+}
+
+/** Macro names must start with a letter and be unique per parameter tuple. */
+function dimKey(mm: number): string {
+  return gerberDim(mm).replace(".", "p").replace("-", "m");
+}
+
+function rotatedMacroName(shape: ApertureShape, angleDeg: number): string {
+  const a = dimKey(angleDeg);
+  switch (shape.kind) {
+    case "circle":
+      return `C_${dimKey(shape.diameterMm)}`;
+    case "rect":
+      return `ROT_R_${dimKey(shape.widthMm)}_${dimKey(shape.heightMm)}_${a}`;
+    case "obround":
+      return `ROT_O_${dimKey(shape.widthMm)}_${dimKey(shape.heightMm)}_${a}`;
+    case "roundrect":
+      return `ROT_RR_${dimKey(shape.widthMm)}_${dimKey(shape.heightMm)}_${dimKey(
+        shape.radiusMm,
+      )}_${a}`;
+  }
 }
 
 function canonicalKey(shape: ApertureShape, fn: AperFunction): string {
+  // The rotation is part of the aperture's identity: two pads that differ only
+  // in a non-orthogonal angle are two different macros. Key strings are
+  // internal (never emitted), so appending it changes no output byte for the
+  // unrotated shapes.
+  const rot = `|${gerberDim(rotationOf(shape))}`;
   switch (shape.kind) {
     case "circle":
       return `c|${gerberDim(shape.diameterMm)}|${fn}`;
     case "rect":
-      return `r|${gerberDim(shape.widthMm)}|${gerberDim(shape.heightMm)}|${fn}`;
+      return `r|${gerberDim(shape.widthMm)}|${gerberDim(shape.heightMm)}${rot}|${fn}`;
     case "obround":
-      return `o|${gerberDim(shape.widthMm)}|${gerberDim(shape.heightMm)}|${fn}`;
+      return `o|${gerberDim(shape.widthMm)}|${gerberDim(shape.heightMm)}${rot}|${fn}`;
     case "roundrect":
-      return `rr|${gerberDim(shape.widthMm)}|${gerberDim(shape.heightMm)}|${gerberDim(shape.radiusMm)}|${fn}`;
+      return `rr|${gerberDim(shape.widthMm)}|${gerberDim(shape.heightMm)}|${gerberDim(shape.radiusMm)}${rot}|${fn}`;
   }
 }
 
 function formatAperture(a: AllocatedAperture): string {
   const s = a.shape;
+  if (needsRotationMacro(s)) {
+    return `%ADD${a.code}${rotatedMacroName(s, rotationOf(s))}*%`;
+  }
   switch (s.kind) {
     case "circle":
       return `%ADD${a.code}C,${gerberDim(s.diameterMm)}*%`;

@@ -31,7 +31,7 @@ long as that correspondence holds:
 rg -n "test\.todo\(" src/core/backend/tests/drc-audit-b*.test.ts
 ```
 
-Expect **6 call sites, 6 unique bug ids** (S5 closed B3-9 / B3-10; S7 added B6-1; S8 closed B5-LIVE-ROT-PAD / B5-LIVE-TH-PAD-SIDE and added B7-1), and every body a real post-fix assertion
+Expect **1 call site, 1 unique bug id** — B7-1 (S5 closed B3-9 / B3-10; S7 added B6-1; S8 closed B5-LIVE-ROT-PAD / B5-LIVE-TH-PAD-SIDE and added B7-1; S10 closed B5-SYNC; S11 closed B2-5 / B2-6 / B2-7 / B6-1), and every body a real post-fix assertion
 (`rg "expect\(true\)\.toBe\(true\)"` over the same files must return nothing — Session 0 replaced
 the seven placeholder bodies; Sessions 1 and 2 flipped nine of them). When a fix lands, the `test.todo` becomes a real `test` and the
 finding leaves this document. If the count drops without a finding being removed here, the
@@ -196,61 +196,28 @@ dispatch completes while `GET /runs/:id` still reports `running`, the released r
 completes on a seeded design with equal bytes. Loop freedom on a 10k board (timer ticks, `GET
 /api/health`, progress frames all before the run resolves) is `drc-worker-client.test.ts`.
 
-## S11 — export parity (raised by the S7 Astra run, 2026-09-09)
+## S11 — export parity (raised by the S7 Astra run, 2026-09-09) — CLOSED 2026-09-10
 
-### B6-1 — a non-orthogonally rotated pad ships un-rotated in the Gerber
+B6-1 (a non-orthogonally rotated pad shipped un-rotated in the Gerber; an unequal `circle` had
+two interpretations) is closed by S11: the Gerber flashes copper, mask and paste from the S1
+copper records with rotated aperture macros, a `circle` pad is a disc of `widthMm` everywhere,
+and `gerber-pad-parity.test.ts` holds every golden's artwork to the record geometry within
+2e-6 mm per layer file. Regression: `drc-audit-b6.test.ts` B6-1 (live). Contract:
+`docs/pcb-hardening/10-manufacturability-contract.md` §6–§7.
 
-**Severity: HIGH** (a DRC-clean board can export copper where DRC saw none). `gerber/writer.ts`
-`padApertureShape` builds a pad's aperture from its own model: an orthogonal swap for rotations
-that are multiples of 90°, and NO rotation otherwise, so a 2 × 0.2 mm rectangle at 45° is flashed
-axis-aligned; an unequal-dimension `circle` uses `widthMm` only, while DRC judges the ellipse
-ring. The copper DRC evaluates (`padOutlineWorldMm`, the S1 record ring) and the copper the fab
-receives differ. Batch DRC is not at fault — the writer does not consume the one pad geometry.
-Fix direction (S11 exit gate "DRC's representation matches export"): flash from the world ring
-(Gerber `%LR` load rotation before the flash, or a rotated aperture macro / region), and give an
-unequal `circle` one interpretation across persistence, DRC and export. Regression:
-`drc-audit-b6.test.ts` B6-1. (Astra S7 #1 claimed the 90° case too; a probe showed the orthogonal
-swap is correct — only non-orthogonal rotations and ellipses diverge.)
+## S11 — manufacturability, S5 — pours (formerly P9) — CLOSED (S5 2026-09-08, S11 2026-09-10)
 
-## S11 — manufacturability, S5 — pours (formerly P9; the two pour findings were closed in S5)
-
-The DFM overlay checks P9 was to add (courtyard, silkscreen, mask, copper shape) are now S12 and
-own no register entry — none of those codes exist yet. The nine pre-existing findings P9 carried
-are split: three manufacturability geometry defects → S11; the layer-blindness cluster → S1
-(fixed, see §1); the two island findings → S5.
-
-### B2-5 — slotted drills are modelled as round holes in the manufacturability checks
-
-**Narrowed 2026-09-06.** `DrcHole.slot` exists and is populated for free pads and free holes, and
-`checks/board.ts` already consumes it: `HOLE_TO_HOLE` measures slot-to-slot edge gaps on the slot
-centreline and the hole-to-board-edge check uses the slot radius. What remains: `DRILL_SIZE_MIN`
-and the pad `ANNULAR_RING_MIN` branch in `checks/manufacturability.ts` read only `hole.drillMm`
-and `hole.padOdMm`, so a slot is still judged as a round hole of the slot's *width* there; and
-footprint through-hole pads never populate `slot` at all (only free pads/holes go through
-`slotCenterline`). Excellon export is slot-aware (`G85`), so DRC and the fab see different holes.
-
-*Anchor:* `checks/manufacturability.ts`, `DRILL_SIZE_MIN` and pad annular branches ·
-`drc-context.ts` `slotCenterline` and footprint-pad hole construction · the `drillSlot` field on
-the pad type in `sdks/designer/types.ts`.
-
-### B2-6 — annular ring uses bounding-box extents for non-rectangular pads
-
-`padOdMm` is computed as `min(width, height)`. That is correct for circle, rect and oval pads.
-For `trapezoid` and `custom` pads those are bounding-box extents, and the actual copper is
-narrower than the box, so the annular ring is over-estimated — a false pass on exactly the pad
-shapes where the ring is most likely to be marginal.
-
-*Anchor:* `checks/manufacturability.ts`, pad annular branch; `padOdMm` derivation in
-`drc-context.ts`.
-
-### B2-7 — the blind-via aspect model is wrong twice over
-
-`VIA_ASPECT_RATIO` scales board thickness linearly by the via's layer-span fraction and then
-applies the **through-hole** 10:1 limit to that scaled depth. Blind and laser vias are governed by
-a depth-to-drill convention closer to 1:1. Compounding it, neither JLCPCB standard preset (2L or
-4L) offers blind vias at all. Unmanufacturable blind vias pass by roughly an order of magnitude.
-
-*Anchor:* `checks/manufacturability.ts`, `VIA_ASPECT_RATIO` branch.
+The DFM overlay checks P9 was to add (courtyard, silkscreen, mask, copper shape) are S12 and own
+no register entry — none of those codes exist yet. The nine pre-existing findings P9 carried are
+all closed: the layer-blindness cluster in S1 (§1), the two island findings in S5, and the three
+manufacturability geometry defects in S11 — B2-5 (slots: every hole now comes from ONE drill
+derivation per object, footprint slots and drill offsets included, and `DRILL_SIZE_MIN` / the fab
+rows judge the tool width), B2-6 (the annular ring is the exact signed-distance kernel of
+`pcb-geometry/pad-annular.ts`, breakout judged first), B2-7 (`VIA_ASPECT_RATIO` is
+`boardThicknessMm / drillMm` for through vias only; every non-through via is
+`VIA_TYPE_UNSUPPORTED` on every fabricator and the export refuses it). Regressions:
+`drc-audit-b2.test.ts` B2-5 / B2-6 / B2-7 (live), `golden-holes-4l`. Contract:
+`docs/pcb-hardening/10-manufacturability-contract.md`.
 
 ### B3-9 — `measuredMm` carries mm² for isolated islands
 
@@ -528,7 +495,7 @@ time.
 |---|---|---|
 | 1 | Min trace width | Implemented |
 | 2 | Min clearance | Implemented |
-| 3 | Min annular ring | Implemented (nominal model) |
+| 3 | Min annular ring | Implemented (exact signed-distance kernel since S11; breakout first) |
 | 4 | Min drill / via size | Implemented |
 | 5 | Board-edge clearance | Implemented (warning severity; holes not covered) |
 | 6 | Copper-to-edge / silkscreen-on-pad | **Partial** — copper-to-edge yes, silkscreen checks entirely absent |
@@ -541,7 +508,7 @@ time.
 | 13 | Diff-pair gap and skew | Missing |
 | 14 | Single-ended / differential impedance | Missing |
 | 15 | Reference-plane gap crossing | Missing |
-| 16 | Aspect ratio | Implemented (blind-via model wrong — B2-7) |
+| 16 | Aspect ratio | Implemented (through vias only since S11; non-through vias are `VIA_TYPE_UNSUPPORTED` — B2-7 closed) |
 
 **Two corrections to the taxonomy itself**, which is otherwise the planning input everyone reaches
 for:
@@ -681,6 +648,11 @@ overrides. `DrcHole.kind` is `via | pth | npth` so per-hole fab checks can selec
 | Aspect ratio | ≤10:1, through-hole |
 
 PCBWay values were deferred to a re-fetch at implementation time and are not recorded here.
+
+S11 (2026-09-10) re-fetched both fabricators' pages and added the sourced rows `minNpthDrillMm`,
+`minPlatedSlotWidthMm`, `minNpthSlotWidthMm`, `npthAnnularRingMm` (JLCPCB only) and `viaTypes`
+(through only, both fabricators) to `fab-presets.ts`, each with its quote and fetch date —
+`docs/pcb-hardening/10-manufacturability-contract.md` §4 is the table.
 
 ## 6.6 Electrical constants
 

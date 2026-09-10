@@ -31,6 +31,7 @@ import { bucketTag } from "./tag-bucketing";
 import type {
   BoundsMm,
   FootprintRenderModel,
+  FootprintRenderSourcePad,
   SymbolRenderModel,
 } from "../../../shared/rendering";
 import {
@@ -408,7 +409,10 @@ function parseFootprintPlacementSnapshot(
   const previewRaw = normalized?.preview;
 
   const preview = isFootprintRenderModel(previewRaw)
-    ? rederivedFootprintPreview(previewRaw)
+    ? withLegacyPlating(
+        rederivedFootprintPreview(previewRaw),
+        asRecord(data.raw)?.pads,
+      )
     : null;
 
   const snapshot: LibraryFootprintPlacementSnapshot = {
@@ -423,6 +427,77 @@ function parseFootprintPlacementSnapshot(
     snapshot.model3d = mapFootprintModelDescriptor(modelRow);
   }
   return snapshot;
+}
+
+/**
+ * A preview pad that MAY carry the S11 plating attribute. It is declared on
+ * `@openpcb/rendering-core`'s pad in the sibling checkout but not in the
+ * pinned package, so it is narrowed structurally here (contract 10 §2.1).
+ */
+type PadWithPlating = FootprintRenderSourcePad & { plated?: boolean };
+
+/**
+ * Recover the plating of a footprint imported BEFORE the `plated` attribute
+ * existed (manufacturability contract 10 §2.2). The library row stores the
+ * whole import JSON, so `raw.pads[i].type === "np_thru_hole"` is still there;
+ * the preview pad id is `` `${number || "?"}:${rawIndex}` ``, where the raw
+ * index was assigned before paste-only sub-pads were filtered out — so it is
+ * NOT the preview array position.
+ *
+ * The raw list is never assumed immutable (Astra run 1 #15): the flip applies
+ * only when the raw pad at that index also MATCHES the preview pad's identity
+ * — same trimmed number, same drill diameter and same local position, each to
+ * 1e-9. Any mismatch, an unparsable id, a missing `raw` (editor-authored
+ * footprints) or a missing pad leaves the attribute absent, which means
+ * plated. Read-time and pure: no migration, no re-pack.
+ */
+export function withLegacyPlating(
+  preview: FootprintRenderModel,
+  rawPads: unknown,
+): FootprintRenderModel {
+  if (!Array.isArray(rawPads)) return preview;
+  let changed = false;
+  const pads = preview.pads.map((source): PadWithPlating => {
+    const pad = source as PadWithPlating;
+    // Already stated (either way) by a post-S11 import — never re-derive it.
+    if (pad.plated !== undefined) return pad;
+    // The index token must be a non-empty run of digits: `Number("")` is 0,
+    // which would bind an id like `edited:` to raw pad 0 (Astra run 2b #5).
+    const token = pad.id.slice(pad.id.lastIndexOf(":") + 1);
+    if (!/^\d+$/.test(token)) return pad;
+    const idx = Number(token);
+    const raw = asRecord(rawPads[idx]);
+    if (!raw || raw.type !== "np_thru_hole") return pad;
+    if (!rawPadMatchesPreview(raw, pad)) return pad;
+    changed = true;
+    return { ...pad, plated: false };
+  });
+  return changed ? { ...preview, pads } : preview;
+}
+
+const PLATING_IDENTITY_EPS = 1e-9;
+
+function nearlyEqual(a: number, b: number): boolean {
+  return Math.abs(a - b) <= PLATING_IDENTITY_EPS;
+}
+
+/** Same pad, not merely the same raw index (contract 10 §2.2). */
+function rawPadMatchesPreview(
+  raw: Record<string, unknown>,
+  pad: FootprintRenderSourcePad,
+): boolean {
+  const rawNumber = asString(raw.number) ?? "";
+  if (rawNumber.trim() !== pad.number.trim()) return false;
+  if (
+    !nearlyEqual(asNumber(raw.drillDiameter) ?? 0, pad.drillDiameterMm ?? 0)
+  ) {
+    return false;
+  }
+  const position = asRecord(raw.position);
+  const x = asNumber(position?.x);
+  const y = asNumber(position?.y);
+  if (x === null || y === null) return false;
+  return nearlyEqual(x, pad.centerMm.x) && nearlyEqual(y, pad.centerMm.y);
 }
 
 /**

@@ -212,8 +212,10 @@ export function insertPcbEntities(
       drillMm: v.drillMm,
       fromLayer,
       toLayer,
-      viaType:
-        v.type === "blind" ? "blind" : v.type === "micro" ? "micro" : "through",
+      // KiCad writes a BURIED via with the `blind` token too (contract 10
+      // §5.3): the span tells them apart — `blind` touches exactly one outer
+      // copper layer, `buried` touches none.
+      viaType: resolveImportedViaType(v.type, fromLayer, toLayer),
       protection: "tented",
       provenance: "route",
     };
@@ -474,4 +476,29 @@ export function adjustBoardCenter(outline: ParsedKicadPcb["boardOutline"]): {
  */
 export function summarizeFootprint(fp: ParsedKicadPcbFootprint): string {
   return `${fp.reference} (${fp.libId}) @ ${fp.at.xMm.toFixed(2)},${fp.at.yMm.toFixed(2)} mm on ${fp.layer}`;
+}
+
+/**
+ * `(via blind …)` / `(via micro …)` → the designer's four-value via type. The
+ * KiCad board file format has only those two tokens, so a buried via arrives
+ * as `blind` and is recognised by its span touching no outer layer
+ * (manufacturability contract 10 §5.3).
+ */
+function resolveImportedViaType(
+  token: "through" | "blind" | "micro",
+  fromLayer: PcbCopperLayerId,
+  toLayer: PcbCopperLayerId,
+): PcbVia["viaType"] {
+  if (token === "micro") return "micro";
+  if (token !== "blind") return "through";
+  const outerCount =
+    (isOuterCopperLayer(fromLayer) ? 1 : 0) +
+    (isOuterCopperLayer(toLayer) ? 1 : 0);
+  if (outerCount === 1) return "blind";
+  if (outerCount === 0) return "buried";
+  return "through";
+}
+
+function isOuterCopperLayer(layer: PcbCopperLayerId): boolean {
+  return layer === "F.Cu" || layer === "B.Cu";
 }

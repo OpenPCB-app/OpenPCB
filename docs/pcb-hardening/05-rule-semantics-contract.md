@@ -19,7 +19,7 @@ assistant), and the migrations the change implies.
 Out of scope, with the owning session: the geometry a rule is compared against (S2), zone and
 keepout legality (S3a/S4), pour geometry (S5), check completeness beyond rule sourcing (S7), live
 live DRC coverage of vias / shorts / board edge (closed in S8 — `07-live-parity-contract.md`), scaling (S9), execution (S10), slot / annular /
-aspect models (S11), DFM overlays (S12), electrical and SI thresholds (S13/S14). A scoped-rules
+aspect models (S11, `10-manufacturability-contract.md`), DFM overlays (S12), electrical and SI thresholds (S13/S14). A scoped-rules
 editor and a severity-override UI are filed, not built (user decision 2026-09-08).
 
 ## 1. Vocabulary
@@ -298,7 +298,7 @@ rule     := explicit ?? null             // clamped rules stay attributed (§2.1
 | `trackWidth` | `minimums.traceWidthMm` | every trace | `manufacturability.ts` → `TRACE_WIDTH_MIN` | names the rule when one set the value |
 | `viaDiameter` | `minimums.viaDiameterMm` | every via | `VIA_DIAMETER_MIN` | |
 | `viaDrill` | `minimums.viaDrillMm` | every via | `VIA_DRILL_MIN` | |
-| `annularRing` | `minimums.annularRingMm` | every via (THT pad rings: S11, B2-6) | `ANNULAR_RING_MIN` | |
+| `annularRing` | `minimums.annularRingMm` | every via; THT pad rings read the board minimum directly (no scalar reach — contract 10 §0; the ring itself is exact since S11, B2-5/B2-6) | `ANNULAR_RING_MIN` | |
 | `holeToHole` | `minimums.holeToHoleMm ?? 0.25` | every hole pair the check visits; `net` / `netClass` match if EITHER hole's net qualifies, `area` needs BOTH holes | `board.ts` → `HOLE_TO_HOLE` | |
 | `edgeClearance` | `clearance.copperToBoardEdgeMm` | every copper item (trace, via, pad); `HOLE_TO_BOARD_EDGE` keeps the board rule (S11) | `board.ts` → `COPPER_TO_BOARD_EDGE` | |
 
@@ -504,7 +504,8 @@ object (**needs verification** — every v9 file in the corpus has it empty).
 - Scoped rules, the clearance floor and `pourToCopperMm` do not reach the cloud auto-layout
   (wire-contract boundary — the snapshot strips the two keys; the desktop apply path
   re-validates).
-- `annularRing` rules apply to vias only; THT pad rings and slots are S11 (B2-5, B2-6).
+- `annularRing` rules apply to vias only; THT pad rings and slots read the board minimum (S11 made the
+  ring exact — contract 10 §3 — but added no scoped reach; recorded in 10 §0).
 - `holeToHole` net / class scopes never match an NPTH (null net) — only `layer` / `area` scopes
   and the unscoped rule reach it.
 - The router's obstacle inflation is a heuristic (§9); the live gate covers the whole pending-item

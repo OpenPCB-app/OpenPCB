@@ -182,6 +182,7 @@ pad from a BGA pad when both are copper on the same layer.
 | `Conductor` | Traces and other routed copper |
 | `ViaPad` | Via lands |
 | `ComponentPad` | Through-hole component lands |
+| `WasherPad` | Copper ring around a NON-plated hole, no electrical function (S11, contract 10 §6.4; Ucamco spec 2022.02 §5.6.10 — such a pad carries no `.P` object attribute) |
 | `SMDPad,CuDef` | Surface-mount pad, copper-defined |
 | `SMDPad,SMDef` | Surface-mount pad, soldermask-defined |
 | `NonConductor` | Non-conducting artwork on a copper layer |
