@@ -25,7 +25,7 @@ electron/
 ├── src/preload/index.ts    # contextBridge: window.electronAPI + window.updater
 ├── src/mcp-shim/index.ts   # stdio ⇄ Streamable HTTP bridge (own tsup entry)
 ├── build/mcp/              # openpcb-mcp launcher scripts (extraResources)
-├── tsup.config.ts          # 3 CJS bundles: main, mcp/shim, preload
+├── tsup.config.ts          # 4 CJS bundles: main, main/drc-worker, mcp/shim, preload (no `clean` — `npm run build` cleans once)
 └── electron-builder.cjs    # Packaging (NOT Electron Forge)
 ```
 
@@ -52,6 +52,11 @@ electron/
   which additionally requires the `OPENPCB_MCP_TOKEN` bearer.
 - Only true natives stay external to the bundle (`electron`, `better-sqlite3`,
   `electron-updater`); everything else is inlined.
+- The DRC worker (`dist/main/drc-worker.js`, S10) is a `node:worker_threads` entry bundled
+  from `src/shared/drc/worker/drc-worker.ts`. It is `asarUnpack`ed and `backend-server.ts`
+  points the backend at it with `setDrcWorkerEntry` (dev: `dist/main/…`; packaged:
+  `app.asar.unpacked/dist/main/…`); `dev:electron` waits for the file. `closeCurrentRuntime`
+  terminates it — `unref()` is not relied on.
 
 ## ANTI-PATTERNS
 

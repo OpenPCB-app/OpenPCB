@@ -223,8 +223,11 @@ export function useAutoLayoutJob(options: {
         type: "applied",
         candidateId,
         revision: applied.revision,
-        drcErrors: applied.drc?.summary.errors ?? 0,
-        drcWarnings: applied.drc?.summary.warnings ?? 0,
+        // `null`, not 0: the post-apply DRC run is reported-never-gating and
+        // can come back without a report (cancelled / superseded). "0 errors"
+        // would claim a clean board nothing checked.
+        drcErrors: applied.drc?.summary.errors ?? null,
+        drcWarnings: applied.drc?.summary.warnings ?? null,
         warnings: applied.warnings ?? [],
       });
       onApplied?.(applied.revision);

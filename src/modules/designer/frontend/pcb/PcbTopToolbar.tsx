@@ -16,6 +16,7 @@ import {
   Network,
   Plus,
   Redo2,
+  Loader2,
   ShieldCheck,
   Square,
   Type,
@@ -93,6 +94,8 @@ interface PcbTopToolbarProps {
   onToggleDrcPanel: () => void;
   /** Active batch-DRC error count; drives the red alarm dot on the button. */
   drcErrorCount?: number;
+  /** A batch DRC run is queued or executing — swaps the icon for a spinner. */
+  drcRunning?: boolean;
   /** Whether DRC violation markers are drawn on the canvas. */
   drcMarkersVisible: boolean;
   onToggleDrcMarkers: () => void;
@@ -660,6 +663,7 @@ export function PcbTopToolbar({
   drcPanelOpen,
   onToggleDrcPanel,
   drcErrorCount,
+  drcRunning = false,
   drcMarkersVisible,
   onToggleDrcMarkers,
   canUndo,
@@ -764,7 +768,9 @@ export function PcbTopToolbar({
           stays a toolbar button; the count flags outstanding violations. */}
       <ToolbarButton
         label="DRC"
-        icon={<ShieldCheck />}
+        icon={
+          drcRunning ? <Loader2 className="animate-spin" /> : <ShieldCheck />
+        }
         active={drcPanelOpen}
         pressable
         onClick={onToggleDrcPanel}

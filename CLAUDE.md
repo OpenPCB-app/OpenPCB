@@ -34,6 +34,7 @@ Strict one-way layer dependencies:
 
 ```
 electron/  ──►  core/backend (started in-process by Electron main)
+           ──►  shared/drc/worker (only `setDrcWorkerEntry` / `disposeDrcWorker` — the S10 worker entry override)
 
 modules/*  ──►  sdks/ + shared/  ──►  core/
 ```
@@ -107,7 +108,9 @@ src/
     │                       — the S9 grid; `DrcOptions.broadPhase: "grid" | "exhaustive"` keeps
     │                       the pre-S9 loops as the oracle, see
     │                       docs/pcb-hardening/08-broad-phase-contract.md), rule resolver,
-    │                       fab presets; `modules/designer/backend/drc/` is re-export shims
+    │                       fab presets; `modules/designer/backend/drc/` is re-export shims;
+    │                       `worker/` — the S10 worker-thread entry + main-thread client
+    │                       (docs/pcb-hardening/09-execution-contract.md)
     ├── pcb-connectivity/   copper connectivity kernel (records, items, touch, graph) — see
     │                       docs/pcb-hardening/01-connectivity-contract.md
     ├── pcb-areas/          copper zones + keepouts: v1→v2 upgrade, the ONE derivation of

@@ -38,11 +38,10 @@ export interface AutolayoutRouteDeps {
     designId: string,
     envelope: DesignerCommandEnvelope,
   ) => Promise<import("../../../../sdks/designer").DesignerDispatchResult>;
+  /** Post-apply report, by design id — the run service owns execution (09 §7). */
   runDrc: (
-    projection: DesignerPcbProjection,
-  ) =>
-    | import("../../../../sdks/designer").DrcReport
-    | Promise<import("../../../../sdks/designer").DrcReport>;
+    designId: string,
+  ) => Promise<import("../../../../sdks/designer").DrcReport | null>;
   notFound: (message: string) => Error;
   success: (data: unknown, status?: number) => Response;
 }

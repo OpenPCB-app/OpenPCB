@@ -24,7 +24,8 @@ import { checkRules } from "./checks/rules";
 import { checkStructural } from "./checks/structural";
 import { checkZones } from "./checks/zones";
 import { buildDrcContext } from "./drc-context";
-import type { DrcOptions, DrcViolationDraft } from "./types";
+import type { DrcContext } from "./drc-context";
+import type { DrcOptions, DrcStage, DrcViolationDraft } from "./types";
 import {
   DEFAULT_SEVERITY_BY_CODE,
   NON_OVERRIDABLE,
@@ -108,6 +109,43 @@ function worseWitness(a: DrcViolation, b: DrcViolation): boolean {
 }
 
 /**
+ * The check stages in the order they run (execution contract 09 §6). Exported
+ * so a test pins the stage LIST on its own: the report is canonical (06 §6),
+ * so a reorder of two checks with disjoint codes would still pass a
+ * report-bytes test. The order is the pre-S10 spread expression's.
+ */
+export const DRC_STAGES: ReadonlyArray<
+  readonly [
+    Exclude<DrcStage, "pour">,
+    (ctx: DrcContext) => DrcViolationDraft[],
+  ]
+> = [
+  // A rule table the resolver refused contextualises every verdict after it,
+  // so it is reported first (contract §10).
+  ["rules", checkRules],
+  ["outline", checkOutline],
+  // Zone/keepout structure runs right after the outline, for the same reason:
+  // a refused area contextualises the copper violations that follow (§13.1).
+  ["zones", checkZones],
+  ["constraints", checkConstraints],
+  ["structural", checkStructural],
+  ["manufacturability", checkManufacturability],
+  ["netclass", checkNetClass],
+  ["clearance", checkClearance],
+  // Copper against non-plated drills, right after the copper-to-copper pass:
+  // it is the same clearance tier over a different obstacle (§4).
+  ["copperToHole", checkCopperToHole],
+  ["connectivity", checkConnectivity],
+  ["copperPour", checkCopperPour],
+  ["dangling", checkDangling],
+  ["electrical", checkElectrical],
+  ["signalIntegrity", checkSignalIntegrity],
+  ["length", checkLength],
+  ["board", checkBoard],
+  ["keepouts", checkKeepouts],
+];
+
+/**
  * Every draft the checks produce, BEFORE `finalizeReport` drops class-ignored
  * and severity-ignored drafts and keeps one witness per id.
  *
@@ -121,32 +159,18 @@ export function drcDrafts(
   options: DrcOptions = {},
 ): DrcViolationDraft[] {
   const ctx = buildDrcContext(projection, options);
-
-  return [
-    // A rule table the resolver refused contextualises every verdict after it,
-    // so it is reported first (contract §10).
-    ...checkRules(ctx),
-    ...checkOutline(ctx),
-    // Zone/keepout structure runs right after the outline, for the same reason:
-    // a refused area contextualises the copper violations that follow (§13.1).
-    ...checkZones(ctx),
-    ...checkConstraints(ctx),
-    ...checkStructural(ctx),
-    ...checkManufacturability(ctx),
-    ...checkNetClass(ctx),
-    ...checkClearance(ctx),
-    // Copper against non-plated drills, right after the copper-to-copper pass:
-    // it is the same clearance tier over a different obstacle (§4).
-    ...checkCopperToHole(ctx),
-    ...checkConnectivity(ctx),
-    ...checkCopperPour(ctx),
-    ...checkDangling(ctx),
-    ...checkElectrical(ctx),
-    ...checkSignalIntegrity(ctx),
-    ...checkLength(ctx),
-    ...checkBoard(ctx),
-    ...checkKeepouts(ctx),
-  ];
+  const tick = options.tick;
+  const drafts: DrcViolationDraft[] = [];
+  for (let i = 0; i < DRC_STAGES.length; i += 1) {
+    const [stage, check] = DRC_STAGES[i]!;
+    // Execution checkpoint (contract 09 §6): cancellation and progress live
+    // here, never inside a check body.
+    tick?.(stage, i, DRC_STAGES.length, drafts.length);
+    // A loop, not `push(...)`: a spread call has an argument-count ceiling a
+    // dense board's draft list can exceed.
+    for (const draft of check(ctx)) drafts.push(draft);
+  }
+  return drafts;
 }
 
 /** `{ locationMm }` of the smaller marker (x, then y); a missing one loses. */

@@ -333,8 +333,9 @@ verified current-master inventory in
 [`docs/pcb-hardening/00-ground-truth.md`](docs/pcb-hardening/00-ground-truth.md). Sessions 0–7 are
 done (S7 authoritative batch DRC closed 2026-09-09); S8 (live / route parity) closed 2026-09-09
 (`docs/pcb-hardening/07-live-parity-contract.md`); S9 (broad-phase scaling and determinism) closed
-2026-09-09 (`docs/pcb-hardening/08-broad-phase-contract.md`: 10k primitives 3.5 s → 136 ms,
-byte-identical to the exhaustive oracle); S10 (DRC execution responsiveness, B5-SYNC) is next.
+2026-09-09 (`docs/pcb-hardening/08-broad-phase-contract.md`: 10k primitives 3.5 s → 195.5 ms,
+byte-identical to the exhaustive oracle); S10 (DRC execution responsiveness, B5-SYNC) is in
+progress (2026-09-09, `docs/pcb-hardening/09-execution-contract.md`).
 
 **Binding decisions (unchanged).** Full scope — core plus DFM plus electrical plus SI · scoped
 priority rules (first-match, *can relax*, board-minimum floor) · full multilayer 2–32 · breaking
@@ -365,9 +366,13 @@ migration, area-scope precision) and S2 (cutout crossing-overlap).
 - [x] **P4** [I] **Backend spatial index** — done as S9 (2026-09-09), without rbush: a
       dependency-free uniform grid (per-sub-segment trace entries) plus a boundary-edge index,
       `DrcOptions.broadPhase: "grid" | "exhaustive"` kept permanently as the oracle, `scripts/drc-bench.ts`,
-      pair-count stats and a seeded fuzz corpus; 10k primitives in 136 ms
+      pair-count stats and a seeded fuzz corpus; 10k primitives in 195.5 ms
       (`docs/pcb-hardening/08-broad-phase-contract.md`).
-- [ ] **P7** [I] **Async DRC + engine relocation + live/batch parity.** A `'designer.drc'`
+- [ ] **P7** [I] **Async DRC + engine relocation + live/batch parity.** *Superseded: the
+      engine relocation and live parity landed as S8; the async execution is S10
+      (`docs/pcb-hardening/09-execution-contract.md` — a `node:worker_threads` worker and a
+      designer-local run registry, NOT a TaskRuntime executor, no size threshold, no `202` on
+      `/drc/run`; the old design below is kept for its history only).* A `'designer.drc'`
       TaskRuntime executor (scope id `drc:<designId>`) with slice-yield every 256 items and between
       groups, SSE progress and `AbortSignal` cancel; the route runs synchronously at ≤2000
       primitives and otherwise returns `202 {taskId}`. `run-helper.ts` dedupes the four call sites.

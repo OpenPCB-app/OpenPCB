@@ -932,32 +932,40 @@ export function buildDrcContext(
       // `problems` and `knownNetIds` could diverge between the report and the
       // fill that produced its copper.
       const nets: ZonePourNets = { resolver };
-      pourResultsCache = copperZones.map((zone) => ({
-        zone,
-        // `records` are the context's own, built from the SAME copper above —
-        // an identical input, so the kernel's own build is pure overhead here.
-        result: buildCopperFillIslands({
-          layerCount: board.layerCount,
-          outline: board.outline,
-          placements: projection.placements,
-          traces: projection.traces,
-          vias: projection.vias,
-          padNetIds,
-          records,
-          copperToBoardEdgeMm: board.designRules.clearance.copperToBoardEdgeMm,
-          copperToHoleMm: copperToHoleClearanceMm(board.designRules),
-          cutouts,
-          freeHoles: projection.freeHoles,
-          freePads: projection.freePads,
-          ...pourParamsForZone(
-            zone,
-            board.designRules,
-            keepouts,
-            copperZones,
-            nets,
-          ),
-        }),
-      }));
+      const results: Array<{ zone: EffectiveCopperZone; result: CopperFillResult }> = [];
+      for (let i = 0; i < copperZones.length; i += 1) {
+        const zone = copperZones[i]!;
+        // Execution checkpoint before every zone (contract 09 §6): one zone is
+        // the indivisible unit of pour work, so this is where a cancel lands.
+        options.tick?.("pour", i, copperZones.length);
+        results.push({
+          zone,
+          // `records` are the context's own, built from the SAME copper above —
+          // an identical input, so the kernel's own build is pure overhead here.
+          result: buildCopperFillIslands({
+            layerCount: board.layerCount,
+            outline: board.outline,
+            placements: projection.placements,
+            traces: projection.traces,
+            vias: projection.vias,
+            padNetIds,
+            records,
+            copperToBoardEdgeMm: board.designRules.clearance.copperToBoardEdgeMm,
+            copperToHoleMm: copperToHoleClearanceMm(board.designRules),
+            cutouts,
+            freeHoles: projection.freeHoles,
+            freePads: projection.freePads,
+            ...pourParamsForZone(
+              zone,
+              board.designRules,
+              keepouts,
+              copperZones,
+              nets,
+            ),
+          }),
+        });
+      }
+      pourResultsCache = results;
     }
     return pourResultsCache;
   };

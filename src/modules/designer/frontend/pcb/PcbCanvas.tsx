@@ -221,7 +221,7 @@ import {
   usePcbWorkspace,
   type DispatchRejectedError,
 } from "./usePcbWorkspace";
-import { useDrcStore } from "./drc/drc-store";
+import { isDrcRunActive, useDrcStore } from "./drc/drc-store";
 import { DRC_SEVERITY } from "./drc/drc-colors";
 import {
   buildDrcMarkers,
@@ -602,6 +602,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   const drcPanelOpen = useDrcStore((s) => s.panelOpen);
   const toggleDrcPanel = useDrcStore((s) => s.togglePanel);
   const drcErrorCount = useDrcStore((s) => s.report?.summary.errors ?? 0);
+  const drcRunning = useDrcStore((s) => isDrcRunActive(s.run));
   // Full report + hover id drive the canvas marker hit-test + hover tooltip.
   const drcReport = useDrcStore((s) => s.report);
   const drcHoveredId = useDrcStore((s) => s.hoveredId);
@@ -6045,6 +6046,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               drcPanelOpen={drcPanelOpen}
               onToggleDrcPanel={toggleDrcPanel}
               drcErrorCount={drcErrorCount}
+              drcRunning={drcRunning}
               drcMarkersVisible={drcMarkersVisible}
               onToggleDrcMarkers={toggleDrcMarkers}
               canUndo={workspace.canUndo}

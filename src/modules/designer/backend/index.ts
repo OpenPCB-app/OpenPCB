@@ -2,10 +2,14 @@ import type { ModuleDefinition } from "../../../core/contracts/modules/backend-m
 import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { MentionRegistry } from "../../../core/backend/mentions";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { disposeDrcWorker } from "../../../shared/drc/worker/drc-worker-client";
 import { resolveCaptureRuntime } from "./capture";
 import { registerRoutes } from "./routes";
 import { buildDesignerSdk } from "./sdk";
 import { DesignMentionProvider } from "./providers/mention-provider";
+
+// One per process, not per activation: test files boot many runtimes.
+let drcWorkerSigtermHooked = false;
 
 export const definition: ModuleDefinition = {
   id: "designer",
@@ -25,6 +29,14 @@ export const definition: ModuleDefinition = {
       const flush = () => capture.endAll();
       process.once("SIGTERM", flush);
       process.once("beforeExit", flush);
+    }
+
+    // The DRC worker is a live thread that `unref()` does NOT let the process
+    // exit past (execution contract 09 §2.3), so a signal — a `bun --watch`
+    // restart included — must terminate it explicitly.
+    if (!drcWorkerSigtermHooked) {
+      drcWorkerSigtermHooked = true;
+      process.once("SIGTERM", () => void disposeDrcWorker());
     }
   },
 

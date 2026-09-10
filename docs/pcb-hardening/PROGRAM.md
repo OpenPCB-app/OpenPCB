@@ -128,7 +128,7 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 | S7 | Authoritative batch DRC completeness | Audit every check against the hardened primitives: duplicated geometry/connectivity models, checks bypassing shared rule resolution, declared-but-unemitted codes, primitive types checks cannot see, unit inconsistencies, false-pass directions, ordering. Batch DRC becomes the reference implementation. | — | repository-grounded adversarial-verify xhigh (run 1: 8 findings — 5 fixed, 2 contract corrections, 1 registered B6-1) | done 2026-09-09 (`06-batch-drc-contract.md`) |
 | S8 | Live DRC and manual-route legality parity | A route legal interactively is legal when committed and batch-checked, and vice versa where practical. Engine relocation to `src/shared/drc/` behind shims so both paths share item builders and kernels. Decide whether route commit gets a server-side clearance gate. | B5-LIVE-ROT-PAD, B5-LIVE-TH-PAD-SIDE | spec-attack xhigh (run 1: 9 findings, 7 accepted, 1 recorded as a guarantee, 1 bound) · repository-grounded adversarial-verify xhigh (run 2: 7 findings — 6 fixed, 1 registered B7-1 → S13) | done 2026-09-09 (`07-live-parity-contract.md`) |
 | S9 | DRC broad-phase scaling and determinism | Faster candidate discovery without changing meaning; exhaustive mode retained as oracle; byte-identical reports. Target 10k primitives under ~300 ms. | — | spec-attack xhigh · adversarial-verify xhigh (user decision 2026-09-09: post run regardless) | done 2026-09-09 (`08-broad-phase-contract.md`) |
-| S10 | DRC execution responsiveness | Expensive DRC runs without blocking the app: lifecycle, cancellation, progress, concurrency, partial-result semantics, deterministic final output. | B5-SYNC | none by default | pending |
+| S10 | DRC execution responsiveness | Expensive DRC runs without blocking the app: lifecycle, cancellation, progress, concurrency, partial-result semantics, deterministic final output. | B5-SYNC | none (user decision 2026-09-09: program default — plan-critique + `reviewer-critical` + `reviewer`) | done 2026-09-10 (`09-execution-contract.md`) |
 
 ### Stage C — manufacturing and electrical trust
 
@@ -198,7 +198,22 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
   todo (2354); tsc 44; Vitest 61 files 545 + 1 todo; gen + gen:contracts clean; e2e routing +
   live-parity 4 + 1 flag-skip.*
 - **S10** — expensive runs no longer block command dispatch or SSE; cancel leaves no partial
-  persistence; B5-SYNC regression live.
+  persistence; B5-SYNC regression live. *Confirmed 2026-09-10: the batch run executes on one
+  persistent `node:worker_threads` worker; `drc-worker-client.test.ts` proves ≥ 5 main-thread
+  timer ticks, a `GET /api/health` and two progress stages all land before a 10k-board run
+  resolves; `drc-audit-b5.test.ts` "B5-SYNC" is live (a held worker → a command dispatch
+  completes while the run reports `running`; the released run persists `runDrc`'s exact bytes;
+  a cancelled run persists nothing; the real worker leg completes with equal bytes);
+  `drc-run-service.test.ts` covers join / supersede / FIFO / deleted design / SSE. Byte identity:
+  goldens ×6, the determinism fixture, three corpus boards and an empty-`rawFootprints` fixture
+  (in-thread vs worker), plus the built Electron bundle on plain Node (`npm run
+  test:drc-worker-smoke`, now a CI step); the six golden shasums unchanged;
+  `git diff src/shared/drc/checks` empty. Numbers: worker overhead 78 ms at 10k (41 ms clone),
+  ≤ 1 ms on the goldens; spawn 12–23 ms, once per process. Gates: backend 2352 pass / 22 known
+  library+assistant fails / 8 skip / 5 todo (2387); tsc 44; Vitest 63 files 576 + 1 todo; gen +
+  gen:contracts clean (`gen:copilot-schemas:check` fails on the pre-existing missing
+  `@openpcb/contracts/schemas/copilot` dir); e2e routing + live-parity + DRC + zones 13 + 1
+  flag-skip.*
 - **S11** — DRC's representation of drilled and plated structures matches what export emits,
   slots included.
 - **S12** — DFM checks use the same physical geometry export uses.
@@ -228,7 +243,7 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 | S7 | xhigh post (repository-grounded) |
 | S8 | **xhigh pre + xhigh post** |
 | S9 | **xhigh pre + xhigh post** (user decision 2026-09-09) |
-| S10 | none normally |
+| S10 | none — user decision 2026-09-09 (program default) |
 | S11 | **xhigh pre + xhigh post** |
 | S12 | xhigh pre |
 | S13 | **xhigh pre + xhigh post** |
@@ -564,6 +579,28 @@ unmanufacturable board.
   questions, Astra before code, two reviewers on disjoint surfaces, every finding probed before
   acceptance; the Bash cwd persisting inside `&&` chains cost three wrong `tsc` counts (21 vs 44)
   — always `cd` back to the root in the same command.
+- **S10 (2026-09-10) — the batch run moved off the request thread.** Decisions (user,
+  2026-09-09): S9 committed first; a `node:worker_threads` worker, not cooperative slicing (the
+  pour kernel is indivisible per zone and can only be stopped by terminating the thread; the
+  backend runs in-process on Electron's main process, so a blocking run stalled the desktop
+  shell); a designer-local `DrcRunService`, not the `tasks` module (ephemeral runs, supersede
+  semantics, no task rows); program-default review, no Astra, no Codex. Landed: contract 09;
+  `DrcOptions.tick` as the only engine seam (the 17 stages became an exported, test-pinned
+  `DRC_STAGES` table; a per-zone tick in the pour loop; zero check-body edits); the worker +
+  client under `src/shared/drc/worker/` (persistent, cooperative cancel by shared flag with a
+  250 ms terminate fallback, respawn, spawn-failure → `failed`, explicit dispose — `unref()`
+  does not let Bun exit); a fourth tsup bundle, asar-unpacked, `setDrcWorkerEntry` from
+  Electron main; `DrcRunService` (join on `(revision, optionsDigest)`, supersede re-attaches
+  waiters, FIFO across designs, persistence only after `done` behind a synchronous head check,
+  a deleted design → `cancelled`); four run routes + SSE; every batch caller through
+  `runAndWait`; `req.signal` now also fires on `close`; the frontend run controller (progress
+  bar, Cancel, previous report dimmed, poll fallback); B5-SYNC live. Retired by analysis: the 07
+  §9 per-revision commit-gate memo (it cannot hit on a sequence of successful commits).
+  Plan-critique (Opus, 17 findings incl. 3 blockers) folded before code; R1
+  (`reviewer-critical`, 25 adversarial tests) found the tsup `clean: true` race that deleted the
+  worker bundle on every watch rebuild and an unwired id-only smoke — both fixed; R2 in §11.
+  Process: the frontend package ran in parallel with the worker package against the contract's
+  wire table, and the run service after the worker — no rework between them.
 
 ## Appendix — Session 0 amendments to the original program text
 

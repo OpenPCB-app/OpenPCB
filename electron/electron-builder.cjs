@@ -92,7 +92,14 @@ module.exports = {
   ],
 
   asar: true,
-  asarUnpack: ["**/*.node"],
+  // The DRC worker entry is spawned as a FILE by node:worker_threads, so it
+  // must live outside the archive (execution contract 09 §2.1); backend-server
+  // points at the app.asar.unpacked copy when packaged.
+  asarUnpack: [
+    "**/*.node",
+    "dist/main/drc-worker.js",
+    "dist/main/drc-worker.js.map",
+  ],
 
   // Direct port of Forge's `extraResource` array. `from` is relative to this
   // config file's directory. Files arrive at process.resourcesPath/{to}.

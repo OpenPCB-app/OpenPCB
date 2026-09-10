@@ -126,6 +126,17 @@ And a command field with no parser in `routes.ts` is silently dropped over HTTP.
   loops, kept verbatim: both modes produce identical pre-finalise drafts and byte-identical
   reports (`drc-broad-phase-oracle.test.ts`). A new check that enumerates pairs must take its
   candidates from the context's index and prove the halo, or run unindexed and say so.
+- **Batch DRC runs on a worker thread** (S10, `docs/pcb-hardening/09-execution-contract.md`).
+  `POST /designs/:id/drc/runs` starts or joins a run owned by `backend/drc/run-service.ts`
+  (in-memory registry: queued → running → completed | cancelled | failed; one run per design,
+  same `(revision, options)` joins, a different one supersedes; FIFO across designs). The engine
+  executes on ONE persistent `node:worker_threads` worker (`src/shared/drc/worker/`); the report
+  is byte-identical to the in-thread `runDrc`; persistence is a single main-thread upsert after
+  completion — never partial, never on cancel; cancel is a shared flag read at stage / pour-zone
+  boundaries with `terminate()` as the fallback. `DrcOptions.tick` is the only engine seam —
+  results-neutral like `stats`; never put cancellation or progress inside a check body. Every
+  batch caller (route, SDK, cloud apply, MCP) goes through `runAndWait`; do not call `runDrc`
+  inline in module code.
   As of S3a it also carries `copperZones` (the effective `collectCopperZones` list) and `keepouts`;
   since S4 also `copperAreaWarnings` (the derivation's own warnings — `ZONE_INVALID` /
   `ZONE_EMPTY_FILL` are a total mapping of them, never a re-derivation) and a lazily cached

@@ -54,10 +54,12 @@ export interface ApplyCandidateDeps {
   dispatch: (
     envelope: DesignerCommandEnvelope,
   ) => Promise<import("../../../../sdks/designer").DesignerDispatchResult>;
-  /** May be async: the production runner pre-fetches the raw-footprint lookup (§13.1). */
-  runDrc: (
-    projection: import("../../../../sdks/designer").DesignerPcbProjection,
-  ) => DrcReport | Promise<DrcReport>;
+  /**
+   * Post-apply report, by design id: the run service loads the projection it
+   * runs over itself, so the report always describes the committed revision.
+   * `null` when there is nothing to report (no PCB, or the run was cancelled).
+   */
+  runDrc: (designId: string) => Promise<DrcReport | null>;
 }
 
 function toCommandProvenance(
@@ -145,7 +147,7 @@ export async function applyCandidate(
   }
 
   const applied = await deps.loadProjection();
-  const drc = applied ? await deps.runDrc(applied) : null;
+  const drc = applied ? await deps.runDrc(designId) : null;
 
   // Fire-and-forget: this is a supervision label, and a telemetry failure must never
   // invalidate a committed board change. Only ever sent after a successful apply — never

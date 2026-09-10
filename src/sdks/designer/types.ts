@@ -2490,6 +2490,52 @@ export interface DrcReport {
   countsByCode: Partial<Record<DrcRuleCode, number>>;
 }
 
+/**
+ * A batch DRC run's lifecycle record (execution contract 09 §1). In-memory on
+ * the designer backend; the report itself is served by `GET /designs/:id/drc`
+ * once the run is `completed`. `progress` carries counts only — never a
+ * partial violation list (09 §4).
+ */
+export type DrcRunStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "cancelled"
+  | "failed";
+
+export type DrcRunCancelReason =
+  | "user"
+  | "superseded"
+  | "design-deleted"
+  | "shutdown";
+
+export interface DrcRunProgress {
+  /** A `DrcStage` name, `"pour"` while zones fill, or `"queued"`. */
+  stage: string;
+  index: number;
+  total: number;
+  /** 0..1 over the whole run; work-based, never time-based. */
+  fraction: number;
+  violationsSoFar: number;
+}
+
+export interface DrcRunSnapshot {
+  runId: string;
+  designId: string;
+  /** The projection revision the run computes over. */
+  revision: number;
+  status: DrcRunStatus;
+  progress: DrcRunProgress;
+  startedAt: string;
+  finishedAt?: string;
+  /** Present once `completed`. */
+  summary?: DrcReport["summary"];
+  /** Present once `failed`. */
+  error?: string;
+  /** Present once `cancelled`. */
+  cancelReason?: DrcRunCancelReason;
+}
+
 export interface DesignerSearchLibraryParams {
   query?: string;
   tags?: string[];

@@ -72,8 +72,9 @@ export type AutoLayoutRunState =
       run: RunContext;
       candidateId: string;
       revision: number;
-      drcErrors: number;
-      drcWarnings: number;
+      /** `null` when the post-apply DRC run did not produce a report. */
+      drcErrors: number | null;
+      drcWarnings: number | null;
       warnings: string[];
     }
   | { type: "failed"; error: AutoLayoutClientError; run: RunContext | null }
@@ -92,8 +93,9 @@ export type AutoLayoutAction =
       type: "applied";
       candidateId: string;
       revision: number;
-      drcErrors: number;
-      drcWarnings: number;
+      /** `null` when the post-apply DRC run did not produce a report. */
+      drcErrors: number | null;
+      drcWarnings: number | null;
       warnings: string[];
     }
   | { type: "cancelRequested" }

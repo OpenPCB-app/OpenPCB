@@ -1,12 +1,22 @@
 import { create } from "zustand";
-import type { DrcReport } from "../../../../../sdks";
+import type {
+  DrcReport,
+  DrcRunCancelReason,
+  DrcRunSnapshot,
+} from "../../../../../sdks";
 
 /**
  * Transient batch-DRC report store. The report is recomputed on demand ("Run
- * DRC"); it is NOT persisted (the engine recomputes from the projection each
- * run). Waivers / ignored rule-classes live on the persisted `PcbViewState`
- * (see `usePcbViewStore`), so they survive reload and feed the server-side
- * engine on the next run.
+ * DRC"); it is NOT persisted client-side (the engine recomputes from the
+ * projection each run and persists the row server-side). Waivers / ignored
+ * rule-classes live on the persisted `PcbViewState` (see `usePcbViewStore`),
+ * so they survive reload and feed the server-side engine on the next run.
+ *
+ * Since the execution contract (09) a run is asynchronous: `run` holds the
+ * active — or last terminal — `DrcRunSnapshot`, and `report` keeps showing the
+ * PREVIOUS run's result until the new one lands in one `completeRun` call. A
+ * cancelled or failed run therefore never blanks the panel. Every action here
+ * is pure state; the transport lives in `use-drc-run.ts`.
  *
  * `panelOpen` is transient UI for the PCB-tab DRC dock (toggled by the toolbar
  * button + status-bar chip). It lives here — not prop-drilled — because the
@@ -16,8 +26,15 @@ import type { DrcReport } from "../../../../../sdks";
  */
 interface DrcStoreState {
   report: DrcReport | null;
-  running: boolean;
+  /** The active run, or the last terminal one. `null` before the first run. */
+  run: DrcRunSnapshot | null;
   error: string | null;
+  /**
+   * Set when a run ended `cancelled`; drives the dismissible notice in the DRC
+   * view. Cleared by `dismissCancelNotice`, by the next `beginRun` and by
+   * `clear()`.
+   */
+  cancelNotice: DrcRunCancelReason | null;
   /** Currently focused violation id (panel ↔ canvas marker highlight). */
   selectedId: string | null;
   /** Hovered violation id (canvas marker hover ↔ trace highlight + tooltip). */
@@ -47,8 +64,29 @@ interface DrcStoreState {
 }
 
 interface DrcStoreActions {
-  /** Run DRC via the supplied runner (wired to `api.runDrc`, which persists). */
-  run(runner: () => Promise<DrcReport | null>): Promise<void>;
+  /** A run was accepted by the backend — this snapshot becomes the active run. */
+  beginRun(snapshot: DrcRunSnapshot): void;
+  /**
+   * Progress / state frame for the active run. Snapshots of a different run —
+   * a superseded run's late frame, or a stream that outlived its run — are
+   * ignored, as is any frame arriving after the active run went terminal.
+   */
+  applyRunSnapshot(snapshot: DrcRunSnapshot): void;
+  /** The run completed; `report` is the freshly fetched row (may be null). */
+  completeRun(report: DrcReport | null): void;
+  /** The run ended cancelled. The previous report stays on screen. */
+  cancelRun(reason: DrcRunCancelReason): void;
+  /** The run ended failed. The previous report stays on screen. */
+  failRun(message: string): void;
+  /**
+   * Forget the tracked run without ending it — used when a controller finds a
+   * run belonging to a DIFFERENT design still in the store. Leaves `report`
+   * alone; this is not a cancel and must not raise the cancelled notice.
+   */
+  detachRun(): void;
+  dismissCancelNotice(): void;
+  /** Surface a transport-level message without ending the run (e.g. cancel POST). */
+  setError(message: string | null): void;
   /** Quietly set the report (e.g. hydrate from the persisted GET on open). */
   setReport(report: DrcReport | null): void;
   select(id: string | null): void;
@@ -67,11 +105,19 @@ interface DrcStoreActions {
   clear(): void;
 }
 
+/** True while a run is queued or executing — the "DRC is busy" predicate. */
+export function isDrcRunActive(
+  run: DrcRunSnapshot | null | undefined,
+): run is DrcRunSnapshot {
+  return run != null && (run.status === "queued" || run.status === "running");
+}
+
 export const useDrcStore = create<DrcStoreState & DrcStoreActions>(
   (set, get) => ({
     report: null,
-    running: false,
+    run: null,
     error: null,
+    cancelNotice: null,
     selectedId: null,
     hoveredId: null,
     lastRunAt: null,
@@ -80,18 +126,55 @@ export const useDrcStore = create<DrcStoreState & DrcStoreActions>(
     panelOpen: false,
     markersVisible: true,
 
-    async run(runner) {
-      if (get().running) return;
-      set({ running: true, error: null });
-      try {
-        const report = await runner();
-        set({ report, running: false, lastRunAt: Date.now() });
-      } catch (err) {
-        set({
-          running: false,
-          error: err instanceof Error ? err.message : "DRC failed",
-        });
-      }
+    beginRun(snapshot) {
+      set({ run: snapshot, error: null, cancelNotice: null });
+    },
+
+    applyRunSnapshot(snapshot) {
+      const current = get().run;
+      if (!isDrcRunActive(current)) return;
+      if (current.runId !== snapshot.runId) return;
+      set({ run: snapshot });
+    },
+
+    completeRun(report) {
+      const current = get().run;
+      set({
+        report,
+        run: current ? { ...current, status: "completed" } : null,
+        lastRunAt: Date.now(),
+        error: null,
+      });
+    },
+
+    cancelRun(reason) {
+      const current = get().run;
+      set({
+        run: current
+          ? { ...current, status: "cancelled", cancelReason: reason }
+          : null,
+        cancelNotice: reason,
+      });
+    },
+
+    failRun(message) {
+      const current = get().run;
+      set({
+        run: current ? { ...current, status: "failed", error: message } : null,
+        error: message,
+      });
+    },
+
+    detachRun() {
+      set({ run: null });
+    },
+
+    dismissCancelNotice() {
+      set({ cancelNotice: null });
+    },
+
+    setError(message) {
+      set({ error: message });
     },
 
     setReport(report) {
@@ -136,8 +219,9 @@ export const useDrcStore = create<DrcStoreState & DrcStoreActions>(
     clear() {
       set({
         report: null,
-        running: false,
+        run: null,
         error: null,
+        cancelNotice: null,
         selectedId: null,
         centerRequest: null,
         centeredSeq: 0,

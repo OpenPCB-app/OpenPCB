@@ -1,5 +1,6 @@
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
+import { NotFoundError } from "../../../core/contracts/errors";
 import { MODULE_SDK_TOKENS } from "../../../sdks";
 import type { DesignerSDK } from "../../../sdks/designer";
 import type { LibrarySDK } from "../../../sdks/library";
@@ -7,8 +8,10 @@ import { getActiveDesignId } from "./active-design";
 import { buildExportBundle } from "./export";
 import { pushCloudSnapshot, readLinkPublic } from "./cloud-sync";
 import { buildBoardSnapshot as buildBoardSnapshotFromProjection } from "./pcb/board-snapshot";
-import { drcOptionsFromProjection, runDrc } from "./drc/drc-engine";
-import { buildRawFootprintLookup } from "./pcb/raw-footprint-lookup";
+import {
+  DrcRunCancelledError,
+  resolveDrcRunService,
+} from "./drc/run-service";
 import { runErc } from "./erc/erc-engine";
 import {
   commitKicadProjectImport,
@@ -20,6 +23,8 @@ type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
 export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
   const store = createDesignerStore(ctx);
+  // Shared with `registerRoutes` — one registry, one worker (09 §5).
+  const drcRuns = resolveDrcRunService(ctx, store);
   // Same module-db unwrap the store uses (store.ts getDb) — cloud-sync helpers
   // take the raw drizzle client.
   const rawDb = (ctx.db as unknown as { db: DbClient }).db;
@@ -69,18 +74,21 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
       return { projection, erc: runErc(projection) };
     },
     runDrc: async (designId) => {
-      const projection = await store.getPcbProjection(designId);
-      if (!projection) return null;
-      // The same defaults-from-projection the HTTP route gets (rule-semantics
-      // contract §8), so the assistant / MCP report equals the route's.
-      const options = drcOptionsFromProjection(projection);
-      // Same raw-footprint recovery the HTTP route does (contract §4); the
-      // lookup is per-run, so it is not part of the persisted options.
-      const report = runDrc(projection, {
-        lookupRawFootprint: await buildRawFootprintLookup(ctx, projection),
-      });
-      await store.saveDrcResult(designId, report, options);
-      return report;
+      // The SAME run the HTTP route waits on (execution contract 09 §7): the
+      // service is a per-context singleton, so an assistant / MCP read joins a
+      // run the UI already started instead of computing a second one, and the
+      // report is byte-identical to the route's by construction.
+      try {
+        return await drcRuns.runAndWait(designId);
+      } catch (error) {
+        // A missing design stays `null` here, as it always has; so does a
+        // run cancelled or superseded under the caller — the assistant's
+        // proposal apply reads this AFTER a committed board change, and a
+        // report is "reported, never gating" (09 §7).
+        if (error instanceof NotFoundError) return null;
+        if (error instanceof DrcRunCancelledError) return null;
+        throw error;
+      }
     },
     inspectKicadProject: async (archiveFileName, archiveBytes) => {
       const { report } = await inspectKicadProjectFromBytes(

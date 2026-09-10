@@ -175,14 +175,26 @@ that follow (the pair's anchors stay the null item's).
 `checks/clearance.ts` bridge pass; `docs/pcb-hardening/07-live-parity-contract.md` §9.
 *Regression:* `drc-audit-b7.test.ts` "B7-1" (`test.todo`).
 
-### B5-SYNC — the full O(n²) batch run executes synchronously in the HTTP handler
+### B5-SYNC — closed in S10 (2026-09-10): the batch run executed synchronously in the HTTP handler
 
-`POST /designs/:designId/drc/run` runs the engine inline on Bun's single thread. At ~10k copper
-primitives that is 0.5–5 s (§5.4) during which command dispatch and SSE are blocked. The engine
-itself is pure and correct; this is purely a placement problem.
+Was: `POST /designs/:designId/drc/run` ran the engine inline on the backend's single thread —
+Bun in dev, **Electron's main process** in the app — so command dispatch, SSE and the desktop
+shell stalled for the whole run (0.5–5 s at 10k primitives before S9, and unbounded on a
+pour-heavy board). The engine itself was pure and correct; this was a placement problem.
 
-*Anchor:* the `POST /designs/:designId/drc/run` handler in `designer/backend/routes.ts`. Cite the
-route, not a line number — the handler has already drifted once.
+Now (`docs/pcb-hardening/09-execution-contract.md`): every batch run executes on one persistent
+`node:worker_threads` worker (`src/shared/drc/worker/`); the designer's `DrcRunService` owns the
+lifecycle (`POST /drc/runs` → 202, `GET /runs/:id`, `POST /runs/:id/cancel`, SSE `/stream`);
+`POST /drc/run`, the SDK and the cloud apply sites await the same service, so no module code
+calls the engine inline; the report is byte-identical to the in-thread engine; nothing is
+persisted before `completed`; cancel is a shared flag at stage / pour-zone boundaries with
+`terminate()` as the fallback.
+
+*Regression:* `drc-audit-b5.test.ts` "B5-SYNC" — live: (a) a held worker proves a command
+dispatch completes while `GET /runs/:id` still reports `running`, the released run persists
+`runDrc(projection)`'s exact bytes, and a cancelled run persists nothing; (b) the real worker
+completes on a seeded design with equal bytes. Loop freedom on a 10k board (timer ticks, `GET
+/api/health`, progress frames all before the run resolves) is `drc-worker-client.test.ts`.
 
 ## S11 — export parity (raised by the S7 Astra run, 2026-09-09)
 
@@ -441,7 +453,8 @@ S8/S9 in `docs/pcb-hardening/00-ground-truth.md`).
 For contrast, KiCad's `DRC_RTREE` gives approximately O(n log n) queries.
 
 The conclusion the audit reached held: this was a scaling problem, not a correctness problem, and
-S9 closed it without changing a verdict. What remains is execution placement — B5-SYNC (S10).
+S9 closed it without changing a verdict; S10 moved the run off the request thread (B5-SYNC
+closed 2026-09-10, `docs/pcb-hardening/09-execution-contract.md`).
 
 ## 5.5 Live-versus-batch divergence — closed in S8
 

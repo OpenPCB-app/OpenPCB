@@ -13,10 +13,12 @@ import { SeverityDiamond } from "@shared/frontend/ui/severity-diamond";
 import type {
   DesignerPcbProjection,
   DrcRuleCode,
+  DrcRunSnapshot,
   DrcSeverity,
 } from "../../../../sdks";
 import { createDesignerApi } from "../api";
-import { useDrcStore } from "../pcb/drc/drc-store";
+import { isDrcRunActive, useDrcStore } from "../pcb/drc/drc-store";
+import { useDrcRun } from "../pcb/drc/use-drc-run";
 import { CODE_LABEL, resolveAnchorLabel } from "../pcb/drc/drc-labels";
 import { usePcbViewStore } from "../pcb/pcb-view-store";
 import { usePcbDesignRulesDialog } from "../pcb/use-pcb-design-rules-dialog";
@@ -44,6 +46,19 @@ const SEVERITY_RANK: Record<DrcSeverity, number> = {
   info: 2,
 };
 
+/**
+ * Work-based progress only. The engine reports the stage it is on out of the
+ * stages it will run (09 §4) and explicitly reports no time, so nothing here
+ * turns progress into an ETA — a wall-clock promise the engine never made is
+ * worse than no promise.
+ */
+function progressLabel(run: DrcRunSnapshot): string {
+  const { stage, index, total } = run.progress;
+  if (run.status === "queued" || stage === "queued") return "Queued…";
+  if (total <= 0) return stage;
+  return `${stage} · ${index + 1}/${total}`;
+}
+
 export function DesignerDrcView({
   backendURL,
   moduleId,
@@ -57,12 +72,22 @@ export function DesignerDrcView({
     [backendURL, moduleId],
   );
   const report = useDrcStore((s) => s.report);
-  const running = useDrcStore((s) => s.running);
+  const run = useDrcStore((s) => s.run);
   const error = useDrcStore((s) => s.error);
+  const cancelNotice = useDrcStore((s) => s.cancelNotice);
+  const dismissCancelNotice = useDrcStore((s) => s.dismissCancelNotice);
   const selectedId = useDrcStore((s) => s.selectedId);
   const select = useDrcStore((s) => s.select);
-  const run = useDrcStore((s) => s.run);
   const requestCenter = useDrcStore((s) => s.requestCenter);
+  const running = isDrcRunActive(run);
+  const { start: startRun, cancel: cancelRun } = useDrcRun({ api, designId });
+  const [cancelling, setCancelling] = useState(false);
+
+  // The Cancel request is cooperative: the button stays in its "Cancelling…"
+  // state until the backend actually ends the run (or it finishes anyway).
+  useEffect(() => {
+    if (!running) setCancelling(false);
+  }, [running]);
 
   const waivedIds = usePcbViewStore((s) => s.viewState.drcWaivedViolationIds);
   const toggleWaived = usePcbViewStore((s) => s.toggleDrcWaived);
@@ -139,7 +164,12 @@ export function DesignerDrcView({
 
   const onRun = (): void => {
     if (!designId) return;
-    void run(() => api.runDrc(designId));
+    void startRun();
+  };
+
+  const onCancel = (): void => {
+    setCancelling(true);
+    void cancelRun();
   };
 
   const handleRulesSaved = useCallback(async () => {
@@ -147,8 +177,8 @@ export function DesignerDrcView({
     // Pull the new board (revision bumped) then re-run DRC against it.
     const proj = await api.getPcbProjection(designId);
     setProjection(proj);
-    void run(() => api.runDrc(designId));
-  }, [api, designId, run]);
+    void startRun();
+  }, [api, designId, startRun]);
 
   // Shared with the PCB Board properties panel — one envelope, one save path.
   const rules = usePcbDesignRulesDialog({
@@ -242,6 +272,56 @@ export function DesignerDrcView({
         ) : null}
       </div>
 
+      {running && run ? (
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-1.5">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-2xs text-text-secondary">
+                {cancelling ? "Cancelling…" : progressLabel(run)}
+              </span>
+              <span className="shrink-0 font-mono text-2xs tabular-nums text-text-tertiary">
+                {Math.round(
+                  Math.min(1, Math.max(0, run.progress.fraction)) * 100,
+                )}
+                %
+              </span>
+            </div>
+            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-control bg-surface-control">
+              <div
+                className="h-full rounded-control bg-selection transition-[width] duration-300"
+                style={{
+                  width: `${Math.round(Math.min(1, Math.max(0, run.progress.fraction)) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onCancel}
+            disabled={cancelling}
+          >
+            {cancelling ? "Cancelling…" : "Cancel"}
+          </Button>
+        </div>
+      ) : null}
+
+      {cancelNotice ? (
+        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-surface-section px-2 py-1 text-2xs text-text-secondary">
+          <span className="min-w-0 flex-1 truncate">
+            Run cancelled
+            {cancelNotice === "user" ? "" : ` (${cancelNotice})`}
+          </span>
+          <button
+            type="button"
+            onClick={dismissCancelNotice}
+            className="shrink-0 cursor-pointer rounded-control px-1 text-text-tertiary hover:text-text-strong"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
       {stale ? (
         <div className="flex h-[22px] shrink-0 items-center border-b border-border bg-status-warning-soft px-2 text-2xs text-status-warning">
           The board changed since this DRC ran — results may be out of date.
@@ -255,103 +335,110 @@ export function DesignerDrcView({
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {report && counts.errors + counts.warnings + counts.infos === 0 ? (
-          <div className="m-2 rounded-control bg-status-success-soft px-2 py-1.5 text-xs text-status-success">
-            No DRC violations
+        {running && report ? (
+          <div className="border-b border-border px-2 py-1 text-2xs text-text-tertiary">
+            Showing the previous run
           </div>
         ) : null}
-
-        {groups.map((group) => {
-          const isCollapsed = collapsed.has(group.code);
-          return (
-            <div key={group.code}>
-              <button
-                type="button"
-                onClick={() =>
-                  setCollapsed((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(group.code)) next.delete(group.code);
-                    else next.add(group.code);
-                    return next;
-                  })
-                }
-                aria-expanded={!isCollapsed}
-                className="flex h-[22px] w-full cursor-pointer items-center gap-1.5 border-y border-border bg-surface-section px-2 text-2xs uppercase tracking-[.04em] text-text-tertiary"
-              >
-                {isCollapsed ? (
-                  <ChevronRight className="h-3 w-3 shrink-0" />
-                ) : (
-                  <ChevronDown className="h-3 w-3 shrink-0" />
-                )}
-                <span className="min-w-0 flex-1 truncate text-left">
-                  {CODE_LABEL[group.code] ?? group.code}
-                </span>
-                <span className="shrink-0 font-mono tabular-nums text-text-tertiary">
-                  {group.violations.length}
-                </span>
-              </button>
-              {!isCollapsed
-                ? group.violations.map((v) => {
-                    const waived = waivedSet.has(v.id);
-                    const selected = v.id === selectedId;
-                    return (
-                      <div
-                        key={v.id}
-                        className={`group flex items-start gap-2 border-b border-border-subtle px-[10px] py-1 ${selected ? "bg-surface-selected" : "hover:bg-surface-hover"}`}
-                      >
-                        <SeverityDiamond
-                          severity={v.severity}
-                          className="mt-1.5"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            select(v.id);
-                            if (v.locationMm) {
-                              requestCenter(v.locationMm);
-                              onShowViolation(v.locationMm);
-                            }
-                          }}
-                          className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 text-left"
-                        >
-                          <span
-                            className={`w-full truncate text-xs font-medium text-text-strong ${waived ? "line-through opacity-60" : ""}`}
-                          >
-                            {v.anchors
-                              .map((a) => resolveAnchorLabel(a, projection))
-                              .join(" ↔ ")}
-                          </span>
-                          <span className="w-full text-2xs leading-[1.35] text-text-tertiary">
-                            {v.message}
-                            {v.measuredMm !== undefined &&
-                            v.requiredMm !== undefined ? (
-                              <span className="ml-1 font-mono">
-                                {v.measuredMm.toFixed(3)} /{" "}
-                                {v.requiredMm.toFixed(3)} mm
-                              </span>
-                            ) : null}
-                          </span>
-                        </button>
-                        {v.layer ? (
-                          <span className="mt-0.5 shrink-0 font-mono text-2xs text-text-disabled">
-                            {v.layer}
-                          </span>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => toggleWaived(v.id)}
-                          title={waived ? "Un-waive" : "Waive (accept)"}
-                          className="mt-0.5 shrink-0 cursor-pointer rounded-control px-1 text-2xs text-text-tertiary opacity-0 hover:text-text-strong group-hover:opacity-100"
-                        >
-                          {waived ? "↩" : "waive"}
-                        </button>
-                      </div>
-                    );
-                  })
-                : null}
+        <div className={running && report ? "opacity-60" : undefined}>
+          {report && counts.errors + counts.warnings + counts.infos === 0 ? (
+            <div className="m-2 rounded-control bg-status-success-soft px-2 py-1.5 text-xs text-status-success">
+              No DRC violations
             </div>
-          );
-        })}
+          ) : null}
+
+          {groups.map((group) => {
+            const isCollapsed = collapsed.has(group.code);
+            return (
+              <div key={group.code}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCollapsed((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(group.code)) next.delete(group.code);
+                      else next.add(group.code);
+                      return next;
+                    })
+                  }
+                  aria-expanded={!isCollapsed}
+                  className="flex h-[22px] w-full cursor-pointer items-center gap-1.5 border-y border-border bg-surface-section px-2 text-2xs uppercase tracking-[.04em] text-text-tertiary"
+                >
+                  {isCollapsed ? (
+                    <ChevronRight className="h-3 w-3 shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-3 w-3 shrink-0" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-left">
+                    {CODE_LABEL[group.code] ?? group.code}
+                  </span>
+                  <span className="shrink-0 font-mono tabular-nums text-text-tertiary">
+                    {group.violations.length}
+                  </span>
+                </button>
+                {!isCollapsed
+                  ? group.violations.map((v) => {
+                      const waived = waivedSet.has(v.id);
+                      const selected = v.id === selectedId;
+                      return (
+                        <div
+                          key={v.id}
+                          className={`group flex items-start gap-2 border-b border-border-subtle px-[10px] py-1 ${selected ? "bg-surface-selected" : "hover:bg-surface-hover"}`}
+                        >
+                          <SeverityDiamond
+                            severity={v.severity}
+                            className="mt-1.5"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              select(v.id);
+                              if (v.locationMm) {
+                                requestCenter(v.locationMm);
+                                onShowViolation(v.locationMm);
+                              }
+                            }}
+                            className="flex min-w-0 flex-1 cursor-pointer flex-col items-start gap-0.5 text-left"
+                          >
+                            <span
+                              className={`w-full truncate text-xs font-medium text-text-strong ${waived ? "line-through opacity-60" : ""}`}
+                            >
+                              {v.anchors
+                                .map((a) => resolveAnchorLabel(a, projection))
+                                .join(" ↔ ")}
+                            </span>
+                            <span className="w-full text-2xs leading-[1.35] text-text-tertiary">
+                              {v.message}
+                              {v.measuredMm !== undefined &&
+                              v.requiredMm !== undefined ? (
+                                <span className="ml-1 font-mono">
+                                  {v.measuredMm.toFixed(3)} /{" "}
+                                  {v.requiredMm.toFixed(3)} mm
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                          {v.layer ? (
+                            <span className="mt-0.5 shrink-0 font-mono text-2xs text-text-disabled">
+                              {v.layer}
+                            </span>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => toggleWaived(v.id)}
+                            title={waived ? "Un-waive" : "Waive (accept)"}
+                            className="mt-0.5 shrink-0 cursor-pointer rounded-control px-1 text-2xs text-text-tertiary opacity-0 hover:text-text-strong group-hover:opacity-100"
+                          >
+                            {waived ? "↩" : "waive"}
+                          </button>
+                        </div>
+                      );
+                    })
+                  : null}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {rules.dialog}

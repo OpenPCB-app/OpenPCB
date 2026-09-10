@@ -239,7 +239,16 @@ export function createHttpServer(config: HttpServerConfig): RuntimeServer {
     const port = config.port ?? 3000;
     const server = createServer((incoming, outgoing) => {
       const controller = new AbortController();
+      // `aborted` is deprecated and does not fire on every runtime. The
+      // request's own `close` is NOT a disconnect signal: it fires as soon as
+      // a body-carrying request has been read, before the handler answers. A
+      // disconnect is the RESPONSE closing before it finished — that is what
+      // an SSE handler must learn about to unsubscribe. `abort()` is
+      // idempotent. (S10 R2 #2, verified on Bun 1.4 and Node 22.)
       incoming.on("aborted", () => controller.abort());
+      outgoing.on("close", () => {
+        if (!outgoing.writableFinished) controller.abort();
+      });
       void fetch(buildRequest(incoming, hostname, controller))
         .then((response) => writeResponse(response, outgoing))
         .catch((error: unknown) => {

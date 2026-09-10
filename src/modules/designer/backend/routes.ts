@@ -116,6 +116,7 @@ import type {
   DesignerCommentCommandEnvelope,
   DesignerCommentSurface,
   DesignerCommentThread,
+  DrcRunSnapshot,
 } from "../../../sdks/designer";
 import { isCopperLayerId } from "../../../sdks/designer";
 import { resolveCaptureRuntime } from "./capture";
@@ -124,8 +125,10 @@ import { ulid } from "./capture/ulid";
 import { buildDesignerSdk } from "./sdk";
 import { createDesignerStore } from "./store";
 import { createCommentStore } from "./comments/comment-store";
-import { drcOptionsFromProjection, runDrc } from "./drc/drc-engine";
-import { buildRawFootprintLookup } from "./pcb/raw-footprint-lookup";
+import {
+  DrcRunCancelledError,
+  resolveDrcRunService,
+} from "./drc/run-service";
 import { registerAutolayoutRoutes } from "./autolayout/register-routes";
 import { runErc } from "./erc/erc-engine";
 import { buildBoardSnapshot } from "./pcb/board-snapshot";
@@ -144,6 +147,30 @@ async function parseJsonBody<T>(req: Request): Promise<T> {
   } catch {
     throw new ValidationError("Request body must be valid JSON");
   }
+}
+
+/** One SSE frame. Same shape the tasks module streams (09 §7). */
+function sse(data: unknown, event: string): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function isTerminalDrcRun(status: DrcRunSnapshot["status"]): boolean {
+  return (
+    status === "completed" || status === "cancelled" || status === "failed"
+  );
+}
+
+/**
+ * A waiting caller whose run was cancelled or whose design was deleted gets a
+ * 409, not a 500 — nothing failed, the answer just no longer exists.
+ */
+function drcRunCancelled(error: DrcRunCancelledError): AppError {
+  return new AppError(
+    error.message,
+    409,
+    "DRC run cancelled",
+    "https://openpcb.dev/problems/drc-run-cancelled",
+  );
 }
 
 /** Cloud auto-layout proxy routes require a signed-in user (R0.4): reject
@@ -2898,6 +2925,25 @@ export function registerRoutes(
   ctx: CoreBackendModuleContext,
 ): void {
   const store = createDesignerStore(ctx);
+  // ONE run registry per module context — the SDK resolves the same instance,
+  // so a run started through either surface is joined by the other (09 §5).
+  const drcRuns = resolveDrcRunService(ctx, store);
+  /**
+   * The post-apply DRC the three cloud apply sites report (09 §7). Reported,
+   * never gating: a run that was cancelled or superseded out from under the
+   * apply yields `null` rather than turning a committed board change into a
+   * failed request.
+   */
+  const drcAfterApply = async (designId: string) => {
+    try {
+      return await drcRuns.runAndWait(designId);
+    } catch (error) {
+      if (error instanceof DrcRunCancelledError || error instanceof NotFoundError) {
+        return null;
+      }
+      throw error;
+    }
+  };
   const capture = resolveCaptureRuntime(ctx);
   capture.setSnapshotProvider(async (designId) => {
     const projection = await store.getPcbProjection(designId);
@@ -3242,24 +3288,148 @@ export function registerRoutes(
 
   // Compute DRC over the current PCB projection AND persist the result, so the
   // design card + a later reopen reflect it. Returns the fresh report.
+  //
+  // Unchanged contract, now backed by the run service (09 §7): the engine
+  // executes on the worker and this handler waits for the run it started or
+  // joined. Callers that want progress use `/drc/runs` below instead.
   router.post("/designs/:designId/drc/run", async ({ params }) => {
     const designId = params.getOrThrow("designId");
-    const projection = await store.getPcbProjection(designId);
-    if (!projection) {
-      throw new NotFoundError(`Design '${designId}' not found`);
+    try {
+      return success({ report: await drcRuns.runAndWait(designId) });
+    } catch (error) {
+      if (error instanceof DrcRunCancelledError) throw drcRunCancelled(error);
+      throw error;
     }
-    // Every suppression DEFAULTS from the projection inside `runDrc`
-    // (rule-semantics contract §8), so this route, the SDK and the cloud apply
-    // path cannot drift; the options are only recorded with the stored result.
-    const options = drcOptionsFromProjection(projection);
-    // Raw footprints recover the courtyards a KiCad import dropped, so the
-    // keepout `footprints` extent is the real body and not just the preview
-    // bounds (contract §4). Not part of the persisted options.
-    const report = runDrc(projection, {
-      lookupRawFootprint: await buildRawFootprintLookup(ctx, projection),
+  });
+
+  // ── Asynchronous batch DRC runs (execution contract 09 §7) ──────────────
+  // Start or join the design's active run. 202 with the first snapshot; the
+  // report itself is never carried by a run — `GET /drc` serves it once the
+  // run completes.
+  router.post("/designs/:designId/drc/runs", async ({ params }) => {
+    const designId = params.getOrThrow("designId");
+    try {
+      return success(await drcRuns.start(designId), 202);
+    } catch (error) {
+      // Only a disposed service (shutdown) rejects a start this way.
+      if (error instanceof DrcRunCancelledError) throw drcRunCancelled(error);
+      throw error;
+    }
+  });
+
+  // A run id is only addressable under the design it belongs to.
+  const runOf = (designId: string, runId: string): DrcRunSnapshot => {
+    const snapshot = drcRuns.get(runId);
+    if (!snapshot || snapshot.designId !== designId) {
+      throw new NotFoundError(`DRC run '${runId}' not found`);
+    }
+    return snapshot;
+  };
+
+  router.get("/designs/:designId/drc/runs/:runId", async ({ params }) => {
+    return success(
+      runOf(params.getOrThrow("designId"), params.getOrThrow("runId")),
+    );
+  });
+
+  // Cooperative: the run is marked cancelled here and the engine is asked to
+  // stop; a run that already finished is returned unchanged (idempotent).
+  router.post("/designs/:designId/drc/runs/:runId/cancel", async ({ params }) => {
+    const runId = params.getOrThrow("runId");
+    runOf(params.getOrThrow("designId"), runId);
+    const snapshot = drcRuns.cancel(runId);
+    if (!snapshot) throw new NotFoundError(`DRC run '${runId}' not found`);
+    return success(snapshot, 202);
+  });
+
+  // SSE lifecycle stream. The current state is replayed as the first frame so
+  // a late connect (or one that raced the terminal transition) still learns the
+  // outcome; a disconnect unsubscribes and never cancels the run (09 §5).
+  router.get("/designs/:designId/drc/runs/:runId/stream", async (routeCtx) => {
+    const runId = routeCtx.params.getOrThrow("runId");
+    const current = runOf(routeCtx.params.getOrThrow("designId"), runId);
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        let closed = false;
+        const close = (): void => {
+          if (closed) return;
+          closed = true;
+          try {
+            controller.close();
+          } catch {
+            /* already closed */
+          }
+        };
+        const emit = (snapshot: DrcRunSnapshot): void => {
+          if (closed) return;
+          try {
+            controller.enqueue(encoder.encode(sse(snapshot, "run.state")));
+          } catch {
+            closed = true;
+          }
+        };
+        const emitTerminal = (snapshot: DrcRunSnapshot): void => {
+          if (closed) return;
+          try {
+            if (snapshot.status === "completed") {
+              controller.enqueue(
+                encoder.encode(
+                  sse({ summary: snapshot.summary }, "run.completed"),
+                ),
+              );
+            } else if (snapshot.status === "cancelled") {
+              controller.enqueue(
+                encoder.encode(
+                  sse({ reason: snapshot.cancelReason ?? "user" }, "run.cancelled"),
+                ),
+              );
+            } else {
+              controller.enqueue(
+                encoder.encode(
+                  sse({ message: snapshot.error ?? "DRC run failed" }, "run.failed"),
+                ),
+              );
+            }
+          } catch {
+            closed = true;
+          }
+          close();
+        };
+
+        emit(current);
+        if (isTerminalDrcRun(current.status)) {
+          emitTerminal(current);
+          return;
+        }
+        const unsubscribe = drcRuns.subscribe(runId, (snapshot) => {
+          if (closed) return;
+          if (!isTerminalDrcRun(snapshot.status)) {
+            try {
+              controller.enqueue(
+                encoder.encode(sse(snapshot, "run.progress")),
+              );
+            } catch {
+              closed = true;
+            }
+            return;
+          }
+          unsubscribe();
+          emitTerminal(snapshot);
+        });
+        routeCtx.req.signal.addEventListener("abort", () => {
+          unsubscribe();
+          close();
+        });
+      },
     });
-    await store.saveDrcResult(designId, report, options);
-    return success({ report });
+    return new Response(stream, {
+      headers: {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      },
+    });
   });
 
   // Return the latest *persisted* DRC report (or null if never run). The
@@ -3424,12 +3594,7 @@ export function registerRoutes(
           appliedCandidateId: appliedCandidateId ?? null,
           groupId: captureGroupId,
         });
-        const projection = await store.getPcbProjection(designId);
-        const drc = projection
-          ? runDrc(projection, {
-              lookupRawFootprint: await buildRawFootprintLookup(ctx, projection),
-            })
-          : null;
+        const drc = await drcAfterApply(designId);
         return success({ appliedCount, failures, drc });
       },
     );
@@ -3550,12 +3715,7 @@ export function registerRoutes(
           if (result.ok) appliedCount += 1;
           else failures.push({ opId: op.id, code: result.code });
         }
-        const projection = await store.getPcbProjection(designId);
-        const drc = projection
-          ? runDrc(projection, {
-              lookupRawFootprint: await buildRawFootprintLookup(ctx, projection),
-            })
-          : null;
+        const drc = await drcAfterApply(designId);
         return success({ appliedCount, failures, drc });
       },
     );
@@ -3573,11 +3733,7 @@ export function registerRoutes(
       loadProjection: (designId) => store.getPcbProjection(designId),
       dispatch: (designId, envelope) =>
         store.dispatchCommand(designId, envelope, {}, { actor: "autolayout_apply" }),
-      runDrc: async (projection) => {
-        return runDrc(projection, {
-          lookupRawFootprint: await buildRawFootprintLookup(ctx, projection),
-        });
-      },
+      runDrc: (designId) => drcAfterApply(designId),
       notFound: (message) => new NotFoundError(message),
       success: (data, status) => success(data, status),
     });

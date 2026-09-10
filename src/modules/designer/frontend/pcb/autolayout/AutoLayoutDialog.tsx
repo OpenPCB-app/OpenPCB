@@ -277,19 +277,25 @@ export function AutoLayoutDialog({
         {state.type === "completed" ? (
           <div
             className={
-              state.drcErrors > 0
-                ? "rounded-control border border-status-warning bg-status-warning-soft px-3 py-2 text-xs text-status-warning"
-                : "rounded-control border border-status-success bg-status-success-soft px-3 py-2 text-xs text-status-success"
+              state.drcErrors === null
+                ? "rounded-control border border-border bg-surface-section px-3 py-2 text-xs text-text-secondary"
+                : state.drcErrors > 0
+                  ? "rounded-control border border-status-warning bg-status-warning-soft px-3 py-2 text-xs text-status-warning"
+                  : "rounded-control border border-status-success bg-status-success-soft px-3 py-2 text-xs text-status-success"
             }
           >
             <p className="font-medium">Auto Layout applied</p>
             <p className="mt-0.5">
-              {state.drcErrors > 0
-                ? `The candidate was applied, but DRC found ${state.drcErrors} error${
-                    state.drcErrors === 1 ? "" : "s"
-                  } — review them on the board.`
-                : "DRC clean."}
-              {state.drcWarnings > 0 ? ` ${state.drcWarnings} warning(s).` : ""}
+              {state.drcErrors === null
+                ? "DRC did not run for this apply — run DRC to check the board."
+                : state.drcErrors > 0
+                  ? `The candidate was applied, but DRC found ${state.drcErrors} error${
+                      state.drcErrors === 1 ? "" : "s"
+                    } — review them on the board.`
+                  : "DRC clean."}
+              {state.drcWarnings !== null && state.drcWarnings > 0
+                ? ` ${state.drcWarnings} warning(s).`
+                : ""}
             </p>
             <p className="mt-0.5 text-[11px]">Undo reverts the whole layout in one step.</p>
           </div>

@@ -9,6 +9,10 @@ import type { StartedBackendRuntime } from "../../../src/core/backend/runtime";
 import type { ModuleRegistryResponse } from "../../../src/core/contracts/modules/registry";
 import { resetSharedSqlite } from "../../../src/core/backend/db/sqlite-client";
 import {
+  disposeDrcWorker,
+  setDrcWorkerEntry,
+} from "../../../src/shared/drc/worker/drc-worker-client";
+import {
   clearStaleMcpPortfile,
   ensureMcpToken,
   removeMcpPortfile,
@@ -115,10 +119,33 @@ function assertRequiredModulesLoaded(snapshot: ModuleRegistryResponse): void {
   );
 }
 
+/**
+ * The DRC worker entry is a separate tsup bundle, spawned as a file — packaged
+ * it lives outside app.asar (execution contract 09 §2.1). `app.getAppPath()`
+ * is the `electron/` directory in dev, the same base `getStaticDir` walks from.
+ */
+function configureDrcWorkerEntry(): void {
+  const entry = app.isPackaged
+    ? join(
+        process.resourcesPath,
+        "app.asar.unpacked",
+        "dist",
+        "main",
+        "drc-worker.js",
+      )
+    : join(app.getAppPath(), "dist", "main", "drc-worker.js");
+  setDrcWorkerEntry(entry);
+  log.info(`DRC worker entry: ${entry}`);
+}
+
 async function closeCurrentRuntime(): Promise<void> {
   if (!runtime) return;
   const current = runtime;
   runtime = null;
+  // The worker holds a thread that outlives the runtime otherwise.
+  await disposeDrcWorker().catch((error: unknown) => {
+    log.warn(`Failed to dispose the DRC worker: ${String(error)}`);
+  });
   await current.close().catch((error: unknown) => {
     log.warn(`Failed to close backend after startup failure: ${String(error)}`);
   });
@@ -164,6 +191,7 @@ export async function startBackendServer(): Promise<BackendReadyPayload> {
   if (runtime && backendPayload) return backendPayload;
 
   configureBackendEnvironment();
+  configureDrcWorkerEntry();
   try {
     const startedRuntime = await startRuntimeWithRequiredModules();
     backendPayload = {
@@ -204,6 +232,11 @@ export async function stopBackendServer(): Promise<void> {
   const current = runtime;
   runtime = null;
   backendPayload = null;
+  // The DRC worker thread would keep the process alive past a clean quit —
+  // `unref()` is not relied on (execution contract 09 §2.3).
+  await disposeDrcWorker().catch((error: unknown) => {
+    log.warn(`Failed to dispose the DRC worker: ${String(error)}`);
+  });
   await current.close();
 }
 

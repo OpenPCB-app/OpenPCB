@@ -296,7 +296,9 @@ gate or not.
 - Obstacles stay AABB heuristics; no board-edge / cutout obstacles (S16); the S6 §9 area-rule
   divergence stays.
 - `pcb_apply_autolayout_candidate` is not gated (filed); the server rebuilds the context per
-  envelope (memo per revision is S10).
+  envelope (the per-revision memo filed here was retired in S10 — `09-execution-contract.md`
+  §9: every applied command advances the revision, so the memo could hit only after a refused
+  command; the saving is incremental context maintenance, unowned).
 - Client-minted ids are not adopted; live ids never match batch ids, waivers or markers (§1).
 - The assistant's proposal apply does not yet show a refusal's detail (filed).
 - Marker ties and the multi-shape-pad bridge marker (§1 exceptions).

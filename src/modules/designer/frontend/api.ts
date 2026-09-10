@@ -15,6 +15,7 @@ import type {
   DesignerPcbProjection,
   DesignerSchematicProjection,
   DrcReport,
+  DrcRunSnapshot,
   ErcReport,
   KicadProjectCommitResult,
   KicadProjectInspectReport,
@@ -340,6 +341,61 @@ export function createDesignerApi(params: {
         ),
       );
       return data.report;
+    },
+
+    /**
+     * Start — or join — the asynchronous batch DRC run for a design
+     * (execution contract 09 §7). Returns the run's first snapshot; the
+     * report itself never travels with a run and is fetched with
+     * `getDrcResult` once the run completes.
+     */
+    async startDrcRun(designId: string): Promise<DrcRunSnapshot> {
+      return fetchData<DrcRunSnapshot>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/drc/runs`,
+        ),
+        { method: "POST" },
+      );
+    },
+
+    /** Poll one run's snapshot. Rejects (404) once the run has been dropped. */
+    async getDrcRun(designId: string, runId: string): Promise<DrcRunSnapshot> {
+      return fetchData<DrcRunSnapshot>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/drc/runs/${encodeURIComponent(runId)}`,
+        ),
+      );
+    },
+
+    /**
+     * Request cancellation. Cooperative: the returned snapshot may still be
+     * `running` — the stream (or the poll fallback) reports the terminal state.
+     */
+    async cancelDrcRun(
+      designId: string,
+      runId: string,
+    ): Promise<DrcRunSnapshot> {
+      return fetchData<DrcRunSnapshot>(
+        buildModuleUrl(
+          backendURL,
+          moduleId,
+          `/designs/${encodeURIComponent(designId)}/drc/runs/${encodeURIComponent(runId)}/cancel`,
+        ),
+        { method: "POST" },
+      );
+    },
+
+    /** SSE endpoint for a run's lifecycle events. Loopback; no headers. */
+    drcRunStreamUrl(designId: string, runId: string): string {
+      return buildModuleUrl(
+        backendURL,
+        moduleId,
+        `/designs/${encodeURIComponent(designId)}/drc/runs/${encodeURIComponent(runId)}/stream`,
+      );
     },
 
     async getBom(designId: string): Promise<BomProjection> {

@@ -67,6 +67,12 @@ jobs:
       - name: Frontend tests (Vitest)
         run: npm run test:react
 
+      # The DRC worker is a separate tsup bundle Electron spawns as a file; the
+      # smoke runs the BUILT bundle on Node and compares its report byte for
+      # byte with the in-thread engine (docs/pcb-hardening/09-execution-contract.md §8).
+      - name: DRC worker bundle smoke (Electron build)
+        run: npm run test:drc-worker-smoke
+
   e2e:
     name: playwright e2e
     runs-on: ubuntu-latest

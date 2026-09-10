@@ -338,13 +338,17 @@ depends on that beyond what the snapshot already pins.
 - Spokes are not relocated when blocked (§6). `custom` / `trapezoid` pads pour against their
   bounding ring (S11).
 - `ZONE_OVERLAP` and keepout / placement predicates ignore zone holes (§11).
-- The fill runs synchronously on the caller's thread (S10). Precedence is `O(Z²)` per layer and
+- The fill runs synchronously on the caller's thread, except inside a batch DRC run: S10 moved
+  that run — its pours included — to a worker thread with a checkpoint before every zone
+  (`09-execution-contract.md` §3); Gerber export, the cloud snapshot pours and
+  `pcb_cleanup_pour_traces` still fill on the caller's thread. Precedence is `O(Z²)` per layer and
   obstacle collection `O(items)` per pour without an index (S9).
 - The Gerber union re-splits islands; island *indices* in the artwork are not the connectivity
   keys (the artwork carries no keys).
 - No edge / intersection / output budget or cancellation exists: 50 zones × 5 000 items ×
   500-vertex rings is `Ω(E + I)` per pour with `I` up to `Θ(E²)` in arrangement-hostile input
-  (Astra run 1 #15); S9 owns budgets and S10 execution.
+  (Astra run 1 #15); the budget stays open (S9 recorded the limit); S10 made a runaway zone
+  cancellable by terminating the worker, not bounded.
 - The union of same-net pours is not re-opened for minimum width (§7, S12).
 - Per-pour island removal cannot see other pours (§8, #4b).
 - A hole ring that collapses to fewer than three distinct vertices on the output grid is dropped

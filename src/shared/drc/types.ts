@@ -67,6 +67,53 @@ export function createDrcRunStats(): DrcRunStats {
   };
 }
 
+/**
+ * The 17 check stages of `drcDrafts`, in the order they run, plus the
+ * copper-pour stage the context runs lazily the first time a check asks for
+ * pour results (execution contract 09 §4, §6).
+ */
+export type DrcStage =
+  | "rules"
+  | "outline"
+  | "zones"
+  | "constraints"
+  | "structural"
+  | "manufacturability"
+  | "netclass"
+  | "clearance"
+  | "copperToHole"
+  | "connectivity"
+  | "copperPour"
+  | "dangling"
+  | "electrical"
+  | "signalIntegrity"
+  | "length"
+  | "board"
+  | "keepouts"
+  | "pour";
+
+/**
+ * Execution checkpoint (contract 09 §6): `drcDrafts` calls it before every
+ * stage with `(stage, stageIndex, stageCount, draftsSoFar)`; the context calls
+ * it before every pour zone with `("pour", zoneIndex, zoneCount)`. Results-
+ * neutral like `stats` — it never reads or writes a draft. A checkpoint that
+ * throws (`DrcCancelledError`) abandons the run and its whole per-run context.
+ */
+export type DrcTick = (
+  stage: DrcStage,
+  index: number,
+  total: number,
+  violationsSoFar?: number,
+) => void;
+
+/** Thrown from a `tick` to abandon a run; the worker then reports `cancelled`. */
+export class DrcCancelledError extends Error {
+  constructor(message = "DRC run cancelled") {
+    super(message);
+    this.name = "DrcCancelledError";
+  }
+}
+
 /** Per-run engine options, sourced by the route from `board.viewState`. */
 export interface DrcOptions {
   /** Rule-classes the user ignores wholesale — not emitted at all. */
@@ -86,4 +133,6 @@ export interface DrcOptions {
   broadPhase?: DrcBroadPhaseMode;
   /** Counter sink for the oracle harness and the bench; results-neutral. */
   stats?: DrcRunStats;
+  /** Execution checkpoint (contract 09 §6); results-neutral, off by default. */
+  tick?: DrcTick;
 }

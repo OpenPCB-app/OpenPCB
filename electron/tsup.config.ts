@@ -33,7 +33,10 @@ export default defineConfig([
     target: "node24",
     outDir: "dist",
     sourcemap: true,
-    clean: true,
+    // No `clean` on ANY config: tsup cleans the whole outDir on every (watch)
+    // rebuild of the config that carries it, which deleted the sibling bundles
+    // — the DRC worker entry included (S10 R1 #1). `npm run build` cleans once.
+    clean: false,
     splitting: false,
     bundle: true,
     banner: {
@@ -57,6 +60,27 @@ export default defineConfig([
       "zod",
     ],
     loader: { ".kicad_mod": "text" },
+    define,
+  },
+  {
+    // DRC worker entry (execution contract 09 §2.1). Its own bundle because
+    // `node:worker_threads` spawns a FILE, not a module of the main bundle.
+    // Same banner/format/target/define as the main config — the engine graph
+    // uses `import.meta.url`, which `define` rewrites to the banner's global.
+    // `clean: false` like every config here; `npm run build` cleans once.
+    entry: { "main/drc-worker": "../src/shared/drc/worker/drc-worker.ts" },
+    format: "cjs",
+    platform: "node",
+    target: "node24",
+    outDir: "dist",
+    sourcemap: true,
+    clean: false,
+    splitting: false,
+    bundle: true,
+    banner: {
+      js: 'var __cjsBundleEntryUrl = require("url").pathToFileURL(__filename).toString();',
+    },
+    external: ["electron", "better-sqlite3", "electron-updater"],
     define,
   },
   {

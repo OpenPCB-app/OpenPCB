@@ -258,7 +258,8 @@ modes. Nothing in S9 introduces a first-wins tie; the one that exists (`signal-i
   trace-bearing kinds (`traceToTrace`, `traceToPad`, `traceToVia`) — a box-filed kind (`padToPad`,
   `padToVia`, `viaToVia`) returns exactly the AABB-within-halo set that `farApart` re-derives, so its
   `pairsJudged` are equal by construction and only its `prefilterTests` drop; the four `pourTo*`
-  counters are never incremented (pour candidate discovery is S10's) — and
+  counters are never incremented (pour candidate discovery is unowned — the fill kernel collects
+  its own obstacles, 04 §13; S10 is execution placement, not discovery) — and
   `grid.prefilterTests < exhaustive.prefilterTests / 10` on the dense seed; (iv) the
   halo inequalities of §5 over every (kind, netA, netB) triple the corpus contains; (v) every
   `DrcRuleCode` (minus `ZONE_FILL_FAILED`) observed across the corpus. The review pass demonstrates
@@ -267,7 +268,7 @@ modes. Nothing in S9 introduces a first-wins tie; the one that exists (`signal-i
 - `scripts/drc-bench.ts` — 1k / 5k / 10k / 20k items, both modes, per-check ms and stats. The gate:
   `runDrc` (default, every check, no zones) on the 10k bench board < 300 ms on the reference
   machine; `buildDrcItems` ≤ 60 ms at 10k; the census board ≤ 50 ms. Pour cost is reported
-  separately (S10).
+  separately; S10 moved the whole run, pours included, off the request thread (contract 09).
 
 Recorded at close (2026-09-09, `bun scripts/drc-bench.ts --items 1000 --items 10000 --golden census`,
 this machine, medians of 3; the synthetic boards are `helpers/drc-synthetic.ts` at seed 1, no zones;
@@ -307,7 +308,7 @@ census 10.9 ms ≤ 50 ms. After S9 the largest single stage at 10k is the S1 con
 - The grid is layer-blind; a per-layer grid is a future knob.
 - The area sub-segment products, `ZONE_OVERLAP` O(Z²), the cutout pairs, the fill kernel,
   `signal-integrity`, `ratsnest` are unchanged.
-- The server rebuilds the context per envelope (S10).
+- The server rebuilds the context per envelope (the S10 memo item is retired, 09 §9).
 - `"exhaustive"` is option-only.
 - `cellMm` is a `createBroadPhase` option that `buildDrcItems` does not thread through; the bench's
   `--cell` is parsed and reported as ignored. A change of cell size is a bench result, never a

@@ -4,11 +4,27 @@
  * Live-DRC tests exercise the frontend pure module under bun, matching the
  * repo convention (see route-tool-state.test.ts).
  */
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import os from "node:os";
 import path from "node:path";
-import type { DesignerCommandEnvelope, DesignerSDK } from "../../../sdks";
+import type {
+  DesignerCommandEnvelope,
+  DesignerSDK,
+  DrcReport,
+  DrcRunSnapshot,
+} from "../../../sdks";
 import { MODULE_SDK_TOKENS } from "../../../sdks";
+import type { RawFootprintLookup } from "../../../shared/pcb-geometry/courtyard";
+import {
+  disposeDrcWorker,
+  setDrcWorkerEntry,
+  setDrcWorkerFactoryForTesting,
+  type DrcWorkerLike,
+} from "../../../shared/drc/worker/drc-worker-client";
+import type {
+  DrcWorkerRequest,
+  DrcWorkerResponse,
+} from "../../../shared/drc/worker/protocol";
 import { resetSharedSqliteForTesting } from "../db/sqlite-client";
 import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
@@ -53,6 +69,218 @@ async function createRuntimeAndServer() {
   });
   return { moduleRuntime, server };
 }
+
+// ── B5-SYNC harness (execution contract 09 §8) ─────────────────────────────
+
+interface FakeWorkerEvents {
+  message: DrcWorkerResponse;
+  error: Error;
+  exit: number;
+}
+
+/** A worker that answers only when the test says so. */
+class ControlledWorker implements DrcWorkerLike {
+  readonly received: DrcWorkerRequest[] = [];
+
+  private readonly listeners: {
+    [K in keyof FakeWorkerEvents]: Array<(payload: FakeWorkerEvents[K]) => void>;
+  } = { message: [], error: [], exit: [] };
+
+  constructor() {
+    setTimeout(() => this.emit("message", { type: "ready" }), 0);
+  }
+
+  postMessage(message: DrcWorkerRequest): void {
+    this.received.push(message);
+  }
+
+  on<K extends keyof FakeWorkerEvents>(
+    event: K,
+    listener: (payload: FakeWorkerEvents[K]) => void,
+  ): void {
+    this.listeners[event].push(listener);
+  }
+
+  off<K extends keyof FakeWorkerEvents>(
+    event: K,
+    listener: (payload: FakeWorkerEvents[K]) => void,
+  ): void {
+    const list = this.listeners[event];
+    const index = list.indexOf(listener);
+    if (index >= 0) list.splice(index, 1);
+  }
+
+  terminate(): Promise<number> {
+    return Promise.resolve(0);
+  }
+
+  emit<K extends keyof FakeWorkerEvents>(
+    event: K,
+    payload: FakeWorkerEvents[K],
+  ): void {
+    for (const listener of [...this.listeners[event]]) listener(payload);
+  }
+
+  /** Answers the held run with exactly what the in-thread engine produces. */
+  release(): void {
+    const request = this.received.at(-1)!;
+    const entries = request.rawFootprints;
+    const lookup: RawFootprintLookup | undefined =
+      entries === null
+        ? undefined
+        : ((byId) => (footprintId: string) => byId.get(footprintId) ?? null)(
+            new Map(entries),
+          );
+    this.emit("message", {
+      type: "done",
+      runId: request.runId,
+      report: runDrc(request.projection, { lookupRawFootprint: lookup }),
+    });
+  }
+}
+
+async function useControlledWorker(): Promise<ControlledWorker[]> {
+  await disposeDrcWorker();
+  const workers: ControlledWorker[] = [];
+  setDrcWorkerFactoryForTesting(() => {
+    const worker = new ControlledWorker();
+    workers.push(worker);
+    return worker;
+  });
+  return workers;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitFor(
+  predicate: () => boolean,
+  label: string,
+  timeoutMs = 30_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await sleep(5);
+  }
+  throw new Error(`timed out waiting for ${label}`);
+}
+
+function drcUrl(designId: string, suffix = ""): string {
+  return `http://localhost/api/modules/designer/designs/${designId}/drc${suffix}`;
+}
+
+async function snapshotFrom(
+  response: Response,
+  expectedStatus = 200,
+): Promise<DrcRunSnapshot> {
+  expect(response.status).toBe(expectedStatus);
+  const body = (await response.json()) as { data: DrcRunSnapshot };
+  return body.data;
+}
+
+type TestServer = { fetch(req: Request): Promise<Response> };
+
+async function waitForStatus(
+  server: TestServer,
+  designId: string,
+  runId: string,
+  status: DrcRunSnapshot["status"],
+): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  let last = "";
+  while (Date.now() < deadline) {
+    const snapshot = await snapshotFrom(
+      await server.fetch(new Request(drcUrl(designId, `/runs/${runId}`))),
+    );
+    last = snapshot.status;
+    if (snapshot.status === status) return;
+    if (snapshot.status !== "queued" && snapshot.status !== "running") break;
+    await sleep(10);
+  }
+  throw new Error(`run ${runId} ended '${last}', expected '${status}'`);
+}
+
+async function storedReport(
+  server: TestServer,
+  designId: string,
+): Promise<DrcReport | null> {
+  const response = await server.fetch(new Request(drcUrl(designId)));
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as { data: { report: DrcReport | null } };
+  return body.data.report;
+}
+
+/**
+ * A trace the commit gate accepts: 1.5 mm apart, well clear of the default
+ * 0.25 mm clearance. `baseRevision: null` skips the revision check so seeding
+ * need not track the head.
+ */
+function traceEnvelope(
+  designId: string,
+  commandId: string,
+  index: number,
+  netClassId: string,
+): DesignerCommandEnvelope {
+  const y = Math.round(index * 1.5 * MM);
+  return {
+    commandId,
+    sessionId: "b5-sync",
+    aggregateId: designId,
+    baseRevision: null,
+    issuedAt: Date.now(),
+    command: {
+      type: "pcb_add_trace",
+      layer: "F.Cu",
+      pointsNm: [
+        { x: 0, y },
+        { x: 4 * MM, y },
+      ],
+      widthMm: 0.2,
+      netId: null,
+      netClassId,
+      segmentMode: "manhattan-90",
+    },
+  };
+}
+
+/**
+ * Eight traces and one off-board drill — a report with content, seeded in NINE
+ * dispatches. Seeding is quadratic (every copper command rebuilds the legality
+ * context), so this must stay small.
+ */
+async function seedBoard(sdk: DesignerSDK, designId: string): Promise<string> {
+  const netClassId = (await sdk.getPcbProjection(designId))!.board.netClasses[0]!
+    .id;
+  const hole = await sdk.dispatchCommand(designId, {
+    commandId: "b5-sync-hole",
+    sessionId: "b5-sync",
+    aggregateId: designId,
+    baseRevision: null,
+    issuedAt: Date.now(),
+    command: {
+      type: "pcb_add_free_hole",
+      centerMm: { x: 24.8, y: 0 },
+      drillMm: 1.2,
+    },
+  });
+  expect(hole.ok).toBe(true);
+  for (let i = 0; i < 8; i += 1) {
+    const result = await sdk.dispatchCommand(
+      designId,
+      traceEnvelope(designId, `b5-sync-trace-${i}`, i, netClassId),
+    );
+    expect(result.ok).toBe(true);
+  }
+  return netClassId;
+}
+
+afterAll(async () => {
+  setDrcWorkerFactoryForTesting(null);
+  setDrcWorkerEntry(null);
+  await disposeDrcWorker();
+});
 
 const MM = 1_000_000;
 
@@ -318,64 +546,103 @@ describe("audit B5 — architecture / waivers / live parity", () => {
     expect(codes(report)).not.toContain("TRACE_LAYER_MISMATCH");
   });
 
-  // Fix: P7 (async DRC task executor; run route stops blocking the loop).
-  test.todo("B5-SYNC: large-board DRC runs off the request path", async () => {
-    // Architectural: asserted in the P7 task-executor tests (enqueue +
-    // progress + cancel), not through runDrc itself.
-    //
-    // Per TODO.md P7 (§5): "the route runs synchronously at ≤2000 primitives
-    // and otherwise returns 202 {taskId}". No route-level test harness
-    // exists for /drc/run specifically, but the designer route module is
-    // exercised elsewhere over real HTTP (designer-autolayout-auth.test.ts)
-    // via `runtime.server.fetch(...)` against a bootstrapped ModuleRuntime —
-    // reused here rather than calling the handler function directly.
-    isolateTestDb("drc-audit-b5-sync");
-    const { moduleRuntime, server } = await createRuntimeAndServer();
-    const designerSdk = moduleRuntime
-      .getSdkRegistry()
-      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+  // Fixed in S10 (execution contract 09): the batch run left the request path.
+  test("B5-SYNC: large-board DRC runs off the request path", async () => {
+    // Leg (a) — a HELD worker makes the run's middle observable: the board
+    // keeps accepting commands while a run is `running`, and only a released
+    // run writes a row.
+    const workers = await useControlledWorker();
+    try {
+      isolateTestDb("drc-audit-b5-sync");
+      const { moduleRuntime, server } = await createRuntimeAndServer();
+      const sdk = moduleRuntime
+        .getSdkRegistry()
+        .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+      const design = await sdk.createDesign({ name: "B5-SYNC" });
+      const netClassId = await seedBoard(sdk, design.id);
 
-    const design = await designerSdk.createDesign({ name: "B5-SYNC" });
-    const initial = await designerSdk.getPcbProjection(design.id);
-    const netClassId = initial!.board.netClasses[0]!.id;
+      const started = await snapshotFrom(
+        await server.fetch(
+          new Request(drcUrl(design.id, "/runs"), { method: "POST" }),
+        ),
+        202,
+      );
+      expect(typeof started.runId).toBe("string");
+      await waitFor(
+        () => workers.length === 1 && workers[0]!.received.length === 1,
+        "the run to reach the worker",
+      );
 
-    // >2000 copper primitives — one 2-point trace per command, well past
-    // the sync threshold. baseRevision: null skips the revision check so
-    // each dispatch doesn't need to track the running head revision.
-    const TRACE_COUNT = 2100;
-    for (let i = 0; i < TRACE_COUNT; i += 1) {
-      const y = i * 0.1;
-      const result = await designerSdk.dispatchCommand(design.id, {
-        commandId: `cmd-trace-${i}`,
-        sessionId: "s",
-        aggregateId: design.id,
-        baseRevision: null,
-        issuedAt: Date.now(),
-        command: {
-          type: "pcb_add_trace",
-          layer: "F.Cu",
-          pointsNm: [
-            { x: 0, y: Math.round(y * 1_000_000) },
-            { x: 1_000_000, y: Math.round(y * 1_000_000) },
-          ],
-          widthMm: 0.2,
-          netId: null,
-          netClassId,
-          segmentMode: "manhattan-90",
-        },
-      } satisfies DesignerCommandEnvelope);
-      expect(result.ok).toBe(true);
+      // THE regression: dispatch completes while the engine is still working.
+      const midRun = await sdk.dispatchCommand(
+        design.id,
+        traceEnvelope(design.id, "b5-sync-mid-run", 9, netClassId),
+      );
+      expect(midRun.ok).toBe(true);
+      const during = await snapshotFrom(
+        await server.fetch(
+          new Request(drcUrl(design.id, `/runs/${started.runId}`)),
+        ),
+      );
+      expect(during.status).toBe("running");
+
+      const ranOver = workers[0]!.received[0]!.projection;
+      workers[0]!.release();
+      await waitForStatus(server, design.id, started.runId, "completed");
+
+      const stored = await storedReport(server, design.id);
+      expect(JSON.stringify(stored)).toBe(JSON.stringify(runDrc(ranOver)));
+
+      // A cancelled run leaves that row exactly as it is.
+      const second = await snapshotFrom(
+        await server.fetch(
+          new Request(drcUrl(design.id, "/runs"), { method: "POST" }),
+        ),
+        202,
+      );
+      await waitFor(
+        () => workers[0]!.received.length === 2,
+        "the second run to reach the worker",
+      );
+      const cancelled = await snapshotFrom(
+        await server.fetch(
+          new Request(
+            drcUrl(design.id, `/runs/${second.runId}/cancel`),
+            { method: "POST" },
+          ),
+        ),
+        202,
+      );
+      expect(cancelled.status).toBe("cancelled");
+      workers[0]!.release();
+      await sleep(20);
+      expect(JSON.stringify(await storedReport(server, design.id))).toBe(
+        JSON.stringify(stored),
+      );
+    } finally {
+      setDrcWorkerFactoryForTesting(null);
+      await disposeDrcWorker();
     }
 
-    const res = await server.fetch(
-      new Request(
-        `http://localhost/api/modules/designer/designs/${design.id}/drc/run`,
-        { method: "POST" },
+    // Leg (b) — the same board, the real worker, end to end.
+    isolateTestDb("drc-audit-b5-sync-real");
+    const { moduleRuntime, server } = await createRuntimeAndServer();
+    const sdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const design = await sdk.createDesign({ name: "B5-SYNC-real" });
+    await seedBoard(sdk, design.id);
+
+    const started = await snapshotFrom(
+      await server.fetch(
+        new Request(drcUrl(design.id, "/runs"), { method: "POST" }),
       ),
+      202,
     );
-    // Today: always synchronous, always 200 with a report — this fails.
-    expect(res.status).toBe(202);
-    const body = (await res.json()) as { taskId?: unknown };
-    expect(typeof body.taskId).toBe("string");
-  });
+    await waitForStatus(server, design.id, started.runId, "completed");
+    const projection = (await sdk.getPcbProjection(design.id))!;
+    expect(JSON.stringify(await storedReport(server, design.id))).toBe(
+      JSON.stringify(runDrc(projection)),
+    );
+  }, 60_000);
 });
