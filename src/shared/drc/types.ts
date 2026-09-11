@@ -5,6 +5,7 @@ import type {
   DrcViolation,
 } from "../../sdks/designer";
 import type { RawFootprintLookup } from "../pcb-geometry/courtyard";
+import type { CopperShapeBudgets } from "../rendering/copper-fill/copper-shape-kernel";
 import type { DrcSeverityOverrides } from "./severity";
 
 /**
@@ -68,7 +69,7 @@ export function createDrcRunStats(): DrcRunStats {
 }
 
 /**
- * The 17 check stages of `drcDrafts`, in the order they run, plus the
+ * The 21 check stages of `drcDrafts`, in the order they run, plus the
  * copper-pour stage the context runs lazily the first time a check asks for
  * pour results (execution contract 09 §4, §6).
  */
@@ -90,7 +91,22 @@ export type DrcStage =
   | "length"
   | "board"
   | "keepouts"
-  | "pour";
+  // The DFM overlay stages (DFM contract 11 §7): they follow `keepouts`, and
+  // each reads a model (courtyard regions, silk artwork, mask openings) the
+  // context builds lazily on first ask.
+  | "courtyard"
+  | "silkscreen"
+  | "solderMask"
+  | "pour"
+  // The second per-ITEM stage (DFM contract 11 §5.5): it ticks once per copper
+  // unit and once per erosion inside one, not only once for the stage.
+  | "copperShape"
+  /**
+   * The copper-shape check's per-UNIT checkpoint (DFM contract 11 §5.5) — a
+   * per-item stage like `pour`, distinct from the engine's `copperShape` stage
+   * tick so a run service can tell a stage frame from an item frame by name.
+   */
+  | "copperShapeUnit";
 
 /**
  * Execution checkpoint (contract 09 §6): `drcDrafts` calls it before every
@@ -135,4 +151,12 @@ export interface DrcOptions {
   stats?: DrcRunStats;
   /** Execution checkpoint (contract 09 §6); results-neutral, off by default. */
   tick?: DrcTick;
+  /**
+   * Override for the three copper-shape engineering limits (DFM contract 11
+   * §5.5). TESTS ONLY, like `broadPhase: "exhaustive"`: the vertex budget and
+   * the neck / erosion caps are 250 000 / 64 / 600 in every real run, and the
+   * only way to provoke `COPPER_SHAPE_UNCHECKED` without a synthetic
+   * quarter-million-vertex fixture is to lower them.
+   */
+  copperShapeBudgets?: Partial<CopperShapeBudgets>;
 }

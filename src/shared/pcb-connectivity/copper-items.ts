@@ -116,7 +116,12 @@ export type CopperItem =
   | ViaCopperItem
   | PourCopperItem;
 
-function padRecordKey(
+/**
+ * Item key of one pad record. Exported because the Gerber writer and the mask
+ * artwork model index pad SHAPES by the same identity (DFM contract 11 §1.3) —
+ * omit `layer` for the per-pad key, pass it for the unplated per-layer split.
+ */
+export function padRecordKey(
   record: PadCopperRecord,
   layer?: PcbCopperLayerId,
 ): string {

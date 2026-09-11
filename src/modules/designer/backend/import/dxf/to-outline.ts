@@ -5,18 +5,17 @@
  * rather than silently picking the largest. Confirmation goes through the normal
  * `pcb_set_board_outline` command — this module never writes.
  */
-import type { PcbBoardContour, PcbOutlineSegment } from "../../../../../sdks";
-import {
-  chainEdgesToLoops,
-  loopSignedArea,
-  type AssembledLoop,
-} from "../../pcb/chain-edges";
-import {
-  normalizeContour,
-  validateContour,
-} from "../../pcb/contour-validation";
+import type { PcbBoardContour } from "../../../../../sdks";
+import { chainEdgesToLoops, loopSignedArea } from "../../pcb/chain-edges";
+import { validateContour } from "../../pcb/contour-validation";
 import { computeOutlineBboxMm } from "../../pcb/outline-geometry";
+// The loop flattener is shared with the courtyard region builder (DFM contract
+// 11 §2.1), so it lives beside the chainer in `shared/rendering/pcb/`; this
+// module keeps the name it published.
+import { loopToContour } from "../../../../../shared/rendering/pcb/loop-ring";
 import { parseDxfToEdges, type DxfParseOptions } from "./parse-dxf";
+
+export { loopToContour };
 
 /** Endpoint-merge tolerance (mm) when chaining DXF edges into loops. */
 export const DXF_CHAIN_EPSILON_MM = 0.01;
@@ -43,28 +42,6 @@ export interface DxfInspectResult {
   detectedUnits: string;
   openChainCount: number;
   diagnostics: string[];
-}
-
-function loopToContour(loop: AssembledLoop): PcbBoardContour {
-  const start = { x: loop.edges[0]!.from.x, y: loop.edges[0]!.from.y };
-  const segments: PcbOutlineSegment[] = loop.edges.map((e) =>
-    e.arc
-      ? {
-          type: "arc",
-          to: { x: e.to.x, y: e.to.y },
-          centerMm: { x: e.arc.centerMm.x, y: e.arc.centerMm.y },
-          cw: e.arc.cw,
-        }
-      : { type: "line", to: { x: e.to.x, y: e.to.y } },
-  );
-  return normalizeContour({
-    kind: "contour",
-    widthMm: 0,
-    heightMm: 0,
-    centerMm: { x: 0, y: 0 },
-    start,
-    segments,
-  });
 }
 
 /** Full pipeline: DXF text → loop candidates. Pure; performs no writes. */

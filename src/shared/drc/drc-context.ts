@@ -37,6 +37,25 @@ import {
   type BroadPhaseNear,
   type BroadPhaseNearPolyline,
 } from "./broad-phase";
+import {
+  placementCourtyardRegionsMm,
+  type PlacementCourtyardRegions,
+} from "../pcb-geometry/courtyard-rings";
+import {
+  buildSilkArtwork,
+  type SilkArtwork,
+} from "../rendering/pcb/artwork/silk-artwork";
+import {
+  buildMaskOpenings,
+  buildPadShapeIndex,
+  type MaskFace,
+  type MaskOpening,
+} from "../rendering/pcb/artwork/mask-artwork";
+import { apertureShapeRing } from "../rendering/pcb/artwork/aperture-shape";
+// Type-only for the context; the VALUE is the check's own documented default
+// (contract 11 §6). `checks/courtyard.ts` type-imports this module, so the
+// edge is one-way at runtime.
+import { DEFAULT_COURTYARD_FALLBACK_MM } from "./checks/courtyard";
 // Type-only (erased at runtime): `checks/clearance-judge.ts` imports values
 // from this module, so a value import here would be a real cycle.
 import type { BridgeEntry } from "./checks/clearance-judge";
@@ -54,6 +73,7 @@ import {
   buildCopperRecords,
   type CopperPadAnchor,
 } from "../pcb-connectivity/copper-records";
+import { padRecordKey } from "../pcb-connectivity/copper-items";
 import type {
   ConnectivityResult,
   CopperItem,
@@ -101,8 +121,14 @@ import type {
   DrcBroadPhaseMode,
   DrcOptions,
   DrcRunStats,
+  DrcTick,
   DrcViolationDraft,
 } from "./types";
+import {
+  DEFAULT_COPPER_SHAPE_BUDGETS,
+  type CopperShapeBudgets,
+} from "../rendering/copper-fill/copper-shape-kernel";
+import { boundsOfPoints } from "../pcb-geometry/region-rings";
 import type { RingBounds } from "../pcb-geometry/pad-outline";
 import type { Point } from "../pcb-geometry/pcb-trace-geometry";
 
@@ -127,6 +153,14 @@ export interface DrcTrace {
 
 export interface DrcPad {
   anchor: DrcAnchor;
+  /**
+   * The S1 item key of the pad's copper record (`padRecordKey`, no layer) —
+   * the SAME identity a mask opening's `ownerKey` carries. The anchor cannot
+   * stand in for it: one pin with several copper shapes is several records
+   * under one anchor, so `checks/solder-mask.ts` could not tell an opening's
+   * own pad from its neighbour's without it (DFM contract 11 §4).
+   */
+  key: string;
   netId: string | null;
   layers: PcbCopperLayerId[];
   ring: PcbPointMm[];
@@ -453,6 +487,56 @@ export interface DrcContext extends LegalityContext {
    * a board with many keepouts would otherwise redo it per keepout.
    */
   placementExtent(placementId: string): readonly PcbPointMm[] | null;
+  /**
+   * The run's execution checkpoint (contract 09 §6), for the checks that do
+   * PER-ITEM work and so cannot be checkpointed by `drcDrafts`'s per-stage call
+   * alone — the pour ticks through `options.tick` directly, `copper-shape.ts`
+   * through this. `DrcOptions.tick` stays the only seam; this is the same
+   * function, not a second one.
+   */
+  tick: DrcTick | undefined;
+  /**
+   * The resolved copper-shape engineering limits (DFM contract 11 §5.5) —
+   * defaults unless a test lowered them through `DrcOptions`.
+   */
+  copperShapeBudgets: CopperShapeBudgets;
+  /**
+   * The placement's courtyard REGION per face (DFM contract 11 §2.1), lazily
+   * resolved and cached beside `placementExtent` — the pair loop asks for every
+   * placement once per partner, and stitching the graphics is not free.
+   *
+   * Deliberately NOT `placementExtent`: that is a convex HULL, which fills a
+   * U-shaped connector's cut-out and a donut's hole, so two parts that nest
+   * correctly would read as overlapping.
+   */
+  placementCourtyard(placementId: string): PlacementCourtyardRegions;
+  /**
+   * THE silkscreen artwork of this board (DFM contract 11 §1.2) — the same
+   * model the Gerber writer emits. Lazy: a run that skips the `dfm` class pays
+   * nothing.
+   */
+  silkArtwork(): SilkArtwork;
+  /** THE solder-mask openings of one FACE, with a broad phase over them (§1.3). */
+  maskIndex(face: MaskFace): MaskFaceIndex;
+}
+
+/**
+ * One face's mask openings, their rings and an index over them. The rings are
+ * built ONCE here because both DFM consumers need them: `checks/silkscreen.ts`
+ * measures legend ink against them and `checks/solder-mask.ts` measures them
+ * against each other and against copper.
+ */
+export interface MaskFaceIndex {
+  openings: readonly MaskOpening[];
+  /** `apertureShapeRing` of `openings[i]`, in the same order. */
+  rings: ReadonlyArray<readonly PcbPointMm[]>;
+  bounds: readonly RingBounds[];
+  /**
+   * Box query over `bounds`, filed under the `pads` kind — the openings are
+   * flashed apertures, so their filed geometry IS their AABB and a query is a
+   * superset of every opening within the halo (08 §2.1).
+   */
+  near: BroadPhaseNear;
 }
 
 /** Widen a copper record's pad anchor to the DRC anchor union. */
@@ -520,6 +604,7 @@ export function itemsFromRecords(
   // still collides with everything until repaired — never masks a short.
   const pads: DrcPad[] = records.pads.map((p) => ({
     anchor: padAnchor(p.anchor),
+    key: padRecordKey(p),
     netId: p.netId,
     layers: p.declaredLayerInvalid
       ? [...validCopperLayers]
@@ -1008,6 +1093,10 @@ export function buildDrcContext(
     else padRingsByPlacement.set(p.anchor.placementId, [p.ring]);
   }
   const placementExtentCache = new Map<string, PcbPointMm[] | null>();
+  const courtyardCache = new Map<string, PlacementCourtyardRegions>();
+  // Absent reads as the IPC-7351B level B courtyard excess (contract 11 §6).
+  const courtyardFallbackMm =
+    board.designRules.dfm?.courtyardFallbackMm ?? DEFAULT_COURTYARD_FALLBACK_MM;
 
   // Lazily built once per context: only the `dfm` dangling check (and future
   // pour-anchoring / routed-length consumers) need the graph, and each enabled
@@ -1017,6 +1106,27 @@ export function buildDrcContext(
   let pourResultsCache:
     | ReadonlyArray<{ zone: EffectiveCopperZone; result: CopperFillResult }>
     | undefined;
+  // The two artwork models (contract 11 §1), lazy for the same reason the pour
+  // is: a run that does not reach the DFM checks pays for neither.
+  let silkCache: SilkArtwork | undefined;
+  let maskOpeningsCache: readonly MaskOpening[] | undefined;
+  const maskIndexCache = new Map<MaskFace, MaskFaceIndex>();
+  const ensureMaskOpenings = (): readonly MaskOpening[] => {
+    if (maskOpeningsCache === undefined) {
+      maskOpeningsCache = buildMaskOpenings({
+        solderMaskExpansionMm: board.solderMaskExpansionMm,
+        layerCount: board.layerCount,
+        placements: projection.placements,
+        freePads: projection.freePads,
+        vias: projection.vias,
+        // The context's OWN records — the same copper every other check reads,
+        // so an opening can never be resolved against a second derivation.
+        records,
+        padShapes: buildPadShapeIndex(projection.placements, projection.freePads),
+      });
+    }
+    return maskOpeningsCache;
+  };
   const padNetIds = new Map(Object.entries(projection.padNets ?? {}));
   const ensurePourResults = () => {
     if (pourResultsCache === undefined) {
@@ -1108,6 +1218,51 @@ export function buildDrcContext(
         : null;
       placementExtentCache.set(placementId, extent);
       return extent;
+    },
+    placementCourtyard(placementId) {
+      const cached = courtyardCache.get(placementId);
+      if (cached) return cached;
+      const placement = placementById.get(placementId);
+      const regions: PlacementCourtyardRegions = placement
+        ? placementCourtyardRegionsMm(
+            placement,
+            options.lookupRawFootprint,
+            courtyardFallbackMm,
+          )
+        : { top: [], bottom: [], source: null, malformed: false };
+      courtyardCache.set(placementId, regions);
+      return regions;
+    },
+    silkArtwork() {
+      if (silkCache === undefined) {
+        silkCache = buildSilkArtwork({
+          placements: projection.placements,
+          overlayShapes: projection.overlayShapes,
+          overlayTexts: projection.overlayTexts,
+        });
+      }
+      return silkCache;
+    },
+    maskIndex(face) {
+      const cached = maskIndexCache.get(face);
+      if (cached) return cached;
+      const openings = ensureMaskOpenings().filter((o) => o.face === face);
+      const rings = openings.map((o) => apertureShapeRing(o.shape, o.centerMm));
+      const bounds = rings.map((ring) => boundsOfPoints(ring));
+      const { near } = createBroadPhase({
+        traces: [],
+        pads: bounds,
+        vias: [],
+        holes: [],
+      });
+      const index: MaskFaceIndex = { openings, rings, bounds, near };
+      maskIndexCache.set(face, index);
+      return index;
+    },
+    tick: options.tick,
+    copperShapeBudgets: {
+      ...DEFAULT_COPPER_SHAPE_BUDGETS,
+      ...options.copperShapeBudgets,
     },
   };
 }

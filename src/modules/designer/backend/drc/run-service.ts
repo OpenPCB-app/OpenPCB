@@ -274,9 +274,10 @@ export function createDrcRunService(params: {
     if (run.status !== "running") return;
     const stages = DRC_STAGES.length;
     let fraction: number;
-    if (progress.stage === "pour") {
-      // A pour frame reports zones, not stages: keep the run inside the stage
-      // that asked for the fill and advance by the zone fraction (§4).
+    if (progress.stage === "pour" || progress.stage === "copperShapeUnit") {
+      // A per-item frame (a pour zone, a copper-shape unit — DFM contract 11
+      // §5.5) reports items, not stages: keep the run inside the stage that
+      // asked for the work and advance by the item fraction (§4).
       const zoneFraction =
         progress.total > 0 ? progress.index / progress.total : 0;
       fraction = (run.stageIndex + zoneFraction) / stages;

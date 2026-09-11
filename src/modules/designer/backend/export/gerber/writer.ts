@@ -4,41 +4,42 @@ import type {
   PcbCopperLayerId,
   PcbFreePad,
   PcbPointMm,
-  PcbVia,
 } from "../../../../../sdks/designer/types";
 import { copperLayersForCount } from "../../../../../sdks/designer/stackup";
 import { copperToHoleClearanceMm } from "../../../../../shared/drc/rule-resolver";
 import { freePadCopperLayers } from "../../../../../shared/rendering/pad-copper-layers";
+import { ApertureTable, type AperFunction } from "../apertures";
+// The artwork MODEL (DFM contract 11 §1): the silkscreen strokes / regions and
+// the mask openings are built once, in `shared/`, and this writer only emits
+// them. It owns no silk or mask geometry of its own — the DFM checks judge the
+// same objects the fab receives.
 import {
-  ApertureTable,
-  roundrectRadiusMm,
-  type AperFunction,
+  apertureFromShape,
+  inflateShape,
   type ApertureShape,
-} from "../apertures";
+} from "../../../../../shared/rendering/pcb/artwork/aperture-shape";
+import {
+  buildMaskOpenings,
+  viaTouchesLayer,
+  type MaskOpening,
+  buildPadShapeIndex,
+} from "../../../../../shared/rendering/pcb/artwork/mask-artwork";
+import {
+  buildSilkArtwork,
+  type SilkArtwork,
+} from "../../../../../shared/rendering/pcb/artwork/silk-artwork";
 import { gerberDim, xyOperand } from "../units";
 // The S1 copper records are the ONE resolution of pad copper the pour,
 // connectivity and DRC read; the artwork flashes from them too, so the fab
 // receives the geometry DRC judged (manufacturability contract 10 §6.1).
 import {
   buildCopperRecords,
-  freePadItemKey,
-  padItemKey,
+  padRecordKey,
   type CopperRecords,
   type PadCopperRecord,
 } from "../../../../../shared/pcb-connectivity";
 import type { PadCopperShape } from "../../../../../shared/pcb-geometry/pad-annular";
-import {
-  freePadCopperShape,
-  padCopperShape,
-  placementPads,
-} from "../../../../../shared/pcb-geometry/pad-geometry";
-import {
-  footprintPadDrill,
-  freePadDrill,
-  type FootprintPadDrill,
-} from "../../../../../shared/rendering/pcb/pcb-drills";
 import { flattenOutline } from "../../../../../shared/rendering/pcb/outline-geometry";
-import { textToStrokes } from "../text/stroke-font";
 // Single source of truth for poured copper: the SAME kernel the canvas renders,
 // so the manufactured plane matches the on-screen copper exactly. The kernel is
 // pure geometry (clipper2 + math; no React/R3F) and runs under Bun. Lives in
@@ -114,7 +115,7 @@ interface BuildContext {
    * composed rotation, the mirror, the resolved copper layers (including the
    * explicit-layer side flip a mirrored placement gets, which the mask loop
    * used to miss) and the net. A copper-LESS unplated pad has NO record and
-   * therefore no flash (§2.3); its mask relief comes from `maskOnlyDrills`.
+   * therefore no flash (§2.3); its mask relief comes from the mask artwork.
    */
   records: CopperRecords;
   /**
@@ -128,62 +129,24 @@ interface BuildContext {
   /** Free pads by id — `padType` and the per-pad expansions records omit. */
   freePadById: ReadonlyMap<string, PcbFreePad>;
   /**
-   * Copper-less unplated footprint drills (§2.3): no copper record, but the
-   * mask still opens on BOTH faces so the drill cannot tear the mask edge
-   * (§6.4 — the `hole` free-pad rule, applied to footprint pads).
+   * The silkscreen and solder-mask ARTWORK of this projection, built ONCE per
+   * export (DFM contract 11 §1). `emitSilk` / `emitMask` walk these lists in
+   * order and add no geometry: the aperture-allocation order IS the model
+   * order, which is what keeps a board with only overlay lines and polylines
+   * byte-identical to S11 (§1.4).
    */
-  maskOnlyDrills: readonly MaskOnlyDrill[];
-}
-
-/** A drilled footprint pad whose copper lies entirely inside the drill (§2.3). */
-interface MaskOnlyDrill {
-  drill: FootprintPadDrill;
+  silk: SilkArtwork;
+  maskOpenings: readonly MaskOpening[];
+  /**
+   * Data errors the mask model could not turn into an opening (a drill relief
+   * with no positive size). Surfaced by `emitMask`, so they reach the export
+   * warnings once per mask FILE — the file that lost the opening.
+   */
+  maskWarnings: readonly string[];
 }
 
 /** Key of one pad record — the same identity `copper-items.ts` assigns. */
-function recordKey(record: PadCopperRecord): string {
-  return record.anchor.kind === "pad"
-    ? padItemKey(
-        record.anchor.placementId,
-        record.anchor.padNumber,
-        record.occurrence,
-      )
-    : freePadItemKey(record.anchor.freePadId);
-}
-
-/**
- * Walk the pads in the SAME order and with the same per-number occurrence
- * counter `footprintPadRecords` uses, so a pad's shape can be looked up by its
- * record key — and a pad with no record is exactly a copper-less unplated pad.
- */
-function buildPadIndex(
-  proj: DesignerPcbProjection,
-  records: CopperRecords,
-): {
-  padShapes: Map<string, PadCopperShape>;
-  maskOnlyDrills: MaskOnlyDrill[];
-} {
-  const recorded = new Set(records.pads.map(recordKey));
-  const padShapes = new Map<string, PadCopperShape>();
-  const maskOnlyDrills: MaskOnlyDrill[] = [];
-  for (const placement of proj.placements) {
-    const occurrenceByNumber = new Map<string, number>();
-    for (const pad of placementPads(placement)) {
-      const occurrence = occurrenceByNumber.get(pad.number) ?? 0;
-      occurrenceByNumber.set(pad.number, occurrence + 1);
-      const key = padItemKey(placement.id, pad.number, occurrence);
-      padShapes.set(key, padCopperShape(placement, pad));
-      if (recorded.has(key)) continue;
-      // No record ⇒ copper-less (§2.3). Its drill is still real.
-      const drill = footprintPadDrill(pad, placement);
-      if (drill && !drill.plated) maskOnlyDrills.push({ drill });
-    }
-  }
-  for (const freePad of proj.freePads) {
-    padShapes.set(freePadItemKey(freePad.id), freePadCopperShape(freePad));
-  }
-  return { padShapes, maskOnlyDrills };
-}
+const recordKey = (record: PadCopperRecord): string => padRecordKey(record);
 
 export function buildGerberLayer(
   proj: DesignerPcbProjection,
@@ -200,7 +163,8 @@ export function buildGerberLayer(
     traces: proj.traces,
     vias: proj.vias,
   });
-  const { padShapes, maskOnlyDrills } = buildPadIndex(proj, records);
+  const padShapes = buildPadShapeIndex(proj.placements, proj.freePads);
+  const maskWarnings: string[] = [];
   const ctx: BuildContext = {
     proj,
     warnings,
@@ -213,7 +177,22 @@ export function buildGerberLayer(
     padShapes,
     referenceById: new Map(proj.placements.map((p) => [p.id, p.reference])),
     freePadById: new Map(proj.freePads.map((p) => [p.id, p])),
-    maskOnlyDrills,
+    silk: buildSilkArtwork({
+      placements: proj.placements,
+      overlayShapes: proj.overlayShapes,
+      overlayTexts: proj.overlayTexts,
+    }),
+    maskOpenings: buildMaskOpenings({
+      solderMaskExpansionMm: proj.board.solderMaskExpansionMm,
+      layerCount: proj.board.layerCount,
+      placements: proj.placements,
+      freePads: proj.freePads,
+      vias: proj.vias,
+      records,
+      padShapes,
+      warnings: maskWarnings,
+    }),
+    maskWarnings,
   };
   const aperTable = new ApertureTable();
   const body: string[] = [];
@@ -599,44 +578,10 @@ function emitRegion(
   out.push("G37*");
 }
 
-// Stackup order used to determine which copper layers a via spans.
-// Indices are increasing from top to bottom of the board.
-const COPPER_LAYER_ORDER: ReadonlyArray<PcbCopperLayerId> = [
-  "F.Cu",
-  "In1.Cu",
-  "In2.Cu",
-  "B.Cu",
-];
-
-function viaTouchesLayer(via: PcbVia, layer: PcbCopperLayerId): boolean {
-  // Through / blind / buried vias all span a contiguous range
-  // [fromLayer, toLayer] in stackup order; a via touches `layer` iff that
-  // layer is anywhere in the range. Endpoints-only logic missed inner
-  // copper layers for through-vias on 4-layer boards.
-  const fromIdx = COPPER_LAYER_ORDER.indexOf(via.fromLayer);
-  const toIdx = COPPER_LAYER_ORDER.indexOf(via.toLayer);
-  const layerIdx = COPPER_LAYER_ORDER.indexOf(layer);
-  if (fromIdx === -1 || toIdx === -1 || layerIdx === -1) {
-    // Unknown layer ids — fall back to endpoint match so we never silently
-    // drop the via's annulus.
-    return layer === via.fromLayer || layer === via.toLayer;
-  }
-  const lo = Math.min(fromIdx, toIdx);
-  const hi = Math.max(fromIdx, toIdx);
-  return layerIdx >= lo && layerIdx <= hi;
-}
-
 /**
- * THE aperture of one copper record (contract 10 §6.2). The record's
- * `rotationDeg` is the pad's COMPOSED world rotation with the mirror already
- * conjugated into it (`placement ± pad`), and every S11 pad outline is
- * symmetric about both of its local axes, so the mirror itself changes no
- * aperture dimension — only that angle does.
- *
- * A multiple of 90° keeps the standard `C` / `R` / `O` / roundrect-macro
- * aperture with the orthogonal width / height swap; any other angle becomes a
- * rotated aperture macro. `custom` has no true outline in the render source
- * and is not an S11 export input (§0), so it returns null and warns as before.
+ * THE aperture of one copper record: the record's world shape resolved by the
+ * shared artwork model (contract 10 §6.2, DFM contract 11 §1.3). Null for a
+ * pad whose shape has no true outline in the render source — the caller warns.
  */
 function apertureFromRecord(
   ctx: BuildContext,
@@ -645,54 +590,6 @@ function apertureFromRecord(
   const shape = ctx.padShapes.get(recordKey(record));
   if (!shape) return null;
   return apertureFromShape(shape, record.rotationDeg);
-}
-
-/**
- * The mask aperture of a `hole` free pad — an NPTH, so it owns no copper
- * record (§2.3) while the drill still opens the mask on both faces. Its frame
- * is the pad's own (a free pad is never mirrored and never placed).
- */
-function freePadReliefShape(
-  ctx: BuildContext,
-  pad: PcbFreePad,
-): ApertureShape | null {
-  const shape = ctx.padShapes.get(freePadItemKey(pad.id));
-  return shape ? apertureFromShape(shape, shape.rotationDeg) : null;
-}
-
-function apertureFromShape(
-  shape: PadCopperShape,
-  rotationDeg: number,
-): ApertureShape | null {
-  const angle = ((rotationDeg % 360) + 360) % 360;
-  const orthogonal = angle % 90 === 0;
-  const swap = orthogonal && (angle === 90 || angle === 270);
-  const w = swap ? shape.heightMm : shape.widthMm;
-  const h = swap ? shape.widthMm : shape.heightMm;
-  const rot = orthogonal ? {} : { rotationDeg: angle };
-  switch (shape.shape) {
-    // A `circle` pad is a disc of `widthMm` — the ONE interpretation (§7).
-    case "circle":
-      return { kind: "circle", diameterMm: shape.widthMm };
-    case "oval":
-      return { kind: "obround", widthMm: w, heightMm: h, ...rot };
-    case "roundrect": {
-      const r = roundrectRadiusMm(w, h, shape.roundrectRatio ?? 0.25);
-      // Degrade to a plain rect when the corner radius rounds to zero —
-      // otherwise the roundrect macro emits zero-diameter corner circles
-      // that some parsers reject.
-      if (r < 1e-6) return { kind: "rect", widthMm: w, heightMm: h, ...rot };
-      return { kind: "roundrect", widthMm: w, heightMm: h, radiusMm: r, ...rot };
-    }
-    // Trapezoid is a KiCad-imported pad shape the importer already degrades to
-    // its bounding rectangle at the source, which is what every other consumer
-    // (DRC, connectivity, the pour) sees too.
-    case "rect":
-    case "trapezoid":
-      return { kind: "rect", widthMm: w, heightMm: h, ...rot };
-    default:
-      return null;
-  }
 }
 
 /** X2 aperture function of a pad record's copper (contract 10 §6.4). */
@@ -723,204 +620,30 @@ function unsupportedShapeWarning(
   return `Pad ${reference}.${record.anchor.padNumber} shape '${shape}' not supported by exporter yet`;
 }
 
-/**
- * Mask relief for a copper-less unplated pad (§6.4): the drilled void plus the
- * mask expansion per side — a disc for a round hit, the routed stadium as an
- * obround rotated to the slot axis. It comes from the DRILLED object because
- * there is no copper record to inflate (Astra run 1 #8).
- */
-/**
- * The drill-derived relief of a `hole` free pad, when its drill is not already
- * covered by the pad-shape opening: a routed slot always (the pad's declared
- * size is a single hit's), or a round drill wider than the pad's narrow side.
- * `null` when the pad-shape opening already covers the drill.
- */
-function holeFreePadDrillRelief(
-  pad: PcbFreePad,
-  expansionMm: number,
-): ApertureShape | null {
-  if (pad.padType !== "hole") return null;
-  const drill = freePadDrill(pad);
-  if (!drill) return null;
-  const covered =
-    !drill.slot &&
-    drill.drillMm <= Math.min(pad.widthMm, pad.heightMm) + 1e-9;
-  if (covered) return null;
-  return drillReliefShape(
-    {
-      centerMm: pad.centerMm,
-      drillMm: drill.drillMm,
-      ...(drill.slot ? { slot: drill.slot } : {}),
-      plated: false,
-    },
-    expansionMm,
-  );
-}
-
-function drillReliefShape(
-  drill: FootprintPadDrill,
-  expansionMm: number,
-): ApertureShape {
-  const across = drill.drillMm + 2 * expansionMm;
-  if (!drill.slot) return { kind: "circle", diameterMm: across };
-  const dx = drill.slot.b.x - drill.slot.a.x;
-  const dy = drill.slot.b.y - drill.slot.a.y;
-  const along = Math.hypot(dx, dy) + across;
-  const angle = (((Math.atan2(dy, dx) * 180) / Math.PI) % 360 + 360) % 360;
-  if (angle % 90 === 0) {
-    const swap = angle === 90 || angle === 270;
-    return {
-      kind: "obround",
-      widthMm: swap ? across : along,
-      heightMm: swap ? along : across,
-    };
-  }
-  return {
-    kind: "obround",
-    widthMm: along,
-    heightMm: across,
-    rotationDeg: angle,
-  };
-}
-
 // =========================================================================
 // Soldermask layer
 // =========================================================================
 
+/**
+ * Flash the mask model's openings for this face, in model order (DFM contract
+ * 11 §1.3 / §1.4). Every rule — the per-side expansion, the copper-less drill
+ * relief, the free-pad layer policy, the untented-via opening — lives in
+ * `buildMaskOpenings`, so the DFM checks measure exactly what is flashed here.
+ */
 function emitMask(
   ctx: BuildContext,
   apers: ApertureTable,
   out: string[],
   side: "top" | "bottom",
 ): void {
-  const layer: PcbCopperLayerId = side === "top" ? "F.Cu" : "B.Cu";
-  // Board-level mask expansion drives every pad/via opening (per-free-pad
-  // overrides still win below); falls back to the typical 50 µm default.
-  const expansionDefault = ctx.proj.board.solderMaskExpansionMm ?? 0.05;
-
-  // Footprint pads: the opening follows the RECORD's copper (contract §6.1),
-  // so a mirrored placement's explicit-layer SMD pad opens on the same face
-  // its copper flashed on — the old mask loop read `pad.layer` unflipped and
-  // opened the wrong side.
-  for (const record of ctx.records.pads) {
-    if (record.anchor.kind !== "pad") continue;
-    if (!record.resolvedLayers.includes(layer)) continue;
-    const aperShape = apertureFromRecord(ctx, record);
-    if (!aperShape) continue;
-    const code = apers.allocate(
-      inflateShape(aperShape, expansionDefault),
-      "SolderMask",
-    );
+  // Distinct messages only: the model derives both faces in one pass, so a
+  // broken drill would otherwise be reported once per face per file.
+  for (const warning of new Set(ctx.maskWarnings)) ctx.warnings.push(warning);
+  for (const opening of ctx.maskOpenings) {
+    if (opening.face !== side) continue;
+    const code = apers.allocate(opening.shape, "SolderMask");
     out.push(`D${code}*`);
-    out.push(`${xyOperand(record.center.x, record.center.y)}D03*`);
-  }
-  // A copper-LESS unplated footprint pad has no record to inflate, but its
-  // drill still wants relief on BOTH faces (§6.4) — the `hole` free-pad rule.
-  for (const entry of ctx.maskOnlyDrills) {
-    const code = apers.allocate(
-      drillReliefShape(entry.drill, expansionDefault),
-      "SolderMask",
-    );
-    out.push(`D${code}*`);
-    out.push(
-      `${xyOperand(entry.drill.centerMm.x, entry.drill.centerMm.y)}D03*`,
-    );
-  }
-  // A mask opening follows the copper (the one derivation) — a `conn` / `smd`
-  // pad opens the mask on its own layer only. The one exception is an NPTH
-  // `hole` pad: it carries no copper (and therefore no record), but the drill
-  // still wants its mask relief on BOTH faces (KiCad flashes an NPTH pad's
-  // mask aperture the same way), so the mask edge is not torn by the drill.
-  const copperStackup = new Set(
-    copperLayersForCount(ctx.proj.board.layerCount),
-  );
-  const recordByKey = new Map(
-    ctx.records.pads.map((record) => [recordKey(record), record] as const),
-  );
-  for (const pad of ctx.proj.freePads) {
-    const record = recordByKey.get(freePadItemKey(pad.id));
-    const opens =
-      pad.padType === "hole"
-        ? layer === "F.Cu" || layer === "B.Cu"
-        : (record?.resolvedLayers ??
-            freePadCopperLayers(pad, copperStackup).layers).includes(layer);
-    if (!opens) continue;
-    const aperShape = record
-      ? apertureFromRecord(ctx, record)
-      : freePadReliefShape(ctx, pad);
-    if (!aperShape) continue;
-    const expansion = pad.solderMaskExpansionMm ?? expansionDefault;
-    const expanded = inflateShape(aperShape, expansion);
-    const code = apers.allocate(expanded, "SolderMask");
-    out.push(`D${code}*`);
-    out.push(`${xyOperand(pad.centerMm.x, pad.centerMm.y)}D03*`);
-    // A `hole` free pad's relief must also cover its DRILL (§6.4): a slot, or
-    // a drill larger than the pad's declared size, would otherwise leave mask
-    // over the void for the router to tear (Astra run 2b #3). The pad-shape
-    // opening above stays — a user may have declared a larger clearance.
-    const drillRelief = holeFreePadDrillRelief(pad, expansion);
-    if (drillRelief) {
-      const reliefCode = apers.allocate(drillRelief, "SolderMask");
-      out.push(`D${reliefCode}*`);
-      out.push(`${xyOperand(pad.centerMm.x, pad.centerMm.y)}D03*`);
-    }
-  }
-  // Vias on this side: only when not tented. v0 defaults to tented vias
-  // (no mask opening). Skip unless explicitly untented.
-  for (const via of ctx.proj.vias) {
-    if (via.protection !== "none") continue;
-    if (!viaTouchesLayer(via, layer)) continue;
-    const code = apers.allocate(
-      { kind: "circle", diameterMm: via.diameterMm + expansionDefault * 2 },
-      "SolderMask",
-    );
-    out.push(`D${code}*`);
-    out.push(`${xyOperand(via.centerMm.x, via.centerMm.y)}D03*`);
-  }
-}
-
-/**
- * Mask / paste expansion of `deltaMm` PER SIDE (contract 10 §6.2): `circle`
- * and `oval` grow both dimensions by `2d` (a Euclidean offset); `roundrect`
- * grows both dimensions by `2d` AND its corner radius by `d` (also Euclidean);
- * `rect` grows both dimensions by `2d` and keeps SHARP corners — KiCad's
- * convention for rectangular pads, whose corners therefore overshoot a true
- * Euclidean offset by `d·(√2 − 1)`, deliberately. A rotated macro inflates the
- * same dimensions and keeps its angle.
- */
-function inflateShape(shape: ApertureShape, deltaMm: number): ApertureShape {
-  const d = deltaMm * 2;
-  switch (shape.kind) {
-    case "circle":
-      return { kind: "circle", diameterMm: shape.diameterMm + d };
-    case "rect":
-      return {
-        kind: "rect",
-        widthMm: shape.widthMm + d,
-        heightMm: shape.heightMm + d,
-        ...(shape.rotationDeg === undefined
-          ? {}
-          : { rotationDeg: shape.rotationDeg }),
-      };
-    case "obround":
-      return {
-        kind: "obround",
-        widthMm: shape.widthMm + d,
-        heightMm: shape.heightMm + d,
-        ...(shape.rotationDeg === undefined
-          ? {}
-          : { rotationDeg: shape.rotationDeg }),
-      };
-    case "roundrect":
-      return {
-        kind: "roundrect",
-        widthMm: shape.widthMm + d,
-        heightMm: shape.heightMm + d,
-        radiusMm: shape.radiusMm + deltaMm,
-        ...(shape.rotationDeg === undefined
-          ? {}
-          : { rotationDeg: shape.rotationDeg }),
-      };
+    out.push(`${xyOperand(opening.centerMm.x, opening.centerMm.y)}D03*`);
   }
 }
 
@@ -989,68 +712,47 @@ function shapeMinDim(shape: ApertureShape): number {
 // Silkscreen
 // =========================================================================
 
+/**
+ * Emit the silkscreen artwork model for this face (DFM contract 11 §1.2 /
+ * §1.4): every stroke as `D02` + `D01`s with a round `NonConductor` aperture of
+ * the stroke width, then every filled shape as a `G36 … G37` region.
+ *
+ * Aperture allocation order IS model order, which is what keeps a board whose
+ * only silk is overlay lines / polylines / text byte-identical to S11. The
+ * writer contributes no geometry: footprint silk graphics, reference
+ * designators and the closed form of an overlay rect / circle / polygon all
+ * come from `buildSilkArtwork`, so the DFM checks judge what the fab receives.
+ */
 function emitSilk(
   ctx: BuildContext,
   apers: ApertureTable,
   out: string[],
   side: "top" | "bottom",
 ): void {
-  // v0: emit overlay text + shapes targeted at the F.SilkS / B.SilkS layers.
-  const silkLayer = side === "top" ? "F.SilkS" : "B.SilkS";
-
-  for (const shape of ctx.proj.overlayShapes) {
-    if (shape.layer !== silkLayer) continue;
-    const strokeWidth =
-      (shape as { strokeWidthMm?: number }).strokeWidthMm ?? 0.15;
+  for (const stroke of ctx.silk.strokes) {
+    if (stroke.face !== side) continue;
+    if (stroke.pointsMm.length < 2) continue;
     const code = apers.allocate(
-      { kind: "circle", diameterMm: strokeWidth },
+      { kind: "circle", diameterMm: stroke.widthMm },
       "NonConductor",
     );
-    emitShapeStrokes(out, shape, code);
-  }
-
-  // Overlay text → single-stroke polylines drawn with a round NonConductor
-  // aperture (stroke width ~15% of cap height, floored at 0.1 mm).
-  for (const overlay of ctx.proj.overlayTexts) {
-    if (overlay.layer !== silkLayer) continue;
-    if (!overlay.text) continue;
-    const strokeWidth = Math.max(0.1, overlay.fontSizeMm * 0.15);
-    const code = apers.allocate(
-      { kind: "circle", diameterMm: strokeWidth },
-      "NonConductor",
-    );
-    const polylines = textToStrokes(overlay.text, {
-      originMm: overlay.positionMm,
-      sizeMm: overlay.fontSizeMm,
-      rotationDeg: overlay.rotationDeg,
-      mirror: overlay.mirror,
-      justify: overlay.justify,
-    });
-    for (const poly of polylines) {
-      if (poly.length < 2) continue;
-      out.push(`D${code}*`);
-      out.push("G01*");
-      for (let i = 0; i < poly.length; i++) {
-        const p = poly[i]!;
-        out.push(`${xyOperand(p.x, p.y)}${i === 0 ? "D02*" : "D01*"}`);
-      }
+    out.push(`D${code}*`);
+    // G01 = linear interpolation mode (default in many fab tools but
+    // explicit is safer for spec compliance).
+    out.push("G01*");
+    for (let i = 0; i < stroke.pointsMm.length; i++) {
+      const p = stroke.pointsMm[i]!;
+      out.push(`${xyOperand(p.x, p.y)}${i === 0 ? "D02*" : "D01*"}`);
     }
   }
-}
-
-function emitShapeStrokes(
-  out: string[],
-  shape: { kind: string; pointsMm?: Array<{ x: number; y: number }> },
-  apertureCode: number,
-): void {
-  // Generic polyline stroke (rect / polygon / polyline shapes share this).
-  const pts = shape.pointsMm ?? [];
-  if (pts.length < 2) return;
-  out.push(`D${apertureCode}*`);
-  out.push("G01*");
-  for (let i = 0; i < pts.length; i++) {
-    const pt = pts[i]!;
-    out.push(`${xyOperand(pt.x, pt.y)}${i === 0 ? "D02*" : "D01*"}`);
+  const regions = ctx.silk.regions.filter((region) => region.face === side);
+  if (regions.length === 0) return;
+  // Legend files never switch polarity; state the dark polarity the regions
+  // are filled with anyway, as the pour emitter does around its holes.
+  out.push("%LPD*%");
+  for (const region of regions) {
+    if (region.ring.length < 3) continue;
+    emitRegion(out, region.ring);
   }
 }
 

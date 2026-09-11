@@ -25,7 +25,7 @@ import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
-import { runDrc } from "../../../shared/drc/drc-engine";
+import { DRC_STAGES, runDrc } from "../../../shared/drc/drc-engine";
 import type { RawFootprintLookup } from "../../../shared/pcb-geometry/courtyard";
 import {
   disposeDrcWorker,
@@ -681,15 +681,19 @@ describe("DrcRunService — the run stream", () => {
       const seen: DrcRunSnapshot[] = [];
       service.subscribe(run.runId, (snapshot) => seen.push(snapshot));
 
-      workers[0]!.progress("clearance", 7, 17, 3);
+      // The stage count is `DRC_STAGES.length`, not a literal: the run service
+      // divides a POUR frame by it, so a session that adds a stage must not
+      // have to re-derive this expectation by hand.
+      const stages = DRC_STAGES.length;
+      workers[0]!.progress("clearance", 7, stages, 3);
       // A pour frame reports zones; it must stay inside the stage that asked.
       workers[0]!.progress("pour", 1, 4, 5);
       await waitFor(() => seen.length >= 2, "two progress frames");
 
       expect(seen[0]!.progress.stage).toBe("clearance");
-      expect(seen[0]!.progress.fraction).toBeCloseTo(7 / 17, 6);
+      expect(seen[0]!.progress.fraction).toBeCloseTo(7 / stages, 6);
       expect(seen[1]!.progress.stage).toBe("pour");
-      expect(seen[1]!.progress.fraction).toBeCloseTo((7 + 1 / 4) / 17, 6);
+      expect(seen[1]!.progress.fraction).toBeCloseTo((7 + 1 / 4) / stages, 6);
       expect(seen[1]!.progress.violationsSoFar).toBe(5);
 
       workers[0]!.release();

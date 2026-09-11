@@ -173,7 +173,9 @@ runs of that worker back to `queued`, and respawns; the next `start` proceeds no
 ## 4. Progress and partial results
 
 Progress is **counts only**. `progress = { stage, index, total, fraction, violationsSoFar }`,
-where `stage` walks the exported `DRC_STAGES` order (§6) plus `pour` (per zone) and `queued`;
+where `stage` walks the exported `DRC_STAGES` order (§6) plus the per-item labels `pour` (per
+zone) and `copperShapeUnit` (per copper-shape unit and per erosion, S12 — contract 11 §5.5) and
+`queued`;
 `index / total` are the stage index over 17 stages, or the zone index inside `pour`; `fraction`
 is `(stageIndex + zoneFraction) / 17`; `violationsSoFar` is the draft count so far. No partial
 violation list is returned, streamed or persisted. The previous stored report stays what
@@ -215,7 +217,9 @@ empty-`rawFootprints` fixture (§8). The only engine change is `DrcOptions.tick`
 and by `buildDrcContext` (no context field — the seam is two call sites): `drcDrafts` iterates the exported `DRC_STAGES`
 table — the same 17 checks in the same order the spread expression ran them, pinned by a test
 on the stage list, not only on report bytes — calling `tick(stage, i, 17)` before each; and
-`ensurePourResults` runs its zones in a loop with `tick("pour", i, n)` before each. `tick`
+`ensurePourResults` runs its zones in a loop with `tick("pour", i, n)` before each, and since S12
+`checks/copper-shape.ts` ticks `tick("copperShapeUnit", i, n)` per unit and per erosion through
+`ctx.tick` (the same `DrcOptions.tick` seam, forwarded by the context). `tick`
 never reads or writes a draft. The S9 oracle harness (goldens in both modes, corpus, fixture
 reversals) is the regression for the seam. No intra-check ticks exist: at 10k primitives every
 check is ≤ 50 ms, so stage granularity bounds cancel latency at about that, and the pour is the

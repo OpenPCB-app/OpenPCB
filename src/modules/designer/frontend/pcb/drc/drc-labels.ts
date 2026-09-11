@@ -62,6 +62,22 @@ export const CODE_LABEL: Record<DrcRuleCode, string> = {
   ZONE_FILL_FAILED: "Zone fill failed",
   DRC_RULE_INVALID: "Design rule cannot be applied",
   DRC_RULE_INEFFECTIVE: "Design rule has no effect",
+  COURTYARD_OVERLAP: "Courtyards overlap",
+  COURTYARD_INVALID: "Courtyard could not be resolved",
+  SILK_TO_MASK_CLEARANCE: "Silkscreen over a mask opening",
+  SILK_TO_BOARD_EDGE: "Silkscreen too close to board edge",
+  FAB_SILK_CLEARANCE: "Silkscreen to pad below fab minimum",
+  FAB_SILK_WIDTH: "Silkscreen line below fab minimum",
+  FAB_SILK_TEXT_HEIGHT: "Silkscreen text below fab minimum",
+  MASK_BRIDGE: "Solder-mask dam too narrow",
+  FAB_MASK_BRIDGE: "Mask dam below fab minimum",
+  MASK_SLIVER: "Solder-mask sliver",
+  FAB_MASK_TO_COPPER: "Mask opening exposes foreign copper",
+  COPPER_CONNECTION_WIDTH: "Copper connection too narrow",
+  COPPER_SLIVER: "Copper sliver",
+  COPPER_SHAPE_UNCHECKED: "Copper shape not checked",
+  TRACE_ACUTE_ANGLE: "Acute trace angle",
+  TRACE_OVERLAP: "Overlapping traces",
 };
 
 /** Short human label for a violation anchor (uses the projection for ref/net names). */
@@ -125,6 +141,16 @@ export function resolveAnchorLabel(
     }
     case "rule":
       return `rule ${anchor.ruleId.slice(0, 12)}`;
+    case "overlayShape":
+      return `drawing ${anchor.shapeId.slice(0, 6)}`;
+    case "overlayText": {
+      // The text itself is the only name an overlay text has — an id prefix
+      // tells the user nothing about which label on the board is meant.
+      const text = projection?.overlayTexts?.find(
+        (t) => t.id === anchor.textId,
+      )?.text;
+      return text ? `text "${text}"` : `text ${anchor.textId.slice(0, 6)}`;
+    }
     case "boardEdge":
       return "board edge";
   }

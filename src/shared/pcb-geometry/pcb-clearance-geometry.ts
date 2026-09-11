@@ -224,6 +224,40 @@ export function polylineToRingEdgeDistance(
   return best;
 }
 
+/**
+ * {@link ringToRingEdgeDistance} plus WHERE the minimum is attained — the two
+ * closest points, one on each perimeter. The DFM copper-shape check needs the
+ * midpoint of those points to mark a neck (contract 11 §5.3); the distance
+ * alone cannot say where two eroded cores nearly touch.
+ *
+ * `onA` / `onB` default to the rings' first vertices so the result is total for
+ * a degenerate input, exactly as the distance form returns `Infinity`.
+ */
+export function ringToRingClosestPoints(
+  ringA: readonly Point[],
+  ringB: readonly Point[],
+): { distance: number; onA: Point; onB: Point } {
+  const fallbackA = ringA[0] ?? { x: 0, y: 0 };
+  const fallbackB = ringB[0] ?? { x: 0, y: 0 };
+  if (ringA.length < 2 || ringB.length < 2) {
+    return { distance: Infinity, onA: fallbackA, onB: fallbackB };
+  }
+  let best = { distance: Infinity, onA: fallbackA, onB: fallbackB };
+  for (let i = 0; i < ringA.length; i += 1) {
+    const a = ringA[i]!;
+    const b = ringA[(i + 1) % ringA.length]!;
+    for (let j = 0; j < ringB.length; j += 1) {
+      const c = ringB[j]!;
+      const d = ringB[(j + 1) % ringB.length]!;
+      const cp = segmentClosestPoints(a, b, c, d);
+      if (cp.distance < best.distance) {
+        best = { distance: cp.distance, onA: cp.a, onB: cp.b };
+      }
+    }
+  }
+  return best;
+}
+
 /** Minimum edge-to-edge distance between two closed rings' perimeters. */
 export function ringToRingEdgeDistance(
   ringA: readonly Point[],

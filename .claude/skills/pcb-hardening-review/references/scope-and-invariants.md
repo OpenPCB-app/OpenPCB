@@ -17,6 +17,7 @@ not the source of truth.
 | ERC / electrical rules | `src/modules/designer/backend/erc/erc-engine.ts`, `src/shared/schematic-routing/` (`manhattan.ts`, `schematic-autoroute.ts`, `wire-obstacles.ts`, `crossing-gaps.ts`) | ✅✅ |
 | Signal integrity / length matching | `checks/signal-integrity.ts` (diff-pair skew/gap), `checks/length.ts`, `backend/pcb/diff-pair-resolver.ts` | ✅✅ |
 | Stackup / manufacturability / DFM | `checks/manufacturability.ts` (via/drill/annular/aspect-ratio, FAB tier — since S11: tool- and plating-aware fab rows, `VIA_TYPE_UNSUPPORTED` on every fab, through-only aspect), `checks/constraints.ts` (stackup), `checks/structural.ts` (`NPTH_PAD_NET`), `fab-presets.ts` (sourced rows, fetch dates in the comments), `src/shared/rendering/pcb/pcb-drills.ts` (`footprintPadDrill` / `freePadDrill` — the ONE drill derivation per object, contract 10 §1) | ✅ |
+| DFM overlays + copper shape (S12) | `src/shared/drc/checks/{courtyard,silkscreen,solder-mask,filled-gap,copper-shape}.ts`, `src/shared/rendering/pcb/artwork/` (the silk + mask artwork model — in-tree, shared with the Gerber writer), `src/shared/pcb-geometry/courtyard-rings.ts`, `src/shared/rendering/copper-fill/copper-shape-kernel.ts`; contract `docs/pcb-hardening/11-dfm-contract.md` | ✅✅ (polygon-topology checks post-implementation) |
 
 **Explicitly out of scope** — refuse and redirect to `/codex-implementation-review` or plain
 Claude review:
@@ -119,6 +120,17 @@ kernel after S1 —, one clearance resolver after S6, the arc flatteners) is in
 > ... is the **only** place that decides which copper areas exist. ... every consumer reads
 > `collectCopperZones`; since S3b it reads persisted zone rows only (board zones are rows with
 > `region.kind === "board"` and id `board:<layer>`; there is no view-state input).
+
+## DFM invariants — from `docs/pcb-hardening/11-dfm-contract.md` (S12, 2026-09-11)
+
+- A check may only judge geometry the fab actually receives: silk strokes and mask openings come from `src/shared/rendering/pcb/artwork/` (`buildSilkArtwork`, `buildMaskOpenings`) — the same model the Gerber writer emits; no check re-derives a stroke, an opening or a transform.
+- Two placement predicates, never one: `mirrorX = placement.mirrored || placement.layer === "B.Cu"` (point transform, text mirror, keep-upright input); `sideFlip = placement.layer === "B.Cu"` (F.* ↔ B.* face).
+- Courtyard regions: edges chained at 0.01 mm, arcs de-duplicated by endpoints + centre + sweep, rings oriented by containment depth and unioned NonZero (overlapping exterior rings union; a donut stays a donut); `malformed` ⇒ the superset hull + `COURTYARD_INVALID`; overlap iff the kernel intersection's area > `DEGENERATE_AREA_MM2`.
+- Mask pairs use the SIGNED filled-set gap (containment first): overlapping different-net copper openings are a bridge with gap 0; overlapping same-net or copper-less openings merge (nothing); `FAB_MASK_TO_COPPER` exempts the opening's own copper and what touches it — net equality is not an exemption.
+- Copper connection width: the EROSION `E(r)`, `r = w/2 − 1e-3`, at arc tolerance 1e-4 decides (the opening cannot see a neck shorter than the disc reach); necks are located by bisection on the radius, narrowest first; verdict band `(w − 3e-3, w)`; every input ring CCW-normalised, stadiums and discs circumscribed, nothing excluded for being narrow; `w` is capped by `minimums.traceWidthMm`.
+- Slivers are thickness-classified residuals (`τ = 2·area/perimeter > 1e-3`, `perimeter/2 ≥ sliverMinLengthMm`) of the over-dilated opening; a convex copper spike is a sliver, a concave copper-free wedge is `TRACE_ACUTE_ANGLE`'s.
+- Nothing passes silently: over-budget units and kernel failures report `COPPER_SHAPE_UNCHECKED`.
+- Angles use `θ < limit − ANGLE_EPS_DEG` (degrees), never `below()` (millimetres); collinear junctions are `TRACE_OVERLAP`'s.
 
 ## Determinism contract — from `OpenPCB/docs/drc/OPEN_FINDINGS.md` §5.2
 

@@ -92,7 +92,8 @@ S0  Ground truth
                                               └► S10 DRC execution responsiveness
                                                    └► S11 Hole / pad / via manufacturability
                                                         └► S12 DFM overlays
-                                                             └► S13 Electrical rules
+                                                             └► S12b Exact arcs + polygon pads
+                                                                  └► S13 Electrical rules
                                                                   └► S14 SI v1 correctness
                                                                        └► S15 High-speed runway
                                                                             └► S16 Base manual routing
@@ -135,7 +136,8 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 | # | Session | Objective | Owns | Astra | Status |
 |---|---|---|---|---|---|
 | S11 | Hole, pad and via manufacturability geometry | Drill geometry, slots, PTH/NPTH, annular geometry, via type/span, aspect semantics. DRC's model of manufactured holes matches export. | B2-5 (manufacturability half), B2-6, B2-7, B6-1 | spec-attack xhigh (run 1: 16 findings — 2 blockers accepted, 13 folded, 1 rejected) · repository-grounded adversarial-verify xhigh (run 2a cut by the usage limit, 3 folded from its trajectory; run 2b: 6 findings, all accepted) | done 2026-09-10 (`10-manufacturability-contract.md`) |
-| S12 | DFM overlays and production checks | Courtyard, silkscreen, mask bridges/slivers, copper slivers, acute angles — built at Gerber parity. | — (no overlay codes exist today) | spec-attack xhigh; post only for polygon-topology checks | pending |
+| S12 | DFM overlays and production checks | Courtyard, silkscreen, mask bridges/slivers, copper slivers, acute angles — built at Gerber parity. | — (no overlay codes exist today) | spec-attack xhigh; post only for polygon-topology checks | done 2026-09-11 (`11-dfm-contract.md`) |
+| S12b | Exact-arc geometry and polygon pads | Exact-arc contour validity (S2 #8), the chord-band second chance (S7), Gerber true arcs, exact arcs for non-circular pads in clearance, board-material minimum web (S2 #11), trapezoid / custom pad outlines as polygon apertures (needs a rendering-core field — after the shared tags). Re-owned from S12 on 2026-09-10 so S12 kept one objective. | — | spec-attack xhigh | pending |
 | S13 | Electrical-rule fidelity | Voltage difference, clearance/creepage semantics, external/internal assumptions, current vs width, layer-dependent assumptions, defaults, applicable pad/via/trace combinations, interaction with net classes and scoped rules. Precise modest claims over ambitious labels. | B7-1 (unassigned copper does not inherit the rule tier of the net it extends — S8 Astra run 2) | spec-attack xhigh · adversarial-verify xhigh | pending |
 | S14 | SI v1 mathematical correctness | Routed length, branches/stubs, disconnected fragments, via contribution, coupled-span accounting, overlapping segments, gap measurement, diverging gap, layer transitions, pair ordering, determinism. Every reported SI number has a precise definition. | — | spec-attack xhigh · adversarial-verify xhigh | pending |
 | S15 | High-speed architecture runway | Identify contracts/data representations that would block credible future SI (stackup geometry, dielectrics, per-layer copper, reference planes, propagation delay, via barrel path, impedance targets, return-path continuity). Produce a compatibility document; change only what prevents a known dead end. | — | brainstorm xhigh (one call) | pending |
@@ -231,6 +233,14 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
   1 flag-skip; golden shasums areas 99c49eb3 · census 15debab1 (two attributed fab rows) ·
   cutouts 43fbd513 · holes-4l a431a463 (new) · pours ab245110 · rules ed0705e8 · small cd4b962e.*
 - **S12** — DFM checks use the same physical geometry export uses.
+  *Met 2026-09-11 (`11-dfm-contract.md`): the silk strokes and mask openings the checks judge are
+  the writer's own model (`gerber-silk-parity.test.ts`, 1:1 per face on every golden); courtyard
+  regions, copper unions and pour islands are the S1/S5 geometry. Gates: backend 2634 pass / 22
+  known library+assistant fails / 8 skip / 1 todo (2665); tsc 44; Vitest 63 files 576 + 1 todo; gen
+  + gen:contracts clean; `test:drc-worker-smoke` byte-identical (87 violations); `package-lock.json`
+  untouched (034652c3); e2e DRC + routing + live-parity 5 + 1 flag-skip; golden shasums areas 99c49eb3 · census b735e86b · cutouts 43fbd513 · dfm 47573fd3 · holes c8ab6694 · pours ab245110 · rules ed0705e8 · small 95fbb3dc
+  (`dfm-2l` new; `census` / `holes` / `small` re-baselined with per-code attribution in their `.md`;
+  `areas` / `cutouts` / `pours` / `rules` byte-identical).*
 - **S13** — no check claims more than its model proves; every electrical constant is sourced.
 - **S14** — every SI number has a precise mathematical definition and a testable interpretation.
 - **S15** — a future-SI compatibility document exists; near-term changes only where they prevent
@@ -259,7 +269,8 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 | S9 | **xhigh pre + xhigh post** (user decision 2026-09-09) |
 | S10 | none — user decision 2026-09-09 (program default) |
 | S11 | **xhigh pre + xhigh post** |
-| S12 | xhigh pre |
+| S12 | xhigh pre + xhigh post (polygon-topology checks, repository-grounded) |
+| S12b | xhigh pre |
 | S13 | **xhigh pre + xhigh post** |
 | S14 | **xhigh pre + xhigh post** |
 | S15 | xhigh brainstorm once |
@@ -656,9 +667,62 @@ unmanufacturable board.
   escaping the breakout check at a 0-minimum, an empty legacy index token binding raw pad 0, and
   an early dedupe of `NPTH_PAD_NET` breaking byte identity — regressions in
   `drc-s11-review-fixes.test.ts`; ledger in contract 10 §12.5. Deferred with
-  owners (10 §0/§10): trapezoid / custom outlines (S12), per-span drill files and a stackup depth
+  owners (10 §0/§10): trapezoid / custom outlines (S12b), per-span drill files and a stackup depth
   model (S15 / export backlog), scoped hole rules (05 §13), slot authoring UI, canvas / 3D slot
   and NPTH rendering, the editor "plated" toggle, PCBWay HDI presets.
+
+- **S12 (2026-09-11) — DFM overlays and copper shape on the artwork the fab receives.**
+  Decisions (user): the exact-arc set and polygon pads re-owned to a new **S12b** session before
+  S13 so S12 kept one objective; the copper-shape check judges the FULL per-(layer, net) union of
+  pads + traces + vias + pour islands (not pours only); the silkscreen export was completed
+  (footprint silk graphics and reference designators had never been exported; overlay rect /
+  circle / polygon shapes were exported as their two stored points); the seven new design-rule
+  fields are backend-only (UI under P12); both Astra runs. Fable: ONE artwork model
+  (`src/shared/rendering/pcb/artwork/` — silk strokes / regions, mask openings with `ownerKey`,
+  the two placement predicates `mirrorX` vs `sideFlip`, the one text rule, drill relief that
+  always contains the drill, the far-face relief of a drilled `smd` / `conn` free pad) consumed
+  by the Gerber writer AND the checks, proven 1:1 by `gerber-silk-parity.test.ts`; per-side
+  courtyard REGIONS (chained edges, depth-oriented NonZero union, superset-hull fallback on
+  malformed, 0.25 mm IPC-7351B level-B box fallback) with overlap by kernel intersection;
+  silk / mask checks on a SIGNED filled-set gap (containment first) with the fab rows sourced
+  from the JLCPCB + PCBWay pages (fetched 2026-09-10; `maskDamMm` finally has its emitter);
+  copper connection width judged on the EROSION cores (the opening cannot see a neck shorter
+  than the disc reach), necks enumerated as the opening's residual channels that join two cores
+  (parallel and curved channels included) plus bisection for the short necks, slivers as
+  thickness-classified residuals, everything batch-only with an explicit budget and
+  `COPPER_SHAPE_UNCHECKED` — never a silent pass; sixteen `dfm` codes, four stages (17 → 21), a
+  per-item `copperShapeUnit` tick label like `pour`. Review: plan-critique (Opus, 16 findings, 5
+  blockers — residual classification by extent, the pour's 7-gon opening, one mirror predicate,
+  per-component necks, the `covered` short-circuit) folded before code; Astra run 1 (spec-attack,
+  prompt-only, 23 findings: 21 accepted — the opening's blind spot for short necks, the proximity
+  cutoff, sub-`w` exclusion, null-net units, the thickness gate and corner arithmetic, the neck
+  midpoint, the 64-cap, inscribed caps, containment, pours and the net exemption, overlapping
+  openings, negative expansion, even-odd courtyards, arc de-dup, filled-set silk, the silk row's
+  target, crossings and 1 nm junctions, covered wedges, the angular epsilon, tie-breakers,
+  quadratic pairing — 1 in part, 1 rejected: a `hole` free pad's declared size IS its authored
+  opening); R1 (`reviewer-critical`, 1 blocker — the raw KiCad courtyard payload is arrays +
+  `pts`, so every imported part read as malformed and the S4 hull's raw path had never matched a
+  real row — 4 majors, 3 minors, all fixed); R2 (`reviewer-critical`, 2 blockers — a curved
+  channel located in empty board and double-reported, parallel necks reporting only the wider —
+  1 major, 8 minors, all fixed; the reviewer disclosed an accidental `git stash` + pop, tree
+  verified intact); Astra run 2 (repository-grounded adversarial-verify, 6 executed counterexamples, all accepted
+  and fixed — a channel to a third lobe hid a series short neck, a negative expansion shrank a
+  `hole` pad's opening below its drill, a copper-less relief bridging two nets passed the pairwise
+  merge rule and a thermal pad's vias read as a sliver, nested cores located inside the frame,
+  nested 8 192-vertex annuli spent 6 s unbudgeted, the initial erosions bypassed the budget;
+  contract 11 §12.5).
+  Goldens: `golden-dfm-2l` new (117 primitives, 43 violations, all fifteen reportable codes);
+  `small` +`COPPER_SLIVER` 1 (a 0.03 mm probe trace) +`TRACE_OVERLAP` 3 (same-net duplicate runs);
+  `census` +`FAB_MASK_BRIDGE` 1 +`FAB_MASK_TO_COPPER` 2; `holes` +`FAB_MASK_TO_COPPER` 1 — every
+  hit attributed in the golden's `.md`; `areas` / `cutouts` / `pours` / `rules` byte-identical
+  (the `pushCircle` change moved nothing). Recorded limits (11 §10): a short sub-`w` bridge
+  parallel to a wider short bridge, the residual neck width is a local chord, the 1 µm sliver
+  floor, a per-board copper-shape budget, mask colours / 2 oz rows, silk-over-silk, courtyard
+  off-board, board-level courtyard overlays, canvas font ≠ stroke font, pour-derived id re-hash.
+  Process: WP2 / WP3 / WP4 as three `impl-critical` briefs (WP3 + WP4 in parallel on disjoint
+  files; the shared golden fixture was clobbered once by a whole-file generator and restored by
+  id — never regenerate a shared fixture wholesale); the disk filled mid-re-baseline (user
+  cleared it; the tracked goldens were verified at their baseline shasums before re-running).
 
 ## Appendix — Session 0 amendments to the original program text
 

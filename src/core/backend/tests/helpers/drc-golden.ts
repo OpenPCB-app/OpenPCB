@@ -46,6 +46,14 @@ export function fixtureToProjection(fixture: any): DesignerPcbProjection {
     Object.assign(board.designRules.clearance, fixture.clearance);
   if (fixture.minimums)
     Object.assign(board.designRules.minimums, fixture.minimums);
+  // The S12 DFM rule sub-objects (DFM contract 11 §6) — additive, so a fixture
+  // that names none keeps every check's own documented default.
+  if (fixture.silkscreen) board.designRules.silkscreen = fixture.silkscreen;
+  if (fixture.solderMask) board.designRules.solderMask = fixture.solderMask;
+  if (fixture.dfm) board.designRules.dfm = fixture.dfm;
+  if (fixture.solderMaskExpansionMm !== undefined) {
+    board.solderMaskExpansionMm = fixture.solderMaskExpansionMm;
+  }
   if (fixture.drcRules) board.drcRules = fixture.drcRules;
   if (fixture.drcSeverityOverrides)
     board.drcSeverityOverrides = fixture.drcSeverityOverrides;
@@ -116,8 +124,10 @@ export function fixtureToProjection(fixture: any): DesignerPcbProjection {
           name: p.footprintName ?? "FP",
           pads: p.pads ?? [],
           graphics: p.graphics ?? [],
-          labels: [],
-          bounds: null,
+          labels: p.labels ?? [],
+          // The courtyard FALLBACK reads `preview.bounds` (contract 11 §2.1),
+          // so a fixture has to be able to declare one.
+          bounds: p.bounds ?? null,
           warnings: [],
         },
       },

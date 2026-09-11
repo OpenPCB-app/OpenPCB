@@ -18,11 +18,24 @@ const MM = 1_000_000;
 
 // Pad-less unit fixtures dangle by construction; these advisory DFM codes are
 // incidental to the property under test (P5 dangling check).
-const ADVISORY_DANGLING = new Set(["TRACK_DANGLING", "VIA_DANGLING"]);
+/**
+ * The `dfm`-class advisories these clearance / short tests are not about. The
+ * copper-shape codes joined the list in S12: two IDENTICAL same-net traces are
+ * a legitimate `TRACE_OVERLAP` (and a 0° `TRACE_ACUTE_ANGLE` at each shared
+ * end) — the duplicate copper the item model cannot see (DFM contract 11 §5.7)
+ * — which says nothing about the clearance verdict asserted here.
+ */
+const ADVISORY_DFM = new Set([
+  "TRACK_DANGLING",
+  "VIA_DANGLING",
+  "COPPER_CONNECTION_WIDTH",
+  "COPPER_SLIVER",
+  "COPPER_SHAPE_UNCHECKED",
+  "TRACE_ACUTE_ANGLE",
+  "TRACE_OVERLAP",
+]);
 function realCodes(report: DrcReport) {
-  return report.violations
-    .map((v) => v.code)
-    .filter((c) => !ADVISORY_DANGLING.has(c));
+  return report.violations.map((v) => v.code).filter((c) => !ADVISORY_DFM.has(c));
 }
 
 function board(overrides: Partial<PcbBoardSettings> = {}): PcbBoardSettings {

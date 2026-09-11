@@ -165,6 +165,18 @@ And a command field with no parser in `routes.ts` is silently dropped over HTTP.
   (`ISOLATED_COPPER_ISLAND` = the island's S1 component has no pad, `ZONE_FILL_FAILED` for a
   failed fill) both read it, so the DRC never runs the fill twice and never disagrees with itself
   (`docs/pcb-hardening/04-copper-pour-contract.md` §9–§10).
+  Since S12 (`docs/pcb-hardening/11-dfm-contract.md`) the context also owns the DFM inputs:
+  `silkArtwork()` and `maskIndex(face)` — built by `src/shared/rendering/pcb/artwork/`
+  (`buildSilkArtwork`, `buildMaskOpenings`), the SAME model the Gerber writer emits, so a silk or
+  mask verdict is about the artwork the fab receives — and `placementCourtyard(id)` (per-side
+  courtyard regions from `pcb-geometry/courtyard-rings.ts`: chained edges, depth-oriented NonZero
+  union, `malformed` ⇒ the superset hull + `COURTYARD_INVALID`, `dfm.courtyardFallbackMm`
+  box). Never rebuild a stroke, an opening or a courtyard inside a check. The copper-shape check
+  (`checks/copper-shape.ts`) is batch-only (`DRC_STAGES` is not the live path), judges the
+  per-(layer, net) union of pads + traces + vias + pour islands by EROSION cores and bisection
+  (contract 11 §5), ticks `copperShapeUnit` per unit and per erosion (a per-item stage label like
+  `pour` — the run service and the stage tests filter it by name), and never passes silently:
+  over-budget or kernel failure is `COPPER_SHAPE_UNCHECKED`.
 - **`DrcRuleClass` has eight values:** `clearance | constraint | connectivity | manufacturability |
   structural | dfm | electrical | signal-integrity`. There is **no `copper-pour` class** — pour
   islands report under `structural`. Do not add a value without checking every consumer that

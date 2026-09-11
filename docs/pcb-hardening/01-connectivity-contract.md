@@ -152,7 +152,8 @@ segment shorter than `2·hw` rescued its own cap (Astra finding 6; adversarial r
 
 Known limitation, accepted: two coincident same-net traces "contact" each other at their far ends,
 so a stub drawn twice is not reported (Astra finding 7). The item model has no copper-union
-topology; an overlapping-trace DFM check is the S12 remedy.
+topology; the overlapping-trace DFM check `TRACE_OVERLAP` (S12, `11-dfm-contract.md` §5.7) now
+reports the duplicate — connectivity itself is unchanged.
 
 ## 5. Ratsnest on top of the kernel
 
@@ -222,10 +223,10 @@ proof" with 14 findings. Disposition after verification against source:
 | 1 | ε = 1 µm turns designed sub-micron gaps into connections | **accepted** | ε → `1e-6` (float-noise only), §3 |
 | 2 | Layer occupancy ≠ vertical conduction (undrilled `*.Cu`, unplated drills) | **resolved in S11** (unplated drills: per-layer null-net items, contract 10 §2.4); undrilled `*.Cu` without plating stays a recorded limit | §2 "Plating" |
 | 3 | NPTH / cutout voids can sever a trace the graph keeps whole | **rejected for S1**, filed | connectivity models designed copper; DRC's copper-over-NPTH check is `COPPER_TO_HOLE` (S7), which since S11 also sees non-plated FOOTPRINT drills (contract 10 §1.3); cutout crossing is B4-1 (S2) |
-| 4 | Point/corner contact has zero conductive neck | **rejected for S1**, filed | topological contact is connection; neck width is a DFM sliver check (S12) |
+| 4 | Point/corner contact has zero conductive neck | **rejected for S1**, closed in S12 | topological contact is connection; the neck width is `COPPER_CONNECTION_WIDTH` on the final copper (`11-dfm-contract.md` §5.3) |
 | 5 | Area-only island membership misses shared-edge contact | **accepted** | membership = positive-area intersection **or** edge distance ≤ ε, §3 |
 | 6 | Whole-trace self-exclusion makes a closed loop dangling | **accepted** | exclude only the incident segment, §4 |
-| 7 | Duplicate coincident traces hide a stub | **accepted as limitation**, filed S12 | item model has no union topology; same in KiCad's item model; §4 |
+| 7 | Duplicate coincident traces hide a stub | **accepted as limitation**, closed in S12 | item model has no union topology; `TRACE_OVERLAP` reports the duplicate (`11-dfm-contract.md` §5.7); §4 |
 | 8 | Null-net exclusion → false opens; wildcard rule misdescribed | **accepted** (wording + rule) | asymmetric contact rule restored; false open is deliberate assignment uncertainty, §2 |
 | 9 | Zero-width copper can bridge | **accepted** | degenerate items dropped, §2 |
 | 10 | Same-numbered pads alias under one key | **accepted** | unique physical keys; logical-pin union in the ratsnest, §2 |

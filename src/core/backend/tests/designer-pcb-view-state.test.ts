@@ -352,6 +352,159 @@ describe("designer PCB view-state persistence", () => {
     expect(proj?.board.netClasses[0]?.currentA).toBe(3);
   });
 
+  test("the S12 DFM rule sub-objects survive save/reload", async () => {
+    // DFM contract 11 §6. `parseDesignRules` reads each key with the `optNum`
+    // semantics and OMITS a sub-object with no keys, so a board that never
+    // stored one is not retroactively given an empty row.
+    const { sdk, designId } = await createDesignerSdk("pcb-design-rules-dfm");
+    const baseProj = await sdk.getPcbProjection(designId);
+    const base = baseProj!.board.designRules;
+    expect(base.silkscreen).toBeUndefined();
+    expect(base.solderMask).toBeUndefined();
+    expect(base.dfm).toBeUndefined();
+
+    const result = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-rules-dfm", 0, {
+        type: "pcb_set_design_rules",
+        designRules: {
+          clearance: { ...base.clearance },
+          minimums: { ...base.minimums },
+          // All seven fields of the three sub-objects, not a sample of them.
+          silkscreen: {
+            silkToMaskClearanceMm: 0.05,
+            silkToBoardEdgeMm: 0.2,
+          },
+          solderMask: { minBridgeMm: 0.12 },
+          dfm: {
+            sliverWidthMm: 0.08,
+            sliverMinLengthMm: 0.16,
+            acuteAngleDeg: 45,
+            courtyardFallbackMm: 0.4,
+          },
+        },
+      }),
+    );
+    expect(result.ok).toBe(true);
+
+    const proj = await sdk.getPcbProjection(designId);
+    const rules = proj!.board.designRules;
+    expect(rules.silkscreen).toEqual({
+      silkToMaskClearanceMm: 0.05,
+      silkToBoardEdgeMm: 0.2,
+    });
+    expect(rules.solderMask).toEqual({ minBridgeMm: 0.12 });
+    expect(rules.dfm).toEqual({
+      sliverWidthMm: 0.08,
+      sliverMinLengthMm: 0.16,
+      acuteAngleDeg: 45,
+      courtyardFallbackMm: 0.4,
+    });
+
+    // An UPDATE that names none of them keeps every stored value (§12 item 6).
+    const second = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-rules-dfm-2", proj!.revision, {
+        type: "pcb_set_design_rules",
+        designRules: {
+          clearance: { ...rules.clearance, traceToTraceMm: 0.3 },
+          minimums: { ...rules.minimums },
+        },
+      }),
+    );
+    expect(second.ok).toBe(true);
+    const kept = (await sdk.getPcbProjection(designId))!.board.designRules;
+    expect(kept.clearance.traceToTraceMm).toBe(0.3);
+    expect(kept.silkscreen).toEqual({
+      silkToMaskClearanceMm: 0.05,
+      silkToBoardEdgeMm: 0.2,
+    });
+    expect(kept.dfm).toEqual({
+      sliverWidthMm: 0.08,
+      sliverMinLengthMm: 0.16,
+      acuteAngleDeg: 45,
+      courtyardFallbackMm: 0.4,
+    });
+
+    // An explicit null clears one key and leaves the rest of the row.
+    const third = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-rules-dfm-3", kept ? 2 : 2, {
+        type: "pcb_set_design_rules",
+        designRules: {
+          clearance: { ...kept.clearance },
+          minimums: { ...kept.minimums },
+          dfm: { acuteAngleDeg: null },
+        },
+      } as never),
+    );
+    expect(third.ok).toBe(true);
+    const cleared = (await sdk.getPcbProjection(designId))!.board.designRules;
+    expect(cleared.dfm).toEqual({
+      sliverWidthMm: 0.08,
+      sliverMinLengthMm: 0.16,
+      courtyardFallbackMm: 0.4,
+    });
+  });
+
+  test("the S12 DFM rule sub-objects survive the real HTTP route", async () => {
+    // The in-process SDK path above shares a process with the store; this one
+    // goes through the module router's own JSON parsing, which is where a new
+    // command field is silently dropped when its parser does not carry it
+    // (designer command HTTP parser gotcha).
+    isolateTestDb("pcb-design-rules-dfm-http");
+    const { moduleRuntime, server } = await createRuntime();
+    const sdk = moduleRuntime
+      .getSdkRegistry()
+      .resolve<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
+    const design = await sdk.createDesign({ name: "dfm rules over http" });
+    const base = `http://localhost/api/modules/designer/designs/${design.id}`;
+
+    const post = await server.fetch(
+      new Request(`${base}/commands`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          envelope(design.id, crypto.randomUUID(), 0, {
+            type: "pcb_set_design_rules",
+            designRules: {
+              silkscreen: {
+                silkToMaskClearanceMm: 0.05,
+                silkToBoardEdgeMm: 0.25,
+              },
+              solderMask: { minBridgeMm: 0.11 },
+              dfm: {
+                sliverWidthMm: 0.09,
+                sliverMinLengthMm: 0.18,
+                acuteAngleDeg: 60,
+                courtyardFallbackMm: 0.3,
+              },
+            },
+          } as never),
+        ),
+      }),
+    );
+    expect(post.status).toBe(200);
+
+    const get = await server.fetch(new Request(`${base}/projection/pcb`));
+    expect(get.status).toBe(200);
+    const body = (await get.json()) as {
+      data?: { projection?: { board: { designRules: Record<string, unknown> } } };
+    };
+    const rules = body.data?.projection?.board.designRules;
+    expect(rules?.silkscreen).toEqual({
+      silkToMaskClearanceMm: 0.05,
+      silkToBoardEdgeMm: 0.25,
+    });
+    expect(rules?.solderMask).toEqual({ minBridgeMm: 0.11 });
+    expect(rules?.dfm).toEqual({
+      sliverWidthMm: 0.09,
+      sliverMinLengthMm: 0.18,
+      acuteAngleDeg: 60,
+      courtyardFallbackMm: 0.3,
+    });
+  });
+
   test("pcb_set_view_state does not create undo history entries", async () => {
     const { sdk, designId } = await createDesignerSdk("pcb-view-state-no-undo");
     const before = await sdk.getHistory(designId, SESSION);

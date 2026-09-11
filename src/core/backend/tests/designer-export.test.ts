@@ -21,6 +21,12 @@ import { padOutlineWorldMm } from "../../../shared/pcb-geometry/pad-outline";
 import { placementPads } from "../../../shared/pcb-geometry/pad-geometry";
 import { insidePrimitives, parseGerber } from "./helpers/gerber-parse";
 import { textToStrokes } from "../../../modules/designer/backend/export/text/stroke-font";
+import { buildSilkArtwork } from "../../../shared/rendering/pcb/artwork/silk-artwork";
+import { buildMaskOpenings } from "../../../shared/rendering/pcb/artwork/mask-artwork";
+import { buildCopperRecords } from "../../../shared/pcb-connectivity";
+import { freePadItemKey } from "../../../shared/pcb-connectivity/copper-items";
+import { freePadCopperShape } from "../../../shared/pcb-geometry/pad-geometry";
+import { createHash } from "node:crypto";
 import { exportBundleName } from "../../../sdks/designer/pcb-helpers";
 import type {
   DesignerPcbProjection,
@@ -288,6 +294,85 @@ function fixtureProjection(): DesignerPcbProjection {
     netNames: { "n-vcc": "VCC" },
     warnings: [],
   };
+}
+
+/** Fixed timestamp so a pinned export byte-hash is reproducible. */
+const EXPORT_TS = "2020-01-01T00:00:00.000Z";
+
+function sha256(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+/**
+ * A board whose ONLY silk is overlay lines, polylines and text — the class of
+ * board DFM contract 11 §1.4 promises exports byte-identically to S11.
+ */
+function overlayOnlySilkProjection(): DesignerPcbProjection {
+  const proj = fixtureProjection();
+  proj.overlayShapes = [
+    {
+      id: "s-line",
+      layer: "F.SilkS",
+      kind: "line",
+      pointsMm: [
+        { x: 2, y: 2 },
+        { x: 8, y: 2 },
+      ],
+      strokeWidthMm: 0.2,
+      fill: "none",
+      lockedAt: null,
+    },
+    {
+      id: "s-poly",
+      layer: "F.SilkS",
+      kind: "polyline",
+      pointsMm: [
+        { x: 2, y: 4 },
+        { x: 5, y: 6 },
+        { x: 8, y: 4 },
+      ],
+      strokeWidthMm: 0.15,
+      fill: "none",
+      lockedAt: null,
+    },
+    {
+      id: "s-line-b",
+      layer: "B.SilkS",
+      kind: "line",
+      pointsMm: [
+        { x: 3, y: 15 },
+        { x: 9, y: 15 },
+      ],
+      strokeWidthMm: 0.25,
+      fill: "none",
+      lockedAt: null,
+    },
+  ];
+  proj.overlayTexts = [
+    {
+      id: "t-1",
+      layer: "F.SilkS",
+      positionMm: { x: 15, y: 16 },
+      text: "OpenPCB",
+      fontSizeMm: 1.2,
+      rotationDeg: 0,
+      mirror: false,
+      justify: "center",
+      lockedAt: null,
+    },
+    {
+      id: "t-2",
+      layer: "B.SilkS",
+      positionMm: { x: 15, y: 4 },
+      text: "v1",
+      fontSizeMm: 0.8,
+      rotationDeg: 90,
+      mirror: true,
+      justify: "left",
+      lockedAt: null,
+    },
+  ];
+  return proj;
 }
 
 // =========================================================================
@@ -632,10 +717,218 @@ describe("Gerber X2 writer", () => {
     expect(out).toContain("%TA.AperFunction,NonConductor*%");
     expect(out).toMatch(/D02\*/);
     expect(out).toMatch(/D01\*/);
+    // The writer emits the ARTWORK MODEL (DFM contract 11 §1.2) — the glyph
+    // polylines are the model's strokes, drawn with the `max(0.1, 0.15·size)`
+    // aperture, not geometry the writer derives on its own.
+    const artwork = buildSilkArtwork({
+      placements: proj.placements,
+      overlayShapes: proj.overlayShapes,
+      overlayTexts: proj.overlayTexts,
+    });
+    expect(artwork.strokes.length).toBeGreaterThan(0);
+    expect(artwork.strokes.every((s) => s.face === "top")).toBe(true);
+    expect(artwork.strokes.every((s) => s.widthMm === 0.15)).toBe(true);
+    expect(parseGerber(out).strokes.length).toBe(artwork.strokes.length);
     // Bottom silk has no text here → no NonConductor strokes.
     expect(buildGerberLayer(proj, "silk.bottom", [])).not.toContain(
       "%TA.AperFunction,NonConductor*%",
     );
+  });
+
+  test("overlay lines / polylines / text keep their exact S11 legend bytes", () => {
+    // DFM contract 11 §1.4: the writer's aperture-allocation order is the
+    // artwork model's order, so a board whose only silk is overlay lines,
+    // polylines and text exports byte-identically to S11. These hashes were
+    // captured from the pre-S12 writer; any drift here is a REGRESSION, not a
+    // re-baseline, unless it maps to one of §1.4's enumerated fixes.
+    const proj = overlayOnlySilkProjection();
+    const top = buildGerberLayer(proj, "silk.top", [], EXPORT_TS);
+    const bottom = buildGerberLayer(proj, "silk.bottom", [], EXPORT_TS);
+    expect(top.match(/%ADD.*\*%/g)).toEqual([
+      "%ADD10C,0.2*%",
+      "%ADD11C,0.15*%",
+      "%ADD12C,0.18*%",
+    ]);
+    expect(bottom.match(/%ADD.*\*%/g)).toEqual([
+      "%ADD10C,0.25*%",
+      "%ADD11C,0.12*%",
+    ]);
+    expect(sha256(top)).toBe(
+      "7eeec4c7f30cdba61f1f79118b2414a71a4b39e282c9e731b9d0b81a14871c38",
+    );
+    expect(sha256(bottom)).toBe(
+      "8542696b922e22ab44a38becb589002b61e7b0667cfd78be9edc900be45ef8c7",
+    );
+  });
+
+  test("a NEGATIVE mask expansion never shrinks a drill relief", () => {
+    // DFM contract 11 §1.3: a negative `solderMaskExpansionMm` is authored to
+    // contract a copper PAD's opening. Applying it to a drilled void would pull
+    // solder mask back OVER the hole, so the relief floors the expansion at
+    // zero and stays drill-sized — round and slotted alike.
+    const proj = fixtureProjection();
+    proj.freePads = [
+      freePad("np_round", {
+        padType: "smd",
+        shape: "rect",
+        center: { x: 6, y: 6 },
+        widthMm: 1.2,
+        heightMm: 1.2,
+        drillMm: 0.9,
+        layer: "F.Cu",
+        solderMaskExpansionMm: -0.05,
+      }),
+      freePad("np_slot", {
+        padType: "hole",
+        shape: "circle",
+        center: { x: 12, y: 6 },
+        widthMm: 1,
+        heightMm: 1,
+        drillMm: 1,
+        drillSlot: { widthMm: 1, lengthMm: 3, angleDeg: 0 },
+        solderMaskExpansionMm: -0.05,
+      }),
+    ];
+    const openings = buildMaskOpenings({
+      solderMaskExpansionMm: proj.board.solderMaskExpansionMm,
+      layerCount: proj.board.layerCount,
+      placements: proj.placements,
+      freePads: proj.freePads,
+      vias: proj.vias,
+      records: buildCopperRecords({
+        layerCount: proj.board.layerCount,
+        placements: proj.placements,
+        padNetIds: new Map(),
+        freePads: proj.freePads,
+        traces: proj.traces,
+        vias: proj.vias,
+      }),
+      padShapes: new Map(
+        proj.freePads.map((p) => [freePadItemKey(p.id), freePadCopperShape(p)]),
+      ),
+    });
+    const openingsOf = (id: string): typeof openings =>
+      openings.filter(
+        (o) => o.anchor.kind === "freePad" && o.anchor.freePadId === id,
+      );
+
+    const round = openingsOf("np_round");
+    expect(round.map((o) => o.face)).toEqual(["top", "bottom"]);
+    // Its own face keeps the CONTRACTED copper opening the user authored…
+    expect(round[0]!.copper).toBe(true);
+    // …while the far face gets the full 0.9 mm drill, not 0.9 − 0.1.
+    expect(round[1]!.shape).toEqual({ kind: "circle", diameterMm: 0.9 });
+    expect(round[1]!.copper).toBe(false);
+
+    const slot = openingsOf("np_slot");
+    expect(slot.map((o) => o.face)).toEqual(["top", "top", "bottom", "bottom"]);
+    // The declared pad shape of a `hole` pad IS an authored opening, so it
+    // takes the negative expansion (1 → 0.9)…
+    expect(slot[0]!.shape).toEqual({ kind: "circle", diameterMm: 0.9 });
+    expect(slot[2]!.shape).toEqual({ kind: "circle", diameterMm: 0.9 });
+    // …and the drill relief does not: a 3 mm slot of a 1 mm tool stays 3 × 1
+    // on BOTH faces, never 2.9 × 0.9.
+    expect(slot[1]!.shape).toEqual({
+      kind: "obround",
+      widthMm: 3,
+      heightMm: 1,
+    });
+    expect(slot[3]!.shape).toEqual({
+      kind: "obround",
+      widthMm: 3,
+      heightMm: 1,
+    });
+  });
+
+  test("a closed overlay shape exports closed, and a solid one as a region", () => {
+    // §1.4, enumerated fix: a `rect` / `circle` / `polygon` used to export as
+    // the TWO points it is stored as — a diagonal line where the canvas drew a
+    // closed shape — and a filled overlay had no region at all.
+    const proj = fixtureProjection();
+    proj.overlayShapes = [
+      {
+        id: "r1",
+        layer: "F.SilkS",
+        kind: "rect",
+        pointsMm: [
+          { x: 2, y: 2 },
+          { x: 6, y: 5 },
+        ],
+        strokeWidthMm: 0.2,
+        fill: "solid",
+        lockedAt: null,
+      },
+    ];
+    const out = buildGerberLayer(proj, "silk.top", []);
+    const parsed = parseGerber(out);
+    expect(parsed.strokes.length).toBe(1);
+    // Five vertices: the four corners plus the closing point.
+    expect(parsed.strokes[0]!.points.length).toBe(5);
+    expect(parsed.strokes[0]!.points[0]).toEqual(
+      parsed.strokes[0]!.points[4]!,
+    );
+    expect(parsed.regions.length).toBe(1);
+    expect(parsed.regions[0]!.polarity).toBe("dark");
+    expect(parsed.regions[0]!.points.length).toBe(5);
+  });
+
+  test("footprint silk graphics and the reference designator reach the legend", () => {
+    // §1.4, enumerated fix: neither was ever exported before S12.
+    const proj = fixtureProjection();
+    const preview = proj.placements[0]!.footprint.preview!;
+    proj.placements[0]!.footprint.preview = {
+      ...preview,
+      graphics: [
+        {
+          kind: "line",
+          a: { x: -2, y: -2 },
+          b: { x: 2, y: -2 },
+          strokeWidthMm: 0.12,
+          layer: "F.SilkS",
+        },
+      ],
+      labels: [
+        {
+          id: "ref",
+          text: "REF**",
+          at: { x: 0, y: 3 },
+          fontSizeMm: 1,
+          rotationDeg: 0,
+          anchorX: "center",
+          anchorY: "middle",
+          layer: "F.SilkS",
+          role: "reference",
+        },
+      ],
+    };
+    const parsed = parseGerber(buildGerberLayer(proj, "silk.top", []));
+    // The graphic's own 0.12 aperture, plus the label's max(0.1, 0.15·1).
+    expect(parsed.strokes.length).toBeGreaterThan(1);
+    const widths = new Set(
+      parsed.strokes.map((s) => {
+        const prim = parsed.apertures.get(s.apertureCode)!.primitives[0]!;
+        return prim.kind === "circle" ? prim.diameterMm : Number.NaN;
+      }),
+    );
+    expect([...widths].sort()).toEqual([0.12, 0.15]);
+    // The placement's own designator, never the shared model's placeholder.
+    const artwork = buildSilkArtwork({
+      placements: proj.placements,
+      overlayShapes: proj.overlayShapes,
+      overlayTexts: proj.overlayTexts,
+    });
+    const labelStrokes = artwork.strokes.filter(
+      (s) => s.source.kind === "placement" && "labelId" in s.source,
+    );
+    const expected = textToStrokes("U1", {
+      originMm: { x: 10, y: 13 },
+      sizeMm: 1,
+      rotationDeg: 0,
+      mirror: false,
+      justify: "center",
+      anchorY: "middle",
+    }).filter((poly) => poly.length >= 2);
+    expect(labelStrokes.length).toBe(expected.length);
   });
 
   test("Edge.Cuts does not double-close an already-closed polygon outline", () => {

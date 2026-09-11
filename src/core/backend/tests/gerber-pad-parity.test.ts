@@ -462,38 +462,68 @@ function expectedMask(
       pad.padType === "hole"
         ? layer === "F.Cu" || layer === "B.Cu"
         : freePadCopperLayers(pad, stackup).layers.includes(layer);
-    if (!opens) continue;
+    if (!opens) {
+      // S12 (DFM contract 11 §1.3, 06 §9): a face the pad shape is NOT flashed
+      // on has nothing that could cover the pad's drill, so a drilled `smd` /
+      // `conn` pad relieves it there unconditionally — otherwise the far face
+      // keeps solder mask stretched over an open NPTH.
+      const drill = freePadDrill(pad);
+      if (!drill) continue;
+      out.push({
+        label: `mask freePad:${pad.id} far-face drill relief`,
+        shape: drillRelief(
+          {
+            centerMm: pad.centerMm,
+            drillMm: drill.drillMm,
+            ...(drill.slot ? { slot: drill.slot } : {}),
+            plated: false,
+          },
+          pad.solderMaskExpansionMm ?? expansion,
+        ),
+        centerMm: pad.centerMm,
+      });
+      continue;
+    }
     const base = expectedAperture(freePadCopperShape(pad), pad.rotationDeg);
     if (!base) continue;
+    const flashed = inflate(base, pad.solderMaskExpansionMm ?? expansion);
     out.push({
       label: `mask freePad:${pad.id}`,
-      shape: inflate(base, pad.solderMaskExpansionMm ?? expansion),
+      shape: flashed,
       centerMm: pad.centerMm,
     });
-    // A `hole` free pad's drill relief when the pad-shape opening does not
-    // cover the drill (a slot, or a drill wider than the pad's narrow side) —
-    // contract 10 §6.4, Astra run 2b #3.
-    if (pad.padType === "hole") {
-      const drill = freePadDrill(pad);
-      const covered =
-        !drill ||
-        (!drill.slot &&
-          drill.drillMm <= Math.min(pad.widthMm, pad.heightMm) + 1e-9);
-      if (drill && !covered) {
-        out.push({
-          label: `mask freePad:${pad.id} drill relief`,
-          shape: drillRelief(
-            {
-              centerMm: pad.centerMm,
-              drillMm: drill.drillMm,
-              ...(drill.slot ? { slot: drill.slot } : {}),
-              plated: false,
-            },
-            pad.solderMaskExpansionMm ?? expansion,
-          ),
-          centerMm: pad.centerMm,
-        });
-      }
+    // A drilled free pad's drill relief when the FLASHED opening does not cover
+    // the drill — a routed slot always (the declared size is one hit's), or a
+    // round drill the flash does not span. Contract 10 §6.4, Astra run 2b #3,
+    // widened in S12 (R1) from `hole` to EVERY pad type — `freePadDrill` has no
+    // pad-type gate, so a slotted `smd` paddle keeps mask stretched over its own
+    // routed void exactly as a `hole` pad would — and again (Astra run 2 #2) to
+    // measure the containment against the opening as EXPANDED: a negative
+    // expansion shrinks a 1 x 1 pad over a 0.8 drill to 0.6 x 0.6, which the
+    // declared shape says covers the drill and the artwork does not. This
+    // reading is independent of the model's — it is stated here in the words of
+    // the contract, not derived from `uncoveredFreePadDrill`.
+    const flashSpan =
+      flashed.kind === "circle"
+        ? flashed.diameterMm
+        : Math.min(flashed.widthMm, flashed.heightMm);
+    const drill = freePadDrill(pad);
+    const covered =
+      !drill || (!drill.slot && drill.drillMm <= flashSpan + 1e-9);
+    if (drill && !covered) {
+      out.push({
+        label: `mask freePad:${pad.id} drill relief`,
+        shape: drillRelief(
+          {
+            centerMm: pad.centerMm,
+            drillMm: drill.drillMm,
+            ...(drill.slot ? { slot: drill.slot } : {}),
+            plated: false,
+          },
+          pad.solderMaskExpansionMm ?? expansion,
+        ),
+        centerMm: pad.centerMm,
+      });
     }
   }
   for (const via of proj.vias) {

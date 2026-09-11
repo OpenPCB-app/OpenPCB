@@ -81,6 +81,26 @@ export const DEFAULT_SEVERITY_BY_CODE: Record<DrcRuleCode, DrcSeverity> = {
   // rule validity (rule-semantics contract §10)
   DRC_RULE_INVALID: "error",
   DRC_RULE_INEFFECTIVE: "warning",
+  // DFM overlays (DFM contract 11 §7). Only the two that make a board
+  // unbuildable are errors: parts that cannot both be placed, and a mask dam
+  // the DESIGN rule says must exist. Everything else is a fab advisory.
+  COURTYARD_OVERLAP: "error",
+  COURTYARD_INVALID: "warning",
+  SILK_TO_MASK_CLEARANCE: "warning",
+  SILK_TO_BOARD_EDGE: "warning",
+  FAB_SILK_CLEARANCE: "warning",
+  FAB_SILK_WIDTH: "warning",
+  FAB_SILK_TEXT_HEIGHT: "warning",
+  MASK_BRIDGE: "error",
+  FAB_MASK_BRIDGE: "warning",
+  MASK_SLIVER: "warning",
+  FAB_MASK_TO_COPPER: "warning",
+  // copper shape (DFM contract 11 §5, §7)
+  COPPER_CONNECTION_WIDTH: "error",
+  COPPER_SLIVER: "warning",
+  COPPER_SHAPE_UNCHECKED: "info",
+  TRACE_ACUTE_ANGLE: "warning",
+  TRACE_OVERLAP: "warning",
 };
 
 const SEVERITY_RANK: Record<DrcSeverity, number> = {
@@ -176,7 +196,19 @@ export const RULE_CLASS_BY_CODE: Record<DrcRuleCode, DrcRuleClass> = {
   ZONE_FILL_FAILED: "structural",
   DRC_RULE_INVALID: "structural",
   DRC_RULE_INEFFECTIVE: "structural",
-  // dfm
+  // dfm — the S12 overlay codes (DFM contract 11 §7); all sixteen S12 codes
+  // are class `dfm` and overridable.
+  COURTYARD_OVERLAP: "dfm",
+  COURTYARD_INVALID: "dfm",
+  SILK_TO_MASK_CLEARANCE: "dfm",
+  SILK_TO_BOARD_EDGE: "dfm",
+  FAB_SILK_CLEARANCE: "dfm",
+  FAB_SILK_WIDTH: "dfm",
+  FAB_SILK_TEXT_HEIGHT: "dfm",
+  MASK_BRIDGE: "dfm",
+  FAB_MASK_BRIDGE: "dfm",
+  MASK_SLIVER: "dfm",
+  FAB_MASK_TO_COPPER: "dfm",
   HOLE_TO_BOARD_EDGE: "dfm",
   HOLE_OFF_BOARD: "dfm",
   TRACK_DANGLING: "dfm",
@@ -188,6 +220,12 @@ export const RULE_CLASS_BY_CODE: Record<DrcRuleCode, DrcRuleClass> = {
   DIFF_PAIR_GAP: "signal-integrity",
   DIFF_PAIR_SKEW: "signal-integrity",
   DIFF_PAIR_UNCOUPLED_LENGTH: "signal-integrity",
+  // copper shape (DFM contract 11 §7: all of S12's codes are class `dfm`)
+  COPPER_CONNECTION_WIDTH: "dfm",
+  COPPER_SLIVER: "dfm",
+  COPPER_SHAPE_UNCHECKED: "dfm",
+  TRACE_ACUTE_ANGLE: "dfm",
+  TRACE_OVERLAP: "dfm",
 };
 
 /** Per-code severity overrides; `"ignore"` drops the violation entirely. */

@@ -188,10 +188,17 @@ function runCorpusBoard(
 
 describe("oracle: synthetic corpus", () => {
   for (const entry of SYNTHETIC_CORPUS) {
-    test(entry.name, () => {
-      const p = synthesizeBoard(entry.opts);
-      runCorpusBoard(entry.name, entry.opts.items, p);
-    });
+    // The corpus's own budget for a dense board is 30 s (see the comment on the
+    // 5000-item entries); the per-entry test was relying on Bun's 5 s default,
+    // which the S12 DFM stages pushed it past. Stated, not inherited.
+    test(
+      entry.name,
+      () => {
+        const p = synthesizeBoard(entry.opts);
+        runCorpusBoard(entry.name, entry.opts.items, p);
+      },
+      30_000,
+    );
   }
 
   test("stats: grid is strictly cheaper on at least one board per pair kind", () => {
@@ -282,8 +289,19 @@ describe("oracle: synthetic corpus", () => {
       const report = runDrc(fixtureToProjection(fixture));
       for (const v of report.violations) union.add(v.code);
     }
+    // The same two kernel-failure codes `drc-golden.test.ts` pins as
+    // CORPUS_EXCEPTIONS. `ZONE_FILL_FAILED` needs a Clipper refusal no board
+    // geometry reaches; `COPPER_SHAPE_UNCHECKED` needs one of those, a
+    // 250 000-vertex unit or a 64-neck group (DFM contract 11 §5.5). The
+    // `nonFinite` corpus entries DO currently provoke the latter through the
+    // fail-closed union, but that is a property of one generator flag, not of
+    // the code — both stay pinned by their own unit tests.
+    const KERNEL_ONLY: readonly DrcRuleCode[] = [
+      "COPPER_SHAPE_UNCHECKED",
+      "ZONE_FILL_FAILED",
+    ];
     const missing = allCodes.filter(
-      (c) => c !== "ZONE_FILL_FAILED" && !union.has(c),
+      (c) => !KERNEL_ONLY.includes(c) && !union.has(c),
     );
     expect(missing, `codes never provoked: ${missing.join(", ")}`).toEqual([]);
   });

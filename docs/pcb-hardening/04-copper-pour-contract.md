@@ -207,13 +207,15 @@ inside the fill — an isolated neck or sliver thinner than `w − 0.002 mm` can
 weaker than "no local width below `w`": where two fat lobes come within `w` of each other, the
 re-inflated discs of both lobes can re-join through a neck of the original polygon narrower than
 `w` (Astra run 2 #3 — a diagonal 0.49 mm neck between two lobes at `w = 1`). The kernel does not
-enforce a minimum *connection* width; that is a DRC check on the final copper (S12, with the
-same-net union case of #7 below). For `w ≤ 0.002 mm` the pass is skipped. After the pass every ring
+enforce a minimum *connection* width; that is `COPPER_CONNECTION_WIDTH` on the final copper (S12,
+`11-dfm-contract.md` §5.3 — erosion cores, not the opening, decide; with the same-net union case
+of #7 below). For `w ≤ 0.002 mm` the pass is skipped. After the pass every ring
 whose area is `< DEGENERATE_AREA_MM2` is discarded regardless of `islandRemoval` (a degenerate
 sliver is not copper, S1 §2). Thermal spokes are at least `w` wide (§6). **Limit:** the union of
 two *same-net* pours can contain a neck narrower than `w` where their independently-opened
-boundaries overlap (Astra run 1 #7) — the S12 copper-sliver / minimum-connection check owns the
-union; the fill does not re-open the union because the union is not a pour.
+boundaries overlap (Astra run 1 #7) — the S12 copper-shape check judges the per-net union
+(`COPPER_CONNECTION_WIDTH`, `11-dfm-contract.md` §5.1); the fill does not re-open the union
+because the union is not a pour.
 
 ## 8. Islands — result and failure contract
 
@@ -412,7 +414,7 @@ GND-airwire change (documented in S1), not to S5.
 | 4b | per-pour removal deletes a small island bridged only through another same-net zone's fill | high | **accepted as a limit** — direction is less copper, connectivity is computed on kept copper | §8, §13 |
 | 5 | null-net islands have no isolation verdict | high | **accepted (doc)** — S3a §3.2 decided net-less copper is never isolated; the text now says so; the union-equals-S1 claim is restricted to net-bound pours | §10, §9 |
 | 6 | min-width pass keeps `w − 2 µm` strips; `r = 0` case; degenerate fragments under `never` | high | **accepted** — `MIN_THICKNESS_EPS_MM = 0.001` is a radius; guarantee restated as `w − 0.002`; degenerate rings discarded regardless of `islandRemoval` | §7 |
-| 7 | width not enforced on the union of same-net pours | high | **accepted as a limit** — the union is not a pour; S12's sliver check owns it | §7, §13 |
+| 7 | width not enforced on the union of same-net pours | high | **accepted as a limit**, closed in S12 — the union is not a pour; `COPPER_CONNECTION_WIDTH` judges the per-net union (`11-dfm-contract.md` §5.1) | §7, §13 |
 | 8 | legitimate empty erosions would be `failed` | medium | **accepted** — the draft rule was wrong for negative offsets | §3, §8 |
 | 9 | `[]`-on-throw primitives hide a lost thermal knockout (pad floods solid) | blocker | **accepted** — `buildThermalKnockout` returns `[]` on any boolean failure today | §3, §8: primitives throw `CopperKernelError`, the pour fails; Gerber union failure fails the export |
 | 10 | Gerber re-quantised union ≠ canvas overdraw by `≤ q/√2` | medium | **accepted as a limit** (0.07 µm) | §9 |
@@ -426,7 +428,7 @@ GND-airwire change (documented in S1), not to S5.
 |---|---|---|---|---|
 | 1 | obstacle union mixed CCW pad rings with CW stadiums; the NonZero overlap cancelled into an un-clearanced void the pour flooded (a VCC pad under a VCC trace shorted to the GND plane) | blocker | **accepted** — traced; the S4 keepout lesson repeated for obstacles | every obstacle ring normalised CCW before grouping (`pushObstacle`); test (q) |
 | 2 | circumscribed trace caps as positive evidence of membership: a zone ending 2 µm short of a trace's true cap was called a member, so a dead island reached a pad | high | **accepted** — the circumscribed stadium is an obstacle superset, not a contact predicate | trace membership decided on the exact segment (`segmentTouchesIsland`: end-cap island distance or segment-to-ring distance `≤ hw + ε`), as S1; test (r) |
-| 3 | the opening re-joins two lobes through a neck narrower than `w` (one zone) | high | **accepted as a limit** — the opening guarantees a union of `w/2` discs, not a local width; the fix is a DRC connection-width check on final copper | §7 reworded; S12 |
+| 3 | the opening re-joins two lobes through a neck narrower than `w` (one zone) | high | **accepted as a limit**, closed in S12 — the opening guarantees a union of `w/2` discs, not a local width; `COPPER_CONNECTION_WIDTH` on the final copper reports the neck | §7 reworded; `11-dfm-contract.md` §5 |
 | 4 | the canvas bucketed vias by global layer index (`viasByLayer`) and omitted a blind via from the B.Cu pour every backend fill cleared | high | **accepted** — a pre-S5 canvas optimisation the kernel's record-based span resolution made wrong | `PcbScene` passes every via; the kernel resolves the span |
 | 5 | `pcb_cleanup_pour_traces` deleted the trace whose membership kept its island alive under `islandRemoval: "always"` — trace and copper both gone | high | **accepted** | coverage re-validated against a refill with the deletions applied, iterated to a fixed point |
 | 6 | KiCad import classified a hole against the INWARD-flattened outer; an arc of sagitta below the chord budget flattened across the hole, which was dropped as an "extra outline" while the zone imported enabled | high | **accepted** — fail-open on import | classification against the outward-flattened outer (a superset of the true outline); a hole that then fails validity imports the zone disabled, never dropped |

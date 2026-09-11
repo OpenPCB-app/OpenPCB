@@ -110,7 +110,9 @@ src/
     │                       docs/pcb-hardening/08-broad-phase-contract.md), rule resolver,
     │                       fab presets; `modules/designer/backend/drc/` is re-export shims;
     │                       `worker/` — the S10 worker-thread entry + main-thread client
-    │                       (docs/pcb-hardening/09-execution-contract.md)
+    │                       (docs/pcb-hardening/09-execution-contract.md); `checks/{courtyard,
+    │                       silkscreen,solder-mask,copper-shape,filled-gap}.ts` — the S12 DFM
+    │                       checks (docs/pcb-hardening/11-dfm-contract.md)
     ├── pcb-connectivity/   copper connectivity kernel (records, items, touch, graph) — see
     │                       docs/pcb-hardening/01-connectivity-contract.md
     ├── pcb-areas/          copper zones + keepouts: v1→v2 upgrade, the ONE derivation of
@@ -125,9 +127,14 @@ src/
     │                       annular-ring kernel (analytic signed distances, breakout, copper-in-drill
     │                       containment), docs/pcb-hardening/10-manufacturability-contract.md §3.
     │                       `rendering/pcb/outline-geometry.ts` and `backend/pcb/outline-geometry.ts`
-    │                       are re-export shims over it
+    │                       are re-export shims over it; courtyard-rings.ts — the S12 per-side
+    │                       courtyard regions (11 §2)
     ├── pcb-routing/        PCB routing
-    ├── rendering/          re-export shim over @openpcb/rendering-core (see above)
+    ├── rendering/          re-export shim over @openpcb/rendering-core (see above) — EXCEPT the
+    │                       in-tree `pcb/` (drills, outline kernels, chain-edges, loop-ring,
+    │                       footprint-labels) and `pcb/artwork/` (the S12 silk + mask artwork
+    │                       model the Gerber writer and the DFM checks share, 11 §1) and
+    │                       `copper-fill/` (the Clipper2 kernel + the S12 copper-shape kernel)
     ├── schematic-routing/  schematic wire routing
     └── frontend/           canvas engine, context-menu, UI primitives
 

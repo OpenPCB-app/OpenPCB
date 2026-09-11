@@ -35,7 +35,18 @@ const goldens = readdirSync(GOLDEN_DIR)
  * membership. This exception list must stay empty except for this one,
  * justified entry (contract 06 §6, plan D15).
  */
-const CORPUS_EXCEPTIONS = new Set<DrcRuleCode>(["ZONE_FILL_FAILED"]);
+const CORPUS_EXCEPTIONS = new Set<DrcRuleCode>([
+  // `COPPER_SHAPE_UNCHECKED` is the copper-shape twin of `ZONE_FILL_FAILED`
+  // (DFM contract 11 §5.5): it fires only when the copper KERNEL refuses a
+  // unit, when a unit carries more than 250 000 input vertices, or when a
+  // group holds more than 64 necks — none of which a hand-written fixture
+  // board reaches. It is pinned instead in `drc-copper-shape.test.ts`
+  // (`describe("COPPER_SHAPE_UNCHECKED", …)`) through the `copperShapeBudgets`
+  // test override, which asserts the code, its class, its default severity and
+  // that it stays out of `NON_OVERRIDABLE`.
+  "COPPER_SHAPE_UNCHECKED",
+  "ZONE_FILL_FAILED",
+]);
 
 describe("DRC golden boards", () => {
   test("corpus is non-empty", () => {
@@ -132,6 +143,9 @@ describe("DRC golden boards", () => {
     // The exception list itself must stay exactly the documented, justified
     // set — a code silently added here without provoking it elsewhere would
     // otherwise defeat the gate.
-    expect([...CORPUS_EXCEPTIONS].sort()).toEqual(["ZONE_FILL_FAILED"]);
+    expect([...CORPUS_EXCEPTIONS].sort()).toEqual([
+      "COPPER_SHAPE_UNCHECKED",
+      "ZONE_FILL_FAILED",
+    ]);
   });
 });

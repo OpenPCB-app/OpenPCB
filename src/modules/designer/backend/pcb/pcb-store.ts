@@ -296,6 +296,47 @@ function parseDesignRules(
     fallback.clearance.copperToHoleMm,
   );
   const clearanceFloorMm = optNum(m.clearanceMm, fallback.minimums.clearanceMm);
+  /**
+   * The S12 DFM sub-objects (DFM contract 11 §6). Every key inside them is
+   * optional with the `optNum` semantics above, and a sub-object with no keys
+   * left is OMITTED — writing `{}` would turn "this board stores no silkscreen
+   * rule" into "this board stores an empty one", which reads the same but is a
+   * new row shape for every pre-S12 board that never had one.
+   */
+  const silkscreen = compactRules({
+    silkToMaskClearanceMm: optNum(
+      asRecord(r.silkscreen)?.silkToMaskClearanceMm,
+      fallback.silkscreen?.silkToMaskClearanceMm,
+    ),
+    silkToBoardEdgeMm: optNum(
+      asRecord(r.silkscreen)?.silkToBoardEdgeMm,
+      fallback.silkscreen?.silkToBoardEdgeMm,
+    ),
+  });
+  const solderMask = compactRules({
+    minBridgeMm: optNum(
+      asRecord(r.solderMask)?.minBridgeMm,
+      fallback.solderMask?.minBridgeMm,
+    ),
+  });
+  const dfm = compactRules({
+    sliverWidthMm: optNum(
+      asRecord(r.dfm)?.sliverWidthMm,
+      fallback.dfm?.sliverWidthMm,
+    ),
+    sliverMinLengthMm: optNum(
+      asRecord(r.dfm)?.sliverMinLengthMm,
+      fallback.dfm?.sliverMinLengthMm,
+    ),
+    acuteAngleDeg: optNum(
+      asRecord(r.dfm)?.acuteAngleDeg,
+      fallback.dfm?.acuteAngleDeg,
+    ),
+    courtyardFallbackMm: optNum(
+      asRecord(r.dfm)?.courtyardFallbackMm,
+      fallback.dfm?.courtyardFallbackMm,
+    ),
+  });
   const e =
     r.electrical === null
       ? null
@@ -335,7 +376,23 @@ function parseDesignRules(
           },
         }
       : {}),
+    ...(silkscreen ? { silkscreen } : {}),
+    ...(solderMask ? { solderMask } : {}),
+    ...(dfm ? { dfm } : {}),
   };
+}
+
+/** A rules sub-object with its `undefined` keys dropped, or `null` when empty. */
+function compactRules<T extends Record<string, number | undefined>>(
+  value: T,
+): { [K in keyof T]: number } | null {
+  const out: Record<string, number> = {};
+  for (const [key, v] of Object.entries(value)) {
+    if (v !== undefined) out[key] = v;
+  }
+  return Object.keys(out).length > 0
+    ? (out as { [K in keyof T]: number })
+    : null;
 }
 
 function parseNetClass(value: unknown): PcbNetClass | null {

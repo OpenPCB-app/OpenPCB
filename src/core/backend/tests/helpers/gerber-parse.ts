@@ -5,6 +5,11 @@
  * 10 §6.5) and by the B6-1 audit test, so both judge the artwork by PARSING it
  * rather than by trusting the writer's own helpers.
  *
+ * S12 adds STROKE and REGION capture (DFM contract 11 §1.5): a `D02` starts a
+ * stroke and the following `D01`s extend it with the aperture that was current,
+ * and every `G36 … G37` contour is captured with its polarity — so the silk
+ * parity harness can compare the emitted legend to the artwork model 1:1.
+ *
  * Every aperture — standard or macro — is reduced to a union of CONVEX
  * primitives (axis-aligned-then-rotated rectangles and circles), which is
  * exactly what an aperture macro is and what a `C` / `R` / `O` aperture can be
@@ -47,9 +52,28 @@ export interface GerberFlash {
   yMm: number;
 }
 
+export interface GerberPoint {
+  xMm: number;
+  yMm: number;
+}
+
+/** One `D02` move plus the `D01` draws that followed it, outside any region. */
+export interface GerberStroke {
+  apertureCode: number;
+  points: GerberPoint[];
+}
+
+/** One `G36 … G37` contour, with the polarity in force when it was emitted. */
+export interface GerberRegion {
+  polarity: "dark" | "clear";
+  points: GerberPoint[];
+}
+
 export interface ParsedGerber {
   apertures: Map<number, GerberAperture>;
   flashes: GerberFlash[];
+  strokes: GerberStroke[];
+  regions: GerberRegion[];
 }
 
 const COORD_SCALE = 1_000_000;
@@ -143,9 +167,21 @@ export function parseGerber(text: string): ParsedGerber {
   const macros = new Map<string, GerberPrimitive[]>();
   const apertures = new Map<number, GerberAperture>();
   const flashes: GerberFlash[] = [];
+  const strokes: GerberStroke[] = [];
+  const regions: GerberRegion[] = [];
   let pendingFunction: string | null = null;
   let current = -1;
   let inRegion = false;
+  let polarity: "dark" | "clear" = "dark";
+  let openStroke: GerberStroke | null = null;
+  let openRegion: GerberPoint[] | null = null;
+
+  // A stroke with a single `D02` and no `D01` draws nothing; drop it rather
+  // than report a phantom stroke the artwork model can never match.
+  const flushStroke = (): void => {
+    if (openStroke && openStroke.points.length >= 2) strokes.push(openStroke);
+    openStroke = null;
+  };
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]!;
@@ -176,24 +212,54 @@ export function parseGerber(text: string): ParsedGerber {
       pendingFunction = null;
       continue;
     }
-    if (line === "G36*") inRegion = true;
-    else if (line === "G37*") inRegion = false;
+    if (line === "%LPD*%") polarity = "dark";
+    else if (line === "%LPC*%") polarity = "clear";
+    if (line === "G36*") {
+      flushStroke();
+      inRegion = true;
+      openRegion = [];
+      continue;
+    }
+    if (line === "G37*") {
+      if (openRegion) regions.push({ polarity, points: openRegion });
+      openRegion = null;
+      inRegion = false;
+      continue;
+    }
     const dcode = /^D(\d+)\*$/.exec(line);
     if (dcode) {
       const code = Number(dcode[1]);
-      if (code >= 10) current = code;
+      if (code >= 10) {
+        flushStroke();
+        current = code;
+      }
       continue;
     }
-    const flash = /^X(-?\d+)Y(-?\d+)D03\*$/.exec(line);
-    if (flash && !inRegion) {
-      flashes.push({
-        code: current,
-        xMm: Number(flash[1]) / COORD_SCALE,
-        yMm: Number(flash[2]) / COORD_SCALE,
-      });
+    const op = /^X(-?\d+)Y(-?\d+)D0([123])\*$/.exec(line);
+    if (!op) continue;
+    const point: GerberPoint = {
+      xMm: Number(op[1]) / COORD_SCALE,
+      yMm: Number(op[2]) / COORD_SCALE,
+    };
+    if (inRegion) {
+      openRegion?.push(point);
+      continue;
+    }
+    switch (op[3]) {
+      case "1":
+        openStroke?.points.push(point);
+        break;
+      case "2":
+        flushStroke();
+        openStroke = { apertureCode: current, points: [point] };
+        break;
+      default:
+        flushStroke();
+        flashes.push({ code: current, xMm: point.xMm, yMm: point.yMm });
     }
   }
-  return { apertures, flashes };
+  flushStroke();
+  return { apertures, flashes, strokes, regions };
 }
 
 function primitivesOfSpec(

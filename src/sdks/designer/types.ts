@@ -641,6 +641,39 @@ export interface PcbDesignRules {
     tempRiseC: number;
     copperWeightOz: number;
   };
+  /**
+   * Silkscreen DFM parameters (DFM contract 11 §6). Optional/additive; an
+   * absent key reads as the check's own documented default, so no existing
+   * board is retroactively judged by a rule it never stored.
+   */
+  silkscreen?: {
+    /** Legend ink to a solder-mask opening (mm). Absent reads as 0. */
+    silkToMaskClearanceMm?: number;
+    /** Legend ink to the board boundary (mm). Absent reads as 0.15. */
+    silkToBoardEdgeMm?: number;
+  };
+  /** Solder-mask DFM parameters (§6). */
+  solderMask?: {
+    /**
+     * Minimum mask dam between two openings (mm). ABSENT means no design-rule
+     * verdict at all — only the fabricator row applies.
+     */
+    minBridgeMm?: number;
+  };
+  /** Copper-shape and courtyard DFM parameters (§6). */
+  dfm?: {
+    /** Minimum conductive width (mm). Absent reads as 0.1, capped by `minimums.traceWidthMm`. */
+    sliverWidthMm?: number;
+    /** Minimum length of a sub-width appendage worth reporting (mm). Absent reads as 0.2. */
+    sliverMinLengthMm?: number;
+    /** Minimum interior angle at a trace junction (deg). Absent reads as 90. */
+    acuteAngleDeg?: number;
+    /**
+     * Courtyard excess applied to a footprint's bounds when it declares no
+     * courtyard (mm). Absent reads as 0.25 — the IPC-7351B level B value.
+     */
+    courtyardFallbackMm?: number;
+  };
 }
 
 /**
@@ -2337,6 +2370,15 @@ export type DrcAnchor =
   | { kind: "lengthGroup"; groupId: string }
   /** A stored `PcbDrcRule` row — DRC_RULE_INVALID / DRC_RULE_INEFFECTIVE. */
   | { kind: "rule"; ruleId: string }
+  /**
+   * A board-level overlay drawing (`PcbOverlayShape`) — the silkscreen artwork
+   * source of a DFM violation (contract 11 §7). It is not copper, so it has no
+   * existing anchor kind; without one every overlay hit would have to hang off
+   * `boardEdge` and collapse into a single id.
+   */
+  | { kind: "overlayShape"; shapeId: string }
+  /** A board-level overlay text (`PcbOverlayText`); same reason. */
+  | { kind: "overlayText"; textId: string }
   | { kind: "boardEdge" };
 
 export type DrcSeverity = "error" | "warning" | "info";
@@ -2456,7 +2498,52 @@ export type DrcRuleCode =
   | "DRC_RULE_INVALID"
   // A rule that resolves, but not with the number its author wrote (unknown
   // net / class / layer reference, or a value clamped by the floor / minimum).
-  | "DRC_RULE_INEFFECTIVE";
+  | "DRC_RULE_INEFFECTIVE"
+  // --- Courtyards (S12, DFM contract 11 §2) ---
+  // Two placements' courtyard regions overlap on one face by more than a
+  // shared edge — the parts cannot both be assembled where they stand.
+  | "COURTYARD_OVERLAP"
+  // The footprint's courtyard graphics would not chain into closed loops (an
+  // open chain, a branch, an unmodelled graphic), or the overlap kernel refused
+  // a pair. The region falls back to the superset hull, which over-reports.
+  | "COURTYARD_INVALID"
+  // --- Silkscreen (S12, DFM contract 11 §3) ---
+  // Legend ink over, or too close to, a solder-mask opening: it will be
+  // printed onto the pad and lift with the solder.
+  | "SILK_TO_MASK_CLEARANCE"
+  // Legend ink too close to (or off) the routed board edge.
+  | "SILK_TO_BOARD_EDGE"
+  // The fabricator's own silk-to-pad row.
+  | "FAB_SILK_CLEARANCE"
+  // A legend stroke narrower than the fabricator prints.
+  | "FAB_SILK_WIDTH"
+  // A legend text smaller than the fabricator prints legibly.
+  | "FAB_SILK_TEXT_HEIGHT"
+  // --- Solder mask (S12, DFM contract 11 §4) ---
+  // The mask dam between two different-net openings is narrower than the
+  // design rule — the bridge hazard the dam exists to prevent.
+  | "MASK_BRIDGE"
+  // The same dam, against the fabricator's row.
+  | "FAB_MASK_BRIDGE"
+  // A mask web between same-net or copper-less openings: it can lift, but it
+  // cannot bridge two nets.
+  | "MASK_SLIVER"
+  // A mask opening exposing copper that is not its own.
+  | "FAB_MASK_TO_COPPER"
+  // --- Copper shape (S12, DFM contract 11 §5) ---
+  // One net's own copper narrows below the sliver width somewhere in the
+  // middle of it — a web the etcher may open.
+  | "COPPER_CONNECTION_WIDTH"
+  // Copper that is thinner than the sliver width EVERYWHERE: an annulus, a
+  // hairline appendage, an acid-trap spike.
+  | "COPPER_SLIVER"
+  // The explicit "we did not answer": a kernel refusal, a unit over the vertex
+  // budget, or a truncated neck list. Never a silent pass.
+  | "COPPER_SHAPE_UNCHECKED"
+  // A copper-free wedge at a trace junction (an acid trap).
+  | "TRACE_ACUTE_ANGLE"
+  // Two collinear, overlapping segments of DIFFERENT traces on one layer.
+  | "TRACE_OVERLAP";
 
 export interface DrcViolation {
   /**

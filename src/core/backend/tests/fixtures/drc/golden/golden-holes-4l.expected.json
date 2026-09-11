@@ -1,7 +1,7 @@
 {
  "summary": {
   "errors": 6,
-  "warnings": 23,
+  "warnings": 24,
   "infos": 0
  },
  "countsByCode": {
@@ -9,6 +9,7 @@
   "COPPER_TO_HOLE": 1,
   "FAB_ANNULAR_RING": 4,
   "FAB_DRILL": 4,
+  "FAB_MASK_TO_COPPER": 1,
   "NPTH_PAD_NET": 1,
   "TRACK_DANGLING": 9,
   "UNCONNECTED_NET": 1,
@@ -28,6 +29,7 @@
   "FAB_DRILL-v2-8a3e4c1f4909831c",
   "FAB_DRILL-v2-92769cb3c099a8f5",
   "FAB_DRILL-v2-fa8f4e533925ab21",
+  "FAB_MASK_TO_COPPER-v2-7c65785580aff633",
   "NPTH_PAD_NET-v2-b45bd460d58877de",
   "TRACK_DANGLING-v2-0c6b01b036cca433",
   "TRACK_DANGLING-v2-10ce52d71ea0bb94",

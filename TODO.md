@@ -4,6 +4,24 @@
 > Open work only. Completed work lives in git history, not in this file.
 > Six programs: Route tool · Compiler agent · MCP integration · Release hardening · DRC · Backlog.
 
+## Now — handoff (2026-09-11, S12 closed in the working tree)
+
+Session-resume block written by `/handoff`; `HANDOFF.md` is the entry point, `CURRENT_STATE.md`
+the snapshot. Everything below this block is the live program tracker and is unchanged.
+
+- [ ] **Commit S12** on `master` when the user says so — 51 modified + 29 untracked files, nothing
+      staged; suggested message: "PCB hardening S12: DFM overlays and copper shape on the artwork
+      the fab receives" (never auto-commit).
+- [ ] **Shared-tags follow-up** (after the user tags `kicad-parsers-v0.1.4` / `kicad-import-v0.2.0`
+      / `rendering-core-v0.1.4` in `../shared` from `e882332`): repin `package.json` in OpenPCB and
+      CoreLibrary, `npm install` lock refresh, verify with a real `npm ci` in a scratch clone (lock
+      diff = three tag lines, no `"link": true`), CoreLibrary `bun tools/rebuild-previews.ts` +
+      `bun validate`. Separate commit.
+- [ ] **S12b — exact-arc geometry and polygon pads** (new PROGRAM row): plan mode first (3 scouts +
+      plan-critique), own contract `12-…`, Astra spec-attack xhigh with per-run Go.
+- [ ] Split the five S12 files over 500 lines (mechanical, after S12b): `copper-shape-kernel.ts`,
+      `checks/copper-shape.ts`, `courtyard-rings.ts`, `checks/solder-mask.ts`, `checks/silkscreen.ts`.
+
 ## Repo state
 
 - **Unmerged local branch `integ/trace-drag`** — 6 commits, ~1.9k lines: trace segment drag
@@ -348,7 +366,8 @@ checkout (kicad-import + rendering-core); the tags `kicad-parsers-v0.1.4` / `kic
 (verify with a real `npm ci`) and the CoreLibrary `bun tools/rebuild-previews.ts` re-pack are a
 SEPARATE follow-up commit — until then new KiCad imports carry no plating / slot attributes and
 existing library rows are corrected at read time from their stored raw pad type. S12 (DFM
-overlays) is next.
+overlays and copper shape — `docs/pcb-hardening/11-dfm-contract.md`) shipped 2026-09-11; S12b
+(exact-arc geometry and polygon pads, re-owned from S12) is next, then S13.
 
 **Binding decisions (unchanged).** Full scope — core plus DFM plus electrical plus SI · scoped
 priority rules (first-match, *can relax*, board-minimum floor) · full multilayer 2–32 · breaking
@@ -396,10 +415,15 @@ migration, area-scope precision) and S2 (cutout crossing-overlap).
       session vias, neighbour net class and the short tier. **Parity acceptance:
       `|measured_live − measured_batch| ≤ 1e-9`; cancel must leave no partial persistence.**
       High blast radius. Depends on P4, and on P6 for live rules.
-- [ ] **P9** [C] **DFM overlay checks** — courtyard, silk-over-pad, mask sliver/bridge, copper
-      sliver, acute angle. Needs a `drc-context-overlays.ts` extraction: world-transformed graphics,
-      courtyard loop-chaining with a bbox + 0.25 mm fallback, silk strokes and mask apertures built
-      **at Gerber parity** with the writer. Depends on P2, and on P8 for the mask dam.
+- [x] **P9** [C] **DFM overlay checks** — shipped as S12 (2026-09-11, contract 11): sixteen `dfm`
+      codes on the shared artwork model (`src/shared/rendering/pcb/artwork/`, consumed by the Gerber
+      writer AND the checks), per-side courtyard regions, and the copper-shape check. Left for
+      later: a DFM section in the rules dialog (P12), silk-over-silk overlap, courtyard off-board,
+      mask colours / 2 oz bridge rows, a per-board copper-shape budget, `pcb-standards.md`'s
+      qualitative silk placement rules as checks, and splitting the five S12 files that exceed the
+      500-line guideline (`copper-shape-kernel.ts` 1361, `checks/copper-shape.ts` 888,
+      `courtyard-rings.ts` 679, `checks/solder-mask.ts` 671, `checks/silkscreen.ts` 528 — a
+      mechanical split after S12b, not during the reviewed session).
 - [ ] **P12** [I] **Rules and severity UI** — `PcbRulesTableEditor`, severity grid, waiver-comment
       flow, `customFabProfile` editor. The backend contracts (`drcRules`, `drcSeverityOverrides`,
       `customFabProfile`, `diffPairs`) are all persisted and ready to bind. Depends on P3, P6, P7.

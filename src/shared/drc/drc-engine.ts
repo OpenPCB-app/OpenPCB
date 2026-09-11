@@ -11,7 +11,9 @@ import { checkClearance } from "./checks/clearance";
 import { checkConnectivity } from "./checks/connectivity";
 import { checkConstraints } from "./checks/constraints";
 import { checkCopperPour } from "./checks/copper-pour";
+import { checkCopperShape } from "./checks/copper-shape";
 import { checkCopperToHole } from "./checks/copper-to-hole";
+import { checkCourtyard } from "./checks/courtyard";
 import { checkDangling } from "./checks/dangling";
 import { checkElectrical } from "./checks/electrical";
 import { checkSignalIntegrity } from "./checks/signal-integrity";
@@ -21,6 +23,8 @@ import { checkNetClass } from "./checks/netclass";
 import { checkKeepouts } from "./checks/keepouts";
 import { checkOutline } from "./checks/outline";
 import { checkRules } from "./checks/rules";
+import { checkSilkscreen } from "./checks/silkscreen";
+import { checkSolderMask } from "./checks/solder-mask";
 import { checkStructural } from "./checks/structural";
 import { checkZones } from "./checks/zones";
 import { buildDrcContext } from "./drc-context";
@@ -38,7 +42,7 @@ import { computeViolationId } from "./violation-id";
 
 /**
  * DRC engine — pure function over the PCB projection, mirroring `runErc`.
- * Builds an mm-domain context, runs all 17 check groups, then resolves severity
+ * Builds an mm-domain context, runs all 21 check groups, then resolves severity
  * and rule class, assigns stable ids, applies ignore/waive options, and tallies
  * the summary.
  *
@@ -143,6 +147,16 @@ export const DRC_STAGES: ReadonlyArray<
   ["length", checkLength],
   ["board", checkBoard],
   ["keepouts", checkKeepouts],
+  // The DFM overlay stages (DFM contract 11 §7). They follow `keepouts` because
+  // they judge the production layers built ON TOP of the copper model every
+  // stage before them establishes.
+  ["courtyard", checkCourtyard],
+  ["silkscreen", checkSilkscreen],
+  ["solderMask", checkSolderMask],
+  // Copper shape closes the list (DFM contract 11 §7): it is the only stage
+  // that re-derives geometry from the pour, so it runs after every check that
+  // only reads it.
+  ["copperShape", checkCopperShape],
 ];
 
 /**

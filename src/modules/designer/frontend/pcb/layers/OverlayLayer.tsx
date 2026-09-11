@@ -11,6 +11,10 @@ import {
   effectiveRenderOrder,
 } from "../../../../../shared/frontend/canvas/layers";
 import { EDAText } from "../../../../../shared/frontend/canvas/primitives/EDAText";
+// THE one expansion of an overlay shape's stored points (DFM contract 11 §1.2)
+// — the silkscreen artwork model draws the same polyline, so canvas, DRC and
+// the exported legend cannot disagree about what a rect / circle / polygon is.
+import { overlayShapePolyline } from "../../../../../shared/rendering/pcb/artwork/overlay-shapes";
 
 interface OverlayLayerProps {
   texts: ReadonlyArray<PcbOverlayText>;
@@ -140,7 +144,7 @@ function OverlayShapeMesh({
   // share the same path. `polygon` closes back to the first point. `rect`
   // and `circle` expand their 2-point representation to a closed loop.
   const segments = useMemo<Float32Array | null>(() => {
-    const pts = pointsForRender(shape);
+    const pts = overlayShapePolyline(shape);
     if (!pts || pts.length < 2) return null;
     const out: number[] = [];
     for (let i = 0; i < pts.length - 1; i++) {
@@ -158,7 +162,7 @@ function OverlayShapeMesh({
 
   const fillGeom = useMemo<THREE.BufferGeometry | null>(() => {
     if (shape.fill !== "solid") return null;
-    const pts = pointsForRender(shape);
+    const pts = overlayShapePolyline(shape);
     if (!pts || pts.length < 3) return null;
     const path = new THREE.Shape();
     path.moveTo(pts[0]!.x, pts[0]!.y);
@@ -202,61 +206,4 @@ function OverlayShapeMesh({
       </lineSegments>
     </>
   );
-}
-
-/**
- * Expand the stored `pointsMm` into a polyline ready for line-segment + fill
- * geometry. Closed shapes (`rect`, `circle`, `polygon`) loop back to the
- * first point.
- */
-function pointsForRender(
-  shape: PcbOverlayShape,
-): Array<{ x: number; y: number }> | null {
-  const p = shape.pointsMm;
-  if (p.length < 2) return null;
-  switch (shape.kind) {
-    case "line":
-      return [p[0]!, p[1]!];
-    case "polyline":
-      return [...p];
-    case "polygon": {
-      const out = [...p];
-      if (
-        out[0]!.x !== out[out.length - 1]!.x ||
-        out[0]!.y !== out[out.length - 1]!.y
-      ) {
-        out.push(out[0]!);
-      }
-      return out;
-    }
-    case "rect": {
-      const a = p[0]!;
-      const b = p[1]!;
-      return [
-        { x: a.x, y: a.y },
-        { x: b.x, y: a.y },
-        { x: b.x, y: b.y },
-        { x: a.x, y: b.y },
-        { x: a.x, y: a.y },
-      ];
-    }
-    case "circle": {
-      const center = p[0]!;
-      const edge = p[1]!;
-      const dx = edge.x - center.x;
-      const dy = edge.y - center.y;
-      const radius = Math.sqrt(dx * dx + dy * dy);
-      if (radius <= 0) return null;
-      const out: Array<{ x: number; y: number }> = [];
-      const steps = 48;
-      for (let i = 0; i <= steps; i++) {
-        const a = (i / steps) * Math.PI * 2;
-        out.push({
-          x: center.x + Math.cos(a) * radius,
-          y: center.y + Math.sin(a) * radius,
-        });
-      }
-      return out;
-    }
-  }
 }

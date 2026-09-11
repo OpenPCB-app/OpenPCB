@@ -80,4 +80,22 @@ export const EMIT_SITE_BY_CODE: Record<DrcRuleCode, { checks: readonly string[] 
   NPTH_PAD_NET: { checks: ["structural"] },
   DRC_RULE_INVALID: { checks: ["rules"] },
   DRC_RULE_INEFFECTIVE: { checks: ["rules"] },
+  // courtyards / silkscreen / solder mask (DFM contract 11 §2–§4)
+  COURTYARD_OVERLAP: { checks: ["courtyard"] },
+  COURTYARD_INVALID: { checks: ["courtyard"] },
+  SILK_TO_MASK_CLEARANCE: { checks: ["silkscreen"] },
+  SILK_TO_BOARD_EDGE: { checks: ["silkscreen"] },
+  FAB_SILK_CLEARANCE: { checks: ["silkscreen"] },
+  FAB_SILK_WIDTH: { checks: ["silkscreen"] },
+  FAB_SILK_TEXT_HEIGHT: { checks: ["silkscreen"] },
+  MASK_BRIDGE: { checks: ["solder-mask"] },
+  FAB_MASK_BRIDGE: { checks: ["solder-mask"] },
+  MASK_SLIVER: { checks: ["solder-mask"] },
+  FAB_MASK_TO_COPPER: { checks: ["solder-mask"] },
+  // copper shape (DFM contract 11 §5)
+  COPPER_CONNECTION_WIDTH: { checks: ["copper-shape"] },
+  COPPER_SLIVER: { checks: ["copper-shape"] },
+  COPPER_SHAPE_UNCHECKED: { checks: ["copper-shape"] },
+  TRACE_ACUTE_ANGLE: { checks: ["copper-shape"] },
+  TRACE_OVERLAP: { checks: ["copper-shape"] },
 };

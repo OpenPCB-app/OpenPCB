@@ -1,5 +1,3 @@
-import { gerberDim } from "./units";
-
 /**
  * Aperture definitions used by Gerber X2. A layer's aperture table is
  * collected lazily during the layer build (dedup by canonical key)
@@ -28,37 +26,18 @@ import { gerberDim } from "./units";
  * transform many fab front-ends still ignore.
  */
 
-export type ApertureShape =
-  | { kind: "circle"; diameterMm: number }
-  // `rotationDeg` absent (or a multiple of 90°, with the caller's orthogonal
-  // width / height swap already applied) ⇒ today's standard aperture. Any
-  // other angle ⇒ a rotated aperture macro (see the rotation note above).
-  | { kind: "rect"; widthMm: number; heightMm: number; rotationDeg?: number }
-  | { kind: "obround"; widthMm: number; heightMm: number; rotationDeg?: number }
-  | {
-      kind: "roundrect";
-      widthMm: number;
-      heightMm: number;
-      radiusMm: number;
-      rotationDeg?: number;
-    };
+import { gerberDim } from "./units";
+// The aperture SHAPE model moved to `shared/` in S12 (DFM contract 11 §1.3):
+// the mask openings the DFM checks measure and the ones the fab receives are
+// the same objects, so the shape cannot be owned by the export module. This
+// file owns only the D-code table and the Gerber FORMATTING of a shape.
+import {
+  inflateShape,
+  roundrectRadiusMm,
+  type ApertureShape,
+} from "../../../../shared/rendering/pcb/artwork/aperture-shape";
 
-/**
- * THE corner radius of a `roundrect` pad, clamped exactly as the copper ring
- * builder (`pad-outline.ts` `roundRectRing`) and the S11 annular-ring kernel
- * (`pad-annular.ts` `roundrectRadiusMm`) clamp it: a ratio above 0.5 cannot
- * round a corner past the half-width / half-height without eating the pad.
- * The Gerber writer used to apply `ratio · min(w, h)` with NO half-dimension
- * clamp, so for a ratio > 0.5 the artwork was a different shape from the
- * copper DRC judged.
- */
-export function roundrectRadiusMm(
-  widthMm: number,
-  heightMm: number,
-  ratio: number,
-): number {
-  return Math.min(ratio * Math.min(widthMm, heightMm), widthMm / 2, heightMm / 2);
-}
+export { inflateShape, roundrectRadiusMm, type ApertureShape };
 
 /** Normalised CCW rotation of an aperture, in [0, 360). */
 function rotationOf(shape: ApertureShape): number {

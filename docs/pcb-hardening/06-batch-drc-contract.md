@@ -25,7 +25,8 @@ consumes (`src/shared/pcb-connectivity/copper-records.ts`, `src/shared/rendering
 
 Out of scope, with the owning session: live / route parity (S8, `07-live-parity-contract.md`), the broad phase (S9, `08-broad-phase-contract.md`), async
 execution (S10, contract 09), slot / annular / aspect / plating models (S11, contract 10; scoped hole rules stay open), DFM
-overlays, exact-arc geometry and minimum-web checks (S12), electrical thresholds (S13), SI and
+overlays and copper-shape checks (S12, contract 11), exact-arc geometry and polygon pads (S12b),
+electrical thresholds (S13), SI and
 length semantics (S14).
 
 ## 1. The reference-implementation statement
@@ -76,7 +77,7 @@ coordinates); the disc branches that handle them in `checks/board.ts` are defens
 
 ## 3. Check inventory
 
-Seventeen checks run in this order; the report order is canonical (§6), so the order matters
+Twenty-one checks run in this order (four DFM checks joined in S12, contract 11); the report order is canonical (§6), so the order matters
 only for the memoised context (rules and areas first because they contextualise what follows).
 
 | Check | Codes | Items | Kernels | Regime (§5) |
@@ -98,6 +99,10 @@ only for the memoised context (rules and areas first because they contextualise 
 | `length` | `NET_LENGTH_OUT_OF_RANGE` | traces per net, per group (anchor `net` + `lengthGroup`, S7) | `polylineLength` | bare (S14) |
 | `board` | `COPPER_TO_BOARD_EDGE`, `COPPER_OFF_BOARD`, `HOLE_TO_BOARD_EDGE`, `HOLE_OFF_BOARD`, `HOLE_TO_HOLE`, `FAB_HOLE_TO_HOLE` | traces, pads (disc-aware), vias, holes vs the biased region | region kernels, resolver `edgeClearance` / `holeToHole` | clearance for copper edge; minimums for holes |
 | `keepouts` | `KEEPOUT_VIOLATION` | traces, vias, pads (disc-aware), placement extents | `keepoutAffects` (S3a) | open interior |
+| `courtyard` (S12) | `COURTYARD_OVERLAP`, `COURTYARD_INVALID` | per-side courtyard regions (`ctx.placementCourtyard`) | `courtyard-rings.ts`, kernel `intersection` (11 §2) | positive area |
+| `silkscreen` (S12) | `SILK_TO_MASK_CLEARANCE`, `SILK_TO_BOARD_EDGE`, `FAB_SILK_CLEARANCE`, `FAB_SILK_WIDTH`, `FAB_SILK_TEXT_HEIGHT` | the silk artwork × mask openings, board region | `filled-gap.ts` signed gap (11 §3) | clearance / minimums |
+| `solder-mask` (S12) | `MASK_BRIDGE`, `FAB_MASK_BRIDGE`, `MASK_SLIVER`, `FAB_MASK_TO_COPPER` | mask openings × openings / copper incl. pour islands | `filled-gap.ts` (11 §4) | minimums |
+| `copper-shape` (S12, batch-only) | `COPPER_CONNECTION_WIDTH`, `COPPER_SLIVER`, `COPPER_SHAPE_UNCHECKED`, `TRACE_ACUTE_ANGLE`, `TRACE_OVERLAP` | per-(layer, net) copper unions, pour islands, trace segments | `copper-shape-kernel.ts` erosion + bisection (11 §5) | verdict band `(w − 3e-3, w)`; angular `ANGLE_EPS_DEG` |
 
 Every code has exactly one class (`RULE_CLASS_BY_CODE`), one default severity
 (`DEFAULT_SEVERITY_BY_CODE`), one label (`CODE_LABEL`) and at least one registered emitter
@@ -139,7 +144,7 @@ pads of one footprint are a dead short on the board. Symmetric with the hole↔h
 keeps overlapping drills of one footprint. Exception (R1 #4): a pair in which either pad is a
 `custom` / `trapezoid` bounding rectangle (`exactShape === false`) is not judged at all inside a
 footprint — its ring is a declared superset, and a short is non-waivable, so the pre-S7 skip
-stays (trapezoid / custom outlines are S12 — the importer degrades them to rectangles at the source, contract 10 §0). Across footprints such pads keep today's (conservative)
+stays (trapezoid / custom outlines are S12b — the importer degrades them to rectangles at the source, contract 10 §0). Across footprints such pads keep today's (conservative)
 verdicts.
 
 Null-net bridges (S7): the clearance loops record, for every null-net item, each known net whose
@@ -174,7 +179,7 @@ and this table is now the record.)
 
 Every remaining approximation IN A DRC CHECK biases towards false-fail: bounding rectangles for
 `custom` / `trapezoid` pads, the board-inner biased region (≤ `MAX_CHORD_DEVIATION_MM` = 0.01 mm on
-curved edges — the exact-arc second chance is S12), the pour's circumscribed arc samplers. The one
+curved edges — the exact-arc second chance is S12b), the pour's circumscribed arc samplers. The one
 approximation that biases the OTHER way lives in connectivity, not in a check: the circumscribed
 ring of an oval / roundrect pad (≤ 0.2 %·r) can fabricate contact between two same-net pads that
 are physically ≈ 2 µm apart, so `UNCONNECTED_NET` is not raised and — the pads being same-net — no
@@ -236,12 +241,12 @@ default from the projection (05 §8); none re-orders or re-derives.
 - `drillSizeMm`, the pad annular ring and `holeToBoardEdgeMm` read the board minimums directly —
   no scalar kind exists, so no scoped rule can reach them (contract 10 §0 keeps this open).
 - `custom` / `trapezoid` pads are bounding rectangles in every consumer (the importer degrades
-  them to `rect` at the source; S12) — excluded from the intra-footprint short tier (§4).
+  them to `rect` at the source; S12b) — excluded from the intra-footprint short tier (§4).
   Footprint slots, drill offsets and the plating attribute are modelled since S11 (contract 10).
 - A slotted free-pad drill's two widths (`drillMm` and `drillSlot.widthMm`) are one value since
   S11: the store hydrator enforces `drillMm === drillSlot.widthMm` (contract 10 §1.2).
-- A drilled `smd` / `conn` free pad opens the mask on its declared layer only, although its NPTH
-  drill goes through both faces; a `hole` free pad opens both (mask policy, S12).
+- A drilled `smd` / `conn` free pad opens its pad shape on its declared face and, since S12, the
+  drill relief on the far face (`11-dfm-contract.md` §1.3); a `hole` free pad opens both faces.
 - The Gerber writer flashes every pad (copper, mask, paste) from the S1 copper RECORDS since S11
   (contract 10 §6): a non-orthogonal composed rotation becomes a rotated aperture macro, an
   unequal `circle` is a disc of `widthMm` everywhere (10 §7), and a per-layer parity harness
@@ -255,13 +260,13 @@ default from the projection (05 §8); none re-orders or re-derives.
 - Invalid-layer traces are not clamped (§2); the guard is non-waivable.
 - Pour copper is never re-measured against foreign copper (§4).
 - Chained null-net shorts (§4).
-- The exact-arc second chance inside the chord band (S12).
+- The exact-arc second chance inside the chord band (S12b).
 - Via barrel length is absent from length / SI; SI and length comparisons carry no epsilon (S14).
 - Outline-milling advisories are fab-advisory (`custom` fab: none). Cutouts are judged with the
   material OUTSIDE the ring (sharp void corners, parametric holes narrower than the cutter); the
   slot / neck search is side-agnostic, so a narrow material web between two lobes of one cutout
-  also reports `OUTLINE_SLOT_WIDTH` (a minimum-web limit S12 owns). The whole outer outline being
-  narrower than the cutter is not reported (S12). The cutout message names the cutout's id; its
+  also reports `OUTLINE_SLOT_WIDTH` (a board-material minimum-web limit S12b owns). The whole outer
+  outline being narrower than the cutter is not reported (S12b). The cutout message names the cutout's id; its
   ordinal is positional.
 - Rendering / export changes riding on the one free-pad model (release notes): a `std` free pad
   now draws and exports copper on inner layers of a 4+-layer board; a `hole` free pad draws and

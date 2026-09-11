@@ -15,7 +15,13 @@ import { placementMirrorX, transformPadCenterMm } from "./pad-geometry";
 const CIRCLE_SEGMENTS = 48;
 const ARC_SEGMENTS_PER_CORNER = 6;
 
-interface ShapeInput {
+/**
+ * The dimensions a pad ring is built from. Exported because the artwork model
+ * builds a MASK OPENING's ring from the same builders (DFM contract 11 §1.3):
+ * an opening must circumscribe its true shape exactly as a pad ring does, or
+ * the DFM checks would measure a different boundary from the one the fab gets.
+ */
+export interface ShapeInput {
   shape: string;
   widthMm: number;
   heightMm: number;
@@ -108,7 +114,7 @@ function roundRectRing(w: number, h: number, ratio: number): PcbPointMm[] {
 }
 
 /** Build the pad outline centered at the origin, rotated by its own rotationDeg. */
-function shapeRingAroundOrigin(pad: ShapeInput): PcbPointMm[] {
+export function shapeRingAroundOrigin(pad: ShapeInput): PcbPointMm[] {
   const hw = pad.widthMm / 2;
   const hh = pad.heightMm / 2;
   let base: PcbPointMm[];

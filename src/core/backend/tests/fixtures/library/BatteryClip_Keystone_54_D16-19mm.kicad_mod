@@ -1,0 +1,298 @@
+(footprint "BatteryClip_Keystone_54_D16-19mm"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(descr "Battery clip for batteries with a diameter between 16-19 mm: https://www.keyelco.com/product.cfm/product_id/826")
+	(tags "battery clip 18650 18350 17350 CR123A 2/3A")
+	(property "Reference" "REF**"
+		(at 4 -7 0)
+		(layer "F.SilkS")
+		(uuid "f12cc4ae-b163-443a-a849-0bf4af87ac44")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "BatteryClip_Keystone_54_D16-19mm"
+		(at 4 7 0)
+		(layer "F.Fab")
+		(uuid "8a5f0d38-dc52-44b0-8bb6-8d4f4299680b")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "8091c30d-8d03-4ea6-9152-23388a282b42")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "6979a33c-ec62-4117-b0c1-c079a04595d2")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr through_hole)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_line
+		(start -3.78 -4.6)
+		(end -3.78 4.6)
+		(stroke
+			(width 0.12)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "a676f7bf-6b47-4c78-a1bb-5ae57d3e59e8")
+	)
+	(fp_line
+		(start -3.78 4.6)
+		(end -0.28 4.6)
+		(stroke
+			(width 0.12)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "a3467cb4-e7ce-418f-ac48-8e95d40b06dc")
+	)
+	(fp_line
+		(start -0.28 -5.7)
+		(end -0.28 -4.6)
+		(stroke
+			(width 0.12)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "541cdf78-36b7-435e-bb5b-0ae1a7c64069")
+	)
+	(fp_line
+		(start -0.28 -4.6)
+		(end -3.78 -4.6)
+		(stroke
+			(width 0.12)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "87e148ca-6fd2-4576-95ca-4a34593088a3")
+	)
+	(fp_line
+		(start -0.28 4.6)
+		(end -0.28 5.7)
+		(stroke
+			(width 0.12)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "be7e5905-8776-4f0c-bfe2-dbb48b9059fd")
+	)
+	(fp_line
+		(start -0.28 5.7)
+		(end 9.6 5.7)
+		(stroke
+			(width 0.12)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "8b9404ca-4fa5-4144-80a0-d8f3cc187b47")
+	)
+	(fp_line
+		(start 9.6 -5.7)
+		(end -0.28 -5.7)
+		(stroke
+			(width 0.12)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "00b050fc-df8f-4c2c-ba57-d434d13c82e6")
+	)
+	(fp_line
+		(start 9.6 5.7)
+		(end 9.6 -5.7)
+		(stroke
+			(width 0.12)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "9a7f9043-e391-4a78-ba21-b4ed0619db86")
+	)
+	(fp_arc
+		(start -3.78 -1.8)
+		(mid -1.98 0)
+		(end -3.78 1.8)
+		(stroke
+			(width 0.12)
+			(type default)
+		)
+		(layer "F.SilkS")
+		(uuid "34347de4-2e5f-4089-ac5a-a4896d12beef")
+	)
+	(fp_rect
+		(start 9.92 10)
+		(end -4.18 -10)
+		(stroke
+			(width 0.05)
+			(type default)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "b62531b9-691b-4056-b99c-84be0a2405a1")
+	)
+	(fp_line
+		(start -3.6068 -4.445)
+		(end -0.127 -4.445)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.Fab")
+		(uuid "65689bcd-0947-4235-a2bf-f2a19e84b2f8")
+	)
+	(fp_line
+		(start -3.6068 4.445)
+		(end -3.6068 -4.445)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.Fab")
+		(uuid "66696d79-a88f-4f5d-b884-e623cc1857c2")
+	)
+	(fp_line
+		(start -3.6068 4.445)
+		(end -0.127 4.445)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.Fab")
+		(uuid "2ecfbab1-673d-4448-bcf7-8ff0d5438659")
+	)
+	(fp_line
+		(start -0.127 -5.5626)
+		(end -0.127 -4.445)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.Fab")
+		(uuid "b8d89081-efbe-4c3d-a174-ab962ce78820")
+	)
+	(fp_line
+		(start -0.127 -5.5626)
+		(end 9.398 -5.5626)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.Fab")
+		(uuid "e45fa63e-4153-4f12-87a2-a0e28fe9154d")
+	)
+	(fp_line
+		(start -0.127 5.5626)
+		(end -0.127 4.445)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.Fab")
+		(uuid "c1055e5c-4113-448f-96d8-4edcb2715748")
+	)
+	(fp_line
+		(start -0.127 5.5626)
+		(end 9.398 5.5626)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.Fab")
+		(uuid "5d1d523a-566a-4232-8a92-50edd4146a73")
+	)
+	(fp_line
+		(start 9.398 5.5626)
+		(end 9.398 -5.5626)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.Fab")
+		(uuid "779a396d-8ae8-44ee-b8c5-75686806aeab")
+	)
+	(fp_arc
+		(start -3.6068 -1.5748)
+		(mid -2.032 0)
+		(end -3.6068 1.5748)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(layer "F.Fab")
+		(uuid "df7d90a2-cff7-4927-9d69-a440d79fd381")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 3 0 0)
+		(layer "F.Fab")
+		(uuid "1663606a-8f0d-4fb7-b3e5-9340ab0d2209")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" thru_hole circle
+		(at 0 0 180)
+		(size 2.5908 2.5908)
+		(drill 1.8288)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "ddae2572-061a-4a62-8c41-ea5e4b6237a5")
+	)
+	(pad "1" thru_hole circle
+		(at 7.62 -2.54 180)
+		(size 2.5908 2.5908)
+		(drill 1.8288)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "211a1e9f-ad4f-4367-891d-2fb8f2c28c24")
+	)
+	(pad "1" thru_hole circle
+		(at 7.62 2.54 180)
+		(size 2.5908 2.5908)
+		(drill 1.8288)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "999b0ac4-ed5b-4f6f-8fae-ac3c292c2ba5")
+	)
+	(embedded_fonts no)
+	(model "${KICAD10_3DMODEL_DIR}/Battery.3dshapes/BatteryClip_Keystone_54_D16-19mm.step"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+)

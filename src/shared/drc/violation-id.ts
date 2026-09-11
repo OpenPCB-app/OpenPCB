@@ -50,6 +50,10 @@ export function anchorKey(a: DrcAnchor): string {
       return `lg:${escapeStructuralIdSegment(a.groupId)}`;
     case "rule":
       return `r:${escapeStructuralIdSegment(a.ruleId)}`;
+    case "overlayShape":
+      return `os:${escapeStructuralIdSegment(a.shapeId)}`;
+    case "overlayText":
+      return `ot:${escapeStructuralIdSegment(a.textId)}`;
     case "boardEdge":
       return "be";
   }
@@ -95,6 +99,30 @@ const LOCATION_HASHED_CODES = new Set<DrcRuleCode>([
   "OUTLINE_INTERNAL_RADIUS",
   "OUTLINE_SLOT_WIDTH",
   "BOARD_OUTLINE_INVALID",
+  // DFM overlays (DFM contract 11 §7). One placement pair, one silk source or
+  // one opening pair is ONE anchor set, and every one of them can hit at
+  // several distinct spots — two courtyards that overlap in two lobes, a silk
+  // polyline that crosses two edges of one mask opening, a pad pair whose dam
+  // narrows at both ends. Only the location keeps those apart.
+  // COURTYARD_INVALID is deliberately absent: it is one verdict per placement.
+  "COURTYARD_OVERLAP",
+  "SILK_TO_MASK_CLEARANCE",
+  "SILK_TO_BOARD_EDGE",
+  "FAB_SILK_CLEARANCE",
+  "MASK_BRIDGE",
+  "FAB_MASK_BRIDGE",
+  "MASK_SLIVER",
+  "FAB_MASK_TO_COPPER",
+  // Copper shape (DFM contract 11 §7): one net on one layer is ONE anchor, so
+  // only the location keeps two necks / slivers / wedges apart. These are
+  // pour-derived, so an unrelated edit that moves a pour vertex can move a
+  // location across a bucket and re-id a waiver — the mirror image of
+  // ISOLATED_COPPER_ISLAND's choice not to hash, recorded in §10.
+  // COPPER_SHAPE_UNCHECKED is deliberately absent: it is one verdict per unit.
+  "COPPER_CONNECTION_WIDTH",
+  "COPPER_SLIVER",
+  "TRACE_ACUTE_ANGLE",
+  "TRACE_OVERLAP",
 ]);
 
 /** 0.1 mm bucket: same-spot evolution keeps a waiver, a real move expires it. */

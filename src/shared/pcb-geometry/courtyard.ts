@@ -28,13 +28,13 @@ import type { PcbPlacedPart, PcbPointMm } from "../../sdks/designer";
 import {
   arcChordPoints,
   arcSegmentCount,
+  ellipseChordRing,
 } from "./arc-chords";
 import { placementMirrorX, transformPadCenterMm } from "./pad-geometry";
+import { rawPointMm, rawPolyPoints } from "./raw-graphics";
 
 /** Minimum vertices for a polygon the service will accept. */
 const MIN_RING_POINTS = 3;
-/** Arc/circle flattening resolution — enough that the hull is not visibly polygonal. */
-const CIRCLE_SEGMENTS = 16;
 
 type PreviewGraphicLike = {
   kind: string;
@@ -62,13 +62,21 @@ export interface CourtyardOptions {
    * Flatten circles and arcs OUTWARD (circumscribed) so the hull CONTAINS the
    * true curve. The keepout `footprints` extent needs a declared superset of
    * the part (zone/keepout contract §4, §13.1); the cloud snapshot keeps the
-   * plain vertex hull (an inscribed 16-gon / the arc's three defining points),
-   * which undershoots a circle of radius r by r·(1 − cos(π/16)) ≈ 1.9 % and an
-   * arc by its whole bulge.
+   * plain vertex hull (an inscribed S2 chord ring / the arc's three defining
+   * points), which undershoots a circle by at most MAX_CHORD_DEVIATION_MM and
+   * an arc by its whole bulge.
    */
   superset?: boolean;
 }
 
+/**
+ * A circle courtyard as the S2 chord kernel samples it (DFM contract 11 §2.1),
+ * circumscribed iff `superset`. It used to be a fixed 16-gon: an inscribed one
+ * undershoots the true circle by r·(1 − cos(π/16)) ≈ 1.9 % of the radius, and
+ * the circumscribed one overshoots it by r·(sec(π/16) − 1) ≈ 2.0 % — both two
+ * orders of magnitude above the MAX_CHORD_DEVIATION_MM the rest of the geometry
+ * layer promises, on the ONE shape a courtyard most often is.
+ */
 function pushCircle(
   out: PcbPointMm[],
   cx: number,
@@ -77,11 +85,15 @@ function pushCircle(
   superset: boolean,
 ): void {
   if (!Number.isFinite(r) || r <= 0) return;
-  // Circumscribed: vertices at r·sec(π/N) so every edge is tangent to the circle.
-  const rr = superset ? r / Math.cos(Math.PI / CIRCLE_SEGMENTS) : r;
-  for (let i = 0; i < CIRCLE_SEGMENTS; i += 1) {
-    const t = (2 * Math.PI * i) / CIRCLE_SEGMENTS;
-    out.push({ x: cx + rr * Math.cos(t), y: cy + rr * Math.sin(t) });
+  const bias = superset ? "circumscribed" : "inscribed";
+  for (const p of ellipseChordRing(
+    { x: cx, y: cy },
+    r,
+    r,
+    arcSegmentCount(r, 2 * Math.PI, bias),
+    bias,
+  )) {
+    out.push(p);
   }
 }
 
@@ -204,41 +216,56 @@ function isPoint(p: unknown): p is PcbPointMm {
   );
 }
 
-/** Footprint-local points contributed by one RAW (KiCad-parsed) graphic. */
+/**
+ * Footprint-local points contributed by one RAW (KiCad-parsed) graphic.
+ *
+ * Every coordinate goes through `rawPointMm` because the persisted row holds
+ * the PARSER's shape — `start: [x, y]`, `pts: [["xy", x, y], …]` — not
+ * `{ x, y }`. Reading `data.start.x` here returned `undefined` for every real
+ * row, so this whole path produced nothing and the hull silently fell back to
+ * the preview bounds for exactly the footprints it exists to rescue.
+ */
 function rawGraphicPoints(
   graphic: Record<string, any>,
   out: PcbPointMm[],
   superset: boolean,
 ): void {
-  const data = (graphic.data ?? {}) as Record<string, any>;
+  const data = (graphic.data ?? {}) as Record<string, unknown>;
+  const start = rawPointMm(data.start);
+  const end = rawPointMm(data.end);
   switch (graphic.type) {
     case "line":
-      pushPoint(out, data.start?.x, data.start?.y);
-      pushPoint(out, data.end?.x, data.end?.y);
+      if (start) out.push(start);
+      if (end) out.push(end);
       return;
     case "rect":
-      if (data.start && data.end) {
-        pushPoint(out, data.start.x, data.start.y);
-        pushPoint(out, data.end.x, data.start.y);
-        pushPoint(out, data.end.x, data.end.y);
-        pushPoint(out, data.start.x, data.end.y);
+      if (start && end) {
+        out.push({ x: start.x, y: start.y });
+        out.push({ x: end.x, y: start.y });
+        out.push({ x: end.x, y: end.y });
+        out.push({ x: start.x, y: end.y });
       }
       return;
-    case "circle":
-      if (data.center && data.end) {
-        const r = Math.hypot(data.end.x - data.center.x, data.end.y - data.center.y);
-        pushCircle(out, data.center.x, data.center.y, r, superset);
+    case "circle": {
+      const center = rawPointMm(data.center);
+      if (center && end) {
+        pushCircle(
+          out,
+          center.x,
+          center.y,
+          Math.hypot(end.x - center.x, end.y - center.y),
+          superset,
+        );
       }
       return;
-    case "arc":
-      if (isPoint(data.start) && isPoint(data.mid) && isPoint(data.end)) {
-        pushArc3(out, data.start, data.mid, data.end, superset);
-      }
+    }
+    case "arc": {
+      const mid = rawPointMm(data.mid);
+      if (start && mid && end) pushArc3(out, start, mid, end, superset);
       return;
+    }
     case "poly":
-      if (Array.isArray(data.points)) {
-        for (const p of data.points) pushPoint(out, p?.x, p?.y);
-      }
+      for (const p of rawPolyPoints(data)) out.push(p);
       return;
     default:
       return;

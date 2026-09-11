@@ -1,7 +1,7 @@
 {
  "summary": {
   "errors": 35,
-  "warnings": 49,
+  "warnings": 52,
   "infos": 0
  },
  "countsByCode": {
@@ -19,6 +19,8 @@
   "FAB_CLEARANCE": 1,
   "FAB_DRILL": 2,
   "FAB_HOLE_TO_HOLE": 1,
+  "FAB_MASK_BRIDGE": 1,
+  "FAB_MASK_TO_COPPER": 2,
   "FAB_PAD": 1,
   "HOLE_TO_HOLE": 1,
   "ISOLATED_COPPER_ISLAND": 2,
@@ -66,6 +68,9 @@
   "FAB_DRILL-v2-140db8a0e6f92ddb",
   "FAB_DRILL-v2-3f3d534fb4b6e22b",
   "FAB_HOLE_TO_HOLE-v2-034398319f92d052",
+  "FAB_MASK_BRIDGE-v2-33d2e81b36e86007",
+  "FAB_MASK_TO_COPPER-v2-42ef456f4be13020",
+  "FAB_MASK_TO_COPPER-v2-c6d6eef1a2a8fb37",
   "FAB_PAD-v2-ce6735212192105a",
   "HOLE_TO_HOLE-v2-4204773b26e6f0f2",
   "ISOLATED_COPPER_ISLAND-v2-afe2945b91030677",

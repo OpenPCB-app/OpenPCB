@@ -529,6 +529,11 @@ degenerate outlines silently produced nonsense edge-clearance results.
 
 P5 resurrected it as `checks/outline.ts` (area, self-intersection, arcs, cutouts).
 
+The same shape recurred with a preset field: `PcbFabPreset.maskDamMm` (0.1 on every preset,
+"minimum solder-mask dam") was declared and never read by any check until S12 gave it its
+emitter, `checks/solder-mask.ts` (`FAB_MASK_BRIDGE`). A declared constant with no consumer is
+the same false comfort as a declared code with no emit site — grep for the READ, not the field.
+
 Record this because the failure mode is recurrent and invisible: a declared rule code with a
 label and no emit site looks implemented from every direction except a grep for its emit. When
 adding a code, add the emit and a test in the same change.
@@ -692,24 +697,33 @@ Length matching shipped separately and in-flight as `checks/length.ts`
 (`NET_LENGTH_OUT_OF_RANGE`, `PcbBoardSettings.lengthMatchGroups`, behind the `pcb.lengthTuning`
 flag) and was adopted as-is; diff-pair skew reconciles against its `lengthByNet`.
 
-## 6.8 DFM parameters
+## 6.8 DFM parameters — shipped in S12 (2026-09-11, `docs/pcb-hardening/11-dfm-contract.md`)
 
-| Parameter | Value |
-|---|---|
-| Courtyard fallback when none authored | Footprint bbox + **0.25 mm** |
-| `designRules.silkscreen.silkToMaskClearanceMm` | 0 |
-| `designRules.silkscreen.silkToBoardEdgeMm` | 0.15 |
-| `sliverWidthMm` | 0.1 |
-| `clearance.holeToBoardEdgeMm` | 0.3 |
-| Acute-angle threshold | < 90° |
+The values below were a specification until S12; they are now the defaults of the optional
+`designRules.silkscreen` / `solderMask` / `dfm` sub-objects (contract 11 §6) and the fab rows of
+`fab-presets.ts` (every row with its URL and fetch date).
 
-**Parity requirement:** silk strokes and mask apertures consumed by DFM checks must be built at
-**Gerber parity** — the same geometry the Gerber writer emits, from the writer's own stroke and
-aperture paths. A check that models silk differently from the exported artwork will disagree with
-the fab.
+| Parameter | Value | Where |
+|---|---|---|
+| `dfm.courtyardFallbackMm` (no authored courtyard: `preview.bounds` or the pad box, inflated) | **0.25 mm** (IPC-7351B level B) | contract 11 §2.1 |
+| `silkscreen.silkToMaskClearanceMm` | 0 (only true penetration reports) | §3 |
+| `silkscreen.silkToBoardEdgeMm` | 0.15 | §3 |
+| `solderMask.minBridgeMm` | absent — the fab row `maskDamMm` judges (JLCPCB 0.10 green 1 oz, PCBWay 0.1016) | §4 |
+| `dfm.sliverWidthMm` | 0.1, capped by `minimums.traceWidthMm` | §5.1 |
+| `dfm.sliverMinLengthMm` | 0.2 | §5.4 |
+| `clearance.holeToBoardEdgeMm` | 0.3 (pre-existing) | — |
+| `dfm.acuteAngleDeg` | 90 (`θ < 90 − 1e-6°` reports; collinear junctions are `TRACE_OVERLAP`'s) | §5.6 |
 
-Copper sliver and connection-width checks run a Clipper opening over memoized pour paths, cover
-pours only in v1, and exempt hatched fills.
+**Parity is by construction, not by discipline:** the silk strokes and mask openings the DFM
+checks judge come from `src/shared/rendering/pcb/artwork/` — the same model the Gerber writer
+emits (`gerber-silk-parity.test.ts` proves the legend and mask files equal the model 1:1). The
+writer no longer owns any silk or mask geometry.
+
+Copper connection width is judged on the EROSION of the per-(layer, net) copper union (pads,
+traces, vias and pour islands together; the opening cannot see a neck shorter than the disc
+reach — contract 11 §5.2), necks are located by bisection on the erosion radius, and slivers are
+thickness-classified residuals of the opening. Pours-only v1 and the hatched-fill exemption are
+superseded (hatched fills import as solid since S3a).
 
 ## 6.9 Via-span topology
 

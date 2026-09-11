@@ -79,11 +79,30 @@ export class CopperKernelError extends Error {
 }
 
 let warned = false;
+let quiet = 0;
+
+/**
+ * Run `fn` with the one-shot `console.warn` suppressed. For a caller that
+ * CONVERTS a `CopperKernelError` into a reported verdict — the copper-shape
+ * check's `COPPER_SHAPE_UNCHECKED` (DFM contract 11 §5.5) — the throw is an
+ * answer, not a surprise, and warning about it trains the reader to ignore the
+ * pour's genuine one. The `warned` latch is untouched, so a later pour failure
+ * still gets its single warning.
+ */
+export function runKernelQuietly<T>(fn: () => T): T {
+  quiet += 1;
+  try {
+    return fn();
+  } finally {
+    quiet -= 1;
+  }
+}
+
 function runOp<T>(op: string, fn: () => T): T {
   try {
     return fn();
   } catch (error) {
-    if (!warned) {
+    if (!warned && quiet === 0) {
       warned = true;
       console.warn(`[copper-kernel] ${op} failed`, error);
     }
@@ -134,6 +153,75 @@ function offset(paths: PathsD, deltaMm: number, joinType: JoinType): PathsD {
 /** Inflate/deflate rounding the corners it creates (convex on +δ). */
 export function offsetRound(paths: PathsD, deltaMm: number): PathsD {
   return offset(paths, deltaMm, JoinType.Round);
+}
+
+/**
+ * Round offset at a CALLER-CHOSEN arc tolerance (DFM contract 11 §5.2). The
+ * pour's {@link ARC_TOLERANCE_MM} (0.005 mm) turns the round join at a ~0.05 mm
+ * erosion radius into a 7-gon — far too coarse to decide a 0.1 mm connection
+ * width — and lowering the pour's constant would re-bake every pour golden. So
+ * the copper-shape kernel gets its own tolerance and shares everything else:
+ * the 0.1 µm grid, the miter limit and the fail-closed {@link runOp}.
+ */
+function offsetRoundAt(
+  paths: PathsD,
+  deltaMm: number,
+  arcToleranceMm: number,
+): PathsD {
+  if (paths.length === 0 || deltaMm === 0) return paths;
+  return runOp("offset", () =>
+    inflatePathsD(
+      paths,
+      deltaMm,
+      JoinType.Round,
+      EndType.Polygon,
+      MITER_LIMIT,
+      PRECISION,
+      arcToleranceMm,
+    ),
+  );
+}
+
+/**
+ * `E(r) = offset(paths, −r)` with round joins at `arcToleranceMm` (DFM contract
+ * 11 §5.2). A non-positive radius is the identity — an erosion by nothing.
+ */
+export function erodeWithTolerance(
+  paths: PathsD,
+  radiusMm: number,
+  arcToleranceMm: number,
+): PathsD {
+  if (radiusMm <= 0) return paths;
+  return offsetRoundAt(paths, -radiusMm, arcToleranceMm);
+}
+
+/** The dilation half of the morphological opening (DFM contract 11 §5.4). */
+export function dilateWithTolerance(
+  paths: PathsD,
+  radiusMm: number,
+  arcToleranceMm: number,
+): PathsD {
+  if (radiusMm <= 0) return paths;
+  return offsetRoundAt(paths, radiusMm, arcToleranceMm);
+}
+
+/**
+ * Total boundary length (mm) of a flat ring set — EVERY ring, holes included
+ * (DFM contract 11 §5.4: for an annulus `2·area/perimeter` is then exactly the
+ * radial thickness). Rings are open; the closing edge is counted.
+ */
+export function perimeter(paths: PathsD): number {
+  let total = 0;
+  for (const ring of paths) {
+    const n = ring.length;
+    if (n < 2) continue;
+    for (let i = 0; i < n; i += 1) {
+      const a = ring[i]!;
+      const b = ring[(i + 1) % n]!;
+      total += Math.hypot(b.x - a.x, b.y - a.y);
+    }
+  }
+  return total;
 }
 
 /** Inflate/deflate chamfering corners — KiCad's min-thickness deflate join. */

@@ -229,7 +229,14 @@ describe("runDrcOnWorker — progress", () => {
       { projection: census.projection, rawFootprints: null },
       { onProgress: (frame) => frames.push(frame) },
     );
-    const stages = frames.filter((f) => f.stage !== "pour");
+    // `pour` and `copperShape` are per-ITEM stages (09 §6, DFM contract 11
+    // §5.5): they post a frame per zone / per unit and per erosion on top of
+    // their stage checkpoint. Collapsing a contiguous run of one stage keeps
+    // this a test of the stage WALK, which is what it is named for — the stage
+    // checkpoint is always the first frame of its run.
+    const stages = frames
+      .filter((f) => f.stage !== "pour" && f.stage !== "copperShapeUnit")
+      .filter((f, i, all) => i === 0 || all[i - 1]!.stage !== f.stage);
     expect(stages.map((f) => f.stage)).toEqual(
       DRC_STAGES.map(([stage]) => stage),
     );

@@ -131,3 +131,20 @@ which asserts the code, its `RULE_CLASS_BY_CODE` entry (`"structural"`), its
 default severity (`"error"`) and its `NON_OVERRIDABLE` membership without
 needing to hack the fill kernel into failing. `drc-census.test.ts` lists this
 as the sole, justified corpus exception.
+
+## S12 — DFM overlay hits on pre-existing geometry (contract 11)
+
+Re-baselined 2026-09-11 for the S12 solder-mask check; no fixture change. Every hit is a new
+code firing on geometry that was already in the fixture:
+
+- `FAB_MASK_BRIDGE` +1 — `P_SHORT` pads 1 and 2 are 0.4 mm apart, so their 0.075 mm-expanded
+  openings OVERLAP: different nets, both copper ⇒ a bridge with `measuredMm 0` ("openings
+  overlap — no dam"; JLCPCB dam 0.10 mm, contract 11 §4).
+- `FAB_MASK_TO_COPPER` +2 — `P_PV`'s opening reaches x = 18.575 while via `v_pv`'s copper starts
+  at 18.55 (the via does NOT touch the pad, gap 0.05 mm, so it is not the opening's own copper);
+  `P_CLR`'s opening sits 0.075 mm from trace `t_clr_a` (JLCPCB "keep 0.09 mm between soldermask
+  openings and neighbouring traces").
+- Astra run 2 fold (2026-09-11): the `P_SHORT` bridge's witness moved from (22.375, −1.575) to
+  (21.625, −1.575) — same code, count, anchors and `measuredMm 0`; `ringGapToRing` now breaks a
+  witness tie on the smaller `(x, y)` instead of the operand order (the fix for a pad-reversal
+  non-determinism), so the id moved to the other corner of the same overlap.

@@ -95,3 +95,11 @@ importer degrades them to a rectangle at the source and S12 owns their fidelity
 Expected of a board with unrouted copper, not part of this fixture's contract:
 `TRACK_DANGLING` x 9 (every trace has free ends) and `VIA_DANGLING` x 5 (no via
 lands on copper).
+
+## S12 — DFM overlay hits on pre-existing geometry (contract 11)
+
+Re-baselined 2026-09-11 for the S12 solder-mask check; no fixture change:
+
+- `FAB_MASK_TO_COPPER` +1 — `MH1` is a copper-less NPTH pad: its drill relief carries no owner
+  (`ownerKey` null), so it exempts no copper, and trace `t_hole` runs 0.021 mm from the relief's
+  edge — below JLCPCB's 0.09 mm opening-to-trace row (contract 11 §4).

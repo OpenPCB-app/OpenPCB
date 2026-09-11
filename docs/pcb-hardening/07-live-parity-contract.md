@@ -21,7 +21,7 @@ In scope: `src/shared/drc/` (the relocated engine, `legality.ts`, `fab-presets.t
 
 Out of scope, with the owning session: routing algorithms, walkaround, auto-finish, pull-tight,
 board-edge / cutout obstacles (S16), tune / bundle / diff-pair geometry (S17), the batch broad
-phase (S9), async execution / B5-SYNC (S10, contract 09), slot / annular / plating models (S11, contract 10 — `VIA_TYPE_UNSUPPORTED` joined the live REPORTED set, not the refuse set), DFM (S12),
+phase (S9), async execution / B5-SYNC (S10, contract 09), slot / annular / plating models (S11, contract 10 — `VIA_TYPE_UNSUPPORTED` joined the live REPORTED set, not the refuse set), DFM overlays and copper shape (S12, contract 11 — batch-only: `DRC_STAGES` is not the live path and none of the sixteen codes joins `LIVE_CODES`),
 electrical (S13), SI / length (S14), part-move / free-pad legality (none scheduled — batch reports).
 
 ## 1. The parity statement

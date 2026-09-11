@@ -38,7 +38,7 @@ const goldens = readdirSync(GOLDEN_DIR)
     ),
   }));
 
-const EXPECTED_STAGES: readonly Exclude<DrcStage, "pour">[] = [
+const EXPECTED_STAGES: readonly Exclude<DrcStage, "pour" | "copperShapeUnit">[] = [
   "rules",
   "outline",
   "zones",
@@ -56,7 +56,19 @@ const EXPECTED_STAGES: readonly Exclude<DrcStage, "pour">[] = [
   "length",
   "board",
   "keepouts",
+  "courtyard",
+  "silkscreen",
+  "solderMask",
+  "copperShape",
 ];
+
+/**
+ * Every engine stage ticks exactly once by name. The two per-ITEM checkpoints
+ * (`pour` per zone, 09 §6; `copperShapeUnit` per copper unit, DFM contract 11
+ * §5.5) carry their own stage labels, so a name filter separates them from the
+ * stage ticks and the surviving indices stay contiguous.
+ */
+const TICKED_STAGES = EXPECTED_STAGES;
 
 interface TickRecord {
   stage: DrcStage;
@@ -99,20 +111,28 @@ describe("DRC_STAGES", () => {
       "checkLength",
       "checkBoard",
       "checkKeepouts",
+      "checkCourtyard",
+      "checkSilkscreen",
+      "checkSolderMask",
+      "checkCopperShape",
     ]);
   });
 });
 
 describe("tick — stage checkpoints", () => {
-  test("every golden ticks the 17 stages in order with a non-decreasing draft count", () => {
+  test("every golden ticks the 21 stages in order with a non-decreasing draft count", () => {
     expect(goldens.length).toBeGreaterThanOrEqual(6);
     for (const { name, projection } of goldens) {
       const { tick, ticks } = recordingTick();
       runDrc(projection, { tick });
-      const stageTicks = ticks.filter((t) => t.stage !== "pour");
-      expect(stageTicks.map((t) => t.stage)).toEqual([...EXPECTED_STAGES]);
+      // `pour` and `copperShape` are per-ITEM stages (09 §6, 11 §5.5): they
+      // tick once per zone / per unit as well as once for the stage.
+      const stageTicks = ticks.filter(
+        (t) => t.stage !== "pour" && t.stage !== "copperShapeUnit",
+      );
+      expect(stageTicks.map((t) => t.stage)).toEqual([...TICKED_STAGES]);
       expect(stageTicks.map((t) => t.index)).toEqual(
-        EXPECTED_STAGES.map((_, i) => i),
+        TICKED_STAGES.map((_, i) => i),
       );
       expect(stageTicks.every((t) => t.total === EXPECTED_STAGES.length)).toBe(
         true,
@@ -157,9 +177,10 @@ describe("tick — stage checkpoints", () => {
     const { tick, ticks } = recordingTick();
     runDrc(projection, { tick });
     expect(ticks.some((t) => t.stage === "pour")).toBe(false);
-    expect(ticks.filter((t) => t.stage !== "pour").length).toBe(
-      EXPECTED_STAGES.length,
-    );
+    expect(
+      ticks.filter((t) => t.stage !== "pour" && t.stage !== "copperShapeUnit")
+        .length,
+    ).toBe(TICKED_STAGES.length);
   });
 });
 
@@ -185,19 +206,21 @@ describe("tick — results-neutral", () => {
 describe("tick — cancellation", () => {
   test("a tick that throws at stage k abandons the run with that error", () => {
     const census = goldens.find((g) => g.name === "golden-census-2l")!;
-    for (const k of [0, 7, 16]) {
+    for (const k of [0, 7, 16, 19]) {
       const seen: DrcStage[] = [];
       const tick: DrcTick = (stage, index) => {
         seen.push(stage);
-        if (stage !== "pour" && index === k) throw new DrcCancelledError();
+        if (stage !== "pour" && stage !== "copperShapeUnit" && index === k) {
+          throw new DrcCancelledError();
+        }
       };
       expect(() => runDrc(census.projection, { tick })).toThrow(
         DrcCancelledError,
       );
       // Nothing after stage k ran.
-      expect(seen.filter((s) => s !== "pour")).toEqual(
-        EXPECTED_STAGES.slice(0, k + 1),
-      );
+      expect(
+        seen.filter((s) => s !== "pour" && s !== "copperShapeUnit"),
+      ).toEqual(TICKED_STAGES.slice(0, k + 1));
     }
   });
 

@@ -84,8 +84,38 @@ export interface PcbFabPreset {
   /** Copper-to-board-edge minimums (mm): routed edge / V-cut edge. */
   boardEdgeRoutedMm: number;
   boardEdgeVcutMm: number;
-  /** Minimum solder-mask dam between openings (mm, 1 oz). */
+  /**
+   * Minimum solder-mask dam between openings (mm).
+   * JLCPCB "Min. Solder Mask Dam 0.10mm" for green / red / yellow / blue /
+   * purple at 1 oz — the page states 0.13 mm for black / white and 0.20 mm at
+   * 2 oz, neither of which this preset models (DFM contract 11 §10); PCBWay
+   * "Min. solder mask bridge 4mil (0.1016mm)" (green, < 2 oz, normal
+   * difficulty) — today's 0.1 was unsourced. Fetched 2026-09-10.
+   */
   maskDamMm: number;
+  /**
+   * Minimum silkscreen-to-PAD distance (mm). JLCPCB "The Minimum Distance
+   * Between Pad and Silkscreen is 0.15mm"; PCBWay states no such row, so the
+   * field is ABSENT there and no verdict is reached. Fetched 2026-09-10.
+   */
+  silkToMaskMm?: number;
+  /**
+   * Minimum silkscreen LINE width (mm). JLCPCB "Min. Silkscreen Width 0.15mm";
+   * PCBWay "Min. silkscreen line width 0.15mm". Fetched 2026-09-10.
+   */
+  minSilkLineWidthMm: number;
+  /**
+   * Minimum silkscreen TEXT height (mm). JLCPCB "Min. Silkscreen Text Height
+   * 1mm"; PCBWay "Min. character height 0.8mm". Fetched 2026-09-10.
+   */
+  minSilkTextHeightMm: number;
+  /**
+   * Minimum distance from a solder-mask opening to NEIGHBOURING copper (mm).
+   * JLCPCB "Keep at least 0.09mm clearance between soldermask openings and
+   * neighboring traces"; PCBWay states no row, so it is ABSENT there.
+   * Fetched 2026-09-10.
+   */
+  maskToCopperMm?: number;
   /**
    * Milling limits for the board outline / cutouts. A routed internal (concave)
    * corner can't be sharper than the router-bit radius, and a slot / neck can't
@@ -116,6 +146,10 @@ export const FAB_PRESETS: Record<PcbFabPreset["id"], PcbFabPreset> = {
     boardEdgeRoutedMm: 0.2,
     boardEdgeVcutMm: 0.4,
     maskDamMm: 0.1,
+    silkToMaskMm: 0.15,
+    minSilkLineWidthMm: 0.15,
+    minSilkTextHeightMm: 1.0,
+    maskToCopperMm: 0.09,
     minInternalRadiusMm: 0.8,
     minSlotWidthMm: 1.0,
   },
@@ -139,6 +173,10 @@ export const FAB_PRESETS: Record<PcbFabPreset["id"], PcbFabPreset> = {
     boardEdgeRoutedMm: 0.2,
     boardEdgeVcutMm: 0.4,
     maskDamMm: 0.1,
+    silkToMaskMm: 0.15,
+    minSilkLineWidthMm: 0.15,
+    minSilkTextHeightMm: 1.0,
+    maskToCopperMm: 0.09,
     minInternalRadiusMm: 0.8,
     minSlotWidthMm: 1.0,
   },
@@ -161,7 +199,9 @@ export const FAB_PRESETS: Record<PcbFabPreset["id"], PcbFabPreset> = {
     holeToHolePthMm: 0.45,
     boardEdgeRoutedMm: 0.3,
     boardEdgeVcutMm: 0.4,
-    maskDamMm: 0.1,
+    maskDamMm: 0.1016,
+    minSilkLineWidthMm: 0.15,
+    minSilkTextHeightMm: 0.8,
     minInternalRadiusMm: 0.8,
     minSlotWidthMm: 1.0,
   },
@@ -183,7 +223,9 @@ export const FAB_PRESETS: Record<PcbFabPreset["id"], PcbFabPreset> = {
     holeToHolePthMm: 0.45,
     boardEdgeRoutedMm: 0.2,
     boardEdgeVcutMm: 0.4,
-    maskDamMm: 0.1,
+    maskDamMm: 0.1016,
+    minSilkLineWidthMm: 0.15,
+    minSilkTextHeightMm: 0.8,
     minInternalRadiusMm: 0.5,
     minSlotWidthMm: 0.8,
   },

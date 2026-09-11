@@ -12,7 +12,7 @@ The question this session answers once, for every consumer:
 
 Scope: segment predicates, arc flattening, the board region, containment and overlap tests, and
 the DRC checks that consume them (`checks/board.ts`, `checks/outline.ts`). Out of scope: spatial
-indexing (S9), copper-fill extent (S5, consumes this region), Gerber true arcs (S12), route
+indexing (S9), copper-fill extent (S5, consumes this region), Gerber true arcs (S12b), route
 obstacles and live DRC (S8 — `07-live-parity-contract.md`; edge / cutout obstacles S16), exact-disc clearance for circular pads (S7).
 
 Decisions taken with the user before this contract was written: off-board is judged on **copper
@@ -123,7 +123,7 @@ promises. Every arc emits the exact end point; the start point belongs to the pr
   shorter-radius endpoint cuts back inside the circle. Default flattening keeps the start radius
   and the exact end point as before. Features finer than the residual chord error at the cap are
   below any manufacturable web and are not resolvable by a polygonal model; certifying them needs
-  exact arc predicates (S12).
+  exact arc predicates (S12b — S12 re-owned the exact-arc set, `11-dfm-contract.md` §0).
 
 Two flattening fixes ride along: `roundRectPoints` no longer emits a duplicate vertex when the
 corner radius equals half the width or height (the natural rounded-slot shape produced a
@@ -252,7 +252,8 @@ manufacturable lives there.
 Accepted false-positive band: near an arc, the biased region is up to `MAX_CHORD_DEVIATION_MM`
 inside the true board, so copper exactly tangent to a curved edge can be reported off-board or
 short of clearance by that much. This is the price of one polygonal model; the exact second-chance
-test inside the band is deferred to S12 (user decision 2026-09-08, S7) and recorded as a limit in
+test inside the band is deferred to S12b (user decision 2026-09-08, S7; re-owned from S12 on
+2026-09-10) and recorded as a limit in
 `06-batch-drc-contract.md` §5.
 
 `pointInOutline` survives for the frontend resize warning, implemented on
@@ -263,7 +264,7 @@ Later consumers, recorded here so they do not re-derive geometry: S5 builds the 
 `buildBoardRegion`; S7 adopted the exact disc for circular pads in the edge, clearance, keepout and
 creepage checks and made `COPPER_TO_BOARD_EDGE.measuredMm` signed (negative when the copper is not
 inside the region); S8 made the live gate judge edge / off-board through the same region (`boardItems`); S16 gives the router board-edge and cutout obstacles from the same
-region; S12 decides whether Gerber emits true arcs, adds exact-arc contour validity, and owns the
+region; S12b decides whether Gerber emits true arcs, adds exact-arc contour validity, and owns the
 minimum-web / connected-material checks that outline validity does not make (`findNarrowestSlot`).
 
 ## 7. Divergences kept and documented
@@ -273,7 +274,7 @@ minimum-web / connected-material checks that outline validity does not make (`fi
 | `pad-outline.ts` `arc` / `ellipseRing` | pad arcs circumscribed by pushing both endpoints out, fixed 48/6 chords; conservative for clearance and connectivity, moving them shifts every pad ring by micrometres | S7 resolved the CIRCLE case without touching the sampler: every DRC check consumes the record's exact `disc` (`drc/pair-gap.ts`); ovals / roundrects keep the circumscribed ring for clearance and connectivity — the ANNULAR RING never reads it (S11 judges the ring on analytic signed distances, `pcb-geometry/pad-annular.ts`, contract 10 §3); exact arcs for clearance stay a recorded limit (S12) |
 | `pcb-routing/collision.ts` `segmentIntersectsRectNm` | nm domain, Liang–Barsky, open interior (boundary contact legal); already uses the clipped-midpoint technique of §5 | S8 named the convention (`07-live-parity-contract.md` §5): an obstacle rect is an outward-rounded superset of `item ⊕ max(required, implicit, SHORT_EPS + 1 nm)`, so boundary contact is always legal under `clearanceViolated` and above the inclusive short threshold; the verdict stays with the gate |
 | copper-fill `addArc`, `buildTraceSegmentStadium`, `buildDiscRing` (`VIA_MAX_ERROR_MM = 0.005`), `padDisc` | fixed-count inscribed samplers and a second chord tolerance; `padDisc` duplicates the S1 disc predicate | S5 |
-| `courtyard.ts` `pushCircle` | 16-chord inscribed hull | S12 |
+| `courtyard.ts` `pushCircle` | S12: `ellipseChordRing` at the S2 count, circumscribed under `superset` (the 16-gon is gone) | closed |
 | `computeOutlineBboxMm` | boxes the inscribed ring (≤ 0.01 mm under-report at a bulge); feeds only the cached width/height | documented |
 | `pcb-trace-geometry.ts` path validators (`simplifyCollinearPath`, `validate45Path`) | exact comparisons, no epsilon | S16 |
 | KiCad `tessellateArcChords` (16), DXF `pushEllipse`, SVG `arcToSvgPath` | import / preview fidelity | out of program |
