@@ -130,6 +130,7 @@ import {
 } from "../rendering/copper-fill/copper-shape-kernel";
 import { boundsOfPoints } from "../pcb-geometry/region-rings";
 import type { RingBounds } from "../pcb-geometry/pad-outline";
+import type { RoundedShape } from "../pcb-geometry/rounded-shape-types";
 import type { Point } from "../pcb-geometry/pcb-trace-geometry";
 
 /** Default minimums when a (pre-DRC) board lacks the optional rule field. */
@@ -174,6 +175,14 @@ export interface DrcPad {
    * non-circular pad.
    */
   disc?: { center: PcbPointMm; radiusMm: number };
+  /**
+   * The pad's EXACT copper — a convex core ⊕ a disc — carried straight from the
+   * copper record (exact-geometry contract 12 §1.1). Every pad gap in
+   * `pair-gap.ts` is measured on this, so an oval's or roundrect's
+   * circumscribed `ring` no longer costs a ≤ 0.86 %·r false-fail band. `disc`
+   * is the same shape with a one-point core and stays for its other readers.
+   */
+  rounded: RoundedShape;
   /**
    * False for a `custom` / `trapezoid` pad, whose `ring` is a bounding
    * rectangle: a declared superset the clearance tiers may over-report on but
@@ -602,25 +611,37 @@ export function itemsFromRecords(
   // Clamp-with-fallback (audit B5-VIA-MASK, symmetric with vias): an
   // invalid-layer pad is checked on ALL valid copper layers so its copper
   // still collides with everything until repaired — never masks a short.
-  const pads: DrcPad[] = records.pads.map((p) => ({
-    anchor: padAnchor(p.anchor),
-    key: padRecordKey(p),
-    netId: p.netId,
-    layers: p.declaredLayerInvalid
-      ? [...validCopperLayers]
-      : [...p.resolvedLayers],
-    ring: p.ring.map((v) => ({ x: v.x, y: v.y })),
-    bounds: { ...p.bounds },
-    center: { ...p.center },
-    // Copied, not aliased — same reason as every other field here: a check that
-    // mutated it in place would corrupt the connectivity records.
-    ...(p.disc
-      ? { disc: { center: { ...p.disc.center }, radiusMm: p.disc.radiusMm } }
-      : {}),
-    exactShape: p.exactShape,
-    declaredLayerInvalid: p.declaredLayerInvalid,
-    plated: p.plated,
-  }));
+  const pads: DrcPad[] = records.pads.map((p) => {
+    const ring = p.ring.map((v) => ({ x: v.x, y: v.y }));
+    return {
+      anchor: padAnchor(p.anchor),
+      key: padRecordKey(p),
+      netId: p.netId,
+      layers: p.declaredLayerInvalid
+        ? [...validCopperLayers]
+        : [...p.resolvedLayers],
+      ring,
+      bounds: { ...p.bounds },
+      center: { ...p.center },
+      // Copied, not aliased — same reason as every other field here: a check
+      // that mutated it in place would corrupt the connectivity records. A
+      // `rect` / `trapezoid` / `custom` core IS the ring (12 §1.1), so it
+      // shares this copy rather than allocating a second identical array.
+      ...(p.disc
+        ? { disc: { center: { ...p.disc.center }, radiusMm: p.disc.radiusMm } }
+        : {}),
+      rounded: {
+        core:
+          p.rounded.core === p.ring
+            ? ring
+            : p.rounded.core.map((v) => ({ x: v.x, y: v.y })),
+        radiusMm: p.rounded.radiusMm,
+      },
+      exactShape: p.exactShape,
+      declaredLayerInvalid: p.declaredLayerInvalid,
+      plated: p.plated,
+    };
+  });
 
   // Holes are derived from the DRILLED OBJECTS, never from the copper records
   // (contract 10 §1.3): a drilled pad yields exactly one hole whether it has
@@ -1056,7 +1077,15 @@ export function buildDrcItems(
     },
   };
   legality.outlineDrafts = outlineProblems(legality);
-  legality.outlineInvalid = legality.outlineDrafts.length > 0;
+  // ONLY a `BOARD_OUTLINE_INVALID` draft makes the outline invalid. The list
+  // also carries the exact layer's `OUTLINE_WEB_UNCHECKED` note (12 §3), and
+  // counting that as an invalid outline would make the commit gate DOWNGRADE
+  // `COPPER_OFF_BOARD` / `COPPER_TO_BOARD_EDGE` to "report" on a perfectly valid
+  // board (07 §6 reserves that for an outline rerouting cannot fix) — an
+  // off-board commit would be allowed (R2 #1).
+  legality.outlineInvalid = legality.outlineDrafts.some(
+    (d) => d.code === "BOARD_OUTLINE_INVALID",
+  );
   return legality;
 }
 

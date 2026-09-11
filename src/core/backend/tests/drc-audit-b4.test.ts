@@ -6,11 +6,12 @@ import { describe, expect, spyOn, test } from "bun:test";
 import * as realOutlineGeometry from "../../../shared/pcb-geometry/outline-geometry";
 import { arcSegmentCount } from "../../../modules/designer/backend/pcb/outline-geometry";
 import { runDrc } from "../../../modules/designer/backend/drc/drc-engine";
-import type { PcbBoardSettings } from "../../../sdks/designer";
+import type { PcbBoardContour, PcbBoardSettings } from "../../../sdks/designer";
 import {
   board,
   codes,
   freeHole,
+  freePad,
   pad,
   placement,
   projection,
@@ -344,6 +345,309 @@ describe("audit B4 — board checks", () => {
       }),
     );
     expect(codes(report)).toContain("COPPER_TO_BOARD_EDGE");
+  });
+
+  // S12b §4 — the certified interval. The chord region `R_inner` and its mirror
+  // superset `R_outer` bracket the truth, and only a verdict they disagree about
+  // is recomputed exactly. Copper tangent to a curved edge inside that band was
+  // reported by up to the chord deviation before S12b (02 §6).
+  test("B4-9: copper in the chord band against a curved edge is not reported", () => {
+    const r = 20;
+    const outline: PcbBoardSettings["outline"] = {
+      kind: "contour",
+      widthMm: 100,
+      heightMm: 100,
+      centerMm: { x: 0, y: 0 },
+      start: { x: -50, y: -50 },
+      segments: [
+        { type: "line", to: { x: 50, y: -50 } },
+        { type: "line", to: { x: 50, y: 50 - r } },
+        {
+          type: "arc",
+          to: { x: 50 - r, y: 50 },
+          centerMm: { x: 50 - r, y: 50 - r },
+          cw: false,
+        },
+        { type: "line", to: { x: -50, y: 50 } },
+        { type: "line", to: { x: -50, y: -50 } },
+      ],
+    };
+    const centre = { x: 50 - r, y: 50 - r };
+    /** A via whose TRUE clearance to the fillet arc is `clearanceMm`. */
+    const bandVia = (clearanceMm: number) => {
+      const d = r - clearanceMm - 0.4;
+      return {
+        id: "v",
+        netId: null,
+        netClassId: "default",
+        centerMm: {
+          x: centre.x + d * Math.SQRT1_2,
+          y: centre.y + d * Math.SQRT1_2,
+        },
+        diameterMm: 0.8,
+        drillMm: 0.4,
+        fromLayer: "F.Cu" as const,
+        toLayer: "B.Cu" as const,
+        viaType: "through" as const,
+        protection: "tented" as const,
+        provenance: "route" as const,
+      };
+    };
+    const base = board();
+    const settings: PcbBoardSettings = {
+      ...base,
+      outline,
+      designRules: {
+        ...base.designRules,
+        clearance: { ...base.designRules.clearance, copperToBoardEdgeMm: 0.2 },
+      },
+    };
+    // 0.205 mm true clearance: the chords read 0.1952 and used to fail it.
+    const inBand = runDrc(
+      projection({ board: settings, vias: [bandVia(0.205)] }),
+    );
+    expect(codes(inBand)).not.toContain("COPPER_TO_BOARD_EDGE");
+    // Outside the band on either side the verdict is certified and unchanged.
+    expect(
+      codes(runDrc(projection({ board: settings, vias: [bandVia(0.1)] }))),
+    ).toContain("COPPER_TO_BOARD_EDGE");
+    expect(
+      codes(runDrc(projection({ board: settings, vias: [bandVia(0.5)] }))),
+    ).not.toContain("COPPER_TO_BOARD_EDGE");
+  });
+
+  // S12b §4 — a FALLBACK ring: a biased flattening that still self-crosses at
+  // the refinement cap, so `buildRings` falls back to the UNBIASED ring for both
+  // ends of the interval. The two regions then coincide and cannot bracket
+  // anything, so the ring's own `boundMm` applies symmetrically and containment
+  // within it is UNKNOWN (Astra run 1 #13).
+  const lobeArc = (
+    to: { x: number; y: number },
+    centerMm: { x: number; y: number },
+  ) => ({ type: "arc" as const, to, centerMm, cw: false });
+  /** Two 100 mm lobes meeting at a 1 µm pinch — `fallbacks = [0]`. */
+  const twoLobes: PcbBoardSettings["outline"] = {
+    kind: "contour",
+    widthMm: 400,
+    heightMm: 200,
+    centerMm: { x: 0, y: 0 },
+    start: { x: -200, y: 0 },
+    segments: [
+      lobeArc({ x: -0.0005, y: 0 }, { x: -100, y: 0 }),
+      lobeArc({ x: 200, y: 0 }, { x: 100, y: 0 }),
+      lobeArc({ x: 0.0005, y: 0 }, { x: 100, y: 0 }),
+      lobeArc({ x: -200, y: 0 }, { x: -100, y: 0 }),
+    ],
+  };
+  /** A via whose TRUE clearance to the left lobe's rim is `clearanceMm`. */
+  const lobeVia = (id: string, clearanceMm: number, angleRad: number) => {
+    const d = 100 - clearanceMm - 0.4;
+    return {
+      id,
+      netId: null,
+      netClassId: "default",
+      centerMm: {
+        x: -100 + d * Math.cos(angleRad),
+        y: d * Math.sin(angleRad),
+      },
+      diameterMm: 0.8,
+      drillMm: 0.2,
+      fromLayer: "F.Cu" as const,
+      toLayer: "B.Cu" as const,
+      viaType: "through" as const,
+      protection: "tented" as const,
+      provenance: "route" as const,
+    };
+  };
+
+  test("B4-10: on a FALLBACK ring, containment inside the bound is UNKNOWN", () => {
+    const base = board();
+    const settings: PcbBoardSettings = {
+      ...base,
+      outline: twoLobes,
+      designRules: {
+        ...base.designRules,
+        clearance: { ...base.designRules.clearance, copperToBoardEdgeMm: 0.5 },
+      },
+    };
+    // `inBand` sits in the CHORD SEGMENT the flattening omits: the chord region
+    // reads it 0.000126 mm OUTSIDE the board, the exact contour 0.0002 mm
+    // inside. Astra run 1 #13 — it must NOT be off-board.
+    // `justUnder` is 0.4998 mm from the rim against a 0.5 mm rule: neither end
+    // of the interval settles it, and the EXACT answer fails it.
+    // `clear` is 0.6 mm out: certified, and unchanged from S12.
+    const report = runDrc(
+      projection({
+        board: settings,
+        vias: [
+          lobeVia("inBand", 2e-4, (40 * Math.PI) / 180),
+          lobeVia("justUnder", 0.4998, (140 * Math.PI) / 180),
+          lobeVia("clear", 0.6, (220 * Math.PI) / 180),
+        ],
+      }),
+    );
+    const named = (id: string, code: string) =>
+      report.violations.some(
+        (v) =>
+          v.code === code &&
+          v.anchors.some((a) => (a as { viaId?: string }).viaId === id),
+      );
+    expect(named("inBand", "COPPER_OFF_BOARD")).toBe(false);
+    expect(named("justUnder", "COPPER_TO_BOARD_EDGE")).toBe(true);
+    expect(named("justUnder", "COPPER_OFF_BOARD")).toBe(false);
+    expect(named("clear", "COPPER_TO_BOARD_EDGE")).toBe(false);
+    // The two enumerations cannot classify the interval differently.
+    const p = projection({
+      board: settings,
+      vias: [
+        lobeVia("inBand", 2e-4, (40 * Math.PI) / 180),
+        lobeVia("justUnder", 0.4998, (140 * Math.PI) / 180),
+        lobeVia("clear", 0.6, (220 * Math.PI) / 180),
+      ],
+    });
+    expect(JSON.stringify(runDrc(p, { broadPhase: "exhaustive" }))).toBe(
+      JSON.stringify(runDrc(p)),
+    );
+  });
+
+  test("B4-11: an exhausted exact budget reports ONE note, never a silent pass", () => {
+    // A 1204-primitive comb: every tooth spans the full width, so the
+    // simplicity sweep's active list never shortens and the per-run comparison
+    // budget runs out. The board is VALID — the note says so and no
+    // `BOARD_OUTLINE_INVALID` is invented — and both modes agree byte for byte.
+    const teeth = 600;
+    const w = 100;
+    const segs: PcbBoardContour["segments"] = [];
+    let y = 0;
+    for (let i = 0; i < teeth; i += 1) {
+      const x = i % 2 === 0 ? w : -w;
+      segs.push({ type: "line", to: { x, y } });
+      y += 0.2;
+      segs.push({ type: "line", to: { x, y } });
+    }
+    segs.push({ type: "line", to: { x: -w - 5, y } });
+    segs.push({ type: "line", to: { x: -w - 5, y: -5 } });
+    segs.push({ type: "line", to: { x: -w, y: -5 } });
+    segs.push({ type: "line", to: { x: -w, y: 0 } });
+    const settings: PcbBoardSettings = {
+      ...board(),
+      outline: {
+        kind: "contour",
+        widthMm: 2 * w + 10,
+        heightMm: y + 10,
+        centerMm: { x: 0, y: y / 2 },
+        start: { x: -w, y: 0 },
+        segments: segs,
+      },
+    };
+    const p = projection({ board: settings });
+    const report = runDrc(p);
+    expect(
+      report.violations.filter((v) => v.code === "OUTLINE_WEB_UNCHECKED"),
+    ).toHaveLength(1);
+    expect(codes(report)).not.toContain("BOARD_OUTLINE_INVALID");
+    expect(JSON.stringify(runDrc(p, { broadPhase: "exhaustive" }))).toBe(
+      JSON.stringify(report),
+    );
+  });
+
+  test("B4-12: the exact budget is PER ITEM, so input order cannot move a verdict", () => {
+    // Astra run 2 #B: a SHARED allowance is spent in input order, so reversing
+    // the pad array changed which items kept a chord verdict — 52 ids moved on
+    // Astra's 2000-segment / 200-pad board. An upper semicircle r = 20 whose
+    // bottom edge is split into 1400 segments, with 250 Ø0.2 pads at ~0.501 mm
+    // true clearance against a 0.5 mm rule: every one of them is ambiguous, and
+    // every one must be judged alone. Sized by re-running this fixture against
+    // the pre-fix shared budget until the id multisets diverged — smaller
+    // boards do not reproduce, and larger ones only cost more.
+    const segments: PcbBoardContour["segments"] = [
+      { type: "arc", to: { x: -20, y: 0 }, centerMm: { x: 0, y: 0 }, cw: false },
+      { type: "line", to: { x: -20, y: -20 } },
+    ];
+    const N = 1400;
+    for (let i = 1; i <= N; i += 1) {
+      segments.push({ type: "line", to: { x: -20 + (40 * i) / N, y: -20 } });
+    }
+    segments.push({ type: "line", to: { x: 20, y: 0 } });
+    const base = board();
+    const settings: PcbBoardSettings = {
+      ...base,
+      outline: {
+        kind: "contour",
+        widthMm: 40,
+        heightMm: 40,
+        centerMm: { x: 0, y: -10 },
+        start: { x: 20, y: 0 },
+        segments,
+      },
+      designRules: {
+        ...base.designRules,
+        clearance: { ...base.designRules.clearance, copperToBoardEdgeMm: 0.5 },
+      },
+    };
+    const nm = (v: number) => Math.round(v * 1e6) / 1e6;
+    const pads = Array.from({ length: 250 }, (_, i) => {
+      const th = 0.2 + (2.7 * i) / 249;
+      return freePad(`p${i}`, {
+        center: { x: nm(19.399 * Math.cos(th)), y: nm(19.399 * Math.sin(th)) },
+        widthMm: 0.2,
+        heightMm: 0.2,
+        shape: "circle",
+      });
+    });
+    const ids = (fp: typeof pads) =>
+      runDrc(projection({ board: settings, freePads: fp }))
+        .violations.map((v) => v.id)
+        .sort();
+    // Two runs only: mode parity on an ambiguous board is B4-10's job, and a
+    // third pass over 1400 primitives is three seconds nobody needs.
+    expect(ids([...pads].reverse())).toEqual(ids(pads));
+    // Two full runs over a 1400-primitive outline: past the 5 s default.
+  }, 30_000);
+
+  test("B4-13: a ring that falls back on ONE side only still widens the interval", () => {
+    // Astra run 2 #C: the OUTER-biased build fell back on a cutout the inner
+    // build did not, so its non-enclosing ring certified a FAIL the exact
+    // contour passes (0.5004998 mm reported as 0.4928206 against a 0.5 rule).
+    const slot: PcbBoardContour = {
+      kind: "contour",
+      widthMm: 400,
+      heightMm: 200,
+      centerMm: { x: 0, y: 100 },
+      start: { x: 200, y: 0 },
+      segments: [
+        { type: "arc", to: { x: -200, y: 0 }, centerMm: { x: 0, y: 0 }, cw: false },
+        { type: "line", to: { x: -199.9985, y: 0 } },
+        { type: "arc", to: { x: 199.9985, y: 0 }, centerMm: { x: 0, y: 0 }, cw: true },
+        { type: "line", to: { x: 200, y: 0 } },
+      ],
+    };
+    const base = board();
+    const settings: PcbBoardSettings = {
+      ...base,
+      outline: { kind: "rect", widthMm: 500, heightMm: 500, centerMm: { x: 0, y: 0 } },
+      cutouts: [{ id: "slot", shape: slot }],
+      designRules: {
+        ...base.designRules,
+        clearance: { ...base.designRules.clearance, copperToBoardEdgeMm: 0.5 },
+      },
+    };
+    const p = projection({
+      board: settings,
+      freePads: [
+        freePad("pc", {
+          center: { x: 199.095271, y: 1.04247 },
+          widthMm: 0.8,
+          heightMm: 0.8,
+          shape: "circle",
+        }),
+      ],
+    });
+    // The exact clearance is 0.5004998 mm: above the rule, so no verdict.
+    expect(codes(runDrc(p))).not.toContain("COPPER_TO_BOARD_EDGE");
+    expect(JSON.stringify(runDrc(p, { broadPhase: "exhaustive" }))).toBe(
+      JSON.stringify(runDrc(p)),
+    );
   });
 
   test("B4-8: full-radius roundrect outline and cutout are valid", () => {
@@ -721,11 +1025,13 @@ describe("audit B4 — board checks", () => {
       );
       const count500 = spy.mock.calls.length;
       // Observed: 2 calls (one unbiased "none" flatten, one biased
-      // "board-inner" flatten) for the single outline ring, independent of
-      // trace count — the old per-sampled-point pointInOutline() re-flatten
-      // is gone.
+      // "board-inner" flatten) for the single outline ring, plus the S12b
+      // MIRROR region the certified interval needs (exact-geometry contract 12
+      // §4: "one extra region + index per runDrc") — all of them per RUN,
+      // independent of trace count, which is what this test exists to pin. The
+      // old per-sampled-point pointInOutline() re-flatten is gone.
       expect(count500).toBe(count50);
-      expect(count50).toBeLessThanOrEqual(4);
+      expect(count50).toBeLessThanOrEqual(6);
     } finally {
       spy.mockRestore();
     }

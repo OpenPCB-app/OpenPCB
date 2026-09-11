@@ -9,6 +9,7 @@
 
 import type { PcbCopperLayerId, PcbPointMm } from "../../sdks/designer";
 import { ringBounds, type RingBounds } from "../pcb-geometry/pad-outline";
+import type { RoundedShape } from "../pcb-geometry/rounded-shape-types";
 import type {
   CopperPadAnchor,
   CopperRecords,
@@ -65,6 +66,8 @@ export interface PadCopperItem {
   ring: readonly PcbPointMm[];
   /** Exact disc for a circular pad; see `PadCopperRecord.disc`. */
   disc?: { center: PcbPointMm; radiusMm: number };
+  /** The pad's exact copper; see `PadCopperRecord.rounded`. */
+  rounded: RoundedShape;
   bounds: RingBounds;
   center: PcbPointMm;
   anchor: CopperPadAnchor;
@@ -182,6 +185,7 @@ export function toCopperItems(records: CopperRecords): CopperItem[] {
       kind: "pad" as const,
       ring: pad.ring,
       ...(pad.disc ? { disc: pad.disc } : {}),
+      rounded: pad.rounded,
       bounds: pad.bounds,
       center: pad.center,
       anchor: pad.anchor,

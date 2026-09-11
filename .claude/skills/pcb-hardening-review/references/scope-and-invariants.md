@@ -17,6 +17,7 @@ not the source of truth.
 | ERC / electrical rules | `src/modules/designer/backend/erc/erc-engine.ts`, `src/shared/schematic-routing/` (`manhattan.ts`, `schematic-autoroute.ts`, `wire-obstacles.ts`, `crossing-gaps.ts`) | ✅✅ |
 | Signal integrity / length matching | `checks/signal-integrity.ts` (diff-pair skew/gap), `checks/length.ts`, `backend/pcb/diff-pair-resolver.ts` | ✅✅ |
 | Stackup / manufacturability / DFM | `checks/manufacturability.ts` (via/drill/annular/aspect-ratio, FAB tier — since S11: tool- and plating-aware fab rows, `VIA_TYPE_UNSUPPORTED` on every fab, through-only aspect), `checks/constraints.ts` (stackup), `checks/structural.ts` (`NPTH_PAD_NET`), `fab-presets.ts` (sourced rows, fetch dates in the comments), `src/shared/rendering/pcb/pcb-drills.ts` (`footprintPadDrill` / `freePadDrill` — the ONE drill derivation per object, contract 10 §1) | ✅ |
+| Exact geometry (S12b) | `src/shared/pcb-geometry/{rounded-shape,rounded-shape-types,canonical-contour,exact-arcs,exact-ring,exact-contour,exact-simplicity,region-build,region-rounded,region-exact}.ts`, `src/shared/drc/checks/{board,outline}.ts` (certified interval, exact validity), `src/shared/rendering/copper-fill/material-web-kernel.ts` (`OUTLINE_MIN_WEB`), `src/shared/rendering/pcb/contour-validation.ts` (the editor gate on the same predicate), `src/modules/designer/backend/export/gerber/arcs.ts` (Profile arcs); contract `docs/pcb-hardening/12-exact-geometry-contract.md` | ✅✅ |
 | DFM overlays + copper shape (S12) | `src/shared/drc/checks/{courtyard,silkscreen,solder-mask,filled-gap,copper-shape}.ts`, `src/shared/rendering/pcb/artwork/` (the silk + mask artwork model — in-tree, shared with the Gerber writer), `src/shared/pcb-geometry/courtyard-rings.ts`, `src/shared/rendering/copper-fill/copper-shape-kernel.ts`; contract `docs/pcb-hardening/11-dfm-contract.md` | ✅✅ (polygon-topology checks post-implementation) |
 
 **Explicitly out of scope** — refuse and redirect to `/codex-implementation-review` or plain
@@ -131,6 +132,15 @@ kernel after S1 —, one clearance resolver after S6, the arc flatteners) is in
 - Slivers are thickness-classified residuals (`τ = 2·area/perimeter > 1e-3`, `perimeter/2 ≥ sliverMinLengthMm`) of the over-dilated opening; a convex copper spike is a sliver, a concave copper-free wedge is `TRACE_ACUTE_ANGLE`'s.
 - Nothing passes silently: over-budget units and kernel failures report `COPPER_SHAPE_UNCHECKED`.
 - Angles use `θ < limit − ANGLE_EPS_DEG` (degrees), never `below()` (millimetres); collinear junctions are `TRACE_OVERLAP`'s.
+
+## Exact-geometry invariants — from `docs/pcb-hardening/12-exact-geometry-contract.md` (S12b, 2026-09-11)
+
+- Copper is a convex core ⊕ disc: `roundedGap = convexDistance(coreA, coreB) − (rA + rB)` (radii summed first; arity-dispatched primitives; `r === 0` delegates to today's polygon primitives); exact for separation and touch in real arithmetic; a negative gap is overlap, not depth.
+- ONE canonical contour arc (start-radius circle, authored end projected radially, explicit closing segment), DERIVED at read, never persisted; authored radii validated BEFORE canonicalisation, the canonical ring AFTER.
+- Outline validity: no primitive-count rule; two-primitive rings share both endpoints; same-circle interval overlap = retrace = invalid; nested cutouts invalid; DRC and the editor gate share the predicate.
+- Board-edge verdicts: certified PASS on the inner region, certified FAIL on the outer, exact only when the regime VERDICT differs between `m_lo` and `m_hi` or containment is unknown; halo = `edgeHalo + r + maxBoundMm`; a `{kind:"chords"}` (ellipse) ring is never exact; `outlineInvalid` counts only `BOARD_OUTLINE_INVALID`.
+- Web = erosion feature (necks + residuals whose boundary contact has ≥ 2 connected components + empty erosion), never a pairwise primitive distance; no thickness floor.
+- Gerber Profile: no centre repair; one quantised centre per arc, integer I/J, pieces ≤ 90° validated after quantisation (zero-chord merged); radius residual ≤ 2√2 nm.
 
 ## Determinism contract — from `OpenPCB/docs/drc/OPEN_FINDINGS.md` §5.2
 

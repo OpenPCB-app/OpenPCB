@@ -725,6 +725,20 @@ reach — contract 11 §5.2), necks are located by bisection on the erosion radi
 thickness-classified residuals of the opening. Pours-only v1 and the hatched-fill exemption are
 superseded (hatched fills import as solid since S3a).
 
+## 6.8b Exact geometry — shipped in S12b (2026-09-11, `docs/pcb-hardening/12-exact-geometry-contract.md`)
+
+The three recorded geometry limits are closed: connectivity's circumscribed oval / roundrect ring
+(06 §5, Astra S7 #5 — a real ≈ 2 µm open hidden) — every pad gap and touch is now exact on a
+convex-core ⊕ disc shape; the ≤ 0.01 mm false-fail band on curved board edges (02 §6) — board-edge
+verdicts are certified on `R_inner ⊆ R_true ⊆ R_outer` and recomputed exactly only when the
+interval straddles the verdict; a true-simple contour rejected by chord flattening (02 §3, S2 #8)
+— outline validity and the editor gate run one exact predicate. New: `OUTLINE_MIN_WEB`
+(`outline.minWebMm`, erosion-defined webs incl. cutout-to-edge, cutout-to-cutout, a narrow outer
+outline), `OUTLINE_WEB_UNCHECKED` (the never-silent budget / certificate note), the Gerber
+Profile with true arcs. Failure modes recorded as limits (12 §10): ellipse outlines stay chords;
+the pour still clears against the circumscribed ring; a 1-ulp flip window at exactly
+`CONNECT_EPS_MM`; CAM acceptance of a ≤ 2√2 nm radius residual needs verification.
+
 ## 6.9 Via-span topology
 
 Enforced at DRC by `isValidViaSpan`; `VIA_LAYER_SPAN` fires on any violation.

@@ -99,6 +99,11 @@ const LOCATION_HASHED_CODES = new Set<DrcRuleCode>([
   "OUTLINE_INTERNAL_RADIUS",
   "OUTLINE_SLOT_WIDTH",
   "BOARD_OUTLINE_INVALID",
+  // A board can be too narrow in several unrelated places at once, and all of
+  // them hang off the single `boardEdge` anchor (12 §5.2).
+  // OUTLINE_WEB_UNCHECKED is deliberately absent: it is ONE note per run, and
+  // an unhashed id is what merges its messages into that one note.
+  "OUTLINE_MIN_WEB",
   // DFM overlays (DFM contract 11 §7). One placement pair, one silk source or
   // one opening pair is ONE anchor set, and every one of them can hit at
   // several distinct spots — two courtyards that overlap in two lobes, a silk

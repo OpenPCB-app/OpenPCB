@@ -259,7 +259,7 @@ and all confirmed against source. Disposition:
 
 | # | Finding (Astra) | Disposition | Action |
 |---|---|---|---|
-| 1 | Circumscribed circle-pad polygons close a real 1 µm gap (blocker) | **accepted** | circle pads carry an exact disc; every predicate uses it; oval/roundrect arcs stay circumscribed (S2 residual, ≈0.2 % of arc radius) |
+| 1 | Circumscribed circle-pad polygons close a real 1 µm gap (blocker) | **accepted** | circle pads carry an exact disc; every predicate uses it; oval/roundrect arcs stayed circumscribed (S2 residual, ≈0.2 % of arc radius) until S12b: since contract 12 §1 every pad touch (`padTouch`, `endCapTouches`, `viaTouchesOnLayer`) reads the exact convex-core ⊕ disc shape — the limit is closed |
 | 2 | Duplicate trace ids → last-write-wins membership, order-dependent verdict | **accepted** | keys de-duplicated deterministically in record order (`#2`, …); membership binds the first occurrence (fail-safe) |
 | 3 | Occurrence suffix collides with a literal pad number `"1#2"` | **accepted** | injective key `pad:[placementId, padNumber, occurrence]` |
 | 4 | A degenerate pad shape drops its pin from open-net checking | **accepted** | ratsnest pins come from records (all correlated pads), not from surviving items; a pin without copper is an isolated node |

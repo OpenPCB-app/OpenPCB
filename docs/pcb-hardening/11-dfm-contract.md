@@ -30,7 +30,7 @@ Items earlier sessions tagged "S12", with their disposition:
 | A drilled `smd` / `conn` free pad opens the mask on its declared layer only | 06 §9 | **S12** — far-face drill relief, unconditional (§1.3) |
 | `courtyard.ts` `pushCircle` is a 16-chord ring | 02 §7, 00 §4 | **S12** — the S2 arc kernel (§2.1) |
 | Exact-arc contour validity (S2 #8), the chord-band second chance (S7), Gerber true arcs, exact arcs for non-circular pads in clearance, board-material minimum web (S2 #11) | 02 §3 / §6 / §7, 06 §5 / §9 | **Not S12** — re-owned by **S12b, "exact-arc geometry and polygon pads"**, a new session before S13 with its own contract and Astra spec-attack (user decision 2026-09-10) |
-| Trapezoid / custom pad outlines (the importer degrades them to rectangles) | 10 §0 / §10 | **Not S12** — S12b (a rendering-core field; after the shared tags) |
+| Trapezoid / custom pad outlines (the importer degrades them to rectangles) | 10 §0 / §10 | **Not S12** — S12c (a rendering-core field; after the shared tags; re-owned from S12b 2026-09-11) |
 | `thruHoleThermal` on a `std` free pad with `drillMm` 0; blocked-spoke relocation | 04 §5 / §6 | **Not S12** — pour backlog, listed for the S18 trust gate; not a DFM overlay |
 
 Out of scope, recorded as limits with owners in §10.

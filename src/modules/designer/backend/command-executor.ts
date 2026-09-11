@@ -393,9 +393,16 @@ function validateBoardOutlineGeometry(outline: PcbBoardOutline): string | null {
       }
       return null;
     case "contour":
-      // Deep contour rules (closure, arc-radius consistency, self-intersection)
-      // live in the shared validator. Callers must {@link normalizeContour}
-      // first so the explicit-closure check holds.
+      // Deep contour rules (closure, arc-radius consistency, simplicity) live
+      // in the shared validator. Callers must {@link normalizeContour} first so
+      // the explicit-closure check holds.
+      //
+      // ORDER is the validator's own (exact-geometry contract 12 §3.2): the
+      // AUTHORED rules — finiteness, arc radii, `full-circle-arc`,
+      // `too-few-segments`, degenerate edges, closure — then canonicalisation,
+      // then simplicity on the canonical exact ring. Nothing derived is
+      // persisted: `normalizeContour` does not project, and what this executor
+      // stores below is the AUTHORED contour.
       return firstContourError(outline);
     default:
       return null;

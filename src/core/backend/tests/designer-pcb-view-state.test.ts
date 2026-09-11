@@ -362,6 +362,8 @@ describe("designer PCB view-state persistence", () => {
     expect(base.silkscreen).toBeUndefined();
     expect(base.solderMask).toBeUndefined();
     expect(base.dfm).toBeUndefined();
+    // The S12b board-material rule joins the same suite (12 §5.2).
+    expect(base.outline).toBeUndefined();
 
     const result = await sdk.dispatchCommand(
       designId,
@@ -382,6 +384,7 @@ describe("designer PCB view-state persistence", () => {
             acuteAngleDeg: 45,
             courtyardFallbackMm: 0.4,
           },
+          outline: { minWebMm: 1 },
         },
       }),
     );
@@ -400,6 +403,7 @@ describe("designer PCB view-state persistence", () => {
       acuteAngleDeg: 45,
       courtyardFallbackMm: 0.4,
     });
+    expect(rules.outline).toEqual({ minWebMm: 1 });
 
     // An UPDATE that names none of them keeps every stored value (§12 item 6).
     const second = await sdk.dispatchCommand(
@@ -425,6 +429,7 @@ describe("designer PCB view-state persistence", () => {
       acuteAngleDeg: 45,
       courtyardFallbackMm: 0.4,
     });
+    expect(kept.outline).toEqual({ minWebMm: 1 });
 
     // An explicit null clears one key and leaves the rest of the row.
     const third = await sdk.dispatchCommand(
@@ -435,6 +440,7 @@ describe("designer PCB view-state persistence", () => {
           clearance: { ...kept.clearance },
           minimums: { ...kept.minimums },
           dfm: { acuteAngleDeg: null },
+          outline: { minWebMm: null },
         },
       } as never),
     );
@@ -445,6 +451,8 @@ describe("designer PCB view-state persistence", () => {
       sliverMinLengthMm: 0.16,
       courtyardFallbackMm: 0.4,
     });
+    // The row's only key cleared ⇒ the sub-object is OMITTED, not left empty.
+    expect(cleared.outline).toBeUndefined();
   });
 
   test("the S12 DFM rule sub-objects survive the real HTTP route", async () => {
@@ -479,6 +487,7 @@ describe("designer PCB view-state persistence", () => {
                 acuteAngleDeg: 60,
                 courtyardFallbackMm: 0.3,
               },
+              outline: { minWebMm: 0.8 },
             },
           } as never),
         ),
@@ -503,6 +512,7 @@ describe("designer PCB view-state persistence", () => {
       acuteAngleDeg: 60,
       courtyardFallbackMm: 0.3,
     });
+    expect(rules?.outline).toEqual({ minWebMm: 0.8 });
   });
 
   test("pcb_set_view_state does not create undo history entries", async () => {

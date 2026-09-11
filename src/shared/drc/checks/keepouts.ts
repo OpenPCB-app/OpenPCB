@@ -15,6 +15,9 @@ import {
   strictlyInsideRing,
   type RingBounds,
 } from "../../pcb-geometry/region-rings";
+import { canonicalizeRing } from "../../pcb-geometry/ring-utils";
+import type { RoundedShape } from "../../pcb-geometry/rounded-shape-types";
+import { roundedOverlapsRing } from "../../pcb-geometry/rounded-shape";
 import { GEOM_EPS_MM } from "../../pcb-geometry/tolerance";
 import { polylineToPolylineClosestPoints } from "../../pcb-geometry/pcb-trace-geometry";
 import { placementSideLayer } from "../../rendering/pad-copper-layers";
@@ -57,6 +60,11 @@ interface CandidateItem {
   point: PcbPointMm;
   /** Set for traces: the witness search runs on the centreline. */
   polylineMm?: readonly PcbPointMm[];
+  /**
+   * Set for a pad whose ring CIRCUMSCRIBES its copper (oval / roundrect): the
+   * exact shape the ring's verdict is refined against (12 §1.3).
+   */
+  rounded?: RoundedShape;
 }
 
 function keepoutLabel(keepout: EffectiveKeepout): string {
@@ -172,6 +180,12 @@ function padCandidate(
     layers: p.layers,
     subject: padSubject(p.anchor, referenceOf),
     point: p.center,
+    // Only an ARC-bearing pad the disc arm does not already answer exactly:
+    // a `rect` / `trapezoid` / `custom` core IS the ring (radius 0) and a
+    // circle is the disc, so neither has anything to refine (12 §1.3).
+    ...(p.rounded.radiusMm > 0 && p.rounded.core.length > 1
+      ? { rounded: p.rounded }
+      : {}),
   };
 }
 
@@ -238,6 +252,24 @@ function judgeKeepoutPair(
 ): void {
   if (!boundsMeet(candidate.bounds, keepoutBounds, GEOM_EPS_MM)) return;
   if (!keepoutAffects(keepout, candidate.item)) return;
+  // The exact refinement (12 §1.3). `keepoutAffects` owns the whole verdict —
+  // restrictions, layers, the keepout ring's usability and the conservative
+  // geometry — and an oval / roundrect pad reaches it as its CIRCUMSCRIBED
+  // ring, which claims up to 0.86 %·r of copper the pad does not have. The core
+  // ⊕ disc is a subset of that ring, so this can only withdraw an affectation
+  // the ring fabricated, never add one, and it runs solely on the rare pairs
+  // the ring already flagged. The keepout ring is canonicalised exactly as
+  // `keepoutAffects` canonicalised it, so both judge one ring.
+  if (
+    candidate.rounded &&
+    !roundedOverlapsRing(
+      candidate.rounded,
+      canonicalizeRing(keepout.pointsMm, GEOM_EPS_MM),
+      GEOM_EPS_MM,
+    )
+  ) {
+    return;
+  }
   const layer =
     candidate.item.kind === "trace"
       ? candidate.item.layer

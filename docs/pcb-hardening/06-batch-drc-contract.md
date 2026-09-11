@@ -25,7 +25,7 @@ consumes (`src/shared/pcb-connectivity/copper-records.ts`, `src/shared/rendering
 
 Out of scope, with the owning session: live / route parity (S8, `07-live-parity-contract.md`), the broad phase (S9, `08-broad-phase-contract.md`), async
 execution (S10, contract 09), slot / annular / aspect / plating models (S11, contract 10; scoped hole rules stay open), DFM
-overlays and copper-shape checks (S12, contract 11), exact-arc geometry and polygon pads (S12b),
+overlays and copper-shape checks (S12, contract 11), exact-arc geometry (S12b, contract 12) and polygon pads (S12c),
 electrical thresholds (S13), SI and
 length semantics (S14).
 
@@ -144,7 +144,7 @@ pads of one footprint are a dead short on the board. Symmetric with the hole↔h
 keeps overlapping drills of one footprint. Exception (R1 #4): a pair in which either pad is a
 `custom` / `trapezoid` bounding rectangle (`exactShape === false`) is not judged at all inside a
 footprint — its ring is a declared superset, and a short is non-waivable, so the pre-S7 skip
-stays (trapezoid / custom outlines are S12b — the importer degrades them to rectangles at the source, contract 10 §0). Across footprints such pads keep today's (conservative)
+stays (trapezoid / custom outlines are S12c — the importer degrades them to rectangles at the source, contract 10 §0). Across footprints such pads keep today's (conservative)
 verdicts.
 
 Null-net bridges (S7): the clearance loops record, for every null-net item, each known net whose
@@ -179,12 +179,10 @@ and this table is now the record.)
 
 Every remaining approximation IN A DRC CHECK biases towards false-fail: bounding rectangles for
 `custom` / `trapezoid` pads, the board-inner biased region (≤ `MAX_CHORD_DEVIATION_MM` = 0.01 mm on
-curved edges — the exact-arc second chance is S12b), the pour's circumscribed arc samplers. The one
-approximation that biases the OTHER way lives in connectivity, not in a check: the circumscribed
-ring of an oval / roundrect pad (≤ 0.2 %·r) can fabricate contact between two same-net pads that
-are physically ≈ 2 µm apart, so `UNCONNECTED_NET` is not raised and — the pads being same-net — no
-clearance check sees them either (S1/S2 recorded limit; exact arcs for non-circles in CLEARANCE are S12's — the annular ring is exact since S11;
-Astra S7 #5). The AABB
+curved edges — resolved in S12b by the certified interval, contract 12 §4), the pour's circumscribed arc samplers. The one
+approximation that biased the OTHER way — connectivity's circumscribed oval / roundrect ring
+fabricating contact across ≈ 2 µm (Astra S7 #5) — is CLOSED since S12b: every pad gap and touch
+is measured on the exact convex-core ⊕ disc shape (contract 12 §1). The AABB
 prefilter uses `clearanceBound` (board pair ∨ both classes ∨ rule maximum ∨ floor) ∨ `fabMin` ∨
 `SHORT_EPS_MM` over outward-inflated boxes — an upper bound of every value a pair can resolve to,
 so it cannot skip a violating pair.
@@ -241,7 +239,7 @@ default from the projection (05 §8); none re-orders or re-derives.
 - `drillSizeMm`, the pad annular ring and `holeToBoardEdgeMm` read the board minimums directly —
   no scalar kind exists, so no scoped rule can reach them (contract 10 §0 keeps this open).
 - `custom` / `trapezoid` pads are bounding rectangles in every consumer (the importer degrades
-  them to `rect` at the source; S12b) — excluded from the intra-footprint short tier (§4).
+  them to `rect` at the source; S12c) — excluded from the intra-footprint short tier (§4).
   Footprint slots, drill offsets and the plating attribute are modelled since S11 (contract 10).
 - A slotted free-pad drill's two widths (`drillMm` and `drillSlot.widthMm`) are one value since
   S11: the store hydrator enforces `drillMm === drillSlot.widthMm` (contract 10 §1.2).
@@ -260,13 +258,14 @@ default from the projection (05 §8); none re-orders or re-derives.
 - Invalid-layer traces are not clamped (§2); the guard is non-waivable.
 - Pour copper is never re-measured against foreign copper (§4).
 - Chained null-net shorts (§4).
-- The exact-arc second chance inside the chord band (S12b).
+- The exact-arc second chance inside the chord band — CLOSED in S12b (contract 12 §4: certified interval, exact on ambiguity).
 - Via barrel length is absent from length / SI; SI and length comparisons carry no epsilon (S14).
 - Outline-milling advisories are fab-advisory (`custom` fab: none). Cutouts are judged with the
   material OUTSIDE the ring (sharp void corners, parametric holes narrower than the cutter); the
   slot / neck search is side-agnostic, so a narrow material web between two lobes of one cutout
-  also reports `OUTLINE_SLOT_WIDTH` (a board-material minimum-web limit S12b owns). The whole outer
-  outline being narrower than the cutter is not reported (S12b). The cutout message names the cutout's id; its
+  no longer reports `OUTLINE_SLOT_WIDTH` for material-side pairs (S12b): board-material webs are
+  `OUTLINE_MIN_WEB` (contract 12 §5, the `outline.minWebMm` rule), including a whole outer outline
+  narrower than the rule. The cutout message names the cutout's id; its
   ordinal is positional.
 - Rendering / export changes riding on the one free-pad model (release notes): a `std` free pad
   now draws and exports copper on inner layers of a 4+-layer board; a `hole` free pad draws and

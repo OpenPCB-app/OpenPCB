@@ -51,6 +51,9 @@ export function fixtureToProjection(fixture: any): DesignerPcbProjection {
   if (fixture.silkscreen) board.designRules.silkscreen = fixture.silkscreen;
   if (fixture.solderMask) board.designRules.solderMask = fixture.solderMask;
   if (fixture.dfm) board.designRules.dfm = fixture.dfm;
+  // The S12b board-material rule (exact-geometry contract 12 §5.2) — additive
+  // in exactly the same way; absent means no `OUTLINE_MIN_WEB` verdict at all.
+  if (fixture.outlineRules) board.designRules.outline = fixture.outlineRules;
   if (fixture.solderMaskExpansionMm !== undefined) {
     board.solderMaskExpansionMm = fixture.solderMaskExpansionMm;
   }

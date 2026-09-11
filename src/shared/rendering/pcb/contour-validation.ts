@@ -20,12 +20,29 @@ import {
   flattenOutline,
   ringSelfIntersects,
 } from "./outline-geometry";
+import { exactContour } from "../../pcb-geometry/exact-contour";
+import {
+  exactEntryOf,
+  exactRingProblem,
+  type RingFault,
+} from "../../pcb-geometry/exact-simplicity";
+import {
+  type ExactBudget,
+  ExactBudgetExceeded,
+} from "../../pcb-geometry/region-exact";
 
 /** Points within this distance (mm) are treated as coincident (1 nm-scale). */
 export const CONTOUR_POINT_EPSILON_MM = 1e-3;
 /** Absolute + relative tolerance for "arc endpoints equidistant from center". */
 export const ARC_RADIUS_TOLERANCE_MM = 1e-3;
 export const ARC_RADIUS_RELATIVE_TOLERANCE = 1e-3;
+/**
+ * Primitive comparisons the simplicity arm may spend on ONE contour
+ * (exact-geometry contract 12 §3, §10). The draw tool calls this on every
+ * pointer release, so the exact sweep must stop and fall back rather than block
+ * the editor on a pathological shape.
+ */
+const CONTOUR_EXACT_BUDGET = 200_000;
 
 export interface ContourValidationError {
   code:
@@ -178,11 +195,19 @@ export function validateContour(
     });
   }
 
-  // Self-intersection on the flattened ring (only when the topology is sane
-  // enough to flatten meaningfully).
+  // Simplicity LAST, and on the CANONICAL EXACT ring (exact-geometry contract
+  // 12 §3.2): the same predicate `BOARD_OUTLINE_INVALID` runs, so the draw tool
+  // can never refuse a contour DRC accepts. The chord arm rejected a return
+  // edge 0.002 mm inside a fillet (S2 #8) — a true-simple shape.
+  //
+  // Every authored rule above has already run and none of them may be judged on
+  // the canonical ring: projecting first would erase a 1 mm authored radius
+  // mismatch (Astra run 1 #8). `exactContour` canonicalises internally, and
+  // nothing derived is persisted — `normalizeContour` never projects.
   if (errors.length === 0) {
-    if (ringSelfIntersects(flattenOutline(contour))) {
-      errors.push({ code: "self-intersects", message: "outline self-intersects" });
+    const fault = contourSimplicityFault(contour);
+    if (fault) {
+      errors.push({ code: "self-intersects", message: simplicityMessage(fault) });
     }
   }
 
@@ -193,4 +218,28 @@ export function validateContour(
 export function firstContourError(contour: PcbBoardContour): string | null {
   const result = validateContour(contour);
   return result.ok ? null : result.errors[0]!.message;
+}
+
+/** §3 (b)'s wording, one message per fault, all under `self-intersects`. */
+function simplicityMessage(fault: RingFault): string {
+  if (fault === "retrace") return "outline retraces the same arc";
+  if (fault === "degenerate") return "outline has a degenerate edge";
+  return "outline self-intersects";
+}
+
+/**
+ * The exact simplicity verdict, with the chord rule as the documented fallback:
+ * an exhausted comparison budget must not let a self-crossing contour through,
+ * and `ringSelfIntersects` on the flattened ring is the pre-S12b answer — it
+ * over-rejects near an arc, which for an authoring gate is the safe side.
+ */
+function contourSimplicityFault(contour: PcbBoardContour): RingFault | null {
+  const budget: ExactBudget = { comparisons: CONTOUR_EXACT_BUDGET };
+  try {
+    const problem = exactRingProblem(exactEntryOf(exactContour(contour)), budget);
+    return problem ? problem.fault : null;
+  } catch (error) {
+    if (!(error instanceof ExactBudgetExceeded)) throw error;
+    return ringSelfIntersects(flattenOutline(contour)) ? "crossing" : null;
+  }
 }

@@ -77,3 +77,16 @@ The `NETCLASS_*` advisories, `TRACK_DANGLING`, `VIA_DANGLING` and the
 produces. Two of them are worth reading, though: NET_A and NET_B each own two
 pads that sit in two SEPARATE pours, and the ratsnest keeps an airwire for each
 - pour-aware connectivity, not a fixture bug.
+
+## S12b §1 — exact rounded pads: verified unchanged
+
+`J1` pad 1 is this fixture's only arc-bearing pad (oval 1.9 x 1.3, cap radius
+0.65). Under the exact rounded-shape model (exact-geometry contract 12 §1)
+**every row of this golden is byte-identical**: ids, counts, `measuredMm`,
+`requiredMm`, `locationMm`, `anchors` and messages all match the pre-S12b
+report (verified on the full report, not just the checked-in
+`.expected.json`). The pad raises no row of its own — the one J1 row,
+`NET_SHORT_CIRCUIT`, anchors pad **2**, a round pad — and its copper has no
+clearance or connectivity neighbour inside the ≤ 1.4 µm band the circumscribed
+ring used to add. The §1.4 shift predicted for this fixture therefore has no
+row to land on.

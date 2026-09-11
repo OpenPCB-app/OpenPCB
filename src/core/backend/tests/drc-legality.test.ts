@@ -23,6 +23,7 @@ import {
 import type {
   DesignerPcbProjection,
   DrcRuleCode,
+  PcbBoardContour,
   DrcViolation,
   PcbDrcRule,
   PcbKeepoutRestrictions,
@@ -638,6 +639,60 @@ describe("refuse set (07 §6)", () => {
     expect(codesOf(refusedViolations(ctx, violations))).not.toContain(
       "COPPER_TO_BOARD_EDGE",
     );
+  });
+
+  test("an exact-budget note does NOT downgrade the off-board tier (R2 #1)", () => {
+    // 07 §6 reserves the downgrade for an outline rerouting cannot fix. The
+    // exact-geometry layer's `OUTLINE_WEB_UNCHECKED` note also lands in
+    // `outlineDrafts` (12 §3), and deriving `outlineInvalid` from the LENGTH of
+    // that list let a 1204-primitive comb — a perfectly valid board whose exact
+    // simplicity sweep merely ran out of budget — allow an off-board commit.
+    const teeth = 600;
+    const pitch = 0.2;
+    const w = 100;
+    const segments: PcbBoardContour["segments"] = [];
+    let y = 0;
+    for (let i = 0; i < teeth; i += 1) {
+      const x = i % 2 === 0 ? w : -w;
+      segments.push({ type: "line", to: { x, y } });
+      y += pitch;
+      segments.push({ type: "line", to: { x, y } });
+    }
+    segments.push({ type: "line", to: { x: -w - 5, y } });
+    segments.push({ type: "line", to: { x: -w - 5, y: -5 } });
+    segments.push({ type: "line", to: { x: -w, y: -5 } });
+    segments.push({ type: "line", to: { x: -w, y: 0 } });
+    const comb = boardWithRules({
+      outline: {
+        kind: "contour",
+        widthMm: 2 * w + 10,
+        heightMm: y + 10,
+        centerMm: { x: 0, y: y / 2 },
+        start: { x: -w, y: 0 },
+        segments,
+      },
+    });
+    const ctx = buildDrcItems(projection({ board: comb, netNames: NETS }));
+    // The board IS valid and the note IS reported — both halves matter.
+    expect(ctx.outlineDrafts.map((d) => d.code)).toEqual([
+      "OUTLINE_WEB_UNCHECKED",
+    ]);
+    expect(ctx.outlineInvalid).toBe(false);
+    const violations = checkPendingCopper(ctx, {
+      traces: [trace("p1", "b", [[500, 500], [510, 500]])],
+      vias: [],
+    });
+    expect(codesOf(refusedViolations(ctx, violations))).toContain(
+      "COPPER_OFF_BOARD",
+    );
+    // ...and the batch report carries exactly ONE note, no invalid verdict.
+    const report = runDrc(projection({ board: comb, netNames: NETS }));
+    expect(
+      report.violations.filter((v) => v.code === "OUTLINE_WEB_UNCHECKED"),
+    ).toHaveLength(1);
+    expect(
+      report.violations.filter((v) => v.code === "BOARD_OUTLINE_INVALID"),
+    ).toHaveLength(0);
   });
 
   test("a waived clearance violation is not refused", () => {

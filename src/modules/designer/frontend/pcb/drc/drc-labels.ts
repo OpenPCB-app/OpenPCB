@@ -78,6 +78,10 @@ export const CODE_LABEL: Record<DrcRuleCode, string> = {
   COPPER_SHAPE_UNCHECKED: "Copper shape not checked",
   TRACE_ACUTE_ANGLE: "Acute trace angle",
   TRACE_OVERLAP: "Overlapping traces",
+  OUTLINE_MIN_WEB: "Board material too narrow",
+  // Covers all three homes of the code (12 §4, §5): the web certificate and the
+  // two exact recomputations that can run out of budget.
+  OUTLINE_WEB_UNCHECKED: "Board geometry not fully checked",
 };
 
 /** Short human label for a violation anchor (uses the projection for ref/net names). */

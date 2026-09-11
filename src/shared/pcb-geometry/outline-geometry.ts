@@ -28,6 +28,7 @@ import {
   MAX_CHORD_DEVIATION_MM,
   MIN_ARC_SEGMENTS,
 } from "./arc-chords";
+import { canonicalContour } from "./canonical-contour";
 import { canonicalizeRing, DEGENERATE_AREA_MM2 } from "./ring-utils";
 import { GEOM_EPS_MM } from "./tolerance";
 
@@ -68,13 +69,14 @@ export interface OutlineBboxMm {
 }
 
 /**
- * Chords for one arc. `annulus` is the biased-build rule for endpoints whose
- * radii differ (the contour validator tolerates up to 1e-3 relative): the true
- * curve is only known to lie in the annulus between the two radii, so an
- * inscribed arc is sampled on the smaller radius and a circumscribed one on the
- * larger, joined to the exact endpoints by radial stubs. Without it the last
- * tangent edge to a shorter-radius endpoint cuts back inside the circle
- * (Astra §9.2 #3). Default flattening keeps the start radius and exact end.
+ * Chords for one arc: the circle of the START radius, from the start angle to
+ * the angle of `end`, ending on the exact `end`.
+ *
+ * The former ANNULUS arm — sampling a mismatched-radius arc on the smaller or
+ * larger radius and joining the authored endpoints with radial stubs — is gone
+ * (exact-geometry contract 12 §2.1). A tolerance was never a curve; the one
+ * canonical curve is now derived by {@link canonicalContour} before any
+ * flattening, so start and end radii agree here by construction.
  */
 function arcTo(
   start: PcbPointMm,
@@ -83,10 +85,8 @@ function arcTo(
   cw: boolean,
   bias: ArcBias,
   stepMultiplier: number,
-  annulus = false,
 ): PcbPointMm[] {
   const rStart = Math.hypot(start.x - center.x, start.y - center.y);
-  const rEnd = Math.hypot(end.x - center.x, end.y - center.y);
   const a0 = Math.atan2(start.y - center.y, start.x - center.x);
   let a1 = Math.atan2(end.y - center.y, end.x - center.x);
   // Normalise the swept angle to (0, 2π] in the requested direction.
@@ -95,23 +95,8 @@ function arcTo(
   } else {
     while (a1 <= a0) a1 += Math.PI * 2;
   }
-  const mismatch = Math.abs(rStart - rEnd);
-  if (!annulus || mismatch <= GEOM_EPS_MM) {
-    const steps = arcSegmentCount(rStart, Math.abs(a1 - a0), bias, stepMultiplier);
-    return arcChordPoints(center, rStart, a0, a1, steps, bias, end);
-  }
-  const r = bias === "inscribed" ? Math.min(rStart, rEnd) : Math.max(rStart, rEnd);
-  const onRadius = (a: number): PcbPointMm => ({
-    x: center.x + Math.cos(a) * r,
-    y: center.y + Math.sin(a) * r,
-  });
-  const steps = arcSegmentCount(r, Math.abs(a1 - a0), bias, stepMultiplier);
-  const projectedEnd = onRadius(a1);
-  return [
-    onRadius(a0), // radial stub from the exact start (already emitted)
-    ...arcChordPoints(center, r, a0, a1, steps, bias, projectedEnd),
-    { x: end.x, y: end.y }, // radial stub back to the exact end
-  ];
+  const steps = arcSegmentCount(rStart, Math.abs(a1 - a0), bias, stepMultiplier);
+  return arcChordPoints(center, rStart, a0, a1, steps, bias, end);
 }
 
 /** Convex parametric shapes: "inward" (and "none") inscribe, "outward" hugs. */
@@ -196,7 +181,6 @@ function contourRing(
   segments: readonly PcbOutlineSegment[],
   arcBiasOf: (cw: boolean) => ArcBias,
   stepMultiplier: number,
-  annulus = false,
 ): PcbPointMm[] {
   const pts: PcbPointMm[] = [{ x: start.x, y: start.y }];
   let prev = start;
@@ -205,9 +189,7 @@ function contourRing(
       pts.push({ x: seg.to.x, y: seg.to.y });
     } else {
       const bias = arcBiasOf(seg.cw);
-      pts.push(
-        ...arcTo(prev, seg.to, seg.centerMm, seg.cw, bias, stepMultiplier, annulus),
-      );
+      pts.push(...arcTo(prev, seg.to, seg.centerMm, seg.cw, bias, stepMultiplier));
     }
     prev = seg.to;
   }
@@ -222,7 +204,7 @@ function contourRing(
  * shallow arc flattens to a single chord can come out as a simple polygon of
  * the OPPOSITE orientation (Astra §9.2), which would flip every arc's bias.
  */
-function contourSignedArea(
+export function contourSignedArea(
   start: PcbPointMm,
   segments: readonly PcbOutlineSegment[],
 ): number {
@@ -287,7 +269,6 @@ function contourPoints(
         : "circumscribed";
     },
     stepMultiplier,
-    true,
   );
 }
 
@@ -338,10 +319,22 @@ export function flattenOutline(
       return canonicalizeRing(
         outline.pointsMm.map((p) => ({ x: p.x, y: p.y })),
       );
-    case "contour":
+    case "contour": {
+      // The ONE derivation every chord consumer shares (12 §2.1): an arc's
+      // effective end is its authored `to` projected onto the circle of the
+      // start radius, and the ring carries an explicit closing segment when the
+      // chain of projections misses `start`. An already-conforming contour comes
+      // back verbatim, so rendering / Gerber / fill / snapshot are unchanged.
+      const canonical = canonicalContour(outline);
       return canonicalizeRing(
-        contourPoints(outline.start, outline.segments, bias, stepMultiplier),
+        contourPoints(
+          canonical.start,
+          canonical.segments,
+          bias,
+          stepMultiplier,
+        ),
       );
+    }
   }
 }
 

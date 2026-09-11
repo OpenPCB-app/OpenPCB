@@ -3,7 +3,10 @@ import type {
   PcbBoardOutline,
 } from "../../../../../sdks/designer/types";
 import { DEFAULT_BOARD_THICKNESS_MM } from "../../../../../sdks/designer";
-import { flattenOutline } from "../../../../../shared/rendering/pcb/outline-geometry";
+import {
+  exactContour,
+  exactContourBounds,
+} from "../../../../../shared/pcb-geometry/exact-contour";
 
 /**
  * One entry in the Gerber Job File's `FilesAttributes` array — a manufacturing
@@ -62,19 +65,14 @@ function outlineSizeMm(outline: PcbBoardOutline | null): {
   y: number;
 } {
   if (!outline) return { x: 0, y: 0 };
-  const pts = flattenOutline(outline);
-  if (pts.length === 0) return { x: 0, y: 0 };
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const p of pts) {
-    if (p.x < minX) minX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y > maxY) maxY = p.y;
+  // TRUE arc extrema (exact-geometry contract 12 §6): the chord ring understates
+  // a curved board by up to the chord deviation, and the fab reads this number
+  // as the panel size.
+  const b = exactContourBounds(exactContour(outline));
+  if (!Number.isFinite(b.minX) || !Number.isFinite(b.minY)) {
+    return { x: 0, y: 0 };
   }
-  return { x: maxX - minX, y: maxY - minY };
+  return { x: b.maxX - b.minX, y: b.maxY - b.minY };
 }
 
 function round3(n: number): number {

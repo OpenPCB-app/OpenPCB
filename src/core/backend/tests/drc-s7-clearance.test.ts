@@ -151,8 +151,11 @@ describe("a circular pad is judged on its exact disc (§2)", () => {
     expect(tracePadGap(t, p).gap).toBe(0.25);
 
     // The sampled ring circumscribes the circle, so the pre-S7 measurement is
-    // strictly smaller — and small enough to have failed the same rule.
-    const { disc: _dropped, ...ringOnly } = p;
+    // strictly smaller — and small enough to have failed the same rule. Both
+    // the disc and the exact rounded core have to be dropped to reproduce it:
+    // either one alone still measures the pad exactly (12 §1.1).
+    const { disc: _dropped, ...rest } = p;
+    const ringOnly = { ...rest, rounded: { core: p.ring, radiusMm: 0 } };
     const ringGap = tracePadGap(t, ringOnly).gap;
     expect(ringGap).toBeLessThan(0.25);
     expect(clearanceViolated(ringGap, 0.25)).toBe(true);

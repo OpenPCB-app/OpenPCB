@@ -98,4 +98,15 @@ export const EMIT_SITE_BY_CODE: Record<DrcRuleCode, { checks: readonly string[] 
   COPPER_SHAPE_UNCHECKED: { checks: ["copper-shape"] },
   TRACE_ACUTE_ANGLE: { checks: ["copper-shape"] },
   TRACE_OVERLAP: { checks: ["copper-shape"] },
+  // board material (exact-geometry contract 12 §5)
+  OUTLINE_MIN_WEB: { checks: ["manufacturability"] },
+  // The ONE "the exact-geometry layer did not answer" code (12 §4, §5). It has
+  // three homes because the exact layer has three: the web certificate
+  // (`manufacturability`), an outline-simplicity recomputation that ran out of
+  // its per-run budget (`outline`), and a board-edge verdict whose ambiguous
+  // interval could not be resolved exactly (`board`). All three are the same
+  // fact — a chord verdict stands where an exact one was owed — and all three
+  // land on the single `boardEdge` anchor, so the report carries ONE note per
+  // run with their messages merged.
+  OUTLINE_WEB_UNCHECKED: { checks: ["manufacturability", "outline", "board"] },
 };

@@ -12,6 +12,7 @@ import {
   normalizeContour,
   validateContour,
 } from "../../../shared/rendering/pcb/contour-validation";
+import { canonicalContour } from "../../../shared/pcb-geometry/canonical-contour";
 
 function contour(
   start: { x: number; y: number },
@@ -129,11 +130,30 @@ describe("arc discretisation (chord contract + exact endpoint)", () => {
     expect(arcSegmentCount(1e6, Math.PI * 2)).toBe(MAX_ARC_SEGMENTS);
   });
 
-  test("flattened arc lands exactly on its endpoint even with a tiny radius mismatch", () => {
+  /**
+   * RE-TARGETED for S12b (exact-geometry contract 12 §2.1). This used to assert
+   * that flattening emitted the AUTHORED endpoint of a mismatched-radius arc
+   * verbatim ("lands exactly on its endpoint"). The annulus arm that made that
+   * true is retired: a tolerance is not a curve, so the one canonical curve is
+   * the circle of the START radius and the authored `to` is projected radially
+   * onto it. The byte change is confined to arcs whose authored radii differ by
+   * more than GEOM_EPS_MM — here 0.00025 mm, which moves the emitted endpoint by
+   * the same 0.00025 mm.
+   */
+  test("flattened arc lands on the CANONICAL endpoint of a radius mismatch", () => {
     // rFrom = 5.0, rTo = hypot(5, 0.05) ≈ 5.00025 — within the validator's tol.
     const c = contour({ x: 0, y: 0 }, [arc(10, 0.05, 5, 0), line(0, 10), line(0, 0)]);
+    const canonical = canonicalContour(c).segments[0]!;
+    if (canonical.type !== "arc") throw new Error("expected an arc");
+    const end = canonical.to;
+    // On the start-radius circle, and moved by exactly the authored mismatch.
+    expect(Math.hypot(end.x - 5, end.y)).toBeCloseTo(5, 12);
+    expect(Math.hypot(end.x - 10, end.y - 0.05)).toBeCloseTo(
+      Math.hypot(5, 0.05) - 5,
+      12,
+    );
     const ring = flattenOutline(c);
-    const hit = ring.some((p) => p.x === 10 && p.y === 0.05);
-    expect(hit).toBe(true);
+    expect(ring.some((p) => p.x === end.x && p.y === end.y)).toBe(true);
+    expect(ring.some((p) => p.x === 10 && p.y === 0.05)).toBe(false);
   });
 });

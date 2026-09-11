@@ -298,6 +298,9 @@ describe("oracle: synthetic corpus", () => {
     // the code — both stay pinned by their own unit tests.
     const KERNEL_ONLY: readonly DrcRuleCode[] = [
       "COPPER_SHAPE_UNCHECKED",
+      // The exact-geometry layer's twin, same reasoning (12 §4, §5) — a kernel
+      // refusal, a capped flattening or an exhausted comparison budget.
+      "OUTLINE_WEB_UNCHECKED",
       "ZONE_FILL_FAILED",
     ];
     const missing = allCodes.filter(

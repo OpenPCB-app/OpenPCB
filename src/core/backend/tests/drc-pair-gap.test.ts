@@ -42,6 +42,16 @@ const SQUARE = freePad("square", {
   center: { x: 10, y: 0 },
 });
 
+/**
+ * The pre-S7 / pre-S12b shape model: no exact disc, and the CIRCUMSCRIBED ring
+ * as the pad's whole geometry. Both the disc and the rounded core have to be
+ * dropped — either one alone still measures the pad exactly.
+ */
+function ringPathPad(pad: DrcPad): DrcPad {
+  const { disc: _disc, ...rest } = pad;
+  return { ...rest, rounded: { core: pad.ring, radiusMm: 0 } };
+}
+
 /** A zero-radius via = a bare point, so the gap is the pad-to-point distance. */
 function pointVia(x: number, y: number, radiusMm = 0): DrcViaGeom {
   return {
@@ -66,8 +76,7 @@ describe("pair-gap — pad shape model", () => {
 
   test("the circumscribed ring under-reports the same gap", () => {
     const [circle] = padsOf([CIRCLE]);
-    const { disc: _disc, ...ringOnly } = circle!;
-    const ring = padViaGap(ringOnly, pointVia(1, 0)).gap;
+    const ring = padViaGap(ringPathPad(circle!), pointVia(1, 0)).gap;
     expect(ring).toBeLessThan(0.5);
     // sec(pi/48) - 1 ~ 0.215 % of r — the false-fail band the disc removes.
     expect(0.5 - ring).toBeLessThan(0.5 * 0.0022);

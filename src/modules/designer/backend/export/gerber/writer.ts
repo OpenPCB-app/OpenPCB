@@ -40,6 +40,16 @@ import {
 } from "../../../../../shared/pcb-connectivity";
 import type { PadCopperShape } from "../../../../../shared/pcb-geometry/pad-annular";
 import { flattenOutline } from "../../../../../shared/rendering/pcb/outline-geometry";
+// The ONE exact reading of every outline kind (12 §2.2) — the Profile, the
+// outline verdict and the certified board-edge interval all read this ring.
+import { exactContour } from "../../../../../shared/pcb-geometry/exact-contour";
+import {
+  emitChordLoop,
+  emitExactRing,
+  ringHasArc,
+  ringIsEmittable,
+  type InterpolationState,
+} from "./arcs";
 // Single source of truth for poured copper: the SAME kernel the canvas renders,
 // so the manufactured plane matches the on-screen copper exactly. The kernel is
 // pure geometry (clipper2 + math; no React/R3F) and runs under Bun. Lives in
@@ -776,28 +786,41 @@ function emitEdgeCuts(
   out.push("G01*");
   // Outer board contour, then one closed contour per internal cutout — each is
   // a separate Profile loop (KiCad-compatible: outermost = edge, inner = holes).
-  emitContour(out, outlinePoints(outline));
+  // The loops are the EXACT rings (exact-geometry contract 12 §6): an authored
+  // arc travels to the fab as a true arc, not as the chords the canvas draws.
+  const shapes: PcbBoardOutline[] = [outline];
   for (const cut of ctx.proj.board.cutouts ?? []) {
-    emitContour(out, flattenOutline(cut.shape));
+    shapes.push(cut.shape);
   }
+  const rings = shapes.map((shape) => exactContour(shape));
+  // G75 — multi-quadrant circular interpolation — is stated once, before any
+  // arc move, and ONLY when an arc is actually emitted, so a rect / polygon
+  // Profile is byte-identical to the pre-arc file. A ring that falls back to
+  // chords below emits no arc and so must not vote for G75 either.
+  if (rings.some((ring) => ringIsEmittable(ring) && ringHasArc(ring))) {
+    out.push("G75*");
+  }
+  const state: InterpolationState = { mode: "G01" };
+  shapes.forEach((shape, index) => {
+    if (emitExactRing(out, rings[index]!, state)) return;
+    // A contour that reduces to a single primitive (a full-circle arc — already
+    // BOARD_OUTLINE_INVALID) has no exact loop. Ship its chord flattening
+    // anyway: a Profile file missing a loop is a board with no edge at all.
+    emitChordLoop(out, state, flattenOutline(shape));
+    ctx.warnings.push(degenerateOutlineWarning(shape, index));
+  });
 }
 
-/** Emit one closed Edge.Cuts contour as move-to + draw-to commands. */
-function emitContour(
-  out: string[],
-  pts: Array<{ x: number; y: number }>,
-): void {
-  if (pts.length < 2) return;
-  for (let i = 0; i < pts.length; i++) {
-    const pt = pts[i]!;
-    out.push(`${xyOperand(pt.x, pt.y)}${i === 0 ? "D02*" : "D01*"}`);
-  }
-  // Close the loop back to the first point unless already closed.
-  const first = pts[0]!;
-  const last = pts[pts.length - 1]!;
-  if (!pointsEqual(first, last)) {
-    out.push(`${xyOperand(first.x, first.y)}D01*`);
-  }
+/** Which loop fell back to chords, and why — one line per degenerate ring. */
+function degenerateOutlineWarning(
+  shape: PcbBoardOutline,
+  index: number,
+): string {
+  const which = index === 0 ? "Board outline" : `Cutout ${index}`;
+  return (
+    `${which} (${shape.kind}) is degenerate — it encloses no closed contour; ` +
+    "Edge.Cuts exported as its chord approximation"
+  );
 }
 
 function pointsEqual(
@@ -806,13 +829,6 @@ function pointsEqual(
 ): boolean {
   // Equal at the Gerber coordinate resolution (1 µm).
   return Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6;
-}
-
-function outlinePoints(
-  outline: PcbBoardOutline,
-): Array<{ x: number; y: number }> {
-  // All shape kinds flatten through the shared helper (arcs discretised).
-  return flattenOutline(outline);
 }
 
 // =========================================================================

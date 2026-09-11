@@ -1,12 +1,5 @@
 import type { PcbPointMm } from "../../sdks/designer";
 import {
-  circleToPolygonDistance,
-  polygonToPolygonDistance,
-  polylineToPolygonDistance,
-  segmentToPolygonDistance,
-  segmentToRingClosestPoints,
-} from "../pcb-geometry/pcb-clearance-geometry";
-import {
   distance,
   pointToPolylineDistance,
   polylineToPolylineClosestPoints,
@@ -14,6 +7,13 @@ import {
   segmentClosestPoints,
   segmentToSegmentDistance,
 } from "../pcb-geometry/pcb-trace-geometry";
+import {
+  roundedGap,
+  roundedPoint,
+  roundedPolylineGap,
+  roundedSegment,
+  roundedSegmentGap,
+} from "../pcb-geometry/rounded-shape";
 import type { DrcHole, DrcPad, DrcTrace, DrcViaGeom } from "./drc-context";
 
 /**
@@ -75,12 +75,10 @@ export function segmentSegmentGap(
 // --- trace ↔ pad / via -------------------------------------------------------
 
 export function tracePadGap(t: DrcTrace, pad: DrcPad): PairGap {
-  const gap = pad.disc
-    ? pointToPolylineDistance(pad.disc.center, t.pointsMm).distance -
-      pad.disc.radiusMm -
-      t.halfWidthMm
-    : polylineToPolygonDistance(t.pointsMm, pad.ring) - t.halfWidthMm;
-  return { gap, location: pad.center };
+  return {
+    gap: roundedPolylineGap(t.pointsMm, t.halfWidthMm, pad.rounded),
+    location: pad.center,
+  };
 }
 
 export function segmentPadGap(
@@ -89,12 +87,10 @@ export function segmentPadGap(
   halfWidthMm: number,
   pad: DrcPad,
 ): PairGap {
-  const gap = pad.disc
-    ? projectPointToSegment(pad.disc.center, a, b).distance -
-      pad.disc.radiusMm -
-      halfWidthMm
-    : segmentToRingClosestPoints(a, b, pad.ring).distance - halfWidthMm;
-  return { gap, location: pad.center };
+  return {
+    gap: roundedSegmentGap(a, b, halfWidthMm, pad.rounded),
+    location: pad.center,
+  };
 }
 
 export function traceViaGap(t: DrcTrace, via: DrcViaGeom): PairGap {
@@ -123,36 +119,17 @@ export function segmentViaGap(
 // --- pad / via ↔ pad / via ---------------------------------------------------
 
 export function padPadGap(a: DrcPad, b: DrcPad): PairGap {
-  const location = midpoint(a.center, b.center);
-  if (a.disc && b.disc) {
-    return {
-      gap:
-        distance(a.disc.center, b.disc.center) -
-        (a.disc.radiusMm + b.disc.radiusMm),
-      location,
-    };
-  }
-  if (a.disc) {
-    return {
-      gap: circleToPolygonDistance(a.disc.center, a.disc.radiusMm, b.ring),
-      location,
-    };
-  }
-  if (b.disc) {
-    return {
-      gap: circleToPolygonDistance(b.disc.center, b.disc.radiusMm, a.ring),
-      location,
-    };
-  }
-  return { gap: polygonToPolygonDistance(a.ring, b.ring), location };
+  return {
+    gap: roundedGap(a.rounded, b.rounded),
+    location: midpoint(a.center, b.center),
+  };
 }
 
 export function padViaGap(pad: DrcPad, via: DrcViaGeom): PairGap {
-  const gap = pad.disc
-    ? distance(pad.disc.center, via.center) -
-      (pad.disc.radiusMm + via.radiusMm)
-    : circleToPolygonDistance(via.center, via.radiusMm, pad.ring);
-  return { gap, location: via.center };
+  return {
+    gap: roundedGap(pad.rounded, roundedPoint(via.center, via.radiusMm)),
+    location: via.center,
+  };
 }
 
 export function viaViaGap(a: DrcViaGeom, b: DrcViaGeom): PairGap {
@@ -233,15 +210,13 @@ function gapToStadium(
     return centreline - s.radiusMm - item.halfWidthMm;
   }
   if (isPad(item)) {
-    if (item.disc) {
-      const centre = s.round
-        ? distance(item.disc.center, s.a)
-        : projectPointToSegment(item.disc.center, s.a, s.b).distance;
-      return centre - item.disc.radiusMm - s.radiusMm;
-    }
-    return s.round
-      ? circleToPolygonDistance(s.a, s.radiusMm, item.ring)
-      : segmentToPolygonDistance(s.a, s.b, item.ring) - s.radiusMm;
+    // The hole is a rounded shape too — a disc, or the routed stadium of a slot.
+    return roundedGap(
+      item.rounded,
+      s.round
+        ? roundedPoint(s.a, s.radiusMm)
+        : roundedSegment(s.a, s.b, s.radiusMm),
+    );
   }
   const centre = s.round
     ? distance(item.center, s.a)

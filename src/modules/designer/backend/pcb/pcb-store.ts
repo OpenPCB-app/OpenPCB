@@ -337,6 +337,17 @@ function parseDesignRules(
       fallback.dfm?.courtyardFallbackMm,
     ),
   });
+  /**
+   * The S12b board-material rule (exact-geometry contract 12 §5.2) — the same
+   * shape as the three above. Absent means NO `OUTLINE_MIN_WEB` verdict, so a
+   * board that never stored one is never retroactively judged by it.
+   */
+  const outline = compactRules({
+    minWebMm: optNum(
+      asRecord(r.outline)?.minWebMm,
+      fallback.outline?.minWebMm,
+    ),
+  });
   const e =
     r.electrical === null
       ? null
@@ -379,6 +390,7 @@ function parseDesignRules(
     ...(silkscreen ? { silkscreen } : {}),
     ...(solderMask ? { solderMask } : {}),
     ...(dfm ? { dfm } : {}),
+    ...(outline ? { outline } : {}),
   };
 }
 

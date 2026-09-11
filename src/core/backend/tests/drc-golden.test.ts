@@ -45,6 +45,15 @@ const CORPUS_EXCEPTIONS = new Set<DrcRuleCode>([
   // test override, which asserts the code, its class, its default severity and
   // that it stays out of `NON_OVERRIDABLE`.
   "COPPER_SHAPE_UNCHECKED",
+  // `OUTLINE_WEB_UNCHECKED` is the exact-geometry layer's twin of both
+  // (exact-geometry contract 12 §4, §5): it fires only when a Clipper offset
+  // refuses the board material, when the flattened outline's chord deviation
+  // eats a tenth of the rule, or when an exact recomputation exhausts its
+  // per-run comparison budget — none of which a hand-written fixture board
+  // reaches. It is pinned instead in `drc-material-web.test.ts` and
+  // `drc-outline-exact.test.ts`, which assert the code, its class, its default
+  // severity and that it stays out of `NON_OVERRIDABLE`.
+  "OUTLINE_WEB_UNCHECKED",
   "ZONE_FILL_FAILED",
 ]);
 
@@ -145,6 +154,7 @@ describe("DRC golden boards", () => {
     // otherwise defeat the gate.
     expect([...CORPUS_EXCEPTIONS].sort()).toEqual([
       "COPPER_SHAPE_UNCHECKED",
+      "OUTLINE_WEB_UNCHECKED",
       "ZONE_FILL_FAILED",
     ]);
   });

@@ -101,6 +101,9 @@ export const DEFAULT_SEVERITY_BY_CODE: Record<DrcRuleCode, DrcSeverity> = {
   COPPER_SHAPE_UNCHECKED: "info",
   TRACE_ACUTE_ANGLE: "warning",
   TRACE_OVERLAP: "warning",
+  // board material (exact-geometry contract 12 §5, §7)
+  OUTLINE_MIN_WEB: "warning",
+  OUTLINE_WEB_UNCHECKED: "info",
 };
 
 const SEVERITY_RANK: Record<DrcSeverity, number> = {
@@ -226,6 +229,10 @@ export const RULE_CLASS_BY_CODE: Record<DrcRuleCode, DrcRuleClass> = {
   COPPER_SHAPE_UNCHECKED: "dfm",
   TRACE_ACUTE_ANGLE: "dfm",
   TRACE_OVERLAP: "dfm",
+  // board material (12 §5.2: a design rule on the milled shape, so it files
+  // under `manufacturability` beside the other two outline advisories).
+  OUTLINE_MIN_WEB: "manufacturability",
+  OUTLINE_WEB_UNCHECKED: "manufacturability",
 };
 
 /** Per-code severity overrides; `"ignore"` drops the violation entirely. */

@@ -951,6 +951,63 @@ describe("Gerber X2 writer", () => {
     const d01 = out.match(/D01\*/g) ?? [];
     expect(d01.length).toBe(4);
   });
+
+  test("Edge.Cuts emits a contour arc as a true G75 multi-quadrant arc", () => {
+    const proj = fixtureProjection();
+    // A capsule: two straight edges and two 180° arcs, which the quadrant rule
+    // splits into two pieces each (exact-geometry contract 12 §6).
+    proj.board.outline = {
+      kind: "contour",
+      widthMm: 30,
+      heightMm: 10,
+      centerMm: { x: 15, y: 5 },
+      start: { x: 5, y: 0 },
+      segments: [
+        { type: "line", to: { x: 25, y: 0 } },
+        { type: "arc", to: { x: 25, y: 10 }, centerMm: { x: 25, y: 5 }, cw: false },
+        { type: "line", to: { x: 5, y: 10 } },
+        { type: "arc", to: { x: 5, y: 0 }, centerMm: { x: 5, y: 5 }, cw: false },
+      ],
+    };
+    const out = buildGerberLayer(proj, "edge_cuts", []);
+    const lines = out.split("\r\n");
+    expect(out).toContain("%TF.FileFunction,Profile,NP*%");
+    // G75 is stated once, after the G01 the Profile opens with.
+    expect(lines.filter((l) => l === "G75*").length).toBe(1);
+    expect(lines.indexOf("G75*")).toBeGreaterThan(lines.indexOf("G01*"));
+    // Counter-clockwise arcs, four pieces, each carrying its own I/J offset.
+    expect(lines.filter((l) => /I-?\d+J-?\d+D01\*$/.test(l)).length).toBe(4);
+    expect(lines).toContain("G03*");
+    expect(lines).not.toContain("G02*");
+    // The arc centres are emitted relative to each piece's start point: the
+    // first piece runs from (25, 0) to (30, 5) about (25, 5).
+    expect(out).toContain("X30000000Y5000000I0J5000000D01*");
+  });
+
+  test("Edge.Cuts emits a circular cutout as its own arc loop", () => {
+    const proj = fixtureProjection();
+    proj.board.cutouts = [
+      {
+        id: "c1",
+        shape: {
+          kind: "circle",
+          widthMm: 6,
+          heightMm: 6,
+          centerMm: { x: 15, y: 10 },
+        },
+      },
+    ];
+    const out = buildGerberLayer(proj, "edge_cuts", []);
+    const lines = out.split("\r\n");
+    expect(out).toContain("%TF.FileFunction,Profile,NP*%");
+    // Two loops: the rect board edge, then the cutout.
+    expect(lines.filter((l) => l.endsWith("D02*")).length).toBe(2);
+    expect(lines.filter((l) => l === "G75*").length).toBe(1);
+    // The rect's own four edges stay linear; the cutout is four quarter arcs.
+    expect(lines.filter((l) => /I-?\d+J-?\d+D01\*$/.test(l)).length).toBe(4);
+    expect(lines).toContain("G03*");
+    expect(out).toContain("X18000000Y10000000D02*");
+  });
 });
 
 // =========================================================================

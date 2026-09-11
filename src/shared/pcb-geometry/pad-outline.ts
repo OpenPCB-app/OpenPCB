@@ -10,7 +10,12 @@ import type {
   PcbPlacedPart,
   PcbPointMm,
 } from "../../sdks/designer";
-import { placementMirrorX, transformPadCenterMm } from "./pad-geometry";
+import {
+  padWorldPositionMm,
+  placementMirrorX,
+  transformPadCenterMm,
+} from "./pad-geometry";
+import type { RoundedShape } from "./rounded-shape-types";
 
 const CIRCLE_SEGMENTS = 48;
 const ARC_SEGMENTS_PER_CORNER = 6;
@@ -145,6 +150,28 @@ export function shapeRingAroundOrigin(pad: ShapeInput): PcbPointMm[] {
   return pad.rotationDeg ? base.map((p) => rotate(p, pad.rotationDeg)) : base;
 }
 
+/**
+ * ONE footprint-local vertex through the placement transform. Extracted so the
+ * ring and the exact rounded CORE go through the same chain vertex by vertex —
+ * rotate, add the pad centre, then `transformPadCenterMm` — never a composed
+ * matrix, which yields 6.1e-17 where the chain yields 0 at 90° and would move
+ * `measuredMm` at the last bit (exact-geometry contract 12 §1.1).
+ */
+function padWorldVertex(
+  v: PcbPointMm,
+  centerMm: PcbPointMm,
+  placement: PcbPlacedPart,
+  mirrored: boolean,
+): PcbPointMm {
+  // footprint-local vertex = shape ring + pad center
+  const local = { x: v.x + centerMm.x, y: v.y + centerMm.y };
+  const t = transformPadCenterMm(local, placement.rotationDeg, mirrored);
+  return {
+    x: placement.positionMm.x + t.x,
+    y: placement.positionMm.y + t.y,
+  };
+}
+
 /** Footprint pad → world-space polygon ring, through the placement transform. */
 export function padOutlineWorldMm(
   placement: PcbPlacedPart,
@@ -152,30 +179,195 @@ export function padOutlineWorldMm(
 ): PcbPointMm[] {
   const ring = shapeRingAroundOrigin(pad);
   const mirrored = placementMirrorX(placement);
-  return ring.map((v) => {
-    // footprint-local vertex = shape ring + pad center
-    const local = { x: v.x + pad.centerMm.x, y: v.y + pad.centerMm.y };
-    const t = transformPadCenterMm(local, placement.rotationDeg, mirrored);
-    return {
-      x: placement.positionMm.x + t.x,
-      y: placement.positionMm.y + t.y,
-    };
-  });
+  return ring.map((v) => padWorldVertex(v, pad.centerMm, placement, mirrored));
 }
 
-/** Free pad → world-space polygon ring (centerMm is already world). */
-export function freePadOutlineWorldMm(freePad: PcbFreePad): PcbPointMm[] {
-  const ring = shapeRingAroundOrigin({
+/** The shape a free pad's ring and rounded core are both built from. */
+function freePadShapeInput(freePad: PcbFreePad): ShapeInput {
+  return {
     shape: freePad.shape,
     widthMm: freePad.widthMm,
     heightMm: freePad.heightMm,
     rotationDeg: freePad.rotationDeg,
     roundrectRatio: freePad.roundrectRatio,
-  });
+  };
+}
+
+/** Free pad → world-space polygon ring (centerMm is already world). */
+export function freePadOutlineWorldMm(freePad: PcbFreePad): PcbPointMm[] {
+  const ring = shapeRingAroundOrigin(freePadShapeInput(freePad));
   return ring.map((v) => ({
     x: v.x + freePad.centerMm.x,
     y: v.y + freePad.centerMm.y,
   }));
+}
+
+/**
+ * A dimension that can define a radius. `discOf` applies the same rule to the
+ * exact disc (`!(widthMm > 0)` ⇒ no disc), and it is load-bearing here for a
+ * different reason: a non-positive dimension yields a NEGATIVE radius, and
+ * `gap = d − (rA + rB)` then reports a gap LARGER than the copper's — a false
+ * PASS, where the circumscribed ring these pads used to be judged on is merely
+ * conservative.
+ */
+function radiusDimension(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
+}
+
+/** The spine of `stadiumRing`: its two cap centres, from the same `w >= h` switch. */
+function stadiumSpine(w: number, h: number): RoundedShape {
+  const hw = w / 2;
+  const hh = h / 2;
+  if (w >= h) {
+    const r = hh;
+    const cx = hw - r;
+    return {
+      core: [
+        { x: -cx, y: 0 },
+        { x: cx, y: 0 },
+      ],
+      radiusMm: r,
+    };
+  }
+  const r = hw;
+  const cy = hh - r;
+  return {
+    core: [
+      { x: 0, y: -cy },
+      { x: 0, y: cy },
+    ],
+    radiusMm: r,
+  };
+}
+
+/**
+ * The four corner centres of `roundRectRing`, from its clamping formula. `null`
+ * when the corner radius clamps to 0 — the shape is then the rect its ring
+ * already is.
+ */
+function roundRectCore(w: number, h: number, ratio: number): RoundedShape | null {
+  const hw = w / 2;
+  const hh = h / 2;
+  const r = Math.min(ratio * Math.min(w, h), hw, hh);
+  // `roundRectRing` falls back to `rectRing` on `r <= 0`; a NaN ratio passes
+  // that test and would build a NaN core, so require a usable radius outright.
+  if (!radiusDimension(r)) return null;
+  const cxp = hw - r;
+  const cyp = hh - r;
+  return {
+    core: [
+      { x: cxp, y: cyp },
+      { x: -cxp, y: cyp },
+      { x: -cxp, y: -cyp },
+      { x: cxp, y: -cyp },
+    ],
+    radiusMm: r,
+  };
+}
+
+/**
+ * The pad's EXACT shape as a convex core ⊕ a disc (exact-geometry contract 12
+ * §1.1), centred at the origin and rotated by its own `rotationDeg` — the shape
+ * {@link shapeRingAroundOrigin} circumscribes. `null` for `rect` / `trapezoid` /
+ * `custom`, whose exact shape IS that ring with radius 0 (S12c owns the true
+ * trapezoid / custom outlines), so the caller references the ring it already
+ * built instead of rebuilding one here.
+ *
+ * `null` ALSO for a pad whose radius-defining dimension is not finite and
+ * positive (see {@link radiusDimension}): such a pad keeps the ring it has
+ * always been judged on rather than gaining a negative radius.
+ */
+export function shapeRoundedAroundOrigin(pad: ShapeInput): RoundedShape | null {
+  let base: RoundedShape | null;
+  switch (pad.shape) {
+    // `heightMm` is IGNORED, exactly as `ellipseRing(hw, hw)` ignores it — so
+    // it is not required to be usable either, or a `circle` pad with a defect
+    // height would carry a `disc` the exact shape disagreed with.
+    case "circle":
+      base = radiusDimension(pad.widthMm)
+        ? { core: [{ x: 0, y: 0 }], radiusMm: pad.widthMm / 2 }
+        : null;
+      break;
+    // The stadium reads BOTH dimensions: `w >= h` picks the spine axis and the
+    // other half-dimension is the cap radius.
+    case "oval":
+      base =
+        radiusDimension(pad.widthMm) && radiusDimension(pad.heightMm)
+          ? stadiumSpine(pad.widthMm, pad.heightMm)
+          : null;
+      break;
+    case "roundrect":
+      base =
+        radiusDimension(pad.widthMm) && radiusDimension(pad.heightMm)
+          ? roundRectCore(
+              pad.widthMm,
+              pad.heightMm,
+              pad.roundrectRatio ?? 0.25,
+            )
+          : null;
+      break;
+    default:
+      base = null;
+      break;
+  }
+  if (!base || !pad.rotationDeg) return base;
+  return {
+    core: base.core.map((p) => rotate(p, pad.rotationDeg)),
+    radiusMm: base.radiusMm,
+  };
+}
+
+/**
+ * Footprint pad → its world-space rounded shape. `ring` MUST be this pad's
+ * {@link padOutlineWorldMm} output: a `rect` / `trapezoid` / `custom` pad's
+ * exact shape is that very array, and referencing it is what keeps the two from
+ * drifting apart.
+ */
+export function padRoundedWorldMm(
+  placement: PcbPlacedPart,
+  pad: FootprintRenderSourcePad,
+  ring: readonly PcbPointMm[],
+): RoundedShape {
+  const local = shapeRoundedAroundOrigin(pad);
+  if (!local) return { core: ring, radiusMm: 0 };
+  // A circle's core is the pad CENTRE, and `padWorldPositionMm` is exactly that
+  // one vertex's chain — the same call the copper record's exact `disc` takes,
+  // so core and disc cannot disagree by a bit.
+  if (pad.shape === "circle") {
+    return {
+      core: [padWorldPositionMm(placement, pad)],
+      radiusMm: local.radiusMm,
+    };
+  }
+  const mirrored = placementMirrorX(placement);
+  return {
+    core: local.core.map((v) =>
+      padWorldVertex(v, pad.centerMm, placement, mirrored),
+    ),
+    radiusMm: local.radiusMm,
+  };
+}
+
+/** Free pad → its world-space rounded shape (`centerMm` is already world). */
+export function freePadRoundedWorldMm(
+  freePad: PcbFreePad,
+  ring: readonly PcbPointMm[],
+): RoundedShape {
+  const local = shapeRoundedAroundOrigin(freePadShapeInput(freePad));
+  if (!local) return { core: ring, radiusMm: 0 };
+  if (freePad.shape === "circle") {
+    return {
+      core: [{ x: freePad.centerMm.x, y: freePad.centerMm.y }],
+      radiusMm: local.radiusMm,
+    };
+  }
+  return {
+    core: local.core.map((v) => ({
+      x: v.x + freePad.centerMm.x,
+      y: v.y + freePad.centerMm.y,
+    })),
+    radiusMm: local.radiusMm,
+  };
 }
 
 export interface RingBounds {

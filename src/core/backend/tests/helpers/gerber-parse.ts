@@ -10,6 +10,14 @@
  * and every `G36 … G37` contour is captured with its polarity — so the silk
  * parity harness can compare the emitted legend to the artwork model 1:1.
  *
+ * S12b adds CIRCULAR interpolation (exact-geometry contract 12 §6): `G01`/`G02`/
+ * `G03` and `G74`/`G75` are modal state, an `I`/`J` operand is read back as the
+ * arc's centre, and the two ways a reader could silently mis-plot an arc — a
+ * circular move with no `I`/`J`, and an arc outside multi-quadrant mode — are
+ * parse ERRORS rather than skipped lines. `strict` extends that to any `G`
+ * command this parser does not model, which is what the Profile parity harness
+ * runs with.
+ *
  * Every aperture — standard or macro — is reduced to a union of CONVEX
  * primitives (axis-aligned-then-rotated rectangles and circles), which is
  * exactly what an aperture macro is and what a `C` / `R` / `O` aperture can be
@@ -57,10 +65,23 @@ export interface GerberPoint {
   yMm: number;
 }
 
+/** The circular interpolation that reached a stroke point. */
+export interface GerberArc {
+  /** Centre, mm — the move's start point plus its `I`/`J` offset. */
+  c: GerberPoint;
+  /** Clockwise in the EMITTED image (`G02`); `G03` is counter-clockwise. */
+  cw: boolean;
+}
+
+/** A stroke vertex, plus the arc that reached it when the move was circular. */
+export interface GerberStrokePoint extends GerberPoint {
+  arc?: GerberArc;
+}
+
 /** One `D02` move plus the `D01` draws that followed it, outside any region. */
 export interface GerberStroke {
   apertureCode: number;
-  points: GerberPoint[];
+  points: GerberStrokePoint[];
 }
 
 /** One `G36 … G37` contour, with the polarity in force when it was emitted. */
@@ -162,7 +183,22 @@ function parseMacroBody(lines: readonly string[]): GerberPrimitive[] {
   return out;
 }
 
-export function parseGerber(text: string): ParsedGerber {
+export interface ParseGerberOptions {
+  /**
+   * Throw on a `G` command this parser does not model, and on a coordinate line
+   * it cannot read, instead of skipping it. An unmodelled mode line silently
+   * changes how every following move plots, so a parity harness must never
+   * tolerate one.
+   */
+  strict?: boolean;
+}
+
+type Interpolation = "linear" | "cw" | "ccw";
+
+export function parseGerber(
+  text: string,
+  options: ParseGerberOptions = {},
+): ParsedGerber {
   const lines = text.split("\r\n");
   const macros = new Map<string, GerberPrimitive[]>();
   const apertures = new Map<number, GerberAperture>();
@@ -175,6 +211,10 @@ export function parseGerber(text: string): ParsedGerber {
   let polarity: "dark" | "clear" = "dark";
   let openStroke: GerberStroke | null = null;
   let openRegion: GerberPoint[] | null = null;
+  let interpolation: Interpolation = "linear";
+  // No default: `G75` (or the deprecated `G74`) must be stated before any arc.
+  let quadrant: "single" | "multi" | null = null;
+  let cursor: GerberPoint | null = null;
 
   // A stroke with a single `D02` and no `D01` draws nothing; drop it rather
   // than report a phantom stroke the artwork model can never match.
@@ -226,6 +266,29 @@ export function parseGerber(text: string): ParsedGerber {
       inRegion = false;
       continue;
     }
+    const gcode = /^G(\d+)\*$/.exec(line);
+    if (gcode) {
+      switch (Number(gcode[1])) {
+        case 1:
+          interpolation = "linear";
+          break;
+        case 2:
+          interpolation = "cw";
+          break;
+        case 3:
+          interpolation = "ccw";
+          break;
+        case 74:
+          quadrant = "single";
+          break;
+        case 75:
+          quadrant = "multi";
+          break;
+        default:
+          if (options.strict) throw new Error(`unsupported G command: ${line}`);
+      }
+      continue;
+    }
     const dcode = /^D(\d+)\*$/.exec(line);
     if (dcode) {
       const code = Number(dcode[1]);
@@ -235,17 +298,39 @@ export function parseGerber(text: string): ParsedGerber {
       }
       continue;
     }
-    const op = /^X(-?\d+)Y(-?\d+)D0([123])\*$/.exec(line);
-    if (!op) continue;
-    const point: GerberPoint = {
+    const op = /^X(-?\d+)Y(-?\d+)(?:I(-?\d+)J(-?\d+))?D0([123])\*$/.exec(line);
+    if (!op) {
+      if (options.strict && /^[XYIJ]/.test(line)) {
+        throw new Error(`unreadable coordinate line: ${line}`);
+      }
+      continue;
+    }
+    const point: GerberStrokePoint = {
       xMm: Number(op[1]) / COORD_SCALE,
       yMm: Number(op[2]) / COORD_SCALE,
     };
+    if (interpolation !== "linear" && op[5] === "1") {
+      if (op[3] === undefined || op[4] === undefined) {
+        throw new Error(`circular interpolation without I/J: ${line}`);
+      }
+      if (quadrant !== "multi") {
+        throw new Error(`arc move outside G75: ${line}`);
+      }
+      if (!cursor) throw new Error(`arc move with no current point: ${line}`);
+      point.arc = {
+        c: {
+          xMm: cursor.xMm + Number(op[3]) / COORD_SCALE,
+          yMm: cursor.yMm + Number(op[4]) / COORD_SCALE,
+        },
+        cw: interpolation === "cw",
+      };
+    }
+    cursor = { xMm: point.xMm, yMm: point.yMm };
     if (inRegion) {
       openRegion?.push(point);
       continue;
     }
-    switch (op[3]) {
+    switch (op[5]) {
       case "1":
         openStroke?.points.push(point);
         break;

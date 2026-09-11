@@ -7,17 +7,19 @@
 
 import type { PcbCopperLayerId, PcbPointMm } from "../../sdks/designer";
 import {
-  circleToPolygonDistance,
   pointInPolygon,
   pointToRingEdgeDistance,
-  polygonToPolygonDistance,
-  polylineToPolygonDistance,
   ringToRingEdgeDistance,
 } from "../pcb-geometry/pcb-clearance-geometry";
 import {
   pointToPolylineDistance,
   polylineToPolylineDistance,
 } from "../pcb-geometry/pcb-trace-geometry";
+import {
+  roundedPoint,
+  roundedPolylineGap,
+  roundedTouch,
+} from "../pcb-geometry/rounded-shape";
 import type { RingBounds } from "../pcb-geometry/pad-outline";
 import { CONNECT_EPS_MM } from "../pcb-geometry/tolerance";
 import type {
@@ -105,21 +107,23 @@ export function pointToIslandDistance(
   return best;
 }
 
-function discGap(
-  a: { center: PcbPointMm; radiusMm: number },
-  b: { center: PcbPointMm; radiusMm: number },
-): number {
-  return (
-    Math.hypot(a.center.x - b.center.x, a.center.y - b.center.y) -
-    a.radiusMm -
-    b.radiusMm
-  );
-}
-
 /**
- * Pad geometry for a touch test: the exact disc of a circular pad, else its
- * (circumscribed) outline ring. Oval and roundrect arcs keep the conservative
- * polygon — a ~0.2 % over-reach of the arc radius, recorded as the S2 residual.
+ * Pad geometry for a touch test: the pad's EXACT copper (exact-geometry
+ * contract 12 §1.3). The circumscribed outline ring used to decide this, which
+ * fabricated contact between two same-net oval / roundrect pads physically
+ * ~2 µm apart — they read CONNECTED, so `UNCONNECTED_NET` stayed silent and,
+ * the pads being same-net, no clearance check saw them either (Astra S7 #5).
+ *
+ * Cores are subsets of their rings, so IN REAL ARITHMETIC no pair that was
+ * OPEN can become CONNECTED and only fabricated contacts are removed. In
+ * FLOAT the claim holds only outside a ±1 ulp window around
+ * `CONNECT_EPS_MM`: this predicate used to group a circle pair's radii
+ * successively (`Math.hypot(…) − rA − rB`) and `roundedGap` groups them first
+ * over `Math.sqrt` (`distance(…) − (rA + rB)`), so a pair sitting at EXACTLY
+ * the 0.5 nm contact tolerance can flip either way by one ulp of that
+ * regrouping. One kernel is worth that: `pair-gap.ts` had already grouped
+ * first, so the two halves of the same question used to disagree with each
+ * other. `pcb-geometry-rounded-shape.test.ts` pins the window.
  */
 function padTouch(
   pad: PadCopperItem,
@@ -128,47 +132,17 @@ function padTouch(
 ): boolean {
   switch (other.kind) {
     case "pad":
-      if (pad.disc && other.disc) return discGap(pad.disc, other.disc) <= eps;
-      if (pad.disc) {
-        return (
-          circleToPolygonDistance(
-            pad.disc.center,
-            pad.disc.radiusMm,
-            other.ring,
-          ) <= eps
-        );
-      }
-      if (other.disc) {
-        return (
-          circleToPolygonDistance(
-            other.disc.center,
-            other.disc.radiusMm,
-            pad.ring,
-          ) <= eps
-        );
-      }
-      return polygonToPolygonDistance(pad.ring, other.ring) <= eps;
+      return roundedTouch(pad.rounded, other.rounded, eps);
     case "trace":
-      if (pad.disc) {
-        return (
-          pointToPolylineDistance(pad.disc.center, asPath(other.pointsMm))
-            .distance <=
-          pad.disc.radiusMm + other.halfWidthMm + eps
-        );
-      }
       return (
-        polylineToPolygonDistance(other.pointsMm, pad.ring) <=
-        other.halfWidthMm + eps
+        roundedPolylineGap(other.pointsMm, other.halfWidthMm, pad.rounded) <=
+        eps
       );
     case "via":
-      if (pad.disc) {
-        return (
-          discGap(pad.disc, { center: other.center, radiusMm: other.radiusMm }) <=
-          eps
-        );
-      }
-      return (
-        circleToPolygonDistance(other.center, other.radiusMm, pad.ring) <= eps
+      return roundedTouch(
+        pad.rounded,
+        roundedPoint(other.center, other.radiusMm),
+        eps,
       );
     case "pour":
       return other.memberKeys.has(pad.key);
@@ -289,14 +263,13 @@ export function endCapTouches(
   if (!p) return false;
   const hw = trace.halfWidthMm;
   switch (other.kind) {
+    // The end cap is a disc of radius `hw` at `p`; the pad is its exact copper,
+    // the SAME shape `padTouch` judges (12 §1.3). Judging the cap on the pad's
+    // circumscribed ring here made the two disagree: the graph called a 2 µm
+    // gap OPEN — raising `UNCONNECTED_NET` — while this predicate called the
+    // same end cap connected, so `TRACK_DANGLING` stayed silent (R1 #2).
     case "pad":
-      if (other.disc) {
-        return (
-          Math.hypot(p.x - other.disc.center.x, p.y - other.disc.center.y) <=
-          hw + other.disc.radiusMm + eps
-        );
-      }
-      return circleToPolygonDistance(p, hw, other.ring) <= eps;
+      return roundedTouch(roundedPoint(p, hw), other.rounded, eps);
     case "trace":
       return (
         pointToPolylineDistance(p, asPath(other.pointsMm)).distance <=
@@ -324,15 +297,14 @@ export function viaTouchesOnLayer(
 ): boolean {
   if (!occupiesLayer(other, layer)) return false;
   switch (other.kind) {
+    // The barrel disc against the pad's exact copper — the same shape
+    // `padTouch` judges, so the ">= 2 layers" test cannot contradict the graph
+    // that already called this pair open (R1 #2).
     case "pad":
-      if (other.disc) {
-        return (
-          discGap({ center: via.center, radiusMm: via.radiusMm }, other.disc) <=
-          eps
-        );
-      }
-      return (
-        circleToPolygonDistance(via.center, via.radiusMm, other.ring) <= eps
+      return roundedTouch(
+        roundedPoint(via.center, via.radiusMm),
+        other.rounded,
+        eps,
       );
     case "trace":
       return (

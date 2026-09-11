@@ -21,10 +21,22 @@ const COORD_SCALE = 1_000_000;
  * already omitted by `toString()`; the format spec compensates.
  */
 export function gerberCoord(mm: number): string {
+  return gerberNm(mm).toString();
+}
+
+/**
+ * The integer nanometre a millimetre value is emitted as — the SAME rounding
+ * {@link gerberCoord} applies, exposed so a caller that must subtract two
+ * emitted coordinates (Gerber arc `I`/`J` offsets, exact-geometry contract 12
+ * §6) does the subtraction on the quantised integers rather than in mm. A
+ * millimetre difference rounded afterwards would not reconstruct the centre the
+ * neighbouring arc piece was measured from.
+ */
+export function gerberNm(mm: number): number {
   if (!Number.isFinite(mm)) {
     throw new Error(`gerberCoord: non-finite value ${mm}`);
   }
-  return Math.round(mm * COORD_SCALE).toString();
+  return Math.round(mm * COORD_SCALE);
 }
 
 /**
@@ -55,4 +67,18 @@ export function gerberDim(mm: number): string {
  */
 export function xyOperand(xMm: number, yMm: number): string {
   return `X${gerberCoord(xMm)}Y${gerberCoord(yMm)}`;
+}
+
+/** {@link xyOperand} for a point already quantised by {@link gerberNm}. */
+export function xyOperandNm(xNm: number, yNm: number): string {
+  return `X${xNm}Y${yNm}`;
+}
+
+/**
+ * The `I`/`J` operand of a circular interpolation: the SIGNED offset from the
+ * arc piece's start point to the arc centre, in the same X4.6 integer grid as
+ * the coordinates (multi-quadrant `G75` reading).
+ */
+export function ijOperandNm(iNm: number, jNm: number): string {
+  return `I${iNm}J${jNm}`;
 }

@@ -674,6 +674,18 @@ export interface PcbDesignRules {
      */
     courtyardFallbackMm?: number;
   };
+  /**
+   * Board-material rules (exact-geometry contract 12 §5). Optional/additive,
+   * and ABSENT means no verdict at all: the minimum web a board may carry is a
+   * shape intent no fabricator row states and nothing may default for a user.
+   */
+  outline?: {
+    /**
+     * Minimum width of board MATERIAL anywhere — between two cutouts, between
+     * a cutout and the edge, or across the board's own neck (mm).
+     */
+    minWebMm?: number;
+  };
 }
 
 /**
@@ -2543,7 +2555,17 @@ export type DrcRuleCode =
   // A copper-free wedge at a trace junction (an acid trap).
   | "TRACE_ACUTE_ANGLE"
   // Two collinear, overlapping segments of DIFFERENT traces on one layer.
-  | "TRACE_OVERLAP";
+  | "TRACE_OVERLAP"
+  // --- Board material (S12b, exact-geometry contract 12 §5) ---
+  // Board MATERIAL narrower than `designRules.outline.minWebMm`: a neck in the
+  // board itself, a band between a cutout and the edge, an annulus between two
+  // cutouts, or a whole board narrower than the rule.
+  | "OUTLINE_MIN_WEB"
+  // The explicit "we did not answer" of the exact-geometry layer (§4, §5): the
+  // web certificate was unavailable (a capped flattening, a kernel refusal, a
+  // budget), or an exact board-edge / outline recomputation ran out of its
+  // per-run budget and the chord verdict stands. Never a silent pass.
+  | "OUTLINE_WEB_UNCHECKED";
 
 export interface DrcViolation {
   /**

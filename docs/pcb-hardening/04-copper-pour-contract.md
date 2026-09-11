@@ -144,7 +144,7 @@ The circumscribed ring of an oval / roundrect / stadium pad exceeds the true cop
 `r·(sec(π/48) − 1) ≈ 0.2146 %` of the arc radius; membership on that ring can therefore call a
 fill that ends inside that band (≤ 2.1 µm for `r = 1 mm`) a contact — the same residual S1 and S2
 accepted for connectivity and DRC, kept here for parity with S1 rather than fixed with a second
-pad geometry; exact discs for TRUE circles landed in DRC in S7 (`06-batch-drc-contract.md` §2), exact arcs for ovals / roundrects are S11's (Astra run 1 #3, accepted as the recorded S1 limit).
+pad geometry; exact discs for TRUE circles landed in DRC in S7 (`06-batch-drc-contract.md` §2), exact arcs for ovals / roundrects landed in S12b for DRC and connectivity (contract 12 §1); the POUR still clears against the circumscribed record ring — a conservative, recorded limit (12 §10).
 
 ## 5. Clearances
 

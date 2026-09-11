@@ -198,6 +198,24 @@ And a command field with no parser in `routes.ts` is silently dropped over HTTP.
   `checks/length.ts` / `signal-integrity.ts` (S14) — are scheduled, not sanctioned (the
   routing-obstacle and live-DRC pad layers were closed in S8: both read the `LegalityContext`
   items). Never add another.
+- **Curved copper and board arcs are exact since S12b (`docs/pcb-hardening/12-exact-geometry-contract.md`).**
+  A pad record carries `rounded` — a convex core ⊕ disc (`pcb-geometry/rounded-shape.ts`; circle =
+  point, oval = spine, roundrect = four inner corners, rect / trapezoid / custom = ring with r = 0)
+  — and every pad gap (`pair-gap.ts`), touch (`touch.ts`: `padTouch`, `endCapTouches`,
+  `viaTouchesOnLayer`) and keepout overlap is `convexDistance(coreA, coreB) − (rA + rB)`, exact;
+  `disc` and `ring` stay for the pour, the copper-shape unit, the artwork and the broad phase. A
+  contour arc's ONE curve is `canonicalContour` (start-radius circle, authored end point projected;
+  DERIVED at read, never persisted — `normalizeContour` does not project); `exactContour` /
+  `exact-arcs.ts` / `exact-simplicity.ts` are the exact kernel; the outline verdict
+  (`checks/outline.ts`) AND the editor gate (`validateContour`) run the SAME simplicity predicate
+  on the exact ring; board-edge verdicts (`checks/board.ts`, BOTH bodies) use the certified
+  interval `R_inner ⊆ R_true ⊆ R_outer` (`BoardRegion.outerBias` / `exact` / `boundMm`) and
+  recompute exactly only when the interval straddles the verdict — never spread or clone a
+  `BoardRegion` (its exact fields are lazy getters); the budget note is `OUTLINE_WEB_UNCHECKED`
+  and `outlineInvalid` counts ONLY `BOARD_OUTLINE_INVALID`. Board-material webs are
+  `OUTLINE_MIN_WEB` (`outline.minWebMm`, erosion via `material-web-kernel.ts`). The Gerber
+  Profile emits true arcs (`export/gerber/arcs.ts`: one quantised centre, integer I/J, ≤ 90°
+  pieces). Ellipse outlines stay chords everywhere. Polygon pads (trapezoid / custom) are S12c.
 - **Board geometry has one region: `src/shared/pcb-geometry/board-region.ts`.** `buildBoardRegion`
   flattens the outline and cutouts once per `runDrc` into a closed set (`ctx.boardRegion`); the
   legality build biases every arc toward the board side so the polygon is a subset of the true

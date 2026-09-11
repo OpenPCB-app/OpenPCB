@@ -22,6 +22,7 @@ import type {
 import {
   board,
   boardWithRules,
+  freePad as freePadFixture,
   pad,
   placement,
   projection,
@@ -285,6 +286,36 @@ describe("KEEPOUT_VIOLATION — vias and pads", () => {
     const found = keepoutViolations(report);
     expect(found).toHaveLength(1);
     expect(found[0]!.layer).toBe("In1.Cu");
+  });
+
+  /**
+   * The keepout's right edge is x = 8. An oval pad of 2 x 1 has 0.5 mm caps,
+   * so its exact copper starts at `centre − 1`; its CIRCUMSCRIBED ring starts
+   * 1.07 µm earlier (sec(π/48) on the cap). A pad whose exact edge sits 0.5 µm
+   * outside the keepout used to be reported through that inflation
+   * (exact-geometry contract 12 §1.3).
+   */
+  describe("an oval pad is judged on its exact copper", () => {
+    const ovalAt = (x: number) =>
+      run({
+        freePads: [
+          freePadFixture("fp1", {
+            shape: "oval",
+            widthMm: 2,
+            heightMm: 1,
+            center: { x, y: 4 },
+          }),
+        ],
+        keepouts: [keepoutRow("k1", ["F.Cu"], SQUARE, { ...NONE, pads: true })],
+      });
+
+    test("the ring's 1.07 µm over-reach no longer affects it", () => {
+      expect(keepoutViolations(ovalAt(9.0000005))).toEqual([]);
+    });
+
+    test("real copper 5 µm inside is still reported", () => {
+      expect(keepoutViolations(ovalAt(8.995))).toHaveLength(1);
+    });
   });
 });
 

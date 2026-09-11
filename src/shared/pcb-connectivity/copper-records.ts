@@ -34,10 +34,13 @@ import {
 } from "../pcb-geometry/pad-geometry";
 import {
   freePadOutlineWorldMm,
+  freePadRoundedWorldMm,
   padOutlineWorldMm,
+  padRoundedWorldMm,
   ringBounds,
   type RingBounds,
 } from "../pcb-geometry/pad-outline";
+import type { RoundedShape } from "../pcb-geometry/rounded-shape-types";
 
 const NM_TO_MM = 1 / 1_000_000;
 
@@ -80,6 +83,15 @@ export interface PadCopperRecord {
    * arc radius recorded for S2.
    */
   disc?: { center: PcbPointMm; radiusMm: number };
+  /**
+   * The pad's EXACT copper: a convex core ⊕ a disc (exact-geometry contract 12
+   * §1.1). `ring` circumscribes every arc, which fabricates contact between two
+   * same-net rounded pads that are physically ~2 µm apart; this is the shape
+   * clearance, connectivity and the keepout overlap judge instead. `disc` is
+   * unchanged and stays — it is exactly this shape with a one-point core, and
+   * it has 56 read sites outside DRC.
+   */
+  rounded: RoundedShape;
   /**
    * False when `ring` is only a bounding-rectangle SUPERSET of the copper
    * (`custom` / `trapezoid` — the render source carries no true outline). A
@@ -224,6 +236,7 @@ function footprintPadRecords(
           : placement.rotationDeg + pad.rotationDeg,
         mirrored: placementMirrorX(placement),
         ...discOf(pad.shape, pad.widthMm, center),
+        rounded: padRoundedWorldMm(placement, pad, ring),
         exactShape: pad.shape !== "custom" && pad.shape !== "trapezoid",
         bounds: ringBounds(ring),
         center,
@@ -265,6 +278,7 @@ function freePadRecords(
       rotationDeg: freePad.rotationDeg,
       mirrored: false,
       ...discOf(freePad.shape, freePad.widthMm, freePad.centerMm),
+      rounded: freePadRoundedWorldMm(freePad, ring),
       // Free pads have no `custom` / `trapezoid` shape (SDK `PcbFreePadShape`).
       exactShape: true,
       bounds: ringBounds(ring),

@@ -92,7 +92,8 @@ S0  Ground truth
                                               └► S10 DRC execution responsiveness
                                                    └► S11 Hole / pad / via manufacturability
                                                         └► S12 DFM overlays
-                                                             └► S12b Exact arcs + polygon pads
+                                                             └► S12b Exact arcs
+                                                                  └► S12c Polygon pads
                                                                   └► S13 Electrical rules
                                                                   └► S14 SI v1 correctness
                                                                        └► S15 High-speed runway
@@ -137,7 +138,8 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 |---|---|---|---|---|---|
 | S11 | Hole, pad and via manufacturability geometry | Drill geometry, slots, PTH/NPTH, annular geometry, via type/span, aspect semantics. DRC's model of manufactured holes matches export. | B2-5 (manufacturability half), B2-6, B2-7, B6-1 | spec-attack xhigh (run 1: 16 findings — 2 blockers accepted, 13 folded, 1 rejected) · repository-grounded adversarial-verify xhigh (run 2a cut by the usage limit, 3 folded from its trajectory; run 2b: 6 findings, all accepted) | done 2026-09-10 (`10-manufacturability-contract.md`) |
 | S12 | DFM overlays and production checks | Courtyard, silkscreen, mask bridges/slivers, copper slivers, acute angles — built at Gerber parity. | — (no overlay codes exist today) | spec-attack xhigh; post only for polygon-topology checks | done 2026-09-11 (`11-dfm-contract.md`) |
-| S12b | Exact-arc geometry and polygon pads | Exact-arc contour validity (S2 #8), the chord-band second chance (S7), Gerber true arcs, exact arcs for non-circular pads in clearance, board-material minimum web (S2 #11), trapezoid / custom pad outlines as polygon apertures (needs a rendering-core field — after the shared tags). Re-owned from S12 on 2026-09-10 so S12 kept one objective. | — | spec-attack xhigh | pending |
+| S12b | Exact-arc geometry | ONE exact model of every curved copper and board shape: rounded pads (convex core ⊕ disc) in clearance, connectivity, keepouts and board-edge checks (closes 06 §5 / Astra S7 #5); ONE canonical contour arc (start radius, end point projected) at write and read; the exact arc kernel; outline validity on the exact contour for DRC AND the editor gate (S2 #8); board-edge verdicts on a certified interval from two biased regions, exact only on ambiguity (the S7 second chance, made sound); board-material minimum web by erosion (`OUTLINE_MIN_WEB`, S2 #11); Gerber Profile true arcs. Contract `12-exact-geometry-contract.md`. | — | brainstorm xhigh (plan, run 0) · spec-attack xhigh (run 1: 18 findings, all accepted) · repo-grounded adversarial-verify xhigh (run 2: 4 executed counterexamples, all fixed) | done 2026-09-11 (`12-exact-geometry-contract.md`) |
+| S12c | Polygon pads (trapezoid / custom) | True outlines through `kicad-parsers` (`rect_delta`, `primitives`) → `rendering-core` `outlinesMm` (pad-local rings, copper = their union) → `kicad-import`; OpenPCB consumers (records `rings`, pair kernels min over rings, pour, copper-shape unit, annular SDF, mask artwork, Gerber `%AM` primitive 4 per ring, canvas / 3D); existing rows re-parsed from `raw.rawSource`; authored fixtures (none exist). Re-owned from S12b on 2026-09-11; needs the S11 tag follow-up + a third tag round. | — | spec-attack xhigh | pending |
 | S13 | Electrical-rule fidelity | Voltage difference, clearance/creepage semantics, external/internal assumptions, current vs width, layer-dependent assumptions, defaults, applicable pad/via/trace combinations, interaction with net classes and scoped rules. Precise modest claims over ambitious labels. | B7-1 (unassigned copper does not inherit the rule tier of the net it extends — S8 Astra run 2) | spec-attack xhigh · adversarial-verify xhigh | pending |
 | S14 | SI v1 mathematical correctness | Routed length, branches/stubs, disconnected fragments, via contribution, coupled-span accounting, overlapping segments, gap measurement, diverging gap, layer transitions, pair ordering, determinism. Every reported SI number has a precise definition. | — | spec-attack xhigh · adversarial-verify xhigh | pending |
 | S15 | High-speed architecture runway | Identify contracts/data representations that would block credible future SI (stackup geometry, dielectrics, per-layer copper, reference planes, propagation delay, via barrel path, impedance targets, return-path continuity). Produce a compatibility document; change only what prevents a known dead end. | — | brainstorm xhigh (one call) | pending |
@@ -233,6 +235,10 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
   1 flag-skip; golden shasums areas 99c49eb3 · census 15debab1 (two attributed fab rows) ·
   cutouts 43fbd513 · holes-4l a431a463 (new) · pours ab245110 · rules ed0705e8 · small cd4b962e.*
 - **S12** — DFM checks use the same physical geometry export uses.
+- **S12b** — every curved copper shape has one exact model shared by connectivity, DRC and the live
+  gate; the outline verdict, the editor's contour gate, the board-edge verdicts near arcs and the
+  Profile the fab receives are computed from the exact contour; no material web is judged on chords;
+  every verdict away from the certified band is byte-identical to S12 (met 2026-09-11).
   *Met 2026-09-11 (`11-dfm-contract.md`): the silk strokes and mask openings the checks judge are
   the writer's own model (`gerber-silk-parity.test.ts`, 1:1 per face on every golden); courtyard
   regions, copper unions and pour islands are the S1/S5 geometry. Gates: backend 2634 pass / 22
@@ -270,7 +276,8 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 | S10 | none — user decision 2026-09-09 (program default) |
 | S11 | **xhigh pre + xhigh post** |
 | S12 | xhigh pre + xhigh post (polygon-topology checks, repository-grounded) |
-| S12b | xhigh pre |
+| S12b | xhigh brainstorm (plan) + **xhigh pre + xhigh post** (user: Astra "as needed", 2026-09-11) |
+| S12c | xhigh pre |
 | S13 | **xhigh pre + xhigh post** |
 | S14 | **xhigh pre + xhigh post** |
 | S15 | xhigh brainstorm once |
@@ -723,6 +730,7 @@ unmanufacturable board.
   files; the shared golden fixture was clobbered once by a whole-file generator and restored by
   id — never regenerate a shared fixture wholesale); the disk filled mid-re-baseline (user
   cleared it; the tracked goldens were verified at their baseline shasums before re-running).
+- **S12b (2026-09-11) — exact-arc geometry.** Decisions (user): polygon pads re-owned to a new **S12c** row (three shared packages, a third tag round, no fixtures); the editor's `validateContour` shares the exact self-intersection predicate with DRC (S2 #8 closes end-to-end); the canonical contour arc (start radius, authored end point projected radially) is DERIVED at read by every consumer (`flattenOutline`, `exactContour`, the validator, the Profile) and never persisted — Astra run 1 #11 showed a projected endpoint rounded to integer nm is not a fixed point, so the user's write + read decision was refined to read-only with the same intent and no release-note event; `OUTLINE_MIN_WEB` is the `outline.minWebMm` design rule only, a fab row only with a sourced value; Astra run 0 (brainstorm, plan mode) + run 1 (spec-attack) + run 2 (repository-grounded adversarial-verify), all xhigh. Fable: copper = convex core ⊕ disc with closed-form `roundedGap` (`disc` stays; `r === 0` delegates to today's primitives; whole-core containment; halo = `edgeHalo + r`); board-edge verdicts on a certified interval `R_inner ⊆ R_true ⊆ R_outer` with exact recomputation only when the interval straddles the threshold (the "witness edge is an arc" trigger was broken twice by Astra run 0); the web is an erosion feature (the S12 copper-shape kernel on the 1e-4-flattened material region), not a pairwise primitive distance; the Profile emits ≤ 90° arc pieces with one quantised centre and integer I/J and never repairs a centre. Plan-critique (Opus, 29 findings, 11 blockers) and Astra run 0 ledgers in contract 12 §12.0. Review: plan-critique (Opus, 29 findings, 11 blockers) and Astra run 0 folded before the contract; Astra run 1 (spec-attack, 18 findings, all accepted — the canonical curve derived not persisted, arity-dispatched distances, the indexed halo carrying the ring bound, the edge-interval exact containment, the contact-run web rule, zero-chord Gerber pieces, the 2√2 nm radius bound); R1 (`reviewer-critical`, 10 findings — the summed-first grouping's 4e-17 mm flip window recorded, `endCapTouches` / `viaTouchesOnLayer` switched, the negative-radius guard); R2 (`reviewer-critical`, 6 — the budget note had downgraded the commit gate's off-board refusal, fallback rings ARE authorable and are now fixtured, a degenerate ring's Profile falls back with a warning); Astra run 2 (repository-grounded, 4 executed counterexamples — the erosion-free ring-pair web arm, the per-item exact budget, fallback from both region builds, pre-quantisation material area). Goldens: `golden-arcs-2l` new (83 primitives, 37 violations, attributed); `census` one `BOARD_OUTLINE_INVALID` id moved to the exact contact witness; the other seven byte-identical. Gates at the program baseline. Files > 500 lines to split after S12c: `checks/board.ts` (1078), `manufacturability.ts` (525).
 
 ## Appendix — Session 0 amendments to the original program text
 

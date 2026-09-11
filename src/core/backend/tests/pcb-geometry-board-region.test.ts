@@ -14,6 +14,7 @@ import type {
   PcbPointMm,
 } from "../../../sdks";
 import {
+  type BoardRegion,
   buildBoardRegion,
   discInsideRegion,
   pointInOutline,
@@ -26,8 +27,27 @@ import {
   ringStrictlyInside,
   segmentInsideRegion,
   stadiumInsideRegion,
-} from "../../../shared/pcb-geometry/board-region";
-import { flattenOutline } from "../../../shared/pcb-geometry/outline-geometry";
+  } from "../../../shared/pcb-geometry/board-region";
+import { pointToPrimDistance } from "../../../shared/pcb-geometry/exact-arcs";
+import {
+  pointInExactRing,
+  ringPrims,
+} from "../../../shared/pcb-geometry/exact-ring";
+import {
+  ExactBudgetExceeded,
+  exactInsideRegion,
+  exactSignedMargin,
+} from "../../../shared/pcb-geometry/region-exact";
+import {
+  roundedInsideRegion,
+  roundedPenetration,
+  signedMargin,
+} from "../../../shared/pcb-geometry/region-rounded";
+import {
+  flattenOutline,
+  MAX_ARC_SEGMENTS,
+  MAX_CHORD_DEVIATION_MM,
+} from "../../../shared/pcb-geometry/outline-geometry";
 import {
   pointInPolygon,
   pointToPolygonDistance,
@@ -36,8 +56,12 @@ import {
   polylineToRingEdgeDistance,
   ringToRingEdgeDistance,
 } from "../../../shared/pcb-geometry/pcb-clearance-geometry";
-import { ringOrientation } from "../../../shared/pcb-geometry/ring-utils";
+import {
+  ringOrientation,
+  ringSignedArea,
+} from "../../../shared/pcb-geometry/ring-utils";
 import { ringSelfIntersects } from "../../../shared/pcb-geometry/segment-predicates";
+import { GEOM_EPS_MM } from "../../../shared/pcb-geometry/tolerance";
 
 // --------------------------------------------------------------------------
 // Fixtures
@@ -777,10 +801,19 @@ describe("shallow-arc sliver cutout keeps the safe bias", () => {
 
 // --------------------------------------------------------------------------
 // Astra §9.2 run 2: outer-ring sliver (look-ahead monotone refinement) and
-// arc endpoints with mismatched radii (annulus rule).
+// arc endpoints with mismatched radii.
+//
+// RE-TARGETED for S12b (exact-geometry contract 12 §2.1). The annulus rule —
+// sample a mismatched-radius arc on the smaller radius when inscribing and the
+// larger when circumscribing, joined to the AUTHORED endpoints by radial stubs —
+// is retired: a tolerance is not a curve. The canonical curve is the circle of
+// the START radius with the authored `to` projected radially onto it, so the
+// hole ring below loses its two radial-stub vertices and its arc ends at
+// (0, 1) instead of the authored (0, 0.9991). Every verdict is unchanged; only
+// the ring's bytes near that endpoint move, by the 0.0009 mm mismatch.
 // --------------------------------------------------------------------------
 
-describe("look-ahead refinement and the annulus rule", () => {
+describe("look-ahead refinement and the canonical arc curve", () => {
   test("a sliver-thin outer contour stays inside the true board", () => {
     const sagitta = 0.005;
     // 2 mm chord: r = (h² + s²) / 2s with half-chord h = 1.
@@ -805,7 +838,7 @@ describe("look-ahead refinement and the annulus rule", () => {
     expect(regionContainsPoint(region, p(1, 0.001))).toBe(false);
   });
 
-  test("a hole arc with a shorter end radius still encloses the annulus", () => {
+  test("a hole arc with a shorter end radius encloses the canonical circle", () => {
     const cut: PcbBoardCutout = {
       id: "m",
       shape: {
@@ -825,5 +858,386 @@ describe("look-ahead refinement and the annulus rule", () => {
     // 0.0004 mm inside the start-radius circle, next to the shorter endpoint.
     expect(regionContainsPoint(region, p(0.001, 0.9996))).toBe(false);
     expect(discInsideRegion(region, p(0.001, 0.9996), 0.0001)).toBe(false);
+    // The authored endpoint is no longer a ring vertex: the arc ends on the
+    // canonical circle of the START radius (1), and no radial stub survives.
+    const hole = region.holes[0]!;
+    expect(
+      hole.some((q) => Math.abs(q.x) < 1e-15 && Math.abs(q.y - 0.9991) < 1e-15),
+    ).toBe(false);
+    const exact = region.exact.holes[0]!;
+    if (!("prims" in exact)) throw new Error("expected exact primitives");
+    const arcPrim = exact.prims.find((prim) => prim.kind === "arc");
+    if (!arcPrim || arcPrim.kind !== "arc") throw new Error("expected an arc");
+    expect(arcPrim.r).toBeCloseTo(1, 12);
+    expect(Math.hypot(arcPrim.b.x, arcPrim.b.y)).toBeCloseTo(1, 12);
+  });
+});
+
+// --------------------------------------------------------------------------
+// S12b: the certified interval (exact-geometry contract 12 §4)
+// --------------------------------------------------------------------------
+
+/** Deterministic pseudo-random sampler — no `Math.random` in a DRC test. */
+function lcg(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 0x1_0000_0000;
+  };
+}
+
+function exactContains(region: BoardRegion, q: PcbPointMm): boolean {
+  if (pointInExactRing(region.exact.outer, q) === "outside") return false;
+  for (const hole of region.exact.holes) {
+    if (pointInExactRing(hole, q) === "inside") return false;
+  }
+  return true;
+}
+
+function exactClearanceMm(region: BoardRegion, q: PcbPointMm): number {
+  let best = Infinity;
+  for (const ring of [region.exact.outer, ...region.exact.holes]) {
+    for (const prim of ringPrims(ring)) {
+      const d = pointToPrimDistance(q, prim);
+      if (d < best) best = d;
+    }
+  }
+  return best;
+}
+
+describe("R_inner ⊆ R_true ⊆ R_outer", () => {
+  /** `golden-cutouts-2l`'s board: a 15 mm-cornered roundrect with 5 cutouts. */
+  const cutoutsBoard: PcbBoardOutline = {
+    kind: "roundrect",
+    widthMm: 80,
+    heightMm: 60,
+    centerMm: p(0, 0),
+    cornerRadiusMm: 15,
+  };
+  const cutoutsCuts: PcbBoardCutout[] = [
+    circleCut("c1", 3, 20, 10),
+    {
+      id: "c2",
+      shape: {
+        kind: "roundrect",
+        widthMm: 10,
+        heightMm: 4,
+        cornerRadiusMm: 2,
+        centerMm: p(-20, 12),
+      },
+    },
+    {
+      id: "c3",
+      shape: {
+        kind: "roundrect",
+        widthMm: 3,
+        heightMm: 12,
+        cornerRadiusMm: 1,
+        centerMm: p(0, -15),
+      },
+    },
+    circleCut("c4", 2, -24, -14),
+    circleCut("c5", 2, -24, -9.5),
+  ];
+
+  /** A free-form arc board: a bulging outer contour with an arc-walled cutout. */
+  const arcBoard: PcbBoardOutline = contour(p(-20, -12), [
+    line(20, -12),
+    arcTo(20, 12, 20, 0),
+    line(-20, 12),
+    line(-20, -12),
+  ]);
+  const arcCuts: PcbBoardCutout[] = [
+    contourCut("notch", p(-6, 0), [
+      arcTo(6, 0, 0, 0, true),
+      line(6, -4),
+      line(-6, -4),
+      line(-6, 0),
+    ]),
+    circleCut("round", 3.5, 8, 6),
+  ];
+
+  const boards: Array<[string, PcbBoardOutline, PcbBoardCutout[], number]> = [
+    ["golden-cutouts-2l", cutoutsBoard, cutoutsCuts, 45],
+    ["synthetic arc rings", arcBoard, arcCuts, 24],
+  ];
+
+  for (const [name, outline, cuts, half] of boards) {
+    test(`inner ⇒ exact ⇒ outer on 10⁴ points (${name})`, () => {
+      const inner = buildBoardRegion(outline, cuts, INNER);
+      const outer = inner.outerBias;
+      const rnd = lcg(90210);
+      let insideInner = 0;
+      let outsideOuter = 0;
+      for (let i = 0; i < 10_000; i += 1) {
+        const q = p(rnd() * half * 2.4 - half * 1.2, rnd() * half * 2.4 - half * 1.2);
+        // Both models are CLOSED at GEOM_EPS_MM and the chord rings sit up to
+        // `maxBoundMm` off the true curve, so only the boundary band itself is
+        // excluded — everything else must obey the inclusion.
+        if (exactClearanceMm(inner, q) <= inner.maxBoundMm + GEOM_EPS_MM) continue;
+        const lo = regionContainsPoint(inner, q);
+        const mid = exactContains(inner, q);
+        const hi = regionContainsPoint(outer.region, q, GEOM_EPS_MM, outer.index);
+        if (lo) {
+          insideInner += 1;
+          expect(mid).toBe(true);
+        }
+        if (mid) expect(hi).toBe(true);
+        if (!hi) {
+          outsideOuter += 1;
+          expect(mid).toBe(false);
+        }
+      }
+      // The fixtures must actually exercise both sides.
+      expect(insideInner).toBeGreaterThan(500);
+      expect(outsideOuter).toBeGreaterThan(500);
+    });
+  }
+
+  test("the outer-bias region is a superset of the inner one", () => {
+    const inner = buildBoardRegion(cutoutsBoard, cutoutsCuts, INNER);
+    // The outer outline circumscribes (wider bbox) and every hole inscribes
+    // (smaller bbox) — both grow the material.
+    expect(inner.outerBias.region.bounds.maxX).toBeGreaterThanOrEqual(
+      inner.bounds.maxX,
+    );
+    for (let h = 0; h < inner.holes.length; h += 1) {
+      const innerArea = Math.abs(ringSignedArea(inner.holes[h]!));
+      const outerArea = Math.abs(ringSignedArea(inner.outerBias.holes[h]!));
+      expect(outerArea).toBeLessThanOrEqual(innerArea + 1e-9);
+    }
+    // `outerBias` of the superset is itself — the mirror of the mirror is not
+    // a third region.
+    expect(inner.outerBias.region.outerBias.region).toBe(inner.outerBias.region);
+  });
+
+  test("boundMm is per ring and the cap residual for an r = 2000 arc", () => {
+    const region = buildBoardRegion(
+      { kind: "rect", widthMm: 10, heightMm: 10, centerMm: p(0, 0) },
+      [circleCut("huge", 2000, 0, 0), circleCut("small", 1, 3, 3)],
+      INNER,
+    );
+    expect(region.boundMm[0]).toBe(0); // a rect carries no arc at all
+    expect(region.boundMm[1]).toBeCloseTo(
+      2000 * (1 / Math.cos(Math.PI / MAX_ARC_SEGMENTS) - 1),
+      12,
+    );
+    expect(region.boundMm[2]).toBeCloseTo(MAX_CHORD_DEVIATION_MM, 12);
+    expect(region.maxBoundMm).toBe(region.boundMm[1]!);
+  });
+
+  test("the derived fields are lazy and invisible to serialisation", () => {
+    const region = buildBoardRegion(board100, [circleCut("c", 5, 0, 0)], INNER);
+    expect(Object.keys(region)).toEqual([
+      "outer",
+      "holes",
+      "unbiasedOuter",
+      "unbiasedHoles",
+      "bounds",
+      "ringBounds",
+      "edges",
+      "fallbacks",
+    ]);
+    expect(region.maxBoundMm).toBeCloseTo(MAX_CHORD_DEVIATION_MM, 12);
+  });
+});
+
+// --------------------------------------------------------------------------
+// S12b: rounded and exact containment (12 §1.2, §4)
+// --------------------------------------------------------------------------
+
+describe("roundedInsideRegion", () => {
+  const board = buildBoardRegion(rect(10, 10, 5, 5), [], INNER);
+
+  test("a rect core half off the board is OUTSIDE, not 'one point inside'", () => {
+    const core = boxRing(9, 4, 11, 6);
+    expect(regionContainsPoint(board, p(9, 4))).toBe(true);
+    expect(roundedInsideRegion(board, { core, radiusMm: 0 })).toBe(false);
+    expect(roundedPenetration(board, { core, radiusMm: 0 })).toBeCloseTo(1, 9);
+    expect(signedMargin(board, { core, radiusMm: 0 })).toBeCloseTo(-1, 9);
+  });
+
+  test("a one-point core is a disc; a two-point core is a stadium", () => {
+    expect(roundedInsideRegion(board, { core: [p(5, 5)], radiusMm: 1 })).toBe(true);
+    expect(roundedInsideRegion(board, { core: [p(0.5, 5)], radiusMm: 1 })).toBe(
+      false,
+    );
+    expect(
+      roundedInsideRegion(board, { core: [p(2, 5), p(8, 5)], radiusMm: 1 }),
+    ).toBe(true);
+    expect(
+      roundedInsideRegion(board, { core: [p(2, 5), p(8, 5)], radiusMm: 6 }),
+    ).toBe(false);
+  });
+
+  test("coincident core points reduce to the lower-arity form", () => {
+    // A `w === h` oval: a two-point spine whose points coincide.
+    expect(
+      roundedInsideRegion(board, { core: [p(5, 5), p(5, 5)], radiusMm: 4.9 }),
+    ).toBe(true);
+    expect(
+      roundedInsideRegion(board, { core: [p(5, 5), p(5, 5)], radiusMm: 5.1 }),
+    ).toBe(false);
+  });
+
+  test("the signed margin is the clearance inside and the penetration outside", () => {
+    expect(
+      signedMargin(board, { core: [p(5, 5)], radiusMm: 1 }, undefined, 10),
+    ).toBeCloseTo(4, 9);
+    expect(signedMargin(board, { core: [p(-2, 5)], radiusMm: 1 })).toBeCloseTo(
+      -3,
+      9,
+    );
+  });
+});
+
+describe("exactInsideRegion", () => {
+  /**
+   * Astra run 1 #3: a board `[−2, 2] × [−2, 0]` with a semicircular notch of
+   * r = 1.3 about the origin opening downward from the top edge. Every vertex
+   * of the strip `[−0.15, 0.15] × [−1.31, −1.296]` sits in material, but its
+   * TOP EDGE passes through the notch — the recipe "vertices inside plus an
+   * unsigned distance" accepts it, and the edge-splitting recipe must not.
+   */
+  const notched = contour(p(-2, 0), [
+    line(-2, -2),
+    line(2, -2),
+    line(2, 0),
+    line(1.3, 0),
+    arcTo(-1.3, 0, 0, 0, true),
+    line(-2, 0),
+  ]);
+  const region = buildBoardRegion(notched, [], INNER);
+  const strip = boxRing(-0.15, -1.31, 0.15, -1.296);
+
+  test("every vertex of the Astra #3 strip is in material", () => {
+    for (const v of strip) {
+      expect(pointInExactRing(region.exact.outer, v)).toBe("inside");
+    }
+  });
+
+  test("but the strip is NOT exact-inside — its top edge crosses the notch", () => {
+    expect(exactInsideRegion(region.exact, { core: strip, radiusMm: 0 })).toBe(
+      false,
+    );
+  });
+
+  test("a failed containment never reports a non-negative margin (R1)", () => {
+    // No core VERTEX is outside, so the raw penetration is 0; a margin of 0
+    // would read as a PASS through the certified interval.
+    const margin = exactSignedMargin(region.exact, { core: strip, radiusMm: 0 }, 1);
+    expect(margin.inside).toBe(false);
+    expect(margin.marginMm).toBeLessThanOrEqual(-GEOM_EPS_MM);
+    // The chord siblings carry the same clamp, so the interval still brackets.
+    const lo = signedMargin(region, { core: strip, radiusMm: 0 }, undefined, 1);
+    const hi = signedMargin(
+      region.outerBias.region,
+      { core: strip, radiusMm: 0 },
+      region.outerBias.index,
+      1,
+    );
+    expect(lo).toBeLessThanOrEqual(-GEOM_EPS_MM);
+    expect(lo).toBeLessThanOrEqual(margin.marginMm);
+    expect(margin.marginMm).toBeLessThanOrEqual(hi);
+  });
+
+  test("dropping the strip clear of the notch makes it exact-inside", () => {
+    const clear = boxRing(-0.15, -1.4, 0.15, -1.35);
+    expect(exactInsideRegion(region.exact, { core: clear, radiusMm: 0 })).toBe(
+      true,
+    );
+    const margin = exactSignedMargin(
+      region.exact,
+      { core: clear, radiusMm: 0 },
+      1,
+    );
+    expect(margin.inside).toBe(true);
+    expect(margin.certain).toBe(true);
+    // The nearest boundary is the notch arc, 1.3 − hypot(0.15, 1.35) away.
+    expect(margin.marginMm).toBeCloseTo(1.35 - 1.3, 9);
+  });
+
+  test("a radius that reaches the notch fails even with the core clear", () => {
+    const clear = boxRing(-0.15, -1.4, 0.15, -1.35);
+    expect(
+      exactInsideRegion(region.exact, { core: clear, radiusMm: 0.2 }),
+    ).toBe(false);
+  });
+
+  test("an exhausted budget throws rather than passing silently", () => {
+    expect(() =>
+      exactInsideRegion(
+        region.exact,
+        { core: strip, radiusMm: 0 },
+        { budget: { comparisons: 1 } },
+      ),
+    ).toThrow(ExactBudgetExceeded);
+  });
+
+  test("an ellipse cutout is never certified exact", () => {
+    const withEllipse = buildBoardRegion(rect(40, 40), [
+      {
+        id: "oval",
+        shape: {
+          kind: "circle",
+          widthMm: 8,
+          heightMm: 4,
+          centerMm: p(0, 0),
+        },
+      },
+    ], INNER);
+    const margin = exactSignedMargin(
+      withEllipse.exact,
+      { core: [p(0, 15)], radiusMm: 0.5 },
+      100,
+    );
+    expect(margin.certain).toBe(false);
+    // ... and a ring far enough away that the ellipse is not consulted is.
+    expect(
+      exactSignedMargin(
+        withEllipse.exact,
+        { core: [p(0, 15)], radiusMm: 0.5 },
+        0.1,
+      ).certain,
+    ).toBe(true);
+  });
+});
+
+describe("the canonical closing segment is ordinary boundary geometry", () => {
+  // Astra #9 at board scale: the CW semicircle's authored end misses `start`
+  // by 0.005 mm, so the canonical ring closes with an explicit 0.005 mm line.
+  const board = contour(p(10, 0), [
+    line(0, 0),
+    line(-10.005, 0),
+    arcTo(10, 0, 0, 0, true),
+  ]);
+  const region = buildBoardRegion(board, [], INNER);
+
+  test("the exact ring carries the closing segment", () => {
+    const exact = region.exact.outer;
+    if (!("prims" in exact)) throw new Error("expected exact primitives");
+    expect(exact.prims).toHaveLength(4);
+    const closing = exact.prims[3]!;
+    expect(closing.kind).toBe("seg");
+    expect(Math.hypot(closing.b.x - closing.a.x, closing.b.y - closing.a.y)).toBeCloseTo(
+      0.005,
+      12,
+    );
+    expect(closing.b).toEqual(p(10, 0));
+  });
+
+  test("it separates material from air like any other edge", () => {
+    // The CW sweep from angle π to 0 runs over the TOP, so the board is the
+    // upper half-disc; the closing segment is the only piece of the bottom edge
+    // between x = 10 and x = 10.005, and without it the ring would leak there.
+    expect(pointInExactRing(region.exact.outer, p(10.002, 0.001))).toBe("inside");
+    expect(pointInExactRing(region.exact.outer, p(10.002, -0.001))).toBe("outside");
+    // A shape straddling the closing edge is not inside the board.
+    expect(
+      exactInsideRegion(region.exact, {
+        core: [p(10.002, 0.001), p(10.002, -0.001)],
+        radiusMm: 0,
+      }),
+    ).toBe(false);
   });
 });

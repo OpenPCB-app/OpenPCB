@@ -12,7 +12,7 @@ The question this session answers once, for every consumer:
 
 Scope: segment predicates, arc flattening, the board region, containment and overlap tests, and
 the DRC checks that consume them (`checks/board.ts`, `checks/outline.ts`). Out of scope: spatial
-indexing (S9), copper-fill extent (S5, consumes this region), Gerber true arcs (S12b), route
+indexing (S9), copper-fill extent (S5, consumes this region), Gerber true arcs (S12b — done, contract 12 §6), route
 obstacles and live DRC (S8 — `07-live-parity-contract.md`; edge / cutout obstacles S16), exact-disc clearance for circular pads (S7).
 
 Decisions taken with the user before this contract was written: off-board is judged on **copper
@@ -123,7 +123,7 @@ promises. Every arc emits the exact end point; the start point belongs to the pr
   shorter-radius endpoint cuts back inside the circle. Default flattening keeps the start radius
   and the exact end point as before. Features finer than the residual chord error at the cap are
   below any manufacturable web and are not resolvable by a polygonal model; certifying them needs
-  exact arc predicates (S12b — S12 re-owned the exact-arc set, `11-dfm-contract.md` §0).
+  exact arc predicates — S12b (contract 12 §2 / §4): the canonical contour, the exact arc kernel and the certified interval; the annulus arm described above is RETIRED (12 §2.1).
 
 Two flattening fixes ride along: `roundRectPoints` no longer emits a duplicate vertex when the
 corner radius equals half the width or height (the natural rounded-slot shape produced a
@@ -252,7 +252,7 @@ manufacturable lives there.
 Accepted false-positive band: near an arc, the biased region is up to `MAX_CHORD_DEVIATION_MM`
 inside the true board, so copper exactly tangent to a curved edge can be reported off-board or
 short of clearance by that much. This is the price of one polygonal model; the exact second-chance
-test inside the band is deferred to S12b (user decision 2026-09-08, S7; re-owned from S12 on
+test inside the band landed in S12b as the certified interval (contract 12 §4; previously deferred by user decision 2026-09-08, S7; re-owned from S12 on
 2026-09-10) and recorded as a limit in
 `06-batch-drc-contract.md` §5.
 
@@ -264,7 +264,7 @@ Later consumers, recorded here so they do not re-derive geometry: S5 builds the 
 `buildBoardRegion`; S7 adopted the exact disc for circular pads in the edge, clearance, keepout and
 creepage checks and made `COPPER_TO_BOARD_EDGE.measuredMm` signed (negative when the copper is not
 inside the region); S8 made the live gate judge edge / off-board through the same region (`boardItems`); S16 gives the router board-edge and cutout obstacles from the same
-region; S12b decides whether Gerber emits true arcs, adds exact-arc contour validity, and owns the
+region; S12b (contract 12) made Gerber emit true arcs (§6), moved outline validity onto the exact contour (§3) and owns the
 minimum-web / connected-material checks that outline validity does not make (`findNarrowestSlot`).
 
 ## 7. Divergences kept and documented

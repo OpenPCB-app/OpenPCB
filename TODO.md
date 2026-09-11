@@ -4,22 +4,32 @@
 > Open work only. Completed work lives in git history, not in this file.
 > Six programs: Route tool · Compiler agent · MCP integration · Release hardening · DRC · Backlog.
 
-## Now — handoff (2026-09-11, S12 closed in the working tree)
+## Now — handoff (2026-09-11, S12b closed in the working tree; S12 committed as `262e4e4`)
 
 Session-resume block written by `/handoff`; `HANDOFF.md` is the entry point, `CURRENT_STATE.md`
 the snapshot. Everything below this block is the live program tracker and is unchanged.
 
-- [ ] **Commit S12** on `master` when the user says so — 51 modified + 29 untracked files, nothing
-      staged; suggested message: "PCB hardening S12: DFM overlays and copper shape on the artwork
-      the fab receives" (never auto-commit).
+- [ ] **Commit S12b** on `master` when the user says so — ≈ 79 entries, nothing staged; suggested
+      message: "PCB hardening S12b: exact-arc geometry — rounded pads, canonical contour, certified
+      board-edge interval, board-material web, Gerber Profile arcs" (never auto-commit; exclude
+      `HANDOFF.md` / `CURRENT_STATE.md`).
 - [ ] **Shared-tags follow-up** (after the user tags `kicad-parsers-v0.1.4` / `kicad-import-v0.2.0`
       / `rendering-core-v0.1.4` in `../shared` from `e882332`): repin `package.json` in OpenPCB and
       CoreLibrary, `npm install` lock refresh, verify with a real `npm ci` in a scratch clone (lock
       diff = three tag lines, no `"link": true`), CoreLibrary `bun tools/rebuild-previews.ts` +
       `bun validate`. Separate commit.
-- [ ] **S12b — exact-arc geometry and polygon pads** (new PROGRAM row): plan mode first (3 scouts +
-      plan-critique), own contract `12-…`, Astra spec-attack xhigh with per-run Go.
-- [ ] Split the five S12 files over 500 lines (mechanical, after S12b): `copper-shape-kernel.ts`,
+- [x] **S12b — exact-arc geometry** closed 2026-09-11 in the working tree (contract
+      `docs/pcb-hardening/12-exact-geometry-contract.md`; Astra brainstorm + spec-attack +
+      adversarial-verify, R1 + R2 folded) — commit on the user's word.
+- [ ] **S12c — polygon pads (trapezoid / custom)** — new PROGRAM row: `kicad-parsers` (`rect_delta`,
+      `primitives`) → `rendering-core` `outlinesMm` → `kicad-import`; OpenPCB record `rings`, pair
+      kernels, pour, copper-shape unit, annular SDF, mask artwork, Gerber `%AM` primitive 4, canvas /
+      3D; re-parse of `raw.rawSource` for existing rows; authored fixtures (none exist). Needs the
+      S11 tag follow-up first, then a third tag round.
+- [ ] S12b follow-ups: mechanical split of `checks/board.ts` (1078) and `manufacturability.ts`
+      (525); the 16 s board-budget exhaustion fixture (left out of the suite); CAM verification of
+      the ≤ 2√2 nm Gerber arc residual on a real fab upload.
+- [ ] Split the five S12 files over 500 lines (mechanical, after S12c): `copper-shape-kernel.ts`,
       `checks/copper-shape.ts`, `courtyard-rings.ts`, `checks/solder-mask.ts`, `checks/silkscreen.ts`.
 
 ## Repo state

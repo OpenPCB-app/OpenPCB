@@ -16,10 +16,21 @@ import type {
   PcbBoardOutlinePolygon,
   PcbPointMm,
 } from "../../../sdks";
+import {
+  type ArcBias,
+  arcSegmentCount,
+  DEFAULT_ARC_SEGMENTS,
+} from "../../pcb-geometry/arc-chords";
+import { canonicalContour } from "../../pcb-geometry/canonical-contour";
+import { exactContour } from "../../pcb-geometry/exact-contour";
+import type { ExactRing } from "../../pcb-geometry/exact-arcs";
 // The shared segment kernel (S2 geometry contract §2) — a superset of the
 // private endpoint-projection helper this file used to carry: it also reports 0
 // for edges that actually touch, which a validated ring never has.
-import { segmentToSegmentDistance } from "../../pcb-geometry/pcb-trace-geometry";
+import {
+  segmentClosestPoints,
+  segmentToSegmentDistance,
+} from "../../pcb-geometry/pcb-trace-geometry";
 import { flattenOutline } from "../../pcb-geometry/outline-geometry";
 import { ringSignedArea } from "../../pcb-geometry/ring-utils";
 import { segmentsIntersect } from "../../pcb-geometry/segment-predicates";
@@ -237,10 +248,16 @@ export function findParametricHoleSlot(
 /**
  * The narrowest gap between non-adjacent edges of the (open) ring, when it is
  * below `minWidthMm` — else null. One report for the thinnest neck / slot.
+ *
+ * `inMaterial` (exact-geometry contract 12 §5.1) skips a pair whose connecting
+ * segment runs through board MATERIAL: that is a web, which `OUTLINE_MIN_WEB`
+ * owns by erosion, and this check stays the fab-advisory VOID rule — the
+ * cutter's access. Absent, every pair is judged, exactly as before S12b.
  */
 export function findNarrowestSlot(
   ring: readonly PcbPointMm[],
   minWidthMm: number,
+  inMaterial?: (p: PcbPointMm) => boolean,
 ): SlotHit | null {
   const n = ring.length;
   if (n < 4) return null;
@@ -258,13 +275,171 @@ export function findNarrowestSlot(
       // validated, so the case is reachable here.
       if (segmentsIntersect(a, b, c, d)) continue;
       const gap = segmentToSegmentDistance(a, b, c, d);
-      if (gap < minWidthMm - EPS_MM && (!best || gap < best.gapMm)) {
-        best = {
-          gapMm: gap,
-          locationMm: { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 },
-        };
+      if (!(gap < minWidthMm - EPS_MM) || (best && gap >= best.gapMm)) continue;
+      if (inMaterial) {
+        // The true point of closest approach, not the box midpoint: the
+        // connecting segment is what the cutter would have to pass along.
+        const cp = segmentClosestPoints(a, b, c, d);
+        const mid = { x: (cp.a.x + cp.b.x) / 2, y: (cp.a.y + cp.b.y) / 2 };
+        if (inMaterial(mid)) continue;
       }
+      best = {
+        gapMm: gap,
+        // The marker keeps the pre-S12b box midpoint — the goldens hash it.
+        locationMm: { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 },
+      };
     }
   }
   return best;
+}
+
+// --- Board material for the minimum-web check (12 §5.1) ---------------------
+
+/**
+ * Refinement factor for the material flattening. The chord rule targets
+ * `MAX_CHORD_DEVIATION_MM = 0.01` and the deviation falls with the SQUARE of the
+ * step count, so ten times the chords is a hundredth of the deviation — 1e-4 mm,
+ * 1 % of a 1 mm web's verdict band. `MAX_ARC_SEGMENTS` can cap it short of that,
+ * which is why the ACHIEVED deviation is returned rather than assumed (Astra
+ * run 1 #6: a 1e-4 request on an r = 100 circle caps at 512 chords = 1.9e-3).
+ */
+export const MATERIAL_STEP_MULTIPLIER = 10;
+
+export interface BoardMaterialRings {
+  /** The outer contour, flattened INWARD — a subset of the true material. */
+  outer: PcbPointMm[];
+  /** Each cutout, flattened OUTWARD — likewise a subset of the material. */
+  holes: PcbPointMm[][];
+  /**
+   * The SAME shapes as exact primitives, in the same ring order. The ring-pair
+   * arm and the pre-quantisation area check read these; no flattening, no
+   * deviation, no fill grid (12 §5.1).
+   */
+  exact: { outer: ExactRing; holes: ExactRing[] };
+  /** The worst ACHIEVED chord deviation over every ring (mm). */
+  deviationMm: number;
+}
+
+/** One arc as the FLATTENER steps it; `floorSteps` carries the circle floor. */
+interface FlattenedArc {
+  radiusMm: number;
+  sweepRad: number;
+  floorSteps: number;
+}
+
+/**
+ * The arcs `flattenOutline` sees, per shape. A near-twin of `exact-contour.ts`'s
+ * own private `flattenedArcs`, which cannot be reused: `outlineChordBoundMm`
+ * builds on it at step multiplier 1 with a `MAX_CHORD_DEVIATION_MM` floor, and
+ * the material flattening needs the ACHIEVED residual at a finer multiplier.
+ * Both mirror `flattenOutline`'s structure and must stay in step with it.
+ */
+function flattenedArcs(shape: PcbBoardOutline): FlattenedArc[] {
+  switch (shape.kind) {
+    case "rect":
+    case "polygon":
+      return [];
+    case "roundrect": {
+      const r = Math.max(
+        0,
+        Math.min(shape.cornerRadiusMm, shape.widthMm / 2, shape.heightMm / 2),
+      );
+      if (r <= 0) return [];
+      return [0, 1, 2, 3].map(() => ({
+        radiusMm: r,
+        sweepRad: Math.PI / 2,
+        floorSteps: 1,
+      }));
+    }
+    case "circle":
+      // An ellipse is stepped in the PARAMETER, and its worst sagitta is
+      // `max(rx, ry)·Δt²/8` — the same formula with the major semi-axis as the
+      // effective radius, which is also what `arcSegmentCount` is given.
+      return [
+        {
+          radiusMm: Math.max(shape.widthMm / 2, shape.heightMm / 2),
+          sweepRad: Math.PI * 2,
+          floorSteps: DEFAULT_ARC_SEGMENTS,
+        },
+      ];
+    case "contour": {
+      const canonical = canonicalContour(shape);
+      const out: FlattenedArc[] = [];
+      let cursor = canonical.start;
+      for (const seg of canonical.segments) {
+        if (seg.type === "arc") {
+          const c = seg.centerMm;
+          const a0 = Math.atan2(cursor.y - c.y, cursor.x - c.x);
+          let a1 = Math.atan2(seg.to.y - c.y, seg.to.x - c.x);
+          if (seg.cw) {
+            while (a1 >= a0) a1 -= Math.PI * 2;
+          } else {
+            while (a1 <= a0) a1 += Math.PI * 2;
+          }
+          out.push({
+            radiusMm: Math.hypot(cursor.x - c.x, cursor.y - c.y),
+            sweepRad: Math.abs(a1 - a0),
+            floorSteps: 1,
+          });
+        }
+        cursor = seg.to;
+      }
+      return out;
+    }
+  }
+}
+
+/**
+ * The deviation (mm) this shape's flattened ring ACTUALLY carries at
+ * `stepMultiplier`. The worse of the two constructions is kept, so one number
+ * bounds the ring whichever bias a contour's per-arc rule picks.
+ */
+export function achievedDeviationMm(
+  shape: PcbBoardOutline,
+  stepMultiplier: number,
+): number {
+  let worst = 0;
+  for (const a of flattenedArcs(shape)) {
+    for (const bias of ["inscribed", "circumscribed"] as ArcBias[]) {
+      const steps = Math.max(
+        a.floorSteps,
+        arcSegmentCount(a.radiusMm, a.sweepRad, bias, stepMultiplier),
+      );
+      const half = a.sweepRad / steps / 2;
+      const residual =
+        bias === "circumscribed"
+          ? a.radiusMm * (1 / Math.cos(half) - 1)
+          : a.radiusMm * (1 - Math.cos(half));
+      if (residual > worst) worst = residual;
+    }
+  }
+  return worst;
+}
+
+/**
+ * The board MATERIAL as fine chord rings (12 §5.1), with the `board-inner` bias
+ * the region already applies: the outer contour INWARD and every cutout OUTWARD,
+ * so the polygon is a SUBSET of the true material and the chord error can only
+ * produce a false PASS of a web, never a false report.
+ */
+export function boardMaterialRings(
+  outline: PcbBoardOutline,
+  cutouts: readonly PcbBoardOutline[],
+  stepMultiplier = MATERIAL_STEP_MULTIPLIER,
+): BoardMaterialRings {
+  let deviationMm = achievedDeviationMm(outline, stepMultiplier);
+  const holes = cutouts.map((shape) => {
+    const d = achievedDeviationMm(shape, stepMultiplier);
+    if (d > deviationMm) deviationMm = d;
+    return flattenOutline(shape, { bias: "outward", stepMultiplier });
+  });
+  return {
+    outer: flattenOutline(outline, { bias: "inward", stepMultiplier }),
+    holes,
+    exact: {
+      outer: exactContour(outline),
+      holes: cutouts.map(exactContour),
+    },
+    deviationMm,
+  };
 }

@@ -103,3 +103,24 @@ Re-baselined 2026-09-11 for the S12 solder-mask check; no fixture change:
 - `FAB_MASK_TO_COPPER` +1 — `MH1` is a copper-less NPTH pad: its drill relief carries no owner
   (`ownerKey` null), so it exempts no copper, and trace `t_hole` runs 0.021 mm from the relief's
   edge — below JLCPCB's 0.09 mm opening-to-trace row (contract 11 §4).
+
+## S12b §1 — exact rounded pads: verified unchanged
+
+The rounded-shape model (exact-geometry contract 12 §1) replaces the
+circumscribed ring with the exact core ⊕ disc for every pad gap, connectivity
+touch and keepout overlap. This fixture carries five arc-bearing pads — `J9`
+pad 1 (oval 2 x 1), `PS1` pad 1 (oval 2 x 1.2) and `RT2` pads 1 / 2 / 4 (the
+mirrored 30° export-parity part) — and **every row of this golden is
+byte-identical under the change**: ids, counts, `measuredMm`, `requiredMm`,
+`locationMm`, `anchors` and messages all match the pre-S12b report exactly
+(verified by dumping the full report on both trees, not just the checked-in
+`.expected.json`).
+
+Why: none of the five sits in a reported pair. `RT2` is the deliberate
+zero-violation export-parity part; `J9` and `PS1` are judged only on their
+DRILLS (`FAB_DRILL`, `FAB_ANNULAR_RING`, `ANNULAR_RING_MIN`), which the S11
+annular kernel already measured exactly (contract 10 §3) and which §1 does not
+touch. The ≤ 0.2146 %·r (oval) / ≤ 0.8629 %·r (roundrect) shift 12 §1.4
+predicts for this fixture therefore has no row to land on. If a future edit
+gives one of these pads a clearance or connectivity neighbour, that row's
+`measuredMm` is expected to GROW by at most that bound.

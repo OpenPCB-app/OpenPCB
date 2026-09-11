@@ -7,12 +7,25 @@ import {
   validateViaAgainstFab,
 } from "../fab-presets";
 import {
+  boardMaterialRings,
   boardSlotRing,
   findNarrowestSlot,
   findParametricHoleSlot,
   findSmallInternalRadii,
+  MATERIAL_STEP_MULTIPLIER,
   type RingMaterialSide,
 } from "../../rendering/pcb/outline-manufacturability";
+import { analyseMaterialRegion } from "../../rendering/copper-fill/material-web-kernel";
+import {
+  CopperShapeBudgetError,
+  EROSION_MARGIN_MM,
+} from "../../rendering/copper-fill/copper-shape-kernel";
+import {
+  CopperKernelError,
+  runKernelQuietly,
+} from "../../rendering/copper-fill/copper-geometry-kernel";
+import { regionContainsPoint } from "../../pcb-geometry/board-region";
+import type { PcbPointMm } from "../../../sdks/designer";
 import {
   below,
   type DrcContext,
@@ -293,6 +306,12 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
   const out: DrcViolationDraft[] = [];
   manufacturabilityItems(ctx, ctx, { out });
 
+  // The board-material minimum web (exact-geometry contract 12 §5.2): ONE call
+  // over the whole board, OUTSIDE the fab branch — a DESIGN rule fires on every
+  // fabricator, and the per-contour `millingAdvisories` below cannot see a web
+  // that spans two contours at all.
+  for (const draft of materialWebDrafts(ctx)) out.push(draft);
+
   // Milling limits (fab-sourced, advisory): internal corner radius + slot/neck
   // width. Custom fab has no capability floor, so it's skipped.
   if (ctx.fabricator !== "custom") {
@@ -306,7 +325,13 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
       // location-hashed, so several hits on the shared `boardEdge` anchor stay
       // distinct. The message carries the cutout id as well as its position,
       // since reordering `board.cutouts` renumbers them.
-      out.push(...millingAdvisories(board.outline, preset, "", "inside"));
+      // A connector that runs through MATERIAL is a web, not a void the cutter
+      // has to reach into; `OUTLINE_MIN_WEB` owns it by erosion (12 §5.1).
+      const inMaterial = (p: PcbPointMm): boolean =>
+        regionContainsPoint(ctx.boardRegion, p, GEOM_EPS_MM, ctx.regionIndex);
+      out.push(
+        ...millingAdvisories(board.outline, preset, "", "inside", inMaterial),
+      );
       (board.cutouts ?? []).forEach((cutout, i) => {
         out.push(
           ...millingAdvisories(
@@ -314,6 +339,7 @@ export function checkManufacturability(ctx: DrcContext): DrcViolationDraft[] {
             preset,
             `Cutout ${i + 1} (${cutout.id.slice(0, 6)}) `,
             "outside",
+            inMaterial,
           ),
         );
       });
@@ -334,6 +360,7 @@ function millingAdvisories(
   preset: PcbFabPreset,
   subject: string,
   material: RingMaterialSide,
+  inMaterial: (p: PcbPointMm) => boolean,
 ): DrcViolationDraft[] {
   const out: DrcViolationDraft[] = [];
   const radiusLabel = subject
@@ -363,7 +390,7 @@ function millingAdvisories(
   // same advisory code, never silently passed (contract 06 §9).
   const slotRing = boardSlotRing(shape);
   const slot = slotRing
-    ? findNarrowestSlot(slotRing, preset.minSlotWidthMm)
+    ? findNarrowestSlot(slotRing, preset.minSlotWidthMm, inMaterial)
     : material === "outside"
       ? findParametricHoleSlot(shape, preset.minSlotWidthMm)
       : null;
@@ -376,6 +403,137 @@ function millingAdvisories(
       measuredMm: slot.gapMm,
       requiredMm: preset.minSlotWidthMm,
     });
+  }
+  return out;
+}
+
+/**
+ * `optNum` semantics (12 §5.2 / DFM contract 11 §6): only a finite, positive
+ * stored number is a rule. ABSENT means no verdict at all — the minimum web a
+ * board may carry is a shape intent no fabricator row states and nothing may
+ * default for a user.
+ */
+function optWebMm(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : undefined;
+}
+
+/**
+ * Floor of the web measurement's own error, independent of the flattening: the
+ * erosion margin on each wall plus the opening's grid allowance (12 §5.1). The
+ * verdict band is `(w − WEB_ERROR_FLOOR_MM − 2·δ, w)`; below it a report is
+ * certain, inside it the measurement cannot separate a web from its tolerance.
+ */
+const WEB_ERROR_FLOOR_MM = 3e-3;
+
+/**
+ * `OUTLINE_MIN_WEB` / `OUTLINE_WEB_UNCHECKED` — the board-material verdict
+ * (12 §5). The material is the canonical outer contour minus its cutouts,
+ * flattened FINE with the `board-inner` bias so the polygon is a subset of the
+ * true material and a chord artefact can only hide a web, never invent one.
+ *
+ * Every way of not answering reports: no erosion radius, a capped flattening
+ * whose deviation eats a tenth of the rule, a kernel refusal, an exhausted
+ * budget, a truncated neck list. None of them is a silent pass (§5.1).
+ */
+function materialWebDrafts(ctx: DrcContext): DrcViolationDraft[] {
+  const w = optWebMm(ctx.designRules.outline?.minWebMm);
+  if (w === undefined) return [];
+  const out: DrcViolationDraft[] = [];
+  const unchecked = (why: string): DrcViolationDraft[] => {
+    out.push({
+      code: "OUTLINE_WEB_UNCHECKED",
+      message: `Board material web not checked: ${why}`,
+      anchors: [{ kind: "boardEdge" }],
+    });
+    return out;
+  };
+  if (!(w / 2 - EROSION_MARGIN_MM > 0)) {
+    return unchecked(
+      `the ${w.toFixed(4)} mm rule leaves no erosion radius above the ${(2 * EROSION_MARGIN_MM).toFixed(3)} mm floor`,
+    );
+  }
+  const material = boardMaterialRings(
+    ctx.board.outline,
+    (ctx.board.cutouts ?? []).map((c) => c.shape),
+  );
+  // Two boundaries contribute their deviation to one measured width, so the
+  // flattening's share of the band is `2·δ`. Above a tenth of the rule the
+  // certificate is unavailable — an engineering limit, tunable (Astra run 1 #6).
+  const slackMm = 2 * material.deviationMm;
+  if (slackMm > w / 10) {
+    return unchecked(
+      `the outline flattens no finer than ${material.deviationMm.toFixed(4)} mm at ${MATERIAL_STEP_MULTIPLIER}× refinement, more than a tenth of the ${w.toFixed(3)} mm rule`,
+    );
+  }
+  const budgets = ctx.copperShapeBudgets;
+  let found;
+  try {
+    // No `tick`: the whole board's material is ONE indivisible unit of work, and
+    // `drcDrafts` already checkpoints this stage once. A second tick under
+    // `"manufacturability"` would make it read as a per-ITEM stage, which only
+    // `pour` and `copperShapeUnit` are (execution contract 09 §6, 11 §5.5).
+    //
+    // Quiet: a kernel refusal here becomes `OUTLINE_WEB_UNCHECKED` below, and a
+    // reported verdict is not a warning.
+    found = runKernelQuietly(() =>
+      analyseMaterialRegion(material, w, {
+        budgets,
+        budget: { remaining: budgets.maxErosionsPerUnit },
+        work: { remaining: budgets.maxEdgeComparisonsPerUnit },
+      }),
+    );
+  } catch (error) {
+    if (error instanceof CopperShapeBudgetError) {
+      return unchecked(
+        `the ${budgets.maxEdgeComparisonsPerUnit} edge-comparison budget was exhausted`,
+      );
+    }
+    if (!(error instanceof CopperKernelError)) throw error;
+    return unchecked("the copper kernel refused the board material");
+  }
+  const band = `uncertain between ${(w - WEB_ERROR_FLOOR_MM - slackMm).toFixed(4)} and ${w.toFixed(3)} mm`;
+  if (found.emptyErosion) {
+    out.push({
+      code: "OUTLINE_MIN_WEB",
+      message: `Board material is narrower than ${w.toFixed(3)} mm everywhere (${band})`,
+      anchors: [{ kind: "boardEdge" }],
+      locationMm: found.markerMm,
+      measuredMm: 0,
+      requiredMm: w,
+    });
+  }
+  for (const web of found.webs) {
+    // A RING-PAIR width is the exact distance between two boundaries: it
+    // carries no chord band, so it does not state one.
+    out.push({
+      code: "OUTLINE_MIN_WEB",
+      message: web.exact
+        ? `Board material narrows to ${web.widthMm.toFixed(4)} mm (min ${w.toFixed(3)} mm) between two board boundaries`
+        : `Board material narrows to ≈${web.widthMm.toFixed(3)} mm (min ${w.toFixed(3)} mm, ${band})`,
+      anchors: [{ kind: "boardEdge" }],
+      locationMm: web.locationMm,
+      measuredMm: web.widthMm,
+      requiredMm: w,
+    });
+  }
+  if (found.exactBudgetSpent) {
+    unchecked(
+      "the exact boundary-pair comparison budget was exhausted, so some ring pairs were not measured",
+    );
+  }
+  if (found.gridLoss) {
+    unchecked(
+      "the 0.1 µm fill grid lost more than half of the board material, so the erosion analysis saw a different shape",
+    );
+  }
+  if (found.truncation !== "none" || found.unlocatedCount > 0) {
+    unchecked(
+      found.truncation === "erosionBudget"
+        ? `the erosion budget ${budgets.maxErosionsPerUnit} stopped the search with ${found.unlocatedCount} web${found.unlocatedCount === 1 ? "" : "s"} not located`
+        : `${found.unlocatedCount} more web${found.unlocatedCount === 1 ? "" : "s"} not located (cap ${budgets.maxNecksPerUnit})`,
+    );
   }
   return out;
 }

@@ -499,14 +499,19 @@ export function sortIslands(islands: CopperIsland[]): CopperIsland[] {
  */
 /**
  * A uniform grid over one island's boundary segments — the reason grouping is
- * not `O(n·m)` any more (Astra run 2 #5). Two concentric 8 192-vertex annuli
+ * not `O(n·m)` any more (Astra run 2 #5).
+ *
+ * Exported (with {@link buildSegmentGrid}, {@link gridWithin},
+ * {@link interiorPoint} and {@link islandContains}) for `material-web-kernel.ts`
+ * alone — the S12b board-material twin of this file, which shares this kernel's
+ * erosion / opening / residual machinery (12 §5.1). Two concentric 8 192-vertex annuli
  * nest, so the `minX` sweep keeps both active and the ring-to-ring distance
  * used to walk 67 million edge pairs; the grid turns that into one pass over
  * each boundary. A segment too large to file goes to `oversized` and is
  * returned by every query, so a degenerate ring degrades to the full scan
  * rather than to a wrong answer (the broad phase's fail-open rule, 08 §2).
  */
-interface SegmentGrid {
+export interface SegmentGrid {
   /** `[ax, ay, bx, by]` per segment. */
   segments: number[];
   cellMm: number;
@@ -517,7 +522,7 @@ interface SegmentGrid {
 /** Cells one segment may occupy before it is filed as oversized. */
 const MAX_GRID_CELLS_PER_SEGMENT = 64;
 
-function buildSegmentGrid(paths: PathsD): SegmentGrid {
+export function buildSegmentGrid(paths: PathsD): SegmentGrid {
   const segments: number[] = [];
   let totalLength = 0;
   let count = 0;
@@ -571,7 +576,7 @@ function buildSegmentGrid(paths: PathsD): SegmentGrid {
  * True when any segment of `paths` comes within `maxMm` of the grid's boundary.
  * Every edge pair actually compared is charged to `work`.
  */
-function gridWithin(
+export function gridWithin(
   grid: SegmentGrid,
   paths: PathsD,
   maxMm: number,
@@ -1023,7 +1028,7 @@ function groupGrid(group: CopperGroup): SegmentGrid {
  * or dog-legged channel has its centroid in empty board, and a DRC marker that
  * is not on the copper it names is the bug R2 #1 reported.
  */
-function interiorPoint(island: CopperIsland): PcbPointMm {
+export function interiorPoint(island: CopperIsland): PcbPointMm {
   const centroid = islandCentroid(island);
   if (islandContains(island, centroid)) return centroid;
   let best = centroid;
@@ -1481,7 +1486,7 @@ function groupContains(group: CopperGroup, point: PcbPointMm): boolean {
 }
 
 /** Ray-cast containment in an island: inside the outer, outside every hole. */
-function islandContains(island: CopperIsland, point: PcbPointMm): boolean {
+export function islandContains(island: CopperIsland, point: PcbPointMm): boolean {
   const rings = island.paths.map(ringOf);
   const outer = rings[0];
   if (!outer || outer.length < 3) return false;

@@ -30,6 +30,14 @@ provocation stays on the outer ring to avoid depending on it):
   extends outside the board outline"). Chosen as a circle so it contributes
   no milling-advisory noise of its own (parametric corner/slot checks are
   empty for a circular cutout).
+  **S12b id move** (exact-geometry contract 12 §3.1): rule (c) is now judged on
+  the EXACT rings and reported at the exact contact point. The circle
+  `x² + (y+45)² = 9` meets the bottom edge `y = -45` at `(±3, -45)` and the
+  lexicographically smaller witness wins, so the marker moved from the first
+  vertex of the flattened cutout ring to `(-3, -45)` and the 0.1 mm id bucket
+  moved with it: `BOARD_OUTLINE_INVALID-v2-37ab5e9b4725cbfd` ->
+  `BOARD_OUTLINE_INVALID-v2-25128a4a1a9a9008`. The verdict, the count and the
+  message are unchanged, and this is the ONLY row of this golden that moved.
 
 Deliberate violation-bearing items, by region (all F.Cu unless noted):
 

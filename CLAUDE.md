@@ -119,7 +119,10 @@ src/
     │                       effective copper areas (board zones are persisted rows), the
     │                       keepout predicate, pour-parameter composition — see
     │                       docs/pcb-hardening/03-zone-keepout-contract.md
-    ├── pcb-geometry/       PCB geometry: segment predicates, arc chords, outline flattening, the
+    ├── pcb-geometry/       PCB geometry (S12b adds the exact layer — `rounded-shape.ts`,
+    │                       `canonical-contour.ts`, `exact-arcs.ts`, `exact-ring.ts`,
+    │                       `exact-contour.ts`, `exact-simplicity.ts`, `region-{build,rounded,exact}.ts`,
+    │                       docs/pcb-hardening/12-exact-geometry-contract.md): segment predicates, arc chords, outline flattening, the
     │                       board region (+ region-index.ts: the S9 boundary-edge index its
     │                       predicates take as an optional argument), area overlap
     │                       (area-overlap.ts) (+ tolerance.ts: the single epsilon policy) — see

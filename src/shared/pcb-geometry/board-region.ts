@@ -16,25 +16,21 @@
  * quotient and the tolerance above is not honoured.
  */
 import type { PcbBoardCutout, PcbBoardOutline, PcbPointMm } from "../../sdks";
-import {
-  pointInPolygon,
-  pointInPolygonEdges,
-} from "./pcb-clearance-geometry";
+import { pointInPolygon, pointInPolygonEdges } from "./pcb-clearance-geometry";
 import { segmentToSegmentDistance } from "./pcb-trace-geometry";
 import {
   distance,
   projectPointToSegment,
-  ringSelfIntersects,
   segmentContactParams,
 } from "./segment-predicates";
 import { canonicalizeRing } from "./ring-utils";
-import { flattenOutline, type OutlineBias } from "./outline-geometry";
+import type { ExactRing } from "./exact-arcs";
+import { buildBoardRegion } from "./region-build";
 import type { RegionIndex } from "./region-index";
 import {
   boundsContainPoint,
   boundsMeet,
   boundsOfPoints,
-  EMPTY_BOUNDS,
   holeInteriorMeetsRing,
   nearRing,
   PARAM_EPS,
@@ -51,12 +47,35 @@ export {
 } from "./region-rings";
 export type { RingBounds } from "./region-rings";
 
+// The builder moved to ./region-build (500-line budget); this stays the import
+// path, exactly as the ring helpers above do.
+export { buildBoardRegion } from "./region-build";
+// The S12b predicate families (12 §1.2, §4) live in ./region-rounded and
+// ./region-exact. They are NOT re-exported here: `region-rounded` consumes the
+// predicates below, so a re-export would close an import cycle through this
+// module. Import those two paths directly.
+
 /** One boundary edge, tagged with its ring (0 = outer, i+1 = hole i). */
 export interface RegionEdge {
   a: PcbPointMm;
   b: PcbPointMm;
   bounds: RingBounds;
   ring: number;
+}
+
+/** The superset region (12 §4), with its own boundary-edge index. */
+export interface BoardRegionOuterBias {
+  outer: PcbPointMm[];
+  holes: PcbPointMm[][];
+  index: RegionIndex;
+  /** The superset as a region, so every predicate below applies to it. */
+  region: BoardRegion;
+}
+
+/** The exact curved model of the same shapes (12 §2.2), outer then holes. */
+export interface RegionExactRings {
+  outer: ExactRing;
+  holes: ExactRing[];
 }
 
 export interface BoardRegion {
@@ -70,174 +89,31 @@ export interface BoardRegion {
   edges: RegionEdge[];
   /** Ring indices whose biased flattening self-crossed even at the cap. */
   fallbacks: number[];
+  /**
+   * The mirror-biased region: `R_inner ⊆ R_true ⊆ R_outer` (12 §4). Lazy and
+   * non-enumerable — see `region-build.attachDerived`.
+   */
+  outerBias: BoardRegionOuterBias;
+  /** The exact rings, for the recomputation an ambiguous verdict asks for. */
+  exact: RegionExactRings;
+  /**
+   * Per ring, in `RegionEdge.ring` order (0 = outer, i+1 = hole i): the chord
+   * deviation that ring's flattening carries. `MAX_CHORD_DEVIATION_MM`, or the
+   * cap residual when an arc hit `MAX_ARC_SEGMENTS`, or 0 for a ring with no
+   * arcs. A FALLBACK ring uses the unbiased ring on both sides, and this bound
+   * applies symmetrically to it.
+   */
+  boundMm: number[];
+  /** `max(boundMm)` — the halo term every certified-interval query carries. */
+  maxBoundMm: number;
 }
 
 export interface BuildBoardRegionOptions {
-  /** `"board-inner"` builds the legality region: `R_poly ⊆ R_true`. */
-  bias: "none" | "board-inner";
-}
-
-/**
- * Only a free-form contour with an arc can gain a self-crossing from chord
- * approximation: rect and polygon carry no arcs at all, and roundrect / circle
- * are convex by construction in both biases. Skipping the O(n²) probe for them
- * keeps `bias: "none"` region builds (rendering, `pointInOutline`) cheap.
- */
-function canSelfCrossFromFlattening(shape: PcbBoardOutline): boolean {
-  return (
-    shape.kind === "contour" && shape.segments.some((s) => s.type === "arc")
-  );
-}
-
-/**
- * Closed containment of one simple ring in another: every sub-interval of
- * every inner edge (split at its contacts with the outer boundary) has its
- * midpoint inside-or-on the outer ring. Vertex tests alone are not enough —
- * two rings sharing all their vertices can still bound disjoint interiors.
- */
-function ringWithinClosed(
-  inner: readonly PcbPointMm[],
-  outer: readonly PcbPointMm[],
-): boolean {
-  const eps = GEOM_EPS_MM;
-  const insideOrOn = (q: PcbPointMm): boolean =>
-    pointInPolygon(q, outer) || nearRing(outer, q, eps);
-  for (let i = 0; i < inner.length; i += 1) {
-    const a = inner[i]!;
-    const b = inner[(i + 1) % inner.length]!;
-    if (!insideOrOn(a)) return false;
-    const params = splitParamsAgainstRing(a, b, outer, eps);
-    let prev = params[0]!;
-    for (let k = 1; k < params.length; k += 1) {
-      const t = params[k]!;
-      if (t - prev <= PARAM_EPS) continue;
-      const mid = (prev + t) / 2;
-      if (!insideOrOn({ x: a.x + (b.x - a.x) * mid, y: a.y + (b.y - a.y) * mid })) {
-        return false;
-      }
-      prev = t;
-    }
-  }
-  return true;
-}
-
-/**
- * A correctly-sided flattening is monotone under refinement: the inward
- * polygon grows toward the true shape (coarse ⊆ fine), the outward one shrinks
- * (fine ⊆ coarse). A coarse ring that stays simple but lands on the wrong side
- * of a sliver-thin feature breaks that (Astra §9.2 #1); default flattening has
- * no side and is never monotone-checked.
- */
-function refinementMonotone(
-  coarse: readonly PcbPointMm[],
-  fine: readonly PcbPointMm[],
-  bias: OutlineBias,
-): boolean {
-  if (bias === "inward") return ringWithinClosed(coarse, fine);
-  if (bias === "outward") return ringWithinClosed(fine, coarse);
-  return true;
-}
-
-/**
- * Flatten with `bias`, looking one refinement level ahead: while the ring or
- * its refinement self-intersects, or the two are not monotone, adopt the
- * refinement and look again (§3 topology rule). A ring still self-crossing at
- * the cap is reported as such; the caller decides what that means.
- */
-function flattenRefined(
-  shape: PcbBoardOutline,
-  bias: OutlineBias,
-): { ring: PcbPointMm[]; selfIntersects: boolean } {
-  let ring = flattenOutline(shape, { bias });
-  if (!canSelfCrossFromFlattening(shape)) {
-    return { ring, selfIntersects: false };
-  }
-  let crosses = ringSelfIntersects(ring);
-  let stepMultiplier = 1;
-  for (;;) {
-    const next = flattenOutline(shape, {
-      bias,
-      stepMultiplier: stepMultiplier * 2,
-    });
-    if (next.length <= ring.length) break; // the cap stopped the refinement
-    const nextCrosses = ringSelfIntersects(next);
-    if (!crosses && !nextCrosses && refinementMonotone(ring, next, bias)) break;
-    stepMultiplier *= 2;
-    ring = next;
-    crosses = nextCrosses;
-  }
-  return { ring, selfIntersects: crosses };
-}
-
-function pushRingEdges(
-  edges: RegionEdge[],
-  ring: readonly PcbPointMm[],
-  index: number,
-): void {
-  // A ring of fewer than two vertices has no perimeter. The per-ring helpers
-  // (`pointToRingEdgeDistance` and friends) already return `Infinity` for it;
-  // filing a degenerate `(p, p)` edge here made the region-level distances
-  // disagree with them — a zero-size cutout canonicalises to one vertex, and
-  // that disagreement surfaced as a two-mode DRC divergence (S9, WP3).
-  if (ring.length < 2) return;
-  for (let i = 0; i < ring.length; i += 1) {
-    const a = ring[i]!;
-    const b = ring[(i + 1) % ring.length]!;
-    edges.push({ a, b, bounds: boundsOfPoints([a, b]), ring: index });
-  }
-}
-
-/**
- * One rule per arc: inscribe when the arc's centre lies on the region-interior
- * side, circumscribe otherwise. Per ring that is "inward" for the outer ring
- * and "outward" for every hole — both shrink the board region, so the
- * polygonal region is a subset of the true one.
- */
-export function buildBoardRegion(
-  outline: PcbBoardOutline,
-  cutouts: readonly PcbBoardCutout[],
-  options: BuildBoardRegionOptions = { bias: "none" },
-): BoardRegion {
-  const shapes: PcbBoardOutline[] = [outline, ...cutouts.map((c) => c.shape)];
-  const biased: PcbPointMm[][] = [];
-  const unbiased: PcbPointMm[][] = [];
-  const fallbacks: number[] = [];
-  for (let i = 0; i < shapes.length; i += 1) {
-    const shape = shapes[i]!;
-    if (options.bias !== "board-inner") {
-      // Render / resize path: plain flattening, no O(n²) topology probe — the
-      // refined unbiased rings exist for outline validity, which only the
-      // legality build serves. A contour vertex drag rebuilds this per frame.
-      const ring = flattenOutline(shape, { bias: "none" });
-      unbiased.push(ring);
-      biased.push(ring);
-      continue;
-    }
-    const plain = flattenRefined(shape, "none");
-    unbiased.push(plain.ring);
-    const attempt = flattenRefined(shape, i === 0 ? "inward" : "outward");
-    if (attempt.selfIntersects) {
-      // Below any manufacturable web: fall back to the unbiased ring, say so.
-      fallbacks.push(i);
-      biased.push(plain.ring);
-    } else {
-      biased.push(attempt.ring);
-    }
-  }
-  const edges: RegionEdge[] = [];
-  const ringBounds = biased.map((ring) => boundsOfPoints(ring));
-  for (let i = 0; i < biased.length; i += 1)
-    pushRingEdges(edges, biased[i]!, i);
-  return {
-    outer: biased[0] ?? [],
-    holes: biased.slice(1),
-    unbiasedOuter: unbiased[0] ?? [],
-    unbiasedHoles: unbiased.slice(1),
-    bounds: ringBounds[0] ?? { ...EMPTY_BOUNDS },
-    ringBounds,
-    edges,
-    fallbacks,
-  };
+  /**
+   * `"board-inner"` builds the legality region (`R_poly ⊆ R_true`);
+   * `"board-outer"` its mirror superset (12 §4).
+   */
+  bias: "none" | "board-inner" | "board-outer";
 }
 
 /** The point's own degenerate AABB — the query box of every point-side index. */
