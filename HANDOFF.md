@@ -1,75 +1,77 @@
-# Handoff — PCB correctness-hardening program, Session 12b (exact-arc geometry)
+# Handoff — PCB correctness-hardening program, Session 13 (electrical-rule fidelity)
 
-Session 2 · 2026-09-11
+Session 3 · 2026-09-12
 
 ## Goal
 
 One physical PCB model that connectivity, geometry, zones, pours, routing, DRC, manufacturing checks
-and export all consume (`docs/pcb-hardening/PROGRAM.md`). This session delivered **S12b — exact-arc
-geometry** (contract `docs/pcb-hardening/12-exact-geometry-contract.md`, binding) and closed it in the
-working tree, uncommitted. S12 was committed at the start of this session as `262e4e4`.
+and export all consume (`docs/pcb-hardening/PROGRAM.md`). This session delivered **S13 —
+electrical-rule fidelity** (contract `docs/pcb-hardening/13-electrical-contract.md`, binding) and
+closed it in the working tree, uncommitted. S12b was committed at the start of this session as
+`ac968dd`, the contract 13 draft as `01d3179`.
 
 ## Original plan
 
-`~/.claude/plans/resume-implementation-snappy-ullman.md` (approved 2026-09-11): decisions D1–D9,
-WP0–6, the four user decisions (polygon pads → S12c; exact editor gate; canonical arc — refined to
-derived-at-read after Astra run 1 #11; `outline.minWebMm` rule only). Operating model as
+`~/.claude/plans/resume-implementation-snappy-ullman.md` (approved 2026-09-11, rewritten for S13):
+decisions D1–D10, WP0–6, the four user decisions (resolver constituent term; refuse + warn;
+coated option → refined to per-item exposure; rules UI backend-only). Operating model as
 `PROGRAM.md` "Standing instruction": plan mode (3 scouts + Opus plan-critique + an Astra
-`brainstorm` on the design) → contract → Astra spec-attack → `impl-critical` work packages →
-`reviewer-critical` → Astra adversarial-verify → gates → docs; never commit / push / stash.
+`brainstorm` on the design) → contract → Astra spec-attack → `impl-critical` / `impl-careful`
+work packages → `reviewer-critical` → Astra repository-grounded adversarial-verify → gates →
+docs; never commit / push / stash.
 
 ## Done so far (and why)
 
-- **§1 rounded shapes** — every pad carries `rounded` (convex core ⊕ disc); `pair-gap.ts`,
-  `touch.ts` (all three pad predicates), `checks/keepouts.ts` and `checks/board.ts` measure on it;
-  closes the connectivity false-contact limit (06 §5). `disc` and `ring` stay for the pour, the
-  copper-shape unit, the artwork, the broad phase. Radii summed first (byte identity for circles);
-  `r === 0` delegates to today's primitives (byte identity for rect / trapezoid / custom).
-- **§2 canonical contour + exact kernel** — `canonical-contour.ts` (start-radius circle, authored
-  end projected, chained, explicit closing segment; DERIVED, never persisted), `exact-arcs.ts`,
-  `exact-ring.ts`, `exact-contour.ts`, `exact-simplicity.ts`; the annulus arm of `flattenOutline` is
-  gone; ellipse outlines stay chords everywhere.
-- **§3 validity** — `checks/outline.ts` and the editor's `validateContour` share one exact
-  simplicity predicate (S2 #8 closed end-to-end); nesting rule (e) new; `outlineInvalid` counts only
-  `BOARD_OUTLINE_INVALID` (R2 #1 — the budget note had downgraded the commit gate).
-- **§4 certified interval** — `BoardRegion.outerBias` / `exact` / `boundMm` (lazy getters — never
-  spread a region); `checks/board.ts` both bodies: certified PASS / FAIL keep today's inner measure,
-  exact only on ambiguity; per-item exact budget (Astra 2 #2); fallback from both builds (Astra 2 #3).
-- **§5 `OUTLINE_MIN_WEB`** — `material-web-kernel.ts`: necks, contact-run residuals, ring-pair exact
-  distances (Astra 2 #1), pre-quantisation area (Astra 2 #4); `OUTLINE_WEB_UNCHECKED` never silent;
-  `outline.minWebMm` design rule (absent ⇒ silent; no fab row published).
-- **§6 Gerber Profile arcs** — `export/gerber/arcs.ts`: G75 iff arcs, one quantised centre, integer
-  I/J, ≤ 90° pieces validated after quantisation, no centre repair, chord fallback + warning for a
-  degenerate ring; `gerber-outline-parity.test.ts`.
-- **Dead ends ruled out:** the "witness edge is an arc" second-chance trigger (Astra 0 broke it
-  twice); pairwise primitive distance as the web definition (subdividing a convex arc manufactures
-  a web); persisting the canonical endpoint (not a fixed point on the nm grid); a bisector centre
-  repair in the writer (a 1 nm mismatch moves it ≈ 7 mm); "≥ 2 distinct rings" as the residual rule
-  (missed a finger between two arms of one cutout); the opening alone for short throats (erased
-  before classification).
-- **Goldens:** `golden-arcs-2l` new (37 violations, attributed); `census` one `BOARD_OUTLINE_INVALID`
-  id moved (exact contact witness); the other seven byte-identical.
+- **§3 the voltage term** — `rule-resolver.ts` → `voltage-term.ts`: the IPC-2221B spacing is a
+  non-relaxable constituent of every resolved clearance (`ResolvedValue.{ordinaryMm, voltage}`,
+  `mm` = their max); the judge reports `CREEPAGE_DISTANCE` as its own row (pre-S13 id derivation,
+  strictest layer) beside the ordinary row; the pour halo, `zoneExclusions`, the route obstacles
+  and the live gate (refuse) inherit it. The separate creepage loop is gone.
+- **§4 effective nets** — `pcb-connectivity/effective-nets.ts`: connected components over
+  trace / pad / via contacts at `SHORT_EPS_MM` (pours excluded, inexact pads never join, unplated
+  pads one node per face); `tierNetOf` on the context; chain shorts via `checks/chain-short.ts`;
+  the live gate's per-call overlay (`effective-net-overlay.ts`) rejudges existing items whose
+  tier or exposure moved. B7-1 closed (`drc-audit-b7` live), the S7 chain limit closed.
+- **§1.2 exposure** — `mask-exposure.ts` / `mask-exposure-overlay.ts`: B4 only on a coated board
+  when neither item's copper meets any mask opening on that face (tenting is not coverage).
+- **§2 voltages** — DC potential + optional `voltageMinV` / `voltageMaxV` interval, Δ at 1 µV,
+  undeclared = reference (stated); magnitude caps; malformed input → `DRC_RULE_INVALID`, never
+  assessed; the store persists declarations, only the resolver refuses them.
+- **§5 current** — `currentItems` per-item form (tier net, inner / outer copper weight), live
+  warning; `requiredTraceWidthMm` guarded both ways.
+- **§6 constants** — Table 6-1 pinned to IPC-2221B from KiCad 8 @ `942661f` and smpspowersupply
+  (fetched 2026-09-11; IPC-2221C differs, never mixed); the in-repo `eda-standards` references
+  corrected (251–300 V row, 1.378 mil/oz, recomputed width tables).
+- **Dead ends ruled out:** signed AC-peak subtraction (two 300 V-peak nets 180° apart → Δ 0);
+  direct-adjacency effective nets (chains, pours, pending-only live judging); one row per pair
+  (a waiver erases the other constituent); a global "coated" switch (exposed pads); via ampacity
+  from barrel area (unverified thermal substitution); a rejudge budget (guarded nothing);
+  `{}`-substituting a malformed interval at the store (erased a live requirement); tenting as
+  coverage; sharing an unplated pad's node across faces.
+- **Goldens:** `golden-electrical-2l` new (85 primitives, 26 violations / 7 codes, attributed);
+  every pre-existing golden byte-identical (census walked cause by cause).
 
 ## How to resume
 
 1. Run the `handoff` skill with "resume".
-2. Read `docs/pcb-hardening/PROGRAM.md` (S12b bullet, S12c row), contract 12, `src/modules/designer/AGENTS.md`
-   "## DRC", the memory file `pcb-hardening-program.md`.
-3. Verify the tree is still the S12b working tree (`git status --short | wc -l` ≈ 79, HEAD
-   `262e4e4`) and re-run the cheap gates: `cd src/core/backend && bun test drc- pcb-geometry- gerber-`
-   and `npx tsc -b --force 2>&1 | grep -c "error TS"` (44, repo root only).
-4. Next (all need the user's word): commit S12b on `master`; the S11 shared-tags follow-up; then
-   S12c (polygon pads) in plan mode; the mechanical split of `checks/board.ts` / `manufacturability.ts`
-   with the five S12 files after S12c.
+2. Read `docs/pcb-hardening/PROGRAM.md` (S13 bullet, S12c / S14 rows), contract 13,
+   `src/modules/designer/AGENTS.md` "## DRC", the memory file `pcb-hardening-program.md`.
+3. Verify the tree is still the S13 working tree (`git status --short | wc -l` = 57, HEAD
+   `01d3179`) and re-run the cheap gates: `cd src/core/backend && bun test drc- legality
+   connectivity routing` and `npx tsc -b --force 2>&1 | grep -c "error TS"` (44, repo root only).
+4. Next (all on the user's word): commit S13 on `master`; the S11 shared-tags follow-up; then
+   S12c (polygon pads) or S14 (SI v1) in plan mode; the mechanical splits listed in `TODO.md`.
 
 ## Open questions
 
-- When to commit S12b (never auto-commit; message suggestion in `TODO.md` "Now — handoff").
-- Whether the user has tagged `../shared` (S11 fields) — S12c depends on it.
-- CAM acceptance of the ≤ 2√2 nm Gerber arc radius residual — verify on a real fab upload.
+- When to commit S13 (never auto-commit; message suggestion in `TODO.md` "Now — handoff").
+- Whether the user has tagged `../shared` (S11 fields) — S12c depends on it; S14 does not.
+- A per-layer tier for split unplated pads and the judge's per-anchor direct bridge (06 §4) —
+  recorded limits, owner S18.
 
 ## Pointers
 
 - Tasks → `TODO.md` ("Now — handoff" block) · Snapshot → `CURRENT_STATE.md` · Session scratch →
-  `/private/tmp/claude-501/-Users-andrejvysny-workspace-openpcb-OpenPCB/5cf59798-7b89-4741-9c64-204100af5304/scratchpad/s12b/`
-  (briefs, Astra packets / outputs, r1 / r2 probes, gate logs; temporary).
+  `/private/tmp/claude-501/-Users-andrejvysny-workspace-openpcb-OpenPCB/5cf59798-7b89-4741-9c64-204100af5304/scratchpad/s13/`
+  (briefs wp2–wp5, Astra packets / outputs 0–2, sources/, r1 / r1b / r2 probes, gate logs;
+  temporary).

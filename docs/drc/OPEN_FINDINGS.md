@@ -31,7 +31,7 @@ long as that correspondence holds:
 rg -n "test\.todo\(" src/core/backend/tests/drc-audit-b*.test.ts
 ```
 
-Expect **1 call site, 1 unique bug id** — B7-1 (S5 closed B3-9 / B3-10; S7 added B6-1; S8 closed B5-LIVE-ROT-PAD / B5-LIVE-TH-PAD-SIDE and added B7-1; S10 closed B5-SYNC; S11 closed B2-5 / B2-6 / B2-7 / B6-1), and every body a real post-fix assertion
+Expect **0 call sites, 0 unique bug ids** (S5 closed B3-9 / B3-10; S7 added B6-1; S8 closed B5-LIVE-ROT-PAD / B5-LIVE-TH-PAD-SIDE and added B7-1; S10 closed B5-SYNC; S11 closed B2-5 / B2-6 / B2-7 / B6-1; S13 closed B7-1), and every body a real post-fix assertion
 (`rg "expect\(true\)\.toBe\(true\)"` over the same files must return nothing — Session 0 replaced
 the seven placeholder bodies; Sessions 1 and 2 flipped nine of them). When a fix lands, the `test.todo` becomes a real `test` and the
 finding leaves this document. If the count drops without a finding being removed here, the
@@ -159,21 +159,26 @@ judges it with the batch pair bodies against a `LegalityContext` built from the 
 `drc-live-parity.test.ts` (leave-one-out over the six goldens, attribution fixtures, obstacle
 superset, server ↔ live through the runtime).
 
-### B7-1 — unassigned copper does not inherit the rule tier of the net it extends (S13)
+### B7-1 — closed in S13 (2026-09-12): unassigned copper did not inherit the rule tier of the net it extends
 
-Since S8 (`06-batch-drc-contract.md` §4) a null-net item touching exactly one named net is an
-extension of that net: its overlap with that net is no longer a clearance error. But its pairs
-with every OTHER net still resolve with the null-net requirement — the board default, no class,
-no net-scoped rule — so a net-less trace that starts on a 2 mm-class net and passes 0.5 mm from
-another net is clean in batch and at the live / server gates alike (Astra S8 run 2 #1; parity holds,
-the verdict is wrong on both sides). Pre-existing before S8 (the null tier was the default then
-too); the extension wording made it explicit. The fix is a post-bridge pass that re-resolves the
-pairs of every null-net item touching exactly one net as that net, with the attribution changes
-that follow (the pair's anchors stay the null item's).
+Was: since S8 (`06-batch-drc-contract.md` §4) a null-net item touching exactly one named net is an
+extension of that net, so its overlap with that net is no longer a clearance error. But its pairs
+with every OTHER net still resolved with the null-net requirement — the board default, no class,
+no net-scoped rule — so a net-less trace that started on a 2 mm-class net and passed 0.5 mm from
+another net was clean in batch and at the live / server gates alike (Astra S8 run 2 #1; parity held,
+the verdict was wrong on both sides). Pre-existing before S8 (the null tier was the default then
+too); the extension wording made it explicit.
 
-*Anchor:* `src/shared/drc/checks/clearance-judge.ts` `emit` (the extension return) and
-`checks/clearance.ts` bridge pass; `docs/pcb-hardening/07-live-parity-contract.md` §9.
-*Regression:* `drc-audit-b7.test.ts` "B7-1" (`test.todo`).
+Now (`docs/pcb-hardening/13-electrical-contract.md` §4): `pcb-connectivity/effective-nets.ts` is a
+pure kernel that gives every unassigned copper item the TIER of the conductor it physically
+extends, built once with the context and immutable for its life. The pair judge and the per-item
+forms that carry a tier — `netClassItems`, `currentItems` — resolve on that tier; the original
+net is what anchors, the short tier and the bridge record keep. The live gate applies the same
+overlay before any check reads a tier and rejudges the existing items the pending copper
+re-tiered, so live and batch stay in step.
+
+*Regression:* `drc-audit-b7.test.ts` "B7-1" (live) — a null-net trace extending a 2 mm-class net is
+judged against other nets as that net, in batch and through `checkPendingCopper` alike.
 
 ### B5-SYNC — closed in S10 (2026-09-10): the batch run executed synchronously in the HTTP handler
 
@@ -661,8 +666,29 @@ S11 (2026-09-10) re-fetched both fabricators' pages and added the sourced rows `
 
 ## 6.6 Electrical constants
 
-IPC-2221 Table 6-1, columns B1 and B2, sourced at implementation time. Current-versus-width uses
-the IPC-2221 formulation:
+Sourced in S13 (`docs/pcb-hardening/13-electrical-contract.md` §6.1): two independent
+transcriptions of IPC-2221B Table 6-1 fetched on 2026-09-11 — KiCad 8's
+`panel_electrical_spacing_ipc2221.cpp` at commit `942661fc` and smpspowersupply.com's IPC-2221B
+clearance page — which agree row for row. IPC-2221B itself is paywalled and has not been read, so
+these are secondary. Edition **B** is pinned: IPC-2221C (Dec 2023) carries different values and
+sources are never mixed.
+
+| Voltage (V, DC or peak, `Δ ≤ max`) | B1 internal | B2 external uncoated (≤ 3050 m) | B4 external, permanent polymer coating |
+|---|---|---|---|
+| 0–15 | 0.05 | 0.1 | 0.05 |
+| 16–30 | 0.05 | 0.1 | 0.05 |
+| 31–50 | 0.1 | 0.6 | 0.13 |
+| 51–100 | 0.1 | 0.6 | 0.13 |
+| 101–150 | 0.2 | 0.6 | 0.4 |
+| 151–170 | 0.2 | 1.25 | 0.4 |
+| 171–250 | 0.2 | 1.25 | 0.4 |
+| 251–300 | 0.2 | 1.25 | 0.4 |
+| 301–500 | 0.25 | 2.5 | 0.8 |
+| > 500 | 0.25 + 0.0025·(V − 500) | 2.5 + 0.005·(V − 500) | 0.8 + 0.00305·(V − 500) |
+
+Bands are stepped, never interpolated. The current-versus-width estimate uses the IPC-2221
+conductor formula `A(mil²) = (I / (k · ΔT^b))^(1/c)` with `width = A / thickness` and
+`thickness = oz × 1.378 mil`:
 
 | Constant | Value |
 |---|---|
@@ -672,10 +698,19 @@ the IPC-2221 formulation:
 | `c` | 0.725 |
 | `designRules.electrical.tempRiseC` | 10 |
 | `designRules.electrical.copperWeightOz` | 1 |
+| `designRules.electrical.innerCopperWeightOz` | falls back to `copperWeightOz`, then 1 |
 
-Nets carrying no voltage are treated as 0 V. Creepage seeds from HV pads and vias as well as
-traces, uses `|ΔV|` so negative rails behave, applies a per-pair-kind base clearance, and does not
-double-emit on HV-to-HV pairs.
+Assumptions (13 §1.3, §2, §5). Each verdict names the inputs it used and the choices it made: a
+`CREEPAGE_DISTANCE` row names the differential Δ, the conductor column, the exposure decision
+whenever a declared coating made B4 available (`coated per design rule` / `exposed conductor`),
+and — when one side declares no potential — that the undeclared net is ASSUMED at the board
+reference potential; a `TRACE_CURRENT_WIDTH` row names the current, the temperature rise, the
+copper weight, the layer class, and that every segment is judged as carrying the FULL class
+current. Two assumptions live here rather than in the message: Δ is the interval form
+`Δ = max(|a.min − b.max|, |a.max − b.min|)`, and the copper weight is the declared nominal, not a
+minimum finished thickness. Not claimed: creepage as distinct from same-layer clearance,
+insulation coordination, cross-layer pairs, actual temperature rise, via / pour / pad ampacity,
+current sharing between parallel paths.
 
 ## 6.7 Signal-integrity thresholds
 

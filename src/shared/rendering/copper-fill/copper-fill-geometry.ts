@@ -53,6 +53,11 @@ import {
   traceItemKey,
   viaItemKey,
 } from "../../pcb-connectivity/copper-items";
+import { copperDrcItems } from "../../pcb-connectivity/copper-drc-items";
+import {
+  buildEffectiveNets,
+  type EffectiveNetItem,
+} from "../../pcb-connectivity/effective-nets";
 
 import {
   collectDrills,
@@ -265,11 +270,20 @@ interface BareCopper {
 export interface CopperFillObstacle {
   kind: "trace" | "pad" | "via";
   netId: string | null;
+  /**
+   * The net the DRC pair judge will judge this copper AS (electrical contract
+   * 13 §4.2): unassigned copper that TOUCHES a conductor is an extension of it,
+   * so a halo built on its original null net would be narrower than the verdict
+   * — the one way the fill's "carves at least what DRC requires" claim breaks.
+   * Equal to `netId` for every item that carries one.
+   */
+  tierNetId: string | null;
   pointMm: PcbPointMm;
 }
 
 interface BareCopperInput {
   layer: PcbCopperLayerId;
+  layerCount: PcbLayerCount;
   records: CopperRecords;
   pourNetId: string | null;
   thermal: ThermalConfig | null;
@@ -406,6 +420,52 @@ function buildThermalKnockout(
   return difference(padInflated, carve);
 }
 
+/** Tier net per record, in `records.traces` / `.pads` / `.vias` order. */
+interface PourTierNets {
+  traces: ReadonlyArray<string | null>;
+  pads: ReadonlyArray<string | null>;
+  vias: ReadonlyArray<string | null>;
+}
+
+/**
+ * Memoised on the RECORDS (13 §3.2 a): the map is a function of the copper
+ * alone, and a multi-layer board fills one zone per layer from one record set —
+ * so the DRC run, which hands the kernel its own records, pays for the contact
+ * walk once instead of once per zone.
+ */
+const TIER_NET_CACHE = new WeakMap<CopperRecords, PourTierNets>();
+
+/**
+ * Effective nets for this fill's copper. Outside the DRC context there is no
+ * grid, so the kernel's own BOUNDS SCAN over the null items serves as the
+ * candidate finder — the exact contact predicate underneath is the same one,
+ * so the components it finds are the same (13 §4.1).
+ */
+function pourTierNets(
+  records: CopperRecords,
+  layerCount: PcbLayerCount,
+): PourTierNets {
+  const cached = TIER_NET_CACHE.get(records);
+  if (cached) return cached;
+  const items = copperDrcItems(
+    records,
+    new Set(records.validCopperLayers),
+    layerCount,
+  );
+  const nets = buildEffectiveNets(items);
+  const tier = (
+    list: readonly EffectiveNetItem[],
+  ): Array<string | null> =>
+    list.map((item) => nets.effectiveNetOf.get(item) ?? item.netId);
+  const out: PourTierNets = {
+    traces: tier(items.traces),
+    pads: tier(items.pads),
+    vias: tier(items.vias),
+  };
+  TIER_NET_CACHE.set(records, out);
+  return out;
+}
+
 /**
  * Classify every copper record against this layer and pour net (contract §4).
  * A record off the layer is ignored; a record whose declared layer or via span
@@ -414,6 +474,10 @@ function buildThermalKnockout(
  */
 function collectBareCopper(input: BareCopperInput): BareCopper {
   const { layer, records, pourNetId, thermal, padConnection } = input;
+  // ONE effective-net map per fill input (13 §3.2 a) — the same pure kernel the
+  // DRC context runs, so every pour (DRC, canvas, 3D, export, snapshot) carves
+  // the copper the judge measures.
+  const tiers = pourTierNets(records, input.layerCount);
   const diffNet: ObstacleCopper[] = [];
   const sameNetItems: BareCopper["sameNetItems"] = [];
   const thermalKnockouts: PathsD[] = [];
@@ -424,22 +488,25 @@ function collectBareCopper(input: BareCopperInput): BareCopper {
   const pushObstacle = (
     kind: CopperFillObstacle["kind"],
     netId: string | null,
+    tierNetId: string | null,
     pointMm: PcbPointMm,
     poly: ClipperPolygon,
   ): void => {
     diffNet.push({
-      clearanceMm: input.obstacleClearanceMm({ kind, netId, pointMm }),
+      clearanceMm: input.obstacleClearanceMm({ kind, netId, tierNetId, pointMm }),
       poly: poly.map(toCcw),
     });
   };
 
-  for (const record of records.pads) {
+  for (let pi = 0; pi < records.pads.length; pi += 1) {
+    const record = records.pads[pi]!;
+    const tierNetId = tiers.pads[pi]!;
     if (!padRecordHasCopper(record)) continue;
     const onLayer = record.resolvedLayers.includes(layer);
     if (!onLayer && !record.declaredLayerInvalid) continue;
     const poly: ClipperPolygon = [ringToClipperRing(record.ring)];
     if (record.declaredLayerInvalid) {
-      pushObstacle("pad", record.netId, record.center, poly);
+      pushObstacle("pad", record.netId, tierNetId, record.center, poly);
       continue;
     }
     // A `std` free pad is drilled by definition (S3a) whatever `drillMm` says.
@@ -461,7 +528,7 @@ function collectBareCopper(input: BareCopperInput): BareCopper {
         ? resolvePadConnection(padConnection, drilled)
         : "none";
     if (mode === "none") {
-      pushObstacle("pad", record.netId, record.center, poly);
+      pushObstacle("pad", record.netId, tierNetId, record.center, poly);
       continue;
     }
     sameNetItems.push({
@@ -482,12 +549,22 @@ function collectBareCopper(input: BareCopperInput): BareCopper {
     }
   }
 
-  for (const record of records.traces) {
+  for (let ti = 0; ti < records.traces.length; ti += 1) {
+    const record = records.traces[ti]!;
     if (record.layer !== layer) continue;
+    // MERGING is decided on the ORIGINAL net, exactly as before S13: the tier
+    // net widens a halo, it never welds a pour to copper the connectivity
+    // kernel does not join.
     const same = isSameNetAsPour(record.netId, pourNetId);
     if (!same) {
       for (const stadium of traceRecordStadiums(record))
-        pushObstacle("trace", record.netId, stadium.midpointMm, stadium.poly);
+        pushObstacle(
+          "trace",
+          record.netId,
+          tiers.traces[ti]!,
+          stadium.midpointMm,
+          stadium.poly,
+        );
       continue;
     }
     if (record.pointsMm.length < 2 || record.halfWidthMm <= 0) continue;
@@ -504,7 +581,8 @@ function collectBareCopper(input: BareCopperInput): BareCopper {
     }
   }
 
-  for (const record of records.vias) {
+  for (let vi = 0; vi < records.vias.length; vi += 1) {
+    const record = records.vias[vi]!;
     if (!(record.radiusMm > 0)) continue;
     const onLayer = record.span.includes(layer);
     if (!onLayer && !record.layerSpanInvalid) continue;
@@ -513,7 +591,7 @@ function collectBareCopper(input: BareCopperInput): BareCopper {
       buildDiscRing(record.center, record.radiusMm, undefined, true),
     ];
     if (record.layerSpanInvalid || !isSameNetAsPour(record.netId, pourNetId)) {
-      pushObstacle("via", record.netId, record.center, poly);
+      pushObstacle("via", record.netId, tiers.vias[vi]!, record.center, poly);
       continue;
     }
     sameNetItems.push({
@@ -1340,6 +1418,7 @@ function computePourIslands(
   );
   const bare = collectBareCopper({
     layer: params.layer,
+    layerCount: params.layerCount,
     records,
     pourNetId: params.pourNetId,
     thermal,

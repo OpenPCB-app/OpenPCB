@@ -737,6 +737,197 @@ describe("buildRouteObstacles — resolved clearance tiers", () => {
   });
 });
 
+describe("buildRouteObstacles — a route with no net yet", () => {
+  /**
+   * The gate gives an unassigned route the TIER of whatever conductor it ends
+   * up touching (13 §4), so resolving its rects at the raw null net offered
+   * paths the gate then refused (R1 #2). A null route therefore takes the
+   * conservative bound — the widest ordinary requirement any pair on this board
+   * can resolve to — and over-blocks instead (§3.2 c).
+   */
+  const netNames = { "net-b": "B", "net-c": "C" };
+  const board = boardFor({ perNetClassAssignments: { "net-b": "wide" } });
+  // `u1`'s pad is net-b (class `wide`, 0.8 mm); the route starts on it and runs
+  // 0.5 mm (edge to edge) under `t1`, which is on an unclassed net.
+  const parts: Partial<DesignerPcbProjection> = {
+    board,
+    netNames,
+    placements: [placement("u1", { x: 0, y: 0 }, [pad("1", 0, 0, 1, 2)])],
+    padNets: { "u1|1": "net-b" },
+    traces: [
+      trace(
+        "t1",
+        [
+          { x: 2 * NM, y: 0.75 * NM },
+          { x: 8 * NM, y: 0.75 * NM },
+        ],
+        { netId: "net-c" },
+      ),
+    ],
+  };
+  const routeNm: [PointNm, PointNm] = [
+    { x: 0, y: 0 },
+    { x: 8 * NM, y: 0 },
+  ];
+
+  test("the gate refuses the route at the touched net's tier", () => {
+    const ctx = ctxFor(parts);
+    const verdict = blockingViolations(
+      ctx,
+      runLiveDrc({
+        ctx,
+        pending: {
+          traces: [
+            trace("p", [routeNm[0], routeNm[1]], { widthMm: 0.3 }),
+          ],
+          vias: [],
+        },
+      }),
+    ).filter((v) => v.code === "TRACE_TO_TRACE_CLEARANCE");
+    expect(verdict).toHaveLength(1);
+    expect(verdict[0]!.requiredMm).toBe(0.8);
+    expect(verdict[0]!.measuredMm).toBeCloseTo(0.5, 9);
+  });
+
+  test("the obstacle rect blocks the path the gate refuses", () => {
+    const ctx = ctxFor(parts);
+    const nullRoute = buildRouteObstacles({
+      ctx,
+      layer: "F.Cu",
+      netId: null,
+      routeWidthMm: 0.3,
+    });
+    expect(
+      segmentIntersectsRectNm(routeNm[0], routeNm[1], byId(nullRoute, "trace:t1:0")),
+    ).toBe(true);
+
+    // Non-vacuous: a route that DOES carry an unclassed net resolves at the
+    // board tier (0.2 mm) and is offered the very same path.
+    const classed = buildRouteObstacles({
+      ctx,
+      layer: "F.Cu",
+      netId: "net-a",
+      routeWidthMm: 0.3,
+    });
+    expect(
+      segmentIntersectsRectNm(routeNm[0], routeNm[1], byId(classed, "trace:t1:0")),
+    ).toBe(false);
+  });
+});
+
+describe("buildRouteObstacles — session copper carries its tier", () => {
+  /**
+   * `input.extra` is not in the BOARD's tier map, so resolving it through
+   * `ctx.tierNetOf` answered with its raw null net while the gate judges the
+   * same geometry through its per-call overlay — the router offered corridors
+   * the gate then refused (Astra run 2 #2). The builder now derives the same
+   * overlay the gate does.
+   */
+  const routeNm: [PointNm, PointNm] = [
+    { x: 5 * NM, y: 0.7 * NM },
+    { x: 10 * NM, y: 0.7 * NM },
+  ];
+  const session = {
+    traces: [
+      trace(
+        "sx",
+        [
+          { x: 0, y: 0 },
+          { x: 10 * NM, y: 0 },
+        ],
+        { netId: null },
+      ),
+    ],
+    vias: [],
+  };
+
+  function ctxWith(classed: boolean) {
+    return ctxFor({
+      board: boardFor(
+        classed ? { perNetClassAssignments: { "net-b": "wide" } } : {},
+      ),
+      // The session trace starts on `tb`, so it extends whatever `tb` is.
+      traces: [
+        trace(
+          "tb",
+          [
+            { x: -4 * NM, y: 0 },
+            { x: 0, y: 0 },
+          ],
+          { netId: "net-b" },
+        ),
+      ],
+    });
+  }
+
+  test("an unassigned session run inherits the class of the copper it extends", () => {
+    const ctx = ctxWith(true);
+    const rects = buildRouteObstacles({
+      ctx,
+      layer: "F.Cu",
+      netId: "net-a",
+      routeWidthMm: 0.3,
+      extra: session,
+    });
+    expect(
+      segmentIntersectsRectNm(routeNm[0], routeNm[1], byId(rects, "trace:sx:0")),
+    ).toBe(true);
+
+    // The gate on the same copper: 0.45 mm measured against the `wide` tier.
+    const verdict = blockingViolations(
+      ctx,
+      runLiveDrc({
+        ctx,
+        pending: {
+          traces: [
+            session.traces[0]!,
+            trace("rt", [routeNm[0], routeNm[1]], {
+              netId: "net-a",
+              widthMm: 0.3,
+            }),
+          ],
+          vias: [],
+        },
+      }),
+    ).filter((v) => v.code === "TRACE_TO_TRACE_CLEARANCE");
+    expect(verdict).toHaveLength(1);
+    expect(verdict[0]!.requiredMm).toBe(0.8);
+    expect(verdict[0]!.measuredMm).toBeCloseTo(0.45, 9);
+  });
+
+  test("CONTROL: with no class on the copper it extends, the path is offered", () => {
+    const ctx = ctxWith(false);
+    const rects = buildRouteObstacles({
+      ctx,
+      layer: "F.Cu",
+      netId: "net-a",
+      routeWidthMm: 0.3,
+      extra: session,
+    });
+    expect(
+      segmentIntersectsRectNm(routeNm[0], routeNm[1], byId(rects, "trace:sx:0")),
+    ).toBe(false);
+    expect(
+      blockingViolations(
+        ctx,
+        runLiveDrc({
+          ctx,
+          pending: {
+            traces: [
+              session.traces[0]!,
+              trace("rt", [routeNm[0], routeNm[1]], {
+                netId: "net-a",
+                widthMm: 0.3,
+              }),
+            ],
+            vias: [],
+          },
+        }),
+      ).filter((v) => v.code === "TRACE_TO_TRACE_CLEARANCE"),
+    ).toEqual([]);
+  });
+});
+
 describe("buildRouteObstacles — keepouts", () => {
   test("one ring-bounds rect per tracks keepout on the routing layer", () => {
     const ctx = ctxFor({ keepouts: [keepout()] });

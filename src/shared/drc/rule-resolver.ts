@@ -41,6 +41,9 @@ import {
   type RuleProblem,
   type ScalarRuleKind,
 } from "./rule-compile";
+import { buildVoltageModel, type VoltageTerm } from "./voltage-term";
+
+export type { VoltageTerm } from "./voltage-term";
 
 export {
   boardMinimumFor,
@@ -59,6 +62,12 @@ export {
 export interface ClearanceItem {
   netId: string | null;
   pointMm: PcbPointMm;
+  /**
+   * The item's copper is UNCOVERED on this pair's layer (electrical contract 13
+   * §1.2): an exposed conductor is an uncoated one whatever the board-level
+   * coating declaration says, so it forces the B2 column. Absent = not exposed.
+   */
+  exposed?: boolean;
 }
 
 /**
@@ -69,7 +78,7 @@ export interface ClearanceItem {
  * construction. `null` additionally drops the net (no second net to scope on).
  */
 export type PourObstacle =
-  | { netId: string | null; pointMm: PcbPointMm | null }
+  | { netId: string | null; pointMm: PcbPointMm | null; exposed?: boolean }
   | null;
 
 /**
@@ -94,10 +103,27 @@ export interface ScalarItem {
   geometry: ScalarGeometry;
 }
 
-/** The number a check compares against, and the rule that set it. */
+/**
+ * The number a check compares against, and the rule that set it — with the two
+ * CONSTITUENTS it is the maximum of (electrical contract 13 §3.1). A consumer
+ * that only sizes a halo reads `mm`; the pair judge reports each constituent as
+ * its own row, with its own id, waiver and severity (§3.3).
+ */
 export interface ResolvedValue {
+  /** `max(ordinaryMm, voltage?.mm ?? 0)`. */
   mm: number;
   rule: PcbDrcRule | null;
+  /** `max(explicit-or-implicit rule value, floorMm)` — the pre-S13 `mm`. */
+  ordinaryMm: number;
+  /**
+   * The IPC-2221 conductor spacing this pair's declared potentials require, or
+   * `null` when neither side declares one. NOT RELAXABLE: an explicit scoped
+   * rule sets `ordinaryMm` and can lower it below the implicit tier, but it is
+   * outside this term's maximum (§3.1). There is no scoped constraint kind for
+   * voltage — a board that wants a looser spacing changes the declared voltage,
+   * which is visible in the data.
+   */
+  voltage: VoltageTerm | null;
 }
 
 export interface RuleResolver {
@@ -154,7 +180,30 @@ export interface RuleResolver {
     layer: PcbCopperLayerId,
     aNetId: string | null,
     bNetId: string | null,
+    exposedA?: boolean,
+    exposedB?: boolean,
   ): ResolvedValue;
+  /**
+   * The widest voltage term ANY declared class could impose against `netId` on
+   * `layer` — the conservative bound a route whose own net is not yet assigned
+   * resolves with (13 §3.2 c). The route walks farther than it might need,
+   * never closer than it must. 0 when no class declares a potential.
+   */
+  maxVoltageTermMm(
+    layer: PcbCopperLayerId,
+    netId: string | null,
+    exposed: boolean,
+  ): number;
+  /** Any class declares a potential; false ⇒ no pair carries the term (§2). */
+  hasVoltageTerms: boolean;
+  /**
+   * Malformed ELECTRICAL input — a non-finite or inverted voltage interval, a
+   * non-positive temperature rise or copper weight (§2). Same shape as
+   * {@link problems}, reported by `checks/rules.ts` as `DRC_RULE_INVALID`; the
+   * constituent each one feeds is absent for the run rather than assessed on
+   * garbage.
+   */
+  electricalProblems: readonly RuleProblem[];
   scalar(kind: ScalarRuleKind, item: ScalarItem): ResolvedValue;
   /** `holeToHole` is the one scalar kind evaluated on a PAIR of items (§5.1). */
   scalarPair(
@@ -263,6 +312,9 @@ export function createRuleResolver(
       netClassClearanceMm(bNetId),
     );
 
+  // The board's voltage model (13 §2), built once beside the rule table.
+  const voltages = buildVoltageModel(board, netClassIdOf);
+
   const clearanceMemo = new Map<string, ResolvedValue>();
   const resolveWithMasks = (
     pairKind: DrcPairKind,
@@ -271,11 +323,19 @@ export function createRuleResolver(
     maskA: number,
     bNetId: string | null,
     maskB: number,
+    exposedA = false,
+    exposedB = false,
   ): ResolvedValue => {
     // Length-prefixed net ids keep the key INJECTIVE for any string a net id
     // can be: with a plain separator, ("x", "y z") and ("x y", "z") would
     // share one cached verdict, and this memo decides legality.
-    const key = `${pairKind}|${layer}|${netKey(aNetId)}${netKey(bNetId)}${maskA}|${maskB}`;
+    //
+    // Exposure enters the key ONLY on a coated board (§3.1): uncoated, the
+    // outer column is B2 whatever the mask does, so the two bits alias nothing
+    // and the key — and with it every pre-S13 board's cache — is unchanged.
+    const key = `${pairKind}|${layer}|${netKey(aNetId)}${netKey(bNetId)}${maskA}|${maskB}${
+      voltages.coated ? `|${exposedA ? 1 : 0}${exposedB ? 1 : 0}` : ""
+    }`;
     const cached = clearanceMemo.get(key);
     if (cached !== undefined) return cached;
     const implicit = implicitTier(pairKind, aNetId, bNetId);
@@ -306,11 +366,18 @@ export function createRuleResolver(
       break;
     }
     const value = explicit ? explicit.valueMm : implicit;
+    const ordinaryMm = Math.max(value, floorMm);
+    // OUTSIDE the `max(value, floorMm)` step on purpose (§3.1): an explicit
+    // scoped rule may relax the ordinary value below the implicit tier, but
+    // never below the IPC-2221 table.
+    const voltage = voltages.termFor(layer, aNetId, bNetId, exposedA, exposedB);
     const resolved: ResolvedValue = {
-      mm: Math.max(value, floorMm),
+      mm: Math.max(ordinaryMm, voltage?.mm ?? 0),
       // A clamped rule still SET the value — it matched first and shadowed
       // everything below it, so its severity is the one that applies (§2.1).
       rule: explicit ? explicit.rule : null,
+      ordinaryMm,
+      voltage,
     };
     clearanceMemo.set(key, resolved);
     return resolved;
@@ -329,6 +396,8 @@ export function createRuleResolver(
       areaMaskForPoint(a.pointMm),
       b.netId,
       areaMaskForPoint(b.pointMm),
+      a.exposed === true,
+      b.exposed === true,
     );
 
   const resolveScalar = (
@@ -336,11 +405,14 @@ export function createRuleResolver(
     match: (rule: CompiledRule) => boolean,
   ): ResolvedValue => {
     const boardMin = boardMinimumFor(kind, board.designRules);
+    // A scalar minimum is a DIMENSION, never a spacing between two conductors:
+    // it carries no voltage constituent, so `ordinaryMm` IS `mm`.
     for (const rule of compiled.scalarRules[kind]) {
       if (!match(rule)) continue;
-      return { mm: Math.max(rule.valueMm, boardMin), rule: rule.rule };
+      const mm = Math.max(rule.valueMm, boardMin);
+      return { mm, rule: rule.rule, ordinaryMm: mm, voltage: null };
     }
-    return { mm: boardMin, rule: null };
+    return { mm: boardMin, rule: null, ordinaryMm: boardMin, voltage: null };
   };
 
   const scalar = (kind: ScalarRuleKind, item: ScalarItem): ResolvedValue => {
@@ -404,6 +476,10 @@ export function createRuleResolver(
     clearance,
     clearancePour(pairKind, layer, pourNetId, obstacle) {
       const obstacleNetId = obstacle ? obstacle.netId : null;
+      // The POUR side carries no exposure of its own: the obstacle's is
+      // conservative already (13 §3.2 — the fill input has no mask model), and
+      // one exposed side is all the B2 column needs.
+      const exposed = obstacle?.exposed === true;
       const unmasked = resolveWithMasks(
         pairKind,
         layer,
@@ -411,6 +487,8 @@ export function createRuleResolver(
         0,
         obstacleNetId,
         0,
+        false,
+        exposed,
       );
       // No evaluation point ⇒ masks 0 is the whole answer (§6 rule 3).
       if (!obstacle || obstacle.pointMm === null) return unmasked;
@@ -424,19 +502,39 @@ export function createRuleResolver(
         mask,
         obstacleNetId,
         mask,
+        false,
+        exposed,
       );
       return atObstacle.mm > unmasked.mm ? atObstacle : unmasked;
     },
     clearanceBound(pairKind, aNetId, bNetId) {
+      // B2 is the widest column ANY layer this pair can share admits (B1 and B4
+      // are ≤ B2 row by row), so one lookup bounds the constituent whatever the
+      // layer and the exposure turn out to be (13 §3.4). Without it every HV
+      // pair wider than the ordinary bound is dropped before resolution.
+      const voltage = voltages.termFor("F.Cu", aNetId, bNetId, true, true);
       return Math.max(
         implicitTier(pairKind, aNetId, bNetId),
         compiled.maxClearanceRuleMm,
         floorMm,
+        voltage?.mm ?? 0,
       );
     },
-    clearanceOutsideAreas(pairKind, layer, aNetId, bNetId) {
-      return resolveWithMasks(pairKind, layer, aNetId, 0, bNetId, 0);
+    clearanceOutsideAreas(pairKind, layer, aNetId, bNetId, exposedA, exposedB) {
+      return resolveWithMasks(
+        pairKind,
+        layer,
+        aNetId,
+        0,
+        bNetId,
+        0,
+        exposedA === true,
+        exposedB === true,
+      );
     },
+    maxVoltageTermMm: voltages.widestTermAgainstMm,
+    hasVoltageTerms: voltages.hasDeclaredVoltage,
+    electricalProblems: voltages.problems,
     scalar,
     scalarPair,
     areaMaskForPoint,

@@ -634,12 +634,29 @@ export interface PcbDesignRules {
     clearanceMm?: number;
   };
   /**
-   * Electrical modeling parameters for IPC-2152/2221 checks (P10). Optional/
-   * additive — absent uses the defaults (10 °C rise, 1 oz copper).
+   * Electrical modeling parameters for the IPC-2221 checks (electrical contract
+   * 13 §1.3, §5). Optional/additive — every key absent uses the documented
+   * default (10 °C rise, 1 oz copper, uncoated outer conductors).
    */
   electrical?: {
-    tempRiseC: number;
-    copperWeightOz: number;
+    /** Allowed conductor temperature rise (°C). Absent reads as 10. */
+    tempRiseC?: number;
+    /** Nominal OUTER copper weight (oz/ft²). Absent reads as 1. */
+    copperWeightOz?: number;
+    /**
+     * Nominal INNER copper weight (oz/ft²) — inner layers are commonly half
+     * the outer weight. Absent falls back to `copperWeightOz`, then to 1.
+     */
+    innerCopperWeightOz?: number;
+    /**
+     * Whether the outer conductors carry a PERMANENT POLYMER COATING, which
+     * selects the IPC-2221B B4 spacing column instead of B2 (13 §1.2).
+     * `"coated"` is the USER'S CLAIM: whether a liquid-photoimageable solder
+     * mask qualifies depends on coverage, openings and process qualification
+     * OpenPCB cannot see, and an item exposed through a mask opening is judged
+     * in B2 whatever this says. Absent reads as `"uncoated"`.
+     */
+    outerConductors?: "uncoated" | "coated";
   };
   /**
    * Silkscreen DFM parameters (DFM contract 11 §6). Optional/additive; an
@@ -769,13 +786,32 @@ export interface PcbNetClass {
    */
   diffPairGapMm?: number;
   /**
-   * Operating voltage (V, relative to board common) of nets in this class.
-   * Drives IPC-2221 creepage/clearance-by-voltage (P10). Optional; absent = 0.
+   * Constant DC potential of nets in this class relative to the board
+   * reference (V, signed). Drives the IPC-2221 conductor-spacing requirement
+   * (electrical contract 13 §2). Optional; ABSENT = undeclared, and an
+   * undeclared net is ASSUMED at the reference potential — an assumption the
+   * verdict states, not a measurement. An explicit `0` is the same assumption.
    */
   voltageV?: number;
   /**
-   * Steady-state current (A) carried by nets in this class. Drives the
-   * IPC-2221 current-vs-trace-width check (P10). Optional; absent = unchecked.
+   * The interval a VARYING potential occupies (AC, a switching node, a bipolar
+   * signal), in volts. Both or neither; absent means `[voltageV, voltageV]`.
+   * Two DISTINCT nets of one class are INDEPENDENT potentials, so a class
+   * `[−300, 300]` gives Δ = 600 V between two of its nets (13 §2) — class
+   * membership never establishes correlation. Conductors at two different
+   * CONSTANT potentials need two classes.
+   */
+  voltageMinV?: number;
+  /** Upper end of {@link voltageMinV}'s interval; both or neither. */
+  voltageMaxV?: number;
+  /**
+   * Steady-state current (A) carried by nets in this class, driving the
+   * IPC-2221 current-versus-width estimate (electrical contract 13 §5). Every
+   * segment of the net — including unassigned copper that extends it — is
+   * judged as carrying the FULL value; parallel paths are not modelled.
+   * Optional; absent = unrated, and a present value that is not finite and
+   * strictly positive is a `DRC_RULE_INVALID` row under which no trace of the
+   * class is judged.
    */
   currentA?: number;
 }

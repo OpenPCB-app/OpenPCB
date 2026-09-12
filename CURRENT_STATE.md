@@ -1,18 +1,24 @@
 # Current State
 
-Last verified: 2026-09-11 21:30
+Last verified: 2026-09-12 (final gate run, `scratchpad/s13/wp6-gates-final.log`)
 
-- **Branch:** `master`, 7 commits ahead of `origin/master` (HEAD `262e4e4` = S12), **dirty** — the
-  S12b working tree (≈ 79 entries: 44 modified + 35 untracked), nothing staged. Sibling `../shared`
-  on `main` at `e882332` (clean, UNTAGGED, unpushed).
-- **What the dirty tree is:** Session 12b — exact-arc geometry (`docs/pcb-hardening/12-exact-geometry-contract.md`,
-  binding; PROGRAM.md row S12b = done, S12c row added).
-- **Changed files (by role):**
-  - Exact layer (new): `src/shared/pcb-geometry/{rounded-shape,rounded-shape-types,canonical-contour,exact-arcs,exact-ring,exact-contour,exact-simplicity,region-build,region-rounded,region-exact}.ts`; `board-region.ts`, `outline-geometry.ts`, `pad-outline.ts` (additive builders) edited.
-  - Consumers: `pcb-connectivity/{copper-records,copper-items,touch}.ts`, `drc/{drc-context,pair-gap}.ts`, `drc/checks/{board,outline,keepouts,manufacturability}.ts`, `rendering/pcb/{contour-validation,outline-manufacturability}.ts`, `copper-fill/{copper-shape-kernel,material-web-kernel}.ts` (new kernel), `export/gerber/{arcs,writer,job-file}.ts` (new `arcs.ts`), `export/units.ts`, `pcb-store.ts`, `command-executor.ts` (comment), registries (`sdks/designer/types.ts`, `code-registry.ts` + shim, `severity.ts`, `violation-id.ts`, `drc-labels.ts`).
-  - Tests: new `pcb-geometry-{rounded-shape,exact-arcs}.test.ts`, `drc-{outline-exact,material-web}.test.ts`, `gerber-outline-parity.test.ts` (+ `helpers/gerber-outline-fixtures.ts`), `frontend/pcb/contour-validation-gate.test.ts` (Vitest); edited `drc-audit-b4` (B4-9…B4-13), `drc-legality`, `drc-golden`, `drc-broad-phase-oracle`, `drc-keepouts`, `drc-pair-gap`, `drc-s7-clearance`, `contour-validation`, `pcb-geometry-board-region`, `designer-export`, `designer-pcb-view-state`, `helpers/{drc-golden,gerber-parse}.ts`; goldens `golden-arcs-2l.*` (new), `golden-census-2l.expected.json` (+ `.md`), `golden-holes-4l.md`, `golden-pours-2l.md`.
-  - Docs: contract 12 (new), `PROGRAM.md`, `OPEN_FINDINGS.md` §6.8b, contracts 01/02/04/06/10/11, `TODO.md`, `CLAUDE.md` tree, `designer/AGENTS.md`, hardening-skill `scope-and-invariants.md`; memory.
-- **Build/test (2026-09-11, final tree):** backend `bun test` 2814 pass / 22 known fails / 8 skip / 1 todo; `npx tsc -b --force | grep -c "error TS"` = 44 (repo root); `npm run test:react` 64 files 583 + 1 todo; `gen` + `gen:contracts -- --check` clean (`gen:check` fails on `gen:copilot-schemas:check` ENOENT — pre-existing); `test:drc-worker-smoke` PASS byte-identical; e2e `pcb-drc pcb-routing pcb-live-parity` 5 passed 1 skipped; `package-lock.json` 034652c3 unchanged; goldens areas 99c49eb3 · census (moved) · cutouts 43fbd513 · dfm 47573fd3 · holes c8ab6694 · pours ab245110 · rules ed0705e8 · small 95fbb3dc · arcs (new).
-- **Key decisions (user, 2026-09-11):** polygon pads → S12c; exact editor gate; canonical arc derived at read (refined from write + read after Astra run 1 #11); `outline.minWebMm` rule only, no invented fab row; Astra "as needed" (brainstorm + spec-attack + adversarial-verify, all run).
-- **Review status:** plan-critique 29 / Astra 0 / Astra 1 (18) / R1 (10) / R2 (6) / Astra 2 (4) — all folded, every fix verified; ledgers in contract 12 §12.
-- **Blockers:** none. Waiting on the user for: the S12b commit; the shared tags (S11 follow-up) before S12c.
+- **Branch:** `master`, HEAD `01d3179` (S12b `ac968dd`, contract 13 draft `01d3179`), dirty —
+  57 entries (46 modified incl. the two handoff files, 11 new), nothing staged, no commit made this session after `01d3179`.
+- **Changed files (S13):** new `src/shared/drc/{voltage-term,mask-exposure,mask-exposure-overlay,
+  effective-net-overlay}.ts`, `checks/chain-short.ts`, `src/shared/pcb-connectivity/{effective-nets,
+  copper-drc-items}.ts`, test `drc-electrical-consumers.test.ts`, golden `golden-electrical-2l.*`;
+  modified `rule-resolver.ts`, `ipc2221-spacing.ts`, `drc-context.ts`, `legality.ts`,
+  `checks/{clearance,clearance-judge,electrical,netclass,rules}.ts`, `code-registry.ts`,
+  `pcb-areas/pour-params.ts`, `copper-fill/copper-fill-geometry.ts`, `pcb-routing/route-obstacles.ts`,
+  `pcb-store.ts`, `sdks/designer/types.ts`, frontend `drc-labels.ts`, tests (`drc-audit-b7`,
+  `drc-electrical`, `drc-legality`, `drc-live-parity`, `drc-broad-phase*`, `designer-pcb-view-state`,
+  `pcb-routing-obstacles`, parity helpers), docs (contract 13 binding; contracts 00/01/04/05/06/07/08/11
+  amended; PROGRAM.md; OPEN_FINDINGS.md B7-1 closed + §6.6; README; designer AGENTS.md; CLAUDE.md
+  tree; hardening-skill scope; TODO.md), and outside the repo the `eda-standards` references.
+- **Build/test:** backend `bun test` 2891 pass / 22 known fails / 8 skip; tsc 44 (repo root);
+  Vitest 583 + 1 todo; gen + gen:contracts clean; worker smoke byte-identical; e2e 5 + 1 skip;
+  lock 034652c3; nine pre-existing goldens byte-identical, `golden-electrical-2l` a9990112; the
+  S9 clearance oracle byte-identical to `HEAD`.
+- **Key decisions:** see `PROGRAM.md` S13 bullet and contract 13 §12 ledgers (plan-critique,
+  Astra runs 0 / 1 / 2, R1, R2 — every finding accepted and fixed).
+- **Blockers:** none. Commit is the user's; `../shared` still untagged (blocks S12c only).

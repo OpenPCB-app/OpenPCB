@@ -303,7 +303,9 @@ describe("one resolution — batch DRC, the resolver and the pour agree", () => 
           : item.kind === "via"
             ? ("pourToVia" as const)
             : ("pourToTrace" as const);
-      expect(params.clearanceForItem(item)).toBeCloseTo(
+      expect(
+        params.clearanceForItem({ ...item, tierNetId: item.netId }),
+      ).toBeCloseTo(
         resolver.clearancePour(pairKind, "F.Cu", "gnd", {
           netId: item.netId,
           pointMm: item.pointMm,
@@ -319,6 +321,7 @@ describe("one resolution — batch DRC, the resolver and the pour agree", () => 
       params.clearanceForItem({
         kind: "pad",
         netId: "nb",
+        tierNetId: "nb",
         pointMm: { x: -12, y: 0 },
       }),
     ).toBeCloseTo(0.8, 9);

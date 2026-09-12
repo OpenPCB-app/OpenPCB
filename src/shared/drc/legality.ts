@@ -16,18 +16,31 @@ import type {
 } from "../../sdks/designer";
 import { buildCopperRecords } from "../pcb-connectivity/copper-records";
 import { boardItems, holePairs } from "./checks/board";
-import { judgeCopperPairs, type ItemSet } from "./checks/clearance";
+import { chainShortDrafts } from "./checks/chain-short";
+import {
+  judgeCopperPairs,
+  rejudgeItemPairs,
+  type ItemSet,
+} from "./checks/clearance";
 import { constraintItems } from "./checks/constraints";
 import { copperToHolePairs } from "./checks/copper-to-hole";
+import { currentItems } from "./checks/electrical";
 import { keepoutItems } from "./checks/keepouts";
 import { manufacturabilityItems } from "./checks/manufacturability";
 import { netClassItems } from "./checks/netclass";
 import {
   itemsFromRecords,
   type DrcItems,
+  type DrcPad,
+  type DrcTrace,
+  type DrcViaGeom,
   type LegalityContext,
 } from "./drc-context";
 import { finalizeReport } from "./drc-engine";
+import {
+  buildEffectiveNetOverlay,
+  type EffectiveNetOverlay,
+} from "./effective-net-overlay";
 import type { DrcSeverityOverrides } from "./severity";
 import type { DrcViolationDraft } from "./types";
 
@@ -67,6 +80,14 @@ export const REFUSE_CODES: ReadonlySet<DrcRuleCode> = new Set<DrcRuleCode>([
   "VIA_LAYER_SPAN",
   "TRACE_LAYER_MISMATCH",
   "TRACE_WIDTH_MIN",
+  // The IPC-2221 spacing CONSTITUENT (electrical contract 13 §3.6): it comes
+  // out of the SAME pair judge the gate already calls, so live and batch agree
+  // by construction — listing it is what makes the gate refuse a commit the
+  // batch report would fail. `refusedViolations` filters by code, waiver and
+  // outline dependence, never by effective severity, so a `CREEPAGE_DISTANCE`
+  // downgraded to a warning still refuses, exactly as a downgraded clearance
+  // does.
+  "CREEPAGE_DISTANCE",
 ]);
 
 /**
@@ -102,6 +123,10 @@ export const LIVE_CODES: ReadonlySet<DrcRuleCode> = new Set<DrcRuleCode>([
   "NETCLASS_VIA_DIAMETER",
   "NETCLASS_VIA_DRILL",
   "PAD_LAYER_MISMATCH",
+  // The current estimate (electrical contract 13 §3.6, §5) — a WARNING, never a
+  // refusal: a narrow trace is legal copper the fabricator will build, and the
+  // rise it will actually see is not something this formula establishes.
+  "TRACE_CURRENT_WIDTH",
 ]);
 
 /** Codes an invalid outline downgrades to "report": rerouting cannot fix one. */
@@ -190,6 +215,43 @@ export function pendingItems(
 }
 
 /**
+ * Rejudge the existing items the pending copper re-tiered or re-exposed (13
+ * §4.4): every pair they take part in on the BOARD, and the per-item forms that
+ * read the tier net.
+ *
+ * Their drafts are emitted with the pending copper's — they carry no pending
+ * anchor, exactly like a bridge that grew because of the route (07 §4) — and
+ * are refused by the same code-based policy, so a newly discovered warning
+ * stays a warning. That attribution is only honest because the set is exactly
+ * the items whose verdict INPUTS moved: an item whose component merely changed
+ * shape resolves every pair to the board's own answer, and re-reporting those
+ * made the gate refuse commits over breaches the route never touched (R1 #1).
+ */
+function rejudgeAffected(
+  octx: LegalityContext,
+  overlay: EffectiveNetOverlay,
+  replaces: ReadonlySet<string>,
+  out: DrcViolationDraft[],
+): void {
+  for (const item of overlay.rejudge) {
+    rejudgeItemPairs(octx, item, octx, { replaces, out });
+  }
+  // The per-item forms that read the tier net (Astra run 1 #8) — over the
+  // RETIERED items only, since a per-item verdict is a pure function of the
+  // tier and no per-item form reads exposure.
+  const traces: DrcTrace[] = [];
+  const vias: DrcViaGeom[] = [];
+  for (const item of overlay.retiered) {
+    if ("pointsMm" in item) traces.push(item);
+    else if (!("ring" in item)) vias.push(item);
+  }
+  if (traces.length === 0 && vias.length === 0) return;
+  const retiered: ItemSet = { traces, pads: [], vias };
+  netClassItems(octx, retiered, { out });
+  currentItems(octx, retiered, { out });
+}
+
+/**
  * The verdict on `pending` against the board `ctx` describes: every pair the
  * pending copper takes part in (pending × board honouring `replaces`, and
  * pending × pending), the copper↔NPTH, board-edge, hole and keepout tiers, and
@@ -210,20 +272,31 @@ export function checkPendingCopper(
     vias: items.vias,
   };
   const withHoles = { ...subjects, holes: items.holes };
+  // The effective-net overlay comes FIRST, before any check reads a tier net
+  // (13 §4.4): every judgement below runs on the FINAL geometry's tiers.
+  const overlay = buildEffectiveNetOverlay(ctx, items, replaces);
+  const octx = overlay.context;
 
-  // The check order `runDrc` dispatches in, so a draft group that hashes to one
-  // id keeps the same survivor here as in the report.
+  // Broadly the order `runDrc` dispatches in — `currentItems` is the exception,
+  // hoisted here beside the other per-item form while the engine runs its
+  // `electrical` stage after `dangling`. Nothing depends on it: a draft group
+  // hashes to one id per CODE, so the dedupe survivor is the same either way.
   const drafts: DrcViolationDraft[] = [];
-  constraintItems(ctx, subjects, { out: drafts });
-  manufacturabilityItems(ctx, withHoles, { out: drafts });
-  netClassItems(ctx, subjects, { out: drafts });
-  judgeCopperPairs(ctx, subjects, ctx, { replaces, out: drafts });
-  copperToHolePairs(ctx, subjects, ctx.holes, { replaces, out: drafts });
-  boardItems(ctx, withHoles, { out: drafts });
-  holePairs(ctx, items.holes, ctx.holes, { replaces, out: drafts });
+  constraintItems(octx, subjects, { out: drafts });
+  manufacturabilityItems(octx, withHoles, { out: drafts });
+  netClassItems(octx, subjects, { out: drafts });
+  currentItems(octx, subjects, { out: drafts });
+  judgeCopperPairs(octx, subjects, octx, { replaces, out: drafts });
+  copperToHolePairs(octx, subjects, octx.holes, { replaces, out: drafts });
+  boardItems(octx, withHoles, { out: drafts });
+  holePairs(octx, items.holes, octx.holes, { replaces, out: drafts });
   // Two pending vias of one session are a pair after the commit (07 §4).
-  holePairs(ctx, items.holes, items.holes, { out: drafts });
-  keepoutItems(ctx, subjects, { out: drafts });
+  holePairs(octx, items.holes, items.holes, { out: drafts });
+  keepoutItems(octx, subjects, { out: drafts });
+  rejudgeAffected(octx, overlay, replaces, drafts);
+  // A conflict component the pending copper created (§4.3): the route's short,
+  // not the board's.
+  chainShortDrafts(octx, overlay.newChainShorts, drafts);
 
   const viewState = ctx.board.viewState;
   return finalizeReport(drafts, {

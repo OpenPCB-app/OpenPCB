@@ -156,3 +156,37 @@ code firing on geometry that was already in the fixture:
   (21.625, −1.575) — same code, count, anchors and `measuredMm 0`; `ringGapToRing` now breaks a
   witness tie on the smaller `(x, y)` instead of the operand order (the fix for a pad-reversal
   non-determinism), so the id moved to the other corner of the same overlap.
+
+## S13 — electrical constituents and effective nets: no delta (contract 13 §7)
+
+Re-verified 2026-09-12 after the S13 work packages landed; **`golden-census-2l`
+is byte-identical and was not re-baselined**. Contract 13 §7 enumerates six
+migration causes and this fixture is untouched by all six — worth recording,
+because it is the only pre-S13 golden that declares a voltage at all:
+
+- **(a) comparison regime** (`below` 1e-6 → `clearanceViolated` 5e-7). No row of
+  this fixture has a gap in the `[required − 1e-6, required − 5e-7)` band. The
+  `t_hv` / `t_lv` pair is 0.3 mm against 1.25 mm and the `t_fabclr` pair is
+  0.08 against 0.1 — both far outside it.
+- **(b) effective nets (B7-1).** `t_bridge_null` is this fixture's only
+  unassigned copper and it touches `t_bridge_a` AND `t_bridge_b` — two named
+  nets, so its component has two labels and it stays NULL-tiered (13 §4.1).
+  It therefore gains no class, its two −0.300 mm overlaps stay suppressed as
+  the S8 extension rule already had them, and the single `NET_SHORT_CIRCUIT`
+  (null-net bridge variant) is unchanged.
+- **(c) chain and component-wide shorts.** `t_bridge_null` touches both nets
+  DIRECTLY, so the direct-bridge draft already names the component's whole
+  label set and §4.3's extra component draft does not fire. No new row.
+- **(d) both constituents reported.** The `t_hv` / `t_lv` pair breaches only the
+  voltage constituent (0.3 mm clears the 0.25 mm ordinary rule), so it was one
+  row before S13 and is one row after. No pair here breaches both.
+- **(e) pour carve on a board with declared voltages.** `hv` (230 V) is on
+  `t_hv` at y = −20; the nearest zone (`z_ov_a` / `z_ov_b`, y −6…4) is over
+  14 mm away, far outside the 1.25 mm B2 halo, so no fill geometry moves.
+- **(f) exposure.** This fixture sets no `designRules.electrical`, so
+  `outerConductors` is absent, B4 is unavailable and every outer pair stays in
+  B2 — the column the pre-S13 check used. The mask artwork is never consulted.
+
+`CREEPAGE_DISTANCE` ids are preserved by construction in any case: the id is
+code + sorted anchors + layer (never location-hashed) and the layered aggregate
+still reports the STRICTEST layer (13 §3.3).

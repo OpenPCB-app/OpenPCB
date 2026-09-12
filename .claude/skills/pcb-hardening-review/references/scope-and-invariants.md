@@ -18,6 +18,7 @@ not the source of truth.
 | Signal integrity / length matching | `checks/signal-integrity.ts` (diff-pair skew/gap), `checks/length.ts`, `backend/pcb/diff-pair-resolver.ts` | ✅✅ |
 | Stackup / manufacturability / DFM | `checks/manufacturability.ts` (via/drill/annular/aspect-ratio, FAB tier — since S11: tool- and plating-aware fab rows, `VIA_TYPE_UNSUPPORTED` on every fab, through-only aspect), `checks/constraints.ts` (stackup), `checks/structural.ts` (`NPTH_PAD_NET`), `fab-presets.ts` (sourced rows, fetch dates in the comments), `src/shared/rendering/pcb/pcb-drills.ts` (`footprintPadDrill` / `freePadDrill` — the ONE drill derivation per object, contract 10 §1) | ✅ |
 | Exact geometry (S12b) | `src/shared/pcb-geometry/{rounded-shape,rounded-shape-types,canonical-contour,exact-arcs,exact-ring,exact-contour,exact-simplicity,region-build,region-rounded,region-exact}.ts`, `src/shared/drc/checks/{board,outline}.ts` (certified interval, exact validity), `src/shared/rendering/copper-fill/material-web-kernel.ts` (`OUTLINE_MIN_WEB`), `src/shared/rendering/pcb/contour-validation.ts` (the editor gate on the same predicate), `src/modules/designer/backend/export/gerber/arcs.ts` (Profile arcs); contract `docs/pcb-hardening/12-exact-geometry-contract.md` | ✅✅ |
+| Electrical rules (S13) | `src/shared/drc/{voltage-term,ipc2221-spacing,mask-exposure,mask-exposure-overlay,effective-net-overlay}.ts`, `checks/{electrical,chain-short}.ts`, the voltage constituent inside `rule-resolver.ts` / `checks/clearance-judge.ts`, `src/shared/pcb-connectivity/{effective-nets,copper-drc-items}.ts`, the tier-net / exposure consumers in `pcb-areas/pour-params.ts`, `copper-fill/copper-fill-geometry.ts`, `pcb-routing/route-obstacles.ts` — see `docs/pcb-hardening/13-electrical-contract.md` | ✅✅ |
 | DFM overlays + copper shape (S12) | `src/shared/drc/checks/{courtyard,silkscreen,solder-mask,filled-gap,copper-shape}.ts`, `src/shared/rendering/pcb/artwork/` (the silk + mask artwork model — in-tree, shared with the Gerber writer), `src/shared/pcb-geometry/courtyard-rings.ts`, `src/shared/rendering/copper-fill/copper-shape-kernel.ts`; contract `docs/pcb-hardening/11-dfm-contract.md` | ✅✅ (polygon-topology checks post-implementation) |
 
 **Explicitly out of scope** — refuse and redirect to `/codex-implementation-review` or plain
@@ -142,6 +143,17 @@ kernel after S1 —, one clearance resolver after S6, the arc flatteners) is in
 - Web = erosion feature (necks + residuals whose boundary contact has ≥ 2 connected components + empty erosion), never a pairwise primitive distance; no thickness floor.
 - Gerber Profile: no centre repair; one quantised centre per arc, integer I/J, pieces ≤ 90° validated after quantisation (zero-chord merged); radius residual ≤ 2√2 nm.
 
+## Electrical invariants — from `docs/pcb-hardening/13-electrical-contract.md` (S13, 2026-09-12)
+
+- The IPC-2221B conductor spacing is a NON-RELAXABLE constituent of every resolved clearance: `mm = max(ordinaryMm, voltage.mm)`, the term outside the explicit-rule / floor step; the pair judge reports it as its own `CREEPAGE_DISTANCE` row (id = sorted anchors + layer, strictest layer, not location-hashed) beside the ordinary row — two rows per pair possible, waivers per constituent; pads of one footprint get the voltage constituent only (bounding rect for inexact pads); same tier net → no constituent. Regime `clearanceViolated` (5e-7) for every spacing constituent; `below` (1e-6) only for the width minimum.
+- Voltage model: `voltageV` = constant DC potential to the board reference; optional `voltageMinV` / `voltageMaxV` interval; Δ = max(|a.min − b.max|, |a.max − b.min|) rounded to 1 µV; undeclared = reference (stated assumption); the constituent exists only when at least one side declares and the nets differ; two distinct nets of one INTERVAL class are independent (Δ from the interval); endpoints beyond 1e6 V, non-finite or inverted intervals, non-positive rise / weight / current → `DRC_RULE_INVALID`, constituent absent, never a throw.
+- Columns: inner → B1; outer → B2; B4 only with `electrical.outerConductors: "coated"` AND neither item exposed on that face, exposure = the union of ALL mask openings on the face meets the item's copper (tenting is not coverage). Outside the DRC context (pour, router) exposure is conservative (B2). Table pinned to IPC-2221B (KiCad 8 @ 942661f + smpspowersupply, fetched 2026-09-11; > 500 V = 500 V value + slope × excess — B1 at 600 V = 0.5 mm distinguishes it); IPC-2221C differs, never mixed; 1.378 mil/oz.
+- Bounds: per-pair `clearanceBound` folds the B2 term; the clearance halo folds `maxCreepageBoundMm` (interval-aware, `Infinity` on non-finite); a null-sided pair's `farApart` uses `maxClearanceBoundMm`; the pour's obstacle halo and `zoneExclusions` carry the term with conservative exposure; a null route uses the board-widest bound (over-blocks).
+- Effective nets: connected components over trace / pad / via contacts at `SHORT_EPS_MM` (1e-4 — NOT connectivity's 5e-7; divergence owned by S18), pours excluded (circular with the pour), inexact-pad contacts are possible not proven (never join), union-find early exit against null partners only; exactly one label → tier; ≥ 2 labels → conflict, one extra `NET_SHORT_CIRCUIT` per conflict component whose direct drafts do not name every label (anchors = null members sorted + net anchors; location = smallest null-member marker). Consumers read `tierNetOf`; anchors, the short tier, the bridge record keep the original net; the frozen S9 loops enumerate on original nets and `emit` suppresses the ordinary / fab / voltage constituents on equal tiers AFTER the touch branch.
+- Live gate: a per-call overlay (never on the context; keyed by item object; complete recomputation over board minus `replaces` plus pending); pairs rejudged for items whose TIER or EXPOSURE moved (never for a component-only change — that re-reports the board's rows), per-item forms for re-tiered items; chain shorts new to the overlay are the route's (board identity ignores pending AND replaced members); `CREEPAGE_DISTANCE` refuses (allow-list by code, severity overrides never consulted), `TRACE_CURRENT_WIDTH` warns.
+- Current: traces only, per item, full class current per segment (stated), nominal copper weight, `innerCopperWeightOz` on inner layers; no via / pour / neck ampacity.
+- Byte identity is claimed only for boards with no declared voltage, no null copper touching named copper and no pair violating both constituents; every other change is an enumerated migration (13 §7).
+
 ## Determinism contract — from `OpenPCB/docs/drc/OPEN_FINDINGS.md` §5.2
 
 > The engine is a pure function. Grep-verified: no `Date`, no `Math.random`, no I/O anywhere under
@@ -179,11 +191,11 @@ packet touches net-class resolution.
 
 ## Known open defect register
 
-`OpenPCB/docs/drc/OPEN_FINDINGS.md` is the live defect register — 6 open DRC bugs remain after
-S0–S8 (B2-5/6/7 + B6-1 → S11, B5-SYNC → S10, B7-1 → S13), each
-with a `test.todo` regression test whose body is a real post-fix assertion (`rg -n "test\.todo\("
-src/core/backend/tests/drc-audit-b*.test.ts` should show 6 call sites; if the count drops without
-a finding being removed from the doc, the register is stale). The program that schedules the fixes is `docs/pcb-hardening/PROGRAM.md`; the verified
+`OpenPCB/docs/drc/OPEN_FINDINGS.md` is the live defect register — every audit finding registered
+through S8 is now closed (B2-5/6/7 + B6-1 in S11, B5-SYNC in S10, B7-1 in S13 on 2026-09-12), each
+by a live regression test (`rg -n "test\.todo\(" src/core/backend/tests/drc-audit-b*.test.ts`
+should show 0 call sites; a new `test.todo` there means a newly registered finding that the doc
+must also carry, else the register is stale). The program that schedules the fixes is `docs/pcb-hardening/PROGRAM.md`; the verified
 current-master inventory is `docs/pcb-hardening/00-ground-truth.md`. **Always check the register
 for an overlapping finding before treating something as a new bug.**
 
@@ -225,7 +237,7 @@ building a packet on the same area.
 
 Never invent a clearance, trace-width, via, or IPC-2221 value in a packet. Pull it from
 `/eda-standards` (`.claude/skills/eda-standards/`) or quote it verbatim from source
-(`ipc2221-spacing.ts`, `fab-presets.ts`). If Astra cites a different numeric value, flag it as
+(`ipc2221-spacing.ts` — since S13 the pinned IPC-2221B transcription with its sources and edition in the header; `fab-presets.ts`). If Astra cites a different numeric value, flag it as
 needing verification against `/eda-standards` rather than trusting it — `OPEN_FINDINGS.md` §5.7
 notes the live JLCPCB capabilities page is the resolution rule of last resort for threshold
 conflicts, not a cached table.

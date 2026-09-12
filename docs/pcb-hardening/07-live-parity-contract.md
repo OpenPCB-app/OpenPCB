@@ -22,7 +22,7 @@ In scope: `src/shared/drc/` (the relocated engine, `legality.ts`, `fab-presets.t
 Out of scope, with the owning session: routing algorithms, walkaround, auto-finish, pull-tight,
 board-edge / cutout obstacles (S16), tune / bundle / diff-pair geometry (S17), the batch broad
 phase (S9), async execution / B5-SYNC (S10, contract 09), slot / annular / plating models (S11, contract 10 — `VIA_TYPE_UNSUPPORTED` joined the live REPORTED set, not the refuse set), DFM overlays and copper shape (S12, contract 11 — batch-only: `DRC_STAGES` is not the live path and none of the sixteen codes joins `LIVE_CODES`),
-electrical (S13), SI / length (S14), part-move / free-pad legality (none scheduled — batch reports).
+SI / length (S14), part-move / free-pad legality (none scheduled — batch reports). Electrical codes joined `L` in S13 (§3; `13-electrical-contract.md` §3.6, §4.4 — the gate also rejudges existing items whose tier net or exposure the pending copper moved).
 
 ## 1. The parity statement
 
@@ -109,12 +109,17 @@ never expects a live id to match a batch id, a waiver or a marker.
 | Board | `COPPER_TO_BOARD_EDGE`, `COPPER_OFF_BOARD`, `HOLE_TO_BOARD_EDGE`, `HOLE_OFF_BOARD` | `boardItems` |
 | Hole pairs | `HOLE_TO_HOLE`, `FAB_HOLE_TO_HOLE` | `holePairs` |
 | Areas | `KEEPOUT_VIOLATION` | `keepoutItems` |
-| Per item | `TRACE_LAYER_MISMATCH`, `VIA_LAYER_SPAN`, `TRACE_WIDTH_MIN`, `VIA_DIAMETER_MIN`, `VIA_DRILL_MIN`, `DRILL_SIZE_MIN`, `ANNULAR_RING_MIN`, `VIA_ASPECT_RATIO`, `FAB_TRACE_WIDTH`, `FAB_DRILL`, `FAB_ANNULAR_RING`, `FAB_PAD` (a via's pad diameter against the fab minimum), `NETCLASS_TRACE_WIDTH`, `NETCLASS_VIA_DIAMETER`, `NETCLASS_VIA_DRILL` | per-item scalars |
+| Per item | `TRACE_LAYER_MISMATCH`, `VIA_LAYER_SPAN`, `TRACE_WIDTH_MIN`, `VIA_DIAMETER_MIN`, `VIA_DRILL_MIN`, `DRILL_SIZE_MIN`, `ANNULAR_RING_MIN`, `VIA_ASPECT_RATIO`, `FAB_TRACE_WIDTH`, `FAB_DRILL`, `FAB_ANNULAR_RING`, `FAB_PAD` (a via's pad diameter against the fab minimum), `NETCLASS_TRACE_WIDTH`, `NETCLASS_VIA_DIAMETER`, `NETCLASS_VIA_DRILL`, `TRACE_CURRENT_WIDTH` | per-item scalars |
+| Electrical | `CREEPAGE_DISTANCE` | `judgeCopperPairs` (a resolver constituent, 13 §3) |
 
 `L` is exported as `LIVE_CODES` from `legality.ts` (R2 #7). The one pad-only per-item code
 (`PAD_LAYER_MISMATCH`) is in the forms but never fires for pending copper (a route commits no
-pads); `PAD_TO_PAD_CLEARANCE` is likewise unreachable until a pad becomes a subject. Excluded, with owners: `CREEPAGE_DISTANCE`,
-`TRACE_CURRENT_WIDTH` (S13); `DIFF_PAIR_*`, `NET_LENGTH_OUT_OF_RANGE` (S14); `TRACK_DANGLING`,
+pads); `PAD_TO_PAD_CLEARANCE` is likewise unreachable until a pad becomes a subject. The two
+electrical codes joined `L` in S13 (13 §3.6): `CREEPAGE_DISTANCE` is a constituent of the pair
+judge the gate already calls, and `TRACE_CURRENT_WIDTH` comes from the per-item form
+`currentItems` dispatched after `netClassItems` — over the pending copper and over the existing
+items the pending copper re-tiered (13 §4.4). Excluded, with owners:
+`DIFF_PAIR_*`, `NET_LENGTH_OUT_OF_RANGE` (S14); `TRACK_DANGLING`,
 `VIA_DANGLING`, `UNCONNECTED_NET`, `ISOLATED_COPPER_ISLAND`, `ZONE_*`, `BOARD_OUTLINE_INVALID`,
 `OUTLINE_*`, `PLACED_PART_MISSING_FOOTPRINT`, `DRC_RULE_*` (board-wide; routing legitimately
 creates dangling ends and splits islands mid-session).
@@ -226,7 +231,9 @@ retried refusal is answered with its verdict, not with a revision conflict. `det
 `*_CLEARANCE`, `COPPER_TO_HOLE`, `COPPER_TO_BOARD_EDGE`, `COPPER_OFF_BOARD`, `KEEPOUT_VIOLATION`,
 `HOLE_OFF_BOARD`, `VIA_LAYER_SPAN`, `TRACE_LAYER_MISMATCH`, `TRACE_WIDTH_MIN` (symmetric with the
 via minimum gate that already refuses `VIA_DIAMETER_MIN` / `VIA_DRILL_MIN` / `ANNULAR_RING_MIN`
-before this contract). Membership is by CODE: a severity override that downgrades one of them to
+before this contract), `CREEPAGE_DISTANCE` (S13 — it comes out of the same pair judge, so a
+commit the batch report would fail is refused by construction; `TRACE_CURRENT_WIDTH` is a warning
+in `L`, never a refusal). Membership is by CODE: a severity override that downgrades one of them to
 a warning does not unblock it — only a suppression that removes it from the report does (a
 per-code `ignore` override, a class ignore, or a waiver — R1 #4), so the gate follows the report
 exactly. Everything else in `L` is
@@ -302,12 +309,11 @@ gate or not.
 - Client-minted ids are not adopted; live ids never match batch ids, waivers or markers (§1).
 - The assistant's proposal apply does not yet show a refusal's detail (filed).
 - Marker ties and the multi-shape-pad bridge marker (§1 exceptions).
-- **Unassigned copper does not inherit the rule tier of the net it extends** (Astra run 2 #1,
-  registered as B7-1, owner S13): a null-net trace touching net A's copper is judged against every
-  other net with the null-net (default) requirement, not A's class or A's net-scoped rules — a
-  false pass in batch and live alike (parity holds; the verdict is wrong in both). The fix needs a
-  post-bridge pass that re-resolves the pairs of every null-net item touching exactly one net as
-  that net, with the attribution consequences that follow.
+- ~~Unassigned copper does not inherit the rule tier of the net it extends~~ — B7-1, CLOSED in
+  S13 (`13-electrical-contract.md` §4): a null-net item resolves on the tier net of its connected
+  component in batch and live; the gate rejudges the existing items whose tier the pending copper
+  moved and attributes those rows to the pending copper (§4). Remaining limits there: pour copper
+  never grants a tier; inexact-pad contacts are possible, not proven.
 - The trace width the server inserts can exceed the width the client checked (§6). The net
   CLASS is not a divergence: the session mapper and the server builders share
   `effectiveNetClassId` (a per-net assignment upgrades the default class the session offered), so
@@ -385,7 +391,7 @@ Run 2 — adversarial-verify, xhigh, repository-grounded, 2026-09-09, ≈13 min,
 
 | # | Finding | Verdict | Folded |
 |---|---|---|---|
-| 1 | Null-net extensions bypass the attached net's stricter rules (blocker-class false pass, pre-existing: the null tier was the default before S8 too) | accepted as a defect, out of S8's parity objective — registered **B7-1** with a `test.todo` (`drc-audit-b7.test.ts`), owner S13 | §9; 06 §4; OPEN_FINDINGS |
+| 1 | Null-net extensions bypass the attached net's stricter rules (blocker-class false pass, pre-existing: the null tier was the default before S8 too) | accepted as a defect, out of S8's parity objective — registered **B7-1** with a `test.todo` (`drc-audit-b7.test.ts`), owner S13 — CLOSED in S13 (live regression, 13 §4) | §9; 06 §4; OPEN_FINDINGS |
 | 2 | Obstacle inflation resolves a segment at its midpoint, missing an area tightening that covers only its end | accepted (the gate catches it; the §5 superset claim did not hold) | obstacles split at the area rings, per sub-segment resolution |
 | 3 | Corridor windows are padded by the clearance bound only, so a far NPTH with a large `copperToHoleMm` is not an obstacle | accepted | corridor padding = `max(clearance bound, hole bound)` |
 | 4 | Equal-deficit candidate ties follow the pending id (measured / required / message, not only the marker) | accepted — the §1 "marker only" exception was too generous. Reproduces only for OFF-diagonal ties of the candidate matrix (a transposition preserves diagonal order): the fixture draws the named trace right-to-left so its segment order opposes the pending run's | `betterWitness` in `summarize`: deficit → larger required → smaller gap → location (x, y); `layered` mode untouched (§4.3 mandates stackup order) |

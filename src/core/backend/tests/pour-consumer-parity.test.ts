@@ -347,6 +347,7 @@ function pourClearance(
   proj: DesignerPcbProjection,
   item: { kind: "trace" | "pad" | "via"; netId: string | null; pointMm: PcbPointMm },
 ): number {
+  // These fixtures carry no unassigned copper, so the tier net IS the net.
   const ctx = buildDrcContext(proj);
   const zone = ctx.copperZones.find((z) => z.id === "board:F.Cu")!;
   return pourParamsForZone(
@@ -355,7 +356,7 @@ function pourClearance(
     ctx.keepouts,
     ctx.copperZones,
     zonePourNets(proj.board, ctx.netNames),
-  ).clearanceForItem(item);
+  ).clearanceForItem({ ...item, tierNetId: item.netId });
 }
 
 /** Smallest distance from any poured vertex to an axis-aligned rect (mm). */

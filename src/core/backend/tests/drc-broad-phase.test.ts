@@ -923,16 +923,17 @@ describe("every halo of §5 bounds what the checks compare against", () => {
         }
       }
 
-      // Creepage: `strictestSpacing` maxes over the pair's layer columns, and
-      // B2 >= B1 on every band — so the B2 value at the widest difference (one
-      // side possibly a classless 0 V net) bounds every pair.
+      // Creepage: the resolver maxes over the pair's layer columns, and
+      // B2 >= B1 (and >= B4) on every band — so the B2 value at the widest
+      // differential (one side possibly a classless 0 V net) bounds every pair.
+      // The differential itself is never signed (13 §2).
       const volts = [0, ...ctx.netClasses.map((c) => c.voltageV ?? 0)];
       for (const u of volts) {
         for (const v of volts) {
-          for (const column of ["B1", "B2"] as const) {
-            expect(ipc2221SpacingMm(u - v, column)).toBeLessThanOrEqual(
-              ctx.maxCreepageBoundMm,
-            );
+          for (const column of ["B1", "B2", "B4"] as const) {
+            expect(
+              ipc2221SpacingMm(Math.abs(u - v), column),
+            ).toBeLessThanOrEqual(ctx.maxCreepageBoundMm);
           }
         }
       }

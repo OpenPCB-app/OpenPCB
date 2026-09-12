@@ -17,6 +17,7 @@ import {
 } from "../drc-context";
 import type { DrcViolationDraft } from "../types";
 import { anchorKey } from "../violation-id";
+import { chainShortDrafts } from "./chain-short";
 import {
   bridgeDraft,
   createPairJudge,
@@ -45,6 +46,11 @@ export function checkClearance(ctx: DrcContext): DrcViolationDraft[] {
   // the shared bodies fires and no bridge is banked.
   if (ctx.broadPhase === "exhaustive") checkClearanceExhaustive(ctx, out);
   else checkClearanceIndexed(ctx, out);
+  // Component shorts (13 §4.3) — the conflict components the per-item direct
+  // bridge drafts above do not fully name. Emitted HERE, after both
+  // enumerations, so the frozen S9 oracle below keeps its bytes (08 §3); the
+  // report is sorted by (code, id) anyway, so the position is free.
+  chainShortDrafts(ctx, ctx.chainShorts, out);
   return out;
 }
 
@@ -610,6 +616,54 @@ function emitBridges(
   }
 }
 
+/** The grid indexes the CONTEXT's arrays; any other `others` scans in full. */
+function othersAreTheBoard(ctx: LegalityContext, others: ItemSet): boolean {
+  return (
+    others.traces === ctx.traces &&
+    others.pads === ctx.pads &&
+    others.vias === ctx.vias
+  );
+}
+
+/**
+ * The candidate source for a subject-set walk. Mode `"exhaustive"` keeps the
+ * pre-S9 full scan as the oracle (08 §3); the grid is the default and both
+ * reach the same verdicts (§1 L1), which the exact `farApart` filter enforces.
+ */
+function pickFor(ctx: LegalityContext, gridded: boolean): Pick {
+  if (!gridded || ctx.broadPhase === "exhaustive") return ALL_PICK;
+  return {
+    box: (kind, _count, bounds) =>
+      ctx.near(kind, bounds, ctx.maxClearanceBoundMm),
+    polyline: (kind, _count, pointsMm, halfWidthMm) =>
+      ctx.nearPolyline(kind, pointsMm, halfWidthMm, ctx.maxClearanceBoundMm),
+  };
+}
+
+/**
+ * Every board pair ONE EXISTING item takes part in, judged by the same bodies
+ * — the live rejudge of an item whose tier net or component the pending copper
+ * moved (13 §4.4).
+ *
+ * No bridge pass: this item's own touches did not change, so its direct-bridge
+ * attribution is `judgeCopperPairs`'s (07 §4) and re-running it here would
+ * attribute a pre-existing bridge to the route.
+ */
+export function rejudgeItemPairs(
+  ctx: LegalityContext,
+  item: DrcTrace | DrcPad | DrcViaGeom,
+  others: ItemSet,
+  opts: { replaces?: ReadonlySet<string>; out: DrcViolationDraft[] },
+): void {
+  const judge = createPairJudge(ctx, opts.out);
+  const replaces =
+    opts.replaces && opts.replaces.size > 0 ? opts.replaces : undefined;
+  const pick = pickFor(ctx, othersAreTheBoard(ctx, others));
+  if ("pointsMm" in item) judgeTraceAgainst(judge, item, others, pick, replaces);
+  else if ("ring" in item) judgePadAgainst(judge, item, others, pick, replaces);
+  else judgeViaAgainst(judge, item, others, pick, replaces);
+}
+
 /**
  * Every copper pair a pending item takes part in — pending × board (through the
  * broad phase, honouring `replaces`) and pending × pending — judged by the SAME
@@ -628,28 +682,8 @@ export function judgeCopperPairs(
   const judge = createPairJudge(ctx, opts.out);
   const replaces =
     opts.replaces && opts.replaces.size > 0 ? opts.replaces : undefined;
-  // The grid indexes the CONTEXT's arrays; any other `others` falls back to the
-  // full scan, which the exact `farApart` filter below makes equivalent.
-  const gridded =
-    others.traces === ctx.traces &&
-    others.pads === ctx.pads &&
-    others.vias === ctx.vias;
-  // Mode `"exhaustive"` keeps the pre-S9 full scan as the oracle (08 §3); the
-  // grid is the default and both reach the same verdicts (§1 L1).
-  const pick: Pick =
-    gridded && ctx.broadPhase !== "exhaustive"
-      ? {
-          box: (kind, _count, bounds) =>
-            ctx.near(kind, bounds, ctx.maxClearanceBoundMm),
-          polyline: (kind, _count, pointsMm, halfWidthMm) =>
-            ctx.nearPolyline(
-              kind,
-              pointsMm,
-              halfWidthMm,
-              ctx.maxClearanceBoundMm,
-            ),
-        }
-      : ALL_PICK;
+  const gridded = othersAreTheBoard(ctx, others);
+  const pick = pickFor(ctx, gridded);
 
   for (const t of subjects.traces) judgeTraceAgainst(judge, t, others, pick, replaces);
   for (const vg of subjects.vias) judgeViaAgainst(judge, vg, others, pick, replaces);

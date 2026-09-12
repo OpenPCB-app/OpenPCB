@@ -26,8 +26,9 @@ consumes (`src/shared/pcb-connectivity/copper-records.ts`, `src/shared/rendering
 Out of scope, with the owning session: live / route parity (S8, `07-live-parity-contract.md`), the broad phase (S9, `08-broad-phase-contract.md`), async
 execution (S10, contract 09), slot / annular / aspect / plating models (S11, contract 10; scoped hole rules stay open), DFM
 overlays and copper-shape checks (S12, contract 11), exact-arc geometry (S12b, contract 12) and polygon pads (S12c),
-electrical thresholds (S13), SI and
-length semantics (S14).
+SI and length semantics (S14). Electrical thresholds joined the engine's own rule model in S13
+(`13-electrical-contract.md`): the IPC-2221 spacing is a constituent of every pair verdict and
+unassigned copper resolves on its tier net.
 
 ## 1. The reference-implementation statement
 
@@ -94,7 +95,8 @@ only for the memoised context (rules and areas first because they contextualise 
 | `connectivity` | `UNCONNECTED_NET` | the engine's own ratsnest (§1) | `ratsnestFromConnectivity` | — |
 | `copper-pour` | `ZONE_FILL_FAILED`, `ZONE_EMPTY_FILL` (no island), `ISOLATED_COPPER_ISLAND` | pour results, connectivity components | S5 kernel | — |
 | `dangling` | `TRACK_DANGLING`, `VIA_DANGLING` | connectivity contact records | S1 kernel | — |
-| `electrical` | `TRACE_CURRENT_WIDTH`, `CREEPAGE_DISTANCE` | traces, pads, vias (net voltage / current from the resolver's class) | `pair-gap.ts`, `ipc2221-spacing.ts`, resolver `clearance` (skip only without area rules — S7) | minimums (S13) |
+| `electrical` | `TRACE_CURRENT_WIDTH` (per trace, tier net's class current, inner / outer copper weight — 13 §5) | traces | `ipc2221-spacing.ts` | minimums |
+| `clearance` (S13 constituent) | `CREEPAGE_DISTANCE` — the IPC-2221 spacing constituent of every pair verdict, its own row beside the ordinary row (13 §3.3); pads of one footprint get the voltage constituent only | the six pair kinds | `rule-resolver.ts` voltage term, `pair-gap.ts` | clearance |
 | `signal-integrity` | `DIFF_PAIR_GAP`, `DIFF_PAIR_SKEW`, `DIFF_PAIR_UNCOUPLED_LENGTH` | traces of resolved pairs | own segment maths (S14) | bare `>` (S14) |
 | `length` | `NET_LENGTH_OUT_OF_RANGE` | traces per net, per group (anchor `net` + `lengthGroup`, S7) | `polylineLength` | bare (S14) |
 | `board` | `COPPER_TO_BOARD_EDGE`, `COPPER_OFF_BOARD`, `HOLE_TO_BOARD_EDGE`, `HOLE_OFF_BOARD`, `HOLE_TO_HOLE`, `FAB_HOLE_TO_HOLE` | traces, pads (disc-aware), vias, holes vs the biased region | region kernels, resolver `edgeClearance` / `holeToHole` | clearance for copper edge; minimums for holes |
@@ -151,7 +153,8 @@ Null-net bridges (S7): the clearance loops record, for every null-net item, each
 copper it touches (`gap ≤ SHORT_EPS_MM`, shared layer). An item touching two or more distinct
 known nets emits `NET_SHORT_CIRCUIT` anchored on the item and the nets. Pairwise semantics stay
 S1's: unassigned copper touching one net is an extension of it. Chains through two null-net items
-are a stated limit.
+were a stated limit until S13: the effective-net components (13 §4) report a conflict component
+whose direct bridge drafts do not name every label as one additional `NET_SHORT_CIRCUIT`.
 
 Touching unassigned copper is one conductor (S8 correction, `07-live-parity-contract.md` §4):
 until S8 the clearance tier still judged a touching (null, null) pair and a touching (null, named)
@@ -159,10 +162,10 @@ pair as different nets and reported a negative-gap `*_CLEARANCE` — a conductor
 with itself, or with the net it extends. Since S8 `emit` returns before the clearance and fab tiers
 for any touching pair with a null side (the bridge record of a (null, named) touch is kept); a
 null-net item that is merely close (`0 < gap < required`) to any copper is still judged, since it
-may be a different conductor. The `census` golden carried such rows; §10 records the delta. What
-the extension does NOT yet do (Astra S8 run 2 #1, registered B7-1, owner S13): give the unassigned
-copper the rule tier of the net it extends — its pairs with other nets still resolve with the
-null-net (default) requirement.
+may be a different conductor. The `census` golden carried such rows; §10 records the delta. Since S13
+(B7-1 closed, `13-electrical-contract.md` §4) the unassigned copper also TAKES the rule tier of
+the net it extends: its pairs with other nets resolve as that net's, in batch and at the live
+gate alike.
 
 ## 5. Comparison regimes
 

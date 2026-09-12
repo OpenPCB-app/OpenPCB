@@ -17,6 +17,7 @@ import type {
   ClearanceItem,
   ResolvedValue,
   RuleResolver,
+  VoltageTerm,
 } from "../rule-resolver";
 import {
   midpoint,
@@ -91,7 +92,7 @@ export interface BridgeEntry {
 export type BridgeMap = Map<string, BridgeEntry>;
 
 /** "A and B", "A, B and C" — net NAMES, falling back to the id. */
-function netList(names: readonly string[]): string {
+export function netList(names: readonly string[]): string {
   if (names.length <= 1) return names[0] ?? "";
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
@@ -149,8 +150,15 @@ export function markerBefore(a: PcbPointMm, b: PcbPointMm): boolean {
  */
 interface Candidate {
   gap: number;
+  /**
+   * The ORDINARY constituent — `resolved.ordinaryMm` (electrical contract 13
+   * §3.1). Named `required` because it is what every pre-S13 path compared
+   * against, and those rows stay byte-identical.
+   */
   required: number;
   rule: PcbDrcRule | null;
+  /** Both constituents, as the resolver returned them for this spot. */
+  resolved: ResolvedValue;
   location: PcbPointMm;
   layer: PcbCopperLayerId;
 }
@@ -161,7 +169,7 @@ interface PairVerdict {
   minRequired: number;
   minLocation: PcbPointMm;
   minLayer: PcbCopperLayerId;
-  /** The reported breach, or null when every candidate clears. */
+  /** The reported ORDINARY breach, or null when every candidate clears. */
   breach: {
     gap: number;
     /** The value reported and compared against; see `summarize`. */
@@ -170,7 +178,22 @@ interface PairVerdict {
     layer: PcbCopperLayerId;
     ruleSeverity: DrcSeverity;
   } | null;
+  /**
+   * The IPC-2221 breach, aggregated INDEPENDENTLY of the ordinary one (§3.3):
+   * its own row, its own id, its own waiver. A pair below both requirements
+   * reports two rows, and waiving one never hides the other reason.
+   */
+  voltageBreach: {
+    gap: number;
+    voltage: VoltageTerm;
+    location: PcbPointMm;
+    layer: PcbCopperLayerId;
+  } | null;
 }
+
+/** The two constituents a witness can be ranked on (electrical contract §3.3). */
+const ordinaryOf = (c: Candidate): number => c.required;
+const voltageOf = (c: Candidate): number => c.resolved.voltage!.mm;
 
 /**
  * Total order on witnesses (Astra R2 #1). The largest deficit wins, but a tie
@@ -184,11 +207,17 @@ interface PairVerdict {
  * The tie-breaks are properties of the geometry alone: the stricter
  * requirement, then the tighter gap, then the smaller marker.
  */
-function betterWitness(c: Candidate, best: Candidate): boolean {
-  const dc = c.required - c.gap;
-  const db = best.required - best.gap;
+function betterWitness(
+  c: Candidate,
+  best: Candidate,
+  requiredOf: (x: Candidate) => number = ordinaryOf,
+): boolean {
+  const rc = requiredOf(c);
+  const rb = requiredOf(best);
+  const dc = rc - c.gap;
+  const db = rb - best.gap;
   if (dc !== db) return dc > db;
-  if (c.required !== best.required) return c.required > best.required;
+  if (rc !== rb) return rc > rb;
   if (c.gap !== best.gap) return c.gap < best.gap;
   if (c.location.x !== best.location.x) return c.location.x < best.location.x;
   return c.location.y < best.location.y;
@@ -249,11 +278,88 @@ function summarize(
         ? null
         : {
             gap: reported.gap,
-            resolved: { mm: value.required, rule: value.rule },
+            resolved: {
+              ...value.resolved,
+              mm: value.required,
+              rule: value.rule,
+            },
             location: reported.location,
             layer: reported.layer,
             ruleSeverity: severity,
           },
+    voltageBreach: summarizeVoltage(candidates, mode),
+  };
+}
+
+/**
+ * The IPC-2221 constituent's own aggregate (13 §3.3).
+ *
+ * `spatial` is the ordinary rule: the largest-deficit witness, ties broken by
+ * `betterWitness` on the VOLTAGE deficit. `layered` is the pre-S13
+ * `strictestSpacing` rule verbatim — the FIRST layer in stackup order attaining
+ * the largest requirement, whether or not a looser layer is violated too — so
+ * every pre-S13 `CREEPAGE_DISTANCE` id, which hashes the layer, is preserved
+ * (Astra run 1 #11). A layered pair is ONE gap, so "strictest attained" and
+ * "strictest violated" pick the same candidate; taking the strictest before the
+ * comparison is what keeps the reported layer the pre-S13 one.
+ */
+function summarizeVoltage(
+  candidates: readonly Candidate[],
+  mode: "spatial" | "layered",
+): PairVerdict["voltageBreach"] {
+  let best: Candidate | null = null;
+  for (const c of candidates) {
+    if (c.resolved.voltage === null) continue;
+    if (mode === "layered") {
+      if (best === null || voltageOf(c) > voltageOf(best)) best = c;
+      continue;
+    }
+    if (!clearanceViolated(c.gap, voltageOf(c))) continue;
+    if (best === null || betterWitness(c, best, voltageOf)) best = c;
+  }
+  if (best === null) return null;
+  if (mode === "layered" && !clearanceViolated(best.gap, voltageOf(best))) {
+    return null;
+  }
+  return {
+    gap: best.gap,
+    voltage: best.resolved.voltage!,
+    location: best.location,
+    layer: best.layer,
+  };
+}
+
+/**
+ * The `CREEPAGE_DISTANCE` draft for one pair's IPC-2221 constituent (13 §3.3,
+ * §7). Its id is the unchanged pre-S13 derivation — code + SORTED anchors +
+ * layer, never location-hashed — so a row that existed before the migration
+ * keeps its id, its waiver and its severity override.
+ */
+function voltageDraft(
+  anchors: readonly DrcAnchor[],
+  breach: NonNullable<PairVerdict["voltageBreach"]>,
+): DrcViolationDraft {
+  const { voltage } = breach;
+  // The exposure DECISION, not just its outcome (§7): on a coated board the
+  // column is whichever exposure chose, so both readings name the reason. An
+  // uncoated board had no decision to make and keeps the bare column.
+  const coating =
+    voltage.column === "B4"
+      ? ", coated per design rule"
+      : voltage.coated && voltage.column === "B2"
+        ? ", exposed conductor"
+        : "";
+  const assumed = voltage.undeclared
+    ? "; undeclared net assumed at reference"
+    : "";
+  return {
+    code: "CREEPAGE_DISTANCE",
+    message: `IPC-2221 spacing ${breach.gap.toFixed(3)} mm is below ${voltage.mm.toFixed(3)} mm for ${voltage.diffV.toFixed(0)} V (${voltage.column}${coating})${assumed}`,
+    anchors: [...anchors],
+    locationMm: breach.location,
+    layer: breach.layer,
+    measuredMm: breach.gap,
+    requiredMm: voltage.mm,
   };
 }
 
@@ -311,16 +417,25 @@ export interface PairJudgeOptions {
 
 /**
  * Copper clearance + short detection for every copper pair kind on shared
- * layers (different nets). One geometric pass yields three TIERS per pair, in
- * this order — the first that fires is the only one that reports:
+ * layers (different nets). One geometric pass yields three ORDINARY TIERS per
+ * pair, in this order — the first that fires is the only one of the three that
+ * reports:
  *   gap ≤ SHORT_EPS (different known nets) → NET_SHORT_CIRCUIT (error)
  *   clearanceViolated(gap, required)       → <pair>_CLEARANCE  (error)
  *   below(gap, fabMin)                     → FAB_CLEARANCE     (warning)
  *
+ * …plus, BESIDE whichever of the three fired, the IPC-2221 spacing CONSTITUENT
+ * (electrical contract 13 §3.3): `CREEPAGE_DISTANCE`, aggregated independently,
+ * with its own id, waiver and severity. A pair below both requirements reports
+ * two rows, so waiving one never hides the other reason.
+ *
  * Pads of ONE placement run the SHORT tier only (batch-DRC contract 06 §4):
  * spacing inside a footprint is the library's business, but a different-net
  * overlap inside one is a dead short on the finished board — symmetric with the
- * hole↔hole rule, which likewise keeps overlapping drills of one footprint.
+ * hole↔hole rule, which likewise keeps overlapping drills of one footprint. The
+ * voltage constituent is the BOARD's business, so it applies there too, and it
+ * is the one tier an inexact (`custom` / `trapezoid`) intra-footprint pair gets
+ * at all — on the bounding rectangle, a declared superset (13 §3.3).
  *
  * Every gap comes from `pair-gap.ts`, the ONE place a pair kind is turned into
  * a distance (contract 06 §3), so clearance, creepage and the copper-to-hole
@@ -338,7 +453,8 @@ export interface PairJudgeOptions {
  * and no single pair can see that. Every (null-net, named) touch is therefore
  * recorded against the null-net item, and after all six loops an item with two
  * or more distinct nets emits ONE `NET_SHORT_CIRCUIT`. Chains through two
- * null-net items are a stated limit (contract 06 §9).
+ * null-net items are the effective-net components' business (13 §4.3), emitted
+ * by `checks/chain-short.ts` after both enumerations.
  */
 export function createPairJudge(
   ctx: LegalityContext,
@@ -363,12 +479,18 @@ export function createPairJudge(
   const emit = (params: {
     netA: string | null;
     netB: string | null;
+    /** The two TIER nets (13 §4.2) — `ctx.tierNetOf` of the two items. */
+    tierA: string | null;
+    tierB: string | null;
     verdict: PairVerdict;
     clearanceCode: DrcRuleCode;
     sideA: PairSide;
     sideB: PairSide;
     label: string;
-    /** Pads of one placement: the short tier is the only one that applies. */
+    /**
+     * Pads of one placement: the short tier is the only ORDINARY one that
+     * applies. The IPC-2221 constituent applies regardless (13 §3.3).
+     */
     shortTierOnly?: boolean;
   }): void => {
     const { verdict, netA, netB } = params;
@@ -391,6 +513,17 @@ export function createPairJudge(
       else if (netB === null && netA !== null) recordBridge(params.sideB, netA);
       return;
     }
+    // SAME TIER NET (electrical contract 13 §4.2): unassigned copper that
+    // extends a conductor IS that conductor, and a conductor has no clearance
+    // — and no fabricator minimum — against itself. This is the false FAIL
+    // B7-1 registered: a null trace merely close to other copper of the net it
+    // extends used to report against it at the null tier.
+    //
+    // Placed AFTER the touch branch and before every other tier, exactly where
+    // it can suppress no short: the short tier reads the ORIGINAL nets, and two
+    // items with one non-null tier are either (null, named) or (null, null) —
+    // `differentKnownNet` is false for both, so there was no short to hide.
+    if (params.tierA !== null && params.tierA === params.tierB) return;
     if (recordOnly) return;
     // A short (different-net copper overlap) is flagged independent of the
     // configured clearance: a 0 mm rule (custom fab / no net class) must NOT
@@ -410,31 +543,47 @@ export function createPairJudge(
         measuredMm: Math.max(0, verdict.minGap),
         requiredMm: verdict.minRequired,
       });
+      // A short suppresses the ordinary clearance tier — it is the same
+      // requirement, reported once — but NOT the IPC-2221 one: the pre-S13
+      // check ran on its own pass and reported both, and a dead short between
+      // two 230 V conductors is still an IPC-2221 breach.
+      if (verdict.voltageBreach) {
+        out.push(voltageDraft(anchors, verdict.voltageBreach));
+      }
       return;
     }
-    if (params.shortTierOnly) return;
-    if (verdict.breach) {
-      const b = verdict.breach;
-      out.push({
-        code: params.clearanceCode,
-        ruleSeverity: b.ruleSeverity,
-        message: `Clearance ${b.gap.toFixed(3)} mm between ${params.label} is below the required ${b.resolved.mm.toFixed(3)} mm${ruleSuffix(b.resolved)}`,
-        anchors,
-        locationMm: b.location,
-        layer: b.layer,
-        measuredMm: b.gap,
-        requiredMm: b.resolved.mm,
-      });
-    } else if (fabMin > 0 && below(verdict.minGap, fabMin)) {
-      out.push({
-        code: "FAB_CLEARANCE",
-        message: `Clearance ${verdict.minGap.toFixed(3)} mm between ${params.label} is below the fabricator minimum ${fabMin.toFixed(3)} mm`,
-        anchors,
-        locationMm: verdict.minLocation,
-        layer: verdict.minLayer,
-        measuredMm: verdict.minGap,
-        requiredMm: fabMin,
-      });
+    // Pads of ONE placement run the SHORT tier only — but the IPC-2221
+    // constituent is the BOARD's business, not the library's, so it applies
+    // inside a footprint too (§3.3).
+    if (!params.shortTierOnly) {
+      if (verdict.breach) {
+        const b = verdict.breach;
+        out.push({
+          code: params.clearanceCode,
+          ruleSeverity: b.ruleSeverity,
+          message: `Clearance ${b.gap.toFixed(3)} mm between ${params.label} is below the required ${b.resolved.mm.toFixed(3)} mm${ruleSuffix(b.resolved)}`,
+          anchors,
+          locationMm: b.location,
+          layer: b.layer,
+          measuredMm: b.gap,
+          requiredMm: b.resolved.mm,
+        });
+      } else if (fabMin > 0 && below(verdict.minGap, fabMin)) {
+        out.push({
+          code: "FAB_CLEARANCE",
+          message: `Clearance ${verdict.minGap.toFixed(3)} mm between ${params.label} is below the fabricator minimum ${fabMin.toFixed(3)} mm`,
+          anchors,
+          locationMm: verdict.minLocation,
+          layer: verdict.minLayer,
+          measuredMm: verdict.minGap,
+          requiredMm: fabMin,
+        });
+      }
+    }
+    // The second CONSTITUENT, always beside the first (§3.3): one row per
+    // reason, so a waiver of the clearance row cannot hide the IPC breach.
+    if (verdict.voltageBreach) {
+      out.push(voltageDraft(anchors, verdict.voltageBreach));
     }
   };
 
@@ -462,30 +611,46 @@ export function createPairJudge(
     splitCache.set(t, segs);
     return segs;
   };
-  const item = (netId: string | null, pointMm: PcbPointMm): ClearanceItem => ({
-    netId,
-    pointMm,
-  });
+  const item = (
+    netId: string | null,
+    pointMm: PcbPointMm,
+    exposed: boolean,
+  ): ClearanceItem => ({ netId, pointMm, exposed });
+
+  /** One side of a layered pair, before the per-LAYER exposure is resolved. */
+  interface LayeredSide {
+    item: DrcPad | DrcViaGeom;
+    netId: string | null;
+    point: PcbPointMm;
+  }
 
   /**
    * Pad↔pad, pad↔via and via↔via share one geometric gap across every shared
-   * layer; only the RULE can vary per layer, so they resolve on each shared
-   * layer in stackup order and aggregate (§4.3).
+   * layer; only the RULE — and, since S13, the IPC-2221 column, which depends
+   * on the face and on each item's exposure there (13 §1.2) — can vary per
+   * layer, so they resolve on each shared layer in stackup order and aggregate
+   * (§4.3).
    */
   const layered = (
     pairKind: Parameters<RuleResolver["clearance"]>[0],
     code: DrcRuleCode,
     sharedLayers: readonly PcbCopperLayerId[],
     g: PairGap,
-    a: ClearanceItem,
-    b: ClearanceItem,
+    a: LayeredSide,
+    b: LayeredSide,
   ): PairVerdict => {
     const candidates: Candidate[] = sharedLayers.map((layer) => {
-      const r: ResolvedValue = resolver.clearance(pairKind, layer, a, b);
+      const r: ResolvedValue = resolver.clearance(
+        pairKind,
+        layer,
+        item(a.netId, a.point, ctx.exposedOn(a.item, layer)),
+        item(b.netId, b.point, ctx.exposedOn(b.item, layer)),
+      );
       return {
         gap: g.gap,
-        required: r.mm,
+        required: r.ordinaryMm,
         rule: r.rule,
+        resolved: r,
         location: g.location,
         layer,
       };
@@ -514,6 +679,13 @@ export function createPairJudge(
         { kind: "trace", traceId: b.id },
       );
       const half = u.halfWidthMm + v.halfWidthMm;
+      // Every resolution site takes the TIER net (13 §4.2); `emit` below keeps
+      // the originals for the touch branch, the short tier and the bridge.
+      const tierU = ctx.tierNetOf(u);
+      const tierV = ctx.tierNetOf(v);
+      // A trace lives on ONE layer, so its exposure there is one lookup.
+      const exposedU = ctx.exposedOn(u, u.layer);
+      const exposedV = ctx.exposedOn(v, u.layer);
 
       const candidates: Candidate[] = [];
       if (!needsSplit(u) && !needsSplit(v)) {
@@ -523,31 +695,33 @@ export function createPairJudge(
         const r = resolver.clearance(
           "traceToTrace",
           u.layer,
-          item(u.netId, u.mid),
-          item(v.netId, v.mid),
+          item(tierU, u.mid, exposedU),
+          item(tierV, v.mid, exposedV),
         );
         candidates.push({
           gap: g.gap,
-          required: r.mm,
+          required: r.ordinaryMm,
           rule: r.rule,
+          resolved: r,
           location: g.location,
           layer: u.layer,
         });
       } else {
         for (const su of segmentsOf(u)) {
-          const pu = item(u.netId, midpoint(su.a, su.b));
+          const pu = item(tierU, midpoint(su.a, su.b), exposedU);
           for (const sv of segmentsOf(v)) {
             const r = resolver.clearance(
               "traceToTrace",
               u.layer,
               pu,
-              item(v.netId, midpoint(sv.a, sv.b)),
+              item(tierV, midpoint(sv.a, sv.b), exposedV),
             );
             const g = segmentSegmentGap(su.a, su.b, sv.a, sv.b, half);
             candidates.push({
               gap: g.gap,
-              required: r.mm,
+              required: r.ordinaryMm,
               rule: r.rule,
+              resolved: r,
               location: g.location,
               layer: u.layer,
             });
@@ -558,6 +732,8 @@ export function createPairJudge(
       emit({
         netA: u.netId,
         netB: v.netId,
+        tierA: tierU,
+        tierB: tierV,
         verdict: summarize("TRACE_TO_TRACE_CLEARANCE", candidates, "spatial"),
         clearanceCode: "TRACE_TO_TRACE_CLEARANCE",
         sideA: traceSide(u),
@@ -568,20 +744,26 @@ export function createPairJudge(
 
     tracePad(t, pad) {
       if (ctx.stats) ctx.stats.pairsJudged.traceToPad += 1;
-      const padItem = item(pad.netId, pad.center);
+      const tierT = ctx.tierNetOf(t);
+      const tierPad = ctx.tierNetOf(pad);
+      // The pair is judged on the TRACE's layer, so both exposures are that
+      // face's — one lookup each, whatever the pad's other layers do.
+      const exposedT = ctx.exposedOn(t, t.layer);
+      const padItem = item(tierPad, pad.center, ctx.exposedOn(pad, t.layer));
       const candidates: Candidate[] = [];
       if (!needsSplit(t) && !resolver.boundsMeetAnyArea(pad.bounds)) {
         const r = resolver.clearance(
           "traceToPad",
           t.layer,
-          item(t.netId, t.mid),
+          item(tierT, t.mid, exposedT),
           padItem,
         );
         const g = tracePadGap(t, pad);
         candidates.push({
           gap: g.gap,
-          required: r.mm,
+          required: r.ordinaryMm,
           rule: r.rule,
+          resolved: r,
           location: g.location,
           layer: t.layer,
         });
@@ -590,14 +772,15 @@ export function createPairJudge(
           const r = resolver.clearance(
             "traceToPad",
             t.layer,
-            item(t.netId, midpoint(s.a, s.b)),
+            item(tierT, midpoint(s.a, s.b), exposedT),
             padItem,
           );
           const g = segmentPadGap(s.a, s.b, t.halfWidthMm, pad);
           candidates.push({
             gap: g.gap,
-            required: r.mm,
+            required: r.ordinaryMm,
             rule: r.rule,
+            resolved: r,
             // The pad is one point of constant membership; its centre stays the
             // marker, so an area rule that changes no verdict changes no id.
             location: g.location,
@@ -609,6 +792,8 @@ export function createPairJudge(
       emit({
         netA: t.netId,
         netB: pad.netId,
+        tierA: tierT,
+        tierB: tierPad,
         verdict: summarize("TRACE_TO_PAD_CLEARANCE", candidates, "spatial"),
         clearanceCode: "TRACE_TO_PAD_CLEARANCE",
         sideA: traceSide(t),
@@ -619,20 +804,24 @@ export function createPairJudge(
 
     traceVia(t, vg) {
       if (ctx.stats) ctx.stats.pairsJudged.traceToVia += 1;
-      const viaItem = item(vg.netId, vg.center);
+      const tierT = ctx.tierNetOf(t);
+      const tierVia = ctx.tierNetOf(vg);
+      const exposedT = ctx.exposedOn(t, t.layer);
+      const viaItem = item(tierVia, vg.center, ctx.exposedOn(vg, t.layer));
       const candidates: Candidate[] = [];
       if (!needsSplit(t) && !resolver.boundsMeetAnyArea(vg.bounds)) {
         const r = resolver.clearance(
           "traceToVia",
           t.layer,
-          item(t.netId, t.mid),
+          item(tierT, t.mid, exposedT),
           viaItem,
         );
         const g = traceViaGap(t, vg);
         candidates.push({
           gap: g.gap,
-          required: r.mm,
+          required: r.ordinaryMm,
           rule: r.rule,
+          resolved: r,
           location: g.location,
           layer: t.layer,
         });
@@ -641,14 +830,15 @@ export function createPairJudge(
           const r = resolver.clearance(
             "traceToVia",
             t.layer,
-            item(t.netId, midpoint(s.a, s.b)),
+            item(tierT, midpoint(s.a, s.b), exposedT),
             viaItem,
           );
           const g = segmentViaGap(s.a, s.b, t.halfWidthMm, vg);
           candidates.push({
             gap: g.gap,
-            required: r.mm,
+            required: r.ordinaryMm,
             rule: r.rule,
+            resolved: r,
             location: g.location,
             layer: t.layer,
           });
@@ -658,6 +848,8 @@ export function createPairJudge(
       emit({
         netA: t.netId,
         netB: vg.netId,
+        tierA: tierT,
+        tierB: tierVia,
         verdict: summarize("TRACE_TO_VIA_CLEARANCE", candidates, "spatial"),
         clearanceCode: "TRACE_TO_VIA_CLEARANCE",
         sideA: traceSide(t),
@@ -679,16 +871,20 @@ export function createPairJudge(
         { kind: "via", viaId: a.via.id },
         { kind: "via", viaId: b.via.id },
       );
+      const tierU = ctx.tierNetOf(u);
+      const tierV = ctx.tierNetOf(v);
       emit({
         netA: u.netId,
         netB: v.netId,
+        tierA: tierU,
+        tierB: tierV,
         verdict: layered(
           "viaToVia",
           "VIA_TO_VIA_CLEARANCE",
           shared,
           viaViaGap(u, v),
-          item(u.netId, u.center),
-          item(v.netId, v.center),
+          { item: u, netId: tierU, point: u.center },
+          { item: v, netId: tierV, point: v.center },
         ),
         clearanceCode: "VIA_TO_VIA_CLEARANCE",
         sideA: viaSide(u),
@@ -703,24 +899,51 @@ export function createPairJudge(
         a.anchor.kind === "pad" &&
         b.anchor.kind === "pad" &&
         a.anchor.placementId === b.anchor.placementId;
-      // A bounding-rectangle pad (`custom` / `trapezoid`) can "overlap" a
-      // neighbour of its own footprint without any copper touching, and a
-      // short is non-waivable — so such intra-footprint pairs stay unjudged,
-      // as before S7, until S11 models the true shape (R1 #4).
-      if (sameFootprint && !(a.exactShape && b.exactShape)) return;
       const shared = a.layers.filter((l) => b.layers.includes(l));
       if (shared.length === 0) return;
       const [u, v] = orient(a, b, a.anchor, b.anchor);
+      const tierU = ctx.tierNetOf(u);
+      const tierV = ctx.tierNetOf(v);
+      // A bounding-rectangle pad (`custom` / `trapezoid`) can "overlap" a
+      // neighbour of its own footprint without any copper touching, and a
+      // short is non-waivable — so such intra-footprint pairs stay unjudged
+      // for the short, clearance and fab tiers, as before S7 (R1 #4).
+      //
+      // The IPC-2221 constituent DOES pass (13 §3.3): the bounding rectangle is
+      // a declared SUPERSET of the pad, so a spacing verdict on it is the
+      // false-fail direction, and dropping it would lose the pre-S13 coverage
+      // of exactly these pads. Nothing else of the pair is reported, and the
+      // gate is `hasVoltageTerms` so a board without voltages does no work.
+      if (sameFootprint && !(a.exactShape && b.exactShape)) {
+        if (recordOnly || !resolver.hasVoltageTerms) return;
+        if (tierU !== null && tierU === tierV) return;
+        const verdict = layered(
+          "padToPad",
+          "PAD_TO_PAD_CLEARANCE",
+          shared,
+          padPadGap(u, v),
+          { item: u, netId: tierU, point: u.center },
+          { item: v, netId: tierV, point: v.center },
+        );
+        if (verdict.voltageBreach) {
+          out.push(
+            voltageDraft([u.anchor, v.anchor], verdict.voltageBreach),
+          );
+        }
+        return;
+      }
       emit({
         netA: u.netId,
         netB: v.netId,
+        tierA: tierU,
+        tierB: tierV,
         verdict: layered(
           "padToPad",
           "PAD_TO_PAD_CLEARANCE",
           shared,
           padPadGap(u, v),
-          item(u.netId, u.center),
-          item(v.netId, v.center),
+          { item: u, netId: tierU, point: u.center },
+          { item: v, netId: tierV, point: v.center },
         ),
         clearanceCode: "PAD_TO_PAD_CLEARANCE",
         sideA: padSide(u),
@@ -738,16 +961,20 @@ export function createPairJudge(
       // has no dedicated rule, so the board floor reuses traceToViaMm.
       const shared = pad.layers.filter((l) => vg.layers.includes(l));
       if (shared.length === 0) return;
+      const tierPad = ctx.tierNetOf(pad);
+      const tierVia = ctx.tierNetOf(vg);
       emit({
         netA: pad.netId,
         netB: vg.netId,
+        tierA: tierPad,
+        tierB: tierVia,
         verdict: layered(
           "padToVia",
           "PAD_TO_VIA_CLEARANCE",
           shared,
           padViaGap(pad, vg),
-          item(pad.netId, pad.center),
-          item(vg.netId, vg.center),
+          { item: pad, netId: tierPad, point: pad.center },
+          { item: vg, netId: tierVia, point: vg.center },
         ),
         clearanceCode: "PAD_TO_VIA_CLEARANCE",
         sideA: padSide(pad),
@@ -766,14 +993,21 @@ export function createPairJudge(
       // pair was skipped and neither batch nor the gate reported the short.
       // Half a nanometre of slack cannot admit a pair the exact tiers then
       // clear, and it costs nothing but a handful of extra kernel calls.
+      //
+      // A NULL side takes the board's widest clearance instead of the null
+      // tier (13 §3.4): the net that judges such an item is its TIER net, a
+      // per-ITEM fact this signature cannot carry — the six batch loops are the
+      // frozen S9 oracle (08 §3) and pass the ORIGINAL nets. `maxClearanceBoundMm`
+      // bounds every requirement any pair on this board can resolve to, and it
+      // is already the halo the grid admitted the pair under, so the prefilter
+      // stays conservative and drops no pair a tier would have judged.
+      const bound =
+        netA === null || netB === null
+          ? ctx.maxClearanceBoundMm
+          : resolver.clearanceBound(pairKind, netA, netB);
       return (
         aabbGap(boundsA, boundsB) >
-        Math.max(
-          resolver.clearanceBound(pairKind, netA, netB),
-          fabMin,
-          SHORT_EPS_MM,
-        ) +
-          GEOM_EPS_MM
+        Math.max(bound, fabMin, SHORT_EPS_MM) + GEOM_EPS_MM
       );
     },
 

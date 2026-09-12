@@ -348,11 +348,58 @@ function parseDesignRules(
       fallback.outline?.minWebMm,
     ),
   });
-  const e =
+  /**
+   * The electrical block (electrical contract 13 §2, §5), read key by key with
+   * the `optNum` semantics above so the design-rules dialog — which edits only
+   * the two weights — cannot silently clear a stored `outerConductors`. An
+   * explicit `null` still clears the WHOLE block.
+   *
+   * A rise or a copper weight is persisted only when finite and STRICTLY
+   * POSITIVE: a zero made `requiredTraceWidthMm` answer 0 mm, which every trace
+   * passed (Astra run 1 #9). A value that escapes this gate is reported as
+   * `DRC_RULE_INVALID` rather than assessed.
+   */
+  const e = r.electrical === null ? null : asRecord(r.electrical);
+  /**
+   * A rise or a weight, accepted only when finite and STRICTLY POSITIVE.
+   *
+   * A present-but-invalid value on an UPDATE keeps what the board already
+   * stored: dropping it would fall back to the reader's default (10 °C, 1 oz),
+   * which is LOOSER than the stored 5 °C — so a malformed write would silently
+   * relax the width check instead of being rejected. An explicit `null` still
+   * clears, and a CREATE has nothing to keep.
+   */
+  const positive = (
+    v: unknown,
+    stored: number | undefined,
+  ): number | undefined => {
+    const n = optNum(v, stored);
+    if (n !== undefined && n > 0) return n;
+    if (v === null || mode !== "update") return undefined;
+    return stored !== undefined && stored > 0 ? stored : undefined;
+  };
+  const storedOuter = mode === "update" ? fallback.electrical?.outerConductors : undefined;
+  const outer = asString(e?.outerConductors);
+  const electrical =
     r.electrical === null
       ? null
-      : (asRecord(r.electrical) ??
-        (mode === "update" ? (fallback.electrical ?? null) : null));
+      : compactElectrical({
+          tempRiseC: positive(e?.tempRiseC, fallback.electrical?.tempRiseC),
+          copperWeightOz: positive(
+            e?.copperWeightOz,
+            fallback.electrical?.copperWeightOz,
+          ),
+          innerCopperWeightOz: positive(
+            e?.innerCopperWeightOz,
+            fallback.electrical?.innerCopperWeightOz,
+          ),
+          outerConductors:
+            e?.outerConductors === null
+              ? undefined
+              : outer === "coated" || outer === "uncoated"
+                ? outer
+                : storedOuter,
+        });
   return {
     clearance: {
       traceToTraceMm: num(c.traceToTraceMm, fallback.clearance.traceToTraceMm),
@@ -377,21 +424,25 @@ function parseDesignRules(
       holeToHoleMm: num(m.holeToHoleMm, fallback.minimums.holeToHoleMm ?? 0.25),
       ...(clearanceFloorMm !== undefined ? { clearanceMm: clearanceFloorMm } : {}),
     },
-    ...(e &&
-    typeof asNumber(e.tempRiseC) === "number" &&
-    typeof asNumber(e.copperWeightOz) === "number"
-      ? {
-          electrical: {
-            tempRiseC: asNumber(e.tempRiseC)!,
-            copperWeightOz: asNumber(e.copperWeightOz)!,
-          },
-        }
-      : {}),
+    ...(electrical ? { electrical } : {}),
     ...(silkscreen ? { silkscreen } : {}),
     ...(solderMask ? { solderMask } : {}),
     ...(dfm ? { dfm } : {}),
     ...(outline ? { outline } : {}),
   };
+}
+
+/** {@link compactRules} for the electrical block, which carries one string key. */
+function compactElectrical(
+  value: NonNullable<PcbDesignRules["electrical"]>,
+): PcbDesignRules["electrical"] | null {
+  const out: Record<string, number | string> = {};
+  for (const [key, v] of Object.entries(value)) {
+    if (v !== undefined) out[key] = v;
+  }
+  return Object.keys(out).length > 0
+    ? (out as NonNullable<PcbDesignRules["electrical"]>)
+    : null;
 }
 
 /** A rules sub-object with its `undefined` keys dropped, or `null` when empty. */
@@ -407,15 +458,69 @@ function compactRules<T extends Record<string, number | undefined>>(
     : null;
 }
 
-function parseNetClass(value: unknown): PcbNetClass | null {
+/** The payload carries this key at all; an explicit `null` CLEARS it. */
+function declaredKey(value: unknown): boolean {
+  return value !== undefined && value !== null;
+}
+
+/**
+ * One net class, validated. `storedById` is the board's CURRENT classes, and is
+ * non-empty only on an update — a rejected ELECTRICAL write then keeps what the
+ * board already had (electrical contract 13 §2, §5).
+ *
+ * A malformed declaration must be REPORTED, never silently dropped: dropping it
+ * turns "this class is at ±300 V" into "this class is at the reference
+ * potential", which removes the requirement AND the row that would have said
+ * so. The resolver is where an invalid declaration becomes `DRC_RULE_INVALID`
+ * and the constituent is withheld — fail-closed WITH a row (`intervalOfNetClass`
+ * for a potential, `currentProblem` for a current) — so the store's job is to
+ * hand it the declaration, not to hide it.
+ */
+function parseNetClass(
+  value: unknown,
+  storedById: ReadonlyMap<string, PcbNetClass>,
+): PcbNetClass | null {
   const r = asRecord(value);
   if (!r) return null;
   const id = asString(r.id);
   const name = asString(r.name);
   if (!id || !name) return null;
   const diffPairGapMm = asNumber(r.diffPairGapMm);
-  const voltageV = asNumber(r.voltageV);
-  const currentA = asNumber(r.currentA);
+  const keep = storedById.get(id);
+
+  // A present-but-non-numeric constant potential is a REJECTED write, not a
+  // licence to read the net as grounded.
+  const voltageV = declaredKey(r.voltageV)
+    ? (asNumber(r.voltageV) ?? keep?.voltageV)
+    : undefined;
+
+  // The class CURRENT, on the same terms (§5). A finite value persists AS
+  // GIVEN, non-positive included: the resolver reports those with a
+  // `DRC_RULE_INVALID` row and judges no trace of the class, while dropping
+  // them here would read as "this class declares no current" — a silent PASS
+  // for every trace on it.
+  const currentA = declaredKey(r.currentA)
+    ? (asNumber(r.currentA) ?? keep?.currentA)
+    : undefined;
+
+  // BOTH or NEITHER (§2). Two finite endpoints are persisted AS GIVEN, INVERTED
+  // INCLUDED: the resolver reports `voltageMinV > voltageMaxV` and withholds the
+  // term, whereas substituting nothing here made a live 1.25 mm requirement and
+  // its report vanish together (Astra run 2). Half an interval — or an endpoint
+  // that is not a number — is a rejected write: the stored pair stands.
+  const minV = asNumber(r.voltageMinV);
+  const maxV = asNumber(r.voltageMaxV);
+  const someEndpoint =
+    declaredKey(r.voltageMinV) || declaredKey(r.voltageMaxV);
+  const interval =
+    minV !== null && maxV !== null
+      ? { voltageMinV: minV, voltageMaxV: maxV }
+      : someEndpoint &&
+          keep?.voltageMinV !== undefined &&
+          keep.voltageMaxV !== undefined
+        ? { voltageMinV: keep.voltageMinV, voltageMaxV: keep.voltageMaxV }
+        : {};
+
   return {
     id,
     name,
@@ -426,18 +531,27 @@ function parseNetClass(value: unknown): PcbNetClass | null {
     color: asString(r.color) ?? "#d4d4d8",
     defaultViaProtection: parseViaProtection(r.defaultViaProtection),
     ...(diffPairGapMm !== null && diffPairGapMm > 0 ? { diffPairGapMm } : {}),
-    ...(voltageV !== null ? { voltageV } : {}),
-    ...(currentA !== null ? { currentA } : {}),
+    ...(voltageV !== undefined ? { voltageV } : {}),
+    ...interval,
+    ...(currentA !== undefined ? { currentA } : {}),
   };
 }
 
 function parseNetClasses(
   value: unknown,
   fallback: PcbNetClass[],
+  mode: "read" | "update",
 ): PcbNetClass[] {
   if (!Array.isArray(value)) return fallback;
+  // On a READ, `fallback` is the DEFAULT class table — not "what this board
+  // stored" — so nothing may fall back to it; an id that happens to collide
+  // with a default's would otherwise inherit a voltage the board never had.
+  const storedById =
+    mode === "update"
+      ? new Map(fallback.map((c) => [c.id, c] as const))
+      : new Map<string, PcbNetClass>();
   const out = value
-    .map(parseNetClass)
+    .map((entry) => parseNetClass(entry, storedById))
     .filter((c): c is PcbNetClass => c !== null);
   return out.length > 0 ? out : fallback;
 }
@@ -739,7 +853,11 @@ function parseBoardSettings(value: unknown): PcbBoardSettings | null {
   const cutouts = parseCutouts(record.cutouts);
   // Design rules / net classes / thickness were previously dropped on load
   // (always defaults). Read them so edits + KiCad-imported rules persist.
-  const netClasses = parseNetClasses(record.netClasses, defaults.netClasses);
+  const netClasses = parseNetClasses(
+    record.netClasses,
+    defaults.netClasses,
+    "read",
+  );
   const perNetClassAssignments = parsePerNetClassAssignments(
     record.perNetClassAssignments,
     new Set(netClasses.map((c) => c.id)),
@@ -1320,7 +1438,7 @@ function resolveDesignRuleFields(
   perNetClassAssignments: Record<string, string> | undefined;
 } {
   const netClasses = params.netClasses
-    ? parseNetClasses(params.netClasses, settings.netClasses)
+    ? parseNetClasses(params.netClasses, settings.netClasses, "update")
     : settings.netClasses;
   // Validate any incoming assignment map against the resulting class set (so a
   // removed class drops its assignments). A full map replaces the existing one.

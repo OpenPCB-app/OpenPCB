@@ -69,6 +69,12 @@ export interface ZonePourParams {
 export interface ZonePourObstacle {
   kind: "trace" | "pad" | "via";
   netId: string | null;
+  /**
+   * The net DRC judges this copper AS — its TIER net (electrical contract 13
+   * §4.2). The halo resolves on THIS, so a null trace extending a 230 V pad is
+   * carved at the 230 V spacing instead of at the null tier (Astra run 1 #2).
+   */
+  tierNetId: string | null;
   pointMm: PcbPointMm;
 }
 
@@ -78,6 +84,23 @@ const POUR_KIND_BY_OBSTACLE: Record<ZonePourObstacle["kind"], DrcPairKind> = {
   pad: "pourToPad",
   via: "pourToVia",
 };
+
+/**
+ * CONSERVATIVE exposure for EVERY pour operand (electrical contract 13 §3.2).
+ * The fill input carries no mask model, so on an OUTER layer the copper a pour
+ * resolves against counts as uncovered and the pair lands in the IPC-2221 B2
+ * column — the wider one in every band. The pour then carves at least as far as
+ * the judge requires and never less; the judge alone, which has the artwork,
+ * may apply B4. On an inner layer the column is B1 whatever this says.
+ *
+ * ONE expression for the obstacle halo AND the zone↔zone exclusion: they are
+ * the same claim about the same missing mask model, and letting the two drift
+ * put two 230 V zones 0.4 mm apart on a coated board while every obstacle on
+ * that board was held at 1.25 mm.
+ */
+function pourExposedOn(layer: PcbCopperLayerId): boolean {
+  return layer === "F.Cu" || layer === "B.Cu";
+}
 
 /**
  * The rule tier of the pour clearance — the SAME `RuleResolver` batch DRC
@@ -138,6 +161,7 @@ function zoneExclusions(
     pointsMm: ReadonlyArray<PcbPointMm>;
     clearanceMm: number;
   }> = [];
+  const exposed = pourExposedOn(zone.layer);
   for (const other of zones) {
     if (other.id === zone.id) continue;
     if (other.layer !== zone.layer) continue;
@@ -162,6 +186,7 @@ function zoneExclusions(
         nets.resolver.clearancePour("pourToPour", zone.layer, zone.netId, {
           netId: other.netId,
           pointMm: null,
+          exposed,
         }).mm,
       ),
     });
@@ -242,14 +267,21 @@ function zoneClearanceResolver(
 ): (item: ZonePourObstacle) => number {
   const own = zone.clearanceMm ?? 0;
   const { resolver } = nets;
-  // With no area rules the resolution depends only on (kind, net), and the fill
-  // asks once per trace SEGMENT — memoise so a long polyline costs one lookup.
+  // A pure function of the zone's LAYER, so it is constant over this resolver
+  // and needs no place in the cache key below.
+  const exposed = pourExposedOn(zone.layer);
+  // With no area rules the resolution depends only on (kind, TIER net), and the
+  // fill asks once per trace SEGMENT — memoise so a long polyline costs one
+  // lookup. Keyed on the tier net, never the original: two obstacles with the
+  // same null net and different tiers resolve to different halos (Astra run 1
+  // #3).
   const cache = resolver.hasAreaRules ? null : new Map<string, number>();
   return (item) => {
     // Length-prefixed, as the resolver's own memo key is: a net id is free
     // text, and this cache decides how far copper stays from it.
+    const tierNetId = item.tierNetId;
     const key = cache
-      ? `${item.kind}|${item.netId === null ? "-" : `${item.netId.length}:${item.netId}`}`
+      ? `${item.kind}|${tierNetId === null ? "-" : `${tierNetId.length}:${tierNetId}`}`
       : "";
     if (cache) {
       const hit = cache.get(key);
@@ -261,7 +293,7 @@ function zoneClearanceResolver(
         POUR_KIND_BY_OBSTACLE[item.kind],
         zone.layer,
         zone.netId,
-        { netId: item.netId, pointMm: item.pointMm },
+        { netId: tierNetId, pointMm: item.pointMm, exposed },
       ).mm,
     );
     if (cache) cache.set(key, value);

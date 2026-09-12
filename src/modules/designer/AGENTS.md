@@ -198,6 +198,20 @@ And a command field with no parser in `routes.ts` is silently dropped over HTTP.
   `checks/length.ts` / `signal-integrity.ts` (S14) — are scheduled, not sanctioned (the
   routing-obstacle and live-DRC pad layers were closed in S8: both read the `LegalityContext`
   items). Never add another.
+- **Electrical rules are constituents of the one rule model since S13 (`docs/pcb-hardening/13-electrical-contract.md`).**
+  The IPC-2221B conductor spacing (edition B pinned, `ipc2221-spacing.ts` cites its sources) is a
+  non-relaxable term of every resolved clearance (`rule-resolver.ts` → `voltage-term.ts`), so the
+  pair judge (`CREEPAGE_DISTANCE`, its own row beside the ordinary row), the copper-pour halo, the
+  route obstacles and the live gate (refuses) inherit it; voltages are DC potentials with optional
+  `voltageMinV` / `voltageMaxV` intervals, Δ = max(|a.min − b.max|, |a.max − b.min|) at 1 µV;
+  undeclared = reference potential (stated assumption); columns B1 inner, B2 outer, B4 only when
+  `electrical.outerConductors: "coated"` AND neither item is mask-exposed on that face
+  (`mask-exposure.ts`). Unassigned copper takes the tier net of its connected component
+  (`pcb-connectivity/effective-nets.ts`, contact = the bridge model's `SHORT_EPS_MM`, pours
+  excluded, inexact pads never join); chain shorts are reported; the live gate builds a per-call
+  overlay (`effective-net-overlay.ts`) and rejudges existing items whose tier or exposure the
+  pending copper moved. `TRACE_CURRENT_WIDTH` is a per-item form (`currentItems`, inner / outer
+  copper weight, tier net). Malformed electrical input is a `DRC_RULE_INVALID` row, never assessed.
 - **Curved copper and board arcs are exact since S12b (`docs/pcb-hardening/12-exact-geometry-contract.md`).**
   A pad record carries `rounded` — a convex core ⊕ disc (`pcb-geometry/rounded-shape.ts`; circle =
   point, oval = spine, roundrect = four inner corners, rect / trapezoid / custom = ring with r = 0)

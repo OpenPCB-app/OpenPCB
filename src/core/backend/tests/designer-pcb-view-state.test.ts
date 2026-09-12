@@ -352,6 +352,261 @@ describe("designer PCB view-state persistence", () => {
     expect(proj?.board.netClasses[0]?.currentA).toBe(3);
   });
 
+  test("the S13 electrical fields survive save/reload, and the bad ones drop", async () => {
+    // Electrical contract 13 §2: a voltage INTERVAL is both keys or neither and
+    // never inverted; a temperature rise or copper weight is persisted only
+    // when finite and strictly positive; `outerConductors` only as one of its
+    // two strings.
+    const { sdk, designId } = await createDesignerSdk("pcb-design-rules-s13");
+    const baseProj = await sdk.getPcbProjection(designId);
+    const base = baseProj!.board.designRules;
+    const classes = baseProj!.board.netClasses;
+    const result = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-rules-s13", 0, {
+        type: "pcb_set_design_rules",
+        designRules: {
+          clearance: { ...base.clearance },
+          minimums: { ...base.minimums },
+          electrical: {
+            tempRiseC: 20,
+            copperWeightOz: 2,
+            innerCopperWeightOz: 1,
+            outerConductors: "coated",
+          },
+        } as never,
+        netClasses: [
+          { ...classes[0]!, voltageMinV: -300, voltageMaxV: 300 },
+          // INVERTED, but both endpoints are finite numbers: persisted as
+          // given, so the resolver can report it. Dropping it here would take
+          // the requirement and the `DRC_RULE_INVALID` row with it.
+          { ...classes[1]!, voltageV: 12, voltageMinV: 5, voltageMaxV: -5 },
+          // A lone endpoint is not an interval, and this class stored none.
+          { ...classes[2]!, voltageMaxV: 48 },
+        ] as never,
+      }),
+    );
+    expect(result.ok).toBe(true);
+
+    const proj = await sdk.getPcbProjection(designId);
+    const rules = proj?.board.designRules;
+    expect(rules?.electrical?.innerCopperWeightOz).toBe(1);
+    expect(rules?.electrical?.outerConductors).toBe("coated");
+    const reloaded = proj!.board.netClasses;
+    expect(reloaded[0]?.voltageMinV).toBe(-300);
+    expect(reloaded[0]?.voltageMaxV).toBe(300);
+    expect(reloaded[1]?.voltageMinV).toBe(5);
+    expect(reloaded[1]?.voltageMaxV).toBe(-5);
+    expect(reloaded[1]?.voltageV).toBe(12);
+    expect(reloaded[2]?.voltageMaxV).toBeUndefined();
+    expect(reloaded[2]?.voltageMinV).toBeUndefined();
+  });
+
+  test("a rejected currentA write keeps the stored rating; null clears it", async () => {
+    // Electrical contract 13 §5, the `voltageV` rule applied to the current:
+    // dropping a malformed rating reads as "this class declares no current",
+    // which is a silent PASS for every trace on it.
+    const { sdk, designId } = await createDesignerSdk("pcb-net-class-current");
+    const classes = (await sdk.getPcbProjection(designId))!.board.netClasses;
+    const send = async (commandId: string, currentA: unknown) => {
+      const rev = (await sdk.getPcbProjection(designId))?.revision ?? null;
+      const res = await sdk.dispatchCommand(
+        designId,
+        envelope(designId, commandId, rev, {
+          type: "pcb_set_design_rules",
+          netClasses: classes.map((c, i) =>
+            i === 1 ? { ...c, currentA } : c,
+          ) as never,
+        }),
+      );
+      expect(res.ok).toBe(true);
+      return (await sdk.getPcbProjection(designId))!.board.netClasses[1]!;
+    };
+
+    expect((await send("cmd-cur-seed", 3)).currentA).toBe(3);
+    // Declared but not a number: a rejected write, not a relaxation.
+    expect((await send("cmd-cur-bad", "x")).currentA).toBe(3);
+    // A finite NON-POSITIVE value persists as given — the resolver reports it.
+    expect((await send("cmd-cur-zero", 0)).currentA).toBe(0);
+    // An explicit `null` still clears the rating.
+    expect((await send("cmd-cur-clear", null)).currentA).toBeUndefined();
+  });
+
+  test("inverting a declared interval REPORTS it; it never silently passes", async () => {
+    // Astra run 2, executed end to end: a class at [−300, 300] V holds a live
+    // 1.25 mm `CREEPAGE_DISTANCE` against an undeclared neighbour. Inverting it
+    // to [300, −300] used to make BOTH endpoints vanish in the parser — the
+    // requirement AND the row that would have explained it. Contract 13 §2:
+    // malformed input is reported, never dropped.
+    const { sdk, designId } = await createDesignerSdk("pcb-net-class-inverted");
+    const baseProj = await sdk.getPcbProjection(designId);
+    const classes = baseProj!.board.netClasses;
+    // NOT the default class: `sig` below resolves to that one, and two distinct
+    // nets of ONE interval class would be judged at Δ = 600 V (Astra run 1 #1),
+    // which is a different band and a different test.
+    const hvIndex = 1;
+    const hv = classes[hvIndex]!.id;
+
+    const declare = async (
+      commandId: string,
+      voltageMinV: number,
+      voltageMaxV: number,
+    ) => {
+      const rev = (await sdk.getPcbProjection(designId))?.revision ?? null;
+      const res = await sdk.dispatchCommand(
+        designId,
+        envelope(designId, commandId, rev, {
+          type: "pcb_set_design_rules",
+          netClasses: classes.map((c, i) =>
+            i === hvIndex ? { ...c, voltageMinV, voltageMaxV } : c,
+          ) as never,
+          perNetClassAssignments: { hvn: hv },
+        }),
+      );
+      expect(res.ok).toBe(true);
+      return (await sdk.getPcbProjection(designId))!.board;
+    };
+
+    /** The stored board, judged against two traces 0.5 mm apart on F.Cu. */
+    const report = (board: NonNullable<typeof baseProj>["board"]) =>
+      runDrc({
+        ...baseProj!,
+        board,
+        netNames: { hvn: "HV_RAIL", sig: "SIG" },
+        traces: [
+          {
+            id: "t_hv",
+            netId: "hvn",
+            netClassId: hv,
+            layer: "F.Cu",
+            widthMm: 0.2,
+            pointsNm: [
+              { x: 0, y: 0 },
+              { x: 10_000_000, y: 0 },
+            ],
+            segmentMode: "manhattan-45",
+          },
+          {
+            id: "t_sig",
+            netId: "sig",
+            netClassId: "default",
+            layer: "F.Cu",
+            widthMm: 0.2,
+            pointsNm: [
+              { x: 0, y: 700_000 },
+              { x: 10_000_000, y: 700_000 },
+            ],
+            segmentMode: "manhattan-45",
+          },
+        ],
+      } as never);
+
+    const declared = report(await declare("cmd-nc-ok", -300, 300));
+    const creepage = declared.violations.filter(
+      (v) => v.code === "CREEPAGE_DISTANCE",
+    );
+    expect(creepage).toHaveLength(1);
+    expect(creepage[0]!.requiredMm).toBeCloseTo(1.25, 9);
+    expect(
+      declared.violations.filter((v) => v.code === "DRC_RULE_INVALID"),
+    ).toHaveLength(0);
+
+    const inverted = report(await declare("cmd-nc-bad", 300, -300));
+    // The endpoints SURVIVED the round trip …
+    const stored = (await sdk.getPcbProjection(designId))!.board.netClasses[
+      hvIndex
+    ]!;
+    expect(stored.voltageMinV).toBe(300);
+    expect(stored.voltageMaxV).toBe(-300);
+    // … so the resolver can refuse them out loud: an ERROR row, and the
+    // constituent withheld rather than quietly resolved to 0 V.
+    const invalid = inverted.violations.filter(
+      (v) => v.code === "DRC_RULE_INVALID",
+    );
+    expect(invalid).toHaveLength(1);
+    expect(invalid[0]!.severity).toBe("error");
+    expect(invalid[0]!.message).toContain("voltageMinV");
+    expect(
+      inverted.violations.filter((v) => v.code === "CREEPAGE_DISTANCE"),
+    ).toHaveLength(0);
+  });
+
+  test("a non-positive rise or weight, and a bogus coating, are not persisted", async () => {
+    const { sdk, designId } = await createDesignerSdk("pcb-design-rules-s13-bad");
+    const baseProj = await sdk.getPcbProjection(designId);
+    const base = baseProj!.board.designRules;
+    const result = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-rules-s13-bad", 0, {
+        type: "pcb_set_design_rules",
+        designRules: {
+          clearance: { ...base.clearance },
+          minimums: { ...base.minimums },
+          electrical: {
+            tempRiseC: 0,
+            copperWeightOz: -1,
+            outerConductors: "lacquered",
+          },
+        } as never,
+      }),
+    );
+    expect(result.ok).toBe(true);
+    const rules = (await sdk.getPcbProjection(designId))?.board.designRules;
+    // Every key refused ⇒ the sub-object itself is omitted, exactly as the S12
+    // DFM blocks behave.
+    expect(rules?.electrical).toBeUndefined();
+
+    // …but a rejected key on a board that already STORED one keeps the stored
+    // value. Dropping it would fall back to the reader's 10 °C / 1 oz defaults,
+    // which are LOOSER than a stored 5 °C — a malformed write must not relax
+    // the width check.
+    const rev1 = (await sdk.getPcbProjection(designId))?.revision ?? null;
+    await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-rules-s13-seed", rev1, {
+        type: "pcb_set_design_rules",
+        designRules: {
+          clearance: { ...base.clearance },
+          minimums: { ...base.minimums },
+          electrical: { tempRiseC: 5, copperWeightOz: 2 },
+        } as never,
+      }),
+    );
+    const rev2 = (await sdk.getPcbProjection(designId))?.revision ?? null;
+    const rejected = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-rules-s13-reject", rev2, {
+        type: "pcb_set_design_rules",
+        designRules: {
+          clearance: { ...base.clearance },
+          minimums: { ...base.minimums },
+          electrical: { tempRiseC: 0, copperWeightOz: 2 },
+        } as never,
+      }),
+    );
+    expect(rejected.ok).toBe(true);
+    const kept = (await sdk.getPcbProjection(designId))?.board.designRules;
+    expect(kept?.electrical?.tempRiseC).toBe(5);
+    expect(kept?.electrical?.copperWeightOz).toBe(2);
+
+    // An explicit `null` still CLEARS the whole block.
+    const rev3 = (await sdk.getPcbProjection(designId))?.revision ?? null;
+    await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-rules-s13-clear", rev3, {
+        type: "pcb_set_design_rules",
+        designRules: {
+          clearance: { ...base.clearance },
+          minimums: { ...base.minimums },
+          electrical: null,
+        } as never,
+      }),
+    );
+    expect(
+      (await sdk.getPcbProjection(designId))?.board.designRules.electrical,
+    ).toBeUndefined();
+  });
+
   test("the S12 DFM rule sub-objects survive save/reload", async () => {
     // DFM contract 11 §6. `parseDesignRules` reads each key with the `optNum`
     // semantics and OMITS a sub-object with no keys, so a board that never

@@ -112,8 +112,12 @@ src/
     │                       `worker/` — the S10 worker-thread entry + main-thread client
     │                       (docs/pcb-hardening/09-execution-contract.md); `checks/{courtyard,
     │                       silkscreen,solder-mask,copper-shape,filled-gap}.ts` — the S12 DFM
-    │                       checks (docs/pcb-hardening/11-dfm-contract.md)
-    ├── pcb-connectivity/   copper connectivity kernel (records, items, touch, graph) — see
+    │                       checks (docs/pcb-hardening/11-dfm-contract.md); `voltage-term.ts`,
+    │                       `mask-exposure.ts`, `effective-net-overlay.ts`, `checks/chain-short.ts`
+    │                       — the S13 electrical constituents (docs/pcb-hardening/13-electrical-contract.md)
+    ├── pcb-connectivity/   copper connectivity kernel (records, items, touch, graph; S13 adds
+    │                       `effective-nets.ts` — tier nets of unassigned copper — and
+    │                       `copper-drc-items.ts`) — see
     │                       docs/pcb-hardening/01-connectivity-contract.md
     ├── pcb-areas/          copper zones + keepouts: v1→v2 upgrade, the ONE derivation of
     │                       effective copper areas (board zones are persisted rows), the

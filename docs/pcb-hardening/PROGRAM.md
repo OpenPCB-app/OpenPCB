@@ -140,7 +140,7 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 | S12 | DFM overlays and production checks | Courtyard, silkscreen, mask bridges/slivers, copper slivers, acute angles — built at Gerber parity. | — (no overlay codes exist today) | spec-attack xhigh; post only for polygon-topology checks | done 2026-09-11 (`11-dfm-contract.md`) |
 | S12b | Exact-arc geometry | ONE exact model of every curved copper and board shape: rounded pads (convex core ⊕ disc) in clearance, connectivity, keepouts and board-edge checks (closes 06 §5 / Astra S7 #5); ONE canonical contour arc (start radius, end point projected) at write and read; the exact arc kernel; outline validity on the exact contour for DRC AND the editor gate (S2 #8); board-edge verdicts on a certified interval from two biased regions, exact only on ambiguity (the S7 second chance, made sound); board-material minimum web by erosion (`OUTLINE_MIN_WEB`, S2 #11); Gerber Profile true arcs. Contract `12-exact-geometry-contract.md`. | — | brainstorm xhigh (plan, run 0) · spec-attack xhigh (run 1: 18 findings, all accepted) · repo-grounded adversarial-verify xhigh (run 2: 4 executed counterexamples, all fixed) | done 2026-09-11 (`12-exact-geometry-contract.md`) |
 | S12c | Polygon pads (trapezoid / custom) | True outlines through `kicad-parsers` (`rect_delta`, `primitives`) → `rendering-core` `outlinesMm` (pad-local rings, copper = their union) → `kicad-import`; OpenPCB consumers (records `rings`, pair kernels min over rings, pour, copper-shape unit, annular SDF, mask artwork, Gerber `%AM` primitive 4 per ring, canvas / 3D); existing rows re-parsed from `raw.rawSource`; authored fixtures (none exist). Re-owned from S12b on 2026-09-11; needs the S11 tag follow-up + a third tag round. | — | spec-attack xhigh | pending |
-| S13 | Electrical-rule fidelity | Voltage difference, clearance/creepage semantics, external/internal assumptions, current vs width, layer-dependent assumptions, defaults, applicable pad/via/trace combinations, interaction with net classes and scoped rules. Precise modest claims over ambitious labels. | B7-1 (unassigned copper does not inherit the rule tier of the net it extends — S8 Astra run 2) | spec-attack xhigh · adversarial-verify xhigh | pending |
+| S13 | Electrical-rule fidelity | Voltage difference, clearance/creepage semantics, external/internal assumptions, current vs width, layer-dependent assumptions, defaults, applicable pad/via/trace combinations, interaction with net classes and scoped rules. Precise modest claims over ambitious labels. | B7-1 (unassigned copper does not inherit the rule tier of the net it extends — S8 Astra run 2) | brainstorm xhigh (run 0, plan mode: 13 concerns, two design choices broken) · spec-attack xhigh (run 1: 13 findings, all accepted) · repository-grounded adversarial-verify xhigh (run 2: 4 executed counterexamples, all fixed) | done 2026-09-12 (`13-electrical-contract.md`) |
 | S14 | SI v1 mathematical correctness | Routed length, branches/stubs, disconnected fragments, via contribution, coupled-span accounting, overlapping segments, gap measurement, diverging gap, layer transitions, pair ordering, determinism. Every reported SI number has a precise definition. | — | spec-attack xhigh · adversarial-verify xhigh | pending |
 | S15 | High-speed architecture runway | Identify contracts/data representations that would block credible future SI (stackup geometry, dielectrics, per-layer copper, reference planes, propagation delay, via barrel path, impedance targets, return-path continuity). Produce a compatibility document; change only what prevents a known dead end. | — | brainstorm xhigh (one call) | pending |
 
@@ -247,7 +247,8 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
   untouched (034652c3); e2e DRC + routing + live-parity 5 + 1 flag-skip; golden shasums areas 99c49eb3 · census b735e86b · cutouts 43fbd513 · dfm 47573fd3 · holes c8ab6694 · pours ab245110 · rules ed0705e8 · small 95fbb3dc
   (`dfm-2l` new; `census` / `holes` / `small` re-baselined with per-code attribution in their `.md`;
   `areas` / `cutouts` / `pours` / `rules` byte-identical).*
-- **S13** — no check claims more than its model proves; every electrical constant is sourced.
+- **S13** — no check claims more than its model proves; every electrical constant is sourced (met
+  2026-09-12 — gate baseline recorded in the S13 decisions bullet below).
 - **S14** — every SI number has a precise mathematical definition and a testable interpretation.
 - **S15** — a future-SI compatibility document exists; near-term changes only where they prevent
   a known dead end.
@@ -278,7 +279,7 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 | S12 | xhigh pre + xhigh post (polygon-topology checks, repository-grounded) |
 | S12b | xhigh brainstorm (plan) + **xhigh pre + xhigh post** (user: Astra "as needed", 2026-09-11) |
 | S12c | xhigh pre |
-| S13 | **xhigh pre + xhigh post** |
+| S13 | xhigh brainstorm (plan) + **xhigh pre + xhigh post** (user: Astra "as needed", 2026-09-11) |
 | S14 | **xhigh pre + xhigh post** |
 | S15 | xhigh brainstorm once |
 | S16 | high/xhigh once |
@@ -732,6 +733,45 @@ unmanufacturable board.
   cleared it; the tracked goldens were verified at their baseline shasums before re-running).
 - **S12b (2026-09-11) — exact-arc geometry.** Decisions (user): polygon pads re-owned to a new **S12c** row (three shared packages, a third tag round, no fixtures); the editor's `validateContour` shares the exact self-intersection predicate with DRC (S2 #8 closes end-to-end); the canonical contour arc (start radius, authored end point projected radially) is DERIVED at read by every consumer (`flattenOutline`, `exactContour`, the validator, the Profile) and never persisted — Astra run 1 #11 showed a projected endpoint rounded to integer nm is not a fixed point, so the user's write + read decision was refined to read-only with the same intent and no release-note event; `OUTLINE_MIN_WEB` is the `outline.minWebMm` design rule only, a fab row only with a sourced value; Astra run 0 (brainstorm, plan mode) + run 1 (spec-attack) + run 2 (repository-grounded adversarial-verify), all xhigh. Fable: copper = convex core ⊕ disc with closed-form `roundedGap` (`disc` stays; `r === 0` delegates to today's primitives; whole-core containment; halo = `edgeHalo + r`); board-edge verdicts on a certified interval `R_inner ⊆ R_true ⊆ R_outer` with exact recomputation only when the interval straddles the threshold (the "witness edge is an arc" trigger was broken twice by Astra run 0); the web is an erosion feature (the S12 copper-shape kernel on the 1e-4-flattened material region), not a pairwise primitive distance; the Profile emits ≤ 90° arc pieces with one quantised centre and integer I/J and never repairs a centre. Plan-critique (Opus, 29 findings, 11 blockers) and Astra run 0 ledgers in contract 12 §12.0. Review: plan-critique (Opus, 29 findings, 11 blockers) and Astra run 0 folded before the contract; Astra run 1 (spec-attack, 18 findings, all accepted — the canonical curve derived not persisted, arity-dispatched distances, the indexed halo carrying the ring bound, the edge-interval exact containment, the contact-run web rule, zero-chord Gerber pieces, the 2√2 nm radius bound); R1 (`reviewer-critical`, 10 findings — the summed-first grouping's 4e-17 mm flip window recorded, `endCapTouches` / `viaTouchesOnLayer` switched, the negative-radius guard); R2 (`reviewer-critical`, 6 — the budget note had downgraded the commit gate's off-board refusal, fallback rings ARE authorable and are now fixtured, a degenerate ring's Profile falls back with a warning); Astra run 2 (repository-grounded, 4 executed counterexamples — the erosion-free ring-pair web arm, the per-item exact budget, fallback from both region builds, pre-quantisation material area). Goldens: `golden-arcs-2l` new (83 primitives, 37 violations, attributed); `census` one `BOARD_OUTLINE_INVALID` id moved to the exact contact witness; the other seven byte-identical. Gates at the program baseline. Files > 500 lines to split after S12c: `checks/board.ts` (1078), `manufacturability.ts` (525).
 
+- **S13 (2026-09-12) — electrical-rule fidelity.** Decisions (user, 2026-09-11): the IPC-2221
+  conductor spacing is a NON-RELAXABLE CONSTITUENT term of the one rule resolver — its own
+  `CREEPAGE_DISTANCE` row (same id derivation) beside the ordinary clearance row, so the pour halo,
+  the route obstacles and the live gate inherit it by construction; `CREEPAGE_DISTANCE` refuses at
+  commit and `TRACE_CURRENT_WIDTH` warns live; `electrical.outerConductors: "coated"` selects B4 —
+  refined after Astra run 0 to per-item, per-face mask EXPOSURE (a global switch passed exposed
+  pads); the rules UI stays backend-only (P12). Fable: unassigned copper takes the tier net of
+  its connected component over trace / pad / via contacts at `SHORT_EPS_MM` (pours excluded —
+  circular with the pour; inexact pads never join; an unplated pad is one node per face), chain
+  shorts reported, the live gate builds a per-call overlay and rejudges existing items whose tier
+  or exposure the pending copper moved (B7-1 closed, the S7 chain limit closed); voltages are DC
+  potentials with optional `voltageMinV` / `voltageMaxV` intervals, Δ = max(|a.min − b.max|,
+  |a.max − b.min|) at 1 µV (Astra run 0 broke signed AC-peak subtraction), undeclared = reference
+  (stated assumption); Table 6-1 pinned to IPC-2221B from two agreeing transcriptions (KiCad 8 @
+  `942661f`, smpspowersupply; IPC-2221C differs, never mixed), the in-repo standards reference
+  corrected (251–300 V row, 1.378 mil/oz, recomputed width tables); the current verdict is a
+  per-item form with inner / outer copper weight; malformed electrical input is a
+  `DRC_RULE_INVALID` row, never assessed; the store persists declarations and only the resolver
+  refuses them. Review: plan-critique (Opus, 20 findings, 6 blockers) and Astra run 0 folded
+  before the contract; Astra run 1 (spec-attack, 13 findings — same-class intervals, pour / router
+  tier plumbing, the pour's exposure-blind cache, tenting ≠ coverage, live exposure changes, a
+  direct short hiding a chain, bounding-rect contacts, per-item rejudge, zero rise, float
+  boundaries, byte-identity claims, NaN voltages, the quadratic cliff); R1 (`reviewer-critical`,
+  WP2 7 + WP3 4 findings — the live rejudge re-reporting the board's own rows, the router's
+  untiered route side, `replaces` identity, zone↔zone exposure, ±1e308 overflow, the store
+  dropping a stored rise); R2 (`reviewer-critical`, 9 — the current skip on voltage problems, the
+  unpinned rejudge, message wording, the standards tables); Astra run 2 (repository-grounded, 4
+  executed — unplated pads conducting between faces, an inverted-interval update erasing a live
+  requirement, session copper untiered in the router, a finite-input overflow to `NaN`).
+  Goldens: `golden-electrical-2l` new (85 primitives, 26 violations / 7 codes, attributed);
+  every pre-existing golden byte-identical (census walked cause by cause, no delta). Files > 500
+  lines after S13: `checks/clearance-judge.ts` (1016), `rule-resolver.ts` (590), `drc-context.ts`
+  (≈ 1400) — split with the S12 / S12b set. Gates (2026-09-12): backend `bun test` 2891 pass / 22 known library + assistant fails / 8 skip
+  (2921); tsc 44 (repo root); Vitest 64 files 583 + 1 todo; gen + gen:contracts clean; worker smoke
+  byte-identical (census, 87 violations); e2e DRC + routing + live-parity 5 + 1 skip;
+  `package-lock.json` 034652c3; goldens areas 99c49eb3 · arcs cd6b067e · census f05ee74f · cutouts
+  43fbd513 · dfm 47573fd3 · electrical a9990112 (new) · holes c8ab6694 · pours ab245110 · rules
+  ed0705e8 · small 95fbb3dc (nine byte-identical to the S12b baseline); the S9 clearance oracle
+  byte-identical to `HEAD`.
 ## Appendix — Session 0 amendments to the original program text
 
 The program above is the user's plan of 2026-09-06 with the following changes, each backed by the

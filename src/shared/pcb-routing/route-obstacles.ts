@@ -15,6 +15,7 @@ import {
   splitSegmentAtRings,
   type RingBounds,
 } from "../pcb-geometry/region-rings";
+import { buildEffectiveNetOverlay } from "../drc/effective-net-overlay";
 import { SHORT_EPS_MM } from "../pcb-geometry/tolerance";
 import { canonicalizeObstacles } from "./collision";
 import { NM_PER_MM, type ObstacleRectNm } from "./types";
@@ -132,35 +133,14 @@ export function buildRouteObstacles(
   const routeHalfMm = input.routeWidthMm / 2;
   const shortFloorMm = SHORT_EPS_MM + ONE_NM_MM;
 
-  /**
-   * The requirement this obstacle imposes on the routed trace: the resolution
-   * with BOTH evaluation points on the obstacle (a search heuristic — the gate
-   * decides legality), floored by the same pair resolved outside every rule
-   * area and by the short tier.
-   */
-  const requiredAt = (
-    pairKind: "traceToTrace" | "traceToPad" | "traceToVia",
-    obstacleNetId: string | null,
-    pointMm: PcbPointMm,
-  ): number =>
-    Math.max(
-      ctx.resolver.clearance(
-        pairKind,
-        layer,
-        { netId, pointMm },
-        { netId: obstacleNetId, pointMm },
-      ).mm,
-      ctx.resolver.clearanceOutsideAreas(pairKind, layer, netId, obstacleNetId)
-        .mm,
-      shortFloorMm,
-    );
-
   // Pending session copper enters as ordinary items, through the SAME builder
   // pair the gate maps its pending copper with (one clamp policy, one bounds
   // convention). `checkPendingCopper` inlines this pair; there is no narrower
   // helper exported from `shared/drc` to call instead.
   let extraTraces: readonly DrcTrace[] = [];
   let extraVias: readonly DrcViaGeom[] = [];
+  let tierNetOf: (item: DrcTrace | DrcPad | DrcViaGeom) => string | null =
+    (item) => ctx.tierNetOf(item);
   if (input.extra) {
     const items = itemsFromRecords(
       buildCopperRecords({
@@ -179,7 +159,89 @@ export function buildRouteObstacles(
     );
     extraTraces = items.traces;
     extraVias = items.vias;
+    // Session copper is not in the BOARD's tier map, so `ctx.tierNetOf` would
+    // answer for it — and for anything it re-tiers — with the raw null net,
+    // while the gate judges the same geometry through its per-call overlay
+    // (13 §4.4). That drift offered paths the gate then refused (R2 #2). The
+    // overlay is the gate's own, over the same `pendingItems` shape.
+    //
+    // `replaces` is only the excluded ids the session copper actually RE-ISSUES
+    // — the tune's own trace, which reaches `checkPendingCopper` the same way.
+    // An id excluded but not re-issued still exists after the commit, and
+    // dropping it would under-tier its unassigned neighbours: narrower rects,
+    // the very direction this fix exists to close.
+    const replaced = new Set<string>();
+    if (input.excludeTraceIds) {
+      for (const t of input.extra.traces) {
+        if (input.excludeTraceIds.has(t.id)) replaced.add(t.id);
+      }
+    }
+    tierNetOf = buildEffectiveNetOverlay(ctx, items, replaced).context.tierNetOf;
   }
+
+  /**
+   * An obstacle's net as the GATE will judge it: its TIER net (electrical
+   * contract 13 §3.2 c). Unassigned copper that extends a wide-clearance
+   * conductor is judged as that conductor, so a rect built on its original
+   * null net would be narrower than the verdict — the one way this builder's
+   * superset claim can break.
+   */
+  const obstacleNet = (item: DrcTrace | DrcPad | DrcViaGeom): string | null =>
+    tierNetOf(item);
+
+  /**
+   * CONSERVATIVE exposure (13 §3.2): the router carries no mask model, and a
+   * route in progress has no mask decision at all, so on an OUTER layer both
+   * sides count as uncovered and the pair resolves in the B2 column — the wider
+   * one in every band. The router therefore keeps at least the judge's
+   * distance, never less; the judge alone, which has the artwork, applies B4.
+   * On an inner layer the column is B1 whatever this says.
+   */
+  const exposed = layer === "F.Cu" || layer === "B.Cu";
+
+  /**
+   * The requirement this obstacle imposes on the routed trace: the resolution
+   * with BOTH evaluation points on the obstacle (a search heuristic — the gate
+   * decides legality), floored by the same pair resolved outside every rule
+   * area and by the short tier.
+   */
+  const requiredAt = (
+    pairKind: "traceToTrace" | "traceToPad" | "traceToVia",
+    obstacleNetId: string | null,
+    pointMm: PcbPointMm,
+  ): number =>
+    Math.max(
+      ctx.resolver.clearance(
+        pairKind,
+        layer,
+        { netId, pointMm, exposed },
+        { netId: obstacleNetId, pointMm, exposed },
+      ).mm,
+      ctx.resolver.clearanceOutsideAreas(
+        pairKind,
+        layer,
+        netId,
+        obstacleNetId,
+        exposed,
+        exposed,
+      ).mm,
+      // A route with NO net yet (13 §3.2 c). The gate gives such a trace the
+      // TIER of whatever conductor it ends up touching, so resolving the rect
+      // at the raw null net offered paths the gate then refused (R1 #2: a stub
+      // off a 2 mm-class net was refused at 2 mm while the router had opened a
+      // 0.25 mm corridor). Both constituents therefore take the conservative
+      // bound — the widest ORDINARY requirement any pair on this board can
+      // resolve to, and the widest IPC-2221 term any declared class would
+      // impose against this obstacle. The route walks farther than it might
+      // need, never closer than it must.
+      netId === null
+        ? Math.max(
+            ctx.maxClearanceBoundMm,
+            ctx.resolver.maxVoltageTermMm(layer, obstacleNetId, exposed),
+          )
+        : 0,
+      shortFloorMm,
+    );
 
   /**
    * The builder's OWN halo (contract 08 §8): an item omitted here must not be
@@ -243,7 +305,7 @@ export function buildRouteObstacles(
       const subs = splitAtAreas(a, b, trace.halfWidthMm);
       for (let k = 0; k < subs.length; k += 1) {
         const sub = subs[k]!;
-        const requiredMm = requiredAt("traceToTrace", trace.netId, {
+        const requiredMm = requiredAt("traceToTrace", obstacleNet(trace), {
           x: (sub.a.x + sub.b.x) / 2,
           y: (sub.a.y + sub.b.y) / 2,
         });
@@ -279,7 +341,7 @@ export function buildRouteObstacles(
     out.push(
       rectFrom(
         pad.bounds,
-        requiredAt("traceToPad", pad.netId, pad.center) + routeHalfMm,
+        requiredAt("traceToPad", obstacleNet(pad), pad.center) + routeHalfMm,
         `pad:${padRectKey(pad)}`,
       ),
     );
@@ -296,7 +358,7 @@ export function buildRouteObstacles(
           maxX: vg.center.x + vg.radiusMm,
           maxY: vg.center.y + vg.radiusMm,
         },
-        requiredAt("traceToVia", vg.netId, vg.center) + routeHalfMm,
+        requiredAt("traceToVia", obstacleNet(vg), vg.center) + routeHalfMm,
         `via:${vg.via.id}`,
       ),
     );

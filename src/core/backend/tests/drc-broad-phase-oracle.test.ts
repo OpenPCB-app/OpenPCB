@@ -28,7 +28,6 @@ import { buildDrcContext, buildDrcItems } from "../../../shared/drc/drc-context"
 import { checkBoard } from "../../../shared/drc/checks/board";
 import { checkClearance, judgeCopperPairs } from "../../../shared/drc/checks/clearance";
 import { checkCopperToHole } from "../../../shared/drc/checks/copper-to-hole";
-import { checkElectrical } from "../../../shared/drc/checks/electrical";
 import { checkPendingCopper } from "../../../shared/drc/legality";
 import type { PendingCopper } from "../../../shared/drc/legality";
 import { createDrcRunStats } from "../../../shared/drc/types";
@@ -1412,10 +1411,13 @@ describe("oracle: mutation check (the harness bites)", () => {
   test("a halved halo, threaded through the BATCH checks, produces strictly fewer drafts (WP4 R2 item 12)", () => {
     // Extends the mutation check beyond `judgeCopperPairs` to the batch
     // enumerations themselves — `checkClearance`, `checkBoard`,
-    // `checkCopperToHole`, `checkElectrical` (every check that queries
-    // `ctx.near` / `ctx.nearPolyline` with an explicit halo argument; NOT
-    // `checkKeepouts`, which always queries with `haloMm: 0` — halving 0
-    // changes nothing, so it is excluded on purpose). For each check, a COPY
+    // `checkCopperToHole` (every check that queries `ctx.near` /
+    // `ctx.nearPolyline` with an explicit halo argument; NOT `checkKeepouts`,
+    // which always queries with `haloMm: 0` — halving 0 changes nothing, so it
+    // is excluded on purpose, and NOT `checkElectrical`, which since S13 has no
+    // enumeration at all: the IPC-2221 spacing verdict is a constituent of
+    // `checkClearance`'s pair judge and the current verdict is per item).
+    // For each check, a COPY
     // of the grid context whose `near` / `nearPolyline` silently halve every
     // requested halo before delegating to the real ones — every check still
     // reads its own (unhalved) `ctx.maxClearanceBoundMm` etc. to decide WHAT
@@ -1435,7 +1437,6 @@ describe("oracle: mutation check (the harness bites)", () => {
       ["checkClearance", checkClearance],
       ["checkBoard", checkBoard],
       ["checkCopperToHole", checkCopperToHole],
-      ["checkElectrical", checkElectrical],
     ];
     const demonstrated = new Set<string>();
 

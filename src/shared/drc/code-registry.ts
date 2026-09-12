@@ -21,8 +21,9 @@ export const EMIT_SITE_BY_CODE: Record<DrcRuleCode, { checks: readonly string[] 
   VIA_TO_VIA_CLEARANCE: { checks: ["clearance-judge"] },
   PAD_TO_PAD_CLEARANCE: { checks: ["clearance-judge"] },
   PAD_TO_VIA_CLEARANCE: { checks: ["clearance-judge"] },
-  // Shorts fall out of the same geometric pass as the clearance verdicts.
-  NET_SHORT_CIRCUIT: { checks: ["clearance-judge"] },
+  // Shorts fall out of the same geometric pass as the clearance verdicts —
+  // except the COMPONENT short, which no single pair can see (13 §4.3).
+  NET_SHORT_CIRCUIT: { checks: ["clearance-judge", "chain-short"] },
   FAB_CLEARANCE: { checks: ["clearance-judge"] },
   COPPER_TO_HOLE: { checks: ["copper-to-hole"] },
   // board edge / holes
@@ -70,7 +71,9 @@ export const EMIT_SITE_BY_CODE: Record<DrcRuleCode, { checks: readonly string[] 
   TRACK_DANGLING: { checks: ["dangling"] },
   VIA_DANGLING: { checks: ["dangling"] },
   // electrical / signal integrity
-  CREEPAGE_DISTANCE: { checks: ["electrical"] },
+  // The IPC-2221 spacing CONSTITUENT of the pair judge since S13 (13 §3.3) —
+  // the same geometric pass as the ordinary clearance verdict, not a second one.
+  CREEPAGE_DISTANCE: { checks: ["clearance-judge"] },
   TRACE_CURRENT_WIDTH: { checks: ["electrical"] },
   DIFF_PAIR_GAP: { checks: ["signal-integrity"] },
   DIFF_PAIR_SKEW: { checks: ["signal-integrity"] },

@@ -27,8 +27,9 @@ export const CODE_LABEL: Record<DrcRuleCode, string> = {
   HOLE_OFF_BOARD: "Hole outside board",
   TRACK_DANGLING: "Dangling trace",
   VIA_DANGLING: "Dangling via",
-  CREEPAGE_DISTANCE: "Creepage/clearance below IPC-2221",
-  TRACE_CURRENT_WIDTH: "Trace too narrow for current",
+  CREEPAGE_DISTANCE: "IPC-2221 conductor spacing (voltage)",
+  TRACE_CURRENT_WIDTH:
+    "Trace narrower than the IPC-2221 width for its class current",
   DIFF_PAIR_GAP: "Diff-pair gap off target",
   DIFF_PAIR_SKEW: "Diff-pair length skew",
   DIFF_PAIR_UNCOUPLED_LENGTH: "Diff-pair uncoupled run too long",

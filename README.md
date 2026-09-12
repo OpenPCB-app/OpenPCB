@@ -58,12 +58,13 @@ schematic, so the layout always reflects the current netlist. Length tuning, bun
 walkaround are present but still behind development flags while they finish manual QA.
 
 **Design rule checking.** The route tool checks every trace and via you draw with the same DRC
-kernel the batch check runs (clearance, shorts, holes, board edge, keepouts and the item
-minimums), refuses an illegal commit with the reason, and the batch check covers the rest, with fabricator
-profiles, net-class-aware clearance resolution, IPC-2221B-derived electrical checks, signal
-integrity checks for differential pairs, length matching, and stable violation identities so a
-waiver you grant stays granted. Violations carry the geometry that produced them, not just a
-message.
+kernel the batch check runs (clearance, shorts, holes, board edge, keepouts, IPC-2221 spacing and
+the item minimums), refuses an illegal commit with the reason, and the batch check covers the rest,
+with fabricator profiles, net-class-aware clearance resolution, IPC-2221B conductor-spacing and
+trace-width estimates under declared net voltages and currents (same-layer copper separation; not
+creepage, insulation coordination or thermal capacity), signal integrity checks for differential
+pairs, length matching, and stable violation identities so a waiver you grant stays granted.
+Violations carry the geometry that produced them, not just a message.
 
 **Manufacturing export.** Gerber X2, Excellon drill, bill of materials and pick-and-place, bundled
 into a single ZIP ready to upload. Silkscreen text is rasterized into the Gerber output rather than

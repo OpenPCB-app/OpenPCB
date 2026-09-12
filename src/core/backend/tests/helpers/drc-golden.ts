@@ -54,6 +54,10 @@ export function fixtureToProjection(fixture: any): DesignerPcbProjection {
   // The S12b board-material rule (exact-geometry contract 12 §5.2) — additive
   // in exactly the same way; absent means no `OUTLINE_MIN_WEB` verdict at all.
   if (fixture.outlineRules) board.designRules.outline = fixture.outlineRules;
+  // The S13 electrical block (electrical contract 13 §1.2, §5) — additive
+  // again: absent means the documented defaults (10 °C rise, 1 oz copper,
+  // UNCOATED outer conductors), which is what every pre-S13 golden reads.
+  if (fixture.electrical) board.designRules.electrical = fixture.electrical;
   if (fixture.solderMaskExpansionMm !== undefined) {
     board.solderMaskExpansionMm = fixture.solderMaskExpansionMm;
   }

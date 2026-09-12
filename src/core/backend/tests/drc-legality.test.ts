@@ -81,6 +81,8 @@ const LIVE_CODES = new Set<DrcRuleCode>([
   "NETCLASS_TRACE_WIDTH",
   "NETCLASS_VIA_DIAMETER",
   "NETCLASS_VIA_DRILL",
+  "CREEPAGE_DISTANCE",
+  "TRACE_CURRENT_WIDTH",
 ]);
 
 type Shape = Pick<
@@ -735,8 +737,11 @@ describe("refuse set (07 §6)", () => {
     ]);
   });
 
-  test("the allow-list holds only the fifteen refusing codes", () => {
-    expect(REFUSE_CODES.size).toBe(15);
+  test("the allow-list holds only the sixteen refusing codes", () => {
+    // S13 added `CREEPAGE_DISTANCE` (electrical contract 13 §3.6): it is a
+    // constituent of the same pair judge the gate already calls.
+    expect(REFUSE_CODES.size).toBe(16);
+    expect(REFUSE_CODES.has("CREEPAGE_DISTANCE")).toBe(true);
     expect(REFUSE_CODES.has("FAB_CLEARANCE")).toBe(false);
     expect(REFUSE_CODES.has("HOLE_TO_HOLE")).toBe(false);
   });

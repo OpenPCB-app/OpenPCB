@@ -17,12 +17,23 @@ import type { DrcViolationDraft } from "../types";
  * anchors, so several problems on one rule — or several rows fighting over one
  * id — must share a message (in the resolver's array-then-reason order) rather
  * than emit colliding ids.
+ *
+ * ELECTRICAL input (electrical contract 13 §2) is reported the same way, one
+ * row per malformed FIELD, keyed `netClass:<id>:<field>` /
+ * `designRules.electrical.<field>`: a non-finite voltage used to resolve to the
+ * 2.5 mm band and a zero temperature rise to a 0 mm width, so both were passes.
+ * The constituent each field feeds is absent for the run instead.
  */
 export function checkRules(ctx: DrcContext): DrcViolationDraft[] {
   return [
     ...group(ctx.resolver.problems, "invalid").map(([id, problems]) => ({
       code: "DRC_RULE_INVALID" as const,
       message: `Rule "${labelOf(problems)}" cannot be applied: ${details(problems)}`,
+      anchors: [{ kind: "rule" as const, ruleId: id }],
+    })),
+    ...group(ctx.resolver.electricalProblems, "invalid").map(([id, problems]) => ({
+      code: "DRC_RULE_INVALID" as const,
+      message: `Electrical setting "${labelOf(problems)}" cannot be applied: ${details(problems)}`,
       anchors: [{ kind: "rule" as const, ruleId: id }],
     })),
     ...group(ctx.resolver.problems, "ineffective").map(([id, problems]) => ({

@@ -111,7 +111,9 @@ expressible designed gap (1 nm) is open (Astra 9.2 #8). (The previous `TOUCH_EPS
 centre-touch approximation and is gone; Astra finding 1.) Consequence, accepted: `CONNECT_EPS_MM`
 is now smaller than `SHORT_EPS_MM = 1e-4`, so a 50 nm gap is reported as a dead short when the nets
 differ and as an open (airwire) when they match — both verdicts are the conservative one for their
-question, and the underlying geometry is a defect either way.
+question, and the underlying geometry is a defect either way. The S13 effective-net components
+(`13-electrical-contract.md` §4.1) use the bridge model's `SHORT_EPS_MM`, not this epsilon — the
+divergence is recorded there with S18 as owner.
 
 | Pair | Predicate |
 |---|---|

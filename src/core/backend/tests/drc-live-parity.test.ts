@@ -90,6 +90,7 @@ const EXPECTED_WARNING_CODES = new Set<DrcRuleCode>([
   "NETCLASS_VIA_DIAMETER",
   "NETCLASS_VIA_DRILL",
   "PAD_LAYER_MISMATCH",
+  "TRACE_CURRENT_WIDTH",
 ]);
 
 test("LIVE_CODES is exactly REFUSE_CODES plus the expected warning codes (07 §3)", () => {
@@ -216,6 +217,26 @@ function setEq(a: Set<string>, b: Set<string>): boolean {
   return true;
 }
 
+/**
+ * Every copper item's TIER net (electrical contract 13 §4.2), keyed by anchor
+ * key. One key can cover several shapes of one multi-shape pin, so the value
+ * is the sorted list of their tiers, not a scalar.
+ */
+function tierByAnchorKey(
+  ctx: ReturnType<typeof buildDrcItems>,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [key, idx] of ctx.itemsByAnchorKey()) {
+    const tiers = [
+      ...idx.traces.map((i) => ctx.tierNetOf(ctx.traces[i]!)),
+      ...idx.pads.map((i) => ctx.tierNetOf(ctx.pads[i]!)),
+      ...idx.vias.map((i) => ctx.tierNetOf(ctx.vias[i]!)),
+    ];
+    out.set(key, tiers.map((t) => t ?? "\u0000null").sort().join("|"));
+  }
+  return out;
+}
+
 function namesItem(
   v: DrcViolation,
   itemId: string,
@@ -316,6 +337,7 @@ describe("leave-one-out stability over the golden corpus (07 §1 clause 2)", () 
     };
     const Rplus = runDrc(P).violations;
     const plusBridges = bridgeMap(Rplus, P);
+    const plusTiers = tierByAnchorKey(buildDrcItems(P));
 
     const items: Array<{ kind: "trace" | "via"; id: string }> = [
       ...P.traces.map((t) => ({ kind: "trace" as const, id: t.id })),
@@ -338,6 +360,7 @@ describe("leave-one-out stability over the golden corpus (07 §1 clause 2)", () 
       const ctxMinus = buildDrcItems(Pminus);
       const Rminus = runDrc(Pminus).violations;
       const minusBridges = bridgeMap(Rminus, Pminus);
+      const minusTiers = tierByAnchorKey(ctxMinus);
 
       const pending: PendingCopper =
         item.kind === "trace"
@@ -354,9 +377,25 @@ describe("leave-one-out stability over the golden corpus (07 §1 clause 2)", () 
       const touchesPlus = (v: DrcViolation): boolean => {
         if (namesItem(v, item.id, item.kind)) return true;
         const info = bridgeInfo(v, P);
-        if (!info) return false;
-        const prior = minusBridges.get(info.ownKey) ?? new Set<string>();
-        return !setEq(prior, info.nets);
+        // A BRIDGE keeps the ORIGINAL nets (electrical contract 13 §4.2), so
+        // its appearance is governed by its net set alone, exactly as in S8 —
+        // the tier clause below must not also claim it.
+        if (info) {
+          const prior = minusBridges.get(info.ownKey) ?? new Set<string>();
+          return !setEq(prior, info.nets);
+        }
+        // S13 (electrical contract 13 §4.4): a row between two OTHER items
+        // that exists only because `item` moved their TIER net is
+        // attributable to `item` — the §4 rule for a bridge that grew because
+        // of the pending copper, generalised to "the pair's tier moved
+        // because of it". `checkPendingCopper` rejudges exactly the affected
+        // items, so the live side emits such a row and the batch side has to
+        // credit it here or clause 1 reads it as unmatched.
+        return v.anchors.some((a) => {
+          const key = anchorKey(a);
+          const before = minusTiers.get(key);
+          return before !== undefined && before !== plusTiers.get(key);
+        });
       };
       const replacedInMinus = (v: DrcViolation): boolean => {
         const info = bridgeInfo(v, Pminus);

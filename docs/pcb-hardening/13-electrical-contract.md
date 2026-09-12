@@ -1,6 +1,6 @@
 # 13 — Electrical-rule contract (S13)
 
-Status: **draft** (binding once S13 closes). Session S13 of `PROGRAM.md`. Owns B7-1
+Status: **binding** (S13 closed 2026-09-12). Session S13 of `PROGRAM.md`. Owns B7-1
 (`docs/drc/OPEN_FINDINGS.md`). Companion to `05-rule-semantics-contract.md` (rule resolution),
 `06-batch-drc-contract.md` (the batch engine), `07-live-parity-contract.md` (the live gate) and
 `11-dfm-contract.md` (the mask model this contract reads).
@@ -64,13 +64,15 @@ claim stops at "the modelled copper"; it never says "false-fail only" for the ph
 | `F.Cu` / `B.Cu` | B2 — external, uncoated, sea level to 3050 m | default (`electrical.outerConductors` absent or `"uncoated"`) |
 | `F.Cu` / `B.Cu` | B4 — external, permanent polymer coating, any elevation | `electrical.outerConductors === "coated"` AND neither item of the pair is exposed on that face (§1.3) |
 
-Exposure is decided per item per face from the S12 mask model (11 §1): a footprint or free pad
-is exposed on a face where it has a mask opening (every pad has one on the faces it exists on,
-unless the artwork model says otherwise); a via is exposed on a face unless tented there
-(`PcbViaProtection`, `viaTouchesLayer`); a trace is exposed on a face iff a mask opening on that
-face overlaps its copper (the `ensureMaskOpenings` broad phase over the trace's stadium). An
-exposed item is an uncoated conductor whatever the board-level setting says, so a pair with an
-exposed side on an outer layer is always judged in B2. This is the exposure rule Astra run 0
+Exposure is decided per item per face from the S12 mask model (11 §1) with ONE rule for every
+item kind: an item is exposed on a face iff the union of ALL mask openings on that face overlaps
+its copper (the `ensureMaskOpenings` broad phase over the item's shape). A pad's own opening
+exposes it; a tented via is still exposed where a neighbouring pad's opening reaches its copper
+(Astra run 1 #4 — tenting says only that the via contributes no opening, never that no other
+opening covers it); a trace is exposed where any opening overlaps it. An exposed item is an
+uncoated conductor whatever the board-level setting says, so a pair with an exposed side on an
+outer layer is always judged in B2. Exposure is a property of the FINAL artwork: in the live
+gate it is recomputed with the pending items' openings added and `replaces` removed (§4.4). This is the exposure rule Astra run 0
 (§12.0) required: a global "coated" switch passes two 230 V pads 0.5 mm apart (B4 0.4 mm)
 while the pads' openings make them uncoated conductors (B2 1.25 mm).
 
@@ -104,6 +106,10 @@ heat spreading are unmodelled), via or pour ampacity, or current sharing between
   the two potentials vary independently and conservative when they are correlated; it is the
   interval answer to Astra run 0's counterexample (two 300 V-peak nets 180° apart have Δ = 600 V,
   not 0 — signed peak subtraction was unsound).
+- The store never turns a malformed declaration into silence: two finite endpoints are
+  persisted as given (an inverted pair reaches the DRC and is reported), a lone or non-finite
+  endpoint on an update keeps the stored declaration (a rejected write), on a create it is
+  dropped (Astra run 2 #2 — the first draft substituted `{}` and erased a live requirement).
 - Undeclared nets (no class, or a class without a voltage) are ASSUMED at the reference
   potential, interval `[0, 0]`. This is an assumption, stated wherever the verdict is shown:
   pairs with an undeclared side are judged under it, not assessed. An explicit `voltageV: 0` is
@@ -114,8 +120,28 @@ heat spreading are unmodelled), via or pour ampacity, or current sharing between
   without voltages are byte-identical. When a declaring pair has Δ = 0 the 0–15 V row applies.
 - Same-net pairs never carry a voltage constituent (a conductor has no spacing requirement to
   itself; a nonzero-voltage zone never carves a moat around its own net).
-- Two nets of one class have Δ = 0 by construction. Conductors at different potentials (mains
-  L and N, the two rails of a bipolar supply) need two classes or an interval that covers both.
+- Two DISTINCT nets whose classes declare the same constant potential have Δ = 0; two distinct
+  nets whose class declares an interval are independent potentials and get the interval formula
+  (a class `[−300, 300]` gives Δ = 600 V between two of its nets — Astra run 1 #1; class
+  membership never establishes correlation). Conductors at different constant potentials (mains
+  L and N, the two rails of a bipolar supply) need two classes.
+- Declared potentials are compared at 1 µV precision: `Δ` is rounded to the nearest 1e-6 V
+  before band selection, so decimal declarations whose float difference lands a few ulp above a
+  band edge (−9.95 and −39.95 → 30.000000000000004) select the band their decimal difference
+  names (Astra run 1 #10). No geometric epsilon is borrowed.
+- Invalid electrical input is never assessed silently: a non-finite or inverted interval, an
+  endpoint whose magnitude exceeds `MAX_DECLARED_VOLTAGE_V` (1e6 V — a finite float pair such as
+  ±1e308 overflows the differential; R1 #2), a non-positive `tempRiseC` or copper weight, a
+  `currentA` that is not a finite positive number, or a current / copper weight / rise beyond
+  its accepted magnitude interval `[1 / cap, cap]` (`MAX_DECLARED_CURRENT_A` 1e6,
+  `MAX_COPPER_WEIGHT_OZ` 1e3, `MAX_TEMP_RISE_C` 1e4 — finite inputs past a cap overflow the width
+  formula to `NaN`, Astra run 2 #4, and a tiny positive weight would overflow it the other way;
+  the sixteen corners of the accepted box evaluate finite, so the formula's non-finite-result
+  guard is unreachable from board data), that escaped the store is reported by the
+  `rules` check as `DRC_RULE_INVALID` (error, non-overridable, one row per field, the detail
+  naming the field and whether the class still carries a requirement) and the affected
+  constituent is absent for that run — the pre-S13 helper answered a `NaN` differential with the
+  2.5 mm fallback and a zero rise with a 0 mm width (Astra run 1 #9, #12); both paths are closed.
 
 ## 3. The voltage term is a constituent of the resolver
 
@@ -153,6 +179,25 @@ Every consumer reads `.mm`, so each inherits the term with no second derivation:
 | Pair judge | `clearance-judge.ts` `layered` / `traceTrace` … | §3.3 — two constituent verdicts |
 | Copper pour | `pour-params.ts` `clearancePour` → halo per obstacle | HV copper is carved at the IPC spacing; a same-net zone is unaffected (`pour-params.ts:146`) |
 | Route obstacles | `route-obstacles.ts` `requiredAt` | obstacle rects widen per (route net, obstacle net) |
+
+The term is a function of the pair's TIER nets (§4) and of the two items' exposure (§1.2), and
+those are not in the resolver's arguments today (Astra run 1 #2, #3): the pour's obstacle
+builder (`collectBareCopper` → `clearanceForItem`, `zonePourNets`) and the route-obstacle
+builder pass the ORIGINAL item net, and `zoneClearanceResolver` memoises per (kind, net). So:
+(a) `zonePourNets` computes the effective-net map itself from the copper records it already
+holds (the §4.1 kernel is pure and takes records plus an optional candidate finder; outside the
+DRC context a bounds scan over the null items serves), so every pour — DRC, canvas, 3D, export,
+snapshot — carves the same copper; (b) every obstacle carries `tierNetId` and `exposed` and the
+pour's memo key includes both; (c) the router resolves obstacles by their tier net — over the committed copper PLUS the
+session copper it is handed (`input.extra`), through the same per-call overlay the gate builds,
+so a session item that extends a named net carries that net's requirement (Astra run 2 #3) —
+and, for a route whose own net is null (an unassigned route in progress), by the conservative bound
+`max over every declared class of the voltage term for that obstacle` — the route walks
+farther than it might need, never closer than it must. Exposure outside the DRC context is
+CONSERVATIVE: the fill input and the router carry no mask model, so on a coated board every pour
+obstacle and the route itself count as exposed on outer layers (B2) — the pour carves at least
+as far as the judge requires and the router keeps at least the judge's distance, never less;
+the judge alone applies B4, on the artwork.
 | Live gate | `legality.ts` → the same judge | §3.6 |
 
 The pour's obstacle-collection halo and the judge's per-pair prefilter must cover the term
@@ -171,11 +216,12 @@ A pair below both requirements produces two rows, as it did before S13. A waiver
 never hides the other constituent (Astra run 0: "one row" must not mean "one surviving
 reason"). `FAB_CLEARANCE` keeps its else-branch on the ordinary constituent only.
 
-Layered aggregate (05 §4.3, amended): per constituent, the reported layer is the first layer in
-stackup order where that constituent is violated and the requirement is the strictest violated
-layer's value for that constituent. The voltage constituent's column differs per layer (B1
-inner, B2 / B4 outer), so the strictest voltage layer is the outer one whenever an outer layer
-is shared — the pre-S13 `strictestSpacing` rule, now inside the judge.
+Layered aggregate (05 §4.3, amended): the ordinary constituent keeps 05 §4.3 (first violated
+layer in stackup order, strictest violated requirement). The voltage constituent reports the
+STRICTEST layer — the first layer in stackup order attaining the largest voltage requirement —
+exactly the pre-S13 `strictestSpacing` rule, so every pre-S13 `CREEPAGE_DISTANCE` id (which
+hashes the layer) is preserved (Astra run 1 #11). Its column differs per layer (B1 inner, B2 /
+B4 outer), so that layer is the outer one whenever an outer layer is shared.
 
 Applicability before the maximum:
 
@@ -190,6 +236,9 @@ Applicability before the maximum:
 
 ### 3.4 Bounds
 
+- The batch loops pass ORIGINAL nets to the judge's `farApart` (the S9 oracle is frozen), so a
+  pair with a null side is prefiltered with `maxClearanceBoundMm` — the board's widest
+  requirement, already the halo the grid admitted the pair under — instead of the null tier.
 - The judge's exact prefilter `clearanceBound(pairKind, netA, netB)` folds
   `ipc2221SpacingMm(Δ(netA, netB), "B2")` (B2 is the widest column for any layer the pair can
   share; B4 ≤ B2 row by row). Without it every HV pair wider than the ordinary bound is dropped
@@ -222,10 +271,19 @@ dispatched after `netClassItems`. 07 §3's exclusion line is retired.
 
 ### 4.1 Derivation
 
-`pcb-connectivity/effective-nets.ts` builds, over the DRC copper items (traces, pads, vias —
-never pour copper), the contact graph under the bridge model's predicate: two items touch when
-their gap on a shared copper layer is `≤ SHORT_EPS_MM` (1e-4 mm), measured by the `pair-gap.ts`
-kernels; a via or a through pad joins every layer it exists on. Candidates come from the grid
+`pcb-connectivity/effective-nets.ts` is a pure kernel over copper records (traces, pads, vias —
+never pour copper) with an optional candidate finder (the DRC grid; a bounds scan otherwise),
+so the DRC context, the live gate and `zonePourNets` derive ONE map. It builds the contact graph
+under the bridge model's predicate: two items touch when their gap on a shared copper layer is
+`≤ SHORT_EPS_MM` (1e-4 mm), measured by the `pair-gap.ts` kernels; a via or a PLATED through
+pad joins every layer it exists on; an UNPLATED pad (an NPTH ring, S11 `plated: false`) has no
+barrel, so its copper is one node PER FACE and a contact on one face never reaches the other
+(Astra run 2 #1 — plating is read from the record, never inferred from geometry). A contact whose either side is an inexact pad (`exactShape === false`,
+a `custom` / `trapezoid` bounding rectangle) is a POSSIBLE contact, not a proven one: it never
+joins components and never establishes a chain short (Astra run 1 #7 — a bounding rectangle
+supports a possible spacing violation, never electrical equivalence); the pre-S13 direct-bridge
+banking of such a touch is unchanged. Once two items are proven in one component, no further
+gap test between members of that component is run (union-find early exit — Astra run 1 #13). Candidates come from the grid
 with a `SHORT_EPS_MM` halo (the full loop in `"exhaustive"` mode, 08 §3). A union-find over the
 items gives connected components; the label set of a component is the set of named nets of its
 members, collected from an immutable snapshot before any assignment.
@@ -264,14 +322,20 @@ reports nothing (a false FAIL against its own conductor, removed); a null trace 
 
 ### 4.3 Chain shorts
 
-A component with two or more labels in which no single null member touches two nets directly
-is a chain short — the S7 stated limit (06 §9), closed here. It emits one `NET_SHORT_CIRCUIT`
-anchored on the component's null members (sorted by anchor key) plus one net anchor per label
-(sorted by net id), located at the smallest marker among the null members' contact points, with
-`measuredMm = 0` and `requiredMm` = the largest ordinary requirement among the component's
-cross-net pairs. The direct case keeps the pre-S13 bridge emitter and its ids. A component
-cannot be both: a null member touching two nets directly is the direct case, and the chain
-draft is emitted only when no member is.
+A component with two or more labels is a conflict. The direct bridge emitter (06 §4) keeps its
+drafts and ids for every null member that touches two or more nets directly. When the union of
+the direct drafts' net sets inside the component is NOT the component's whole label set — no
+member touches two nets directly (the S7 "chains" limit, 06 §9, closed here), or a further net
+reaches the component only through a chain (Astra run 1 #6: `A–X–B` direct plus `Y` bringing
+C) — one additional `NET_SHORT_CIRCUIT` is emitted for the component, anchored on its null
+members (sorted by anchor key) plus one net anchor per label (sorted by net id), located at the
+smallest NULL-member marker (trace mid, pad / via centre — the meaning `recordBridge` already
+gives "marker"; a contact-point witness would depend on which union event proved the component
+and so on candidate order; the named members are the anchors' net side, not the location's), with `measuredMm = 0` and `requiredMm` = the largest ordinary
+requirement among the component's cross-net pairs. Direct-draft coverage is computed from the
+kernel's own proven contacts, never from a possible (inexact-pad) touch the judge may bank —
+the judge can name a net the component does not, which suppresses nothing. The report of a
+conflict component therefore always names every net of the component.
 
 ### 4.4 Live
 
@@ -282,13 +346,32 @@ overlay at its top — before `netClassItems` — from the board map and the pen
 that `replaces` a board trace shares its id; `replaces` can also delete a board null item's
 connection). The overlay is never stored on the context.
 
-Every existing null item whose effective net changed because of the pending copper is
-rejudged against all its pairs in the overlay's tiers, and every resulting draft is attributed
-to the pending copper and refused with it — the 07 §4 rule for a bridge that grew because of the
-pending copper, generalised. Batch on the committed geometry and live on the same final geometry
-therefore derive the same components and the same verdicts (07 §1 clause 1). Whether a net-set
-shrink (a `replaces` that removes a connection) must also rejudge is decided by that clause:
-it must, and the overlay recomputes affected items in both directions.
+The AFFECTED set of existing items is every existing item whose tier net changed, whose
+component's label set or membership changed (a conflict growing from {A, B} to {A, B, C} moves
+no scalar tier — Astra run 1 #6), or whose exposure changed because a pending opening now
+reaches its copper or a replaced opening no longer does (Astra run 1 #5). Pairs are rejudged for
+the items whose TIER NET or EXPOSURE moved (a pair verdict reads two tiers, two exposures and
+geometry only, so a component-only change cannot move it and rejudging such an item would only
+re-report — and refuse — the board's pre-existing rows, R1 #1); a component whose label set or
+membership changed is served by the chain-short delta instead. Every such item is rejudged in
+the overlay's tiers and exposure: its pairs (through the grid, honouring `replaces`), AND — for
+the items whose TIER NET itself moved (a per-item verdict is a pure
+function of the tier and the item's own geometry, so a component-only change would re-report a
+board-wide warning as the route's) — the per-item forms that read the tier net: the current
+verdict and the net-class dimension checks (Astra run 1 #8); every resulting draft is attributed to the pending
+copper and refused by the same code-based policy (a newly discovered warning stays a warning)
+— the 07 §4 rule for a bridge that grew because of the pending copper, generalised. The overlay
+is a complete recomputation over the final geometry (board minus `replaces` plus pending), never
+a union-only update, so a shrink re-tiers correctly. Batch on the committed geometry and live on
+the same final geometry therefore derive the same components and the same verdicts (07 §1
+clause 1). Cost: contact work is bounded by the null items' candidates with the union-find early
+exit, and the rejudge by the components the pending copper reaches (a re-tiered item is always
+an unassigned one, so nothing larger than "every unassigned board item" can ever be affected);
+nothing is skipped, so no clean verdict is ever returned for work not done (Astra run 1 #13;
+the rejudge budget of the first draft guarded nothing and was removed, R1 #5). A null route
+in progress resolves its obstacles with the board-widest bound (§3.2 c) and may look
+unroutable on a high-voltage board until a net is assigned — over-blocking, never
+under-blocking.
 
 ### 4.5 Determinism
 
@@ -308,7 +391,11 @@ with `tempRiseC = electrical.tempRiseC ?? 10`, `copperOz = electrical.innerCoppe
 electrical.copperWeightOz ?? 1` on inner layers and `electrical.copperWeightOz ?? 1` on outer
 layers. `TRACE_CURRENT_WIDTH` (warning) when `below(widthMm,
 requiredWidthMm)` holds (minimums regime, unchanged — this is a width minimum, not a spacing).
-The defaults 10 °C and 1 oz are policy defaults and every message names the values used.
+The defaults 10 °C and 1 oz are policy defaults and every message names the values used. The
+formula is evaluated only for finite, strictly positive current, rise and copper weight; any
+other input is a `DRC_RULE_INVALID` row (§2) and no trace of that class is judged — the pre-S13
+helper returned a 0 mm requirement for a zero rise or weight, which every trace passed (Astra
+run 1 #9).
 
 Assumptions, stated in the message and the docs: every segment carries the full class current
 (parallel paths are not modelled — conservative under the formula); copper weight is the
@@ -381,11 +468,18 @@ finished thickness is nominal (§5).
 - Labels: `CREEPAGE_DISTANCE` → "IPC-2221 conductor spacing (voltage)"; `TRACE_CURRENT_WIDTH` →
   "Trace narrower than the IPC-2221 width for its class current".
 - Messages name the column, Δ, the exposure decision when B4 was possible, and the defaults used.
-- Golden deltas, attributed per cause in each golden's `.md`: (a) regime 1e-6 → 5e-7 (no row
-  expected to move); (b) effective nets (rows that gain a class tier, rows that vanish as
-  same-tier pairs); (c) chain shorts (new rows); (d) pour carve on boards with declared voltages
-  (no golden declares one except `census`, which has no zone near its HV trace — verified at
-  WP0); (e) exposure (none — no golden sets `outerConductors`). `golden-electrical-2l` is new.
+- Byte identity is claimed only for inputs the migration cannot touch (Astra run 1 #11): a
+  board with no null-net copper touching named copper, no pair violating both constituents, no
+  declared voltages. Everything else is an enumerated migration, attributed per cause in each
+  golden's `.md`: (a) regime 1e-6 → 5e-7 (no row expected to move); (b) effective nets (rows
+  that gain a class tier, rows that vanish as same-tier pairs — B7-1 itself changes ordinary
+  reports on boards without voltages); (c) chain and component-wide shorts (new rows); (d) both
+  constituents reported where the pre-S13 check suppressed the voltage row under a dominating
+  ordinary rule (new rows; waivers of the ordinary row no longer hide the IPC breach); (e) pour
+  carve on boards with declared voltages (no golden declares one except `census`, whose zones
+  lie 14 mm from its HV trace — verified 2026-09-11); (f) exposure (none — no golden sets
+  `outerConductors`). `CREEPAGE_DISTANCE` ids are preserved (§3.3 strictest layer).
+  `golden-electrical-2l` is new.
 - Determinism: 06 §7 unchanged; §4.5.
 
 ## 8. Consumers
@@ -416,8 +510,19 @@ rect widens per route net. Round trips for `voltageMinV` / `voltageMaxV`, `outer
   debit for slots and edges, columns B3 / A5–A7, assembled conductors — not modelled.
 - Solder-mask qualification for B4 is the user's declaration.
 - Undeclared voltages are assumed at reference potential.
-- Effective nets ignore pour copper and use the bridge tolerance (1e-4 mm) while connectivity
-  uses 5e-7 mm — owner S18.
+- Effective nets ignore pour copper, treat inexact-pad contacts as possible only, and use the
+  bridge tolerance (1e-4 mm) while connectivity uses 5e-7 mm — owner S18.
+- A gap that lands within float error of `required − 5e-7` can flip with a rigid translation of
+  the board (06 §5's regime; Astra run 1 #10) — the epsilon policy is recorded, not changed.
+- The contact pass and the live rejudge are quadratic on a dense cluster of null copper
+  (≈ 172 ms per gate call for 500 coincident unassigned traces, R1 #7); slow, never clean. The
+  route-obstacle builder now pays the same overlay per call that carries session copper.
+- An unplated pad's tier is per face in the component model, but its scalar `tierNetOf` is set
+  only when every face agrees (else untiered — over-reports); the judge's DIRECT null-net bridge
+  (06 §4) is still per anchor across faces, so an unplated pad whose two rings touch two nets is
+  banked as one short although no barrel joins them — pre-existing, owner S18.
+- A per-layer tier (`tierNetOf(item, layer)`) would be the fully general answer for split
+  pads — a judge-wide signature change, not taken here.
 - Via, pour-neck and pad ampacity; parallel-path current sharing; minimum finished copper.
 - The cloud snapshot carries no electrical data; server-side DRC has no electrical parity.
 - IPC-2221B values are secondary transcriptions; primary verification is pending.
@@ -455,7 +560,90 @@ else-branch (§3.3); refusal ignores severity overrides (§3.6); overlay before 
 (§4.4); labels are frontend; `maxClearanceBound` uses null nets (§3.4); grep census excludes
 `dist/`.
 
-### 12.1 Astra run 1 (spec-attack) — pending
-### 12.2 R1 — pending
-### 12.3 R2 — pending
-### 12.4 Astra run 2 (adversarial-verify) — pending
+### 12.1 Astra run 1 (spec-attack, xhigh, prompt-only with executed probes), 2026-09-11
+
+13 findings, all verified against source and accepted: #1 same-class intervals (§2 — the
+interval formula applies to distinct nets whatever the class); #2 the pour and router pass
+original nets (§3.2 — the kernel is pure, `zonePourNets` derives the map, obstacles carry tier
+net + exposure, a null route uses the conservative bound); #3 `zoneClearanceResolver` memo
+aliases exposure (§3.2 — key includes tier net and exposure); #4 tenting is not coverage (§1.2
+— one union-of-openings rule for every kind); #5 live exposure changes (§4.4 — affected set
+includes exposure changes from pending openings and `replaces`); #6 a direct short hiding a
+chain (§4.3 — component-wide draft whenever the direct drafts do not cover the label set; §4.4
+label-set changes are affecting); #7 bounding-rect contacts as proven shorts (§4.1 — possible
+contacts never join components); #8 per-item forms in the rejudge (§4.4); #9 zero rise / weight
+→ 0 mm width (§2, §5 — `DRC_RULE_INVALID`, constituent absent); #10 float boundaries (§2 — Δ at
+1 µV; §10 — the geometric regime recorded); #11 byte-identity overstated (§7 — enumerated
+migrations; §3.3 — the voltage row reports the strictest layer so ids survive); #12 `NaN`
+voltage passes at the 2.5 mm fallback (§2 — rejected and reported before comparison); #13 quadratic contact / rejudge cliff (§4.1 early exit; §4.4 nothing skipped, never clean; §10 records the dense-cluster cost). Held:
+the interval differential, B2 ≥ B1 / B4 in every band, the current formula and 1.378 mil,
+constituent waiver independence, complete recomputation handling `replaces` shrink and
+multilayer vias.
+### 12.2 R1 (`reviewer-critical`, executed probes) — WP3 part, 2026-09-12
+
+Four findings, all fixed: #1 (high) `zoneExclusions` resolved zone↔zone spacing with no
+`exposed`, so a coated board carved two pours at B4 0.4 mm while every obstacle used B2 —
+`pourExposedOn(layer)` is now the one conservative expression for both paths (§3.2); #2
+(medium-high) store-accepted ±1e308 endpoints overflowed Δ to `Infinity` and the table's guard
+threw out of batch, live and `clearanceBound` — `MAX_DECLARED_VOLTAGE_V` and a null-returning
+`voltageDeltaV` (§2); #3 (low) the `DRC_RULE_INVALID` detail claimed "no requirement" beside a
+real creepage row — per-field wording with the class-level consequence appended; #4 (low) an
+update with a non-positive `tempRiseC` dropped the stored value and relaxed the width check to
+the 10 °C default — the store keeps the stored value on an invalid update. Held: every false-pass
+hunt (inner/outer, coated + exposed side, intervals, an explicit 0.05 mm rule between 230 V and
+0 V → 1.25 mm on all ten pair kinds, same-class intervals, same-potential classes), the
+exposure model incl. the tented-via case, the 5e-7 regime, both rows on a shorted HV pair,
+pre-S13 `CREEPAGE_DISTANCE` ids on multilayer pairs (executed against a `HEAD` worktree),
+grid ≡ exhaustive and reversal on a mixed board, every invalid-input row, the table at every
+band edge, live ≡ batch for the null extension, the pending-via exposure change and the
+`replaces` shrink. The WP2 part of R1 is §12.2b below.
+
+### 12.2b R1 (`reviewer-critical`, executed probes) — WP2 part, 2026-09-12
+
+Seven findings: #1 (major) the live rejudge ran over every item whose component signature
+changed and re-reported, then refused, the board's pre-existing pairs — pairs are now rejudged
+for re-tiered or exposure-changed items only (§4.4); #2 (major) the router tiered the obstacle
+side but not the route's own side, so an unassigned route extending a 2 mm-class net was offered
+a path the gate refuses — a null route now resolves with the conservative bound over every class
+for the ordinary term as well as the voltage term (§3.2 c); #3 (medium) a `replaces` that
+removed a member of a pre-existing chain short re-reported it as the route's — the board-side
+identity now ignores replaced members on both sides; #4 (low) the chain draft's location is the
+smallest NULL-member marker — §4.3 amended to say so; #5 (low) the rejudge budget was inert —
+resolved in the fix round; #6 (info) the null-side `farApart` bound must fold the voltage
+halo — WP3 did (`maxClearanceBound` folds `maxCreepageBound`, verified by R1's WP3 part); #7
+(info) a dense cluster of 500 coincident unassigned traces costs ≈ 172 ms per gate call — a
+§10 limit. Held: 20 determinism combinations (five layouts × reversal × grid / exhaustive), live
+≡ batch on pending × pending chains and a pending via bridging two layers, the same-tier return
+cannot swallow a short or a bank, `farApart`'s null-side bound is the grid halo, inexact pads
+never join a component, the context spread is safe, duplicate drafts collapse by id.
+### 12.3 R2 (`reviewer-critical`, executed probes) — WP4 + WP5, 2026-09-12
+
+Nine findings, all disposed: #1 (medium) the current verdict skipped a class flagged for a
+VOLTAGE field — narrowed to the `currentA` problem (§5); #2 (medium) the re-tier rejudge of
+the current verdict was unpinned — regression added to `drc-audit-b7` (§4.4); #3 the
+`CREEPAGE_DISTANCE` message now states the exposure decision when B4 was possible and the
+undeclared-net assumption when one side declares nothing (§7); #4 the gate's dispatch-order
+comment amended; #5 the parity harness's tier clause cannot hide a breach (over-credit,
+under-credit and unchanged rows each fail a clause) but cannot credit a label-set-only chain
+change either — recorded as a harness limit; #6, #7 golden `.md` wording; #8 the
+`trace-width.md` quick-reference tables recomputed from the formula (they disagreed with it by
+up to 35 %); #9 a stackup-invalid layer is judged at the inner copper weight (false-fail,
+pre-S13 behaviour, noted). Held: every hand-recomputed golden region (A–M), grid ≡ exhaustive
+and reversal on `golden-electrical-2l`, the census migration walk (no delta, all six causes),
+the live gate's refusal policy incl. `ignore` and an `error` override on a warning code, the
+per-item form's inner / outer widths by hand, the invalid-input rows for `currentA` 0 / −1 /
+NaN / Infinity.
+### 12.4 Astra run 2 (adversarial-verify, xhigh, repository-grounded, executed probes), 2026-09-12
+
+Four verified findings, all accepted and fixed: #1 (high) an unplated pad's copper was one
+node across both faces, so an unassigned back-side trace inherited a front-side net's tier
+through non-conducting copper and its same-layer 1.25 mm breach vanished — unplated pads are
+one node per face (§4.1); #2 (high) an inverted interval update erased both endpoints at the
+store and with them a live requirement, with no row anywhere — finite endpoints persist as
+given and are reported by the DRC, a lone / non-finite one keeps the stored declaration (§2);
+#3 (medium) session copper handed to the router through `input.extra` fell back to its own null
+tier (0.25 mm) while the gate refused the route at 1.25 mm — the router resolves over the
+committed + session overlay (§3.2 c); #4 (medium) finite store-accepted extremes (1e225 A on
+1.7e308 oz) overflowed the width formula to `NaN`, which passed silently — magnitude caps and a
+non-finite-result guard (§2, §5). Astra's own validation: 255 existing tests green, 48
+additional boundary / degenerate / grid-vs-exhaustive / reversal probes with no id drift.

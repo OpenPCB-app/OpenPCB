@@ -19,7 +19,7 @@ assistant), and the migrations the change implies.
 Out of scope, with the owning session: the geometry a rule is compared against (S2), zone and
 keepout legality (S3a/S4), pour geometry (S5), check completeness beyond rule sourcing (S7), live
 live DRC coverage of vias / shorts / board edge (closed in S8 — `07-live-parity-contract.md`), scaling (S9), execution (S10), slot / annular /
-aspect models (S11, `10-manufacturability-contract.md`), DFM overlays (S12), electrical and SI thresholds (S13/S14). A scoped-rules
+aspect models (S11, `10-manufacturability-contract.md`), DFM overlays (S12), SI thresholds (S14). Electrical thresholds joined THIS model in S13: the IPC-2221 conductor spacing is a non-relaxable constituent of every resolved clearance and unassigned copper resolves on its tier net (`13-electrical-contract.md` §3, §4). A scoped-rules
 editor and a severity-override UI are filed, not built (user decision 2026-09-08).
 
 ## 1. Vocabulary
@@ -49,7 +49,8 @@ storage and converted once by the projection). Comparisons follow the epsilon po
 `OPEN_FINDINGS.md` §5.1 with one S6 amendment (Astra run 1 #10): a clearance violation is
 `gap < required − GEOM_EPS_MM` (0.5 nm of grace — the derived-float case `0.3 − (0.1 + 0.1)`
 evaluates to `0.09999999999999998` and used to fail a 0.1 mm rule at exact physical equality;
-a 1 nm deficit still fires, as probe P-A2 requires); minimums keep `below(v, limit)` with
+a 1 nm deficit still fires, as probe P-A2 requires); the S13 voltage constituent uses this same
+clearance regime (13 §3.5); minimums keep `below(v, limit)` with
 `DRC_EPS_MM = 1e-6`; the short tier keeps `gap <= SHORT_EPS_MM` inclusive. One helper,
 `clearanceViolated(gap, required)` in `tolerance.ts`, is the only place the clearance regime
 is written; batch and live both call it.
@@ -164,7 +165,8 @@ explicit := first rule r in ORDER(enabled clearance rules) such that
           and (no area scope      or inside(p_a, r.area) and inside(p_b, r.area))
 implicit := max(board[K], classClearance(a.net), classClearance(b.net))
 value    := explicit ? explicit.mm : implicit          // an explicit rule MAY relax
-mm       := max(value, floor)                          // floor = minimums.clearanceMm ?? 0
+ordinary := max(value, floor)                          // floor = minimums.clearanceMm ?? 0
+mm       := max(ordinary, voltage ?? 0)                // S13: the IPC-2221 term, never relaxable (13 §3.1)
 rule     := explicit ?? null   // a clamped rule still matched first and shadowed the rest (§2.1);
                                // its severity applies; the message says "clamped to the floor" 
 ```
@@ -272,7 +274,10 @@ resolution can return for that pair, so no candidate is discarded before evaluat
 An item with a null net (unassigned pad, orphan trace) matches no `net` / `netClass` scope, has
 class clearance 0, and is still subject to the board rule, `layer` / `area` / `pairKind`
 scopes and the floor. The short tier is unchanged: it fires only between two different *known*
-nets.
+nets. Since S13 the nets an item RESOLVES with are its tier nets (`13-electrical-contract.md`
+§4): unassigned copper whose connected component carries exactly one named net resolves as
+that net (class, net-scoped rules, voltage), while the short tier, the bridge record and every
+anchor keep the original null net.
 
 ### 4.6 Area limit
 
@@ -573,8 +578,8 @@ row owned its id (fixed — duplicates are detected among enabled rows); the cla
 named the rule as if its number applied (one `ruleSuffix` helper now says "clamped to the floor
 …"); the golden `.md` and `netClasses[0]` sites were stale (fixed / WP3, WP4); two resolvers
 were compiled per DRC run (WP3 reuses the context's); P-A2 had no probe row (added, plus a
-direct `clearanceViolated` boundary pin at 4e-7 / 6e-7). `CREEPAGE_DISTANCE` keeps `below()`
-(S13).
+direct `clearanceViolated` boundary pin at 4e-7 / 6e-7). `CREEPAGE_DISTANCE` kept `below()`
+until S13, when it became a constituent of the judge under the clearance regime (13 §3.5).
 
 **R2 (reviewer on WP3 + WP4, 2026-09-08)** — 7 findings, all verified by probe: the fail-closed
 rule validator was fed the raw command payload (a partial `designRules` plus a `drcRules` array

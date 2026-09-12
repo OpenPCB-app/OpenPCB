@@ -49,8 +49,11 @@ export function netClassItems(
     return cls;
   };
 
+  // The TIER net (13 §4.2): unassigned copper that extends a classed conductor
+  // carries that class's dimensions, and the intent gate (explicit assignment
+  // or name match) is evaluated on the net it extends, not on "no net".
   for (const t of items.traces) {
-    const cls = classOf(t.netId);
+    const cls = classOf(ctx.tierNetOf(t));
     if (cls && below(t.widthMm, cls.traceWidthMm)) {
       out.push({
         code: "NETCLASS_TRACE_WIDTH",
@@ -65,7 +68,7 @@ export function netClassItems(
   }
 
   for (const vg of items.vias) {
-    const cls = classOf(vg.netId);
+    const cls = classOf(ctx.tierNetOf(vg));
     if (!cls) continue;
     if (below(vg.via.diameterMm, cls.viaDiameterMm)) {
       out.push({

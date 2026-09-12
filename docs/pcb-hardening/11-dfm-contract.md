@@ -114,6 +114,11 @@ preview model (§10).
 
 ### 1.3 Solder mask
 
+Since S13 the mask openings have a second consumer: the DRC's exposure predicate
+(`drc/mask-exposure.ts`, `13-electrical-contract.md` §1.2) reads the same per-face index to decide
+whether a copper item is an uncoated conductor (the union of all openings on the face meets its
+copper), which selects the IPC-2221 column on a coated board.
+
 `buildMaskOpenings(input): MaskOpening[]` with `MaskOpening { face, centerMm, shape: ApertureShape,
 anchor: DrcAnchor, netId, copper: boolean, ownerKey }`. `ApertureShape`, `roundrectRadiusMm`,
 `inflateShape` and `apertureFromShape` (the one pad-shape → aperture derivation) move to

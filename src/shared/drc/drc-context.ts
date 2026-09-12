@@ -28,10 +28,7 @@ import type {
   PcbPointMm,
   PcbVia,
 } from "../../sdks/designer";
-import {
-  DEFAULT_BOARD_THICKNESS_MM,
-  isValidViaSpan,
-} from "../../sdks/designer";
+import { DEFAULT_BOARD_THICKNESS_MM } from "../../sdks/designer";
 import {
   createBroadPhase,
   type BroadPhaseNear,
@@ -69,11 +66,18 @@ import {
   createRuleResolver,
   type RuleResolver,
 } from "./rule-resolver";
+import { buildCopperRecords } from "../pcb-connectivity/copper-records";
 import {
-  buildCopperRecords,
-  type CopperPadAnchor,
-} from "../pcb-connectivity/copper-records";
-import { padRecordKey } from "../pcb-connectivity/copper-items";
+  buildEffectiveNets,
+  EFFECTIVE_NET_HALO_MM,
+  isTraceItem,
+  type EffectiveComponent,
+  type EffectiveNetItem,
+  type EffectiveNetItems,
+  type EffectiveNetOptions,
+  type EffectiveNets,
+} from "../pcb-connectivity/effective-nets";
+import { copperDrcItems } from "../pcb-connectivity/copper-drc-items";
 import type {
   ConnectivityResult,
   CopperItem,
@@ -116,6 +120,8 @@ import {
   type RegionIndex,
 } from "../pcb-geometry/region-index";
 import { ipc2221SpacingMm } from "./ipc2221-spacing";
+import { itemExposedOnFace } from "./mask-exposure";
+import { widestVoltageDeltaV } from "./voltage-term";
 import { placementKeepoutExtentMm } from "../pcb-geometry/placement-extent";
 import type {
   DrcBroadPhaseMode,
@@ -401,11 +407,14 @@ export interface LegalityContext {
    */
   maxEdgeBoundMm: number;
   /**
-   * The creepage halo: `ipc2221SpacingMm(max(V ∪ {0}) − min(V ∪ {0}), "B2")`
-   * over every net class's `voltageV`, plus the geometry epsilon. A pair's
-   * voltage difference is `u.voltage − v.voltage` with one side possibly 0 V,
-   * so the widest difference is max − min over `V ∪ {0}`; `ipc2221SpacingMm` is
-   * monotone in |ΔV| and the B2 column dominates B1 on every band (08 §5).
+   * The creepage halo (electrical contract 13 §3.4):
+   * `ipc2221SpacingMm(hi − lo, "B2")` over every declared voltage ENDPOINT —
+   * `voltageV` and both ends of a `voltageMinV` / `voltageMaxV` interval — with
+   * the reference potential folded in, plus the geometry epsilon. Every pair's
+   * `Δ = max(|a.min − b.max|, |a.max − b.min|)` lies in `[0, hi − lo]`;
+   * `ipc2221SpacingMm` is monotone in Δ and B2 dominates B1 and B4 on every
+   * band (08 §5). `Infinity` on any non-finite input: a full scan is correct,
+   * only slow. Folded into `maxClearanceBoundMm`.
    */
   maxCreepageBoundMm: number;
   /**
@@ -445,6 +454,49 @@ export interface LegalityContext {
    * Only filled for an empty `replaces` set — `replaces` changes the board.
    */
   boardBridgeCache: Map<string, BridgeEntry | null>;
+  /**
+   * Effective nets for the board's unassigned copper (electrical contract 13
+   * §4), built ONCE with the context, after the grid and before any check, and
+   * immutable for the context's life. Never persisted, and no item record is
+   * touched: the tier lives beside the copper, not on it.
+   */
+  effectiveNets: EffectiveNets;
+  /**
+   * The net a pair or a per-item dimension check judges this item AS: the
+   * conductor its unassigned copper extends, or its own net (§4.2). The
+   * ORIGINAL net is what anchors, the short tier and the bridge record keep.
+   */
+  tierNetOf(item: EffectiveNetItem): string | null;
+  /**
+   * Conflict components the per-item direct bridge drafts do not fully name
+   * (§4.3) — one extra `NET_SHORT_CIRCUIT` each, emitted by `checkClearance`
+   * after BOTH enumerations so the frozen oracle keeps its bytes.
+   */
+  chainShorts: readonly EffectiveComponent[];
+  /**
+   * THE solder-mask openings of one FACE, with a broad phase over them (DFM
+   * contract 11 §1.3). On the EAGER half because the electrical constituent
+   * reads it per pair (13 §1.2), not only the DFM checks; still lazy, so a run
+   * that asks no exposure question builds no artwork.
+   */
+  maskIndex(face: MaskFace): MaskFaceIndex;
+  /**
+   * Is this item's copper UNCOVERED on the outer face of `layer` (13 §1.2)?
+   * False for every inner layer (an internal conductor has no mask face and
+   * resolves in B1 regardless) and, cheaply, for every board that declares no
+   * voltage or no `electrical.outerConductors === "coated"` — the only reader
+   * is the IPC-2221 column, and uncoated that column is B2 whatever the mask
+   * does, so no artwork is ever built. It is a COLUMN gate, not a general
+   * "is this copper bare" predicate; a future consumer that needs the latter
+   * must drop those two short-circuits. The coating read here is only that
+   * short-circuit: `spacingColumn` stays the ONE place the coating decides a
+   * column. `layer` must be one the item actually occupies — every caller is a
+   * pair body walking the pair's SHARED layers.
+   *
+   * Memoised per item per face: the pair loops ask about one item once per
+   * partner, and the artwork walk is not free.
+   */
+  exposedOn(item: EffectiveNetItem, layer: PcbCopperLayerId): boolean;
   /**
    * `placement.reference` by id, built on first use — `checks/keepouts.ts`
    * needs it for a pad's subject noun and used to rebuild it from every
@@ -525,8 +577,6 @@ export interface DrcContext extends LegalityContext {
    * nothing.
    */
   silkArtwork(): SilkArtwork;
-  /** THE solder-mask openings of one FACE, with a broad phase over them (§1.3). */
-  maskIndex(face: MaskFace): MaskFaceIndex;
 }
 
 /**
@@ -546,17 +596,6 @@ export interface MaskFaceIndex {
    * superset of every opening within the halo (08 §2.1).
    */
   near: BroadPhaseNear;
-}
-
-/** Widen a copper record's pad anchor to the DRC anchor union. */
-function padAnchor(anchor: CopperPadAnchor): DrcAnchor {
-  return anchor.kind === "pad"
-    ? {
-        kind: "pad",
-        placementId: anchor.placementId,
-        padNumber: anchor.padNumber,
-      }
-    : { kind: "freePad", freePadId: anchor.freePadId };
 }
 
 /** A drill derivation as the annular-ring kernel takes it (contract 10 §3). */
@@ -593,55 +632,14 @@ export function itemsFromRecords(
   freeHoles: readonly PcbFreeHole[],
   placements: readonly PcbPlacedPart[],
 ): DrcItems {
-  // Copy every array / point object out of the records at this boundary: the
-  // same records also back the connectivity items (`copperItems()` below), and
-  // a check that reordered or mutated a DRC primitive in place would otherwise
-  // silently corrupt the connectivity graph.
-  const traces: DrcTrace[] = records.traces.map((t) => ({
-    id: t.id,
-    netId: t.netId,
-    layer: t.layer,
-    widthMm: t.widthMm,
-    halfWidthMm: t.halfWidthMm,
-    pointsMm: t.pointsMm.map((p) => ({ x: p.x, y: p.y })),
-    bounds: { ...t.bounds },
-    mid: { ...t.mid },
-  }));
-
-  // Clamp-with-fallback (audit B5-VIA-MASK, symmetric with vias): an
-  // invalid-layer pad is checked on ALL valid copper layers so its copper
-  // still collides with everything until repaired — never masks a short.
-  const pads: DrcPad[] = records.pads.map((p) => {
-    const ring = p.ring.map((v) => ({ x: v.x, y: v.y }));
-    return {
-      anchor: padAnchor(p.anchor),
-      key: padRecordKey(p),
-      netId: p.netId,
-      layers: p.declaredLayerInvalid
-        ? [...validCopperLayers]
-        : [...p.resolvedLayers],
-      ring,
-      bounds: { ...p.bounds },
-      center: { ...p.center },
-      // Copied, not aliased — same reason as every other field here: a check
-      // that mutated it in place would corrupt the connectivity records. A
-      // `rect` / `trapezoid` / `custom` core IS the ring (12 §1.1), so it
-      // shares this copy rather than allocating a second identical array.
-      ...(p.disc
-        ? { disc: { center: { ...p.disc.center }, radiusMm: p.disc.radiusMm } }
-        : {}),
-      rounded: {
-        core:
-          p.rounded.core === p.ring
-            ? ring
-            : p.rounded.core.map((v) => ({ x: v.x, y: v.y })),
-        radiusMm: p.rounded.radiusMm,
-      },
-      exactShape: p.exactShape,
-      declaredLayerInvalid: p.declaredLayerInvalid,
-      plated: p.plated,
-    };
-  });
+  // The three copper arrays come from the ONE records → primitives conversion
+  // (`pcb-connectivity/copper-drc-items.ts`), which the copper pour shares so
+  // its effective-net map is built on the same layer policy (13 §3.2 a).
+  const { traces, pads, vias } = copperDrcItems(
+    records,
+    validCopperLayers,
+    layerCount,
+  );
 
   // Holes are derived from the DRILLED OBJECTS, never from the copper records
   // (contract 10 §1.3): a drilled pad yields exactly one hole whether it has
@@ -742,27 +740,6 @@ export function itemsFromRecords(
     });
   }
 
-  const vias: DrcViaGeom[] = records.vias.map((v) => ({
-    via: v.via,
-    netId: v.netId,
-    center: { ...v.center },
-    radiusMm: v.radiusMm,
-    // Clamp-with-fallback (audit B5-VIA-MASK): a layer-invalid via is checked
-    // on every valid copper layer so its physical barrel copper still collides
-    // with everything until repaired — it must not vanish from clearance/short.
-    layers: v.layerSpanInvalid ? [...validCopperLayers] : [...v.span],
-    layerSpanInvalid: v.layerSpanInvalid,
-    viaTypeInvalid:
-      !v.layerSpanInvalid &&
-      !isValidViaSpan(
-        v.via.fromLayer,
-        v.via.toLayer,
-        v.via.viaType,
-        layerCount,
-      ).ok,
-    bounds: { ...v.bounds },
-  }));
-
   for (const vg of vias) {
     holes.push({
       anchor: { kind: "via", viaId: vg.via.id },
@@ -807,7 +784,14 @@ function maxClearanceBound(
   board: PcbBoardSettings,
   resolver: RuleResolver,
 ): number {
-  let max = Math.max(SHORT_EPS_MM, fabMinClearanceMm(board.fabricator));
+  // The IPC-2221 constituent too (13 §3.4). `clearanceBound(kind, null, null)`
+  // below cannot see it — two null nets carry no voltage term — and a null side
+  // is judged at its TIER net, which may be the board's widest HV class.
+  let max = Math.max(
+    SHORT_EPS_MM,
+    fabMinClearanceMm(board.fabricator),
+    maxCreepageBound(board),
+  );
   for (const kind of DRC_PAIR_KINDS) {
     max = Math.max(max, resolver.clearanceBound(kind, null, null));
   }
@@ -870,23 +854,16 @@ function maxEdgeBound(
  * maxes over the layer column — so B2 at the widest difference bounds it.
  */
 function maxCreepageBound(board: PcbBoardSettings): number {
-  let lo = 0;
-  let hi = 0;
-  for (const cls of board.netClasses) {
-    const v = cls.voltageV ?? 0;
-    // A non-finite voltage anywhere on the board makes the halo FAIL OPEN:
-    // `Infinity` turns every creepage query into "every index". Skipping it
-    // left the halo at the finite classes' value while the NaN pair still
-    // demanded the 2.5 mm band (R1 #3); PROPAGATING it was worse — a NaN
-    // difference resolves to that 2.5 mm band, which is BELOW what a finite
-    // pair on the same board can require (an 800 V pair needs 4 mm), so the
-    // finite pair was silently dropped (Astra A2 #1). Only an infinite halo
-    // bounds both.
-    if (!Number.isFinite(v)) return Number.POSITIVE_INFINITY;
-    if (v < lo) lo = v;
-    if (v > hi) hi = v;
-  }
-  return ipc2221SpacingMm(hi - lo, "B2") + GEOM_EPS_MM;
+  // A non-finite voltage anywhere on the board makes the halo FAIL OPEN:
+  // `Infinity` turns every query into "every index". Leaving it out left the
+  // halo at the finite classes' value while the NaN pair still demanded the
+  // 2.5 mm band (R1 #3); PROPAGATING it was worse — a NaN difference used to
+  // resolve to that 2.5 mm band, which is BELOW what a finite pair on the same
+  // board can require (an 800 V pair needs 4 mm), so the finite pair was
+  // silently dropped (Astra A2 #1). Only an infinite halo bounds both.
+  const widest = widestVoltageDeltaV(board);
+  if (!Number.isFinite(widest)) return Number.POSITIVE_INFINITY;
+  return ipc2221SpacingMm(widest, "B2") + GEOM_EPS_MM;
 }
 
 /** The drill's own extent: the disc, or the slot stadium, as a box. */
@@ -971,6 +948,12 @@ export function buildDrcItems(
   );
 
   const netNames = input.netNames ?? {};
+  // The solder-mask artwork and the exposure verdicts derived from it (11 §1.3,
+  // 13 §1.2), lazy for the same reason the pour is: a run that reaches neither
+  // the DFM checks nor a coated board's voltage constituent pays nothing.
+  let maskOpeningsCache: readonly MaskOpening[] | undefined;
+  const maskIndexCache = new Map<MaskFace, MaskFaceIndex>();
+  const exposureCache = new Map<MaskFace, Map<EffectiveNetItem, boolean>>();
   // Lazy: only `checks/keepouts.ts` needs it, and only when a keepout exists.
   let referenceById: Map<string, string> | undefined;
   // Lazy: only the null-net bridge completion needs it, and only when a pending
@@ -1002,6 +985,20 @@ export function buildDrcItems(
     vias: vias.map((v) => v.bounds),
     holes: holes.map(holeBounds),
   });
+  const mode = options.broadPhase ?? "grid";
+  // One derivation of the tier net for every unassigned item (13 §4.4): after
+  // the grid, before any check, immutable for the context's life.
+  const effectiveNets = buildEffectiveNets(
+    { traces, pads, vias },
+    mode === "exhaustive"
+      ? {}
+      : {
+          candidates: effectiveNetCandidates(
+            broadPhase.near,
+            broadPhase.nearPolyline,
+          ),
+        },
+  );
 
   const legality: LegalityContext = {
     board,
@@ -1034,7 +1031,7 @@ export function buildDrcItems(
     maxHoleBoundMm: maxHoleBound(board),
     maxEdgeBoundMm: maxEdgeBound(board, holeToBoardEdgeMm),
     maxCreepageBoundMm: maxCreepageBound(board),
-    broadPhase: options.broadPhase ?? "grid",
+    broadPhase: mode,
     // Filled immediately below — `outlineProblems` needs the region fields this
     // very object carries, so the one computation runs after the literal.
     outlineDrafts: [],
@@ -1044,6 +1041,60 @@ export function buildDrcItems(
     regionIndex: buildRegionIndex(boardRegion),
     stats: options.stats,
     boardBridgeCache: new Map(),
+    effectiveNets,
+    tierNetOf(item) {
+      return effectiveNets.effectiveNetOf.get(item) ?? item.netId;
+    },
+    chainShorts: effectiveNets.chainShorts,
+    maskIndex(face) {
+      const cached = maskIndexCache.get(face);
+      if (cached) return cached;
+      if (maskOpeningsCache === undefined) {
+        maskOpeningsCache = buildMaskOpenings({
+          solderMaskExpansionMm: board.solderMaskExpansionMm,
+          layerCount: board.layerCount,
+          placements: input.placements,
+          freePads: input.freePads,
+          vias: input.vias,
+          // The context's OWN records — the same copper every other check
+          // reads, so an opening can never be resolved against a second
+          // derivation.
+          records,
+          padShapes: buildPadShapeIndex(input.placements, input.freePads),
+        });
+      }
+      const openings = maskOpeningsCache.filter((o) => o.face === face);
+      const rings = openings.map((o) => apertureShapeRing(o.shape, o.centerMm));
+      const bounds = rings.map((ring) => boundsOfPoints(ring));
+      const { near } = createBroadPhase({
+        traces: [],
+        pads: bounds,
+        vias: [],
+        holes: [],
+      });
+      const index: MaskFaceIndex = { openings, rings, bounds, near };
+      maskIndexCache.set(face, index);
+      return index;
+    },
+    exposedOn(item, layer) {
+      if (!resolver.hasVoltageTerms) return false;
+      if (board.designRules.electrical?.outerConductors !== "coated") {
+        return false;
+      }
+      const face: MaskFace | null =
+        layer === "F.Cu" ? "top" : layer === "B.Cu" ? "bottom" : null;
+      if (face === null) return false;
+      let byItem = exposureCache.get(face);
+      if (!byItem) {
+        byItem = new Map<EffectiveNetItem, boolean>();
+        exposureCache.set(face, byItem);
+      }
+      const cached = byItem.get(item);
+      if (cached !== undefined) return cached;
+      const exposed = itemExposedOnFace(item, legality.maskIndex(face));
+      byItem.set(item, exposed);
+      return exposed;
+    },
     itemsByAnchorKey() {
       if (anchorIndex === undefined) {
         anchorIndex = new Map<string, AnchorItemIndex>();
@@ -1138,24 +1189,6 @@ export function buildDrcContext(
   // The two artwork models (contract 11 §1), lazy for the same reason the pour
   // is: a run that does not reach the DFM checks pays for neither.
   let silkCache: SilkArtwork | undefined;
-  let maskOpeningsCache: readonly MaskOpening[] | undefined;
-  const maskIndexCache = new Map<MaskFace, MaskFaceIndex>();
-  const ensureMaskOpenings = (): readonly MaskOpening[] => {
-    if (maskOpeningsCache === undefined) {
-      maskOpeningsCache = buildMaskOpenings({
-        solderMaskExpansionMm: board.solderMaskExpansionMm,
-        layerCount: board.layerCount,
-        placements: projection.placements,
-        freePads: projection.freePads,
-        vias: projection.vias,
-        // The context's OWN records — the same copper every other check reads,
-        // so an opening can never be resolved against a second derivation.
-        records,
-        padShapes: buildPadShapeIndex(projection.placements, projection.freePads),
-      });
-    }
-    return maskOpeningsCache;
-  };
   const padNetIds = new Map(Object.entries(projection.padNets ?? {}));
   const ensurePourResults = () => {
     if (pourResultsCache === undefined) {
@@ -1272,22 +1305,6 @@ export function buildDrcContext(
       }
       return silkCache;
     },
-    maskIndex(face) {
-      const cached = maskIndexCache.get(face);
-      if (cached) return cached;
-      const openings = ensureMaskOpenings().filter((o) => o.face === face);
-      const rings = openings.map((o) => apertureShapeRing(o.shape, o.centerMm));
-      const bounds = rings.map((ring) => boundsOfPoints(ring));
-      const { near } = createBroadPhase({
-        traces: [],
-        pads: bounds,
-        vias: [],
-        holes: [],
-      });
-      const index: MaskFaceIndex = { openings, rings, bounds, near };
-      maskIndexCache.set(face, index);
-      return index;
-    },
     tick: options.tick,
     copperShapeBudgets: {
       ...DEFAULT_COPPER_SHAPE_BUDGETS,
@@ -1301,6 +1318,42 @@ export function aabbGap(a: RingBounds, b: RingBounds): number {
   const dx = Math.max(a.minX - b.maxX, b.minX - a.maxX, 0);
   const dy = Math.max(a.minY - b.maxY, b.minY - a.maxY, 0);
   return Math.sqrt(dx * dx + dy * dy);
+}
+
+/**
+ * The grid as the effective-net kernel's candidate finder (13 §4.1). A TRACE
+ * subject asks with its polyline, so a long diagonal's empty AABB corners cost
+ * nothing (08 §2.1); a pad or via subject asks with its box. `"exhaustive"`
+ * drops the finder entirely and both must reach the same components (08 §3).
+ *
+ * `indexOf` remaps a board index to the caller's own array — the identity for
+ * the board map, the overlay's board-minus-`replaces` offset for the live gate
+ * (§4.4). A `-1` means the item is not in the caller's arrays at all.
+ */
+export function effectiveNetCandidates(
+  near: BroadPhaseNear,
+  nearPolyline: BroadPhaseNearPolyline,
+  indexOf?: (kind: keyof EffectiveNetItems, boardIndex: number) => number,
+  extra?: (kind: keyof EffectiveNetItems) => readonly number[],
+): NonNullable<EffectiveNetOptions["candidates"]> {
+  return (kind, subject) => {
+    const found = isTraceItem(subject)
+      ? nearPolyline(
+          kind,
+          subject.pointsMm,
+          subject.halfWidthMm,
+          EFFECTIVE_NET_HALO_MM,
+        )
+      : near(kind, subject.bounds, EFFECTIVE_NET_HALO_MM);
+    if (!indexOf && !extra) return found;
+    const out: number[] = [];
+    for (const i of found) {
+      const mapped = indexOf ? indexOf(kind, i) : i;
+      if (mapped >= 0) out.push(mapped);
+    }
+    if (extra) out.push(...extra(kind));
+    return out;
+  };
 }
 
 export function layersOverlap(
