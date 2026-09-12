@@ -4,35 +4,29 @@
 > Open work only. Completed work lives in git history, not in this file.
 > Six programs: Route tool · Compiler agent · MCP integration · Release hardening · DRC · Backlog.
 
-## Now — handoff (2026-09-12, S13 closed in the working tree; S12b committed `ac968dd`, contract 13 draft `01d3179`)
+## Now — handoff (2026-09-12, S13 committed `8214488`; tree clean)
 
 Session-resume block; `HANDOFF.md` is the entry point, `CURRENT_STATE.md` the snapshot.
 Everything below this block is the live program tracker and is unchanged.
 
-- [ ] **Commit S13** on `master` when the user says so — the whole working tree (contract 13 is
-      now binding and belongs in the commit; `HANDOFF.md` / `CURRENT_STATE.md` included or not, the
-      user's call). Suggested message: "PCB hardening S13: electrical rules are constituents of the
-      one rule model — IPC-2221B spacing in the resolver, effective nets for unassigned copper,
-      exposure-aware columns, interval voltages, sourced constants". Never auto-commit.
-- [x] **S13 — electrical-rule fidelity** closed 2026-09-12 (contract
-      `docs/pcb-hardening/13-electrical-contract.md`, binding; B7-1 closed; Astra brainstorm +
-      spec-attack + repository-grounded adversarial-verify, R1 + R2 folded).
+- [x] **S13 — electrical-rule fidelity** committed 2026-09-12 as `8214488` (contract 13 binding;
+      B7-1 closed; Astra brainstorm + spec-attack + repository-grounded adversarial-verify, R1 + R2
+      folded).
 - [ ] **Shared-tags follow-up** (after the user tags `kicad-parsers-v0.1.4` / `kicad-import-v0.2.0`
       / `rendering-core-v0.1.4` in `../shared` from `e882332`): repin `package.json` in OpenPCB and
       CoreLibrary, `npm install` lock refresh, verify with a real `npm ci` in a scratch clone (lock
       diff = three tag lines, no `"link": true`), CoreLibrary `bun tools/rebuild-previews.ts` +
       `bun validate`. Separate commit.
-- [ ] **S12c — polygon pads (trapezoid / custom)** — PROGRAM row; needs the S11 tag follow-up first,
-      then a third tag round (see the row for the design).
-- [ ] **S14 — SI v1 mathematical correctness** — next PROGRAM row after S12c (or before it if the
-      shared tags stay pending): plan mode first.
+- [ ] **Next session — plan mode first** (`/fable-orchestrator` + `/pcb-hardening-review`): S14 (SI v1
+      mathematical correctness; Astra spec-attack + adversarial-verify xhigh; no tag dependency) or
+      S12c (polygon pads) once the shared tags exist.
 - [ ] S13 follow-ups: per-layer tier (`tierNetOf(item, layer)`) for split unplated pads; the
       judge's direct null-net bridge is still per anchor across the faces of an unplated pad (06 §4,
-      owner S18); memoise the route-obstacle overlay per (revision, session copper); the store still
+      owner S18); memoise the route-obstacle overlay per (revision, session copper); the store
       accepts any finite `currentA` at the boundary (the resolver reports it); `trace-width.md`
-      tables now computed from the formula — re-source if a primary table is ever available.
-- [ ] Mechanical splits (after S12c): `checks/clearance-judge.ts` (1016), `rule-resolver.ts` (590),
-      `drc-context.ts` (≈ 1400), `checks/board.ts` (1078), `manufacturability.ts` (525), and the five
+      tables are computed from the formula — re-source if a primary table is ever available.
+- [ ] Mechanical splits (after S12c): `checks/clearance-judge.ts` (1027), `rule-resolver.ts` (590),
+      `drc-context.ts` (1365), `checks/board.ts` (1078), `manufacturability.ts` (525), and the five
       S12 files over 500 lines.
 - [ ] S12b follow-ups: the 16 s board-budget exhaustion fixture (left out of the suite); CAM
       verification of the ≤ 2√2 nm Gerber arc residual on a real fab upload.

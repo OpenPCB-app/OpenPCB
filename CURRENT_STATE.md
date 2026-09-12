@@ -1,9 +1,9 @@
 # Current State
 
-Last verified: 2026-09-12 (final gate run, `scratchpad/s13/wp6-gates-final.log`)
+Last verified: 2026-09-12 12:43 (final gate run before the commit, `scratchpad/s13/wp6-gates-final.log`)
 
-- **Branch:** `master`, HEAD `01d3179` (S12b `ac968dd`, contract 13 draft `01d3179`), dirty —
-  57 entries (46 modified incl. the two handoff files, 11 new), nothing staged, no commit made this session after `01d3179`.
+- **Branch:** `master`, HEAD `8214488` (S13 committed 2026-09-12; S12b `ac968dd`, contract draft
+  `01d3179`), clean tree, nothing staged.
 - **Changed files (S13):** new `src/shared/drc/{voltage-term,mask-exposure,mask-exposure-overlay,
   effective-net-overlay}.ts`, `checks/chain-short.ts`, `src/shared/pcb-connectivity/{effective-nets,
   copper-drc-items}.ts`, test `drc-electrical-consumers.test.ts`, golden `golden-electrical-2l.*`;
@@ -21,4 +21,4 @@ Last verified: 2026-09-12 (final gate run, `scratchpad/s13/wp6-gates-final.log`)
   S9 clearance oracle byte-identical to `HEAD`.
 - **Key decisions:** see `PROGRAM.md` S13 bullet and contract 13 §12 ledgers (plan-critique,
   Astra runs 0 / 1 / 2, R1, R2 — every finding accepted and fixed).
-- **Blockers:** none. Commit is the user's; `../shared` still untagged (blocks S12c only).
+- **Blockers:** none. `../shared` still untagged at `e882332` (blocks S12c only; S14 is free).

@@ -7,8 +7,8 @@ Session 3 · 2026-09-12
 One physical PCB model that connectivity, geometry, zones, pours, routing, DRC, manufacturing checks
 and export all consume (`docs/pcb-hardening/PROGRAM.md`). This session delivered **S13 —
 electrical-rule fidelity** (contract `docs/pcb-hardening/13-electrical-contract.md`, binding) and
-closed it in the working tree, uncommitted. S12b was committed at the start of this session as
-`ac968dd`, the contract 13 draft as `01d3179`.
+committed it as `8214488` (S12b `ac968dd` and the contract 13 draft `01d3179` earlier in the same
+session). The tree is clean.
 
 ## Original plan
 
@@ -56,15 +56,15 @@ docs; never commit / push / stash.
 1. Run the `handoff` skill with "resume".
 2. Read `docs/pcb-hardening/PROGRAM.md` (S13 bullet, S12c / S14 rows), contract 13,
    `src/modules/designer/AGENTS.md` "## DRC", the memory file `pcb-hardening-program.md`.
-3. Verify the tree is still the S13 working tree (`git status --short | wc -l` = 57, HEAD
-   `01d3179`) and re-run the cheap gates: `cd src/core/backend && bun test drc- legality
-   connectivity routing` and `npx tsc -b --force 2>&1 | grep -c "error TS"` (44, repo root only).
-4. Next (all on the user's word): commit S13 on `master`; the S11 shared-tags follow-up; then
-   S12c (polygon pads) or S14 (SI v1) in plan mode; the mechanical splits listed in `TODO.md`.
+3. Verify HEAD is `8214488` on `master` with a clean tree and re-run the cheap gates:
+   `cd src/core/backend && bun test drc- legality connectivity routing` and
+   `npx tsc -b --force 2>&1 | grep -c "error TS"` (44, repo root only).
+4. Next (all on the user's word): the S11 shared-tags follow-up once `../shared` is tagged; then
+   S12c (polygon pads, needs the tags) or S14 (SI v1, no tag dependency) in plan mode via
+   `/fable-orchestrator` + `/pcb-hardening-review`; the mechanical splits listed in `TODO.md`.
 
 ## Open questions
 
-- When to commit S13 (never auto-commit; message suggestion in `TODO.md` "Now — handoff").
 - Whether the user has tagged `../shared` (S11 fields) — S12c depends on it; S14 does not.
 - A per-layer tier for split unplated pads and the judge's per-anchor direct bridge (06 §4) —
   recorded limits, owner S18.
