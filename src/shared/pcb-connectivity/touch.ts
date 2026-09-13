@@ -16,6 +16,7 @@ import {
   polylineToPolylineDistance,
 } from "../pcb-geometry/pcb-trace-geometry";
 import {
+  roundedGap,
   roundedPoint,
   roundedPolylineGap,
   roundedTouch,
@@ -108,6 +109,28 @@ export function pointToIslandDistance(
 }
 
 /**
+ * The verdict a copper-touch decision was made on: the distance that was
+ * measured and the reach it was compared against. `distanceMm <= reachMm` IS
+ * the predicate — the two numbers are kept apart, never pre-subtracted into a
+ * gap, because `d <= h + eps` and `d - h <= eps` disagree by an ulp at the
+ * boundary and every S1 verdict was made with the former.
+ */
+export interface CopperTouchWitness {
+  readonly distanceMm: number;
+  readonly reachMm: number;
+}
+
+const witness = (
+  distanceMm: number,
+  reachMm: number,
+): CopperTouchWitness | null =>
+  distanceMm <= reachMm ? { distanceMm, reachMm } : null;
+
+/** Membership is already a decision; 0 / Infinity carries it as a distance. */
+const membership = (member: boolean): CopperTouchWitness | null =>
+  witness(member ? 0 : Infinity, 0);
+
+/**
  * Pad geometry for a touch test: the pad's EXACT copper (exact-geometry
  * contract 12 §1.3). The circumscribed outline ring used to decide this, which
  * fabricated contact between two same-net oval / roundrect pads physically
@@ -129,23 +152,22 @@ function padTouch(
   pad: PadCopperItem,
   other: CopperItem,
   eps: number,
-): boolean {
+): CopperTouchWitness | null {
   switch (other.kind) {
     case "pad":
-      return roundedTouch(pad.rounded, other.rounded, eps);
+      return witness(roundedGap(pad.rounded, other.rounded), eps);
     case "trace":
-      return (
-        roundedPolylineGap(other.pointsMm, other.halfWidthMm, pad.rounded) <=
-        eps
+      return witness(
+        roundedPolylineGap(other.pointsMm, other.halfWidthMm, pad.rounded),
+        eps,
       );
     case "via":
-      return roundedTouch(
-        pad.rounded,
-        roundedPoint(other.center, other.radiusMm),
+      return witness(
+        roundedGap(pad.rounded, roundedPoint(other.center, other.radiusMm)),
         eps,
       );
     case "pour":
-      return other.memberKeys.has(pad.key);
+      return membership(other.memberKeys.has(pad.key));
   }
 }
 
@@ -153,22 +175,25 @@ function traceTouch(
   trace: TraceCopperItem,
   other: CopperItem,
   eps: number,
-): boolean {
+): CopperTouchWitness | null {
   switch (other.kind) {
     case "pad":
       return padTouch(other, trace, eps);
     case "trace":
-      return (
-        polylineToPolylineDistance(asPath(trace.pointsMm), asPath(other.pointsMm)) <=
-        trace.halfWidthMm + other.halfWidthMm + eps
+      return witness(
+        polylineToPolylineDistance(
+          asPath(trace.pointsMm),
+          asPath(other.pointsMm),
+        ),
+        trace.halfWidthMm + other.halfWidthMm + eps,
       );
     case "via":
-      return (
-        pointToPolylineDistance(other.center, asPath(trace.pointsMm)).distance <=
-        other.radiusMm + trace.halfWidthMm + eps
+      return witness(
+        pointToPolylineDistance(other.center, asPath(trace.pointsMm)).distance,
+        other.radiusMm + trace.halfWidthMm + eps,
       );
     case "pour":
-      return other.memberKeys.has(trace.key);
+      return membership(other.memberKeys.has(trace.key));
   }
 }
 
@@ -176,19 +201,22 @@ function viaTouch(
   via: ViaCopperItem,
   other: CopperItem,
   eps: number,
-): boolean {
+): CopperTouchWitness | null {
   switch (other.kind) {
     case "pad":
       return padTouch(other, via, eps);
     case "trace":
       return traceTouch(other, via, eps);
     case "via":
-      return (
-        Math.hypot(via.center.x - other.center.x, via.center.y - other.center.y) <=
-        via.radiusMm + other.radiusMm + eps
+      return witness(
+        Math.hypot(
+          via.center.x - other.center.x,
+          via.center.y - other.center.y,
+        ),
+        via.radiusMm + other.radiusMm + eps,
       );
     case "pour":
-      return other.memberKeys.has(via.key);
+      return membership(other.memberKeys.has(via.key));
   }
 }
 
@@ -200,11 +228,11 @@ function viaTouch(
  * different pours on the same net and layer merge where they overlap
  * (`pourTouch`).
  */
-export function copperTouch(
+export function copperTouchWitness(
   a: CopperItem,
   b: CopperItem,
   eps: number = CONNECT_EPS_MM,
-): boolean {
+): CopperTouchWitness | null {
   switch (a.kind) {
     case "pad":
       return padTouch(a, b, eps);
@@ -213,8 +241,19 @@ export function copperTouch(
     case "via":
       return viaTouch(a, b, eps);
     case "pour":
-      return b.kind === "pour" ? pourTouch(a, b, eps) : copperTouch(b, a, eps);
+      return b.kind === "pour"
+        ? membership(pourTouch(a, b, eps))
+        : copperTouchWitness(b, a, eps);
   }
+}
+
+/** The ONE oracle: touching IS having a witness (SI contract 14 §1). */
+export function copperTouch(
+  a: CopperItem,
+  b: CopperItem,
+  eps: number = CONNECT_EPS_MM,
+): boolean {
+  return copperTouchWitness(a, b, eps) !== null;
 }
 
 /**

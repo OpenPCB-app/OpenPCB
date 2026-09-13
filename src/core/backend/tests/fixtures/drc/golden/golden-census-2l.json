@@ -83,7 +83,8 @@
   "dp_n": "DP_N",
   "lg1": "LG1",
   "zov_a": "ZOV_A",
-  "zov_b": "ZOV_B"
+  "zov_b": "ZOV_B",
+  "lg2": "LG2"
  },
  "placements": [
   {
@@ -779,6 +780,262 @@
      "rotationDeg": 0
     }
    ]
+  },
+  {
+   "id": "P_DPP_A",
+   "reference": "P_DPP_A",
+   "positionMm": {
+    "x": -20,
+    "y": -20
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 0.3,
+     "heightMm": 0.3,
+     "rotationDeg": 0
+    }
+   ],
+   "graphics": [
+    {
+     "kind": "rect",
+     "layer": "F.CrtYd",
+     "x": -0.25,
+     "y": -0.25,
+     "width": 0.5,
+     "height": 0.5
+    }
+   ]
+  },
+  {
+   "id": "P_DPP_B",
+   "reference": "P_DPP_B",
+   "positionMm": {
+    "x": 0,
+    "y": -20
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 0.3,
+     "heightMm": 0.3,
+     "rotationDeg": 0
+    }
+   ],
+   "graphics": [
+    {
+     "kind": "rect",
+     "layer": "F.CrtYd",
+     "x": -0.25,
+     "y": -0.25,
+     "width": 0.5,
+     "height": 0.5
+    }
+   ]
+  },
+  {
+   "id": "P_DPN_A",
+   "reference": "P_DPN_A",
+   "positionMm": {
+    "x": -20,
+    "y": -20.7
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 0.3,
+     "heightMm": 0.3,
+     "rotationDeg": 0
+    }
+   ],
+   "graphics": [
+    {
+     "kind": "rect",
+     "layer": "F.CrtYd",
+     "x": -0.25,
+     "y": -0.25,
+     "width": 0.5,
+     "height": 0.5
+    }
+   ]
+  },
+  {
+   "id": "P_DPN_B",
+   "reference": "P_DPN_B",
+   "positionMm": {
+    "x": -18,
+    "y": -20.7
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 0.3,
+     "heightMm": 0.3,
+     "rotationDeg": 0
+    }
+   ],
+   "graphics": [
+    {
+     "kind": "rect",
+     "layer": "F.CrtYd",
+     "x": -0.25,
+     "y": -0.25,
+     "width": 0.5,
+     "height": 0.5
+    }
+   ]
+  },
+  {
+   "id": "P_LG_A",
+   "reference": "P_LG_A",
+   "positionMm": {
+    "x": 3,
+    "y": -20
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 0.3,
+     "heightMm": 0.3,
+     "rotationDeg": 0
+    }
+   ],
+   "graphics": [
+    {
+     "kind": "rect",
+     "layer": "F.CrtYd",
+     "x": -0.25,
+     "y": -0.25,
+     "width": 0.5,
+     "height": 0.5
+    }
+   ]
+  },
+  {
+   "id": "P_LG_B",
+   "reference": "P_LG_B",
+   "positionMm": {
+    "x": 6,
+    "y": -20
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 0.3,
+     "heightMm": 0.3,
+     "rotationDeg": 0
+    }
+   ],
+   "graphics": [
+    {
+     "kind": "rect",
+     "layer": "F.CrtYd",
+     "x": -0.25,
+     "y": -0.25,
+     "width": 0.5,
+     "height": 0.5
+    }
+   ]
+  },
+  {
+   "id": "P_LG2_A",
+   "reference": "P_LG2_A",
+   "positionMm": {
+    "x": 10,
+    "y": -20
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 0.3,
+     "heightMm": 0.3,
+     "rotationDeg": 0
+    }
+   ],
+   "graphics": [
+    {
+     "kind": "rect",
+     "layer": "F.CrtYd",
+     "x": -0.25,
+     "y": -0.25,
+     "width": 0.5,
+     "height": 0.5
+    }
+   ]
+  },
+  {
+   "id": "P_LG2_B",
+   "reference": "P_LG2_B",
+   "positionMm": {
+    "x": 16,
+    "y": -20
+   },
+   "pads": [
+    {
+     "id": "pad-1",
+     "number": "1",
+     "shape": "rect",
+     "centerMm": {
+      "x": 0,
+      "y": 0
+     },
+     "widthMm": 0.3,
+     "heightMm": 0.3,
+     "rotationDeg": 0
+    }
+   ],
+   "graphics": [
+    {
+     "kind": "rect",
+     "layer": "F.CrtYd",
+     "x": -0.25,
+     "y": -0.25,
+     "width": 0.5,
+     "height": 0.5
+    }
+   ]
   }
  ],
  "padNets": {
@@ -828,7 +1085,15 @@
   "U_R5|5": "U_R5_5",
   "U_R5|6": "U_R5_6",
   "U_R5|7": "U_R5_7",
-  "U_R5|8": "U_R5_8"
+  "U_R5|8": "U_R5_8",
+  "P_DPP_A|1": "dp_p",
+  "P_DPP_B|1": "dp_p",
+  "P_DPN_A|1": "dp_n",
+  "P_DPN_B|1": "dp_n",
+  "P_LG_A|1": "lg1",
+  "P_LG_B|1": "lg1",
+  "P_LG2_A|1": "lg2",
+  "P_LG2_B|1": "lg2"
  },
  "traces": [
   {
@@ -1132,6 +1397,46 @@
     [
      14000000,
      19000000
+    ]
+   ]
+  },
+  {
+   "id": "t_lg2_a",
+   "netId": "lg2",
+   "layer": "F.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     10000000,
+     -20000000
+    ],
+    [
+     16000000,
+     -20000000
+    ]
+   ]
+  },
+  {
+   "id": "t_lg2_b",
+   "netId": "lg2",
+   "layer": "F.Cu",
+   "widthMm": 0.25,
+   "pointsNm": [
+    [
+     10000000,
+     -20000000
+    ],
+    [
+     10000000,
+     -23000000
+    ],
+    [
+     16000000,
+     -23000000
+    ],
+    [
+     16000000,
+     -20000000
     ]
    ]
   }
@@ -1654,7 +1959,8 @@
    "id": "lg1grp",
    "name": "LG1",
    "netIds": [
-    "lg1"
+    "lg1",
+    "lg2"
    ],
    "target": {
     "kind": "absolute",

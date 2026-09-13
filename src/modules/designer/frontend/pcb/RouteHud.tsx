@@ -136,7 +136,11 @@ export function RouteHudStatus({
       ) : null}
       {model.lengthTarget ? (
         <span
-          title={`Length match '${model.lengthTarget.groupName}' — net total vs target ±${model.lengthTarget.toleranceMm.toFixed(2)} mm`}
+          title={`Length match '${model.lengthTarget.groupName}' — net total vs target ±${model.lengthTarget.toleranceMm.toFixed(2)} mm${
+            model.lengthTarget.pathDefined
+              ? ""
+              : " (approximate: the net has no single routed path yet)"
+          }`}
           className={
             Math.abs(model.lengthTarget.totalMm - model.lengthTarget.targetMm) <=
             model.lengthTarget.toleranceMm
@@ -144,6 +148,7 @@ export function RouteHudStatus({
               : "font-medium text-status-warning"
           }
         >
+          {model.lengthTarget.pathDefined ? "" : "≈"}
           {model.lengthTarget.totalMm.toFixed(1)} /{" "}
           {model.lengthTarget.targetMm.toFixed(1)} mm
         </span>

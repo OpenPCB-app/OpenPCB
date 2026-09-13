@@ -31,7 +31,7 @@ long as that correspondence holds:
 rg -n "test\.todo\(" src/core/backend/tests/drc-audit-b*.test.ts
 ```
 
-Expect **0 call sites, 0 unique bug ids** (S5 closed B3-9 / B3-10; S7 added B6-1; S8 closed B5-LIVE-ROT-PAD / B5-LIVE-TH-PAD-SIDE and added B7-1; S10 closed B5-SYNC; S11 closed B2-5 / B2-6 / B2-7 / B6-1; S13 closed B7-1), and every body a real post-fix assertion
+Expect **0 call sites, 0 unique bug ids** (S5 closed B3-9 / B3-10; S7 added B6-1; S8 closed B5-LIVE-ROT-PAD / B5-LIVE-TH-PAD-SIDE and added B7-1; S10 closed B5-SYNC; S11 closed B2-5 / B2-6 / B2-7 / B6-1; S13 closed B7-1; S14 registered B8-1..B8-7 on 2026-09-13 and closed them the same day — `drc-audit-b8.test.ts` is 8 live tests), and every body a real post-fix assertion
 (`rg "expect\(true\)\.toBe\(true\)"` over the same files must return nothing — Session 0 replaced
 the seven placeholder bodies; Sessions 1 and 2 flipped nine of them). When a fix lands, the `test.todo` becomes a real `test` and the
 finding leaves this document. If the count drops without a finding being removed here, the
@@ -54,6 +54,66 @@ Session 0 (2026-09-06) re-verified every *open* entry by running its `test.todo`
 current source: 11 of the 12 bodies that carried a real assertion failed as expected; one
 (B5-LIVE-ROT-PAD) passed for the wrong reason and was rewritten; the seven placeholder bodies were
 replaced with real specs, and two of those (B2-9, B5-LIVE-PADGEOMS) passed and were flipped.
+
+---
+
+## S14 — signal integrity and routed length — registered AND CLOSED 2026-09-13
+
+Every finding below was reproduced against the real `runDrc` on 2026-09-13 (session scratch
+`s14/probe.test.ts`) before being registered; the post-fix bodies are LIVE tests in
+`drc-audit-b8.test.ts` (B8-1 two bodies, B8-2 two bodies, B8-3..B8-6; B8-7 is pinned by the
+frontend Vitest `use-net-path-lengths.test.ts` / `tools/diff-pair.test.ts`). Now
+(`docs/pcb-hardening/14-si-contract.md`): routed length is the minimal terminal-spanning subtree
+of the bridge-only forest over the S1 junction graph (copper inside pads and via discs clipped,
+through vias outer-to-outer = board thickness, loops / pour bypasses / inner-layer vias reported as
+`NET_LENGTH_UNDEFINED`); coupling is an exact closed-form measure over each member's path against
+the partner's copper (`coupled` / `tight` gate-free, `wide` on near-parallel strips, `DIFF_PAIR_GAP`
+= max over members, uncoupled 2D per member, skew for chains only); one diff-pair identity (bare
+`P/N` gone); the route / tune HUD reads the same model. Was — common cause: `checks/signal-integrity.ts` and `checks/length.ts` keep a
+private definition of "routed length" (Σ of every trace polyline on the net) and of "coupling"
+(one closest-point number per segment pair, projected onto P's axis) instead of reading the
+copper path the S1 connectivity model already knows. Owner: S14
+(`docs/pcb-hardening/14-si-contract.md`).
+
+### B8-1 — duplicate / overlapping copper manufactures routed length and coupled length
+P 0→20 mm; N is two coincident 0→10 mm traces; `maxUncoupledMm 5`, `maxSkewMm 0.5` → **no
+violation**. `netLength(N)` = 20 (double-counted), `coupledLen` = 20 (P against each copy),
+`uncoupled = 20 − 20 = 0`. Truth: 10 mm of P runs beside no N copper; N's own length is
+ambiguous. False pass on two codes. *Symbols:* `netLength`, the `coupledLen +=` loop.
+
+### B8-2 — the gap is sampled at one closest point per segment pair
+P 0→20 at y = 0; N from (0, 0.35) to (20, 1.35) (edge gap 0.15 → 1.15 mm, angle 2.9°), target
+0.15 ± 0.05 → **no violation**: `segmentToSegmentDistance` returns the 0.15 mm closest approach,
+so the pair is "on target" and the whole 20 mm counts as coupled. Likewise a 2 mm hole in the
+partner (two N traces 0→9 and 11→20) is invisible. False pass. *Symbols:* `segmentToSegmentDistance`
+inside `checkSignalIntegrity`, `coupledOverlap`.
+
+### B8-3 — the coupled length depends on which net is P
+`coupledOverlap` projects N onto P's direction only; swapping `pNetId` / `nNetId` on a 14°
+approach changes the reported uncoupled length 0.60 → 0.68 mm. Order-dependent measurement.
+
+### B8-4 — stubs, branches and disconnected fragments are routed length
+A dangling 10 mm stub on P makes an equal pair report `DIFF_PAIR_SKEW` 10 mm and 10 mm
+uncoupled; a same-net fragment that touches nothing still adds to `netLength` and to
+`lengthByNet` in `checks/length.ts`. False positives; the number has no physical meaning.
+
+### B8-5 — via barrels and layer changes are invisible
+`netLength` never sees `ctx.vias`; a member routed half on `B.Cu` through two through vias is
+2 × `boardThicknessMm` longer than its partner and reports skew 0. Coupling is per layer, so the
+layer change is silently "uncoupled" only by accident.
+
+### B8-6 — two diff-pair identities, one of them pairing unrelated nets
+`src/shared/drc/diff-pair-resolver.ts` pairs on `_P/_N`, `_+/_-`, `+/-` AND bare `P/N`
+(case-insensitive), so `VIP` / `VIN` become a pair and receive `DIFF_PAIR_SKEW` at the 0.5 mm
+default with no explicit gap. `src/modules/designer/frontend/pcb/tools/diff-pair.ts`
+(`diffPairPartnerName`, case-preserving, `_P/_N` and trailing `+/-` only, no explicit table) is a
+second, different table used by the bundle tool.
+
+### B8-7 — six private routed-length copies in the route / tune HUD
+`routeLengthMm` is summed at six call sites (`PcbCanvas.tsx` ≈1957, 1981, 1986, 5286, 6649;
+`tools/route-hud-model.ts` ≈93/96) with a `longest` target that EXCLUDES the session net, while
+`checks/length.ts` includes it. Frontend-only; the regression lives in Vitest beside the shared
+hook once it exists.
 
 ---
 
@@ -714,14 +774,18 @@ current sharing between parallel paths.
 
 ## 6.7 Signal-integrity thresholds
 
-| Threshold | Value |
-|---|---|
-| Diff-pair near-parallel gate | < 15° |
-| Uncoupled length | 15 mm |
-| Skew | 0.5 mm |
+| Threshold | Value | Since S14 (`DIFF_PAIR_DEFAULTS`, contract 14 §4.2) |
+|---|---|---|
+| Diff-pair near-parallel gate | < 15° | applies to the `wide` verdict only (`coupled` / `tight` are gate-free) |
+| Uncoupled length | 15 mm | unchanged |
+| Skew | 0.5 mm | unchanged; judged for two-terminal (`chain`) members only |
+| Gap tolerance | 0.05 mm | unchanged |
+| Coupling window `G` | `4·target + 0.1` mm | now an explicit, definitional `PcbDiffPair.couplingMaxGapMm` default; the 1.0 mm no-target fallback is GONE (no target → `DRC_RULE_INEFFECTIVE`, skew only) |
 
-Pair naming convention: `_P` / `_N` suffixes and trailing `+` / `-`. An explicit
-`PcbBoardSettings.diffPairs` table **wins over inference**.
+Pair naming convention: `_P` / `_N`, `_+` / `_-` and trailing `+` / `-` suffixes (bare `P` / `N`
+REMOVED in S14 — it paired `VIP` / `VIN`). An explicit `PcbBoardSettings.diffPairs` table **wins
+over inference**; ambiguous inferred bases and conflicting explicit rows are reported, never
+resolved by insertion order (contract 14 §5).
 
 This design **explicitly rejects** the LLM-based and `signalType`-based inference proposed in
 `TODO-signal-aware-routing.md`. Auto-detected pair order is deterministically sorted, duplicate
@@ -730,7 +794,9 @@ handles wrap-around so anti-parallel segments and ±179° are not misclassified.
 
 Length matching shipped separately and in-flight as `checks/length.ts`
 (`NET_LENGTH_OUT_OF_RANGE`, `PcbBoardSettings.lengthMatchGroups`, behind the `pcb.lengthTuning`
-flag) and was adopted as-is; diff-pair skew reconciles against its `lengthByNet`.
+flag). Since S14 both checks read ONE routed-length model (`ctx.netPaths()`, contract 14 §2:
+the minimal terminal-spanning subtree over the S1 junction graph) and report `NET_LENGTH_UNDEFINED`
+for loops, pour bypasses and undefined via traversals instead of summing polylines.
 
 ## 6.8 DFM parameters — shipped in S12 (2026-09-11, `docs/pcb-hardening/11-dfm-contract.md`)
 

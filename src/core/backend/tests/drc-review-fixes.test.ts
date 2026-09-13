@@ -272,17 +272,42 @@ describe("review: diff-pair auto order is deterministic", () => {
 describe("review: SI angle-wrap does not misclassify near-parallel", () => {
   test("anti-parallel diff-pair legs still couple (no false uncoupled)", () => {
     // P runs +x, N runs −x at the same y-gap; they are anti-parallel but
-    // physically a coupled pair. The angle-wrap fix keeps them coupled.
+    // physically a coupled pair. Since S14 there is no angle test left to get
+    // wrong — coupling is a distance measure — but the fixture is kept as the
+    // regression. Re-fixtured with pad terminals and an explicit gap target:
+    // without pads the path model measures nothing, and without a target the
+    // check makes no coupling verdict at all, so the assertion would have
+    // passed for two reasons that are not the one it is about (contract 14
+    // §4.2, §9).
+    const pin = (id: string, x: number, y: number) =>
+      placement(id, {
+        positionMm: { x, y },
+        pads: [pad("1", { x: 0, y: 0 }, 0.2, 0.2)],
+      });
     const b: PcbBoardSettings = {
       ...board100(),
       diffPairs: [
-        { id: "dp", name: "USB", pNetId: "p", nNetId: "n", maxUncoupledMm: 5 },
+        {
+          id: "dp",
+          name: "USB",
+          pNetId: "p",
+          nNetId: "n",
+          gapMm: 0.15,
+          maxUncoupledMm: 5,
+        },
       ],
     };
     const report = runDrc(
       projection({
         board: b,
         netNames: { p: "USB_P", n: "USB_N" },
+        placements: [
+          pin("P1", -10, 0),
+          pin("P2", 10, 0),
+          pin("N1", -10, 0.35),
+          pin("N2", 10, 0.35),
+        ],
+        padNets: { "P1|1": "p", "P2|1": "p", "N1|1": "n", "N2|1": "n" },
         traces: [
           trace("tp", "p", [[-10, 0], [10, 0]]),
           trace("tn", "n", [[10, 0.35], [-10, 0.35]]), // reversed direction
@@ -290,6 +315,7 @@ describe("review: SI angle-wrap does not misclassify near-parallel", () => {
       }),
     );
     expect(codes(report)).not.toContain("DIFF_PAIR_UNCOUPLED_LENGTH");
+    expect(codes(report)).not.toContain("DIFF_PAIR_GAP");
   });
 });
 

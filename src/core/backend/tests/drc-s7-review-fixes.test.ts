@@ -319,22 +319,48 @@ describe("Astra S7 #4 — a collapsed id keeps the most severe draft", () => {
 });
 
 describe("Astra S7 #6 — length groups and diff pairs are order-independent (§7)", () => {
+  // Re-fixtured for S14: both nets are PINNED at two pads and each is routed
+  // as a connected run, so the path model measures them (a trace-only net has
+  // no routed length at all, contract 14 §2.7) and every member is split
+  // across two trace records, which is what the reversal actually exercises.
+  const tinyPin = (id: string, x: number, y: number) =>
+    placement(id, {
+      positionMm: { x, y },
+      pads: [pad("1", { x: 0, y: 0 }, 0.2, 0.2)],
+    });
   const withGroups = (reverse: boolean): DesignerPcbProjection => {
     const traces = [
-      trace("t1", "n1", [[0, 0], [0.1, 0]]),
-      trace("t2", "n1", [[0, 1], [0.1, 1]]),
-      trace("t3", "n1", [[0, 2], [0.3, 2]]),
-      trace("p1", "dp_p", [[5, 5], [10, 5]]),
-      trace("p2", "dp_p", [[25, 5], [30, 5]]),
-      trace("n1x", "dp_n", [[5, 5.3], [10, 5.3]]),
+      trace("t1", "n1", [[0, 0], [1, 0]]),
+      trace("t2", "n1", [[1, 0], [3, 0]]),
+      trace("p1", "dp_p", [[5, 5], [7, 5]]),
+      trace("p2", "dp_p", [[7, 5], [10, 5]]),
+      trace("n1x", "dp_n", [[5, 5.3], [9, 5.3]]),
     ];
     return projection({
       board: board({
         lengthMatchGroups: [
-          { id: "g", name: "G", netIds: ["n1"], target: { kind: "absolute", mm: 0.6 }, toleranceMm: 0.1 },
+          { id: "g", name: "G", netIds: ["n1"], target: { kind: "absolute", mm: 2 }, toleranceMm: 0.1 },
         ],
-        diffPairs: [{ id: "dp", name: "DP", pNetId: "dp_p", nNetId: "dp_n", maxSkewMm: 0.1 }],
+        diffPairs: [
+          { id: "dp", name: "DP", pNetId: "dp_p", nNetId: "dp_n", gapMm: 0.1, maxSkewMm: 0.1 },
+        ],
       }),
+      placements: [
+        tinyPin("A1", 0, 0),
+        tinyPin("A2", 3, 0),
+        tinyPin("DP1", 5, 5),
+        tinyPin("DP2", 10, 5),
+        tinyPin("DN1", 5, 5.3),
+        tinyPin("DN2", 9, 5.3),
+      ],
+      padNets: {
+        "A1|1": "n1",
+        "A2|1": "n1",
+        "DP1|1": "dp_p",
+        "DP2|1": "dp_p",
+        "DN1|1": "dp_n",
+        "DN2|1": "dp_n",
+      },
       traces: reverse ? [...traces].reverse() : traces,
       netNames: { n1: "A", dp_p: "DP_P", dp_n: "DP_N" },
     });
@@ -342,6 +368,7 @@ describe("Astra S7 #6 — length groups and diff pairs are order-independent (§
   test("reversing traces changes neither ids nor markers", () => {
     expect(bytes(withGroups(false))).toBe(bytes(withGroups(true)));
     expect(of(runDrc(withGroups(false)), "DIFF_PAIR_SKEW")).toHaveLength(1);
+    expect(of(runDrc(withGroups(false)), "NET_LENGTH_OUT_OF_RANGE")).toHaveLength(1);
   });
 });
 

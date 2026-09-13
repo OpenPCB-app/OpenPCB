@@ -193,11 +193,33 @@ And a command field with no parser in `routes.ts` is silently dropped over HTTP.
   reads the ratsnest. There is no net-name rule anywhere — GND shows airwires until a GND pour
   exists. Two layer policies share the one geometry: connectivity is fail-safe (a layer-invalid
   pad or via occupies no layer), DRC short detection clamps such items to every layer; the DRC-side
-  graph (`ctx.connectivity()`) is always built from the fail-safe items. The remaining private
-  answers to "is this copper connected" — copper-fill island anchoring (S5), routed-length sums in
-  `checks/length.ts` / `signal-integrity.ts` (S14) — are scheduled, not sanctioned (the
-  routing-obstacle and live-DRC pad layers were closed in S8: both read the `LegalityContext`
+  graph (`ctx.connectivity()`) is always built from the fail-safe items. There are NO remaining
+  private answers to "is this copper connected": copper-fill island anchoring reads the component
+  (S5), and routed length / diff-pair coupling read the path model (S14, below); the
+  routing-obstacle and live-DRC pad layers were closed in S8 (both read the `LegalityContext`
   items). Never add another.
+- **Routed length and diff-pair coupling are measures over the copper PATH since S14
+  (`docs/pcb-hardening/14-si-contract.md`).** `computeConnectivity(items, { junctions: true })`
+  additionally emits WHERE the copper touches (one junction per contact component, from the same
+  witness the union used — components and contacts are byte-identical with the option on or off;
+  default off). `pcb-connectivity/net-path.ts` builds, per net, the graph of trace cuts / via span
+  layers / logical-pin terminals, clips the centreline inside pad and via copper, contracts
+  zero-weight joins, and calls a route UNIQUE iff every terminal lies in one component of the
+  bridge-only forest; the measured set is the minimal terminal-spanning subtree (each edge once;
+  ≥ 3 pins = a tree total). A through via traversed outer-to-outer adds `boardThicknessMm`; any
+  other barrel traversal, a loop, a pour that bypasses the route, or an unlocatable contact is
+  `NET_LENGTH_UNDEFINED` with its reason — never a summed number. `ctx.netPaths()` is the lazy
+  memo (a SEPARATE junction-bearing connectivity; `ctx.connectivity()` stays junction-free).
+  `checks/length.ts` and `checks/signal-integrity.ts` read it; the SI check measures each member's
+  path against the partner's copper traces through `drc/si/coupled-span.ts` — exact closed-form
+  sublevel intervals (`pcb-geometry/segment-sublevel.ts`): `coupled = {g ≤ G}`, `tight = {g <
+  t − tol}` (both gate-free), `wide` on near-parallel (≤ 15°) strips only, `DIFF_PAIR_GAP` = max
+  over members of the off-band coupled length, uncoupled per member (2D), skew for two-pin members
+  only. The ONE diff-pair identity is `drc/diff-pair-resolver.ts` (`_P/_N`, `_+/_-`, `+/-`; bare
+  `P/N` never pairs; ambiguity and conflicting rows are `DRC_RULE_*` rows); the frontend
+  `tools/diff-pair.ts` re-exports it, and the route / tune gauges read `use-net-path-lengths.ts`
+  over the same kernels. Defaults live in `DIFF_PAIR_DEFAULTS` only. Every code here is
+  batch-only (never in `LIVE_CODES`).
 - **Electrical rules are constituents of the one rule model since S13 (`docs/pcb-hardening/13-electrical-contract.md`).**
   The IPC-2221B conductor spacing (edition B pinned, `ipc2221-spacing.ts` cites its sources) is a
   non-relaxable term of every resolved clearance (`rule-resolver.ts` → `voltage-term.ts`), so the

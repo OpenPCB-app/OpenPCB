@@ -16,6 +16,9 @@
 import type { PcbCopperLayerId, PcbPointMm } from "../../sdks/designer";
 import { CONNECT_EPS_MM } from "../pcb-geometry/tolerance";
 import type { CopperItem } from "./copper-items";
+import { JunctionCollector } from "./junctions";
+import { farthestWithinReach } from "./trace-arc";
+import type { Junction } from "./net-path-types";
 import {
   boundsOverlap,
   copperTouch,
@@ -47,6 +50,13 @@ export interface ConnectivityResult {
     string,
     ReadonlyMap<PcbCopperLayerId, ReadonlySet<string>>
   >;
+  /**
+   * WHERE the copper touches (SI contract 14 §1) — emitted only for
+   * `{ junctions: true }`. Components and contact records are byte-identical
+   * with the option on or off; `dangling`, `connectivity` and `copper-pour`
+   * pay nothing.
+   */
+  junctions?: readonly Junction[];
 }
 
 interface Contacts {
@@ -145,6 +155,7 @@ function sweepLayer(
   eps: number,
   parent: number[],
   contacts: Contacts,
+  junctions: JunctionCollector | null,
 ): void {
   for (let i = 0; i < bucket.length; i += 1) {
     const ai = bucket[i]!;
@@ -162,35 +173,12 @@ function sweepLayer(
       recordContacts(b, a, layer, eps, contacts);
       if (a.netId !== null && a.netId === b.netId && copperTouch(a, b, eps)) {
         unite(parent, ai, bi);
+        // The junction hook IS the union site (contract 14 §1): a location is
+        // only ever recorded for a contact the graph has already accepted.
+        junctions?.pair(a, b);
       }
     }
   }
-}
-
-/**
- * Largest `t ∈ [0, 1]` at which segment `a→b` is still within `reach` of `p`,
- * or null when no point of the segment is. Solves |a + t·(b−a) − p|² = reach².
- */
-function farthestWithinReach(
-  p: PcbPointMm,
-  a: PcbPointMm,
-  b: PcbPointMm,
-  reach: number,
-): number | null {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const fx = a.x - p.x;
-  const fy = a.y - p.y;
-  const qa = dx * dx + dy * dy;
-  const qc = fx * fx + fy * fy - reach * reach;
-  if (qa === 0) return qc <= 0 ? 0 : null;
-  const qb = 2 * (fx * dx + fy * dy);
-  const disc = qb * qb - 4 * qa * qc;
-  if (disc < 0) return null;
-  const root = Math.sqrt(disc);
-  const lo = Math.max(0, (-qb - root) / (2 * qa));
-  const hi = Math.min(1, (-qb + root) / (2 * qa));
-  return hi < lo ? null : hi;
 }
 
 /**
@@ -244,15 +232,26 @@ function recordSelfContacts(
   items: readonly CopperItem[],
   eps: number,
   contacts: Contacts,
+  junctions: JunctionCollector | null,
 ): void {
   for (const item of items) {
     if (item.kind !== "trace") continue;
     const points = item.pointsMm;
     if (points.length < 3) continue;
     const caps = contacts.endpoints.get(item.key)!;
-    if (capTouchesOwnBody(points, item.halfWidthMm, eps)) caps[0].add(item.key);
-    const reversed = [...points].reverse();
-    if (capTouchesOwnBody(reversed, item.halfWidthMm, eps)) caps[1].add(item.key);
+    // Two NON-ADJACENT segments of one trace touching is a join as much as two
+    // traces crossing (contract 14 §1, Astra #1); it never changes components,
+    // because a trace is already one node. It runs FIRST so a fold-back it
+    // already covers does not also get a cap junction of its own.
+    junctions?.traceSelf(item);
+    if (capTouchesOwnBody(points, item.halfWidthMm, eps)) {
+      caps[0].add(item.key);
+      junctions?.selfCap(item, 0);
+    }
+    if (capTouchesOwnBody([...points].reverse(), item.halfWidthMm, eps)) {
+      caps[1].add(item.key);
+      junctions?.selfCap(item, 1);
+    }
   }
 }
 
@@ -302,9 +301,10 @@ function buildComponents(
 
 export function computeConnectivity(
   items: ReadonlyArray<CopperItem>,
-  opts?: { epsMm?: number },
+  opts?: { epsMm?: number; junctions?: boolean },
 ): ConnectivityResult {
   const eps = opts?.epsMm ?? CONNECT_EPS_MM;
+  const collector = opts?.junctions ? new JunctionCollector(eps) : null;
   const sorted = [...items].sort((a, b) =>
     a.key < b.key ? -1 : a.key > b.key ? 1 : 0,
   );
@@ -331,9 +331,9 @@ export function computeConnectivity(
   });
 
   for (const [layer, bucket] of groupByLayer(sorted)) {
-    sweepLayer(sorted, bucket, layer, eps, parent, contacts);
+    sweepLayer(sorted, bucket, layer, eps, parent, contacts, collector);
   }
-  recordSelfContacts(sorted, eps, contacts);
+  recordSelfContacts(sorted, eps, contacts, collector);
   freezeContacts(contacts);
 
   const { components, componentOf } = buildComponents(sorted, parent);
@@ -342,5 +342,6 @@ export function computeConnectivity(
     componentOf,
     endpointContacts: contacts.endpoints,
     viaLayerContacts: contacts.viaLayers,
+    ...(collector ? { junctions: collector.finish() } : {}),
   };
 }

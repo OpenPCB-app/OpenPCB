@@ -257,7 +257,9 @@ import {
   initialBundleToolState,
   type BundlePad,
 } from "./tools/bundle-tool-state";
-import { diffPairPartnerName } from "./tools/diff-pair";
+import { buildDiffPairIndex } from "./tools/diff-pair";
+import { useNetPathLengths } from "./use-net-path-lengths";
+import { resolveLengthTarget } from "../../../../shared/drc/si/length-target";
 import { BundleHud, type BundleHudModel } from "./BundleHud";
 import {
   assignLaneOffsets,
@@ -1939,53 +1941,77 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     );
   }, [tuneState, workspace.projection]);
 
-  // Group rule for the tuned trace's net (longest targets exclude that net).
-  const tuneGroupTarget = useMemo(() => {
-    if (!tunedTrace || tunedTrace.netId === null || !workspace.projection) {
-      return null;
-    }
-    const netId = tunedTrace.netId;
-    const group = (workspace.projection.board.lengthMatchGroups ?? []).find(
-      (g) => g.netIds.includes(netId),
+  /** Length-match rule the tuned trace's net belongs to, if any. */
+  const tuneGroup = useMemo(() => {
+    const netId = tunedTrace?.netId ?? null;
+    if (netId === null || !workspace.projection) return null;
+    return (
+      (workspace.projection.board.lengthMatchGroups ?? []).find((g) =>
+        g.netIds.includes(netId),
+      ) ?? null
     );
-    if (!group) return null;
-    const lengthByNet = new Map<string, number>();
-    for (const t of workspace.projection.traces) {
-      if (t.netId === null || !group.netIds.includes(t.netId)) continue;
-      lengthByNet.set(
-        t.netId,
-        (lengthByNet.get(t.netId) ?? 0) + routeLengthMm(t.pointsNm),
-      );
-    }
-    const targetMm =
-      group.target.kind === "absolute"
-        ? group.target.mm
-        : Math.max(
-            0,
-            ...group.netIds
-              .filter((n) => n !== netId)
-              .map((n) => lengthByNet.get(n) ?? 0),
-          );
-    if (targetMm <= 0) return null;
-    return { name: group.name, targetMm, toleranceMm: group.toleranceMm };
   }, [tunedTrace, workspace.projection]);
+
+  /** Every net whose ROUTED length the tune gauge needs (contract 14 §6). */
+  const tuneLengthNetIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (tunedTrace?.netId) ids.add(tunedTrace.netId);
+    for (const netId of tuneGroup?.netIds ?? []) ids.add(netId);
+    return [...ids].sort();
+  }, [tuneGroup, tunedTrace]);
+
+  const tuneLengthByNet = useNetPathLengths(
+    workspace.projection,
+    tuneLengthNetIds,
+  );
+
+  // Group rule for the tuned trace's net (longest targets exclude that net) —
+  // the ONE target helper the batch check uses, with `exclude` (contract §6).
+  const tuneGroupTarget = useMemo(() => {
+    const netId = tunedTrace?.netId ?? null;
+    if (netId === null || !tuneGroup) return null;
+    const target = resolveLengthTarget(tuneGroup, tuneLengthByNet, {
+      exclude: netId,
+    });
+    if (!target || target.targetMm <= 0) return null;
+    return {
+      name: tuneGroup.name,
+      targetMm: target.targetMm,
+      toleranceMm: tuneGroup.toleranceMm,
+    };
+  }, [tuneGroup, tuneLengthByNet, tunedTrace]);
 
   const tuneNetLengths = useMemo(() => {
     if (tuneState.kind !== "tuning" || !tunedTrace || !workspace.projection) {
       return null;
     }
+    const baselineMm = routeLengthMm(tuneState.session.baselinePointsNm);
+    const netId = tunedTrace.netId;
+    const pathMm = netId === null ? undefined : tuneLengthByNet.get(netId);
+    if (pathMm !== undefined) {
+      // The tuned trace is ALREADY part of the net's routed path, so the
+      // committed remainder is the path minus this trace's baseline; the HUD
+      // re-adds the baseline and the proposal's in-flight delta, which makes
+      // the gauge total exactly `pathMm + (proposal − baseline)` (§6).
+      //
+      // NOT clamped at 0: `baselineMm` is the trace's RAW polyline while the
+      // path clips the copper inside each terminal (§2.2), so a lone trace
+      // between two pads has `otherMm < 0` — that negative IS the clipped pad
+      // copper. Clamping it would make the gauge read the raw polyline and
+      // contradict `NET_LENGTH_OUT_OF_RANGE` on the commonest topology.
+      return { otherMm: pathMm - baselineMm, baselineMm, pathDefined: true };
+    }
+    // An undefined path is not a reason to hide the gauge — fall back to the
+    // committed polyline sum and let the HUD mark the number approximate.
     let otherMm = 0;
     for (const t of workspace.projection.traces) {
       if (t.id === tunedTrace.id) continue;
-      if (tunedTrace.netId !== null && t.netId === tunedTrace.netId) {
+      if (netId !== null && t.netId === netId) {
         otherMm += routeLengthMm(t.pointsNm);
       }
     }
-    return {
-      otherMm,
-      baselineMm: routeLengthMm(tuneState.session.baselinePointsNm),
-    };
-  }, [tunedTrace, tuneState, workspace.projection]);
+    return { otherMm, baselineMm, pathDefined: false };
+  }, [tunedTrace, tuneLengthByNet, tuneState, workspace.projection]);
 
   const tuneResolvedTargetMm =
     tuneState.kind === "tuning"
@@ -2174,6 +2200,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       baselineMm: tuneNetLengths.baselineMm,
       proposalExtraMm: (tuneProposal?.achievedExtraNm ?? 0) / NM_PER_MM,
       meanderStatus: tuneProposal?.status ?? null,
+      pathDefined: tuneNetLengths.pathDefined,
     });
   }, [
     tuneGroupTarget,
@@ -2227,6 +2254,21 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
   }, [selection, toolMode, tuneHoverTraceId, tuneState]);
 
   // ---- Bundle routing (pcb.bundleRouting) ------------------------------
+
+  /**
+   * The board's ONE diff-pair identity (SI contract 14 §5): explicit
+   * `board.diffPairs` rows first, then the shared name convention. The bundle
+   * tool's partner auto-add and its HUD badge both read it, so the pair the
+   * tool collects is the pair the SI checks judge.
+   */
+  const diffPairIndex = useMemo(
+    () =>
+      buildDiffPairIndex(
+        workspace.projection?.board.diffPairs,
+        workspace.projection?.netNames ?? {},
+      ),
+    [workspace.projection],
+  );
 
   /** Nearest pad on the named net — the diff-pair partner auto-add. */
   const findNearestPadOnNet = useCallback(
@@ -2429,7 +2471,8 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       s.pads.length === 2 &&
       s.pads[0]!.netName !== null &&
       s.pads[1]!.netName !== null &&
-      diffPairPartnerName(s.pads[0]!.netName) === s.pads[1]!.netName;
+      diffPairIndex.partnerNetName(s.pads[0]!.netId, s.pads[0]!.netName) ===
+        s.pads[1]!.netName;
     return {
       padCount: s.pads.length,
       netNames,
@@ -2437,7 +2480,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
       pitchMm: s.pitchNm / NM_PER_MM,
       diffPair,
     };
-  }, [bundleState]);
+  }, [bundleState, diffPairIndex]);
 
   // Amber rings over collected pads — the in-scene collection feedback.
   const sceneBundlePads = useMemo(() => {
@@ -2858,7 +2901,10 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
               bundleState.session.pads.some((p) => p.padId === pad.padId);
             dispatchBundle({ kind: "toggle-pad", pad, ...toggleDefaults });
             if (!alreadyIn && netName) {
-              const partnerName = diffPairPartnerName(netName);
+              const partnerName = diffPairIndex.partnerNetName(
+                anchor.netId,
+                netName,
+              );
               const partner = partnerName
                 ? findNearestPadOnNet(partnerName, pad.centerNm)
                 : null;
@@ -4239,6 +4285,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     autoFinishProposal,
     bundleState,
     defaultNetClass,
+    diffPairIndex,
     dragSession,
     eventToMm,
     findNearestPadOnNet,
@@ -5265,44 +5312,66 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     [drcViolations, legalityContext],
   );
 
-  // Length-match gauge (pcb.lengthTuning): when the session net belongs to a
-  // group, resolve its target + the net's already-committed copper so the HUD
-  // shows "total / target". Longest targets exclude the session net itself.
-  const routeLengthTarget = useMemo(() => {
-    if (!lengthTuningEnabled) return null;
-    if (routeState.kind !== "routing" || !routeState.session.netId) return null;
-    const projection = workspace.projection;
-    if (!projection) return null;
-    const netId = routeState.session.netId;
-    const group = (projection.board.lengthMatchGroups ?? []).find((g) =>
-      g.netIds.includes(netId),
-    );
-    if (!group) return null;
-    const lengthByNet = new Map<string, number>();
-    for (const t of projection.traces) {
-      if (t.netId === null || !group.netIds.includes(t.netId)) continue;
-      lengthByNet.set(
-        t.netId,
-        (lengthByNet.get(t.netId) ?? 0) + routeLengthMm(t.pointsNm),
-      );
+  /** Net the route session is drawing, if any — the gauge's subject. */
+  const routeSessionNetId =
+    routeState.kind === "routing" ? routeState.session.netId : null;
+
+  /** Length-match rule the session net belongs to, if any. */
+  const routeGroup = useMemo(() => {
+    if (!lengthTuningEnabled || !routeSessionNetId || !workspace.projection) {
+      return null;
     }
-    const targetMm =
-      group.target.kind === "absolute"
-        ? group.target.mm
-        : Math.max(
-            0,
-            ...group.netIds
-              .filter((n) => n !== netId)
-              .map((n) => lengthByNet.get(n) ?? 0),
-          );
-    if (targetMm <= 0) return null;
+    return (
+      (workspace.projection.board.lengthMatchGroups ?? []).find((g) =>
+        g.netIds.includes(routeSessionNetId),
+      ) ?? null
+    );
+  }, [lengthTuningEnabled, routeSessionNetId, workspace.projection]);
+
+  /** Every net whose ROUTED length the route gauge needs (contract 14 §6). */
+  const routeLengthNetIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (routeSessionNetId) ids.add(routeSessionNetId);
+    for (const netId of routeGroup?.netIds ?? []) ids.add(netId);
+    return [...ids].sort();
+  }, [routeGroup, routeSessionNetId]);
+
+  const routeLengthByNet = useNetPathLengths(
+    workspace.projection,
+    routeLengthNetIds,
+  );
+
+  // Length-match gauge (pcb.lengthTuning): when the session net belongs to a
+  // group, resolve its target through the ONE target helper (`exclude` = the
+  // session net, i.e. "the longest OTHER member") and pair it with the net's
+  // committed ROUTED path length. The HUD adds the in-flight polyline.
+  const routeLengthTarget = useMemo(() => {
+    if (!routeGroup || !routeSessionNetId || !workspace.projection) return null;
+    const target = resolveLengthTarget(routeGroup, routeLengthByNet, {
+      exclude: routeSessionNetId,
+    });
+    if (!target || target.targetMm <= 0) return null;
+    const pathMm = routeLengthByNet.get(routeSessionNetId);
+    let committedMm = pathMm;
+    if (committedMm === undefined) {
+      // Mid-route the session net is normally OPEN, so it has no defined path.
+      // Fall back to its committed polyline sum and flag the gauge approximate
+      // instead of dropping it.
+      committedMm = 0;
+      for (const t of workspace.projection.traces) {
+        if (t.netId === routeSessionNetId) {
+          committedMm += routeLengthMm(t.pointsNm);
+        }
+      }
+    }
     return {
-      groupName: group.name,
-      targetMm,
-      toleranceMm: group.toleranceMm,
-      committedMm: lengthByNet.get(netId) ?? 0,
+      groupName: routeGroup.name,
+      targetMm: target.targetMm,
+      toleranceMm: routeGroup.toleranceMm,
+      committedMm,
+      pathDefined: pathMm !== undefined,
     };
-  }, [lengthTuningEnabled, routeState, workspace.projection]);
+  }, [routeGroup, routeLengthByNet, routeSessionNetId, workspace.projection]);
 
   // Route HUD view-model (net, layer, width + source, via sizes, length, DRC).
   const routeHudModel = useMemo(() => {

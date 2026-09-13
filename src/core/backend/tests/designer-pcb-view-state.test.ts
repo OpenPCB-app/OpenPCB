@@ -319,6 +319,43 @@ describe("designer PCB view-state persistence", () => {
     expect(proj?.board.netClasses[0]?.diffPairGapMm).toBe(0.15);
   });
 
+  test("diff-pair rows survive save/reload, couplingMaxGapMm included", async () => {
+    // SI contract 14 §4.2: the coupling window is a stored, per-pair field. A
+    // dropped one silently falls back to `4 · gap + 0.1`, which is a different
+    // rule than the one the user wrote; a stored 0 would mean "nothing
+    // couples" and turn every pair's whole length into uncoupled run, so it is
+    // refused like every other malformed optional number.
+    const { sdk, designId } = await createDesignerSdk("pcb-diff-pairs");
+    const result = await sdk.dispatchCommand(
+      designId,
+      envelope(designId, "cmd-diff-pairs", 0, {
+        type: "pcb_set_design_rules",
+        diffPairs: [
+          {
+            id: "dp1",
+            name: "USB",
+            pNetId: "p",
+            nNetId: "n",
+            gapMm: 0.15,
+            gapTolMm: 0.02,
+            maxUncoupledMm: 4,
+            maxSkewMm: 0.25,
+            couplingMaxGapMm: 1.25,
+          },
+          { id: "dp2", name: "CLK", pNetId: "a", nNetId: "b", couplingMaxGapMm: 0 },
+        ],
+      } as never),
+    );
+    expect(result.ok).toBe(true);
+
+    const pairs = (await sdk.getPcbProjection(designId))?.board.diffPairs;
+    expect(pairs?.[0]?.couplingMaxGapMm).toBe(1.25);
+    expect(pairs?.[0]?.gapTolMm).toBe(0.02);
+    expect(pairs?.[0]?.maxUncoupledMm).toBe(4);
+    expect(pairs?.[0]?.maxSkewMm).toBe(0.25);
+    expect(pairs?.[1]?.couplingMaxGapMm).toBeUndefined();
+  });
+
   test("new DRC/electrical fields survive save/reload (review blocker)", async () => {
     const { sdk, designId } = await createDesignerSdk("pcb-design-rules-new");
     const baseProj = await sdk.getPcbProjection(designId);

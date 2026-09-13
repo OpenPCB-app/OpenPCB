@@ -172,6 +172,9 @@ describe("buildRouteHudModel", () => {
       targetMm: 15,
       toleranceMm: 0.5,
       totalMm: 10, // 6 committed + 4 session
+      // The committed part is a DEFINED routed path unless the caller says
+      // otherwise (SI contract 14 §6).
+      pathDefined: true,
     });
     // Absent rule keeps the plain length display.
     const plain = buildRouteHudModel({

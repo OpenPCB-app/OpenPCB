@@ -5,3 +5,5 @@ export * from "./copper-records";
 export * from "./copper-items";
 export * from "./touch";
 export * from "./connectivity-graph";
+export * from "./net-path-types";
+export * from "./net-path";

@@ -119,8 +119,12 @@ sessions S5, S14 and S8. The S0 descriptions are kept below for the record.
    each kept island (`04-copper-pour-contract.md` §10); the kernel's `attached` is only the
    island-removal criterion. Was: `anchored = intersection(island, union(bare.sameNet))` where
    `bare.sameNet` includes pads, traces and vias — dead copper anchors. [v]
-4. **Routed length** — `checks/length.ts` and `checks/signal-integrity.ts` `netLength` sum every
-   trace polyline on the net: no continuity, no layer, no via barrel. [a]
+4. **Routed length** — *replaced in S14* (`docs/pcb-hardening/14-si-contract.md`): both checks read
+   `ctx.netPaths()` — the minimal terminal-spanning subtree of the bridge-only forest over the S1
+   junction graph (pad / via interiors clipped, through vias outer-to-outer = board thickness,
+   loops / pour bypasses / other via traversals `NET_LENGTH_UNDEFINED`); the route / tune HUD reads
+   the same model. Was: `netLength` summed every trace polyline on the net: no continuity, no
+   layer, no via barrel. [v]
 5. **Frontend pad-net fallback** — *deleted in S1* (`pcb-pad-nets.ts` removed; `projection.padNets`
    is always written by the projection loader and every consumer reads it directly). Was: pad→net
    reconstructed from ratsnest endpoints then trace-endpoint-on-pad-centre. [a]

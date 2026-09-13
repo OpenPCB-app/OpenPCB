@@ -71,6 +71,7 @@ export const DEFAULT_SEVERITY_BY_CODE: Record<DrcRuleCode, DrcSeverity> = {
   VIA_DANGLING: "warning",
   // length / SI
   NET_LENGTH_OUT_OF_RANGE: "warning",
+  NET_LENGTH_UNDEFINED: "warning",
   // electrical (P10)
   CREEPAGE_DISTANCE: "error",
   TRACE_CURRENT_WIDTH: "warning",
@@ -167,6 +168,7 @@ export const RULE_CLASS_BY_CODE: Record<DrcRuleCode, DrcRuleClass> = {
   NETCLASS_VIA_DIAMETER: "constraint",
   NETCLASS_VIA_DRILL: "constraint",
   NET_LENGTH_OUT_OF_RANGE: "constraint",
+  NET_LENGTH_UNDEFINED: "constraint",
   BOARD_OUTLINE_INVALID: "constraint",
   COPPER_OFF_BOARD: "constraint",
   KEEPOUT_VIOLATION: "constraint",

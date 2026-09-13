@@ -97,8 +97,8 @@ only for the memoised context (rules and areas first because they contextualise 
 | `dangling` | `TRACK_DANGLING`, `VIA_DANGLING` | connectivity contact records | S1 kernel | — |
 | `electrical` | `TRACE_CURRENT_WIDTH` (per trace, tier net's class current, inner / outer copper weight — 13 §5) | traces | `ipc2221-spacing.ts` | minimums |
 | `clearance` (S13 constituent) | `CREEPAGE_DISTANCE` — the IPC-2221 spacing constituent of every pair verdict, its own row beside the ordinary row (13 §3.3); pads of one footprint get the voltage constituent only | the six pair kinds | `rule-resolver.ts` voltage term, `pair-gap.ts` | clearance |
-| `signal-integrity` | `DIFF_PAIR_GAP`, `DIFF_PAIR_SKEW`, `DIFF_PAIR_UNCOUPLED_LENGTH` | traces of resolved pairs | own segment maths (S14) | bare `>` (S14) |
-| `length` | `NET_LENGTH_OUT_OF_RANGE` | traces per net, per group (anchor `net` + `lengthGroup`, S7) | `polylineLength` | bare (S14) |
+| `signal-integrity` | `DIFF_PAIR_GAP`, `DIFF_PAIR_SKEW`, `DIFF_PAIR_UNCOUPLED_LENGTH`, `NET_LENGTH_UNDEFINED` | the members' PATHS (`ctx.netPaths()`, contract 14 §2) against the partner's copper traces | `drc/si/coupled-span.ts` (closed-form sublevel intervals, contract 14 §4) | `below()` at `DRC_EPS_MM` (14 §4.2; amended 2026-09-13, was "bare") |
+| `length` | `NET_LENGTH_OUT_OF_RANGE`, `NET_LENGTH_UNDEFINED` | the net's PATH per group (anchor `net` + `lengthGroup`, S7) | `ctx.netPaths()` — the minimal terminal-spanning subtree (contract 14 §2–§3) | `below()` at `DRC_EPS_MM` (14 §4.2) |
 | `board` | `COPPER_TO_BOARD_EDGE`, `COPPER_OFF_BOARD`, `HOLE_TO_BOARD_EDGE`, `HOLE_OFF_BOARD`, `HOLE_TO_HOLE`, `FAB_HOLE_TO_HOLE` | traces, pads (disc-aware), vias, holes vs the biased region | region kernels, resolver `edgeClearance` / `holeToHole` | clearance for copper edge; minimums for holes |
 | `keepouts` | `KEEPOUT_VIOLATION` | traces, vias, pads (disc-aware), placement extents | `keepoutAffects` (S3a) | open interior |
 | `courtyard` (S12) | `COURTYARD_OVERLAP`, `COURTYARD_INVALID` | per-side courtyard regions (`ctx.placementCourtyard`) | `courtyard-rings.ts`, kernel `intersection` (11 §2) | positive area |
@@ -175,7 +175,7 @@ gate alike.
 | Clearance | `clearanceViolated(gap, req)` = `gap < req − GEOM_EPS_MM` (0.5 nm) | six copper pairs, copper↔edge, copper↔hole |
 | Short | `gap <= SHORT_EPS_MM` (1e-4), inclusive | short tier, null-net bridges |
 | Fab | `below(gap, fabMin)` | `FAB_CLEARANCE`, `FAB_HOLE_TO_HOLE`, the fab validators |
-| Bare | `>` / `<` with no grace | SI, length (S14) |
+| Bare | `>` / `<` with no grace | — (SI and length moved to `below()` at `DRC_EPS_MM` in S14, contract 14 §4.2) |
 
 (`OPEN_FINDINGS.md` §5.1 listed the FAB tier under the clearance regime; the code uses `below`,
 and this table is now the record.)
@@ -262,7 +262,7 @@ default from the projection (05 §8); none re-orders or re-derives.
 - Pour copper is never re-measured against foreign copper (§4).
 - Chained null-net shorts (§4).
 - The exact-arc second chance inside the chord band — CLOSED in S12b (contract 12 §4: certified interval, exact on ambiguity).
-- Via barrel length is absent from length / SI; SI and length comparisons carry no epsilon (S14).
+- Via barrel length: a through via traversed outer-to-outer contributes `boardThicknessMm`; any other barrel traversal is `NET_LENGTH_UNDEFINED(via)` (S14, contract 14 §2.5). SI and length comparisons use `below()` at `DRC_EPS_MM` (S14).
 - Outline-milling advisories are fab-advisory (`custom` fab: none). Cutouts are judged with the
   material OUTSIDE the ring (sharp void corners, parametric holes narrower than the cutter); the
   slot / neck search is side-agnostic, so a narrow material web between two lobes of one cutout

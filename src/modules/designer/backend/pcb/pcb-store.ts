@@ -927,12 +927,20 @@ function parseDiffPairs(value: unknown): PcbDiffPair[] {
     const gapTolMm = nonNeg(raw.gapTolMm);
     const maxUncoupledMm = nonNeg(raw.maxUncoupledMm);
     const maxSkewMm = nonNeg(raw.maxSkewMm);
+    // The coupling window (SI contract 14 §4.2) must be POSITIVE, not merely
+    // non-negative: a stored 0 would mean "nothing couples", silently turning
+    // every pair's whole length into uncoupled run. A bad value drops to the
+    // documented `4 · gap + 0.1` default like every other optional number.
+    const rawCoupling = asNumber(raw.couplingMaxGapMm);
+    const couplingMaxGapMm =
+      rawCoupling !== null && rawCoupling > 0 ? rawCoupling : null;
     out.push({
       id, name, pNetId, nNetId,
       ...(gapMm !== null ? { gapMm } : {}),
       ...(gapTolMm !== null ? { gapTolMm } : {}),
       ...(maxUncoupledMm !== null ? { maxUncoupledMm } : {}),
       ...(maxSkewMm !== null ? { maxSkewMm } : {}),
+      ...(couplingMaxGapMm !== null ? { couplingMaxGapMm } : {}),
     });
   }
   return out;

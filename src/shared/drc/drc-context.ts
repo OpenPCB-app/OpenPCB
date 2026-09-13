@@ -82,7 +82,10 @@ import type {
   ConnectivityResult,
   CopperItem,
   CopperRecords,
+  NetPaths,
 } from "../pcb-connectivity";
+import { computeConnectivity } from "../pcb-connectivity/connectivity-graph";
+import { computeNetPaths } from "../pcb-connectivity/net-path";
 import {
   footprintPadDrill,
   freeHoleDrill,
@@ -529,6 +532,18 @@ export interface DrcContext extends LegalityContext {
   copperItems(): readonly CopperItem[];
   /** Components + contact records over `copperItems()` (memoized). */
   connectivity(): ConnectivityResult;
+  /**
+   * The routed copper path of every net (SI contract 14 §2, §6) — the ONE
+   * length and coupling model `checks/length.ts` and
+   * `checks/signal-integrity.ts` read. Memoized and lazy for the same reason
+   * the graph above is.
+   *
+   * Deliberately built over a SECOND `computeConnectivity` call with
+   * `junctions: true`: junctions are what locate a contact along a trace, and
+   * every other consumer of `connectivity()` — dangling, the ratsnest, the
+   * pour — needs only the components, so they must not pay for them (§1).
+   */
+  netPaths(): NetPaths;
   /**
    * The fill verdict of EVERY effective copper zone, net-less ones included, in
    * `copperZones` order — computed once per run and shared (copper-pour
@@ -1183,6 +1198,7 @@ export function buildDrcContext(
   // pour layer costs a full fill-kernel run.
   let copperItemsCache: readonly CopperItem[] | undefined;
   let connectivityCache: ConnectivityResult | undefined;
+  let netPathsCache: NetPaths | undefined;
   let pourResultsCache:
     | ReadonlyArray<{ zone: EffectiveCopperZone; result: CopperFillResult }>
     | undefined;
@@ -1266,6 +1282,20 @@ export function buildDrcContext(
       return copperItemsCache!;
     },
     connectivity: ensureConnectivity,
+    netPaths() {
+      if (netPathsCache === undefined) {
+        ensureConnectivity();
+        const items = copperItemsCache!;
+        netPathsCache = computeNetPaths({
+          items,
+          connectivity: computeConnectivity(items, { junctions: true }),
+          layerCount: board.layerCount,
+          boardThicknessMm:
+            board.boardThicknessMm ?? DEFAULT_BOARD_THICKNESS_MM,
+        });
+      }
+      return netPathsCache;
+    },
     pourResults: ensurePourResults,
     placementExtent(placementId) {
       const cached = placementExtentCache.get(placementId);

@@ -82,6 +82,7 @@ export function TuneHud({
           <span
             className={model.band ? BAND_CLASS[model.band] : "text-text-tertiary"}
           >
+            {model.pathDefined ? "" : "≈"}
             {model.currentMm.toFixed(2)}
             {model.targetMm !== null ? ` / ${model.targetMm.toFixed(2)}` : ""} mm
           </span>

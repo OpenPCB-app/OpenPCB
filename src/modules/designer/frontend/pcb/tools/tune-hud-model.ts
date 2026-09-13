@@ -18,6 +18,12 @@ export interface TuneHudModel {
   toleranceMm: number | null;
   /** Net total with the proposal applied (mm). */
   currentMm: number;
+  /**
+   * False when the tuned net has no defined routed path (SI contract 14 §2.7)
+   * and `currentMm` fell back to the committed traces' polyline sum — the HUD
+   * marks the gauge "≈" rather than hiding it.
+   */
+  pathDefined: boolean;
   /** current − target; null without a target. */
   deltaMm: number | null;
   band: "short" | "ok" | "long" | null;
@@ -37,13 +43,23 @@ export function buildTuneHudModel(input: {
   netName: string | null;
   /** Matching length-match rule for the trace's net, if any. */
   group: { name: string; targetMm: number; toleranceMm: number } | null;
-  /** Net copper committed OUTSIDE the tuned trace (mm). */
+  /**
+   * The net's routed length OUTSIDE the tuned trace (mm): its `computeNetPaths`
+   * path length minus this trace's baseline, or the other committed traces'
+   * polyline sum when that path is undefined (`pathDefined: false`).
+   */
   netOtherMm: number;
   /** Baseline length of the tuned trace (mm). */
   baselineMm: number;
-  /** Extra length the current proposal adds (mm, 0 without a proposal). */
+  /**
+   * Extra length the current proposal adds (mm, 0 without a proposal). The
+   * in-flight delta — a plain polyline difference, never a re-walked path
+   * (SI contract 14 §6, §10).
+   */
   proposalExtraMm: number;
   meanderStatus: TuneMeanderStatus | null;
+  /** False when the tuned net's routed path is undefined; defaults to true. */
+  pathDefined?: boolean;
 }): TuneHudModel {
   const s = input.session;
   const targetSource =
@@ -77,6 +93,7 @@ export function buildTuneHudModel(input: {
     targetMm,
     toleranceMm,
     currentMm,
+    pathDefined: input.pathDefined !== false,
     deltaMm,
     band,
     amplitudeMm: s.amplitudeNm / NM_PER_MM,

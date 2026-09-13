@@ -41,6 +41,9 @@ export const EMIT_SITE_BY_CODE: Record<DrcRuleCode, { checks: readonly string[] 
   NETCLASS_VIA_DIAMETER: { checks: ["netclass"] },
   NETCLASS_VIA_DRILL: { checks: ["netclass"] },
   NET_LENGTH_OUT_OF_RANGE: { checks: ["length"] },
+  // Both consumers of the path model report an undefined path: the length
+  // check for a group member, the SI check for a diff-pair member (14 §3).
+  NET_LENGTH_UNDEFINED: { checks: ["length", "signal-integrity"] },
   BOARD_OUTLINE_INVALID: { checks: ["outline"] },
   KEEPOUT_VIOLATION: { checks: ["keepouts"] },
   ZONE_OVERLAP: { checks: ["zones"] },
@@ -81,8 +84,12 @@ export const EMIT_SITE_BY_CODE: Record<DrcRuleCode, { checks: readonly string[] 
   // structural / rule validity
   PLACED_PART_MISSING_FOOTPRINT: { checks: ["structural"] },
   NPTH_PAD_NET: { checks: ["structural"] },
-  DRC_RULE_INVALID: { checks: ["rules"] },
-  DRC_RULE_INEFFECTIVE: { checks: ["rules"] },
+  // The resolver's refusals (`rules`) plus the diff-pair table's own: a pair
+  // whose two classes disagree about the gap, or whose base name matches two
+  // positives, is a rule that cannot be applied / has no effect, and the SI
+  // check is the only place that knows (SI contract 14 §4.2, §5).
+  DRC_RULE_INVALID: { checks: ["rules", "signal-integrity"] },
+  DRC_RULE_INEFFECTIVE: { checks: ["rules", "signal-integrity"] },
   // courtyards / silkscreen / solder mask (DFM contract 11 §2–§4)
   COURTYARD_OVERLAP: { checks: ["courtyard"] },
   COURTYARD_INVALID: { checks: ["courtyard"] },

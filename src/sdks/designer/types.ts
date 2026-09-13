@@ -839,6 +839,14 @@ export interface PcbDiffPair {
   maxUncoupledMm?: number;
   /** Max intra-pair length skew (mm); default 0.5. */
   maxSkewMm?: number;
+  /**
+   * Maximum edge gap (mm) at which the partner's copper still counts as
+   * COUPLED to this member (SI contract 14 §4.2). Definitional, not physical:
+   * it is the window the coupled / uncoupled measures are taken over, and its
+   * default `4 · gap + 0.1` is the window the pre-S14 check used, kept so no
+   * board's verdict moves without an explicit edit.
+   */
+  couplingMaxGapMm?: number;
 }
 
 /**
@@ -2512,6 +2520,10 @@ export type DrcRuleCode =
   | "FAB_PAD"
   // --- Length matching (pcb.lengthTuning) ---
   | "NET_LENGTH_OUT_OF_RANGE"
+  // A member of a length group or a diff pair whose copper has no single
+  // routed length — a loop, a pour bypass or an undefined via traversal
+  // (SI contract 14 §3). The rule is never silently inert.
+  | "NET_LENGTH_UNDEFINED"
   // --- P2 (historical group label; all implemented) ---
   | "VIA_TO_VIA_CLEARANCE"
   | "PAD_TO_PAD_CLEARANCE"

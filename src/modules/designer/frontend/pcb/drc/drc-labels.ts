@@ -42,6 +42,7 @@ export const CODE_LABEL: Record<DrcRuleCode, string> = {
   FAB_DRILL: "Drill below fab minimum",
   FAB_PAD: "Via pad below fab minimum",
   NET_LENGTH_OUT_OF_RANGE: "Net length out of range",
+  NET_LENGTH_UNDEFINED: "Net length undefined",
   VIA_TO_VIA_CLEARANCE: "Via-to-via clearance",
   PAD_TO_PAD_CLEARANCE: "Pad-to-pad clearance",
   PAD_TO_VIA_CLEARANCE: "Pad-to-via clearance",

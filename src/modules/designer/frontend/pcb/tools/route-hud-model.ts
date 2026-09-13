@@ -41,13 +41,20 @@ export interface RouteHudModel {
   lengthMm: number;
   /**
    * Length-match gauge (pcb.lengthTuning): the session net belongs to a
-   * group. `totalMm` = already-committed net copper + this session's length.
+   * group. `totalMm` = the net's ROUTED path length (SI contract 14 §6) plus
+   * this session's in-flight polyline.
    */
   lengthTarget: {
     groupName: string;
     targetMm: number;
     toleranceMm: number;
     totalMm: number;
+    /**
+     * False when the net has no defined routed path and `totalMm` fell back to
+     * the committed traces' polyline sum — the HUD marks the gauge "≈" rather
+     * than hiding it, because an OPEN net is the normal case mid-route.
+     */
+    pathDefined: boolean;
   } | null;
   /**
    * Violations a `refuse` commit would be REJECTED for (live-parity contract
@@ -82,8 +89,14 @@ export function buildRouteHudModel(input: {
     groupName: string;
     targetMm: number;
     toleranceMm: number;
-    /** Net copper already committed OUTSIDE this session (mm). */
+    /**
+     * The net's committed routed length (mm): its `computeNetPaths` path
+     * length, or the committed traces' polyline sum when that path is
+     * undefined (`pathDefined: false`).
+     */
     committedMm: number;
+    /** False when that path is undefined; defaults to true. */
+    pathDefined?: boolean;
   } | null;
 }): RouteHudModel {
   const s = input.session;
@@ -93,6 +106,9 @@ export function buildRouteHudModel(input: {
     (sum, b) => sum + (b.run ? routeLengthMm(b.run.pointsNm) : 0),
     0,
   );
+  // The in-flight delta: copper this session has drawn but not committed, so
+  // no path model has seen it yet. It is a PLAIN POLYLINE length — no pad
+  // clipping, no via z — a stated v1 approximation (SI contract 14 §6, §10).
   const sessionLengthMm = pendingLengthMm + routeLengthMm(input.previewPathNm);
   return {
     netName: input.netName,
@@ -114,7 +130,10 @@ export function buildRouteHudModel(input: {
           groupName: input.lengthTarget.groupName,
           targetMm: input.lengthTarget.targetMm,
           toleranceMm: input.lengthTarget.toleranceMm,
+          // The gauge total the contract defines: the net's routed path length
+          // plus the in-flight polyline delta.
           totalMm: input.lengthTarget.committedMm + sessionLengthMm,
+          pathDefined: input.lengthTarget.pathDefined !== false,
         }
       : null,
     drcConflictCount: input.drcConflictCount,

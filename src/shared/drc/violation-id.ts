@@ -44,8 +44,15 @@ export function anchorKey(a: DrcAnchor): string {
       return `z:${escapeStructuralIdSegment(a.zoneId)}`;
     case "keepout":
       return `k:${escapeStructuralIdSegment(a.keepoutId)}`;
-    case "diffPair":
-      return `dp:${escapeStructuralIdSegment(a.pNetId)}:${escapeStructuralIdSegment(a.nNetId)}`;
+    case "diffPair": {
+      // Canonicalised in the KEY only (SI contract 14 §5, Astra #14): a pair is
+      // an unordered net set, so swapping `pNetId` / `nNetId` in the stored
+      // table must not re-id — and with it expire — every waiver on the pair.
+      // The anchor itself keeps the author's order for the message and the UI.
+      const [lo, hi] =
+        a.pNetId <= a.nNetId ? [a.pNetId, a.nNetId] : [a.nNetId, a.pNetId];
+      return `dp:${escapeStructuralIdSegment(lo)}:${escapeStructuralIdSegment(hi)}`;
+    }
     case "lengthGroup":
       return `lg:${escapeStructuralIdSegment(a.groupId)}`;
     case "rule":

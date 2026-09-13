@@ -7,10 +7,12 @@ exists ONLY to make the emit census a machine gate: together with
 and `golden-rules-2l`, the union of every emitted code across all six equals
 every `DrcRuleCode` member except `ZONE_FILL_FAILED` (documented exception
 below). Fabricator `jlcpcb_2l`, 2-layer, ≥ 80 primitives, ≥ 10 violations
-(the golden-suite non-triviality gates), 84 violations / 37 codes in this
-fixture alone (82 / 37 from S8 to S10; 84 / 38 until S8: the bridge trace's
-two overlap rows left when touching unassigned copper became an extension —
-contract 06 §4; S11 added the two fab rows noted under "Hole pairs"), all
+(the golden-suite non-triviality gates), 85 violations / 40 codes in this
+fixture alone since S14 (87 / 39 from S11 to S13; 82 / 37 from S8 to S10;
+84 / 38 until S8: the bridge trace's two overlap rows left when touching
+unassigned copper became an extension — contract 06 §4; S11 added the two fab
+rows noted under "Hole pairs"; S14 traded three `TRACK_DANGLING` rows for the
+pad terminals the path model needs and added `NET_LENGTH_UNDEFINED`), all
 ids unique.
 
 Outline: a polygon rectangle (120×90) with two deliberate milling features on
@@ -82,12 +84,18 @@ Deliberate violation-bearing items, by region (all F.Cu unless noted):
   `CREEPAGE_DISTANCE`. Net class `hc` (`currentA: 3`) on the default-width
   (0.2 mm) trace `t_hc`, well under the ~1.37 mm IPC-2221 minimum for 3 A ->
   `TRACE_CURRENT_WIDTH`. Diff pair `dp1` (`dp_p` 20 mm, `dp_n` 2 mm, coupled
-  over the first 2 mm at a 0.7 mm gap against an explicit 0.2 mm target) ->
-  `DIFF_PAIR_GAP` (gap deviation 0.5 mm > 0.05 mm tolerance),
-  `DIFF_PAIR_SKEW` (18 mm > 0.5 mm), `DIFF_PAIR_UNCOUPLED_LENGTH` (18 mm >
-  15 mm) — one diff pair provokes all three signal-integrity codes. Net
-  `lg1` (3 mm routed) against an absolute length-match group target of
-  10 mm ± 1 mm -> `NET_LENGTH_OUT_OF_RANGE`.
+  over the first 2 mm at a 0.5 mm copper gap against an explicit 0.2 mm
+  target) -> `DIFF_PAIR_GAP`, `DIFF_PAIR_SKEW`, `DIFF_PAIR_UNCOUPLED_LENGTH`
+  — one diff pair provokes all three signal-integrity codes. Net `lg1`
+  (3 mm routed) against an absolute length-match group target of
+  10 mm ± 1 mm -> `NET_LENGTH_OUT_OF_RANGE`. Net `lg2`, the second member of
+  that group, is reached from its two pads by TWO routes (`t_lg2_a` straight,
+  `t_lg2_b` around three sides) -> `NET_LENGTH_UNDEFINED`. Since S14 all four
+  of these nets carry PAD TERMINALS (`P_DPP_*`, `P_DPN_*`, `P_LG_*`,
+  `P_LG2_*`, 0.3 mm pads with a declared 0.5 mm `F.CrtYd` so the two pads
+  0.7 mm apart at x = −20 do not read as a courtyard overlap): under the path
+  model a trace-only net has no routed length at all, so without them every
+  code in this paragraph would go silent (contract 14 §2.7, §9).
 - **Keepouts (y=-8, x=-50..-4), one item per restriction kind:** `k_tracks`
   (tracks) crossed by `t_ko_tracks`; `k_vias` (vias) containing `v_ko`;
   `k_pads` (pads) containing `P_KO.1`; `k_body` (footprints) overlapped by
@@ -190,3 +198,47 @@ because it is the only pre-S13 golden that declares a voltage at all:
 `CREEPAGE_DISTANCE` ids are preserved by construction in any case: the id is
 code + sorted anchors + layer (never location-hashed) and the layered aggregate
 still reports the STRICTEST layer (13 §3.3).
+
+## S14 — routed length and coupling become measures over the path (contract 14)
+
+Re-fixtured and re-baselined 2026-09-13 (WP3). The fixture change is ADDITIVE —
+eight pad placements, the two `lg2` traces, `lg2` in `netNames` and in the
+`lg1grp` member list; no existing item moved. 87 -> 85 violations, 35 errors
+unchanged, 52 -> 50 warnings. Cause by cause:
+
+- **`TRACK_DANGLING` 18 -> 15.** `t_dp_p`, `t_dp_n` and `t_lg` now end on pads
+  instead of in mid-air. This is the fixture change, not an engine change: the
+  three rows describe copper that no longer dangles.
+- **`NET_LENGTH_UNDEFINED` +1 (new code).** `lg2` is joined to its two pads by
+  two independent routes, so no single routed length exists and the length rule
+  says so instead of summing both (contract 14 §2.4, §3). This is also the
+  corpus' only occurrence of the code, which is what keeps
+  `drc-golden.test.ts`'s corpus-union gate and the oracle's non-vacuity test
+  honest without a new exception entry.
+- **`NET_LENGTH_OUT_OF_RANGE` unchanged (1).** `lg1` measures 2.7 mm now (3 mm
+  of trace minus the 0.15 mm of copper inside each pad — copper inside a
+  terminal is not routed length, §2.2) against the same 10 mm ± 1 mm target.
+- **The three `DIFF_PAIR_*` rows keep their codes and counts, and all three
+  MOVE ID.** Two independent causes, neither a change of verdict:
+  (a) the `diffPair` anchor key is now canonicalised `min(p, n)` first
+  (§5, Astra #14), and this pair's stored order is `dp_p` / `dp_n`, so every
+  id that hashes it changes; (b) `DIFF_PAIR_UNCOUPLED_LENGTH` additionally
+  gained its second anchor — the worse member, `dp_p` (§8).
+  `DIFF_PAIR_GAP-v2-e4f6c4cf0b8a2c48` -> `-v2-6f5be11aa1d971f8`,
+  `DIFF_PAIR_SKEW-v2-c9c757bf9df0b41e` -> `-v2-fa594437a9c3ed9e`,
+  `DIFF_PAIR_UNCOUPLED_LENGTH-v2-82f06617c2cb899a` -> `-v2-582bdef23f9564cf`.
+- **What the three now measure.** `DIFF_PAIR_GAP` reports 1.850 mm — an
+  off-band COPPER LENGTH (§4.2), not a gap deviation: the 1.850 mm of `dp_p`
+  that runs beside `dp_n` at a 0.5 mm gap, outside the 0.2 ± 0.05 mm band. It
+  is the MAX over the two members, not their sum (`dp_n` sees the same stretch
+  as its own whole 1.700 mm path; the message states both figures). The figure
+  was 2.699 mm before the amended `wide` rule: the extra 0.849 mm was the band
+  `dp_p` runs through as it passes `dp_n`'s END CAP, where the gap opens from
+  0.5 mm to the edge of the coupling window — copper beside the rounded end of
+  the partner, not beside the partner's run.
+  `DIFF_PAIR_SKEW` reports 18.000 mm
+  (19.7 − 1.7, the two paths with their pad interiors clipped). 
+  `DIFF_PAIR_UNCOUPLED_LENGTH` reports 17.00 mm of `dp_p` beside no `dp_n`
+  copper. The pre-S14 numbers (18 mm skew, 18 mm uncoupled) came from summing
+  trace polylines.
+- **No other row moved.** The nine other goldens are byte-identical.
