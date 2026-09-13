@@ -4,29 +4,38 @@
 > Open work only. Completed work lives in git history, not in this file.
 > Six programs: Route tool · Compiler agent · MCP integration · Release hardening · DRC · Backlog.
 
-## Now — handoff (2026-09-12, S13 committed `8214488`; tree clean)
+## Now — handoff (2026-09-13, S14 committed `b417145`; tree clean)
 
 Session-resume block; `HANDOFF.md` is the entry point, `CURRENT_STATE.md` the snapshot.
 Everything below this block is the live program tracker and is unchanged.
 
-- [x] **S13 — electrical-rule fidelity** committed 2026-09-12 as `8214488` (contract 13 binding;
-      B7-1 closed; Astra brainstorm + spec-attack + repository-grounded adversarial-verify, R1 + R2
-      folded).
+- [x] **S14 committed 2026-09-13 as `b417145`** (contract 14 binding; B8-1..B8-7 closed; goldens
+      census re-baselined + `golden-si-2l` new).
+- [x] **S14 — SI v1 mathematical correctness** implemented 2026-09-13 (Astra spec-attack +
+      repository-grounded adversarial-verify, R1 + R2 folded; all gates at the program baseline).
 - [ ] **Shared-tags follow-up** (after the user tags `kicad-parsers-v0.1.4` / `kicad-import-v0.2.0`
       / `rendering-core-v0.1.4` in `../shared` from `e882332`): repin `package.json` in OpenPCB and
       CoreLibrary, `npm install` lock refresh, verify with a real `npm ci` in a scratch clone (lock
       diff = three tag lines, no `"link": true`), CoreLibrary `bun tools/rebuild-previews.ts` +
       `bun validate`. Separate commit.
-- [ ] **Next session — plan mode first** (`/fable-orchestrator` + `/pcb-hardening-review`): S14 (SI v1
-      mathematical correctness; Astra spec-attack + adversarial-verify xhigh; no tag dependency) or
-      S12c (polygon pads) once the shared tags exist.
+- [ ] **Next session — plan mode first** (`/fable-orchestrator` + `/pcb-hardening-review`): S15
+      (high-speed architecture runway; Astra brainstorm xhigh once; no tag dependency) or S12c
+      (polygon pads) once the shared tags exist.
+- [ ] S14 follow-ups: `intervals.ts` (drc/si) is generic arc-length algebra — `net-path-graph.ts`
+      could share it; the coupling sweep axis is per layer (a dense vertical + a dense horizontal
+      bundle on one layer get one compromise axis — an S9-style grid if a fixture ever shows it);
+      `unresolved` path reason has no hand-written board reaching it; the `rule` anchor doc
+      comment in `types.ts` still says "a stored `PcbDrcRule` row" (the SI check also files
+      synthetic `diffPair:…` ids); `findNearestPadOnNet` (PcbCanvas) resolves by net name where the
+      partner is now known by id; contract 14 §10 limits (near-parallel merge band, duplicate
+      records = loop, HUD omits pours, in-flight session polyline).
 - [ ] S13 follow-ups: per-layer tier (`tierNetOf(item, layer)`) for split unplated pads; the
       judge's direct null-net bridge is still per anchor across the faces of an unplated pad (06 §4,
       owner S18); memoise the route-obstacle overlay per (revision, session copper); the store
       accepts any finite `currentA` at the boundary (the resolver reports it); `trace-width.md`
       tables are computed from the formula — re-source if a primary table is ever available.
 - [ ] Mechanical splits (after S12c): `checks/clearance-judge.ts` (1027), `rule-resolver.ts` (590),
-      `drc-context.ts` (1365), `checks/board.ts` (1078), `manufacturability.ts` (525), and the five
+      `drc-context.ts` (≈1400), `checks/board.ts` (1078), `manufacturability.ts` (525), and the five
       S12 files over 500 lines.
 - [ ] S12b follow-ups: the 16 s board-budget exhaustion fixture (left out of the suite); CAM
       verification of the ≤ 2√2 nm Gerber arc residual on a real fab upload.
@@ -62,7 +71,16 @@ both are gated on manual QA on a real board before their dev flags can graduate.
       sets pair pitch and is stripped from the cloud BoardSnapshot to keep the wire schema stable.
 - [ ] **Skew tuning** = P5 Tune applied to the shorter leg. No extra code; usable once Tune passes QA.
 - [ ] **Release notes are required when graduating a dev flag.** Behaviour changes that must be
-      written up: snap tolerance moved to 8px/zoom (P2d), auto-finish / walkaround / lengthTuning /
+      written up: the S14 SI / length changes (`docs/pcb-hardening/14-si-contract.md`: routed
+      length is the pad-to-pad copper path — stubs, duplicates and pad / via interiors no longer
+      count, through vias add the board thickness, loops / pour bypasses / non-through vias report
+      `NET_LENGTH_UNDEFINED`; `DIFF_PAIR_GAP` is an off-band MEASURE on near-parallel runs and a
+      gap wider than the window is uncoupled; bare `P`/`N` net names no longer form a pair; a pair
+      without any gap target is reported ineffective instead of judged against a 1.0 mm window;
+      every `DIFF_PAIR_*` violation id on a board whose stored pair has `pNetId > nNetId` moves
+      once, expiring waivers on it; `NET_LENGTH_OUT_OF_RANGE` ids are unchanged so their waivers
+      carry over onto the new measure; the route / tune HUD shows "≈" while a net's path is
+      undefined), snap tolerance moved to 8px/zoom (P2d), auto-finish / walkaround / lengthTuning /
       bundleRouting behaviour, and the S1 connectivity changes (`docs/pcb-hardening/01-connectivity-contract.md`
       §7: GND airwires + `UNCONNECTED_NET` when no pour exists, `pcb.padShapeConnectivity` retired in
       favour of exact copper overlap, free-pad airwires, GND airwires now reach the cloud autorouter), and the S2 geometry changes

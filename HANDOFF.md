@@ -1,77 +1,72 @@
-# Handoff — PCB correctness-hardening program, Session 13 (electrical-rule fidelity)
+# Handoff — PCB correctness-hardening program, Session 14 (SI v1 mathematical correctness)
 
-Session 3 · 2026-09-12
+Session 4 · 2026-09-13
 
 ## Goal
 
 One physical PCB model that connectivity, geometry, zones, pours, routing, DRC, manufacturing checks
-and export all consume (`docs/pcb-hardening/PROGRAM.md`). This session delivered **S13 —
-electrical-rule fidelity** (contract `docs/pcb-hardening/13-electrical-contract.md`, binding) and
-committed it as `8214488` (S12b `ac968dd` and the contract 13 draft `01d3179` earlier in the same
-session). The tree is clean.
+and export all consume (`docs/pcb-hardening/PROGRAM.md`). This session delivered **S14 — SI v1
+mathematical correctness** (contract `docs/pcb-hardening/14-si-contract.md`, binding) and
+committed it as **`b417145`** on the user's "commit all" (a second commit carries the handoff
+files). The tree is clean.
 
 ## Original plan
 
-`~/.claude/plans/resume-implementation-snappy-ullman.md` (approved 2026-09-11, rewritten for S13):
-decisions D1–D10, WP0–6, the four user decisions (resolver constituent term; refuse + warn;
-coated option → refined to per-item exposure; rules UI backend-only). Operating model as
-`PROGRAM.md` "Standing instruction": plan mode (3 scouts + Opus plan-critique + an Astra
-`brainstorm` on the design) → contract → Astra spec-attack → `impl-critical` / `impl-careful`
-work packages → `reviewer-critical` → Astra repository-grounded adversarial-verify → gates →
-docs; never commit / push / stash.
+`~/.claude/plans/s14-si-v1-correctness.md` (rev 3): decisions D1–D7, WP0–6, eight user decisions
+taken by default. Operating model as `PROGRAM.md` "Standing instruction": reconnaissance +
+executed probes → Opus plan-critique (26 findings) → Astra spec-attack (15) → contract →
+`impl-critical` WP1 / WP2 in parallel → `reviewer-critical` R1 (11) → `impl-careful` WP3 → WP4 ∥
+WP5 → R2 (9) → Astra repository-grounded adversarial-verify (8) → fix rounds → gates → docs.
 
 ## Done so far (and why)
 
-- **§3 the voltage term** — `rule-resolver.ts` → `voltage-term.ts`: the IPC-2221B spacing is a
-  non-relaxable constituent of every resolved clearance (`ResolvedValue.{ordinaryMm, voltage}`,
-  `mm` = their max); the judge reports `CREEPAGE_DISTANCE` as its own row (pre-S13 id derivation,
-  strictest layer) beside the ordinary row; the pour halo, `zoneExclusions`, the route obstacles
-  and the live gate (refuse) inherit it. The separate creepage loop is gone.
-- **§4 effective nets** — `pcb-connectivity/effective-nets.ts`: connected components over
-  trace / pad / via contacts at `SHORT_EPS_MM` (pours excluded, inexact pads never join, unplated
-  pads one node per face); `tierNetOf` on the context; chain shorts via `checks/chain-short.ts`;
-  the live gate's per-call overlay (`effective-net-overlay.ts`) rejudges existing items whose
-  tier or exposure moved. B7-1 closed (`drc-audit-b7` live), the S7 chain limit closed.
-- **§1.2 exposure** — `mask-exposure.ts` / `mask-exposure-overlay.ts`: B4 only on a coated board
-  when neither item's copper meets any mask opening on that face (tenting is not coverage).
-- **§2 voltages** — DC potential + optional `voltageMinV` / `voltageMaxV` interval, Δ at 1 µV,
-  undeclared = reference (stated); magnitude caps; malformed input → `DRC_RULE_INVALID`, never
-  assessed; the store persists declarations, only the resolver refuses them.
-- **§5 current** — `currentItems` per-item form (tier net, inner / outer copper weight), live
-  warning; `requiredTraceWidthMm` guarded both ways.
-- **§6 constants** — Table 6-1 pinned to IPC-2221B from KiCad 8 @ `942661f` and smpspowersupply
-  (fetched 2026-09-11; IPC-2221C differs, never mixed); the in-repo `eda-standards` references
-  corrected (251–300 V row, 1.378 mil/oz, recomputed width tables).
-- **Dead ends ruled out:** signed AC-peak subtraction (two 300 V-peak nets 180° apart → Δ 0);
-  direct-adjacency effective nets (chains, pours, pending-only live judging); one row per pair
-  (a waiver erases the other constituent); a global "coated" switch (exposed pads); via ampacity
-  from barrel area (unverified thermal substitution); a rejudge budget (guarded nothing);
-  `{}`-substituting a malformed interval at the store (erased a live requirement); tenting as
-  coverage; sharing an unplated pad's node across faces.
-- **Goldens:** `golden-electrical-2l` new (85 primitives, 26 violations / 7 codes, attributed);
-  every pre-existing golden byte-identical (census walked cause by cause).
+- **Junctions** (`pcb-connectivity/{junctions,contact-components,terminal-contact,island-contact,
+  trace-arc}.ts`, `touch.ts` witness variants, `connectivity-graph.ts` opt-in
+  `{ junctions: true }`): WHERE the S1 copper touches, one junction per contact component, from the
+  same witness the union used; S1 components / contacts byte-identical either way.
+- **Net path model** (`net-path.ts`, `net-path-graph.ts`, `net-path-uniqueness.ts`,
+  `net-path-types.ts`): logical-pin terminals, terminal interiors clipped, zero-weight contraction,
+  bridge-only-forest uniqueness, minimal terminal-spanning subtree, through-via z, pour-bypass
+  contact sets; reasons `open | terminals | loop | pour | via | unresolved`.
+- **Coupling kernel** (`drc/si/{coupled-span,intervals,length-target}.ts`,
+  `pcb-geometry/segment-sublevel.ts`): exact sublevel intervals; `coupled` / `tight` gate-free,
+  `wide` on near-parallel strips (direction-invariant 15° gate), per-axis sweep.
+- **Consumers**: `checks/{length,signal-integrity,diff-pair-paths}.ts` on `ctx.netPaths()`;
+  `NET_LENGTH_UNDEFINED`; `PcbDiffPair.couplingMaxGapMm`; one `diff-pair-resolver.ts` (bare
+  `P/N` gone, conflicts / ambiguity reported); canonical `diffPair` anchor key; frontend
+  `use-net-path-lengths.ts`, `tools/diff-pair.ts` shim, `PcbCanvas` gauges + `route/tune-hud-model`
+  (`pathDefined` → "≈").
+- **Findings**: B8-1..B8-7 registered from executed probes and closed the same day
+  (`drc-audit-b8.test.ts` 8 live tests).
+- **Goldens**: `golden-si-2l` new (104 primitives, 24 violations / 10 codes, attributed);
+  `golden-census-2l` re-fixtured with pads + a looped `lg2`, 87 → 85, attributed; nine
+  byte-identical.
+- **Docs**: contract 14 (ledgers §12.0–§12.4), OPEN_FINDINGS (S14 section + §6.7), PROGRAM.md
+  (S14 done + decisions + evidence), 00-ground-truth §4, 06 §5 regime rows, designer AGENTS.md
+  "## DRC", hardening-skill scope, TODO.md release notes.
+- **Dead ends ruled out**: shortest terminal-spanning walk (NP-hard); `wide` as a bare strip union;
+  uniform-stackup inner-layer via z; summing off-band over both members; an angle-free `wide`.
 
 ## How to resume
 
 1. Run the `handoff` skill with "resume".
-2. Read `docs/pcb-hardening/PROGRAM.md` (S13 bullet, S12c / S14 rows), contract 13,
+2. Read `docs/pcb-hardening/PROGRAM.md` (S14 bullet; S15 / S12c rows), contract 14,
    `src/modules/designer/AGENTS.md` "## DRC", the memory file `pcb-hardening-program.md`.
-3. Verify HEAD is `8214488` on `master` with a clean tree and re-run the cheap gates:
-   `cd src/core/backend && bun test drc- legality connectivity routing` and
-   `npx tsc -b --force 2>&1 | grep -c "error TS"` (44, repo root only).
-4. Next (all on the user's word): the S11 shared-tags follow-up once `../shared` is tagged; then
-   S12c (polygon pads, needs the tags) or S14 (SI v1, no tag dependency) in plan mode via
-   `/fable-orchestrator` + `/pcb-hardening-review`; the mechanical splits listed in `TODO.md`.
+3. Verify HEAD is the handoff commit after `b417145` on `master` with a clean tree and re-run the
+   cheap gates: `cd src/core/backend && bun test drc-
+   legality connectivity net-path coupled` and `npx tsc -b --force 2>&1 | grep -c "error TS"` (44,
+   repo root only).
+4. Next (all on the user's word): the shared-tags follow-up; then S15 (no tag dependency) or S12c (needs the tags) in plan mode via
+   `/fable-orchestrator` + `/pcb-hardening-review`.
 
 ## Open questions
 
-- Whether the user has tagged `../shared` (S11 fields) — S12c depends on it; S14 does not.
-- A per-layer tier for split unplated pads and the judge's per-anchor direct bridge (06 §4) —
-  recorded limits, owner S18.
+- Whether the user has tagged `../shared` (S11 fields) — S12c depends on it; S15 does not.
+- `unresolved` path reason: no hand-written board reaches it (kernel-limit reason, reported).
+- The coupling sweep axis is per layer; an S9-style grid only if a fixture ever shows the cliff.
 
 ## Pointers
 
 - Tasks → `TODO.md` ("Now — handoff" block) · Snapshot → `CURRENT_STATE.md` · Session scratch →
-  `/private/tmp/claude-501/-Users-andrejvysny-workspace-openpcb-OpenPCB/5cf59798-7b89-4741-9c64-204100af5304/scratchpad/s13/`
-  (briefs wp2–wp5, Astra packets / outputs 0–2, sources/, r1 / r1b / r2 probes, gate logs;
-  temporary).
+  `/private/tmp/claude-501/-Users-andrejvysny-workspace-openpcb-OpenPCB/340ce36a-c0de-4c2c-b18e-0c0f3cb7c837/scratchpad/s14/`
+  (probe tests, Astra packets / prompts / outputs 1–2, gate logs; temporary).
