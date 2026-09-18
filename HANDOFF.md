@@ -1,72 +1,76 @@
-# Handoff — PCB correctness-hardening program, Session 14 (SI v1 mathematical correctness)
+# Handoff — PCB correctness-hardening program, Session 15 (high-speed architecture runway)
 
-Session 4 · 2026-09-13
+Session 5 · 2026-09-18
 
 ## Goal
 
 One physical PCB model that connectivity, geometry, zones, pours, routing, DRC, manufacturing checks
-and export all consume (`docs/pcb-hardening/PROGRAM.md`). This session delivered **S14 — SI v1
-mathematical correctness** (contract `docs/pcb-hardening/14-si-contract.md`, binding) and
-committed it as **`b417145`** on the user's "commit all" (a second commit carries the handoff
-files). The tree is clean.
+and export all consume (`docs/pcb-hardening/PROGRAM.md`). This session delivered **S15 — the
+high-speed architecture runway** (contract `docs/pcb-hardening/15-high-speed-runway.md`, binding).
+Committed on the user's word: **`0f7c002`** (S15), **`54b08f2`** (JLCPCB source research for S15b), then the
+handoff files. The tree is clean.
 
 ## Original plan
 
-`~/.claude/plans/s14-si-v1-correctness.md` (rev 3): decisions D1–D7, WP0–6, eight user decisions
-taken by default. Operating model as `PROGRAM.md` "Standing instruction": reconnaissance +
-executed probes → Opus plan-critique (26 findings) → Astra spec-attack (15) → contract →
-`impl-critical` WP1 / WP2 in parallel → `reviewer-critical` R1 (11) → `impl-careful` WP3 → WP4 ∥
-WP5 → R2 (9) → Astra repository-grounded adversarial-verify (8) → fix rounds → gates → docs.
+`~/.claude/plans/typed-discovering-glacier.md` (rev 3): 3 Explore scouts → plan-critique (opus
+`Plan`, 24 findings) → Astra run 0 (brainstorm, xhigh, prompt-only) → scope decision **T1+** (user):
+the compatibility contract, the one true dead end fixed, side defects registered, the stack-up
+model split off as **S15b**. Execution: `impl-careful` for the serializer ∥ Fable inline for the
+export refusal + contract → `reviewer-critical` R1 (16 executed probes) → fix round → gates → docs.
 
 ## Done so far (and why)
 
-- **Junctions** (`pcb-connectivity/{junctions,contact-components,terminal-contact,island-contact,
-  trace-arc}.ts`, `touch.ts` witness variants, `connectivity-graph.ts` opt-in
-  `{ junctions: true }`): WHERE the S1 copper touches, one junction per contact component, from the
-  same witness the union used; S1 components / contacts byte-identical either way.
-- **Net path model** (`net-path.ts`, `net-path-graph.ts`, `net-path-uniqueness.ts`,
-  `net-path-types.ts`): logical-pin terminals, terminal interiors clipped, zero-weight contraction,
-  bridge-only-forest uniqueness, minimal terminal-spanning subtree, through-via z, pour-bypass
-  contact sets; reasons `open | terminals | loop | pour | via | unresolved`.
-- **Coupling kernel** (`drc/si/{coupled-span,intervals,length-target}.ts`,
-  `pcb-geometry/segment-sublevel.ts`): exact sublevel intervals; `coupled` / `tight` gate-free,
-  `wide` on near-parallel strips (direction-invariant 15° gate), per-axis sweep.
-- **Consumers**: `checks/{length,signal-integrity,diff-pair-paths}.ts` on `ctx.netPaths()`;
-  `NET_LENGTH_UNDEFINED`; `PcbDiffPair.couplingMaxGapMm`; one `diff-pair-resolver.ts` (bare
-  `P/N` gone, conflicts / ambiguity reported); canonical `diffPair` anchor key; frontend
-  `use-net-path-lengths.ts`, `tools/diff-pair.ts` shim, `PcbCanvas` gauges + `route/tune-hud-model`
-  (`pathDefined` → "≈").
-- **Findings**: B8-1..B8-7 registered from executed probes and closed the same day
-  (`drc-audit-b8.test.ts` 8 live tests).
-- **Goldens**: `golden-si-2l` new (104 primitives, 24 violations / 10 codes, attributed);
-  `golden-census-2l` re-fixtured with pads + a looped `lg2`, 87 → 85, attributed; nine
-  byte-identical.
-- **Docs**: contract 14 (ledgers §12.0–§12.4), OPEN_FINDINGS (S14 section + §6.7), PROGRAM.md
-  (S14 done + decisions + evidence), 00-ground-truth §4, 06 §5 regime rows, designer AGENTS.md
-  "## DRC", hardening-skill scope, TODO.md release notes.
-- **Dead ends ruled out**: shortest terminal-spanning walk (NP-hard); `wide` as a bare strip union;
-  uniform-stackup inner-layer via z; summing off-band over both members; an angle-free `wide`.
+- **Contract 15**: capability ladder L0–L4, the dead-end register, eight binding extension rules
+  (§3: future SI consumes the junction GRAPH never the `NetPath` scalars; join-never-rename;
+  nominal ≠ finished copper; reference planes are derived candidates; broadside = a new measure;
+  extended nets = composition; stitched copper = a result variant; canonical-grid stack numerics),
+  the stack-up brief for S15b (§4), registered findings (§7), ledgers (§8).
+- **Settings survival** (the only irreversible dead end): every board-settings write goes through
+  `serializeBoardSettings` (`backend/pcb/board-settings-serialize.ts` +
+  `board-settings-known-keys.ts`; `pcb-store.ts` `loadBoardSettingsRow` /
+  `serializePcbBoardSettings`; the KiCad importer's two writes). `schemaVersion` stamped; unknown
+  keys carried at the top level, in `designRules` + sub-blocks, `viewState` + `autoLayoutConfig`,
+  on id-keyed rows and nested objects; every unparseable row rescued raw with its net-class
+  assignments; rule scopes paired by CONTENT; typed projection untouched. 32 tests.
+- **6+-layer export refusal**: `export/index.ts` throws 422 `export-unsupported-layer-count` (it
+  shipped F.Cu / B.Cu only); the export dialog renders the refusal and disables Export; the
+  assistant `designer_export_manufacturing` tool returns `ok: false` with the reason.
+- **Docs**: OPEN_FINDINGS "S15" (S15-1 / S15-2 closed, S15-3..S15-9 filed), PROGRAM (S15 done, new
+  S15b row, graph, exit gates, Astra table, decisions bullet), 00 / 10 / 13 / 14 pointers → S15b,
+  designer `AGENTS.md` (the one-serializer rule), hardening-skill scope, `TODO.md`.
+- **Dead ends ruled out**: recording via traversal / clipped spans in `NetPath` (re-derivable, and
+  the proposed shapes were insufficient); a stackup accessor with no producer (dominated); the
+  full stack-up in this session (its hybrid via length is non-additive:
+  `L(F,In2) + L(In2,B) = D_Cu − (t_F + t_B)/2 ≠ boardThicknessMm`; bounding surfaces unsourced);
+  index-paired scope carry-over (moves data onto the wrong scope).
 
 ## How to resume
 
 1. Run the `handoff` skill with "resume".
-2. Read `docs/pcb-hardening/PROGRAM.md` (S14 bullet; S15 / S12c rows), contract 14,
-   `src/modules/designer/AGENTS.md` "## DRC", the memory file `pcb-hardening-program.md`.
-3. Verify HEAD is the handoff commit after `b417145` on `master` with a clean tree and re-run the
-   cheap gates: `cd src/core/backend && bun test drc-
-   legality connectivity net-path coupled` and `npx tsc -b --force 2>&1 | grep -c "error TS"` (44,
-   repo root only).
-4. Next (all on the user's word): the shared-tags follow-up; then S15 (no tag dependency) or S12c (needs the tags) in plan mode via
-   `/fable-orchestrator` + `/pcb-hardening-review`.
+2. `git status` — expect a clean tree with HEAD = the handoff commit after `54b08f2`.
+3. Cheap gates: `cd src/core/backend && bun test board-settings-serialize designer-export
+   assistant-export-refusal drc-golden` and `npx tsc -b --force 2>&1 | grep -c "error TS"` (44, repo root).
+4. Next (plan mode first via `/fable-orchestrator` + `/pcb-hardening-review`): **S15b — board
+   stack-up model** (user decisions 2026-09-18: before S16; includes a minimal stack-up editor).
+   Read contract 15 §4 (the brief) and `docs/pcb-hardening/sources/jlcpcb-stackup-2026-09-18.md`
+   first. The shared-tags follow-up → S12c stays parked until the user tags `../shared`.
 
 ## Open questions
 
-- Whether the user has tagged `../shared` (S11 fields) — S12c depends on it; S15 does not.
-- `unresolved` path reason: no hand-written board reaches it (kernel-limit reason, reported).
-- The coupling sweep axis is per layer; an S9-style grid only if a fixture ever shows the cliff.
+- RESOLVED 2026-09-18: S15b runs before S16; it includes a minimal stack-up editor; the JLCPCB
+  reference is researched — the nominal thickness is a label with ± 10 % / ± 0.1 mm tolerance and
+  NO stated bounding surfaces (template sums run −10.8 % … +10.4 % of nominal), so a stack-up sum is
+  a problem only outside the fab tolerance and every axial length comes from declared items.
+- S15b: is a second fab (PCBWay) reference needed; where does the editor live (design-rules dialog
+  vs its own panel); does `layerCount` get its write command in the same session (S15-4)?
+- S15-10: a sourced per-fab inner-copper default (JLCPCB builds 0.5 oz inner; OpenPCB falls back to
+  the outer weight) — fix in S15b or with the fab presets?
+- Product: is future "delay" routed-copper, tap-to-tap or pin-to-pin; is reference analysis
+  descriptive or normative (contract 15 §6)?
+- Whether the user has tagged `../shared` (still `e882332` on 2026-09-18) — S12c depends on it.
 
 ## Pointers
 
 - Tasks → `TODO.md` ("Now — handoff" block) · Snapshot → `CURRENT_STATE.md` · Session scratch →
-  `/private/tmp/claude-501/-Users-andrejvysny-workspace-openpcb-OpenPCB/340ce36a-c0de-4c2c-b18e-0c0f3cb7c837/scratchpad/s14/`
-  (probe tests, Astra packets / prompts / outputs 1–2, gate logs; temporary).
+  `/private/tmp/claude-501/-Users-andrejvysny-workspace-openpcb-OpenPCB/95caf7cc-e8d9-4b0b-ab0a-0535b277c298/scratchpad/s15/`
+  (plan rev 3, Astra run 0 output, R1 probes, gate logs; temporary).

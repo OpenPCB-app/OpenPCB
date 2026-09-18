@@ -4,23 +4,30 @@
 > Open work only. Completed work lives in git history, not in this file.
 > Six programs: Route tool · Compiler agent · MCP integration · Release hardening · DRC · Backlog.
 
-## Now — handoff (2026-09-13, S14 committed `b417145`; tree clean)
+## Now — handoff (2026-09-18, S15 committed `0f7c002` + source research `54b08f2`; tree clean)
 
 Session-resume block; `HANDOFF.md` is the entry point, `CURRENT_STATE.md` the snapshot.
 Everything below this block is the live program tracker and is unchanged.
 
-- [x] **S14 committed 2026-09-13 as `b417145`** (contract 14 binding; B8-1..B8-7 closed; goldens
-      census re-baselined + `golden-si-2l` new).
-- [x] **S14 — SI v1 mathematical correctness** implemented 2026-09-13 (Astra spec-attack +
-      repository-grounded adversarial-verify, R1 + R2 folded; all gates at the program baseline).
+- [x] **S15 committed 2026-09-18 as `0f7c002`** (+ `54b08f2` JLCPCB source research for S15b; a third
+      commit carries the handoff files).
+- [x] **S15 — high-speed architecture runway** implemented 2026-09-18 (contract 15 binding; one true
+      dead end — settings erasure — fixed; S15-1 / S15-2 closed, S15-3..S15-9 filed; all gates at the
+      program baseline; no golden moved).
+- [x] **S14 committed 2026-09-13 as `b417145`** (contract 14 binding; B8-1..B8-7 closed).
 - [ ] **Shared-tags follow-up** (after the user tags `kicad-parsers-v0.1.4` / `kicad-import-v0.2.0`
       / `rendering-core-v0.1.4` in `../shared` from `e882332`): repin `package.json` in OpenPCB and
       CoreLibrary, `npm install` lock refresh, verify with a real `npm ci` in a scratch clone (lock
       diff = three tag lines, no `"link": true`), CoreLibrary `bun tools/rebuild-previews.ts` +
       `bun validate`. Separate commit.
-- [ ] **Next session — plan mode first** (`/fable-orchestrator` + `/pcb-hardening-review`): S15
-      (high-speed architecture runway; Astra brainstorm xhigh once; no tag dependency) or S12c
-      (polygon pads) once the shared tags exist.
+- [ ] **Next session — plan mode first** (`/fable-orchestrator` + `/pcb-hardening-review`): **S15b**
+      (board stack-up model — contract 15 §4 is its brief, `docs/pcb-hardening/sources/jlcpcb-stackup-2026-09-18.md`
+      its source note; Astra spec-attack xhigh; no tag dependency; user decisions 2026-09-18: runs
+      BEFORE S16 and INCLUDES a minimal stack-up editor) or S12c (polygon pads) once the shared tags exist.
+- [ ] S15 follow-ups: `updatePcbDesignRules` reads the settings row twice (once in
+      `ensurePcbBoardSettings`, once in `replacePcbBoardSettings`); `alignmentGuidesVisible` has no
+      `parseViewState` arm (S15-9); unknown keys inside `outline` / `cutouts` / maps are not carried
+      (15 §2.1 limit).
 - [ ] S14 follow-ups: `intervals.ts` (drc/si) is generic arc-length algebra — `net-path-graph.ts`
       could share it; the coupling sweep axis is per layer (a dense vertical + a dense horizontal
       bundle on one layer get one compromise axis — an S9-style grid if a fixture ever shows it);
@@ -71,7 +78,10 @@ both are gated on manual QA on a real board before their dev flags can graduate.
       sets pair pitch and is stripped from the cloud BoardSnapshot to keep the wire schema stable.
 - [ ] **Skew tuning** = P5 Tune applied to the shorter leg. No extra code; usable once Tune passes QA.
 - [ ] **Release notes are required when graduating a dev flag.** Behaviour changes that must be
-      written up: the S14 SI / length changes (`docs/pcb-hardening/14-si-contract.md`: routed
+      written up: the S15 changes (`docs/pcb-hardening/15-high-speed-runway.md`: the manufacturing
+      export now REFUSES a board with more than four copper layers — it used to ship F.Cu / B.Cu
+      only; the export dialog shows a refusal in the preview and disables Export; board settings
+      saved by this build keep fields written by a newer build), the S14 SI / length changes (`docs/pcb-hardening/14-si-contract.md`: routed
       length is the pad-to-pad copper path — stubs, duplicates and pad / via interiors no longer
       count, through vias add the board thickness, loops / pour bypasses / non-through vias report
       `NET_LENGTH_UNDEFINED`; `DIFF_PAIR_GAP` is an off-band MEASURE on near-parallel runs and a
