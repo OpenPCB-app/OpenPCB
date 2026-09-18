@@ -1853,6 +1853,38 @@ describe("export orchestrator", () => {
     );
   });
 
+  test("refuses a board with more than four copper layers", () => {
+    // The bundle has two inner-layer slots (In1.Cu / In2.Cu). A 6-layer board
+    // used to export F.Cu / B.Cu only while the job file claimed LayerNumber 6
+    // (contract 15 §7) — refuse instead of shipping a different board.
+    const proj = fixtureProjection();
+    proj.board.layerCount = 6;
+    let thrown: unknown = null;
+    try {
+      buildExportBundle(proj, null);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    const err = thrown as Error & {
+      status?: number;
+      type?: string;
+      extras?: { layerCount?: number };
+    };
+    expect(err.status).toBe(422);
+    expect(err.type).toBe(
+      "https://openpcb.dev/problems/export-unsupported-layer-count",
+    );
+    expect(err.extras?.layerCount).toBe(6);
+    // Two- and four-layer boards still export.
+    const four = fixtureProjection();
+    four.board.layerCount = 4;
+    expect(buildExportBundle(four, null).artifacts.length).toBe(16);
+    expect(buildExportBundle(fixtureProjection(), null).artifacts.length).toBe(
+      14,
+    );
+  });
+
   test("job file reports the board's own thickness", () => {
     // It used to report the 1.6 mm default for every board, so a 0.8 mm
     // stackup reached the fab mislabelled (contract 10 §5.4).

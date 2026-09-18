@@ -54,6 +54,10 @@ export function PcbExportDialog({
   const [summaryState, setSummaryState] = useState<"loading" | "ok" | "error">(
     "loading",
   );
+  // The backend REFUSES boards it cannot manufacture faithfully (non-through
+  // vias, more than four copper layers); the refusal must be readable here,
+  // not only after pressing Export.
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   const api = useMemo(
     () => createDesignerApi({ backendURL, moduleId }),
@@ -106,6 +110,7 @@ export function PcbExportDialog({
     if (!open) return;
     let cancelled = false;
     setSummaryState("loading");
+    setSummaryError(null);
     void api
       .fetchExportSummary(designId, {
         includeBom,
@@ -117,8 +122,9 @@ export function PcbExportDialog({
         setSummary(s);
         setSummaryState("ok");
       })
-      .catch(() => {
+      .catch((e) => {
         if (cancelled) return;
+        setSummaryError(e instanceof Error ? e.message : String(e));
         setSummaryState("error");
       });
     return () => {
@@ -264,6 +270,11 @@ export function PcbExportDialog({
               Preparing export preview…
             </p>
           ) : null}
+          {summaryState === "error" ? (
+            <p className="rounded-control border border-status-danger bg-status-danger-soft px-3 py-2 text-xs text-status-danger">
+              {summaryError ?? "Export preview failed"}
+            </p>
+          ) : null}
           {summaryState === "ok" && summary && summary.warnings.length > 0 ? (
             <div className="rounded-control border border-status-warning bg-status-warning-soft px-3 py-2 text-xs text-status-warning">
               <p className="flex items-center gap-1.5 font-medium">
@@ -321,6 +332,7 @@ export function PcbExportDialog({
             disabled={
               status.state === "running" ||
               drcGate.state === "running" ||
+              summaryState === "error" ||
               drcBlocks
             }
             title={

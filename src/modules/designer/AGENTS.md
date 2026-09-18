@@ -79,6 +79,19 @@ DRC checks, and constraint groups cheap to persist. It does **not** make them fr
 a command field, a parse-with-default branch in the board-settings parser, and a dialog section.
 And a command field with no parser in `routes.ts` is silently dropped over HTTP.
 
+**Every board-settings write goes through `serializeBoardSettings(storedRaw, next)`**
+(`backend/pcb/board-settings-serialize.ts`, S15 — `docs/pcb-hardening/15-high-speed-runway.md`
+§2.1). The reader is a whitelist, so a plain `JSON.stringify(settings)` ERASES whatever a newer
+build wrote. The serializer stamps `schemaVersion` and carries unknown top-level keys, unknown keys
+inside `designRules` and on id-keyed rows, and whole rows this build cannot parse; known keys always
+win and a deleted row stays deleted. Never add a second writer. Carried data is preserved, never
+interpreted — and it can be stale (an older build may have changed `layerCount` under a preserved
+block), so a reader of a newly-known block validates it against the known fields. A new persisted
+field must be a NEW KEY (or a new row variant), never a new VALUE of an existing key — an older
+build rewrites an enum value it cannot parse to its own fallback — and it goes beside, not inside,
+`outline` / `cutouts` / maps, whose internals are not carried. It additionally needs its content-digest entry (`board-content-digest.ts`, fail-closed rule) and
+its name in the serializer's known-key list (a missing name fails `tsc`).
+
 ## DRC
 
 - **Defect register and program.** `docs/drc/OPEN_FINDINGS.md` is the live defect register (one

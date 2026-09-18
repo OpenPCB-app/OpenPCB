@@ -50,6 +50,11 @@ import {
 import { pcbEntities } from "../schema";
 import { asNumber, asRecord, asString } from "../value-guards";
 import {
+  serializeBoardSettings,
+  serializeRawBoardSettings,
+  type BoardSettingsRowParsers,
+} from "./board-settings-serialize";
+import {
   createDefaultPcbBoardSettings,
   createDefaultPcbViewState,
 } from "./pcb-defaults";
@@ -1194,11 +1199,45 @@ function parseFabricator(
   return null;
 }
 
-export function ensurePcbBoardSettings(
+/**
+ * Which stored rows THIS build can parse — the rescue rule in
+ * `serializeBoardSettings` keeps only the ones it cannot, because a row the user
+ * was never shown cannot be a row the user deleted. Passed in rather than
+ * imported there, so the serializer never imports this module back.
+ */
+const NO_STORED_NET_CLASSES: ReadonlyMap<string, PcbNetClass> = new Map();
+const BOARD_SETTINGS_ROW_PARSERS: BoardSettingsRowParsers = {
+  netClasses: (row) => parseNetClass(row, NO_STORED_NET_CLASSES) !== null,
+  diffPairs: (row) => parseDiffPairs([row]).length === 1,
+  lengthMatchGroups: (row) => parseLengthMatchGroup(row) !== null,
+  drcRules: (row) => parseDrcRules([row]).rules.length === 1,
+};
+
+/**
+ * Every board-settings payload is built here — including the KiCad importer's,
+ * which inserts its row outside this module.
+ */
+export function serializePcbBoardSettings(
+  storedRaw: unknown,
+  next: PcbBoardSettings,
+): string {
+  return serializeBoardSettings(storedRaw, next, BOARD_SETTINGS_ROW_PARSERS);
+}
+
+/**
+ * The design's settings row as BOTH the typed projection and the raw payload it
+ * was parsed from. Every writer needs both — the raw is what
+ * `serializeBoardSettings` carries unknown keys over from — and reading them
+ * together is what keeps a settings write at one SELECT.
+ *
+ * The repair branch (a row that does not parse) is a write like any other, so it
+ * too carries the unknown keys of the payload it replaces.
+ */
+function loadBoardSettingsRow(
   db: DbClient,
   designId: string,
   timestamp: string,
-): PcbBoardSettings {
+): { settings: PcbBoardSettings; storedRaw: unknown } {
   const row = db
     .select()
     .from(pcbEntities)
@@ -1210,18 +1249,22 @@ export function ensurePcbBoardSettings(
     )
     .get();
 
+  const storedRaw = row ? parsePayload(row.payloadJson) : undefined;
   if (row) {
-    const parsed = parseBoardSettings(parsePayload(row.payloadJson));
-    if (parsed) return parsed;
+    const parsed = parseBoardSettings(storedRaw);
+    if (parsed) return { settings: parsed, storedRaw };
   }
 
   const settings = createDefaultPcbBoardSettings(timestamp);
   if (row) {
     db.update(pcbEntities)
-      .set({ payloadJson: JSON.stringify(settings), updatedAt: timestamp })
+      .set({
+        payloadJson: serializePcbBoardSettings(storedRaw, settings),
+        updatedAt: timestamp,
+      })
       .where(eq(pcbEntities.id, row.id))
       .run();
-    return settings;
+    return { settings, storedRaw };
   }
 
   db.insert(pcbEntities)
@@ -1229,12 +1272,20 @@ export function ensurePcbBoardSettings(
       id: crypto.randomUUID(),
       designId,
       kind: BOARD_SETTINGS_KIND,
-      payloadJson: JSON.stringify(settings),
+      payloadJson: serializePcbBoardSettings(undefined, settings),
       createdAt: timestamp,
       updatedAt: timestamp,
     })
     .run();
-  return settings;
+  return { settings, storedRaw: undefined };
+}
+
+export function ensurePcbBoardSettings(
+  db: DbClient,
+  designId: string,
+  timestamp: string,
+): PcbBoardSettings {
+  return loadBoardSettingsRow(db, designId, timestamp).settings;
 }
 
 export function updatePcbBoardSize(params: {
@@ -1246,7 +1297,7 @@ export function updatePcbBoardSize(params: {
   centerMm?: { x: number; y: number };
   timestamp: string;
 }): PcbBoardSettings {
-  const settings = ensurePcbBoardSettings(
+  const { settings, storedRaw } = loadBoardSettingsRow(
     params.db,
     params.designId,
     params.timestamp,
@@ -1264,7 +1315,10 @@ export function updatePcbBoardSize(params: {
 
   params.db
     .update(pcbEntities)
-    .set({ payloadJson: JSON.stringify(next), updatedAt: params.timestamp })
+    .set({
+      payloadJson: serializePcbBoardSettings(storedRaw, next),
+      updatedAt: params.timestamp,
+    })
     .where(
       and(
         eq(pcbEntities.designId, params.designId),
@@ -1283,7 +1337,7 @@ export function updatePcbBoardOutline(params: {
   cutouts?: PcbBoardSettings["cutouts"];
   timestamp: string;
 }): PcbBoardSettings {
-  const settings = ensurePcbBoardSettings(
+  const { settings, storedRaw } = loadBoardSettingsRow(
     params.db,
     params.designId,
     params.timestamp,
@@ -1296,7 +1350,10 @@ export function updatePcbBoardOutline(params: {
   };
   params.db
     .update(pcbEntities)
-    .set({ payloadJson: JSON.stringify(next), updatedAt: params.timestamp })
+    .set({
+      payloadJson: serializePcbBoardSettings(storedRaw, next),
+      updatedAt: params.timestamp,
+    })
     .where(
       and(
         eq(pcbEntities.designId, params.designId),
@@ -1313,7 +1370,7 @@ export function updatePcbActiveLayer(params: {
   layer: PcbLayerId;
   timestamp: string;
 }): PcbBoardSettings {
-  const settings = ensurePcbBoardSettings(
+  const { settings, storedRaw } = loadBoardSettingsRow(
     params.db,
     params.designId,
     params.timestamp,
@@ -1328,7 +1385,10 @@ export function updatePcbActiveLayer(params: {
   };
   params.db
     .update(pcbEntities)
-    .set({ payloadJson: JSON.stringify(next), updatedAt: params.timestamp })
+    .set({
+      payloadJson: serializePcbBoardSettings(storedRaw, next),
+      updatedAt: params.timestamp,
+    })
     .where(
       and(
         eq(pcbEntities.designId, params.designId),
@@ -1345,7 +1405,7 @@ export function updatePcbVisibleLayers(params: {
   visibleLayers: ReadonlyArray<PcbLayerId>;
   timestamp: string;
 }): PcbBoardSettings {
-  const settings = ensurePcbBoardSettings(
+  const { settings, storedRaw } = loadBoardSettingsRow(
     params.db,
     params.designId,
     params.timestamp,
@@ -1380,7 +1440,10 @@ export function updatePcbVisibleLayers(params: {
   };
   params.db
     .update(pcbEntities)
-    .set({ payloadJson: JSON.stringify(next), updatedAt: params.timestamp })
+    .set({
+      payloadJson: serializePcbBoardSettings(storedRaw, next),
+      updatedAt: params.timestamp,
+    })
     .where(
       and(
         eq(pcbEntities.designId, params.designId),
@@ -1397,7 +1460,7 @@ export function updatePcbViewState(params: {
   patch: Partial<PcbViewState>;
   timestamp: string;
 }): PcbBoardSettings {
-  const settings = ensurePcbBoardSettings(
+  const { settings, storedRaw } = loadBoardSettingsRow(
     params.db,
     params.designId,
     params.timestamp,
@@ -1411,7 +1474,10 @@ export function updatePcbViewState(params: {
   };
   params.db
     .update(pcbEntities)
-    .set({ payloadJson: JSON.stringify(next), updatedAt: params.timestamp })
+    .set({
+      payloadJson: serializePcbBoardSettings(storedRaw, next),
+      updatedAt: params.timestamp,
+    })
     .where(
       and(
         eq(pcbEntities.designId, params.designId),
@@ -1534,14 +1600,24 @@ export function updatePcbDesignRules(params: {
   return next;
 }
 
+/**
+ * Reads the stored payload itself rather than taking it from the caller: this is
+ * the public "write these settings" entry point, and a caller that arrived with
+ * a settings object from somewhere else (a world snapshot, an undo replay) has
+ * no raw payload to hand over.
+ */
 export function replacePcbBoardSettings(
   db: DbClient,
   designId: string,
   settings: PcbBoardSettings,
   timestamp: string,
 ): void {
+  const stored = readRawBoardSettingsRow(db, designId);
   db.update(pcbEntities)
-    .set({ payloadJson: JSON.stringify(settings), updatedAt: timestamp })
+    .set({
+      payloadJson: serializePcbBoardSettings(stored?.raw, settings),
+      updatedAt: timestamp,
+    })
     .where(
       and(
         eq(pcbEntities.designId, designId),
@@ -3081,9 +3157,12 @@ export function migrateLegacyBoardFill(
   delete viewState.copperFillLayers;
   delete viewState.copperFillPourNetIds;
   delete viewState.copperFillPadConnection;
-  // The RAW record, never the parsed settings: unknown fields must survive.
+  // The RAW record, never the typed serializer: the three legacy keys deleted
+  // just above are UNKNOWN to `viewState`'s carry-over, which would faithfully
+  // put them straight back. This write is the one that is allowed to remove
+  // data, so it writes the record it edited.
   db.update(pcbEntities)
-    .set({ payloadJson: JSON.stringify(row.raw), updatedAt: timestamp })
+    .set({ payloadJson: serializeRawBoardSettings(row.raw), updatedAt: timestamp })
     .where(eq(pcbEntities.id, row.rowId))
     .run();
   return true;

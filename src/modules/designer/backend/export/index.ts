@@ -66,6 +66,21 @@ export function buildExportBundle(
     );
   }
 
+  // The bundle emits In1.Cu / In2.Cu only (`GerberLayerKind` has two inner
+  // slots). A 6+-layer board — reachable through KiCad import — would ship
+  // without its other inner layers while the job file still claims the full
+  // `LayerNumber`: a different board from the one designed. REFUSE, as above
+  // (high-speed runway contract 15 §7; real multilayer emission is export backlog).
+  if (pcb.board.layerCount > 4) {
+    throw new AppError(
+      "OpenPCB's Gerber export writes at most four copper layers; this board has more and cannot be manufactured from this export",
+      422,
+      "Unsupported layer count",
+      "https://openpcb.dev/problems/export-unsupported-layer-count",
+      { layerCount: pcb.board.layerCount },
+    );
+  }
+
   const bundleName = exportBundleName(pcb.designId);
   const includeInner =
     options.includeInnerLayers !== false && pcb.board.layerCount === 4;

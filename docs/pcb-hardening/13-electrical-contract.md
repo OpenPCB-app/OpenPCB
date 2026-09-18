@@ -25,7 +25,7 @@ scope) and its regime note ("`CREEPAGE_DISTANCE` keeps `below()` (S13)" — §3.
 §6.6.
 
 Out of scope, with owners: signal integrity and length (S14, `14-…`); stack-up, per-layer
-dielectric and plane layers (S15); ERC (schematic-only, reads no voltage); the rules UI for
+dielectric and plane layers (S15b — contract 15 §3.3, §3.4, §4); ERC (schematic-only, reads no voltage); the rules UI for
 voltage, current and the electrical block (backlog P12); the cloud snapshot, which strips
 `voltageV` / `currentA` by contract (OPEN_FINDINGS §6.10) — there is no electrical parity
 server-side, and this contract records that as a boundary, not a defect.

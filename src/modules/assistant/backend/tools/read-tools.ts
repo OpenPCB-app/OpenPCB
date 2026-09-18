@@ -33,6 +33,12 @@ function designerOf(ctx: CoreBackendModuleContext): DesignerSDK | undefined {
   return ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER) ?? undefined;
 }
 
+function exportRefusalMessage(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  const status = (error as Error & { status?: unknown }).status;
+  return status === 422 ? error.message : null;
+}
+
 function missingDesign(designId: string | undefined): string {
   return designId
     ? `Design '${designId}' not found.`
@@ -314,13 +320,32 @@ function makeExportManufacturingTool(ctx: CoreBackendModuleContext): AiTool {
       };
       const designer = designerOf(ctx);
       if (!designer) return { ...NO_DESIGNER, limits: execCtx.limits };
-      const summary = args.designId
-        ? await designer.getManufacturingExportSummary(args.designId, {
-            includeBom: args.includeBom,
-            includePickAndPlace: args.includePickAndPlace,
-            includeInnerLayers: args.includeInnerLayers,
-          })
-        : null;
+      let summary: Awaited<
+        ReturnType<DesignerSDK["getManufacturingExportSummary"]>
+      > | null = null;
+      try {
+        summary = args.designId
+          ? await designer.getManufacturingExportSummary(args.designId, {
+              includeBom: args.includeBom,
+              includePickAndPlace: args.includePickAndPlace,
+              includeInnerLayers: args.includeInnerLayers,
+            })
+          : null;
+      } catch (error) {
+        // The export REFUSES a board it cannot manufacture faithfully (422:
+        // non-through vias, more than four copper layers). That is an answer
+        // about the design, not a tool failure.
+        const refusal = exportRefusalMessage(error);
+        if (refusal === null) throw error;
+        return {
+          ok: false,
+          data: null,
+          sources: [],
+          warnings: [refusal],
+          truncated: false,
+          limits: execCtx.limits,
+        };
+      }
       if (!summary) {
         return {
           ok: false,

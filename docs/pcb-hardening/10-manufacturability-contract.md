@@ -22,9 +22,10 @@ interpretations).
 Out of scope, with the owning session: trapezoid / custom pad outlines (the importer degrades
 them to a rectangle with a warning at the source, so every consumer — DRC, connectivity, the
 pour, the artwork — sees the same rectangle; S12c owns fidelity (re-owned from S12 on 2026-09-10 and from S12b on 2026-09-11); polygon pads are therefore not an
-export input in S11), 6+-layer Gerber inner layers (pre-existing export limit, filed), slot
+export input in S11), 6+-layer Gerber inner layers (pre-existing export limit, filed; since S15 the export REFUSES
+`layerCount > 4` — contract 15 §7.1), slot
 authoring UI and `drillSlot` command parsing (TODO), canvas / 3D rendering of slots and non-plated
-pads (UI backlog), a per-layer thickness / depth model and per-span drill files (S15 / export
+pads (UI backlog), a per-layer thickness / depth model and per-span drill files (S15b — contract 15 §4 — / export
 backlog), scoped `drillSize` / `copperToHole` / pad-`annularRing` rules (05 §13), PCBWay HDI
 presets, the library editor's "plated" toggle (UI backlog).
 

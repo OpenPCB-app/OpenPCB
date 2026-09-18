@@ -15,7 +15,7 @@ the ONE diff-pair identity; the route / tune HUD gauges as consumers. Resolves 0
 and the "scheduled, not sanctioned" private connectivity answers in the designer `AGENTS.md`.
 
 Out of scope, with owners: impedance, propagation delay, crosstalk, real stack-up (per-layer
-dielectric and copper, inner-layer elevations) — S15; tune meander generation, bundle lanes,
+dielectric and copper, inner-layer elevations) — S15b (contract 15 §3, §4); tune meander generation, bundle lanes,
 diff-pair routing — S17; ERC; the cloud snapshot (strips `diffPairGapMm`; `diffPairs` /
 `lengthMatchGroups` enter only the content digest); the live gate — every code here is batch-only
 (`DRC_STAGES`, never `LIVE_CODES`), recorded as a boundary.
@@ -332,8 +332,9 @@ looped `lg2`) and re-baselined 87 → 85 with attribution, the other nine byte-i
   uncertainty; overlapping copper is reported by `TRACE_OVERLAP`, not modelled as a conductor.
 - Two identical trace records are a `loop` (Astra #8: a conservative verdict on a data defect,
   co-reported by `TRACE_OVERLAP`).
-- Inner-layer via traversal and every non-through via → `undefined (via)` until S15 supplies
-  elevations.
+- Inner-layer via traversal and every non-through via → `undefined (via)` until S15b supplies
+  elevations. Contract 15 §4.6 binds how: a board with a valid declared stack-up uses ONE additive
+  axial metric for all its vias (through vias included); a board without one keeps §2.5 verbatim.
 - Uncoupled and coupled measures are 2D; via barrels neither couple nor count as uncoupled.
 - Skew is defined for chains only; tree members report `multi-terminal`.
 - The HUD omits pours and approximates the in-flight segment.
@@ -355,6 +356,9 @@ looped `lg2`) and re-baselined 87 → 85 with attribution, the other nine byte-i
   arc-length domains (the draft's "∪" across two parametrisations double-reported one stretch).
 - 2026-09-13 (WP5 authoring): `wide` is measured on near-parallel strips only (§4.2); `coupled`
   and `tight` unchanged.
+- 2026-09-18 (S15): §0 and §10 repoint the stack-up / elevation IOU to S15b; contract 15 §3 binds how
+  any later SI capability extends this contract (the junction graph is the input, never the `NetPath`
+  scalars; join, never rename; broadside coupling and stitched copper get new measures / variants).
 - 2026-09-13 (R1): §1 merge rule, §2.1 single-layer unplated pads, §2.6 contact-set rule, §2.7
   `unresolved`, §4.2 `t − tol > G` invalid, §6 `exclude`, §10 additions.
 

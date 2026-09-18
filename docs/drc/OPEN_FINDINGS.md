@@ -57,6 +57,26 @@ replaced with real specs, and two of those (B2-9, B5-LIVE-PADGEOMS) passed and w
 
 ---
 
+## S15 — high-speed runway — registered 2026-09-18
+
+S15 (`docs/pcb-hardening/15-high-speed-runway.md`) is a design session and owns no `B*` id: none of
+the entries below is a DRC false pass, so none carries a `test.todo`. They are recorded here so they
+have an owner.
+
+| # | Finding | State | Owner |
+|---|---|---|---|
+| S15-1 | **Board settings erased data they did not understand.** The reader whitelists named keys and every writer serialised the typed projection, with no schema version — a field written by a newer build was gone after an older build's next save. | CLOSED 2026-09-18: every write goes through `serializeBoardSettings` (`backend/pcb/board-settings-serialize.ts`), which stamps `schemaVersion` and carries unknown keys, nested keys and unparseable rows; pinned by `board-settings-serialize.test.ts` (contract 15 §2.1). Builds before S15 remain destructive. | S15 |
+| S15-2 | **A 6+-layer board exported F.Cu / B.Cu Gerbers only**, while the job file claimed the full `LayerNumber` (`export/index.ts` emitted inner layers only for `layerCount === 4`; reachable through KiCad import). | CLOSED fail-closed 2026-09-18: the export refuses `layerCount > 4` with 422 `export-unsupported-layer-count` (`designer-export.test.ts`). Emitting `In3.Cu`…: OPEN. | export backlog |
+| S15-3 | The 3D preview draws inner-layer traces on the `B.Cu` plane, skips inner pours, draws every via full-depth and never receives the board's own thickness (`three-d/primitives/*`, `Board3DCanvas.tsx`). | OPEN (visual only) | 3D backlog |
+| S15-4 | `PcbLayerTabStrip` lists `In1.Cu` / `In2.Cu` only; `layerCount` has no write command (default 2 or KiCad import). | OPEN | 4-layer UI backlog (`TODO.md` §6) |
+| S15-5 | The cloud snapshot caps the stack at 2 / 4 layers and keeps a private layer-order copy (`backend/pcb/board-snapshot.ts`). | OPEN, cross-repo (§6.10) | cloud session |
+| S15-6 | Five literal `1.6`s bypass `DEFAULT_BOARD_THICKNESS_MM` (`pcb-defaults.ts`, the assistant read tool, `PcbBoardPanel.tsx`, `PcbDesignRulesDialog.tsx` ×2). Same value today. | OPEN | S15b |
+| S15-7 | KiCad board import never reads `(general (thickness))` or `(setup (stackup …))` and drops the parsed layer `type` (`kicad-pcb-parser.ts`, `import/kicad-project/inspect.ts`) — every imported board is 1.6 mm, which feeds `VIA_ASPECT_RATIO` and the through-via length of contract 14 §2.5. | OPEN | S15b |
+| S15-8 | No stack-up model: inner-layer via traversal and every non-through via are `NET_LENGTH_UNDEFINED (via)` (contract 14 §10). | OPEN by design until the stack-up exists | S15b (contract 15 §4) |
+| S15-9 | `PcbViewState.alignmentGuidesVisible` is declared and the frontend persists it (`pcb-view-store.ts` `persistPatch`), but `parseViewState` has no arm for it — the per-design alignment-guides toggle is discarded on every read (found by the S15 implementer; a KNOWN key, so the carry-over rightly does not rescue it). | OPEN (UI state only) | UI backlog |
+
+---
+
 ## S14 — signal integrity and routed length — registered AND CLOSED 2026-09-13
 
 Every finding below was reproduced against the real `runDrc` on 2026-09-13 (session scratch

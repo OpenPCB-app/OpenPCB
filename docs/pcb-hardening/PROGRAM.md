@@ -97,9 +97,10 @@ S0  Ground truth
                                                                   └► S13 Electrical rules
                                                                   └► S14 SI v1 correctness
                                                                        └► S15 High-speed runway
-                                                                            └► S16 Base manual routing
-                                                                                 └► S17 Advanced routing
-                                                                                      └► S18 PCB trust gate
+                                                                            └► S15b Board stack-up model
+                                                                                 └► S16 Base manual routing
+                                                                                      └► S17 Advanced routing
+                                                                                           └► S18 PCB trust gate
 ```
 
 Do not, for example, improve diff-pair routing while SI's definition of coupled length is still
@@ -142,7 +143,8 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 | S12c | Polygon pads (trapezoid / custom) | True outlines through `kicad-parsers` (`rect_delta`, `primitives`) → `rendering-core` `outlinesMm` (pad-local rings, copper = their union) → `kicad-import`; OpenPCB consumers (records `rings`, pair kernels min over rings, pour, copper-shape unit, annular SDF, mask artwork, Gerber `%AM` primitive 4 per ring, canvas / 3D); existing rows re-parsed from `raw.rawSource`; authored fixtures (none exist). Re-owned from S12b on 2026-09-11; needs the S11 tag follow-up + a third tag round. | — | spec-attack xhigh | pending |
 | S13 | Electrical-rule fidelity | Voltage difference, clearance/creepage semantics, external/internal assumptions, current vs width, layer-dependent assumptions, defaults, applicable pad/via/trace combinations, interaction with net classes and scoped rules. Precise modest claims over ambitious labels. | B7-1 (unassigned copper does not inherit the rule tier of the net it extends — S8 Astra run 2) | brainstorm xhigh (run 0, plan mode: 13 concerns, two design choices broken) · spec-attack xhigh (run 1: 13 findings, all accepted) · repository-grounded adversarial-verify xhigh (run 2: 4 executed counterexamples, all fixed) | done 2026-09-12 (`13-electrical-contract.md`) |
 | S14 | SI v1 mathematical correctness | Routed length, branches/stubs, disconnected fragments, via contribution, coupled-span accounting, overlapping segments, gap measurement, diverging gap, layer transitions, pair ordering, determinism. Every reported SI number has a precise definition. | B8-1..B8-7 (registered 2026-09-13: duplicate copper double-counted, one-point gap sampling, P/N-order dependence, stubs/fragments as length, vias invisible, two pair identities + bare `P/N`, six HUD copies) | spec-attack xhigh (run 1: 15 findings — 13 accepted, 1 bound, 0 rejected) · repository-grounded adversarial-verify xhigh (run 2: 8 executed findings, all accepted and fixed) | done 2026-09-13 (`14-si-contract.md`) |
-| S15 | High-speed architecture runway | Identify contracts/data representations that would block credible future SI (stackup geometry, dielectrics, per-layer copper, reference planes, propagation delay, via barrel path, impedance targets, return-path continuity). Produce a compatibility document; change only what prevents a known dead end. | — | brainstorm xhigh (one call) | pending |
+| S15 | High-speed architecture runway | Identify contracts/data representations that would block credible future SI (stackup geometry, dielectrics, per-layer copper, reference planes, propagation delay, via barrel path, impedance targets, return-path continuity). Produce a compatibility document; change only what prevents a known dead end. | S15-1 (settings erasure), S15-2 (6+-layer export) | brainstorm xhigh (run 0, plan mode: 7 questions — the draft's two "blocked" verdicts on `NetPath` overruled, the hybrid via length shown non-additive) | done 2026-09-18 (`15-high-speed-runway.md`) |
+| S15b | Board stack-up model | The persisted stack-up contract 15 §4 briefs: ordered per-gap dielectric sequences, nominal / plating / finished copper kept distinct, per-quantity validity, `boardThicknessMm` authoritative with SOURCED bounding surfaces, ONE additive axial via metric per declared board (undeclared boards keep 14 §2.5 verbatim), stub as a branch inventory, canonical-grid numerics + conditional digest entry, KiCad `(general (thickness))` / `(setup (stackup))` import, the literal `1.6`s, and an explicit decision on the authoring surface. Pays 14 §10's elevation IOU. | S15-6, S15-7, S15-8 | spec-attack xhigh (+ post if the net-path kernel changes) | pending |
 
 ### Stage D — routing after legality is trustworthy
 
@@ -266,7 +268,12 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
   primitives, 24 violations / 10 codes) · small 95fbb3dc (nine byte-identical to the S13
   baseline).*
 - **S15** — a future-SI compatibility document exists; near-term changes only where they prevent
-  a known dead end.
+  a known dead end. *Met 2026-09-18 (`15-high-speed-runway.md`): the capability ladder, the dead-end
+  register (one true blocker — settings erasure — fixed), eight binding extension rules and the
+  stack-up brief for S15b; evidence in the S15 decisions bullet below.*
+- **S15b** — a board with a valid declared stack-up has elevations and ONE additive via metric; a
+  board without one is byte-identical to S14; every stack quantity is declared or unknown, never
+  defaulted or invented; KiCad imports carry their thickness.
 - **S16** — the route tool reasons consistently and deterministically about any legal path it
   represents.
 - **S17** — advanced routing consumes SI/DRC definitions rather than competing definitions of gap,
@@ -296,7 +303,8 @@ Status values: `pending` · `in progress` · `done` · `blocked`. Owned findings
 | S12c | xhigh pre |
 | S13 | xhigh brainstorm (plan) + **xhigh pre + xhigh post** (user: Astra "as needed", 2026-09-11) |
 | S14 | **xhigh pre + xhigh post** |
-| S15 | xhigh brainstorm once |
+| S15 | xhigh brainstorm once (run 0 completed 2026-09-18) |
+| S15b | xhigh pre (+ post if the net-path kernel changes) |
 | S16 | high/xhigh once |
 | S17 | xhigh when changing algorithms |
 | S18 | **xhigh post** (repository-grounded) |
@@ -784,6 +792,38 @@ unmanufacturable board.
   members (double-reported one stretch); an angle-free `wide` (every cap an error row). Files
   > 500 lines after S14: none new (`PcbCanvas.tsx` 6 879 pre-existing).
 
+
+- **S15 (2026-09-18) — high-speed architecture runway.** Decisions (user): Astra run 0 approved at
+  xhigh, prompt-only; scope **T1+** — the compatibility contract, the one true dead end fixed, the
+  side defects registered — with the stack-up model split off as **S15b** (the user's first lean was
+  the full persisted stack-up in-session; Astra run 0 showed its via-length rule non-additive and
+  `boardThicknessMm`'s bounding surfaces unsourced, so it needs its own contract and spec-attack);
+  the 6+-layer export is registered AND refused (422), not fixed. Fable: `NetPath` is a lossy RESULT,
+  not a dead end — persisted copper regenerates the junction graph, so future SI consumes the graph
+  and no result shape changes now (the plan-critique's two "blocked" verdicts overruled by Astra
+  and by the fact that nothing is destroyed); the only irreversible loss is the whitelist settings
+  parser erasing a newer build's keys → ONE serializer for every board-settings write
+  (`backend/pcb/board-settings-serialize.ts` + `board-settings-known-keys.ts`): `schemaVersion`,
+  unknown keys carried at the top level, in `designRules` + sub-blocks, in `viewState` +
+  `autoLayoutConfig`, on id-keyed rows and their nested objects, every unparseable row rescued raw
+  with its net-class assignments, scopes paired by CONTENT, the typed projection untouched; the
+  binding extension rules (contract 15 §3: graph not scalars, join-never-rename, nominal ≠ finished,
+  reference planes derived, broadside = new measure, extended nets = composition, stitched copper =
+  a result variant, canonical-grid stack numerics) and **"extend by new keys or row variants, never
+  by new values of an existing key"** (an older build rewrites an enum value it cannot parse).
+  Review: 3 Explore scouts; plan-critique (opus `Plan`, 24 findings / 6 blockers — folded, two
+  overruled, five deferred to S15b); Astra run 0 (brainstorm, 7 questions, every claim verified);
+  R1 (`reviewer-critical`, 16 executed probes, 9 findings: #1 high — index-paired scopes MOVED a
+  newer build's per-scope keys onto another scope; id-less / duplicate-id unparseable rows dropped;
+  a rescued class lost its assignments; `viewState` internals still erased; `__proto__` dropped;
+  the export refusal invisible in the dialog and thrown out of the assistant tool — all fixed; three
+  recorded as limits in 15 §2.1). No post-implementation Astra run (allocation spent; the change is
+  outside the DRC / geometry kernels). Gates at close: backend 3068 pass / 22 known
+  library+assistant fails / 8 skip / 0 todo (3098); tsc 44; Vitest 66 files 594 + 1 todo;
+  gen:contracts clean, `gen:check` fails only on the pre-existing `gen:copilot-schemas:check`
+  ENOENT with no generated file dirty; worker smoke byte-identical (census 85); e2e DRC + routing +
+  live-parity 5 + 1 skip; `package-lock.json` 034652c3; all eleven golden fixtures untouched (no
+  DRC code, no verdict and no id moved). Filed: S15-3..S15-9 in `OPEN_FINDINGS.md`.
 - **S13 (2026-09-12) — electrical-rule fidelity.** Decisions (user, 2026-09-11): the IPC-2221
   conductor spacing is a NON-RELAXABLE CONSTITUENT term of the one rule resolver — its own
   `CREEPAGE_DISTANCE` row (same id derivation) beside the ordinary clearance row, so the pour halo,

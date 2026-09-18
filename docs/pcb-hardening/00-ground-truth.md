@@ -96,7 +96,7 @@ B3-5, B3-6 are live tests. `rg -n "expect\(true\)\.toBe\(true\)" src/core/backen
 | Electrical / SI | `checks/electrical.ts` (current per item), the resolver's voltage term (`voltage-term.ts`, S13 — `13-electrical-contract.md`), `checks/signal-integrity.ts`, `checks/length.ts`, `backend/pcb/diff-pair-resolver.ts` | — | S13 done 2026-09-12 / S14 |
 | ERC | `backend/erc/erc-engine.ts` (`UNCONNECTED_INPUT_PIN`, `OUTPUT_OUTPUT_SHORT`, `NO_CONNECT_VIOLATION`; schematic-only) [a] | — | S13 (scope note only) |
 | Export | `backend/export/gerber/writer.ts` (own `padApertureShape`, pours via the shared fill kernel), `export/excellon/writer.ts` (slot-aware `G85`) [a] | — | S11/S12 |
-| Stackup | none — `boardThicknessMm` + `layerCount` + single `designRules.electrical.copperWeightOz`; no dielectric, no per-layer copper thickness [a] | — | S15 |
+| Stackup | none — `boardThicknessMm` + `layerCount` + single `designRules.electrical.copperWeightOz`; no dielectric, no per-layer copper thickness [a] | — | S15 (runway, contract 15) → S15b (the model) |
 
 ## 4. Duplicate-model register
 

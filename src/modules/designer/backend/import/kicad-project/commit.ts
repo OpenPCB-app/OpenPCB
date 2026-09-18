@@ -43,6 +43,7 @@ import type { CoreBackendModuleContext } from "../../../../../core/contracts/mod
 import { resolveCaptureRuntime } from "../../capture";
 import { commandLog, designHeads, pcbEntities } from "../../schema";
 import { createDefaultPcbBoardSettings } from "../../pcb/pcb-defaults";
+import { serializePcbBoardSettings } from "../../pcb/pcb-store";
 import { parseKicadSchematic } from "../../../../library/backend/infrastructure/parsers/kicad/kicad-schematic-parser";
 import { parseKicadPcb } from "../../../../library/backend/infrastructure/parsers/kicad/kicad-pcb-parser";
 import {
@@ -190,7 +191,7 @@ export async function commitKicadProjectImport(
           id: crypto.randomUUID(),
           designId,
           kind: "board_settings",
-          payloadJson: JSON.stringify(settings),
+          payloadJson: serializePcbBoardSettings(undefined, settings),
           createdAt: timestamp,
           updatedAt: timestamp,
         })
@@ -222,7 +223,9 @@ export async function commitKicadProjectImport(
       if (Object.keys(assignments).length > 0) {
         tx.update(pcbEntities)
           .set({
-            payloadJson: JSON.stringify({
+            // The row was inserted from `settings` a few statements above, so
+            // there is no stored payload with unknown keys to carry over.
+            payloadJson: serializePcbBoardSettings(undefined, {
               ...settings,
               perNetClassAssignments: assignments,
             }),
