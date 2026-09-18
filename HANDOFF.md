@@ -35,7 +35,7 @@ export refusal + contract → `reviewer-critical` R1 (16 executed probes) → fi
 - **6+-layer export refusal**: `export/index.ts` throws 422 `export-unsupported-layer-count` (it
   shipped F.Cu / B.Cu only); the export dialog renders the refusal and disables Export; the
   assistant `designer_export_manufacturing` tool returns `ok: false` with the reason.
-- **Docs**: OPEN_FINDINGS "S15" (S15-1 / S15-2 closed, S15-3..S15-9 filed), PROGRAM (S15 done, new
+- **Docs**: OPEN_FINDINGS "S15" (S15-1 / S15-2 closed, S15-3..S15-10 filed), PROGRAM (S15 done, new
   S15b row, graph, exit gates, Astra table, decisions bullet), 00 / 10 / 13 / 14 pointers → S15b,
   designer `AGENTS.md` (the one-serializer rule), hardening-skill scope, `TODO.md`.
 - **Dead ends ruled out**: recording via traversal / clipped spans in `NetPath` (re-derivable, and
@@ -47,7 +47,8 @@ export refusal + contract → `reviewer-critical` R1 (16 executed probes) → fi
 ## How to resume
 
 1. Run the `handoff` skill with "resume".
-2. `git status` — expect a clean tree with HEAD = the handoff commit after `54b08f2`.
+2. `git status` — expect a clean tree; `git log --oneline -5` shows `0f7c002` (S15), `54b08f2`
+   (source research), `7c8c0af` + one refresh (handoff files). Not pushed.
 3. Cheap gates: `cd src/core/backend && bun test board-settings-serialize designer-export
    assistant-export-refusal drc-golden` and `npx tsc -b --force 2>&1 | grep -c "error TS"` (44, repo root).
 4. Next (plan mode first via `/fable-orchestrator` + `/pcb-hardening-review`): **S15b — board

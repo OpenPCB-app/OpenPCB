@@ -9,10 +9,14 @@
 Session-resume block; `HANDOFF.md` is the entry point, `CURRENT_STATE.md` the snapshot.
 Everything below this block is the live program tracker and is unchanged.
 
+- [ ] **NEXT: S15b — board stack-up model**, plan mode first (`/fable-orchestrator` +
+      `/pcb-hardening-review`, Astra spec-attack xhigh): brief = contract 15 §4, source note =
+      `docs/pcb-hardening/sources/jlcpcb-stackup-2026-09-18.md`; before S16; includes a minimal
+      stack-up editor; owns S15-6 / S15-7 / S15-8 / S15-10.
 - [x] **S15 committed 2026-09-18 as `0f7c002`** (+ `54b08f2` JLCPCB source research for S15b; a third
       commit carries the handoff files).
 - [x] **S15 — high-speed architecture runway** implemented 2026-09-18 (contract 15 binding; one true
-      dead end — settings erasure — fixed; S15-1 / S15-2 closed, S15-3..S15-9 filed; all gates at the
+      dead end — settings erasure — fixed; S15-1 / S15-2 closed, S15-3..S15-10 filed; all gates at the
       program baseline; no golden moved).
 - [x] **S14 committed 2026-09-13 as `b417145`** (contract 14 binding; B8-1..B8-7 closed).
 - [ ] **Shared-tags follow-up** (after the user tags `kicad-parsers-v0.1.4` / `kicad-import-v0.2.0`

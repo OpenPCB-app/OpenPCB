@@ -1,9 +1,10 @@
 # Current State
 
-Last verified: 2026-09-18 11:20 (full gate run, logs in `scratchpad/s15/gate-*.log`)
+Last verified: 2026-09-18 11:31 (snapshot: clean tree, HEAD `7c8c0af` + this handoff refresh; full gate run 11:20 on the S15 code, unchanged since — only docs were committed after it)
 
 - **Branch:** `master`; S15 committed 2026-09-18 as `0f7c002`, the S15b source research as `54b08f2`, the
-  handoff files in a third commit; clean tree, nothing staged.
+  handoff files as `7c8c0af` (+ one refresh commit); clean tree, nothing staged; local `master` is ahead of
+  `origin/master` — NOT pushed (push only on the user's word).
 - **Changed files (S15):** new `docs/pcb-hardening/15-high-speed-runway.md`,
   `src/modules/designer/backend/pcb/{board-settings-serialize,board-settings-known-keys}.ts`,
   tests `src/core/backend/tests/{board-settings-serialize,assistant-export-refusal}.test.ts`;
