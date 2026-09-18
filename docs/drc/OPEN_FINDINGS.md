@@ -73,6 +73,7 @@ have an owner.
 | S15-6 | Five literal `1.6`s bypass `DEFAULT_BOARD_THICKNESS_MM` (`pcb-defaults.ts`, the assistant read tool, `PcbBoardPanel.tsx`, `PcbDesignRulesDialog.tsx` ×2). Same value today. | OPEN | S15b |
 | S15-7 | KiCad board import never reads `(general (thickness))` or `(setup (stackup …))` and drops the parsed layer `type` (`kicad-pcb-parser.ts`, `import/kicad-project/inspect.ts`) — every imported board is 1.6 mm, which feeds `VIA_ASPECT_RATIO` and the through-via length of contract 14 §2.5. | OPEN | S15b |
 | S15-8 | No stack-up model: inner-layer via traversal and every non-through via are `NET_LENGTH_UNDEFINED (via)` (contract 14 §10). | OPEN by design until the stack-up exists | S15b (contract 15 §4) |
+| S15-10 | `TRACE_CURRENT_WIDTH` judges inner layers at `innerCopperWeightOz ?? copperWeightOz ?? 1` (13 §5). JLCPCB builds inner layers at 0.5 oz by default (`docs/pcb-hardening/sources/jlcpcb-stackup-2026-09-18.md` §3), so a multilayer JLCPCB board left at defaults is judged at 1 oz inner — OPTIMISTIC for the current check. A stated assumption of contract 13, not a code defect; the fix is a sourced per-fab inner default or the declared stack-up. | OPEN | S15b |
 | S15-9 | `PcbViewState.alignmentGuidesVisible` is declared and the frontend persists it (`pcb-view-store.ts` `persistPatch`), but `parseViewState` has no arm for it — the per-design alignment-guides toggle is discarded on every read (found by the S15 implementer; a KNOWN key, so the carry-over rightly does not rescue it). | OPEN (UI state only) | UI backlog |
 
 ---

@@ -222,17 +222,26 @@ S15b owns the persisted model. S15 fixes what it may and may not be:
    Asymmetric builds are legal data. Replacing a sequence by an averaged Dk is forbidden.
 2. **Copper.** Nominal base weight, added plating and declared finished thickness are three
    quantities (§3.3). Weight alone is not geometric ground truth; the oz → mm conversion is the
-   sourced 1.378 mil/oz of 13 §6 and nothing else.
+   sourced 1.378 mil/oz of 13 §6 and nothing else, and a DECLARED per-layer thickness overrides it:
+   JLCPCB's templates give 0.5 oz inner copper as 0.0152 mm (copper loss in production), not the
+   0.0175 mm the conversion yields. Pressed prepreg thickness likewise differs from the sheet's
+   nominal (0.2104 vs 0.21844 for 7628) — the stack-up stores the pressed value.
 3. **Unknown is not zero.** An omitted mask, plating or Df is unknown. Validity is PER QUANTITY: a
    missing Df must not void elevations; a missing geometric thickness does (Astra Q4).
 4. **Material properties are qualified.** Dk and Df are dimensionless and each carries its own
    frequency qualifier; an unqualified value stays unqualified. No material library, no default
    Dk: `/eda-standards` holds no sourced dielectric value today (its "εr ≈ 4.2–4.6" line is
    unsourced and must not be used).
-5. **`boardThicknessMm` stays authoritative as a mechanical requirement.** A declared stack-up's sum
-   is derived; a disagreement is a reported problem, never an override and never silently
-   redistributed across gaps. WHICH SURFACES bound it (outer copper, mask, finish) is undefined
-   today and S15b must define it from a sourced fab document before it writes a formula.
+5. **`boardThicknessMm` stays authoritative as a mechanical requirement — a NOMINAL with a fab
+   tolerance, not a geometric sum.** Sourced 2026-09-18 (`sources/jlcpcb-stackup-2026-09-18.md`):
+   JLCPCB states ± 10 % (≥ 1.0 mm) / ± 0.1 mm (< 1.0 mm) and does NOT state which surfaces bound the
+   finished thickness; its own impedance templates sum (copper + dielectric) to −10.8 % … +10.4 % of
+   their nominal (`JLC04161H-7628`: 1.5862 for 1.6). So a declared stack-up's sum is derived and
+   never overrides the nominal, is never redistributed across gaps, and a disagreement is a reported
+   problem ONLY outside the fab's stated tolerance — inside it, it is a normal build. The model must
+   not need to know whether the mask is inside the nominal: elevations are measured between copper
+   layers, and every axial length on a declared board comes from the declared items, never from
+   `boardThicknessMm`.
 6. **One additive axial metric per declared board.** With copper layer `i` occupying `[a_i, b_i]`
    and tap elevation `c_i = (a_i + b_i) / 2`, the axial length between layers is `|c_j − c_i|` —
    additive over ordered taps. It is NOT compatible with "a through via is `boardThicknessMm`":
@@ -248,8 +257,8 @@ S15b owns the persisted model. S15 fixes what it may and may not be:
    declaration; `fromLayer` / `toLayer` is a nominal span.
 8. **Import and authoring.** KiCad `(general (thickness))` and `(setup (stackup …))` are read by
    the in-tree board parser (no shared-tag dependency); today every imported board is 1.6 mm.
-   Without an authoring surface a stack-up arrives only by import — S15b decides the surface
-   explicitly rather than implying it.
+   Without an authoring surface a stack-up arrives only by import — so S15b INCLUDES a minimal
+   stack-up editor (user decision 2026-09-18), and S15b runs BEFORE S16 (same decision).
 9. **Digest.** The stack-up enters the content digest conditionally, so undeclared boards keep
    their digest.
 
@@ -339,4 +348,14 @@ rescued, assignments carried; #6 a stored key named `__proto__` was dropped; #8 
 refusal was invisible in the dialog preview and escaped the assistant tool as an exception.
 Recorded as limits (§2.1): #2 known key with an unparseable value, #5 the repair path's stale
 block, #7 integer-only version stamps.
+
+### 8.4 Source research for S15b (2026-09-18, after the S15 commit `0f7c002`)
+
+The user asked for a JLCPCB reference for §4.5's open question. Result in
+`sources/jlcpcb-stackup-2026-09-18.md`: the capability page and the impedance templates (read
+through the archived API JSON, 40 of 577 templates sampled) show the nominal thickness is a label
+with a ± 10 % / ± 0.1 mm tolerance and no stated bounding surfaces — §4.2 and §4.5 amended
+accordingly. Also sourced: per-construction Dk values, mask Dk 3.8 and ink ≥ 10 µm, average hole
+plating 18 µm (the via-wall quantity 13 §5 lacked — an average, not a minimum), inner copper
+0.5 oz by default at JLCPCB (filed S15-10: OpenPCB's inner weight falls back to the outer one).
 
