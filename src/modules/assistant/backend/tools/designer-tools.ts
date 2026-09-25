@@ -18,7 +18,10 @@ import {
   type DesignerPcbProjection,
 } from "../../../../sdks";
 import type { ContextResolver } from "../context-resolver";
-import type { ConversationStore } from "../conversation-store";
+import {
+  writeProposalIdempotencyScope,
+  type ConversationStore,
+} from "../conversation-store";
 import { ACTION_ID_DESC, isValidActionId } from "./action-id";
 import {
   buildProjectionIndex,
@@ -187,44 +190,35 @@ interface WriteToolModelData {
 }
 
 /**
- * Look for a prior write proposal in this chat that carries the same
- * `actionId` for the same design — regardless of status. Used to make write
- * tools idempotent and to block duplicate in-flight dispatches: re-issuing the
- * same action_id must never duplicate placements/wires.
- *
- * Returns the most recent matching record (proposals are listed created-at
- * ASC) so the dedup decision reflects the latest known state of that action.
+ * The prior write proposal holding the same idempotency key — design +
+ * scope (the MCP session, or the chat in-app) + `actionId` — regardless of
+ * status. The same key the database enforces as UNIQUE, so the lookup and
+ * the race backstop can never disagree.
  */
 function findPriorByActionId(
   conversation: ConversationStore,
   chatId: string,
   designId: string,
   actionId: string,
+  actor: AssistantWriteProposalActor | null,
 ): AssistantWriteProposalDto | null {
-  let match: AssistantWriteProposalDto | null = null;
-  for (const record of conversation.listWriteProposals(chatId)) {
-    if (record.designId !== designId) continue;
-    const envelope = (record as { envelope?: unknown }).envelope as
-      | { actionId?: unknown }
-      | null
-      | undefined;
-    if (envelope && envelope.actionId === actionId) match = record;
-  }
-  return match;
+  return conversation.getWriteProposalByActionKey(
+    designId,
+    writeProposalIdempotencyScope(chatId, actor),
+    actionId,
+  );
 }
 
 /**
  * Idempotency / duplicate guard for write tools. Returns a terminal tool
- * result when a prior proposal for the same (designId + actionId) means we must
- * NOT dispatch again, or null when this action is fresh and may proceed:
- *  - applied / partial → already landed; replay its persisted apply result.
- *  - pending           → an earlier identical action is still in-flight (auto-
- *                        apply gated or concurrent); block to avoid a duplicate
- *                        write.
- *  - failed            → a prior identical action errored; a blind re-dispatch
- *                        could double-write whatever partially landed. Block
- *                        and report so correction goes through a fresh action.
- *  - rejected          → user declined; allow a fresh attempt (returns null).
+ * result when a prior proposal with the same key means we must NOT dispatch
+ * again, or null when this action is fresh and may proceed:
+ *  - applied / partial → already landed; replay its persisted result.
+ *  - pending           → still waiting (approval or in flight); block.
+ *  - failed / rejected → the action was tried and did not land, or the user
+ *                        declined it. Re-sending the same id must not act as
+ *                        a silent retry: block, and require a NEW action_id
+ *                        for a deliberate new attempt.
  */
 export function dedupByActionId<T>(
   conversation: ConversationStore,
@@ -232,17 +226,23 @@ export function dedupByActionId<T>(
   designId: string,
   actionId: string,
   limits: AiToolResult<T>["limits"],
+  actor: AssistantWriteProposalActor | null = null,
 ): AiToolResult<T | null> | null {
-  const prior = findPriorByActionId(conversation, chatId, designId, actionId);
+  const prior = findPriorByActionId(conversation, chatId, designId, actionId, actor);
   if (!prior) return null;
+  return priorActionResult<T>(prior, actionId, limits);
+}
+
+/** The terminal result for an action that already exists (see dedupByActionId). */
+function priorActionResult<T>(
+  prior: AssistantWriteProposalDto,
+  actionId: string,
+  limits: AiToolResult<T>["limits"],
+): AiToolResult<T | null> {
   if (prior.status === "applied" || prior.status === "partial") {
     return alreadyAppliedResult<T>(prior, actionId, limits);
   }
-  if (prior.status === "pending" || prior.status === "failed") {
-    return duplicateInFlightResult<T>(prior, actionId, limits);
-  }
-  // rejected (or any future non-blocking status): allow a fresh attempt.
-  return null;
+  return duplicateInFlightResult<T>(prior, actionId, limits);
 }
 
 /**
@@ -306,7 +306,9 @@ function duplicateInFlightResult<T>(
   const reason =
     record.status === "failed"
       ? `action_id "${actionId}" already attempted and failed; do not re-issue it. Inspect the design state and use a new action_id only for the parts that still need fixing.`
-      : `action_id "${actionId}" is already in-flight (pending). Wait for it to settle instead of re-issuing the same write.`;
+      : record.status === "rejected"
+        ? `action_id "${actionId}" was rejected by the user. Do not re-send it; if the user now wants a changed version, propose it with a new action_id.`
+        : `action_id "${actionId}" is already in-flight (pending). Wait for it to settle instead of re-issuing the same write.`;
   const modelData: WriteToolModelData = {
     appliedCount: 0,
     skipped: [{ id: actionId, reason }],
@@ -1283,6 +1285,7 @@ export function makeDesignerPlaceComponentsTool(
           designId,
           actionId,
           execCtx.limits,
+          mcpActorOf(execCtx),
         );
         if (dedup) return dedup;
       }
@@ -1397,7 +1400,7 @@ export function makeDesignerPlaceComponentsTool(
         warnings: proposalWarnings,
         actionId,
       });
-      conversation.createWriteProposal({
+      const stored = conversation.createWriteProposal({
         id: proposalId,
         chatId,
         actor: mcpActorOf(execCtx),
@@ -1407,6 +1410,14 @@ export function makeDesignerPlaceComponentsTool(
         proposal,
         envelope,
       });
+      if (actionId && stored && stored.id !== proposalId) {
+        // Same idempotency key already holds an action: never place twice.
+        return priorActionResult<AssistantPlacementProposal>(
+          stored,
+          actionId,
+          execCtx.limits,
+        );
+      }
       // Build-time skips (unresolved components, truncation). These never reach
       // the apply path, so they are reported as skipped regardless of apply.
       const buildSkipped: WriteToolModelData["skipped"] = skipped.map(
@@ -1956,6 +1967,7 @@ export function makeDesignerProposeSchematicEditsTool(
           designId,
           actionId,
           execCtx.limits,
+          mcpActorOf(execCtx),
         );
         if (dedup) return dedup;
       }
@@ -2351,6 +2363,7 @@ export function makeDesignerArrangeSchematicTool(
           designId,
           actionId,
           execCtx.limits,
+          mcpActorOf(execCtx),
         );
         if (dedup) return dedup;
       }
@@ -2533,6 +2546,7 @@ export function makeDesignerProposeSchematicWiresTool(
           designId,
           actionId,
           execCtx.limits,
+          mcpActorOf(execCtx),
         );
         if (dedup) return dedup;
       }
@@ -2912,6 +2926,7 @@ export function makeDesignerProposeSchematicUpdatesTool(
           designId,
           actionId,
           execCtx.limits,
+          mcpActorOf(execCtx),
         );
         if (dedup) return dedup;
       }
@@ -3287,6 +3302,7 @@ export function makeDesignerProposeSchematicDeletionsTool(
           designId,
           actionId,
           execCtx.limits,
+          mcpActorOf(execCtx),
         );
         if (dedup) return dedup;
       }
@@ -3461,7 +3477,7 @@ export async function finalizeAndMaybeApply(params: {
     options,
     actor,
   } = params;
-  conversation.createWriteProposal({
+  const stored = conversation.createWriteProposal({
     id: envelope.id,
     chatId,
     actor: actor ?? null,
@@ -3471,6 +3487,14 @@ export async function finalizeAndMaybeApply(params: {
     proposal: envelope,
     envelope,
   });
+  const envelopeActionId = (envelope as { actionId?: string }).actionId;
+  if (envelopeActionId && stored && stored.id !== envelope.id) {
+    // The store returned an EXISTING proposal: the idempotency key (design +
+    // scope + action_id) already holds a concurrent or earlier identical
+    // action. Report that one and apply nothing. (Only an action_id can
+    // collide here, hence the guard.)
+    return priorActionResult<SchematicProposalEnvelope>(stored, envelopeActionId, limits);
+  }
   // Auto-apply is decided by the session policy callback. Production wiring
   // (assistant-service) allows non-destructive schematic proposals by default
   // and gates destructive ones behind an explicit allowance.

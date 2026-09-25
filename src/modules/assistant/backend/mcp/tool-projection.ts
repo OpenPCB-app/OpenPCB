@@ -141,7 +141,11 @@ function proposalRefFor(
 ): McpProposalRef | null {
   const ref = extractProposalRef(data);
   if (!ref) return null;
-  const record = deps.conversation.getWriteProposal(chatId, ref.id);
+  // A dedup hit returns an earlier proposal, which may live in another of
+  // this session's chats.
+  const record =
+    deps.conversation.getWriteProposal(chatId, ref.id) ??
+    deps.conversation.getWriteProposalById(ref.id);
   const status = record?.status ?? "pending";
   const proposal: McpProposalRef = {
     id: ref.id,

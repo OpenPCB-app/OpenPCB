@@ -183,3 +183,92 @@ describe("chat binding under concurrency", () => {
     for (const count of primaryCounts()) expect(count).toBeLessThanOrEqual(1);
   });
 });
+
+describe("idempotency is per session and never double-applies", () => {
+  async function partCount(designId: string): Promise<number> {
+    return (await h.designer.getSchematicProjection(designId))!.parts.length;
+  }
+
+  test("a retried action_id replays the first result and places nothing twice", async () => {
+    h.enable({ writes: true });
+    const designId = await createDesign("Retry once");
+    const args = {
+      designId,
+      action_id: `place_r1_${designId}`,
+      components: [{ componentId: RESISTOR, quantity: 1 }],
+    };
+    const first = await h.callTool("designer_place_components", args, A);
+    expect(first.structuredContent.ok).toBe(true);
+    const retry = await h.callTool("designer_place_components", args, A);
+    expect(retry.structuredContent.summary).toContain("already_applied");
+    expect(await partCount(designId)).toBe(1);
+  });
+
+  test("two parallel identical calls land exactly once", async () => {
+    h.enable({ writes: true });
+    const designId = await createDesign("Parallel duplicate");
+    const args = {
+      designId,
+      action_id: `place_twin_${designId}`,
+      components: [{ componentId: RESISTOR, quantity: 1 }],
+    };
+    const results = await Promise.all([
+      h.callTool("designer_place_components", args, A),
+      h.callTool("designer_place_components", args, A),
+    ]);
+    const summaries = results.map((r) => r.structuredContent.summary);
+    expect(summaries.filter((s) => s.includes("already_applied"))).toHaveLength(1);
+    expect(await partCount(designId)).toBe(1);
+  });
+
+  test("the same deterministic action_id from another session is its own action (no crash, no cross-talk)", async () => {
+    h.enable({ writes: true });
+    const designId = await createDesign("Shared action id");
+    const args = {
+      designId,
+      action_id: `place_shared_${designId}`,
+      components: [{ componentId: RESISTOR, quantity: 1 }],
+    };
+    const fromA = await h.callTool("designer_place_components", args, A);
+    const fromB = await h.callTool("designer_place_components", args, B);
+    expect(fromA.structuredContent.ok).toBe(true);
+    expect(fromB.structuredContent.ok).toBe(true);
+    expect(fromB.structuredContent.summary).not.toContain("already_applied");
+    expect(await partCount(designId)).toBe(2);
+  });
+
+  test("re-sending a rejected action_id is blocked; a new id is a new proposal", async () => {
+    h.enable({ writes: true });
+    const designId = await createDesign("Rejected once");
+    await placeResistor(designId, A);
+    const partId = (await h.designer.getSchematicProjection(designId))!.parts[0]!.id;
+    const args = {
+      designId,
+      action_id: `delete_r1_${designId}`,
+      title: "Remove R1",
+      summary: "Delete R1.",
+      entities: [{ entityId: partId, entityKind: "part" }],
+    };
+    const pending = await h.callTool("designer_propose_schematic_deletions", args, A);
+    const proposalId = pending.structuredContent.proposal!.id;
+    const chat = sessionChat(designId, "session-a")!;
+    const reject = await h.fetch(
+      `/api/modules/assistant/chats/${chat.id}/write-proposals/${proposalId}/reject`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+    );
+    expect(reject.ok).toBe(true);
+
+    const resent = await h.callTool("designer_propose_schematic_deletions", args, A);
+    expect(resent.structuredContent.ok).toBe(false);
+    expect(resent.structuredContent.summary).toContain("duplicate_blocked");
+    expect(resent.structuredContent.warnings.join(" ")).toContain("rejected");
+
+    const fresh = await h.callTool(
+      "designer_propose_schematic_deletions",
+      { ...args, action_id: `delete_r1again_${designId}` },
+      A,
+    );
+    expect(fresh.structuredContent.proposal!.status).toBe("pending");
+    expect(fresh.structuredContent.proposal!.id).not.toBe(proposalId);
+  });
+});

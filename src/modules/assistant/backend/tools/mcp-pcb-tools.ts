@@ -196,6 +196,12 @@ async function propose(input: ProposeInput): Promise<AiToolResult<unknown>> {
   if (input.operations.length === 0) {
     return failed("Nothing to do: no operations were built.", execCtx.limits);
   }
+  if (input.actionId !== undefined && !ACTION_ID_FORMAT.test(input.actionId)) {
+    return failed(
+      "action_id may only contain letters, digits and . _ : - (1–200 characters).",
+      execCtx.limits,
+    );
+  }
   if (input.actionId) {
     const dup = dedupByActionId(
       input.conversation,
@@ -203,6 +209,7 @@ async function propose(input: ProposeInput): Promise<AiToolResult<unknown>> {
       target.designId,
       input.actionId,
       execCtx.limits,
+      mcpActorOf(execCtx),
     );
     if (dup) return dup as AiToolResult<unknown>;
   }
@@ -270,9 +277,14 @@ async function propose(input: ProposeInput): Promise<AiToolResult<unknown>> {
 
 const ACTION_ID: AiJsonSchemaObject = {
   type: "string",
+  minLength: 1,
+  maxLength: 200,
   description:
-    "Stable idempotency key you choose, e.g. `route_VCC_<designId>`. Re-sending the same action_id is a no-op.",
+    "Stable idempotency key you choose (letters, digits, . _ : -), e.g. `route_VCC_<designId>`. Re-sending it returns the earlier result instead of acting twice; after a rejection or failure, use a new one.",
 };
+
+/** Same alphabet the description promises; checked in code (the schema type has no `pattern`). */
+const ACTION_ID_FORMAT = /^[A-Za-z0-9._:-]{1,200}$/;
 
 const DESIGN_ID: AiJsonSchemaObject = {
   type: "string",

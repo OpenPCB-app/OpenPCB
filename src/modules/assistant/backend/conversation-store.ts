@@ -239,6 +239,18 @@ export interface UpsertToolEventInput {
   sources?: AiSourceRef[];
 }
 
+/**
+ * Who an `action_id` is unique for: the MCP session that issued the write, or
+ * (in-app) the chat. Retries dedupe within the scope; the same deterministic
+ * id from another session or chat is a different action.
+ */
+export function writeProposalIdempotencyScope(
+  chatId: string,
+  actor: AssistantWriteProposalActor | null | undefined,
+): string {
+  return actor ? `mcp:${actor.clientKey}:${actor.instanceId}` : `chat:${chatId}`;
+}
+
 export interface CreateWriteProposalInput {
   id?: string;
   chatId: string;
@@ -648,9 +660,23 @@ export class ConversationStore {
   }
 
   // ---------- write proposals ----------
+  /** Insert a proposal; on an idempotency conflict returns the existing one. */
   createWriteProposal(
     input: CreateWriteProposalInput,
   ): AssistantWriteProposalDto {
+    return this.createOrGetWriteProposal(input).record;
+  }
+
+  /**
+   * Insert a proposal, or — when one with the same idempotency key
+   * (design, scope, action_id) or cloud id already exists — return that one
+   * with `created: false`. Callers MUST NOT apply anything when `created` is
+   * false: the returned record is the action that already happened (or is
+   * pending), not the envelope they were about to persist.
+   */
+  createOrGetWriteProposal(
+    input: CreateWriteProposalInput,
+  ): { record: AssistantWriteProposalDto; created: boolean } {
     const timestamp = now();
     const proposalId = input.id ?? id();
     const envelope = input.envelope ?? null;
@@ -660,9 +686,10 @@ export class ConversationStore {
     const actionId =
       (envelope as { actionId?: string } | null)?.actionId ?? null;
     const cloudProposalId = input.cloudProposalId ?? null;
+    const scope = writeProposalIdempotencyScope(input.chatId, input.actor);
     try {
       this.rawSql(
-        "INSERT INTO assistant_write_proposal (id,chat_id,tool_event_id,kind,status,design_id,base_revision,proposal_json,apply_result_json,tool_name,title,summary,risk_level,operations_json,sources_json,warnings_json,envelope_json,action_id,origin,cloud_run_id,cloud_proposal_id,actor_client_key,actor_instance_id,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO assistant_write_proposal (id,chat_id,tool_event_id,kind,status,design_id,base_revision,proposal_json,apply_result_json,tool_name,title,summary,risk_level,operations_json,sources_json,warnings_json,envelope_json,action_id,origin,cloud_run_id,cloud_proposal_id,actor_client_key,actor_instance_id,idempotency_scope,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           proposalId,
           input.chatId,
@@ -687,30 +714,30 @@ export class ConversationStore {
           cloudProposalId,
           input.actor?.clientKey ?? null,
           input.actor?.instanceId ?? null,
+          scope,
           timestamp,
           timestamp,
         ],
       );
     } catch (err) {
-      // F6: a concurrent submit already inserted a proposal for the same
-      // (design_id, action_id) — the UNIQUE index rejects this one. Return the
-      // existing proposal so the caller reuses it instead of duplicating writes.
-      // Same story for a re-streamed cloud proposal (design_id, cloud_proposal_id).
+      // The idempotency index (design, scope, action_id) or the cloud index
+      // (design, cloud_proposal_id) already holds this action — a concurrent
+      // submit, a retry, or a re-streamed cloud proposal.
       const isUnique = /unique|constraint/i.test(String(err));
       const existing = isUnique
         ? (actionId
-            ? this.getWriteProposalByActionId(input.designId, actionId)
+            ? this.getWriteProposalByActionKey(input.designId, scope, actionId)
             : null) ??
           (cloudProposalId
             ? this.getWriteProposalByCloudId(input.designId, cloudProposalId)
             : null)
         : null;
-      if (existing) return existing;
+      if (existing) return { record: existing, created: false };
       throw err;
     }
     const created = this.getWriteProposal(input.chatId, proposalId)!;
     this.emitProposal(created);
-    return created;
+    return { record: created, created: true };
   }
 
   /**
@@ -738,14 +765,15 @@ export class ConversationStore {
     return row ? rowToWriteProposal(row) : null;
   }
 
-  /** F6: look up a proposal by its idempotency key (design + action_id). */
-  getWriteProposalByActionId(
+  /** The proposal holding an idempotency key (design + scope + action_id), if any. */
+  getWriteProposalByActionKey(
     designId: string,
+    scope: string,
     actionId: string,
   ): AssistantWriteProposalDto | null {
     const row = this.rawSql(
-      "SELECT * FROM assistant_write_proposal WHERE design_id=? AND action_id=? LIMIT 1",
-      [designId, actionId],
+      "SELECT * FROM assistant_write_proposal WHERE design_id=? AND idempotency_scope=? AND action_id=? ORDER BY created_at DESC LIMIT 1",
+      [designId, scope, actionId],
     )[0];
     return row ? rowToWriteProposal(row) : null;
   }
