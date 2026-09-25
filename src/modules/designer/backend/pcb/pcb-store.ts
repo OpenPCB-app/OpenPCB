@@ -561,6 +561,85 @@ function parseNetClasses(
   return out.length > 0 ? out : fallback;
 }
 
+const MAX_NET_CLASS_ID_LENGTH = 64;
+const MAX_NET_CLASS_NAME_LENGTH = 64;
+
+/** A present geometry field must be a finite number in range; absent defaults. */
+function netClassSizeProblem(
+  r: Record<string, unknown>,
+  key: "traceWidthMm" | "clearanceMm" | "viaDiameterMm" | "viaDrillMm",
+  allowZero: boolean,
+): string | null {
+  if (r[key] === undefined) return null;
+  const value = asNumber(r[key]);
+  if (value === null) return `${key} must be a number`;
+  if (allowZero ? value < 0 : value <= 0) {
+    return `${key} must be ${allowZero ? "zero or positive" : "positive"}`;
+  }
+  return null;
+}
+
+function netClassRowProblem(raw: unknown): string | null {
+  const r = asRecord(raw);
+  const id = asString(r?.id)?.trim() ?? "";
+  const name = asString(r?.name)?.trim() ?? "";
+  if (!r || id.length === 0 || name.length === 0) {
+    return "needs a non-empty id and name";
+  }
+  // Ids are keys (assignments, rule scopes, copper hints): no padded variants.
+  if (r.id !== id) return "id must not start or end with spaces";
+  if (id.length > MAX_NET_CLASS_ID_LENGTH) return "id is too long";
+  if (name.length > MAX_NET_CLASS_NAME_LENGTH) return "name is too long";
+  return (
+    netClassSizeProblem(r, "traceWidthMm", false) ??
+    netClassSizeProblem(r, "clearanceMm", true) ??
+    netClassSizeProblem(r, "viaDiameterMm", false) ??
+    netClassSizeProblem(r, "viaDrillMm", false)
+  );
+}
+
+/**
+ * Fail-closed validation of a `pcb_set_design_rules` `netClasses` payload (the
+ * Design-rules dialog's add / rename / delete / edit): a row the parser would
+ * silently DROP — or default a bad number of — is refused instead, because the
+ * user wrote it. Returns the first problem, or `null` when the table is valid.
+ *
+ * The FIRST stored class is the board's default (`defaultNetClassId`, the order
+ * is semantic): it must stay first, so a save can never silently reclassify
+ * every unassigned net. Every other class may be renamed or deleted.
+ */
+export function validateNetClassesForSave(
+  value: unknown,
+  stored: readonly PcbNetClass[],
+): string | null {
+  if (!Array.isArray(value) || value.length === 0) {
+    return "at least one net class is required";
+  }
+  const ids = new Set<string>();
+  const names = new Set<string>();
+  for (const [index, raw] of value.entries()) {
+    const label = `net class ${index + 1}`;
+    const problem = netClassRowProblem(raw);
+    if (problem) return `${label}: ${problem}`;
+    const parsed = parseNetClass(raw, new Map())!;
+    const id = parsed.id.trim();
+    const name = parsed.name.trim().toUpperCase();
+    if (ids.has(id)) return `${label}: duplicate id '${parsed.id}'`;
+    if (names.has(name)) return `${label}: duplicate name '${parsed.name}'`;
+    ids.add(id);
+    names.add(name);
+    if (!(parsed.viaDrillMm < parsed.viaDiameterMm)) {
+      return `${label} ('${parsed.name}'): via drill must be smaller than via diameter`;
+    }
+  }
+  const defaultId = stored[0]?.id;
+  const firstId = asString(asRecord(value[0])?.id)?.trim();
+  if (defaultId !== undefined && firstId !== defaultId) {
+    return `the default net class '${stored[0]!.name}' cannot be deleted or moved`;
+  }
+  return null;
+}
+
 /**
  * Validate a per-net → net-class override map (netId → netClassId). Keeps only
  * string net ids that map to a known class id; unknown classes are dropped so a
@@ -1514,21 +1593,24 @@ function resolveDesignRuleFields(
   const netClasses = params.netClasses
     ? parseNetClasses(params.netClasses, settings.netClasses, "update")
     : settings.netClasses;
-  // Validate any incoming assignment map against the resulting class set (so a
-  // removed class drops its assignments). A full map replaces the existing one.
+  // Validate the resulting assignment map — incoming or stored — against the
+  // resulting class set, so a deleted class drops its assignments and those
+  // nets fall back to the default class. A full map replaces the existing one.
   const validClassIds = new Set(netClasses.map((c) => c.id));
+  const assignments = parsePerNetClassAssignments(
+    params.perNetClassAssignments ?? settings.perNetClassAssignments,
+    validClassIds,
+  );
   return {
     designRules: params.designRules
       ? parseDesignRules(params.designRules, settings.designRules, "update")
       : settings.designRules,
     netClasses,
     perNetClassAssignments:
-      params.perNetClassAssignments !== undefined
-        ? parsePerNetClassAssignments(
-            params.perNetClassAssignments,
-            validClassIds,
-          )
-        : settings.perNetClassAssignments,
+      params.perNetClassAssignments === undefined &&
+      settings.perNetClassAssignments === undefined
+        ? undefined
+        : assignments,
   };
 }
 
@@ -1918,10 +2000,15 @@ export function syncPcbPlacementsFromSchematic(params: {
   for (const part of schematicParts) {
     const existingPlacement = existingByPartId.get(part.id);
     if (existingPlacement && !isAbsurd(existingPlacement)) {
-      const footprintChanged =
+      // The placement's reference and component are DERIVED from its schematic
+      // part (same partId): a refdes rename must reach the silkscreen, PnP and
+      // BOM, and an undo of that rename (a schematic-only patch) must too.
+      const derivedChanged =
+        existingPlacement.reference !== part.reference ||
+        existingPlacement.componentId !== part.componentId ||
         JSON.stringify(existingPlacement.footprint) !==
-        JSON.stringify(part.footprint);
-      if (footprintChanged) {
+          JSON.stringify(part.footprint);
+      if (derivedChanged) {
         const refreshed: PcbPlacedPart = {
           ...existingPlacement,
           componentId: part.componentId,
@@ -1945,6 +2032,8 @@ export function syncPcbPlacementsFromSchematic(params: {
       // Repair in place: keep id + manual fields the user set, reset position.
       const repaired: PcbPlacedPart = {
         ...existingPlacement,
+        componentId: part.componentId,
+        reference: part.reference,
         positionMm: repairedPosition,
         // Refresh the footprint snapshot too — the stale data was likely
         // committed alongside an outdated snapshot.
@@ -2225,6 +2314,43 @@ export function insertPcbVia(
 
 export function deletePcbVia(db: DbClient, viaId: string): void {
   db.delete(pcbEntities).where(eq(pcbEntities.id, viaId)).run();
+}
+
+export function updatePcbVia(
+  db: DbClient,
+  via: PcbVia,
+  timestamp: string,
+): void {
+  db.update(pcbEntities)
+    .set({ payloadJson: JSON.stringify(via), updatedAt: timestamp })
+    .where(eq(pcbEntities.id, via.id))
+    .run();
+}
+
+/**
+ * A deleted net class takes its copper with it to the default class: the
+ * `netClassId` a trace or via carries is a creation-time hint, but a hint
+ * naming a class that no longer exists would leave the inspector and the
+ * route-tool defaults pointing at nothing. Same transaction as the settings
+ * write, so one undo restores the class AND the hints.
+ */
+export function reassignDeletedNetClassCopper(params: {
+  db: DbClient;
+  designId: string;
+  deletedClassIds: ReadonlySet<string>;
+  defaultClassId: string;
+  timestamp: string;
+}): void {
+  const { db, designId, deletedClassIds, defaultClassId, timestamp } = params;
+  if (deletedClassIds.size === 0) return;
+  for (const trace of loadPcbTraces(db, designId)) {
+    if (!deletedClassIds.has(trace.netClassId)) continue;
+    updatePcbTrace(db, { ...trace, netClassId: defaultClassId }, timestamp);
+  }
+  for (const via of loadPcbVias(db, designId)) {
+    if (!deletedClassIds.has(via.netClassId)) continue;
+    updatePcbVia(db, { ...via, netClassId: defaultClassId }, timestamp);
+  }
 }
 
 export function replacePcbVias(

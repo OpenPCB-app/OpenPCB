@@ -1422,6 +1422,13 @@ export interface DesignerWire {
   routeStatus?: "colliding";
 }
 
+/**
+ * A net label (KiCad local-label semantics). Its anchor `positionNm` joins the
+ * net of every wire segment, wire end or pin within
+ * `SCHEMATIC_LABEL_ATTACH_TOLERANCE_NM`, and labels with the same text
+ * (case-insensitive, trimmed) are ONE net even with no wire between them — the
+ * same namespace as power rails and net portals.
+ */
 export interface DesignerLabel {
   id: string;
   text: string;
@@ -1430,6 +1437,13 @@ export interface DesignerLabel {
     y: number;
   };
 }
+
+/**
+ * How far (nm) a net label's anchor may sit from a wire or pin and still attach
+ * to it: 0.1 mm, 5 % of the 2 mm schematic grid — absorbs rounding and legacy
+ * off-grid anchors, never reaches a neighbouring on-grid wire.
+ */
+export const SCHEMATIC_LABEL_ATTACH_TOLERANCE_NM = 100_000;
 
 interface DesignerPrimitiveBase {
   id: string;
@@ -1839,12 +1853,23 @@ export interface DesignerPcbSetViewStateCommand {
 
 /**
  * Edit the board's design rules, net classes, and/or finished thickness.
- * Non-undoable settings change; bumps the revision so a prior DRC run is
- * marked stale. Any omitted field is left unchanged.
+ * One undo step; bumps the revision so a prior DRC run is marked stale. Any
+ * omitted field is left unchanged.
  */
 export interface DesignerPcbSetDesignRulesCommand {
   type: "pcb_set_design_rules";
   designRules?: PcbDesignRules;
+  /**
+   * The WHOLE class table (add / rename / delete / edit in one save). Refused
+   * whole (`INVALID_PCB_BOARD_SETTINGS`) unless: non-empty; every row has a
+   * non-empty, unpadded id and a non-empty name; ids unique; names unique
+   * case-insensitively; `traceWidthMm` / `viaDiameterMm` / `viaDrillMm` > 0 and
+   * `clearanceMm` ≥ 0 when present; via drill < via diameter; and the stored
+   * FIRST (default) class is still first. A class missing from the table is
+   * deleted: its `perNetClassAssignments` entries are dropped (those nets fall
+   * to the default class) and traces / vias carrying its id are re-pointed to
+   * the default class, all in the same undo step.
+   */
   netClasses?: PcbNetClass[];
   boardThicknessMm?: number;
   /** Per-net → net-class overrides (netId → netClassId). See PcbBoardSettings. */
@@ -2101,6 +2126,74 @@ export interface DesignerPcbDeleteKeepoutCommand {
   keepoutId: string;
 }
 
+/**
+ * ONE user action over several entities — multi-delete, multi-rotate, align,
+ * group move — as ONE command: one revision, one undo entry, all or nothing
+ * (T-096; a loop of envelopes left one undo step per entity and a half-applied
+ * selection on a mid-loop failure).
+ *
+ * Sub-commands run in order inside one transaction; each sees the state the
+ * previous one left. The first failing sub-command fails the whole batch with
+ * ITS result (codes as for a single command) and nothing is persisted. A
+ * `delete_entity` whose target an earlier sub-command already removed (a
+ * part's attached wires) is a no-op, not a failure. At most
+ * `DESIGNER_BATCH_MAX_COMMANDS` sub-commands; no nesting, no `place_part`
+ * (needs a library lookup), no `pcb_set_view_state` (not undoable) and no
+ * `pcb_apply_autolayout_candidate` (has its own atomic path) — a parser error
+ * (400) over HTTP.
+ */
+export interface DesignerBatchCommandsCommand {
+  type: "batch_commands";
+  commands: DesignerBatchableCommand[];
+}
+
+export type DesignerBatchableCommand = Exclude<
+  DesignerCommand,
+  | DesignerBatchCommandsCommand
+  | DesignerPlacePartCommand
+  | DesignerPcbSetViewStateCommand
+  | DesignerPcbApplyAutolayoutCandidateCommand
+>;
+
+export const DESIGNER_BATCH_MAX_COMMANDS = 5000;
+
+/**
+ * Patch a trace from the inspector (T-174) — only provided fields change.
+ * `widthMm` is validated like a new trace's and against the resolved
+ * `trackWidth` minimum; the result is judged by the copper commit gate like
+ * `pcb_update_trace_geometry` (`legality`, default `refuse`). The net is not
+ * editable: a trace's net is what its copper touches.
+ */
+export interface DesignerPcbUpdateTraceCommand {
+  type: "pcb_update_trace";
+  traceId: string;
+  widthMm?: number;
+  layer?: PcbCopperLayerId;
+  legality?: PcbCommitLegality;
+}
+
+/**
+ * Patch a via from the inspector (T-174) — only provided fields change.
+ * Size is validated like `pcb_add_via` (diameter > drill, scoped
+ * `viaDiameter` / `viaDrill` / `annularRing` minimums). Setting `viaType:
+ * "through"` converts a blind/buried/micro via to a through via spanning
+ * F.Cu→B.Cu (layers may be omitted). A non-through type or span is accepted
+ * only behind `pcb.advancedVias`, as on insert; an unchanged existing
+ * non-through via stays editable without it. Judged by the copper commit gate
+ * (`legality`, default `refuse`). The net is not editable.
+ */
+export interface DesignerPcbUpdateViaCommand {
+  type: "pcb_update_via";
+  viaId: string;
+  diameterMm?: number;
+  drillMm?: number;
+  viaType?: PcbViaType;
+  fromLayer?: PcbCopperLayerId;
+  toLayer?: PcbCopperLayerId;
+  protection?: PcbViaProtection;
+  legality?: PcbCommitLegality;
+}
+
 export type DesignerCommand =
   | DesignerPlacePartCommand
   | DesignerCreateWireCommand
@@ -2159,7 +2252,10 @@ export type DesignerCommand =
   | DesignerPcbDeleteZoneCommand
   | DesignerPcbAddKeepoutCommand
   | DesignerPcbUpdateKeepoutCommand
-  | DesignerPcbDeleteKeepoutCommand;
+  | DesignerPcbDeleteKeepoutCommand
+  | DesignerPcbUpdateTraceCommand
+  | DesignerPcbUpdateViaCommand
+  | DesignerBatchCommandsCommand;
 
 export type DesignerCommandEnvelope = CommandEnvelope<DesignerCommand>;
 
@@ -2921,6 +3017,14 @@ export interface BomRow {
 
 export interface BomOverride {
   designId: string;
+  /**
+   * The schematic part the override belongs to (also its placement's `partId`).
+   * A bound override follows the part across refdes renames and their undo/redo;
+   * `null` = unbound (no schematic part carried `refdes` when it was written),
+   * matched by `refdes` only.
+   */
+  partId: string | null;
+  /** The part's current reference (bound), or the match key (unbound). */
   refdes: string;
   manufacturer: string | null;
   manufacturerPartNumber: string | null;

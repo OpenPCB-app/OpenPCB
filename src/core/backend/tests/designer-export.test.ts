@@ -29,6 +29,7 @@ import { freePadCopperShape } from "../../../shared/pcb-geometry/pad-geometry";
 import { createHash } from "node:crypto";
 import { exportBundleName } from "../../../sdks/designer/pcb-helpers";
 import type {
+  BomOverride,
   DesignerPcbProjection,
   DesignerSchematicProjection,
 } from "../../../sdks/designer/types";
@@ -1587,7 +1588,9 @@ describe("BOM CSV writer", () => {
       revision: 1,
       parts: [
         {
-          id: "part-r1",
+          // The fixture placement R1 belongs to part "part-2": BOM rows pair
+          // a placement with its schematic part by partId, never by refdes.
+          id: "part-2",
           componentId: "c-r10k",
           reference: "R1",
           value: "10k",
@@ -1640,6 +1643,7 @@ describe("BOM CSV writer", () => {
     const projection = buildBomProjection(fixtureProjection(), null, [
       {
         designId: "blink",
+        partId: null,
         refdes: "R1",
         manufacturer: "Yageo",
         manufacturerPartNumber: "RC0603FR-0710KL",
@@ -1659,6 +1663,44 @@ describe("BOM CSV writer", () => {
     expect(row?.manufacturer).toBe("Yageo");
     expect(row?.lcscPartNumber).toBe("C25804");
     expect(projection.summary.estimatedCost).toBeNull();
+  });
+
+  test("a part-bound override follows its part, never its stale reference", () => {
+    const override = (
+      partId: string | null,
+      refdes: string,
+      lcscPartNumber: string,
+      dnp = false,
+    ): BomOverride => ({
+      designId: "blink",
+      partId,
+      refdes,
+      manufacturer: null,
+      manufacturerPartNumber: null,
+      lcscPartNumber,
+      supplier: null,
+      unitPrice: null,
+      currency: null,
+      dnp,
+      assemblySide: null,
+      notes: null,
+      updatedAt: new Date().toISOString(),
+    });
+    // part-2 (R1) was written as R9; part-1 (U1) was written as R1 and renamed.
+    // The unbound R1 row loses to R1's bound one; U1's stale "R1" never reaches R1.
+    const overrides = [
+      override("part-2", "R9", "C111", true),
+      override(null, "R1", "C222"),
+      override("part-1", "R1", "C333"),
+    ];
+    const rows = buildBomProjection(fixtureProjection(), null, overrides).rows;
+    const lcscOf = (ref: string) =>
+      rows.find((row) => row.refdesList === ref)?.lcscPartNumber;
+    expect(lcscOf("R1")).toBe("C111");
+    expect(lcscOf("U1")).toBe("C333");
+    expect(rows.find((row) => row.refdesList === "R1")?.dnp).toBe(true);
+    // The CPL drops the DNP part by placement, whatever reference it was written under.
+    expect(buildPnpCsv(fixtureProjection(), null, overrides)).not.toContain("R1,");
   });
 
   test("emits JLC and KiCad-style BOM CSV variants", () => {
@@ -1717,6 +1759,7 @@ describe("Pick-and-place CSV writer", () => {
     const out = buildPnpCsv(fixtureProjection(), null, [
       {
         designId: "blink",
+        partId: null,
         refdes: "R1",
         manufacturer: null,
         manufacturerPartNumber: null,
@@ -1806,6 +1849,31 @@ describe("export orchestrator", () => {
   test("bundle name comes from the shared helper (no client/server drift)", () => {
     const result = buildExportBundle(fixtureProjection(), null);
     expect(result.bundleName).toBe(exportBundleName("blink"));
+  });
+
+  test("a named design names the bundle, every file and the job's ProjectId (T-164)", () => {
+    const at = "2020-01-01T00:00:00.000Z";
+    const named = buildExportBundle(
+      fixtureProjection(),
+      null,
+      {},
+      [],
+      at,
+      "Dual LED Blinker",
+    );
+    expect(named.bundleName).toBe("Dual_LED_Blinker");
+    for (const artifact of named.artifacts) {
+      expect(artifact.fileName.startsWith("Dual_LED_Blinker")).toBe(true);
+    }
+    const job = (result: typeof named) =>
+      JSON.parse(result.artifacts.find((a) => a.kind === "gerber.job")!.text);
+    expect(job(named).GeneralSpecs.ProjectId.Name).toBe("Dual LED Blinker");
+    // The GUID is the design's, so a rename is not a new project for the fab.
+    const unnamed = buildExportBundle(fixtureProjection(), null, {}, [], at);
+    expect(job(named).GeneralSpecs.ProjectId.GUID).toBe(
+      job(unnamed).GeneralSpecs.ProjectId.GUID,
+    );
+    expect(job(unnamed).GeneralSpecs.ProjectId.Name).toBe("blink");
   });
 
   test("respects includeBom/includePickAndPlace options", () => {

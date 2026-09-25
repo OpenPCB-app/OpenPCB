@@ -86,6 +86,11 @@ import type {
   DesignerPcbAddKeepoutCommand,
   DesignerPcbUpdateKeepoutCommand,
   DesignerPcbDeleteKeepoutCommand,
+  DesignerPcbUpdateTraceCommand,
+  DesignerPcbUpdateViaCommand,
+  DesignerBatchCommandsCommand,
+  DesignerBatchableCommand,
+  PcbViaProtection,
   PcbKeepoutRestrictions,
   PcbZoneIslandRemoval,
   PcbZoneNetRef,
@@ -117,8 +122,15 @@ import type {
   DesignerCommentSurface,
   DesignerCommentThread,
   DrcRunSnapshot,
+  BomExportKind,
 } from "../../../sdks/designer";
-import { isCopperLayerId } from "../../../sdks/designer";
+import {
+  bomExportFileName,
+  DESIGNER_BATCH_MAX_COMMANDS,
+  exportBundleName,
+  isCopperLayerId,
+} from "../../../sdks/designer";
+import { isBatchableCommandType } from "./commands/batch";
 import { resolveCaptureRuntime } from "./capture";
 import type { DesignerStore } from "./store";
 import { ulid } from "./capture/ulid";
@@ -405,6 +417,16 @@ function parseOptionalString(
     throw new ValidationError(`${key} must be a string or null`);
   }
   set(value);
+}
+
+/** The shared download name, so the server header and the client agree. */
+async function bomDownloadName(
+  store: DesignerStore,
+  designId: string,
+  kind: BomExportKind,
+): Promise<string> {
+  const bundle = exportBundleName(designId, await store.getDesignName(designId));
+  return bomExportFileName(bundle, kind);
 }
 
 function textResponse(
@@ -1693,6 +1715,101 @@ function parsePcbUpdateTraceGeometryCommand(
   };
 }
 
+function parsePcbUpdateTraceCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbUpdateTraceCommand {
+  const traceId = asString(raw.traceId);
+  if (!traceId) {
+    throw new ValidationError("command.traceId must be a string");
+  }
+  const command: DesignerPcbUpdateTraceCommand = {
+    type: "pcb_update_trace",
+    traceId,
+    ...parseLegality(raw),
+  };
+  if (raw.widthMm !== undefined) {
+    command.widthMm = parsePositiveNumber(raw.widthMm, "command.widthMm");
+  }
+  if (raw.layer !== undefined) {
+    command.layer = parseCopperLayerOrThrow(raw.layer, "command.layer");
+  }
+  if (command.widthMm === undefined && command.layer === undefined) {
+    throw new ValidationError("command must change widthMm or layer");
+  }
+  return command;
+}
+
+const VIA_TYPES: ReadonlySet<string> = new Set([
+  "through",
+  "blind",
+  "buried",
+  "micro",
+]);
+
+const VIA_PROTECTIONS: ReadonlySet<string> = new Set([
+  "none",
+  "tented",
+  "plugged",
+  "filled",
+  "capped",
+]);
+
+function parsePcbUpdateViaCommand(
+  raw: Record<string, unknown>,
+): DesignerPcbUpdateViaCommand {
+  const viaId = asString(raw.viaId);
+  if (!viaId) {
+    throw new ValidationError("command.viaId must be a string");
+  }
+  const command: DesignerPcbUpdateViaCommand = {
+    type: "pcb_update_via",
+    viaId,
+    ...parseLegality(raw),
+  };
+  if (raw.diameterMm !== undefined) {
+    command.diameterMm = parsePositiveNumber(raw.diameterMm, "command.diameterMm");
+  }
+  if (raw.drillMm !== undefined) {
+    command.drillMm = parsePositiveNumber(raw.drillMm, "command.drillMm");
+  }
+  if (raw.fromLayer !== undefined) {
+    command.fromLayer = parseCopperLayerOrThrow(raw.fromLayer, "command.fromLayer");
+  }
+  if (raw.toLayer !== undefined) {
+    command.toLayer = parseCopperLayerOrThrow(raw.toLayer, "command.toLayer");
+  }
+  if (raw.viaType !== undefined) {
+    const viaType = asString(raw.viaType);
+    if (!viaType || !VIA_TYPES.has(viaType)) {
+      throw new ValidationError(
+        "command.viaType must be 'through', 'blind', 'buried' or 'micro'",
+      );
+    }
+    command.viaType = viaType as PcbViaType;
+  }
+  if (raw.protection !== undefined) {
+    const protection = asString(raw.protection);
+    if (!protection || !VIA_PROTECTIONS.has(protection)) {
+      throw new ValidationError(
+        "command.protection must be 'none', 'tented', 'plugged', 'filled' or 'capped'",
+      );
+    }
+    command.protection = protection as PcbViaProtection;
+  }
+  const changes = [
+    command.diameterMm,
+    command.drillMm,
+    command.fromLayer,
+    command.toLayer,
+    command.viaType,
+    command.protection,
+  ];
+  if (changes.every((change) => change === undefined)) {
+    throw new ValidationError("command must change at least one via field");
+  }
+  return command;
+}
+
 function parsePcbSetViewStateCommand(
   raw: Record<string, unknown>,
 ): DesignerPcbSetViewStateCommand {
@@ -2701,6 +2818,19 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
     throw new ValidationError("command must be an object");
   }
 
+  return {
+    commandId,
+    sessionId,
+    aggregateId,
+    baseRevision,
+    issuedAt,
+    command: parseCommand(commandRecord),
+  };
+}
+
+function parseCommand(
+  commandRecord: Record<string, unknown>,
+): DesignerCommandEnvelope["command"] {
   const type = asString(commandRecord.type);
   if (!type) {
     throw new ValidationError("command.type must be a string");
@@ -2882,18 +3012,51 @@ function parseCommandEnvelope(body: unknown): DesignerCommandEnvelope {
     case "pcb_delete_keepout":
       command = parsePcbDeleteKeepoutCommand(commandRecord);
       break;
+    case "pcb_update_trace":
+      command = parsePcbUpdateTraceCommand(commandRecord);
+      break;
+    case "pcb_update_via":
+      command = parsePcbUpdateViaCommand(commandRecord);
+      break;
+    case "batch_commands":
+      command = parseBatchCommandsCommand(commandRecord);
+      break;
     default:
       throw new ValidationError(`Unsupported command type '${type}'`);
   }
+  return command;
+}
 
-  return {
-    commandId,
-    sessionId,
-    aggregateId,
-    baseRevision,
-    issuedAt,
-    command,
-  };
+function parseBatchCommandsCommand(
+  raw: Record<string, unknown>,
+): DesignerBatchCommandsCommand {
+  if (!Array.isArray(raw.commands) || raw.commands.length === 0) {
+    throw new ValidationError("command.commands must be a non-empty array");
+  }
+  if (raw.commands.length > DESIGNER_BATCH_MAX_COMMANDS) {
+    throw new ValidationError(
+      `command.commands may carry at most ${DESIGNER_BATCH_MAX_COMMANDS} commands`,
+    );
+  }
+  const commands = raw.commands.map((entry, index) => {
+    const step = asRecord(entry);
+    const type = asString(step?.type);
+    if (!step || !type) {
+      throw new ValidationError(`command.commands[${index}] must be a command`);
+    }
+    if (!isBatchableCommandType(type)) {
+      throw new ValidationError(
+        `command.commands[${index}]: '${type}' cannot be batched`,
+      );
+    }
+    try {
+      return parseCommand(step) as DesignerBatchableCommand;
+    } catch (error) {
+      if (!(error instanceof ValidationError)) throw error;
+      throw new ValidationError(`command.commands[${index}]: ${error.message}`);
+    }
+  });
+  return { type: "batch_commands", commands };
 }
 
 /** Pre-apply snapshot of each targeted net's existing copper ids (WP-D4):
@@ -3178,7 +3341,7 @@ export function registerRoutes(
     return textResponse(
       buildBomCsv(pcb, schematic, overrides),
       "text/csv; charset=utf-8",
-      `openpcb-${designId}-BOM.csv`,
+      await bomDownloadName(store, designId, "csv"),
     );
   });
 
@@ -3189,7 +3352,7 @@ export function registerRoutes(
     return textResponse(
       buildBomTsv(bom.rows),
       "text/tab-separated-values; charset=utf-8",
-      `openpcb-${designId}-BOM.tsv`,
+      await bomDownloadName(store, designId, "tsv"),
     );
   });
 
@@ -3200,7 +3363,7 @@ export function registerRoutes(
     return textResponse(
       buildJlcBomCsv(bom.rows),
       "text/csv; charset=utf-8",
-      `openpcb-${designId}-JLC-BOM.csv`,
+      await bomDownloadName(store, designId, "jlc"),
     );
   });
 
@@ -3211,7 +3374,7 @@ export function registerRoutes(
     return textResponse(
       buildKicadBomCsv(bom.rows),
       "text/csv; charset=utf-8",
-      `openpcb-${designId}-KiCad-BOM.csv`,
+      await bomDownloadName(store, designId, "kicad"),
     );
   });
 
@@ -3224,7 +3387,7 @@ export function registerRoutes(
     return textResponse(
       buildPnpCsv(pcb, schematic, overrides),
       "text/csv; charset=utf-8",
-      `openpcb-${designId}-PnP.csv`,
+      await bomDownloadName(store, designId, "pnp"),
     );
   });
 
@@ -3242,7 +3405,14 @@ export function registerRoutes(
         : {};
       const options = parseExportOptions(rawBody);
 
-      const bundle = buildExportBundle(pcb, schematic, options, overrides);
+      const bundle = buildExportBundle(
+        pcb,
+        schematic,
+        options,
+        overrides,
+        undefined,
+        await store.getDesignName(designId),
+      );
 
       // Dataset capture (WP-D4): export is a milestone — snapshot + per-net
       // outcome derivation for every applied auto-layout job.

@@ -5,6 +5,7 @@ import type {
   DesignerDispatchResult,
   DesignerPcbAddTraceCommand,
   DesignerPcbAddViaCommand,
+  DesignerPcbUpdateViaCommand,
   DesignerPin,
   DesignerPrimitive,
   DesignerSchematicProjection,
@@ -18,6 +19,7 @@ import type {
   PcbFreeHole,
   PcbCopperLayerId,
   PcbKeepout,
+  PcbPointMm,
   PcbTrace,
   PcbVia,
   PcbViaType,
@@ -42,6 +44,7 @@ import {
 import { isFeatureEnabled } from "../../../core/contracts/feature-flags/backend";
 import { autoRouteWirePointsDetailed } from "./routing/wire-obstacles";
 import { applyAutoArrange } from "./layout/arrange-schematic";
+import { executeBatchCommands } from "./commands/batch";
 import {
   buildPlacePartPayload,
   normalizeRotationDeg,
@@ -135,6 +138,9 @@ import {
   updatePcbViewState,
   updatePcbDesignRules,
   validateDrcRulesForSave,
+  validateNetClassesForSave,
+  reassignDeletedNetClassCopper,
+  updatePcbVia,
   updatePcbVisibleLayers,
   updatePcbZone,
 } from "./pcb/pcb-store";
@@ -600,6 +606,109 @@ function ruleResolverFor(
   );
 }
 
+/**
+ * A via's size against the board: positive, diameter over drill, and the
+ * scoped `viaDiameter` / `viaDrill` / `annularRing` minimums. ONE check for the
+ * insert gate and the inspector edit, so an edit can never store a via the
+ * insert would have refused.
+ */
+function viaSizeError(
+  via: {
+    netId: string | null;
+    centerMm: PcbPointMm;
+    diameterMm: number;
+    drillMm: number;
+    layers: readonly PcbCopperLayerId[];
+  },
+  board: PcbBoardSettings,
+  resolver: RuleResolver,
+): DesignerDispatchResult | null {
+  const { diameterMm, drillMm } = via;
+  if (!Number.isFinite(diameterMm) || diameterMm <= 0) {
+    return invalidPcbVia("via diameter must be positive");
+  }
+  if (!Number.isFinite(drillMm) || drillMm <= 0) {
+    return invalidPcbVia("via drill must be positive");
+  }
+  if (diameterMm <= drillMm) {
+    return invalidPcbVia("via diameter must exceed drill");
+  }
+  // Scope geometry for the resolver: the via's copper disc over its span.
+  const scalarItem = {
+    netId: via.netId,
+    layers: via.layers,
+    geometry: {
+      kind: "disc" as const,
+      center: via.centerMm,
+      radiusMm: diameterMm / 2,
+    },
+  };
+  // Scoped scalar rules gate the via exactly as the board minimum does
+  // (rule-semantics contract §5.1): the resolution is first-match, then
+  // floored by the board minimum, so this can only ever be at least as strict.
+  const requiredDiameterMm = resolver.scalar("viaDiameter", scalarItem).mm;
+  if (below(diameterMm, requiredDiameterMm)) {
+    return invalidPcbVia("via diameter is below board minimum");
+  }
+  const requiredDrillMm = resolver.scalar("viaDrill", scalarItem).mm;
+  // `drillSizeMm` has no scalar rule kind and stays board-only (§5.1).
+  if (
+    below(drillMm, requiredDrillMm) ||
+    below(drillMm, board.designRules.minimums.drillSizeMm)
+  ) {
+    return invalidPcbVia("via drill is below board minimum");
+  }
+  const requiredAnnularMm = resolver.scalar("annularRing", scalarItem).mm;
+  if (below((diameterMm - drillMm) / 2, requiredAnnularMm)) {
+    return invalidPcbVia("via annular ring is below board minimum");
+  }
+  return null;
+}
+
+/**
+ * The span an inspector edit leaves the via with. Untouched type and layers
+ * keep the stored span as-is — a release build (no `pcb.advancedVias`) can
+ * still resize an imported blind via — and `viaType: "through"` alone converts
+ * any via to the full F.Cu→B.Cu barrel. Anything else goes through the insert's
+ * `resolveViaSpan`, flag and stackup checks included.
+ */
+function resolveUpdatedViaSpan(
+  existing: PcbVia,
+  command: DesignerPcbUpdateViaCommand,
+  board: PcbBoardSettings,
+):
+  | { fromLayer: PcbCopperLayerId; toLayer: PcbCopperLayerId; viaType: PcbViaType }
+  | { error: DesignerDispatchResult } {
+  if (
+    command.viaType === undefined &&
+    command.fromLayer === undefined &&
+    command.toLayer === undefined
+  ) {
+    return {
+      fromLayer: existing.fromLayer,
+      toLayer: existing.toLayer,
+      viaType: existing.viaType,
+    };
+  }
+  const viaType = command.viaType ?? existing.viaType;
+  const keepStoredLayers = viaType !== "through";
+  const fromLayer =
+    command.fromLayer ?? (keepStoredLayers ? existing.fromLayer : undefined);
+  const toLayer =
+    command.toLayer ?? (keepStoredLayers ? existing.toLayer : undefined);
+  return resolveViaSpan(
+    {
+      centerMm: existing.centerMm,
+      netId: existing.netId,
+      netClassId: existing.netClassId,
+      viaType,
+      ...(fromLayer !== undefined ? { fromLayer } : {}),
+      ...(toLayer !== undefined ? { toLayer } : {}),
+    },
+    board,
+  );
+}
+
 function buildPcbViaForInsert(
   input: PcbViaInput,
   board: PcbBoardSettings,
@@ -610,49 +719,25 @@ function buildPcbViaForInsert(
   if (!netClass) return { error: pcbNetClassNotFound(netClassId) };
   const diameterMm = input.diameterMmOverride ?? netClass.viaDiameterMm;
   const drillMm = input.drillMmOverride ?? netClass.viaDrillMm;
-  if (!Number.isFinite(diameterMm) || diameterMm <= 0) {
-    return { error: invalidPcbVia("via diameter must be positive") };
-  }
-  if (!Number.isFinite(drillMm) || drillMm <= 0) {
-    return { error: invalidPcbVia("via drill must be positive") };
-  }
-  if (diameterMm <= drillMm) {
-    return { error: invalidPcbVia("via diameter must exceed drill") };
-  }
-  const minimums = board.designRules.minimums;
   const span = resolveViaSpan(input, board);
-  // Scope geometry for the resolver: the via's copper disc over its resolved
-  // span. An unresolvable span cannot narrow a `layer` scope, so fall back to
-  // the whole stackup — conservative, and the span error is still returned
-  // below in the order this gate has always reported it.
-  const scalarItem = {
-    netId: input.netId,
-    layers:
-      "error" in span
-        ? copperLayersForCount(board.layerCount)
-        : viaSpanLayers(span.fromLayer, span.toLayer, board.layerCount),
-    geometry: {
-      kind: "disc" as const,
-      center: input.centerMm,
-      radiusMm: diameterMm / 2,
+  // An unresolvable span cannot narrow a `layer` scope, so the size check falls
+  // back to the whole stackup — conservative, and the span error is still
+  // returned below in the order this gate has always reported it.
+  const sizeError = viaSizeError(
+    {
+      netId: input.netId,
+      centerMm: input.centerMm,
+      diameterMm,
+      drillMm,
+      layers:
+        "error" in span
+          ? copperLayersForCount(board.layerCount)
+          : viaSpanLayers(span.fromLayer, span.toLayer, board.layerCount),
     },
-  };
-  // Scoped scalar rules gate the insert exactly as the board minimum does
-  // (rule-semantics contract §5.1): the resolution is first-match, then
-  // floored by the board minimum, so this can only ever be at least as strict.
-  const requiredDiameterMm = resolver.scalar("viaDiameter", scalarItem).mm;
-  if (below(diameterMm, requiredDiameterMm)) {
-    return { error: invalidPcbVia("via diameter is below board minimum") };
-  }
-  const requiredDrillMm = resolver.scalar("viaDrill", scalarItem).mm;
-  // `drillSizeMm` has no scalar rule kind and stays board-only (§5.1).
-  if (below(drillMm, requiredDrillMm) || below(drillMm, minimums.drillSizeMm)) {
-    return { error: invalidPcbVia("via drill is below board minimum") };
-  }
-  const requiredAnnularMm = resolver.scalar("annularRing", scalarItem).mm;
-  if (below((diameterMm - drillMm) / 2, requiredAnnularMm)) {
-    return { error: invalidPcbVia("via annular ring is below board minimum") };
-  }
+    board,
+    resolver,
+  );
+  if (sizeError) return { error: sizeError };
   if ("error" in span) return span;
   const via: PcbVia = {
     id: crypto.randomUUID(),
@@ -822,6 +907,8 @@ interface EnvelopeLegality {
    * derivation. `undefined` when no context exists, or the id is not a board row.
    */
   boundTrace(traceId: string): PcbTrace | undefined;
+  /** The via twin of `boundTrace`: an imported via is bound by `netName` too. */
+  boundVia(viaId: string): PcbVia | undefined;
 }
 
 /**
@@ -853,6 +940,7 @@ function legalityFor(params: ExecuteDesignerCommandParams): EnvelopeLegality {
     },
     boundTrace: (traceId) =>
       assemble()?.traces.find((trace) => trace.id === traceId),
+    boundVia: (viaId) => assemble()?.vias.find((via) => via.id === viaId),
   };
 }
 
@@ -920,6 +1008,27 @@ export function executeDesignerCommand(
     timestamp,
     placeComponentDetail,
   } = params;
+  if (command.type === "batch_commands") {
+    return executeBatchCommands({
+      tx,
+      designId,
+      revision,
+      timestamp,
+      command,
+      projection,
+      executeStep: (step) =>
+        executeDesignerCommand({
+          tx: step.tx,
+          designId,
+          revision,
+          command: step.command,
+          projection: step.projection,
+          timestamp,
+          placeComponentDetail: null,
+          ...(step.pcbBefore ? { pcbBefore: step.pcbBefore } : {}),
+        }),
+    });
+  }
   const gate = legalityFor(params);
   if (command.type === "pcb_set_board_settings") {
     if (command.widthMm <= 0 || command.heightMm <= 0) {
@@ -1316,6 +1425,82 @@ export function executeDesignerCommand(
     );
   }
 
+  if (command.type === "pcb_update_trace") {
+    const existing = loadPcbTraceById(tx, designId, command.traceId);
+    if (!existing) return pcbTraceNotFound(command.traceId);
+    const board = ensurePcbBoardSettings(tx, designId, timestamp);
+    const widthMm = command.widthMm ?? existing.widthMm;
+    if (!Number.isFinite(widthMm) || widthMm <= 0) {
+      return invalidPcbTrace("trace width must be positive");
+    }
+    const layer = command.layer ?? existing.layer;
+    if (copperLayerIndex(layer, board.layerCount) === null) {
+      return invalidPcbTrace(
+        `${layer} is not a copper layer of this ${board.layerCount}-layer board`,
+      );
+    }
+    // Judged like a geometry edit: the BOUND row, its own board row replaced.
+    // A too-thin width is `TRACE_WIDTH_MIN`, in the gate's refuse set.
+    const legality = commandLegality(command);
+    const bound = gate.boundTrace(command.traceId) ?? existing;
+    const verdict = gateCopper(
+      gate.context(),
+      { traces: [{ ...bound, widthMm, layer }], vias: [] },
+      legality,
+      [command.traceId],
+    );
+    const refusal = copperRefusal(verdict, legality);
+    if (refusal) return refusal;
+    updatePcbTrace(tx, { ...existing, widthMm, layer }, timestamp);
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      null,
+      legalityCounts(verdict),
+    );
+  }
+
+  if (command.type === "pcb_update_via") {
+    const existing = loadPcbViaById(tx, designId, command.viaId);
+    if (!existing) return pcbViaNotFound(command.viaId);
+    const board = ensurePcbBoardSettings(tx, designId, timestamp);
+    const span = resolveUpdatedViaSpan(existing, command, board);
+    if ("error" in span) return span.error;
+    const changes = {
+      diameterMm: command.diameterMm ?? existing.diameterMm,
+      drillMm: command.drillMm ?? existing.drillMm,
+      ...span,
+      protection: command.protection ?? existing.protection,
+    };
+    const sizeError = viaSizeError(
+      {
+        netId: existing.netId,
+        centerMm: existing.centerMm,
+        diameterMm: changes.diameterMm,
+        drillMm: changes.drillMm,
+        layers: viaSpanLayers(span.fromLayer, span.toLayer, board.layerCount),
+      },
+      board,
+      ruleResolverFor(tx, designId, board),
+    );
+    if (sizeError) return sizeError;
+    const legality = commandLegality(command);
+    const bound = gate.boundVia(command.viaId) ?? existing;
+    const verdict = gateCopper(
+      gate.context(),
+      { traces: [], vias: [{ ...bound, ...changes }] },
+      legality,
+      [command.viaId],
+    );
+    const refusal = copperRefusal(verdict, legality);
+    if (refusal) return refusal;
+    updatePcbVia(tx, { ...existing, ...changes }, timestamp);
+    return okResult(
+      bumpRevision(tx, designId, revision, timestamp),
+      null,
+      legalityCounts(verdict),
+    );
+  }
+
   if (command.type === "pcb_cleanup_pour_traces") {
     const proj = loadPcbProjection({ db: tx, designId, revision, timestamp });
     const dr = proj.board.designRules;
@@ -1644,6 +1829,18 @@ export function executeDesignerCommand(
   }
 
   if (command.type === "pcb_set_design_rules") {
+    const storedClasses = ensurePcbBoardSettings(
+      tx,
+      designId,
+      timestamp,
+    ).netClasses;
+    if (command.netClasses !== undefined) {
+      const problem = validateNetClassesForSave(
+        command.netClasses,
+        storedClasses,
+      );
+      if (problem) return invalidPcbBoardSettings(problem);
+    }
     if (command.drcRules !== undefined) {
       // Fail CLOSED (rule-semantics contract §2.1): a structurally invalid
       // rule refuses the WHOLE command and nothing is persisted. Dropping the
@@ -1670,7 +1867,7 @@ export function executeDesignerCommand(
         return invalidDrcRule(first.ruleId, `${first.reason}: ${first.detail}`);
       }
     }
-    updatePcbDesignRules({
+    const next = updatePcbDesignRules({
       db: tx,
       designId,
       designRules: command.designRules,
@@ -1681,6 +1878,16 @@ export function executeDesignerCommand(
       drcSeverityOverrides: command.drcSeverityOverrides,
       drcRules: command.drcRules,
       diffPairs: command.diffPairs,
+      timestamp,
+    });
+    const keptClassIds = new Set(next.netClasses.map((c) => c.id));
+    reassignDeletedNetClassCopper({
+      db: tx,
+      designId,
+      deletedClassIds: new Set(
+        storedClasses.map((c) => c.id).filter((id) => !keptClassIds.has(id)),
+      ),
+      defaultClassId: defaultNetClassId(next.netClasses),
       timestamp,
     });
     return okResult(bumpRevision(tx, designId, revision, timestamp), null);

@@ -129,7 +129,14 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
       if (!pcb) return null;
       const schematic = await store.getSchematicProjection(designId);
       const overrides = await store.listBomOverrides(designId);
-      const bundle = buildExportBundle(pcb, schematic, options ?? {}, overrides);
+      const bundle = buildExportBundle(
+        pcb,
+        schematic,
+        options ?? {},
+        overrides,
+        undefined,
+        await store.getDesignName(designId),
+      );
       // Sizes only — the artifact text stays here. Callers wanting the bytes
       // use the HTTP export route, which streams a ZIP.
       return {

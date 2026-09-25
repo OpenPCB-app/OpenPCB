@@ -566,12 +566,15 @@ function mergeNetClasses(
 ): PcbNetClass[] {
   const byName = new Map<string, PcbNetClass>();
   for (const nc of defaults) byName.set(nc.name.toLowerCase(), nc);
+  // Class ids must be unique (the design-rules save refuses duplicates), and
+  // two KiCad names can slug alike ("USB+" / "USB-").
+  const usedIds = new Set(defaults.map((nc) => nc.id));
 
   for (const incoming of fromKicad) {
     const key = incoming.name.toLowerCase();
     const existing = byName.get(key);
     const merged: PcbNetClass = {
-      id: existing?.id ?? slugify(incoming.name),
+      id: existing?.id ?? uniqueId(slugify(incoming.name), usedIds),
       name: incoming.name,
       traceWidthMm: incoming.trackWidthMm ?? existing?.traceWidthMm ?? 0.25,
       clearanceMm: incoming.clearanceMm ?? existing?.clearanceMm ?? 0.25,
@@ -583,6 +586,13 @@ function mergeNetClasses(
     byName.set(key, merged);
   }
   return [...byName.values()];
+}
+
+function uniqueId(base: string, used: Set<string>): string {
+  let id = base;
+  for (let n = 2; used.has(id); n += 1) id = `${base}-${n}`;
+  used.add(id);
+  return id;
 }
 
 function slugify(name: string): string {

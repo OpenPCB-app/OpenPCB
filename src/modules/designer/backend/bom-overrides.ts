@@ -1,27 +1,44 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type {
   BomOverride,
   BomOverridePatch,
 } from "../../../sdks/designer/types";
-import { bomOverrides } from "./schema";
+import { bomOverrides, schematicParts } from "./schema";
 
 type DbClient = BetterSQLite3Database<Record<string, unknown>>;
 
 type BomOverrideRow = typeof bomOverrides.$inferSelect;
 
+/**
+ * Overrides are bound to the schematic part that carried the reference when
+ * they were written, so a rename (or its undo/redo, which bypasses command
+ * handlers) never strands them. A bound row reports its part's CURRENT
+ * reference; the BOM/PnP writers match it by `partId` only.
+ */
 export function listBomOverrides(
   db: DbClient,
   designId: string,
 ): BomOverride[] {
+  const referenceByPartId = new Map(
+    partReferences(db, designId).map((part) => [part.id, part.reference]),
+  );
   return db
     .select()
     .from(bomOverrides)
     .where(eq(bomOverrides.designId, designId))
     .all()
-    .map(toDto);
+    .map((row) =>
+      toDto(row, row.partId ? referenceByPartId.get(row.partId) : undefined),
+    );
 }
 
+/**
+ * `refdes` is the reference the user sees now. It resolves to the part that
+ * carries it; that part's bound row is updated, else an unbound row under the
+ * same reference is adopted (bound), else a new row is written. A reference no
+ * schematic part carries (e.g. a PCB-only placement) keeps an unbound row.
+ */
 export function upsertBomOverride(
   db: DbClient,
   designId: string,
@@ -29,14 +46,22 @@ export function upsertBomOverride(
   patch: BomOverridePatch,
   timestamp: string,
 ): BomOverride {
-  const existing = db
-    .select()
-    .from(bomOverrides)
-    .where(and(eq(bomOverrides.designId, designId), eq(bomOverrides.refdes, refdes)))
-    .get();
+  const partId =
+    db
+      .select({ id: schematicParts.id })
+      .from(schematicParts)
+      .where(
+        and(
+          eq(schematicParts.designId, designId),
+          eq(schematicParts.reference, refdes),
+        ),
+      )
+      .get()?.id ?? null;
+  const existing = findOverrideRow(db, designId, partId, refdes);
   const next = {
     id: existing?.id ?? crypto.randomUUID(),
     designId,
+    partId,
     refdes,
     manufacturer:
       patch.manufacturer !== undefined ? normalizeString(patch.manufacturer) : existing?.manufacturer ?? null,
@@ -78,10 +103,51 @@ export function upsertBomOverride(
   return toDto(next);
 }
 
-function toDto(row: BomOverrideRow): BomOverride {
+function partReferences(
+  db: DbClient,
+  designId: string,
+): Array<{ id: string; reference: string }> {
+  return db
+    .select({ id: schematicParts.id, reference: schematicParts.reference })
+    .from(schematicParts)
+    .where(eq(schematicParts.designId, designId))
+    .all();
+}
+
+function findOverrideRow(
+  db: DbClient,
+  designId: string,
+  partId: string | null,
+  refdes: string,
+): BomOverrideRow | undefined {
+  if (partId) {
+    const bound = db
+      .select()
+      .from(bomOverrides)
+      .where(
+        and(eq(bomOverrides.designId, designId), eq(bomOverrides.partId, partId)),
+      )
+      .get();
+    if (bound) return bound;
+  }
+  return db
+    .select()
+    .from(bomOverrides)
+    .where(
+      and(
+        eq(bomOverrides.designId, designId),
+        isNull(bomOverrides.partId),
+        eq(bomOverrides.refdes, refdes),
+      ),
+    )
+    .get();
+}
+
+function toDto(row: BomOverrideRow, currentRefdes?: string): BomOverride {
   return {
     designId: row.designId,
-    refdes: row.refdes,
+    partId: row.partId,
+    refdes: currentRefdes ?? row.refdes,
     manufacturer: row.manufacturer,
     manufacturerPartNumber: row.manufacturerPartNumber,
     lcscPartNumber: row.lcscPartNumber,

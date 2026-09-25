@@ -45,6 +45,8 @@ export function buildExportBundle(
   options: GerberExportOptions = {},
   bomOverrides: readonly BomOverride[] = [],
   createdAt: string = new Date().toISOString(),
+  /** The design's name: names the bundle, every file in it and the job's ProjectId. */
+  designName: string | null = null,
 ): GerberExportResult {
   const warnings: string[] = [];
   const artifacts: GerberArtifact[] = [];
@@ -81,7 +83,7 @@ export function buildExportBundle(
     );
   }
 
-  const bundleName = exportBundleName(pcb.designId);
+  const bundleName = exportBundleName(pcb.designId, designName);
   const includeInner =
     options.includeInnerLayers !== false && pcb.board.layerCount === 4;
   const includeBom = options.includeBom !== false;
@@ -190,7 +192,7 @@ export function buildExportBundle(
   artifacts.push({
     kind: "gerber.job",
     fileName: `${bundleName}.gbrjob`,
-    text: buildGerberJobFile({ pcb, files: jobFiles, createdAt }),
+    text: buildGerberJobFile({ pcb, files: jobFiles, createdAt, designName }),
   });
 
   if (includeBom) {

@@ -30,8 +30,12 @@ import type {
   PcbVia,
   PcbZone,
 } from "../../../sdks";
+import { SCHEMATIC_LABEL_ATTACH_TOLERANCE_NM } from "../../../sdks/designer";
 import { normalizeRotationDeg } from "./commands/place-part";
-import { pointStrictlyInsideOrthogonalSegment } from "./routing/manhattan";
+import {
+  orthogonalProjection,
+  pointStrictlyInsideOrthogonalSegment,
+} from "./routing/manhattan";
 import { asPrimitiveFromPayload, insertPrimitiveRow } from "./primitive-store";
 import {
   designHeads,
@@ -542,6 +546,62 @@ export interface NetDerivationWarning {
   detail: string;
 }
 
+const LABEL_ATTACH_TOLERANCE_SQ =
+  BigInt(SCHEMATIC_LABEL_ATTACH_TOLERANCE_NM) *
+  BigInt(SCHEMATIC_LABEL_ATTACH_TOLERANCE_NM);
+
+function withinLabelTolerance(
+  label: { x: number; y: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): boolean {
+  // The segment's box grown by the tolerance bounds the exact test from
+  // outside, and keeps the bigint projection off the common far-away case.
+  const tol = SCHEMATIC_LABEL_ATTACH_TOLERANCE_NM;
+  if (
+    label.x < Math.min(a.x, b.x) - tol ||
+    label.x > Math.max(a.x, b.x) + tol ||
+    label.y < Math.min(a.y, b.y) - tol ||
+    label.y > Math.max(a.y, b.y) + tol
+  ) {
+    return false;
+  }
+  return orthogonalProjection(label, a, b).distanceSq <= LABEL_ATTACH_TOLERANCE_SQ;
+}
+
+/**
+ * A net label joins every wire it touches — anywhere along a segment, at a
+ * corner or at an end — and every pin-like point under it, within
+ * `SCHEMATIC_LABEL_ATTACH_TOLERANCE_NM` (T-097; it used to need a nanometre-
+ * exact wire VERTEX, which a click never lands on). A wire's nodes are already
+ * one component, so touching any segment joins the whole wire.
+ */
+function attachLabels(
+  labelCoords: ReadonlyMap<string, { x: number; y: number }>,
+  wires: readonly DesignerWire[],
+  pinCoords: ReadonlyMap<string, { x: number; y: number }>,
+  graph: {
+    union: (a: string, b: string) => void;
+    wireNode: (wireId: string) => string;
+  },
+): void {
+  for (const [labelNode, point] of labelCoords) {
+    for (const wire of wires) {
+      const pts = wire.pointsNm;
+      const touches =
+        pts.length === 1
+          ? withinLabelTolerance(point, pts[0]!, pts[0]!)
+          : pts.some(
+              (b, i) => i > 0 && withinLabelTolerance(point, pts[i - 1]!, b),
+            );
+      if (touches) graph.union(labelNode, graph.wireNode(wire.id));
+    }
+    for (const [pinNode, pin] of pinCoords) {
+      if (withinLabelTolerance(point, pin, pin)) graph.union(labelNode, pinNode);
+    }
+  }
+}
+
 export interface NetDerivationResult {
   nets: DesignerDerivedNet[];
   junctions: DesignerJunction[];
@@ -557,9 +617,10 @@ export interface NetDerivationResult {
  *   any DesignerLabel text                     -> alphabetically first label text
  *   otherwise                                  -> Net_<n>
  *
- * NET_PORTALs sharing the same `portalText` join across disconnected
- * sub-graphs (cross-region net), which is what distinguishes them from local
- * DesignerLabels.
+ * NET_PORTALs and net labels sharing the same text join across disconnected
+ * sub-graphs — a single-sheet schematic has no scope in which a local label
+ * could differ from a portal. A label also joins every wire and pin its anchor
+ * touches (`attachLabels`).
  */
 export function deriveNetsAndJunctions(
   parts: DesignerPlacedPart[],
@@ -584,7 +645,7 @@ export function deriveNetsAndJunctions(
 
   const pinKeyById = new Map<string, string>();
   // Pin-like coordinates (pins + primitive connection points): connect to wire
-  // interiors. Labels stay vertex-exact (current behavior preserved).
+  // interiors. Labels attach within a tolerance (see `attachLabels` below).
   const pinCoords = new Map<string, { x: number; y: number }>();
   const labelCoords = new Map<string, { x: number; y: number }>();
 
@@ -716,21 +777,29 @@ export function deriveNetsAndJunctions(
       unionFind.union(pt, wNode(hit.wireId, hit.segStartIdx));
     }
   }
-  for (const [pt, point] of labelCoords) {
-    const coord = pointKey(point);
-    for (const vertex of vertexByCoord.get(coord) ?? []) {
-      unionFind.union(pt, wNode(vertex.wireId, vertex.idx));
-    }
-  }
+  attachLabels(labelCoords, wires, pinCoords, {
+    union: (a, b) => unionFind.union(a, b),
+    wireNode: (wireId) => wNode(wireId, 0),
+  });
 
-  // Global named-net union: every primitive that names a net merges with all
-  // others sharing that name, even without a physical wire — across GND ports
-  // (canonical "GND"), PWR rails (railText) and net portals (portalText) in ONE
-  // namespace, so e.g. a pwr("+5V") and a net_portal("+5V") form a single net.
-  // The grouping key is case-insensitive (VCC == vcc); display names are still
-  // taken from the original primitive text downstream. Junction nodes name
-  // nothing.
+  // Global named-net union: every primitive or net label that names a net
+  // merges with all others sharing that name, even without a physical wire —
+  // across GND ports (canonical "GND"), PWR rails (railText), net portals
+  // (portalText) and net labels (text) in ONE namespace, so e.g. a pwr("+5V")
+  // and a net_portal("+5V") form a single net, and two "SDA" labels do too
+  // (KiCad local labels on the one sheet). One name, one net: the PCB re-binds
+  // copper by the upper-cased name. The grouping key is case-insensitive
+  // (VCC == vcc); display names are still taken from the original text
+  // downstream. Junction nodes name nothing.
   const keysByNetName = new Map<string, string[]>();
+  for (const label of labels) {
+    const text = label.text.trim();
+    if (!text) continue;
+    const groupKey = text.toUpperCase();
+    const arr = keysByNetName.get(groupKey) ?? [];
+    arr.push(ptNode(label.positionNm));
+    keysByNetName.set(groupKey, arr);
+  }
   for (const prim of primitives) {
     let netName: string | null = null;
     if (prim.kind === "gnd") netName = "GND";

@@ -1155,8 +1155,9 @@ describe("designer PCB view-state persistence", () => {
       designId,
       envelope(designId, "cmd-unknown-class", rev0, {
         type: "pcb_set_design_rules",
-        // The class entry is malformed (no id), so the store DROPS it — the
-        // rule below then names a class the persisted board does not have.
+        // Only the default class survives the save, so the rule below names a
+        // class the persisted board does not have. (A malformed class ROW is
+        // refused outright since T-162 — it is not a way to drop a class.)
         netClasses: [
           {
             id: "default",
@@ -1168,7 +1169,6 @@ describe("designer PCB view-state persistence", () => {
             color: "#d4d4d8",
             defaultViaProtection: "tented",
           },
-          { name: "Ghost", clearanceMm: 0.9 },
         ] as never,
         drcRules: [
           {

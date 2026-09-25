@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -226,6 +227,9 @@ export const bomOverrides = sqliteTable(
   {
     id: text("id").primaryKey(),
     designId: text("design_id").notNull(),
+    // Identity of a bound override (migration 0019); refdes is the reference
+    // at the last write and the match key only while part_id is null.
+    partId: text("part_id"),
     refdes: text("refdes").notNull(),
     manufacturer: text("manufacturer"),
     manufacturerPartNumber: text("manufacturer_part_number"),
@@ -240,10 +244,15 @@ export const bomOverrides = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => ({
-    designRefUq: uniqueIndex("designer_bom_overrides_design_ref_uq").on(
+    designPartUq: uniqueIndex("designer_bom_overrides_design_part_uq").on(
       table.designId,
-      table.refdes,
+      table.partId,
     ),
+    designRefUnboundUq: uniqueIndex(
+      "designer_bom_overrides_design_ref_unbound_uq",
+    )
+      .on(table.designId, table.refdes)
+      .where(sql`${table.partId} is null`),
     designIdIdx: index("designer_bom_overrides_design_id_idx").on(
       table.designId,
     ),

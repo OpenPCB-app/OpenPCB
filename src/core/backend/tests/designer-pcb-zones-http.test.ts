@@ -19,6 +19,10 @@ import { DiagnosticsStore } from "../diagnostics/diagnostics-store";
 import { createHttpServer } from "../http/create-http-server";
 import { ModuleRuntime } from "../modules/module-loader";
 import { ModuleRouterRegistry } from "../router/module-registry";
+import {
+  importCapacitorComponent,
+  placeCapacitors,
+} from "./helpers/designer-runtime";
 
 function isolateTestDb(label: string): void {
   resetSharedSqliteForTesting();
@@ -176,22 +180,26 @@ describe("designer PCB zones — nets", () => {
 
 describe("designer PCB zones — projection warnings", () => {
   test("an ambiguous zone net is reported once, not also as unresolved", async () => {
-    const { sdk } = await createRuntime("zone-net-ambiguous");
+    const { sdk, server } = await createRuntime("zone-net-ambiguous");
     const design = await sdk.createDesign({ name: "Ambiguous" });
-    for (const x of [0, 5_000_000]) {
-      const label = await sdk.dispatchCommand(
-        design.id,
-        envelope(design.id, {
-          type: "upsert_label",
-          text: "GND",
-          positionNm: { x, y: 0 },
-        }),
-      );
-      expect(label.ok).toBe(true);
-    }
+    // Same-text labels are ONE net since T-097, so a duplicated name can only
+    // come from a label that spells an auto-generated name: the capacitor's
+    // two unconnected pins are `Net_1` / `Net_2`, and a lone `Net_1` label is
+    // a second, unrelated net of that name.
+    const componentId = await importCapacitorComponent(server);
+    await placeCapacitors(sdk, design.id, componentId, 1);
+    const label = await sdk.dispatchCommand(
+      design.id,
+      envelope(design.id, {
+        type: "upsert_label",
+        text: "Net_1",
+        positionNm: { x: 90_000_000, y: 90_000_000 },
+      }),
+    );
+    expect(label.ok).toBe(true);
     const nets = Object.values(
       (await sdk.getPcbProjection(design.id))!.netNames,
-    ).filter((name) => name === "GND");
+    ).filter((name) => name === "Net_1");
     expect(nets.length).toBeGreaterThan(1);
 
     const add = await sdk.dispatchCommand(
@@ -199,7 +207,7 @@ describe("designer PCB zones — projection warnings", () => {
       envelope(design.id, {
         type: "pcb_add_zone",
         layer: "F.Cu",
-        net: { netId: null, netName: "GND" },
+        net: { netId: null, netName: "Net_1" },
         region: { kind: "polygon", pointsMm: SQUARE },
       }),
     );

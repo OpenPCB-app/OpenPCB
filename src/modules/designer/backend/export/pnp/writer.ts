@@ -32,40 +32,41 @@ export function buildPnpCsv(
   schematic: DesignerSchematicProjection | null,
   overrides: readonly BomOverride[] = [],
 ): string {
-  const valueByRef = new Map<string, string>();
-  const rotationOverrideByRef = new Map<string, number>();
-  if (schematic) {
-    for (const part of schematic.parts as DesignerPlacedPart[]) {
-      valueByRef.set(part.reference, part.value);
-      const override = readPnpRotation(part.propertiesJson);
-      if (override !== null)
-        rotationOverrideByRef.set(part.reference, override);
-    }
+  // Paired by partId, like the BOM: the designator is the SCHEMATIC reference,
+  // so BOM and CPL name the same part identically even before a renamed
+  // placement row has re-synced.
+  const partById = new Map<string, DesignerPlacedPart>();
+  for (const part of (schematic?.parts ?? []) as DesignerPlacedPart[]) {
+    partById.set(part.id, part);
   }
 
-  // DNP parts are excluded from the CPL. Reuse the BOM projection's per-ref DNP
-  // resolution (propertiesJson.dnp + overrides) so PnP and BOM never disagree
-  // about what is populated.
-  const dnpRefs = new Set<string>();
+  // DNP parts are excluded from the CPL. Reuse the BOM projection's per-part DNP
+  // resolution (propertiesJson.dnp + part-bound overrides) so PnP and BOM never
+  // disagree about what is populated — keyed by placement, never by refdes.
+  const dnpPlacementIds = new Set<string>();
   for (const row of buildBomProjection(pcb, schematic, overrides).rows) {
-    for (const ref of row.refs) if (ref.dnp) dnpRefs.add(ref.refdes);
+    for (const ref of row.refs) {
+      if (ref.dnp && ref.placementId) dnpPlacementIds.add(ref.placementId);
+    }
   }
 
   const rows: CentroidRow[] = [];
   for (const placement of pcb.placements) {
     if (!isSurfaceMount(placement)) continue;
-    if (dnpRefs.has(placement.reference)) continue;
+    if (dnpPlacementIds.has(placement.id)) continue;
+    const part = partById.get(placement.partId) ?? null;
+    const refdes = part?.reference ?? placement.reference;
     const layer: "top" | "bottom" =
       placement.layer === "B.Cu" ? "bottom" : "top";
     rows.push({
-      refdes: placement.reference,
-      value: valueByRef.get(placement.reference) ?? "",
+      refdes,
+      value: part?.value ?? "",
       footprint: placement.footprint.name,
       xMm: placement.positionMm.x,
       yMm: placement.positionMm.y,
       rotationDeg: cplRotationDeg(
         placement,
-        rotationOverrideByRef.get(placement.reference) ?? null,
+        part ? readPnpRotation(part.propertiesJson) : null,
       ),
       layer,
     });

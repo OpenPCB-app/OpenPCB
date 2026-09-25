@@ -34,14 +34,18 @@ export function buildGerberJobFile(params: {
   pcb: DesignerPcbProjection;
   files: readonly GerberJobFileAttr[];
   createdAt: string;
+  /** Shown to the fab as the project name; the design id when absent/blank. */
+  designName?: string | null;
 }): string {
   const { pcb, files, createdAt } = params;
+  const projectName = params.designName?.trim() || pcb.designId;
   const size = outlineSizeMm(pcb.board.outline);
   const job = {
     Header: { GenerationSoftware: SOFTWARE, CreationDate: createdAt },
     GeneralSpecs: {
       ProjectId: {
-        Name: pcb.designId,
+        Name: projectName,
+        // From the id, not the name: a rename must not make it a new project.
         GUID: deterministicGuid(pcb.designId),
         Revision: String(pcb.revision),
       },

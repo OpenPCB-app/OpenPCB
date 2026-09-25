@@ -179,8 +179,33 @@ export async function mirrorCommand(
     return;
   }
 
+  const command = opts.envelope.command;
+  if (command.type === "batch_commands") {
+    // The cloud has no batch command, and mirroring the steps one by one would
+    // advance the cloud revision N times for ONE local revision — every later
+    // mirror would then 409. Reseed the cloud copy from the local projection
+    // instead (desktop-authoritative, one revision).
+    if (!command.commands.some((step) => SCHEMATIC_COMMAND_TYPES.has(step.type))) {
+      logger.info("cloud-sync: skipping non-schematic batch", {
+        designId: opts.designId,
+      });
+      return;
+    }
+    await pushCloudSnapshot(db, opts.designId, {
+      bearer,
+      apiUrl,
+    }).catch((err: unknown) => {
+      // pushCloudSnapshot has already recorded the failed outcome.
+      logger.warn("cloud-sync: batch snapshot push failed", {
+        designId: opts.designId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    });
+    return;
+  }
+
   const cloudCommand = enrichCommand(
-    opts.envelope.command as unknown as { type: string; [k: string]: unknown },
+    command as unknown as { type: string; [k: string]: unknown },
     opts.placeComponentDetail,
   );
   if (!cloudCommand) {

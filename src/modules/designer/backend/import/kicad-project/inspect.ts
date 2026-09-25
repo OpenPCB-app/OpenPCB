@@ -20,6 +20,7 @@ import { extractZipEntries } from "../../../../library/backend/import/archive/ex
 import { parseKicadProject } from "../../../../library/backend/infrastructure/parsers/kicad/kicad-project-parser";
 import { parseKicadSchematic } from "../../../../library/backend/infrastructure/parsers/kicad/kicad-schematic-parser";
 import { parseKicadPcb } from "../../../../library/backend/infrastructure/parsers/kicad/kicad-pcb-parser";
+import { KicadProjectImportError, parseProjectFile } from "./errors";
 
 export interface ResolvedProjectFiles {
   projectFileName: string;
@@ -37,7 +38,9 @@ export interface ResolvedProjectFiles {
 }
 
 /**
- * Resolve project files from a ZIP buffer. Throws when the bundle is incomplete.
+ * Resolve project files from a ZIP buffer. Throws a 4xx problem when the bundle
+ * is not a readable ZIP (400), is a KiCad 5 / library archive or is incomplete
+ * (422, `KicadProjectImportError`).
  */
 export function resolveProjectFiles(
   archiveBytes: Uint8Array,
@@ -59,14 +62,38 @@ export function resolveProjectFiles(
     // backup copies (e.g. `…-backups/…`), drop them.
     .filter((e) => !/(^|\/)([^/]*-backups|\.backup)\//i.test(e.path));
 
+  const pcbContent = pcb ? decode(pcb.bytes) : null;
+  const legacyBoard =
+    pcbContent !== null && isLegacyKicadBoard(pcbContent) ? pcb : null;
   if (!project) {
-    throw new Error("ZIP archive does not contain a .kicad_pro project file");
+    const legacy = entries.find(
+      (e) => e.extension === ".pro" || e.extension === ".sch",
+    );
+    const legacyFile = legacy?.baseName ?? legacyBoard?.baseName;
+    if (legacyFile) throw legacyProjectError(legacyFile);
+    if (entries.some((e) => KICAD_LIBRARY_EXTENSIONS.has(e.extension))) {
+      throw new KicadProjectImportError(
+        "library_archive",
+        "This ZIP holds KiCad library files, not a project. Import symbols and footprints from the Library instead, or choose a ZIP that contains a .kicad_pro project.",
+      );
+    }
+    throw new KicadProjectImportError(
+      "missing_project",
+      "The ZIP does not contain a KiCad project (.kicad_pro). Zip the whole project folder from KiCad 6 or newer and try again.",
+    );
   }
-  if (!pcb) {
-    throw new Error("ZIP archive does not contain a .kicad_pcb board file");
+  if (!pcb || pcbContent === null) {
+    throw new KicadProjectImportError(
+      "missing_board",
+      "The ZIP does not contain a .kicad_pcb board file.",
+    );
   }
+  if (legacyBoard) throw legacyProjectError(legacyBoard.baseName);
   if (schematics.length === 0) {
-    throw new Error("ZIP archive does not contain any .kicad_sch sheets");
+    throw new KicadProjectImportError(
+      "missing_schematic",
+      "The ZIP does not contain any .kicad_sch schematic sheets.",
+    );
   }
 
   // Sort sheets so the project-matching root sheet comes first; the inserters
@@ -84,13 +111,43 @@ export function resolveProjectFiles(
     projectFileName: project.baseName,
     projectContent: decode(project.bytes),
     pcbFileName: pcb.baseName,
-    pcbContent: decode(pcb.bytes),
+    pcbContent,
     schematicSheets: schematics.map((s) => ({
       fileName: s.baseName,
       content: decode(s.bytes),
     })),
     ...(customRules ? { customRulesFileName: customRules.baseName } : {}),
   };
+}
+
+/** KiCad 6.0 wrote board format 20211014; everything older is KiCad 5 or earlier. */
+const FIRST_KICAD6_BOARD_VERSION = 20211014;
+
+const KICAD_LIBRARY_EXTENSIONS = new Set([
+  ".kicad_sym",
+  ".kicad_mod",
+  ".lib",
+]);
+
+/**
+ * `(kicad_pcb (version 20171130) …)` — read from the header alone, before any
+ * parse, so a KiCad 5 board is named as such instead of failing somewhere deep
+ * in the parser. A board with no readable version is left to the parser.
+ */
+function isLegacyKicadBoard(content: string): boolean {
+  const match = /\(\s*kicad_pcb\s*\(\s*version\s+(\d+)\s*\)/.exec(
+    content.slice(0, 512),
+  );
+  if (!match?.[1]) return false;
+  return Number(match[1]) < FIRST_KICAD6_BOARD_VERSION;
+}
+
+function legacyProjectError(fileName: string): KicadProjectImportError {
+  return new KicadProjectImportError(
+    "legacy_kicad",
+    "KiCad 5 projects (.pro/.sch) aren't supported yet. Open the project in KiCad 6 or newer, save it, then import the ZIP again.",
+    { fileName },
+  );
 }
 
 /**
@@ -137,7 +194,9 @@ export async function buildInspectReport(
   const warnings: KicadProjectImportWarning[] = [];
 
   // --- Parse project ---
-  const project = parseKicadProject(files.projectContent);
+  const project = parseProjectFile(files.projectFileName, () =>
+    parseKicadProject(files.projectContent),
+  );
   pushWarnings(warnings, project.warnings, "info");
 
   if (files.customRulesFileName) {
@@ -149,7 +208,9 @@ export async function buildInspectReport(
   }
 
   // --- Parse PCB (authoritative for layer count + nets + outline) ---
-  const pcb = parseKicadPcb(files.pcbContent);
+  const pcb = parseProjectFile(files.pcbFileName, () =>
+    parseKicadPcb(files.pcbContent),
+  );
   pushWarnings(warnings, pcb.warnings, "warning");
 
   // --- Parse schematic sheets ---
@@ -162,7 +223,9 @@ export async function buildInspectReport(
   let totalNoConnects = 0;
   let totalSheets = 0;
   for (const sheet of files.schematicSheets) {
-    const parsed = parseKicadSchematic(sheet.content);
+    const parsed = parseProjectFile(sheet.fileName, () =>
+      parseKicadSchematic(sheet.content),
+    );
     pushWarnings(warnings, parsed.warnings, "info");
     for (const sym of parsed.symbols) {
       allSymbols.push({ libId: sym.libId, reference: sym.reference });

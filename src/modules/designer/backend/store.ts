@@ -115,6 +115,7 @@ import {
   toDesignRecordFromProjection,
 } from "./projection-read";
 import { conflict, parseDispatchResultJson } from "./results";
+import { commandTouchesPcb } from "./commands/batch";
 import { listBomOverrides, upsertBomOverride } from "./bom-overrides";
 import { buildBomProjection } from "./export/bom/writer";
 
@@ -140,6 +141,8 @@ export interface DesignerStore {
   createDesign(input?: { name?: string }): Promise<DesignerDesignSummary>;
   listDesigns(): Promise<DesignerDesignSummary[]>;
   getDesign(designId: string): Promise<DesignerDesignRecord | null>;
+  /** Just the head row's name — for export file names; null when missing. */
+  getDesignName(designId: string): Promise<string | null>;
   updateDesign(
     designId: string,
     input: { name: string },
@@ -432,6 +435,15 @@ export function createDesignerStore(
       );
     },
 
+    async getDesignName(designId) {
+      const head = db
+        .select({ name: designHeads.name })
+        .from(designHeads)
+        .where(eq(designHeads.id, designId))
+        .get();
+      return head?.name ?? null;
+    },
+
     async updateDesign(designId, input) {
       const name = input.name;
       const timestamp = nowIso();
@@ -709,7 +721,7 @@ export function createDesignerStore(
 
           const timestamp = nowIso();
           const command = envelope.command;
-          const isPcbCommand = command.type.startsWith("pcb_");
+          const isPcbCommand = commandTouchesPcb(command);
           // Lazy legacy board-fill migration (contract §12.1) BEFORE the
           // before-snapshot: every settings writer re-serialises the parsed
           // record, which would drop the unread legacy keys unread.

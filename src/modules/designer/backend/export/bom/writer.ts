@@ -192,72 +192,118 @@ function collectParts(
   schematic: DesignerSchematicProjection | null,
   overrides: readonly BomOverride[],
 ): PartContext[] {
-  const overrideByRef = new Map(overrides.map((o) => [o.refdes, o]));
-  const placementsByRef = new Map<string, PcbPlacedPart>();
+  const overrideFor = overrideLookup(overrides);
+  return pairPartsWithPlacements(pcb, schematic).map(
+    ({ refdes, partId, schPart, placement }) =>
+      partContext(refdes, schPart, placement, overrideFor(partId, refdes)),
+  );
+}
+
+/**
+ * A bound override (`partId`) follows its part across renames and their
+ * undo/redo, so it is matched by `partId` ONLY — its refdes may now name another
+ * part. An unbound override is matched by reference, and never onto a part that
+ * has a bound one.
+ */
+function overrideLookup(
+  overrides: readonly BomOverride[],
+): (partId: string, refdes: string) => BomOverride | null {
+  const byPartId = new Map<string, BomOverride>();
+  const unboundByRef = new Map<string, BomOverride>();
+  for (const override of overrides) {
+    if (override.partId) byPartId.set(override.partId, override);
+    else unboundByRef.set(override.refdes, override);
+  }
+  return (partId, refdes) =>
+    byPartId.get(partId) ?? unboundByRef.get(refdes) ?? null;
+}
+
+/**
+ * One entry per physical part. A schematic part and its placement are the SAME
+ * part when they share the `partId` — never when they share a refdes, which a
+ * rename changes on one side first (a stale placement ref would otherwise list
+ * the part twice). The schematic reference wins; a placement with no schematic
+ * part is listed under its own reference.
+ */
+function pairPartsWithPlacements(
+  pcb: DesignerPcbProjection,
+  schematic: DesignerSchematicProjection | null,
+): Array<{
+  refdes: string;
+  partId: string;
+  schPart: DesignerPlacedPart | null;
+  placement: PcbPlacedPart | null;
+}> {
+  const placementByPartId = new Map<string, PcbPlacedPart>();
   for (const placement of pcb.placements) {
-    placementsByRef.set(placement.reference, placement);
+    placementByPartId.set(placement.partId, placement);
   }
-
   const schematicParts = schematic?.parts ?? [];
-  const refOrder = new Set<string>();
-  for (const part of schematicParts) refOrder.add(part.reference);
-  for (const placement of pcb.placements) refOrder.add(placement.reference);
+  const schematicPartIds = new Set(schematicParts.map((part) => part.id));
+  const paired = schematicParts.map((part) => ({
+    refdes: part.reference,
+    partId: part.id,
+    schPart: part,
+    placement: placementByPartId.get(part.id) ?? null,
+  }));
+  const orphans = pcb.placements
+    .filter((placement) => !schematicPartIds.has(placement.partId))
+    .map((placement) => ({
+      refdes: placement.reference,
+      partId: placement.partId,
+      schPart: null,
+      placement,
+    }));
+  return [...paired, ...orphans];
+}
 
-  const schematicByRef = new Map<string, DesignerPlacedPart>();
-  for (const part of schematicParts) schematicByRef.set(part.reference, part);
-
-  const out: PartContext[] = [];
-  for (const refdes of refOrder) {
-    const schPart = schematicByRef.get(refdes) ?? null;
-    const placement = placementsByRef.get(refdes) ?? null;
-    const override = overrideByRef.get(refdes) ?? null;
-    const props = schPart?.propertiesJson ?? null;
-    const manufacturer = coalesce(
-      override?.manufacturer,
-      readPropString(props, "manufacturer"),
-    );
-    const manufacturerPartNumber = coalesce(
-      override?.manufacturerPartNumber,
-      readPropString(props, "manufacturerPartNumber"),
-      readPropString(props, "mpn"),
-    );
-    const lcscPartNumber = coalesce(
-      override?.lcscPartNumber,
-      readPropString(props, "lcscPartNumber"),
-      readPropString(props, "lcsc"),
-      readPropString(props, "jlc"),
-    );
-    const footprint = placement?.footprint.name ?? schPart?.footprint.name ?? "";
-    const value = schPart?.value ?? "";
-    const description = readPropString(props, "description");
-    const dnp = override?.dnp ?? readPropBoolean(props, "dnp") ?? false;
-    const assemblySide = override?.assemblySide ?? pcbSide(placement) ?? null;
-    const warnings: string[] = [];
-    if (!footprint) warnings.push(`${refdes}: missing footprint`);
-    if (!manufacturerPartNumber && !lcscPartNumber) {
-      warnings.push(`${refdes}: missing MPN or LCSC/JLC part number`);
-    }
-    out.push({
-      value,
-      footprint,
-      description,
-      refdes,
-      partId: schPart?.id ?? null,
-      placementId: placement?.id ?? null,
-      pcbLayer: pcbSide(placement),
-      manufacturer,
-      manufacturerPartNumber,
-      lcscPartNumber,
-      supplier: override?.supplier ?? readPropString(props, "supplier"),
-      unitPrice: override?.unitPrice ?? readPropNumber(props, "unitPrice"),
-      currency: override?.currency ?? readPropString(props, "currency"),
-      dnp,
-      assemblySide,
-      notes: override?.notes ?? readPropString(props, "notes"),
-      warnings,
-    });
+function partContext(
+  refdes: string,
+  schPart: DesignerPlacedPart | null,
+  placement: PcbPlacedPart | null,
+  override: BomOverride | null,
+): PartContext {
+  const props = schPart?.propertiesJson ?? null;
+  const manufacturer = coalesce(
+    override?.manufacturer,
+    readPropString(props, "manufacturer"),
+  );
+  const manufacturerPartNumber = coalesce(
+    override?.manufacturerPartNumber,
+    readPropString(props, "manufacturerPartNumber"),
+    readPropString(props, "mpn"),
+  );
+  const lcscPartNumber = coalesce(
+    override?.lcscPartNumber,
+    readPropString(props, "lcscPartNumber"),
+    readPropString(props, "lcsc"),
+    readPropString(props, "jlc"),
+  );
+  const footprint = placement?.footprint.name ?? schPart?.footprint.name ?? "";
+  const warnings: string[] = [];
+  if (!footprint) warnings.push(`${refdes}: missing footprint`);
+  if (!manufacturerPartNumber && !lcscPartNumber) {
+    warnings.push(`${refdes}: missing MPN or LCSC/JLC part number`);
   }
-  return out;
+  return {
+    value: schPart?.value ?? "",
+    footprint,
+    description: readPropString(props, "description"),
+    refdes,
+    partId: schPart?.id ?? null,
+    placementId: placement?.id ?? null,
+    pcbLayer: pcbSide(placement),
+    manufacturer,
+    manufacturerPartNumber,
+    lcscPartNumber,
+    supplier: override?.supplier ?? readPropString(props, "supplier"),
+    unitPrice: override?.unitPrice ?? readPropNumber(props, "unitPrice"),
+    currency: override?.currency ?? readPropString(props, "currency"),
+    dnp: override?.dnp ?? readPropBoolean(props, "dnp") ?? false,
+    assemblySide: override?.assemblySide ?? pcbSide(placement) ?? null,
+    notes: override?.notes ?? readPropString(props, "notes"),
+    warnings,
+  };
 }
 
 function aggregateRows(parts: readonly PartContext[]): BomLine[] {

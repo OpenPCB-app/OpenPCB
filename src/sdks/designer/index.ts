@@ -158,6 +158,10 @@ export type {
   DesignerPcbAddKeepoutCommand,
   DesignerPcbUpdateKeepoutCommand,
   DesignerPcbDeleteKeepoutCommand,
+  DesignerPcbUpdateTraceCommand,
+  DesignerPcbUpdateViaCommand,
+  DesignerBatchCommandsCommand,
+  DesignerBatchableCommand,
   ErcAnchor,
   ErcReport,
   ErcSeverity,
@@ -221,9 +225,19 @@ export type {
   BomSummary,
   CentroidRow,
 } from "./types";
-export { DEFAULT_BOARD_THICKNESS_MM, DRC_RULE_CLASSES } from "./types";
+export {
+  DEFAULT_BOARD_THICKNESS_MM,
+  DESIGNER_BATCH_MAX_COMMANDS,
+  DRC_RULE_CLASSES,
+  SCHEMATIC_LABEL_ATTACH_TOLERANCE_NM,
+} from "./types";
 export type { DesignerInvalidatedEvent } from "./events";
-export { placementMirrorX, exportBundleName } from "./pcb-helpers";
+export {
+  placementMirrorX,
+  exportBundleName,
+  bomExportFileName,
+} from "./pcb-helpers";
+export type { BomExportKind } from "./pcb-helpers";
 
 /**
  * Optional dataset-capture attribution for a dispatched command (WP-D4).
