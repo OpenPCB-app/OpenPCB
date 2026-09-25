@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Plus, Minus, Maximize } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING } from "./focus";
 
 export interface CanvasZoomClusterProps {
   onZoomIn: () => void;
@@ -11,7 +12,7 @@ export interface CanvasZoomClusterProps {
 
 const buttonClassName = cn(
   "flex h-[22px] w-[22px] items-center justify-center hover:bg-surface-hover hover:text-text-strong cursor-pointer",
-  "outline-none focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-selection",
+  FOCUS_RING,
 );
 
 /** Floating zoom-in / zoom-out / zoom-to-fit cluster, docked to a canvas corner. */

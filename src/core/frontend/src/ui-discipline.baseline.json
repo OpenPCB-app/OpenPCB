@@ -1,0 +1,388 @@
+{
+  "version": 1,
+  "generatedBy": "ui-discipline.test.ts",
+  "files": {
+    "src/core/frontend/src/cloud/AcceptInvitePage.tsx": {
+      "palette": 32,
+      "whiteBlack": 4
+    },
+    "src/core/frontend/src/components/AppContextMenu.tsx": {
+      "heavyShadow": 1
+    },
+    "src/core/frontend/src/screens/HomeScreen.tsx": {
+      "whiteBlack": 1,
+      "heavyShadow": 1
+    },
+    "src/core/frontend/src/settings/panels/AccountPanel.tsx": {
+      "palette": 12
+    },
+    "src/core/frontend/src/settings/panels/AssistantPanel.tsx": {
+      "palette": 13,
+      "tinyText": 3,
+      "nativeSelect": 1
+    },
+    "src/core/frontend/src/settings/panels/GeneralPanel.tsx": {
+      "palette": 4
+    },
+    "src/core/frontend/src/settings/panels/LibrariesPanel.tsx": {
+      "nativeDialog": 1,
+      "palette": 16
+    },
+    "src/core/frontend/src/settings/panels/McpSection.tsx": {
+      "palette": 4,
+      "tinyText": 1
+    },
+    "src/core/frontend/src/settings/panels/PrivacyPanel.tsx": {
+      "palette": 12
+    },
+    "src/core/frontend/src/settings/panels/account/AccountSignedIn.tsx": {
+      "palette": 2,
+      "whiteBlack": 1
+    },
+    "src/core/frontend/src/settings/panels/account/AiCloudTeaser.tsx": {
+      "palette": 4
+    },
+    "src/modules/assistant/frontend/DesignerChatDock.tsx": {
+      "nativeDialog": 2,
+      "palette": 77,
+      "whiteBlack": 3,
+      "heavyShadow": 1
+    },
+    "src/modules/assistant/frontend/Space.tsx": {
+      "nativeSelect": 1,
+      "nativeDialog": 3,
+      "palette": 214,
+      "whiteBlack": 11,
+      "tinyText": 1,
+      "heavyShadow": 3
+    },
+    "src/modules/assistant/frontend/components/AssistantRunStatusCard.tsx": {
+      "palette": 31,
+      "whiteBlack": 1
+    },
+    "src/modules/assistant/frontend/components/BomResultCard.tsx": {
+      "palette": 42,
+      "whiteBlack": 3,
+      "tinyText": 2
+    },
+    "src/modules/assistant/frontend/components/ChatComposer.tsx": {
+      "palette": 54,
+      "whiteBlack": 5,
+      "heavyShadow": 1
+    },
+    "src/modules/assistant/frontend/components/ComponentResultCard.tsx": {
+      "palette": 37,
+      "whiteBlack": 2,
+      "tinyText": 1
+    },
+    "src/modules/assistant/frontend/components/CopilotPlanCard.tsx": {
+      "palette": 63,
+      "whiteBlack": 4
+    },
+    "src/modules/assistant/frontend/components/GenericProposalCard.tsx": {
+      "palette": 67,
+      "whiteBlack": 3
+    },
+    "src/modules/assistant/frontend/components/MentionAutocomplete.tsx": {
+      "palette": 14,
+      "whiteBlack": 1,
+      "heavyShadow": 1
+    },
+    "src/modules/assistant/frontend/components/MentionBadge.tsx": {
+      "palette": 9
+    },
+    "src/modules/assistant/frontend/components/MessageCard.tsx": {
+      "palette": 59
+    },
+    "src/modules/assistant/frontend/components/ModelSelectorPill.tsx": {
+      "palette": 52,
+      "whiteBlack": 6,
+      "tinyText": 1,
+      "heavyShadow": 1,
+      "nativeSelect": 3
+    },
+    "src/modules/assistant/frontend/components/PlacementProposalCard.tsx": {
+      "palette": 48,
+      "whiteBlack": 2
+    },
+    "src/modules/assistant/frontend/components/PromptPresetPicker.tsx": {
+      "nativeSelect": 1,
+      "palette": 6,
+      "whiteBlack": 2
+    },
+    "src/modules/assistant/frontend/components/ProviderCapabilityBadge.tsx": {
+      "palette": 8
+    },
+    "src/modules/assistant/frontend/components/SourceChip.tsx": {
+      "palette": 18,
+      "whiteBlack": 1
+    },
+    "src/modules/assistant/frontend/components/ToolCard.tsx": {
+      "palette": 38
+    },
+    "src/modules/assistant/frontend/components/component-type.ts": {
+      "palette": 4
+    },
+    "src/modules/designer/frontend/components/CloudDesignBrowser.tsx": {
+      "whiteBlack": 2,
+      "palette": 30,
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/components/CloudPresenceIndicator.tsx": {
+      "whiteBlack": 1
+    },
+    "src/modules/designer/frontend/components/ComponentCommandPalette.tsx": {
+      "whiteBlack": 1,
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/components/DesignerBomView.tsx": {
+      "nativeSelect": 2
+    },
+    "src/modules/designer/frontend/components/KicadProjectImportWizard.tsx": {
+      "palette": 60,
+      "heavyShadow": 1,
+      "whiteBlack": 3
+    },
+    "src/modules/designer/frontend/components/LabelPicker.tsx": {
+      "whiteBlack": 1,
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/components/OutlinePanel/OutlineRow.tsx": {
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/components/PcbDesignRulesDialog.tsx": {
+      "whiteBlack": 1,
+      "heavyShadow": 1,
+      "nativeSelect": 2
+    },
+    "src/modules/designer/frontend/components/comments/CommentComposerPopup.tsx": {
+      "palette": 3,
+      "whiteBlack": 1,
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/components/comments/CommentPin.tsx": {
+      "palette": 2,
+      "whiteBlack": 2,
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/components/comments/CommentThreadPopup.tsx": {
+      "palette": 41,
+      "whiteBlack": 2,
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/components/comments/comment-markdown.tsx": {
+      "palette": 7
+    },
+    "src/modules/designer/frontend/hooks/use-toast.tsx": {
+      "backdropBlur": 1,
+      "palette": 27,
+      "whiteBlack": 1
+    },
+    "src/modules/designer/frontend/pcb/AreaToolOptionsBar.tsx": {
+      "backdropBlur": 1,
+      "heavyShadow": 1,
+      "nativeSelect": 2
+    },
+    "src/modules/designer/frontend/pcb/CornerOpModal.tsx": {
+      "whiteBlack": 1,
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/pcb/EdgeDimModal.tsx": {
+      "whiteBlack": 1,
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/pcb/PcbAutoplaceDialog.tsx": {
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/pcb/PcbAutorouteDialog.tsx": {
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/pcb/PcbCanvas.tsx": {
+      "nativeDialog": 1,
+      "backdropBlur": 6,
+      "heavyShadow": 8
+    },
+    "src/modules/designer/frontend/pcb/PcbDisambiguationPopup.tsx": {
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/pcb/PcbExportDialog.tsx": {
+      "whiteBlack": 1,
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/pcb/PcbLayersPanel.tsx": {
+      "nativeSelect": 1
+    },
+    "src/modules/designer/frontend/pcb/PcbPlacePreviewBar.tsx": {
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/pcb/PcbSelectionFilter.tsx": {
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/pcb/PcbSelectionInspector.tsx": {
+      "nativeSelect": 7
+    },
+    "src/modules/designer/frontend/pcb/PcbTopToolbar.tsx": {
+      "heavyShadow": 1,
+      "nativeSelect": 1,
+      "nativeDialog": 2
+    },
+    "src/modules/designer/frontend/pcb/SketchDimEntry.tsx": {
+      "backdropBlur": 1,
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/pcb/autolayout/AutoLayoutDialog.tsx": {
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/pcb/import/DxfImportModal.tsx": {
+      "whiteBlack": 1,
+      "heavyShadow": 1
+    },
+    "src/modules/designer/frontend/three-d/Board3DCanvas.tsx": {
+      "palette": 12
+    },
+    "src/modules/designer/frontend/three-d/Board3DOverlay.tsx": {
+      "palette": 49,
+      "tinyText": 2,
+      "nativeSelect": 1,
+      "backdropBlur": 4,
+      "heavyShadow": 4,
+      "whiteBlack": 1
+    },
+    "src/modules/knowledge/frontend/Space.tsx": {
+      "palette": 2
+    },
+    "src/modules/knowledge/frontend/components/Editor/FixedToolbar.tsx": {
+      "palette": 10
+    },
+    "src/modules/knowledge/frontend/components/Editor/LinkDialog.tsx": {
+      "palette": 7,
+      "whiteBlack": 1
+    },
+    "src/modules/knowledge/frontend/components/Editor/PageEditor.tsx": {
+      "nativeDialog": 1,
+      "palette": 8
+    },
+    "src/modules/knowledge/frontend/components/Editor/PdfViewer.tsx": {
+      "whiteBlack": 1,
+      "palette": 8
+    },
+    "src/modules/knowledge/frontend/components/Sidebar/PageTree.tsx": {
+      "palette": 13
+    },
+    "src/modules/knowledge/frontend/components/Sidebar/Sidebar.tsx": {
+      "palette": 8
+    },
+    "src/modules/knowledge/frontend/components/Sidebar/TreeItem.tsx": {
+      "nativeDialog": 1,
+      "palette": 4
+    },
+    "src/modules/library/frontend/Space.tsx": {
+      "heavyShadow": 1,
+      "nativeDialog": 1
+    },
+    "src/modules/library/frontend/components/LibraryPreviewPane.tsx": {
+      "tinyText": 1
+    },
+    "src/modules/library/frontend/components/LibraryTable.tsx": {
+      "tinyText": 1
+    },
+    "src/modules/library/frontend/components/PreviewModal.tsx": {
+      "heavyShadow": 1
+    },
+    "src/modules/library/frontend/components/TagTokenInput.tsx": {
+      "heavyShadow": 1
+    },
+    "src/modules/library/frontend/import-wizard/ImportWizardPage.tsx": {
+      "nativeDialog": 1,
+      "palette": 48,
+      "whiteBlack": 4
+    },
+    "src/modules/library/frontend/import-wizard/WizardProgressBar.tsx": {
+      "palette": 8
+    },
+    "src/modules/library/frontend/import-wizard/components/FootprintPresetPicker.tsx": {
+      "palette": 58,
+      "whiteBlack": 6
+    },
+    "src/modules/library/frontend/import-wizard/components/WarningsPanel.tsx": {
+      "palette": 12
+    },
+    "src/modules/library/frontend/import-wizard/editor/EditorToolbar.tsx": {
+      "palette": 54,
+      "whiteBlack": 1,
+      "backdropBlur": 1
+    },
+    "src/modules/library/frontend/import-wizard/editor/PinPropertyPanel.tsx": {
+      "palette": 57,
+      "whiteBlack": 6,
+      "tinyText": 5,
+      "nativeSelect": 2
+    },
+    "src/modules/library/frontend/import-wizard/editor/TextEditorOverlay.tsx": {
+      "palette": 6,
+      "whiteBlack": 1,
+      "heavyShadow": 1
+    },
+    "src/modules/library/frontend/import-wizard/footprint-editor/FootprintEditorToolbar.tsx": {
+      "palette": 77,
+      "whiteBlack": 1,
+      "backdropBlur": 1,
+      "nativeSelect": 1
+    },
+    "src/modules/library/frontend/import-wizard/footprint-editor/FootprintTextEditorOverlay.tsx": {
+      "palette": 6,
+      "whiteBlack": 1,
+      "heavyShadow": 1
+    },
+    "src/modules/library/frontend/import-wizard/footprint-editor/LayerPanel.tsx": {
+      "palette": 19,
+      "whiteBlack": 1
+    },
+    "src/modules/library/frontend/import-wizard/footprint-editor/PadPropertyPanel.tsx": {
+      "palette": 82,
+      "whiteBlack": 9,
+      "tinyText": 8,
+      "nativeSelect": 3
+    },
+    "src/modules/library/frontend/import-wizard/layout/CanvasStepLayout.tsx": {
+      "palette": 19,
+      "whiteBlack": 3
+    },
+    "src/modules/library/frontend/import-wizard/steps/FootprintStep.tsx": {
+      "palette": 209,
+      "whiteBlack": 16,
+      "backdropBlur": 1
+    },
+    "src/modules/library/frontend/import-wizard/steps/MetadataStep.tsx": {
+      "palette": 58,
+      "whiteBlack": 3
+    },
+    "src/modules/library/frontend/import-wizard/steps/ModelStep.tsx": {
+      "palette": 50,
+      "whiteBlack": 5
+    },
+    "src/modules/library/frontend/import-wizard/steps/SymbolStep.tsx": {
+      "palette": 199,
+      "whiteBlack": 18,
+      "backdropBlur": 1,
+      "nativeSelect": 3
+    },
+    "src/modules/library/frontend/three-d/ThreeDComponentPreview.tsx": {
+      "palette": 5,
+      "whiteBlack": 1
+    },
+    "src/modules/tasks/frontend/Space.tsx": {
+      "palette": 15,
+      "whiteBlack": 1
+    },
+    "src/shared/frontend/markdown/MarkdownContent.tsx": {
+      "palette": 4
+    },
+    "src/shared/frontend/markdown/MermaidDiagram.tsx": {
+      "palette": 53,
+      "whiteBlack": 6,
+      "tinyText": 1,
+      "hexArbitrary": 2
+    }
+  }
+}

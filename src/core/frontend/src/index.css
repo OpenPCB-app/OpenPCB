@@ -2,6 +2,11 @@
 @plugin "@tailwindcss/typography";
 @source "../../../modules";
 @source "../../../shared";
+/* @openpcb/r3f-eda-canvas ships JSX with Tailwind class strings (preview
+   overlays); without this they are never generated and borders fall back to
+   currentColor (T-264). Follow-up: the package should not depend on host
+   Tailwind at all. */
+@source "../../../../node_modules/@openpcb/r3f-eda-canvas/dist";
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
@@ -31,7 +36,9 @@
   --radius-card: 2px;      /* compat alias — flattened with the rest */
 
   /* Tailwind radius scale flattened so unmigrated files lose the pill
-     geometry. `rounded-full` stays round for dots and spinners. */
+     geometry. `rounded-full` stays round for dots and spinners. Bare
+     `rounded` reads `--radius` (default 0.25rem) — flattened too (T-016). */
+  --radius: 2px;
   --radius-sm: 2px;
   --radius-md: 2px;
   --radius-lg: 2px;
@@ -75,8 +82,8 @@
   --color-violet-900: #1c1c1f;
   --color-violet-950: #151517;
 
-  /* Canvas — theme-invariant (PCB canvas is always dark) */
-  --color-canvas: #08090a;
+  /* Canvas — theme-invariant (PCB canvas is always dark). `--color-canvas`
+     (the PCB clear colour) is mapped to --surface-canvas-well below. */
   --color-canvas-board: #121315;
   --color-canvas-grid: rgba(255, 255, 255, 0.22);
   --color-canvas-grid-major: rgba(255, 255, 255, 0.35);
@@ -125,6 +132,20 @@
   --color-surface-hover: var(--surface-hover);
   --color-surface-selected: var(--surface-selected);
   --color-surface-canvas-well: var(--surface-canvas-well);
+  --color-surface-schematic-canvas: var(--surface-schematic-canvas);
+  --color-canvas: var(--surface-canvas-well);
+
+  /* Modal backdrop + elevation (floats: menus/popovers/toasts; dialogs) */
+  --color-scrim: var(--scrim);
+  --shadow-float: var(--elevation-float);
+  --shadow-dialog: var(--elevation-dialog);
+
+  /* Messages drawn over a canvas well. Wells are dark in BOTH themes, so
+     these never switch with the theme (T-284). */
+  --color-well-text: var(--well-text);
+  --color-well-text-muted: var(--well-text-muted);
+  --color-well-border: var(--well-border);
+  --color-well-surface: var(--well-surface);
 
   /* Menus / tooltips */
   --color-menu-bg: var(--menu-bg);
@@ -154,18 +175,25 @@
   /* Selection — the only chromatic accent */
   --color-selection: var(--selection);
   --color-selection-soft: var(--selection-soft);
+  --color-focus-ring: var(--focus-ring);
 
-  /* Status */
+  /* Status — `-soft` fills, `-border` ~40% strokes. The base colour is AA
+     (>=4.5:1) as text on its own -soft fill over every chrome surface. */
   --color-status-danger: var(--status-danger);
   --color-status-danger-soft: var(--status-danger-soft);
+  --color-status-danger-border: var(--status-danger-border);
   --color-status-warning: var(--status-warning);
   --color-status-warning-soft: var(--status-warning-soft);
+  --color-status-warning-border: var(--status-warning-border);
   --color-status-success: var(--status-success);
   --color-status-success-soft: var(--status-success-soft);
+  --color-status-success-border: var(--status-success-border);
   --color-status-info: var(--status-info);
   --color-status-info-soft: var(--status-info-soft);
+  --color-status-info-border: var(--status-info-border);
   --color-status-neutral: var(--status-neutral);
   --color-status-neutral-soft: var(--status-neutral-soft);
+  --color-status-neutral-border: var(--status-neutral-border);
 
   /* Net classes (domain colours) */
   --color-net-power: var(--net-power);
@@ -200,6 +228,18 @@
   --surface-hover: #e6e6e9;
   --surface-selected: #e2e2e5;
   --surface-canvas-well: #08090a;
+  --surface-schematic-canvas: #f4f4f5;
+
+  --scrim: rgba(17, 17, 20, 0.32);
+  --elevation-float: 0 4px 12px rgba(17, 17, 20, 0.12), 0 1px 2px rgba(17, 17, 20, 0.08);
+  --elevation-dialog: 0 16px 40px rgba(17, 17, 20, 0.2), 0 2px 6px rgba(17, 17, 20, 0.08);
+
+  /* Canvas-well overlay text/lines: theme-invariant (wells are always dark),
+     declared once here so html.dark inherits them unchanged. */
+  --well-text: #c4c4c9;
+  --well-text-muted: #8a8a90;
+  --well-border: #2a2a2e;
+  --well-surface: #151517;
 
   --border: #d4d4d8;
   --border-subtle: #e6e6e9;
@@ -224,17 +264,27 @@
 
   --selection: #0891b2;
   --selection-soft: rgba(8, 145, 178, 0.1);
+  /* Resolved on <html>, so it follows html.dark's --selection too. */
+  --focus-ring: var(--selection);
 
-  --status-danger: #c2402f;
-  --status-danger-soft: rgba(194, 64, 47, 0.12);
-  --status-warning: #9a6b12;
-  --status-warning-soft: rgba(154, 107, 18, 0.12);
-  --status-success: #2f7a3d;
-  --status-success-soft: rgba(47, 122, 61, 0.12);
-  --status-info: #2f5f9a;
-  --status-info-soft: rgba(47, 95, 154, 0.12);
-  --status-neutral: #7f7f86;
-  --status-neutral-soft: rgba(127, 127, 134, 0.14);
+  /* Light status colours are dark enough to stay >=4.5:1 as text on their
+     own -soft fill over --surface-raised (#e2e2e5), the darkest chrome
+     surface a status box sits on (T-175). */
+  --status-danger: #a3301f;
+  --status-danger-soft: rgba(163, 48, 31, 0.12);
+  --status-danger-border: rgba(163, 48, 31, 0.4);
+  --status-warning: #77520e;
+  --status-warning-soft: rgba(119, 82, 14, 0.12);
+  --status-warning-border: rgba(119, 82, 14, 0.4);
+  --status-success: #276533;
+  --status-success-soft: rgba(39, 101, 51, 0.12);
+  --status-success-border: rgba(39, 101, 51, 0.4);
+  --status-info: #2d5a92;
+  --status-info-soft: rgba(45, 90, 146, 0.12);
+  --status-info-border: rgba(45, 90, 146, 0.4);
+  --status-neutral: #59595e;
+  --status-neutral-soft: rgba(89, 89, 94, 0.12);
+  --status-neutral-border: rgba(89, 89, 94, 0.4);
 
   --net-power: #c94a2f;
   --net-ground: #2f8a6a;
@@ -259,6 +309,11 @@ html.dark {
   --surface-hover: #1c1c1f;
   --surface-selected: #26262b;
   --surface-canvas-well: #08090a;
+  --surface-schematic-canvas: #101012;
+
+  --scrim: rgba(0, 0, 0, 0.55);
+  --elevation-float: 0 4px 12px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --elevation-dialog: 0 16px 40px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.35);
 
   --border: #1e1e21;
   --border-subtle: #16161a;
@@ -286,14 +341,19 @@ html.dark {
 
   --status-danger: #e0705f;
   --status-danger-soft: rgba(224, 112, 95, 0.12);
+  --status-danger-border: rgba(224, 112, 95, 0.4);
   --status-warning: #d9a441;
   --status-warning-soft: rgba(217, 164, 65, 0.12);
+  --status-warning-border: rgba(217, 164, 65, 0.4);
   --status-success: #6fbf7a;
   --status-success-soft: rgba(111, 191, 122, 0.12);
+  --status-success-border: rgba(111, 191, 122, 0.4);
   --status-info: #7aa7d9;
   --status-info-soft: rgba(122, 167, 217, 0.12);
-  --status-neutral: #7f7f84;
-  --status-neutral-soft: rgba(127, 127, 132, 0.14);
+  --status-info-border: rgba(122, 167, 217, 0.4);
+  --status-neutral: #98989e;
+  --status-neutral-soft: rgba(152, 152, 158, 0.14);
+  --status-neutral-border: rgba(152, 152, 158, 0.4);
 
   --net-power: #e0573a;
   --net-ground: #5dcaa5;
@@ -317,6 +377,43 @@ body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
 }
+
+/* One app-wide keyboard focus treatment instead of the UA blue ring (T-007).
+   In the base layer so a component's own utilities (`outline-none` + a kit
+   FOCUS_RING / FIELD_FOCUS) still win. */
+@layer base {
+  :focus-visible {
+    outline: 1px solid var(--focus-ring);
+    outline-offset: -1px;
+  }
+}
+
+/* Hover-revealed row actions (T-008): also revealed while the row holds
+   keyboard focus, while their own menu is open, and always on devices
+   without hover. Usage: parent row `group`, actions wrapper `row-actions`. */
+@layer components {
+  .row-actions {
+    opacity: 0;
+    transition: opacity 75ms;
+  }
+  .group:hover .row-actions,
+  .group:focus-within .row-actions,
+  .row-actions:focus-within,
+  .row-actions:focus-visible,
+  .row-actions[data-state="open"],
+  .row-actions:has([data-state="open"]) {
+    opacity: 1;
+  }
+  @media (hover: none) {
+    .row-actions {
+      opacity: 1;
+    }
+  }
+}
+
+/* z-order: dialogs z-50 (scrim + panel) < menus / popovers / select popups
+   z-60 (so a menu opened inside a dialog is never behind it) < toasts z-70 <
+   tooltips z-80. See docs/design/design-tokens.md. */
 
 /* TipTap placeholder — Placeholder extension tags the empty first node with
    `.tiptap-is-empty` + `data-placeholder`; render it as ghost text. */

@@ -1,6 +1,7 @@
 import * as React from "react";
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
 import { cn } from "@/lib/utils";
+import { MENU_CONTENT, MENU_ITEM, MENU_ITEM_DESTRUCTIVE } from "./dropdown-menu";
 
 export const ContextMenu = ContextMenuPrimitive.Root;
 export const ContextMenuTrigger = ContextMenuPrimitive.Trigger;
@@ -13,10 +14,7 @@ export const ContextMenuContent = React.forwardRef<
   <ContextMenuPrimitive.Portal>
     <ContextMenuPrimitive.Content
       ref={ref}
-      className={cn(
-        "z-50 min-w-[10rem] overflow-hidden rounded-float border border-menu-border bg-menu-bg p-1 text-xs text-text shadow-md",
-        className,
-      )}
+      className={cn(MENU_CONTENT, "min-w-[10rem]", className)}
       {...props}
     />
   </ContextMenuPrimitive.Portal>
@@ -35,16 +33,7 @@ export const ContextMenuItem = React.forwardRef<
 >(({ className, destructive = false, ...props }, ref) => (
   <ContextMenuPrimitive.Item
     ref={ref}
-    className={cn(
-      "flex h-[22px] cursor-pointer select-none items-center gap-2 rounded-control px-2 text-xs outline-none transition-colors",
-      "[&_svg]:h-3 [&_svg]:w-3 [&_svg]:shrink-0",
-      "focus:bg-menu-highlight focus:text-text-strong",
-      "data-[highlighted]:bg-menu-highlight data-[highlighted]:text-text-strong",
-      "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      destructive &&
-        "text-status-danger focus:bg-status-danger-soft focus:text-status-danger data-[highlighted]:bg-status-danger-soft data-[highlighted]:text-status-danger",
-      className,
-    )}
+    className={cn(MENU_ITEM, destructive && MENU_ITEM_DESTRUCTIVE, className)}
     {...props}
   />
 ));

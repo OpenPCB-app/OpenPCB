@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING } from "./focus";
 
 export interface PanelSectionHeaderProps
   extends Omit<React.HTMLAttributes<HTMLDivElement>, "title"> {
@@ -79,7 +80,10 @@ export const PanelSectionHeader = React.forwardRef<
             type="button"
             onClick={onToggle}
             aria-expanded={collapsed === undefined ? undefined : !collapsed}
-            className="flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none"
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-1.5 self-stretch text-left",
+              FOCUS_RING,
+            )}
           >
             {chevron}
             {titleNode}

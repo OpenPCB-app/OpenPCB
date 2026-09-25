@@ -1,6 +1,7 @@
 import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING } from "./focus";
 
 export const Tabs = TabsPrimitive.Root;
 
@@ -27,7 +28,8 @@ export const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent px-3 text-xs transition-colors outline-none",
+      "inline-flex items-center justify-center whitespace-nowrap rounded-none border-b-2 border-transparent px-3 text-xs transition-colors",
+      FOCUS_RING,
       "hover:text-text data-[state=active]:border-text data-[state=active]:font-medium data-[state=active]:text-text-strong",
       "data-[orientation=vertical]:w-full data-[orientation=vertical]:justify-start data-[orientation=vertical]:border-b-0 data-[orientation=vertical]:px-2 data-[orientation=vertical]:py-1.5",
       className,

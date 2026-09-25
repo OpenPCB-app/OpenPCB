@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING } from "./focus";
 
 export type StatusBarProps = React.HTMLAttributes<HTMLDivElement>;
 
@@ -48,7 +49,7 @@ export const StatusSegment = React.forwardRef<HTMLElement, StatusSegmentProps>(
           ref={ref as React.Ref<HTMLButtonElement>}
           type="button"
           onClick={onClick}
-          className={cn(classes, "outline-none")}
+          className={cn(classes, FOCUS_RING)}
           {...(props as React.ButtonHTMLAttributes<HTMLButtonElement>)}
         >
           {children}

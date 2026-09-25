@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING } from "./focus";
 
 export type ToolbarProps = React.HTMLAttributes<HTMLDivElement>;
 
@@ -55,8 +56,8 @@ export const ToolbarButton = React.forwardRef<
         ref={ref}
         type="button"
         className={cn(
-          "inline-flex shrink-0 items-center justify-center rounded-control transition-colors outline-none",
-          "focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-selection",
+          "inline-flex shrink-0 items-center justify-center rounded-control transition-colors",
+          FOCUS_RING,
           "disabled:cursor-not-allowed disabled:opacity-35",
           "[&_svg]:h-[14px] [&_svg]:w-[14px] [&_svg]:shrink-0 [&_svg]:[stroke-width:1.5]",
           children !== undefined && children !== null

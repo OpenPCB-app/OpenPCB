@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING_OUTSET } from "./focus";
 
 /**
  * `outline` is an alias of `secondary` and `destructive` an alias of `danger`
@@ -51,8 +52,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     <button
       ref={ref}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-control transition-colors outline-none",
-        "focus-visible:border-selection disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-control transition-colors",
+        FOCUS_RING_OUTSET,
+        "disabled:cursor-not-allowed disabled:opacity-50",
         "[&_svg]:shrink-0",
         VARIANTS[variant],
         SIZES[size],

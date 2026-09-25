@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING } from "./focus";
 
 export interface ChipProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
@@ -15,7 +16,8 @@ export const Chip = React.forwardRef<HTMLButtonElement, ChipProps>(
       type="button"
       aria-pressed={active}
       className={cn(
-        "inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-control border px-2 text-xs transition-colors outline-none",
+        "inline-flex h-[22px] shrink-0 items-center gap-1.5 rounded-control border px-2 text-xs transition-colors",
+        FOCUS_RING,
         "[&_svg]:h-3 [&_svg]:w-3 [&_svg]:shrink-0",
         active
           ? "border-border-control bg-surface-control font-medium text-text-strong"

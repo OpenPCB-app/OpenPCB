@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING } from "./focus";
 import { Tooltip } from "./tooltip";
 
 export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -36,8 +37,8 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
         aria-label={label}
         aria-pressed={typeof active === "boolean" ? active : undefined}
         className={cn(
-          "inline-flex shrink-0 items-center justify-center rounded-control transition-colors outline-none",
-          "focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-selection",
+          "inline-flex shrink-0 items-center justify-center rounded-control transition-colors",
+          FOCUS_RING,
           "disabled:cursor-not-allowed disabled:opacity-50",
           "[&_svg]:h-[12px] [&_svg]:w-[12px] [&_svg]:shrink-0",
           variant === "outline" && "border border-border-control",

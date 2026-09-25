@@ -10,6 +10,11 @@ export interface CheckboxProps
   boxClassName?: string;
   /** Class applied to the wrapping label element. */
   wrapperClassName?: string;
+  /**
+   * Row height of the wrapping label: `md` 22px, `sm` 20px. Omit to keep the
+   * label's natural height (inline use inside an existing row).
+   */
+  size?: "sm" | "md";
 }
 
 /**
@@ -27,6 +32,7 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
       className,
       boxClassName,
       wrapperClassName,
+      size,
       disabled,
       ...props
     },
@@ -54,6 +60,8 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
       <label
         className={cn(
           "inline-flex select-none items-center gap-1.5 text-xs text-text",
+          size === "md" && "h-[22px]",
+          size === "sm" && "h-5",
           disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
           wrapperClassName,
           className,
@@ -76,7 +84,7 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
           aria-hidden="true"
           className={cn(
             "flex h-[11px] w-[11px] shrink-0 items-center justify-center rounded-none border border-text-caps bg-surface-input",
-            "peer-focus-visible:border-selection",
+            "peer-focus-visible:border-selection peer-focus-visible:outline-solid peer-focus-visible:outline-1 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-focus-ring",
             boxClassName,
           )}
         >
