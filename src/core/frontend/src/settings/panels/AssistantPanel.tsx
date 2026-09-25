@@ -431,6 +431,7 @@ export function AssistantPanel() {
       <McpSection
         settings={settings}
         onSave={(patch) => void saveSettings(patch).catch(reportError)}
+        assistantBase={base}
       />
 
       {/* Providers — stacked accordion */}

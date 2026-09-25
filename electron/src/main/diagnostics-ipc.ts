@@ -1,23 +1,32 @@
 import os from "node:os";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { app, ipcMain, shell } from "electron";
 import { getCrashDumpsDir } from "./crash.js";
-import { getBackendPayload, getMcpPortfilePath } from "./backend-server.js";
+import {
+  getBackendPayload,
+  getClaudeMarketplaceDir,
+  getMcpPortfilePath,
+} from "./backend-server.js";
 import { ensureMcpToken } from "./mcp-portfile.js";
+import { getInstalledMcpLauncher } from "./mcp-launcher.js";
+import {
+  mcpSnippets,
+  stdioServerConfig,
+  type LauncherPlatform,
+} from "./mcp-launcher-content.js";
+import {
+  claudeCodeStatus,
+  connectClaudeCode,
+  defaultCliEnv,
+  disconnectClaudeCode,
+} from "./claude-code-cli.js";
 
-/**
- * Absolute path to the bundled stdio shim launcher, or null when running
- * unpackaged (where it lives in electron/dist and is not laid out as it will
- * be in the app bundle).
- */
-function getMcpShimPath(): string | null {
-  if (!app.isPackaged) return null;
-  return join(
-    process.resourcesPath,
-    "mcp",
-    process.platform === "win32" ? "openpcb-mcp.cmd" : "openpcb-mcp",
-  );
+function launcherPlatform(): LauncherPlatform {
+  return process.platform === "win32"
+    ? "win32"
+    : process.platform === "darwin"
+      ? "darwin"
+      : "linux";
 }
 
 let registered = false;
@@ -51,14 +60,24 @@ export function registerDiagnosticsIpc(): void {
     appVersion: app.getVersion(),
   }));
 
-  // Everything the Settings panel needs to render a copy-pasteable MCP client
-  // config. The shim path is resolved here because only main knows whether the
-  // app is packaged and where its resources landed.
+  // Everything the Settings panel needs to connect an MCP client. The paths
+  // point at the stable launcher in the user-data dir (rewritten every launch),
+  // never into the app bundle, which moves (AppImage, portable, translocation).
   ipcMain.handle("mcp:config", () => {
-    const shimPath = getMcpShimPath();
+    const launcher = getInstalledMcpLauncher();
+    const marketplaceDir = getClaudeMarketplaceDir();
+    const hasMarketplace = existsSync(marketplaceDir);
     return {
-      shimPath,
-      shimAvailable: shimPath !== null && existsSync(shimPath),
+      launcherPath: launcher?.launcherPath ?? null,
+      launcherWarning: launcher?.exec.warning ?? null,
+      marketplaceDir: hasMarketplace ? marketplaceDir : null,
+      snippets: launcher
+        ? mcpSnippets({
+            platform: launcherPlatform(),
+            launcherPath: launcher.launcherPath,
+            marketplaceDir: hasMarketplace ? marketplaceDir : null,
+          })
+        : [],
       portfilePath: getMcpPortfilePath(),
       url: getBackendPayload()
         ? `${getBackendPayload()?.url}/api/modules/assistant/mcp`
@@ -66,6 +85,39 @@ export function registerDiagnosticsIpc(): void {
       token: ensureMcpToken(),
     };
   });
+
+  // One-click Claude Code setup (claude-code-cli.ts). Runs the user's own
+  // `claude` CLI with fixed arguments, only on an explicit click.
+  const cliInput = () => ({
+    appVersion: app.getVersion(),
+    launcherPath: getInstalledMcpLauncher()?.launcherPath ?? null,
+  });
+  ipcMain.handle("mcp:claude-code:status", () =>
+    claudeCodeStatus(defaultCliEnv(), cliInput()),
+  );
+  ipcMain.handle(
+    "mcp:claude-code:connect",
+    (_event, mode: unknown) => {
+      const launcher = getInstalledMcpLauncher();
+      if (!launcher) {
+        return {
+          ok: false,
+          message: "The OpenPCB MCP launcher is not installed; restart OpenPCB.",
+          log: [],
+        };
+      }
+      const marketplaceDir = getClaudeMarketplaceDir();
+      return connectClaudeCode(defaultCliEnv(), {
+        ...cliInput(),
+        mode: mode === "server" ? "server" : "plugin",
+        marketplaceDir: existsSync(marketplaceDir) ? marketplaceDir : null,
+        serverConfig: stdioServerConfig(launcherPlatform(), launcher.launcherPath),
+      });
+    },
+  );
+  ipcMain.handle("mcp:claude-code:disconnect", () =>
+    disconnectClaudeCode(defaultCliEnv(), cliInput()),
+  );
 
   ipcMain.handle("app:get-versions", () => ({
     app: app.getVersion(),

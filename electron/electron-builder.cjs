@@ -133,6 +133,13 @@ module.exports = {
       to: "mcp",
       filter: ["openpcb-mcp", "openpcb-mcp.cmd"],
     },
+    // Claude Code plugin template (skills). Electron main turns it into a local
+    // plugin marketplace in the user-data dir on every launch
+    // (src/main/claude-plugin.ts).
+    {
+      from: "resources/claude-plugin",
+      to: "claude-plugin",
+    },
     {
       from: path.relative(__dirname, path.join(repoRoot, "src")),
       to: "src",

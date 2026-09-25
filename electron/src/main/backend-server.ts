@@ -18,6 +18,17 @@ import {
   removeMcpPortfile,
   writeMcpPortfile,
 } from "./mcp-portfile.js";
+import { installMcpLauncher } from "./mcp-launcher.js";
+import { writeClaudePluginMarketplace } from "./claude-plugin.js";
+import { stdioServerConfig, type LauncherPlatform } from "./mcp-launcher-content.js";
+
+function launcherPlatform(): LauncherPlatform {
+  return process.platform === "win32"
+    ? "win32"
+    : process.platform === "darwin"
+      ? "darwin"
+      : "linux";
+}
 
 const log = electronLog.scope("backend");
 
@@ -213,6 +224,16 @@ export async function startBackendServer(): Promise<BackendReadyPayload> {
       url: startedRuntime.url,
       port: startedRuntime.port,
     });
+    // Stable entry points for Claude Code & co.: the launcher in the user-data
+    // dir (never the bundle path, which moves) and the local plugin
+    // marketplace that points at it. Both are rewritten on every launch.
+    const launcher = installMcpLauncher(appDataDir);
+    if (launcher) {
+      writeClaudePluginMarketplace({
+        appDataDir,
+        server: stdioServerConfig(launcherPlatform(), launcher.launcherPath),
+      });
+    }
 
     log.info(`Backend ready at ${runtime.url}`);
     return backendPayload;
@@ -242,4 +263,9 @@ export async function stopBackendServer(): Promise<void> {
 
 export function getMcpPortfilePath(): string {
   return join(getAppDataDir(), "mcp.json");
+}
+
+/** Where the local Claude Code plugin marketplace is written. */
+export function getClaudeMarketplaceDir(): string {
+  return join(getAppDataDir(), "claude-code", "marketplace");
 }
