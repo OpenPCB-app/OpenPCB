@@ -74,3 +74,6 @@ graphify-out/
 # Subagent scratch memory (session-local)
 .claude/agent-memory/
 src/core/backend/.claude/
+
+# Local QA run archives (screenshots, DB snapshots, findings) — backed up manually, never committed
+/docs/qa/
