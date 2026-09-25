@@ -8,10 +8,12 @@ import {
   registerProjectedTools,
   registerUseDesignTool,
 } from "./tool-projection";
-import { registerResources } from "./resources";
+import { registerKnowledgeResources, registerResources } from "./resources";
 import { registerPrompts } from "./prompts";
 import { MCP_SERVER_INSTRUCTIONS } from "./instructions";
 import { registerProposalTools } from "./proposal-tools";
+import { registerVerifyTool } from "./verify-tool";
+import type { BuildIntentStore } from "../verification/build-intent-store";
 import type { AssistantEventBus } from "../events";
 import { MODULE_SDK_TOKENS, type DesignerSDK } from "../../../../sdks";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
@@ -27,6 +29,7 @@ export interface BuildMcpServerDeps {
   events: AssistantEventBus;
   contextResolver: ContextResolver;
   conversation: ConversationStore;
+  buildIntents: BuildIntentStore;
   allowWrites: boolean;
   pendingProposalHint: (chatTitle: string) => string;
 }
@@ -65,6 +68,7 @@ export function buildMcpServer(
     recorder: deps.recorder,
     contextResolver: deps.contextResolver,
     conversation: deps.conversation,
+    buildIntents: deps.buildIntents,
     allowWrites: deps.allowWrites,
     pendingProposalHint: deps.pendingProposalHint,
   });
@@ -78,12 +82,21 @@ export function buildMcpServer(
     }));
   });
 
+  registerVerifyTool(server, connection, {
+    connections: deps.connections,
+    conversation: deps.conversation,
+    buildIntents: deps.buildIntents,
+    designer: () =>
+      deps.ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER) ?? undefined,
+  });
+
   registerProposalTools(server, connection, {
     conversation: deps.conversation,
     events: deps.events,
   });
 
   registerResources(server, deps.ctx);
+  registerKnowledgeResources(server);
   registerPrompts(server, { allowWrites: deps.allowWrites });
 
   return server;

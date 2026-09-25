@@ -13,6 +13,7 @@ import { checkMcpAuth } from "./auth";
 import { buildMcpServer } from "./server";
 import type { McpCallRecorder } from "./call-recorder";
 import type { AssistantEventBus } from "../events";
+import type { BuildIntentStore } from "../verification/build-intent-store";
 import {
   normalizeClientKey,
   type McpClientIdentity,
@@ -92,6 +93,7 @@ export interface McpEndpointDeps {
   connections: McpConnectionRegistry;
   recorder: McpCallRecorder;
   events: AssistantEventBus;
+  buildIntents: BuildIntentStore;
   getSettings(): AssistantSettings;
   /**
    * Tool registry for this endpoint. `allowWrites` selects whether write tools
@@ -128,6 +130,7 @@ export class McpEndpoint {
         events: this.deps.events,
         contextResolver: this.deps.contextResolver,
         conversation: this.deps.conversation,
+        buildIntents: this.deps.buildIntents,
         allowWrites: settings.mcpAllowWrites,
         pendingProposalHint: this.deps.pendingProposalHint,
       });

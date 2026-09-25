@@ -3,6 +3,7 @@ import type { AssistantPromptPresetId } from "../../../../sdks";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import type { ConversationStore } from "../conversation-store";
 import type { ContextResolver } from "../context-resolver";
+import type { CapturedIntent } from "../verification/build-intent-capture";
 
 /**
  * Who is calling the MCP endpoint, and which assistant chats back them.
@@ -45,6 +46,11 @@ export interface McpConnection extends McpClientIdentity {
   pinnedDesignId: string | null;
   /** The last design a call from this connection acted on. */
   lastDesignId: string | null;
+  /**
+   * Expected BOM from this session's last `library_resolve_bom`, held until a
+   * design exists to attach it to (`designer_verify_build` moves it).
+   */
+  buildIntent: CapturedIntent | null;
   firstSeen: number;
   lastSeen: number;
   callCount: number;
@@ -149,6 +155,7 @@ export class McpConnectionRegistry {
       instanceId,
       pinnedDesignId: null,
       lastDesignId: null,
+      buildIntent: null,
       firstSeen: now,
       lastSeen: now,
       callCount: 0,

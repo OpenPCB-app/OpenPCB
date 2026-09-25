@@ -56,6 +56,8 @@ import { ContextResolver } from "./context-resolver";
 import { RunService } from "./run-service";
 import { buildOpenpcbToolRegistry } from "./tools/openpcb-tool-registry";
 import { registerExtendedReadTools } from "./tools/read-tools";
+import { registerKnowledgeTools } from "./tools/knowledge-tools";
+import { BuildIntentStore } from "./verification/build-intent-store";
 import { McpEndpoint } from "./mcp/handler";
 import {
   McpConnectionRegistry,
@@ -688,6 +690,7 @@ export class AssistantService {
           onChatActivity: (chatId) => this.publishChatActivity(chatId),
         }),
         events: this.events,
+        buildIntents: new BuildIntentStore(this.ctx),
         getSettings: () => this.settings.getSettings(),
         getRegistry: (allowWrites) => this.mcpRegistry(allowWrites),
         pendingProposalHint: (chatTitle) =>
@@ -769,6 +772,7 @@ export class AssistantService {
       },
     );
     registerExtendedReadTools(registry, this.ctx);
+    registerKnowledgeTools(registry);
     this.mcpRegistries.set(key, registry);
     return registry;
   }

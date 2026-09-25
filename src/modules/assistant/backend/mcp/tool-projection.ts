@@ -22,6 +22,14 @@ import {
   type McpProposalRef,
 } from "./result-envelope";
 import { annotationsFor, mcpDescription, metaFor } from "./tool-policy";
+import type { BuildIntentStore } from "../verification/build-intent-store";
+import {
+  intentFromBomResult,
+  intentFromCompileResult,
+} from "../verification/build-intent-capture";
+
+/** Task key the MCP path stores build intents under (see verify-tool.ts). */
+const MCP_INTENT_TASK_ID = "mcp";
 
 /**
  * Project the assistant's `AiToolRegistry` onto an MCP server.
@@ -119,6 +127,7 @@ export interface ToolProjectionDeps {
   recorder: McpCallRecorder;
   contextResolver: ContextResolver;
   conversation: ConversationStore;
+  buildIntents: BuildIntentStore;
   /** When false, `effect: "write"` tools are not registered at all. */
   allowWrites: boolean;
   /** Next step the model should take while a proposal waits for the user. */
@@ -235,15 +244,19 @@ export async function runProjectedTool(
     result = { ...result, warnings: [...(result.warnings ?? []), ...extraWarnings] };
   }
 
-  const proposal = proposalRefFor(deps, chatId, result.data);
-  const envelope = buildEnvelope(result, proposal);
-
   let resultJson: string | null = null;
   try {
     resultJson = result.data === undefined ? null : JSON.stringify(result.data);
   } catch {
     resultJson = null;
   }
+
+  if (completed && result.ok && resultJson) {
+    captureBuildIntent(def.name, resultJson, connection, chatId, deps);
+  }
+
+  const proposal = proposalRefFor(deps, chatId, result.data);
+  const envelope = buildEnvelope(result, proposal);
   deps.recorder.end(call, {
     completed,
     ok: result.ok,
@@ -254,6 +267,37 @@ export async function runProjectedTool(
   });
 
   return completed ? toCallToolResult(envelope) : failureResult(envelope.summary);
+}
+
+/**
+ * Parity with the in-app loop, which records what the user asked to build so
+ * the Definition-of-Done verifier can check the result (`run-service.ts`).
+ * A resolved BOM usually precedes the design, so it waits on the connection
+ * until `designer_verify_build` attaches it; a compile already runs in the
+ * design's chat, so it is stored there directly.
+ */
+function captureBuildIntent(
+  toolName: string,
+  resultJson: string,
+  connection: McpConnection,
+  chatId: string,
+  deps: ToolProjectionDeps,
+): void {
+  if (toolName === "library_resolve_bom") {
+    const intent = intentFromBomResult(resultJson);
+    if (intent) connection.buildIntent = intent;
+    return;
+  }
+  if (toolName === "compile_circuit") {
+    const intent = intentFromCompileResult(resultJson);
+    if (!intent) return;
+    try {
+      deps.buildIntents.save({ chatId, taskId: MCP_INTENT_TASK_ID, ...intent });
+      connection.buildIntent = null;
+    } catch {
+      // Best-effort, like the in-app capture.
+    }
+  }
 }
 
 export function registerProjectedTools(
