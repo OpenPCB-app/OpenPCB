@@ -120,8 +120,12 @@ export interface SchematicProposalEnvelope {
     | "pcb_delete_routing"
     | "pcb_set_board_outline"
     | "pcb_set_design_rules"
-    | "pcb_manage_zone"
-    | "pcb_manage_keepout"
+    | "pcb_add_zone"
+    | "pcb_update_zone"
+    | "pcb_delete_zone"
+    | "pcb_add_keepout"
+    | "pcb_update_keepout"
+    | "pcb_delete_keepout"
     | "pcb_waive_drc_violations"
     | "pcb_set_drc_rule_class_ignores"
     | "designer_delete_design";
@@ -3562,7 +3566,7 @@ export async function finalizeAndMaybeApply(params: {
             op.status === "failed" ||
             (op.status === "applied" && op.error != null),
         )
-        .map((op) => ({ id: op.operationId, reason: op.error ?? "failed" }));
+        .map((op) => ({ id: op.operationId, reason: operationFailureReason(op) }));
       const skipped = [...buildSkipped, ...failedSkips];
       // A failed/partial apply must surface ok:false/partial — never ok:true.
       if (applyResult.status === "applied") {
@@ -3990,6 +3994,18 @@ export async function applyDesignerPlaceComponentsProposal(input: {
  * design. Persisted as the proposal's failed apply result (`toApplyResult`),
  * so the panel card and `assistant_await_proposal` can say why.
  */
+/**
+ * Why an operation failed, for the agent: the dispatch code plus the
+ * executor's human detail when it gave one ("PCB_COPPER_ILLEGAL: trace on
+ * In1.Cu is not on the board stackup") — a bare code gives a model nothing
+ * to correct.
+ */
+function operationFailureReason(op: { error?: string | null; result?: unknown }): string {
+  const detail = (op.result as { detail?: unknown } | undefined)?.detail;
+  if (!op.error) return "failed";
+  return typeof detail === "string" && detail.trim() ? `${op.error}: ${detail.trim()}` : op.error;
+}
+
 export class ProposalStaleError extends Error {
   readonly code = "STALE_PROPOSAL" as const;
   constructor(

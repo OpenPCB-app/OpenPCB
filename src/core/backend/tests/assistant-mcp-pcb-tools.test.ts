@@ -218,17 +218,15 @@ describe("board and rules", () => {
     h.enable({ writes: true });
     const designId = await twoResistorDesign("Pours");
     const net = (await layout(designId)).nets[0]!.name;
-    const zone = await h.callTool("pcb_manage_zone", {
+    const zone = await h.callTool("pcb_add_zone", {
       designId,
-      action: "add",
       layer: "B.Cu",
       net,
       region: "board",
     });
     expect(zone.structuredContent.ok).toBe(true);
-    const keepout = await h.callTool("pcb_manage_keepout", {
+    const keepout = await h.callTool("pcb_add_keepout", {
       designId,
-      action: "add",
       layers: ["F.Cu"],
       pointsMm: [
         { x: 10, y: 5 },
@@ -242,6 +240,126 @@ describe("board and rules", () => {
     const after = await layout(designId);
     expect(after.zones.some((z) => z.layer === "B.Cu")).toBe(true);
     expect(after.keepouts.length).toBe(1);
+
+    // Updating applies; deleting is its own, destructive tool and waits.
+    const zoneId = after.zones.find((z) => z.layer === "B.Cu")!.id;
+    const renamed = await h.callTool("pcb_update_zone", { designId, zoneId, name: "Ground pour" });
+    expect(renamed.structuredContent.proposal?.status).toBe("applied");
+    const removal = await h.callTool("pcb_delete_zone", { designId, zoneId });
+    expect(removal.structuredContent.proposal?.status).toBe("pending");
+    const tools = await h.listTools();
+    const del = tools.find((t) => t.name === "pcb_delete_zone")!;
+    const add = tools.find((t) => t.name === "pcb_add_zone")!;
+    expect((del.annotations as { destructiveHint?: boolean }).destructiveHint).toBe(true);
+    expect((add.annotations as { destructiveHint?: boolean }).destructiveHint).toBe(false);
+  });
+});
+
+describe("validation refuses what would be physically wrong", () => {
+  test("layers must exist on this board's stack", async () => {
+    h.enable({ writes: true });
+    const designId = await twoResistorDesign("Two layers");
+    const net = (await layout(designId)).nets[0]!.name;
+    const zone = await h.callTool("pcb_add_zone", { designId, layer: "In1.Cu", net, region: "board" });
+    expect(zone.structuredContent.ok).toBe(false);
+    expect(zone.structuredContent.summary).toContain("not on this 2-layer board");
+    const keepout = await h.callTool("pcb_add_keepout", {
+      designId,
+      layers: ["In2.Cu"],
+      pointsMm: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }],
+      forbid: ["tracks"],
+    });
+    expect(keepout.structuredContent.ok).toBe(false);
+    const before = await layout(designId);
+    const connection = before.unrouted[0]!;
+    const route = await h.callTool("pcb_route", {
+      designId,
+      traces: [{ net: connection.net, layer: "In1.Cu", from: connection.from, to: connection.to }],
+    });
+    expect(route.structuredContent.ok).toBe(false);
+    expect(route.structuredContent.summary).toContain("F.Cu, B.Cu");
+    const zeroWidth = await h.callTool("pcb_route", {
+      designId,
+      traces: [{ net: connection.net, layer: "F.Cu", from: connection.from, to: connection.to, widthMm: 0 }],
+    });
+    expect(zeroWidth.structuredContent.ok).toBe(false);
+  });
+
+  test("outlines: no invented radius, circles are round, polygons are simple", async () => {
+    h.enable({ writes: true });
+    const designId = await twoResistorDesign("Outlines");
+    const noRadius = await h.callTool("pcb_set_board_outline", {
+      designId,
+      shape: "roundrect",
+      widthMm: 40,
+      heightMm: 30,
+    });
+    expect(noRadius.structuredContent.ok).toBe(false);
+    expect(noRadius.structuredContent.summary).toContain("cornerRadiusMm");
+    const tooRound = await h.callTool("pcb_set_board_outline", {
+      designId,
+      shape: "roundrect",
+      widthMm: 40,
+      heightMm: 30,
+      cornerRadiusMm: 16,
+    });
+    expect(tooRound.structuredContent.ok).toBe(false);
+    const circleWithBox = await h.callTool("pcb_set_board_outline", {
+      designId,
+      shape: "circle",
+      widthMm: 40,
+      heightMm: 30,
+    });
+    expect(circleWithBox.structuredContent.ok).toBe(false);
+    const bowtie = await h.callTool("pcb_set_board_outline", {
+      designId,
+      shape: "polygon",
+      pointsMm: [
+        { x: 0, y: 0 },
+        { x: 20, y: 20 },
+        { x: 20, y: 0 },
+        { x: 0, y: 20 },
+      ],
+    });
+    expect(bowtie.structuredContent.ok).toBe(false);
+    expect(bowtie.structuredContent.summary).toContain("crosses");
+
+    const circle = await h.callTool("pcb_set_board_outline", { designId, shape: "circle", diameterMm: 30 });
+    expect(circle.structuredContent.ok).toBe(true);
+    let board = (await h.designer.getPcbProjection(designId))!.board.outline;
+    expect([board.kind, board.widthMm, board.heightMm]).toEqual(["circle", 30, 30]);
+    const oval = await h.callTool("pcb_set_board_outline", { designId, shape: "oval", widthMm: 40, heightMm: 20 });
+    expect(oval.structuredContent.ok).toBe(true);
+    board = (await h.designer.getPcbProjection(designId))!.board.outline;
+    expect([board.widthMm, board.heightMm]).toEqual([40, 20]);
+  });
+
+  test("design rules: positive sizes, drill smaller than pad, unique ids and names", async () => {
+    h.enable({ writes: true });
+    const designId = await twoResistorDesign("Rule sanity");
+    const zero = await h.callTool("pcb_set_design_rules", {
+      designId,
+      netClasses: [{ name: "Default", traceWidthMm: 0 }],
+    });
+    expect(zero.structuredContent.ok).toBe(false);
+    expect(zero.structuredContent.summary).toContain("traceWidthMm must be a number > 0");
+    const drill = await h.callTool("pcb_set_design_rules", {
+      designId,
+      netClasses: [{ name: "Fat drill", traceWidthMm: 0.3, clearanceMm: 0.2, viaDiameterMm: 0.6, viaDrillMm: 0.6 }],
+    });
+    expect(drill.structuredContent.ok).toBe(false);
+    expect(drill.structuredContent.summary).toContain("smaller than viaDiameterMm");
+    const clearance = await h.callTool("pcb_set_design_rules", {
+      designId,
+      clearanceMm: { traceToTraceMm: 0 },
+    });
+    expect(clearance.structuredContent.ok).toBe(false);
+    const dupName = await h.callTool("pcb_set_design_rules", {
+      designId,
+      netClasses: [{ id: "power2", name: "Default", traceWidthMm: 0.3, clearanceMm: 0.2, viaDiameterMm: 0.6, viaDrillMm: 0.3 }],
+    });
+    expect(dupName.structuredContent.ok).toBe(false);
+    expect(dupName.structuredContent.summary).toContain("used twice");
   });
 });
 

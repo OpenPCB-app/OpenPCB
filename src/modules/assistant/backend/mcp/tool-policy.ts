@@ -26,6 +26,12 @@ export interface McpToolPolicy {
    * whose data scales with the design.
    */
   maxResultSizeChars?: number;
+  /**
+   * Changes what the user SEES in the OpenPCB window (e.g. focusing a design)
+   * but no design data. Such tools are `effect: "read"` — so they stay
+   * available with writes off — yet must not claim `readOnlyHint`.
+   */
+  uiSideEffect?: boolean;
 }
 
 const LARGE_RESULT = 400_000;
@@ -54,16 +60,19 @@ export const MCP_TOOL_POLICIES: Record<string, McpToolPolicy> = {
   pcb_set_board_outline: {},
   // Not undoable; always waits for approval (APPROVAL_REQUIRED_KINDS).
   pcb_set_design_rules: { destructive: true },
-  // `action: "delete"` removes the zone/keepout — flag the tool conservatively.
-  pcb_manage_zone: { destructive: true },
-  pcb_manage_keepout: { destructive: true },
+  pcb_add_zone: {},
+  pcb_update_zone: {},
+  pcb_delete_zone: { destructive: true },
+  pcb_add_keepout: {},
+  pcb_update_keepout: {},
+  pcb_delete_keepout: { destructive: true },
   // Suppress verification: always approval-tier (APPROVAL_REQUIRED_KINDS);
   // flagged destructive so clients treat them with the same care.
   pcb_waive_drc_violations: { destructive: true },
   pcb_set_drc_rule_class_ignores: { destructive: true },
   designer_rename_design: { idempotent: true },
   designer_delete_design: { destructive: true },
-  designer_focus_design: { idempotent: true },
+  designer_focus_design: { uiSideEffect: true, idempotent: true },
   designer_undo: {},
   designer_redo: {},
 };
@@ -73,8 +82,16 @@ export function policyFor(name: string): McpToolPolicy | undefined {
 }
 
 export function annotationsFor(tool: AiTool): ToolAnnotations {
-  const readOnly = tool.definition.effect === "read";
   const policy = policyFor(tool.definition.name) ?? {};
+  if (policy.uiSideEffect) {
+    return {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: policy.idempotent === true,
+      openWorldHint: false,
+    };
+  }
+  const readOnly = tool.definition.effect === "read";
   return {
     readOnlyHint: readOnly,
     destructiveHint: !readOnly && policy.destructive === true,

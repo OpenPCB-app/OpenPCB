@@ -16,7 +16,9 @@ connections as pad pairs (`"U1.3"` → `"R1.1"`). Filter with `refs` / `nets` on
 
 ## Workflow
 
-1. **Outline**: `pcb_set_board_outline` (rect / roundrect / circle from width × height, or a polygon).
+1. **Outline**: `pcb_set_board_outline` — rect (width × height), roundrect (+ `cornerRadiusMm`,
+   required), circle (`diameterMm`), oval (width × height) or a simple polygon. Use the size the user
+   gives; if they gave none, ask — board size and corner radius are mechanical constraints.
 2. **Place**: `pcb_place_footprints` by reference designator (position, rotation 0/90/180/270,
    side top/bottom). Keep parts inside the outline; group by function; decoupling caps next to
    their IC's power pins.
@@ -24,15 +26,16 @@ connections as pad pairs (`"U1.3"` → `"R1.1"`). Filter with `refs` / `nets` on
    path gets 45° elbows automatically, width and vias default to the net's class. It is one atomic,
    undoable change. If OpenPCB answers `PCB_COPPER_ILLEGAL`, the path would violate DRC — move the
    waypoints or change layer (add a via) and try again; do not force it.
-4. **Pours**: `pcb_manage_zone` (e.g. GND on B.Cu over the whole board); keep areas clear with
-   `pcb_manage_keepout`.
+4. **Pours**: `pcb_add_zone` (e.g. GND on B.Cu over the whole board), `pcb_update_zone`; keep areas
+   clear with `pcb_add_keepout` / `pcb_update_keepout`. Layers must exist on the board — read
+   `layerCount` from the layout; a 2-layer board has only F.Cu and B.Cu.
 5. **Check**: `designer_run_drc` after every batch; the write tools also report the DRC count.
 
 ## Approval and undo
 
-- Deleting copper (`pcb_delete_routing`), deleting zones/keepouts, and rule changes
-  (`pcb_set_design_rules`, not undoable) wait for the user's approval in OpenPCB. Tell the user, then
-  call `assistant_await_proposal`.
+- Deleting copper (`pcb_delete_routing`), deleting zones/keepouts (`pcb_delete_zone`,
+  `pcb_delete_keepout`), and rule changes (`pcb_set_design_rules`, not undoable) wait for the user's
+  approval in OpenPCB. Tell the user, then call `assistant_await_proposal`.
 - Never guess manufacturing values: widths, clearances and drill sizes come from the design's net
   classes or from the user / their fab.
 - `designer_undo` / `designer_redo` only act on changes this session made; the user undoes their own

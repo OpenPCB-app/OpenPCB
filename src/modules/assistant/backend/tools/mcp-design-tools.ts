@@ -187,7 +187,9 @@ function makeFocusTool(ctx: CoreBackendModuleContext): AiTool {
     definition: {
       name: "designer_focus_design",
       version: "1",
-      effect: "write",
+      // A UI side effect, not a design write (tool-policy `uiSideEffect`):
+      // available with writes off, never flagged read-only.
+      effect: "read",
       capability: "designer.ui.focus",
       description:
         "Open and focus a design in the OpenPCB window so the user sees what you are working on. Changes no design data.",

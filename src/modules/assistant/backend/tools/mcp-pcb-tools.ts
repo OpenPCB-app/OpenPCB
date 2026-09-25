@@ -8,6 +8,7 @@ import type {
 } from "@openpcb/ai-core";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import {
+  copperLayersForCount,
   DRC_RULE_CLASSES,
   MODULE_SDK_TOKENS,
   type DesignerCommandEnvelope,
@@ -28,6 +29,8 @@ import {
 import { buildTracePathThroughAnchors } from "../../../../shared/pcb-geometry/pcb-trace-geometry";
 import { resolveNetClassId } from "../../../../shared/pcb-areas/net-class-resolver";
 import { NON_OVERRIDABLE } from "../../../../shared/drc/severity";
+import { canonicalizeRing } from "../../../../shared/pcb-geometry/ring-utils";
+import { ringSelfIntersects } from "../../../../shared/pcb-geometry/segment-predicates";
 import type { ContextResolver } from "../context-resolver";
 import type { ConversationStore } from "../conversation-store";
 import {
@@ -39,6 +42,7 @@ import {
   type SchematicProposalEnvelope,
 } from "./designer-tools";
 import { drcCounts, drcCountsLine } from "./drc-counts";
+import { applyNetClassPatches, clearanceProblems } from "./rules-validation";
 
 /**
  * PCB tools for MCP clients (Claude Code).
@@ -62,7 +66,15 @@ import { drcCounts, drcCountsLine } from "./drc-counts";
  * - Copper commits use `legality: "refuse"`: an illegal route is rejected with
  *   `PCB_COPPER_ILLEGAL` instead of landing a DRC violation.
  * - No manufacturing constants are invented here: widths, clearances and via
- *   sizes default from the design's own net classes and rules.
+ *   sizes default from the design's own net classes and rules; a physical
+ *   dimension the design cannot supply (a corner radius, a board size) must
+ *   come from the caller.
+ * - **Validated against the design, not just the schema**: layers against the
+ *   board's real copper stack, sizes > 0, via drill < via pad, unique net
+ *   class ids/names, simple outline polygons. MCP writes bypass the HTTP
+ *   route parsers, so these checks live here.
+ * - **One risk per tool**: add/update and delete are separate tools, so a
+ *   tool's annotations say exactly what it can do.
  */
 
 const NM_PER_MM = 1_000_000;
@@ -705,6 +717,11 @@ function makeRouteTool(
       const traces: Array<Extract<DesignerCommandEnvelope["command"], { type: "pcb_commit_route" }>["traces"][number]> = [];
       for (const [index, t] of (args.traces ?? []).entries()) {
         const label = `trace ${index + 1} (${t.net})`;
+        const layerIssue = layerProblem(pcb, t.layer);
+        if (layerIssue) return failed(`${label}: ${layerIssue}`, execCtx.limits);
+        if (t.widthMm !== undefined && !positiveMm(t.widthMm)) {
+          return failed(`${label}: widthMm must be > 0 (omit it to use the net class width).`, execCtx.limits);
+        }
         const netId = netIdByName(pcb, t.net);
         if (!netId) return failed(`${label}: no net named '${t.net}'.`, execCtx.limits);
         const anchorsMm: Array<{ x: number; y: number }> = [];
@@ -837,10 +854,23 @@ function makeDeleteRoutingTool(
         [...ids].filter((id) => pool.some((x) => x.id === id));
       const traces = known(traceIds, pcb.traces);
       const vias = known(viaIds, pcb.vias);
-      if (traces.length + vias.length === 0) {
-        return failed(warnings[0] ?? "No matching traces or vias.", execCtx.limits);
+      const unknownIds = [
+        ...[...(args.traceIds ?? [])].filter((id) => !pcb.traces.some((t) => t.id === id)),
+        ...[...(args.viaIds ?? [])].filter((id) => !pcb.vias.some((v) => v.id === id)),
+      ];
+      if (unknownIds.length > 0) {
+        warnings.push(
+          `Not on the board (already deleted, or stale ids — re-read designer_get_pcb_layout): ${unknownIds.slice(0, 10).join(", ")}${unknownIds.length > 10 ? ", …" : ""}.`,
+        );
       }
-      return propose({
+      if (traces.length + vias.length === 0) {
+        return failed(warnings.join(" ") || "No matching traces or vias.", execCtx.limits);
+      }
+      // Skipped names/ids go in the summary (the approval card shows it) and
+      // back to the agent — not as proposal warnings, which would make the
+      // destructive proposal un-appliable without "apply anyway".
+      const skippedNote = warnings.length > 0 ? ` Skipped: ${warnings.join(" ")}` : "";
+      const proposed = await propose({
         conversation,
         options,
         execCtx,
@@ -848,7 +878,7 @@ function makeDeleteRoutingTool(
         kind: "designer_pcb_deletions",
         toolName: "pcb_delete_routing",
         title: "Delete routing",
-        summary: `Delete ${traces.length} trace(s) and ${vias.length} via(s)`,
+        summary: `Delete ${traces.length} trace(s) and ${vias.length} via(s).${skippedNote}`,
         riskLevel: "destructive",
         actionId: args.action_id,
         operations: [
@@ -861,9 +891,11 @@ function makeDeleteRoutingTool(
             payload: { type: "pcb_delete_via" as const, viaId },
           })),
         ],
-        // Warnings keep a destructive proposal pending; unknown nets are
-        // informational here, so report them in the summary instead.
       });
+      if (warnings.length > 0) {
+        proposed.warnings = [...(proposed.warnings ?? []), ...warnings];
+      }
+      return proposed;
     },
   };
 }
@@ -884,6 +916,66 @@ function bbox(points: Array<{ x: number; y: number }>) {
   };
 }
 
+const positiveMm = (value: number | undefined): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value > 0;
+
+/**
+ * The outline an agent asked for, or why not. No geometry is defaulted: a
+ * rounded rectangle needs its radius, a circle its diameter — the tool never
+ * invents a physical dimension (the old `cornerRadiusMm ?? 1` did). A circle
+ * and an oval are both kind "circle" in the model (bounding-box diameters,
+ * `PcbBoardOutline`), so the tool names them apart to keep "circle" round.
+ */
+export function buildOutline(
+  args: {
+    shape: "rect" | "roundrect" | "circle" | "oval" | "polygon";
+    widthMm?: number;
+    heightMm?: number;
+    diameterMm?: number;
+    centerMm?: { x: number; y: number };
+    cornerRadiusMm?: number;
+    pointsMm?: Array<{ x: number; y: number }>;
+  },
+  currentCenter: { x: number; y: number },
+): PcbBoardOutline | string {
+  const centerMm = args.centerMm ?? currentCenter;
+  if (args.shape === "polygon") {
+    const points = canonicalizeRing(args.pointsMm ?? []);
+    if (points.length < 3) return "A polygon outline needs at least 3 distinct pointsMm.";
+    if (!points.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) {
+      return "Every polygon point needs finite x and y.";
+    }
+    if (ringSelfIntersects(points)) {
+      return "The polygon crosses or touches itself; give the corners in order around the board.";
+    }
+    const box = bbox(points);
+    if (!positiveMm(box.widthMm) || !positiveMm(box.heightMm)) {
+      return "The polygon has no area.";
+    }
+    return { kind: "polygon", pointsMm: points, ...box };
+  }
+  if (args.shape === "circle") {
+    if (!positiveMm(args.diameterMm)) return "A circle outline needs diameterMm > 0.";
+    if (args.widthMm !== undefined || args.heightMm !== undefined) {
+      return "A circle takes diameterMm only; use shape 'oval' for different width and height.";
+    }
+    return { kind: "circle", widthMm: args.diameterMm, heightMm: args.diameterMm, centerMm };
+  }
+  if (!positiveMm(args.widthMm) || !positiveMm(args.heightMm)) {
+    return `A ${args.shape} outline needs widthMm and heightMm > 0.`;
+  }
+  const base = { widthMm: args.widthMm, heightMm: args.heightMm, centerMm };
+  if (args.shape === "oval") return { kind: "circle", ...base };
+  if (args.shape === "roundrect") {
+    const limit = Math.min(args.widthMm, args.heightMm) / 2;
+    if (!positiveMm(args.cornerRadiusMm) || args.cornerRadiusMm > limit) {
+      return `A roundrect needs cornerRadiusMm > 0 and ≤ ${round(limit, 3)} (half the shorter side).`;
+    }
+    return { kind: "roundrect", ...base, cornerRadiusMm: args.cornerRadiusMm };
+  }
+  return { kind: "rect", ...base };
+}
+
 function makeBoardOutlineTool(
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
@@ -897,15 +989,16 @@ function makeBoardOutlineTool(
       effect: "write",
       capability: "designer.write.pcb.board",
       description:
-        "Set the board outline: shape 'rect' / 'roundrect' / 'circle' from widthMm × heightMm (+ cornerRadiusMm) around centerMm, or 'polygon' from pointsMm. Existing cutouts are kept. Undoable.",
+        "Set the board outline around centerMm (default: current center): 'rect' / 'roundrect' from widthMm × heightMm (roundrect also needs cornerRadiusMm), 'circle' from diameterMm, 'oval' from widthMm × heightMm, or 'polygon' from pointsMm (a simple, non-self-intersecting ring). Existing cutouts are kept. Undoable. Use the dimensions the user gives — never invent them.",
       inputSchema: {
         type: "object",
         properties: {
           designId: DESIGN_ID,
           action_id: ACTION_ID,
-          shape: { type: "string", enum: ["rect", "roundrect", "circle", "polygon"] },
+          shape: { type: "string", enum: ["rect", "roundrect", "circle", "oval", "polygon"] },
           widthMm: { type: "number", minimum: 0 },
           heightMm: { type: "number", minimum: 0 },
+          diameterMm: { type: "number", minimum: 0 },
           centerMm: POINT_MM,
           cornerRadiusMm: { type: "number", minimum: 0 },
           pointsMm: { type: "array", items: POINT_MM, minItems: 3, maxItems: 500 },
@@ -917,38 +1010,19 @@ function makeBoardOutlineTool(
       const args = input as {
         designId?: string;
         action_id?: string;
-        shape: "rect" | "roundrect" | "circle" | "polygon";
+        shape: "rect" | "roundrect" | "circle" | "oval" | "polygon";
         widthMm?: number;
         heightMm?: number;
+        diameterMm?: number;
         centerMm?: { x: number; y: number };
         cornerRadiusMm?: number;
         pointsMm?: Array<{ x: number; y: number }>;
       };
       const target = await loadTarget(ctx, contextResolver, execCtx, args.designId);
       if (typeof target === "string") return failed(target, execCtx.limits);
-      const current = target.pcb.board.outline;
-      let outline: PcbBoardOutline;
-      if (args.shape === "polygon") {
-        if (!args.pointsMm || args.pointsMm.length < 3) {
-          return failed("A polygon outline needs at least 3 pointsMm.", execCtx.limits);
-        }
-        outline = { kind: "polygon", pointsMm: args.pointsMm, ...bbox(args.pointsMm) };
-      } else {
-        if (!args.widthMm || !args.heightMm) {
-          return failed(`A ${args.shape} outline needs widthMm and heightMm.`, execCtx.limits);
-        }
-        const base = {
-          widthMm: args.widthMm,
-          heightMm: args.heightMm,
-          centerMm: args.centerMm ?? current.centerMm,
-        };
-        outline =
-          args.shape === "roundrect"
-            ? { kind: "roundrect", ...base, cornerRadiusMm: args.cornerRadiusMm ?? 1 }
-            : args.shape === "circle"
-              ? { kind: "circle", ...base }
-              : { kind: "rect", ...base };
-      }
+      const built = buildOutline(args, target.pcb.board.outline.centerMm);
+      if (typeof built === "string") return failed(built, execCtx.limits);
+      const outline = built;
       return propose({
         conversation,
         options,
@@ -987,10 +1061,6 @@ interface RulesInput {
   boardThicknessMm?: number;
 }
 
-function slugId(name: string): string {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "class";
-}
-
 function makeDesignRulesTool(
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
@@ -1004,7 +1074,7 @@ function makeDesignRulesTool(
       effect: "write",
       capability: "designer.write.pcb.rules",
       description:
-        "Change board clearances, add or edit net classes (trace width, clearance, via size), assign nets to classes, or set board thickness. Only the fields you pass change. NOT undoable, so it always waits for the user's approval in OpenPCB (then call assistant_await_proposal). Use values the user or their fab specifies — never guess manufacturing limits. Class assignments are stored per current net id and must be redone if a net is renamed or re-created.",
+        "Change board clearances, add or edit net classes (trace width, clearance, via size), assign nets to classes, or set board thickness. Only the fields you pass change; a class is matched by id if given, else by name. All sizes > 0 and via drill < via diameter. NOT undoable, so it always waits for the user's approval in OpenPCB (then call assistant_await_proposal). Use values the user or their fab specifies — never guess manufacturing limits. Class assignments are stored per current net id and must be redone if a net is renamed or re-created.",
       inputSchema: {
         type: "object",
         properties: {
@@ -1059,7 +1129,9 @@ function makeDesignRulesTool(
         type: "pcb_set_design_rules",
       };
       const changes: string[] = [];
+      const problems: string[] = [];
       if (args.clearanceMm && Object.keys(args.clearanceMm).length > 0) {
+        problems.push(...clearanceProblems(args.clearanceMm));
         command.designRules = {
           ...board.designRules,
           clearance: { ...board.designRules.clearance, ...args.clearanceMm },
@@ -1068,38 +1140,10 @@ function makeDesignRulesTool(
       }
       let classes = board.netClasses;
       if (args.netClasses?.length) {
-        const template = board.netClasses[0];
-        if (!template) return failed("The board has no net classes to extend.", execCtx.limits);
-        classes = [...board.netClasses];
-        for (const patch of args.netClasses) {
-          const index = classes.findIndex(
-            (c) => (patch.id && c.id === patch.id) || c.name.toLowerCase() === patch.name.toLowerCase(),
-          );
-          if (index >= 0) {
-            classes[index] = { ...classes[index]!, ...stripUndefined(patch), id: classes[index]!.id };
-            changes.push(`net class ${classes[index]!.name}`);
-          } else {
-            const missing = (["traceWidthMm", "clearanceMm", "viaDiameterMm", "viaDrillMm"] as const).filter(
-              (k) => patch[k] === undefined,
-            );
-            if (missing.length > 0) {
-              return failed(
-                `New net class '${patch.name}' needs ${missing.join(", ")} — give the values explicitly.`,
-                execCtx.limits,
-              );
-            }
-            classes.push({
-              ...template,
-              id: patch.id ?? slugId(patch.name),
-              name: patch.name,
-              traceWidthMm: patch.traceWidthMm!,
-              clearanceMm: patch.clearanceMm!,
-              viaDiameterMm: patch.viaDiameterMm!,
-              viaDrillMm: patch.viaDrillMm!,
-            });
-            changes.push(`new net class ${patch.name}`);
-          }
-        }
+        const outcome = applyNetClassPatches(board.netClasses, args.netClasses);
+        problems.push(...outcome.problems);
+        classes = outcome.classes;
+        changes.push(...outcome.changes);
         command.netClasses = classes;
       }
       if (args.netClassAssignments?.length) {
@@ -1117,8 +1161,14 @@ function makeDesignRulesTool(
         changes.push(`${args.netClassAssignments.length} net assignment(s)`);
       }
       if (args.boardThicknessMm !== undefined) {
+        if (!Number.isFinite(args.boardThicknessMm) || args.boardThicknessMm <= 0) {
+          problems.push("boardThicknessMm must be a number > 0");
+        }
         command.boardThicknessMm = args.boardThicknessMm;
         changes.push(`board thickness ${args.boardThicknessMm} mm`);
+      }
+      if (problems.length > 0) {
+        return failed(`Rule change refused: ${problems.join("; ")}.`, execCtx.limits);
       }
       if (changes.length === 0) return failed("No rule changes given.", execCtx.limits);
       return propose({
@@ -1138,35 +1188,37 @@ function makeDesignRulesTool(
   };
 }
 
-function stripUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, v]) => v !== undefined),
-  ) as Partial<T>;
-}
-
 // ─── write: zones, keepouts, waivers ───────────────────────────────────
 
+/** Why `layer` is not usable on this board, or null. Checked against the REAL stack. */
+function layerProblem(pcb: DesignerPcbProjection, layer: string): string | null {
+  const valid = copperLayersForCount(pcb.board.layerCount) as readonly string[];
+  return valid.includes(layer)
+    ? null
+    : `Layer '${layer}' is not on this ${pcb.board.layerCount}-layer board (copper layers: ${valid.join(", ")}).`;
+}
+
+type ItemAction = "add" | "update" | "delete";
+
+const ZONE_DESCRIPTIONS: Record<ItemAction, string> = {
+  add: "Add a copper zone (pour): a named net on one copper layer of this board, over the whole board (region 'board') or a polygon (region 'polygon' + pointsMm). Applies at once; undoable.",
+  update: "Change a copper zone by zoneId (from designer_get_pcb_layout): layer, net, region, name, priority, pad connection, enabled. Applies at once; undoable.",
+  delete: "Delete a copper zone by zoneId. Destructive: waits for the user's approval in OpenPCB (then assistant_await_proposal).",
+};
+
 function makeZoneTool(
+  action: ItemAction,
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
   conversation: ConversationStore,
   options: DesignerToolOptions,
 ): AiTool {
-  return {
-    definition: {
-      name: "pcb_manage_zone",
-      version: "1",
-      effect: "write",
-      capability: "designer.write.pcb.zone",
-      description:
-        "Add, update or delete a copper zone (pour). A zone pours a named net on one copper layer over the whole board (region 'board') or a polygon (pointsMm). Add/update apply at once (undoable); delete waits for the user's approval.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          designId: DESIGN_ID,
-          action_id: ACTION_ID,
-          action: { type: "string", enum: ["add", "update", "delete"] },
-          zoneId: { type: "string", description: "Required for update/delete." },
+  const toolName = `pcb_${action}_zone` as const;
+  const fields: Record<string, AiJsonSchemaObject> =
+    action === "delete"
+      ? { zoneId: { type: "string" } }
+      : {
+          ...(action === "update" ? { zoneId: { type: "string" } } : {}),
           layer: COPPER_LAYER,
           net: { type: "string", description: "Net name to pour, e.g. GND." },
           region: { type: "string", enum: ["board", "polygon"] },
@@ -1175,15 +1227,24 @@ function makeZoneTool(
           priority: { type: "integer", minimum: 0 },
           padConnection: { type: "string", enum: ["solid", "thermal", "thruHoleThermal", "none"] },
           enabled: { type: "boolean" },
-        },
-        required: ["action"],
+        };
+  return {
+    definition: {
+      name: toolName,
+      version: "1",
+      effect: "write",
+      capability: "designer.write.pcb.zone",
+      description: ZONE_DESCRIPTIONS[action],
+      inputSchema: {
+        type: "object",
+        properties: { designId: DESIGN_ID, action_id: ACTION_ID, ...fields },
+        required: action === "add" ? ["layer", "net", "region"] : ["zoneId"],
       },
     },
     async execute(execCtx, input): Promise<AiToolResult<unknown>> {
       const args = input as {
         designId?: string;
         action_id?: string;
-        action: "add" | "update" | "delete";
         zoneId?: string;
         layer?: string;
         net?: string;
@@ -1196,6 +1257,10 @@ function makeZoneTool(
       };
       const target = await loadTarget(ctx, contextResolver, execCtx, args.designId);
       if (typeof target === "string") return failed(target, execCtx.limits);
+      if (args.layer) {
+        const problem = layerProblem(target.pcb, args.layer);
+        if (problem) return failed(problem, execCtx.limits);
+      }
       const region =
         args.region === "polygon"
           ? args.pointsMm && args.pointsMm.length >= 3
@@ -1210,10 +1275,10 @@ function makeZoneTool(
       }
       // Named nets persist by name and re-bind on every projection (zone contract).
       const netRef = args.net ? { netId: null, netName: args.net.trim().toUpperCase() } : undefined;
-      const exists = (id?: string) => Boolean(id && target.pcb.zones.some((z) => z.id === id));
+      const exists = Boolean(args.zoneId && target.pcb.zones.some((z) => z.id === args.zoneId));
 
       let payload: DesignerCommandEnvelope["command"];
-      if (args.action === "add") {
+      if (action === "add") {
         if (!args.layer || !netRef || !region) {
           return failed("Adding a zone needs layer, net and region.", execCtx.limits);
         }
@@ -1227,8 +1292,8 @@ function makeZoneTool(
           ...(args.padConnection ? { padConnection: args.padConnection } : {}),
           ...(args.enabled !== undefined ? { enabled: args.enabled } : {}),
         };
-      } else if (args.action === "update") {
-        if (!exists(args.zoneId)) return failed(`No zone '${args.zoneId ?? ""}'.`, execCtx.limits);
+      } else if (action === "update") {
+        if (!exists) return failed(`No zone '${args.zoneId ?? ""}'.`, execCtx.limits);
         payload = {
           type: "pcb_update_zone",
           zoneId: args.zoneId!,
@@ -1241,48 +1306,46 @@ function makeZoneTool(
           ...(args.enabled !== undefined ? { enabled: args.enabled } : {}),
         };
       } else {
-        if (!exists(args.zoneId)) return failed(`No zone '${args.zoneId ?? ""}'.`, execCtx.limits);
+        if (!exists) return failed(`No zone '${args.zoneId ?? ""}'.`, execCtx.limits);
         payload = { type: "pcb_delete_zone", zoneId: args.zoneId! };
       }
-      const destructive = args.action === "delete";
+      const destructive = action === "delete";
       return propose({
         conversation,
         options,
         execCtx,
         target,
         kind: destructive ? "designer_pcb_deletions" : "designer_pcb_board_edits",
-        toolName: "pcb_manage_zone",
-        title: `${args.action} zone`,
-        summary: `${args.action} zone${args.net ? ` for ${args.net}` : ""}`,
+        toolName,
+        title: `${action} zone`,
+        summary: `${action} zone${args.net ? ` for ${args.net}` : ""}`,
         riskLevel: destructive ? "destructive" : "medium",
         actionId: args.action_id,
-        operations: [{ title: `${args.action} zone`, payload }],
+        operations: [{ title: `${action} zone`, payload }],
       });
     },
   };
 }
 
+const KEEPOUT_DESCRIPTIONS: Record<ItemAction, string> = {
+  add: "Add a keepout area: a polygon in mm on copper layers of this board that forbids tracks / vias / pads / copper pour / footprints. Applies at once; undoable.",
+  update: "Change a keepout by keepoutId (from designer_get_pcb_layout): layers, polygon, what it forbids, name, enabled. Applies at once; undoable.",
+  delete: "Delete a keepout by keepoutId. Destructive: waits for the user's approval in OpenPCB (then assistant_await_proposal).",
+};
+
 function makeKeepoutTool(
+  action: ItemAction,
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
   conversation: ConversationStore,
   options: DesignerToolOptions,
 ): AiTool {
-  return {
-    definition: {
-      name: "pcb_manage_keepout",
-      version: "1",
-      effect: "write",
-      capability: "designer.write.pcb.keepout",
-      description:
-        "Add, update or delete a keepout area (a polygon in mm on copper layers that forbids tracks / vias / pads / copper pour / footprints). Add/update apply at once (undoable); delete waits for the user's approval.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          designId: DESIGN_ID,
-          action_id: ACTION_ID,
-          action: { type: "string", enum: ["add", "update", "delete"] },
-          keepoutId: { type: "string" },
+  const toolName = `pcb_${action}_keepout` as const;
+  const fields: Record<string, AiJsonSchemaObject> =
+    action === "delete"
+      ? { keepoutId: { type: "string" } }
+      : {
+          ...(action === "update" ? { keepoutId: { type: "string" } } : {}),
           layers: { type: "array", items: COPPER_LAYER, minItems: 1 },
           pointsMm: { type: "array", items: POINT_MM, minItems: 3, maxItems: 500 },
           forbid: {
@@ -1291,15 +1354,24 @@ function makeKeepoutTool(
           },
           name: { type: "string" },
           enabled: { type: "boolean" },
-        },
-        required: ["action"],
+        };
+  return {
+    definition: {
+      name: toolName,
+      version: "1",
+      effect: "write",
+      capability: "designer.write.pcb.keepout",
+      description: KEEPOUT_DESCRIPTIONS[action],
+      inputSchema: {
+        type: "object",
+        properties: { designId: DESIGN_ID, action_id: ACTION_ID, ...fields },
+        required: action === "add" ? ["layers", "pointsMm", "forbid"] : ["keepoutId"],
       },
     },
     async execute(execCtx, input): Promise<AiToolResult<unknown>> {
       const args = input as {
         designId?: string;
         action_id?: string;
-        action: "add" | "update" | "delete";
         keepoutId?: string;
         layers?: string[];
         pointsMm?: Array<{ x: number; y: number }>;
@@ -1309,6 +1381,10 @@ function makeKeepoutTool(
       };
       const target = await loadTarget(ctx, contextResolver, execCtx, args.designId);
       if (typeof target === "string") return failed(target, execCtx.limits);
+      for (const layer of args.layers ?? []) {
+        const problem = layerProblem(target.pcb, layer);
+        if (problem) return failed(problem, execCtx.limits);
+      }
       const restrictions = args.forbid
         ? {
             tracks: args.forbid.includes("tracks"),
@@ -1318,9 +1394,9 @@ function makeKeepoutTool(
             footprints: args.forbid.includes("footprints"),
           }
         : undefined;
-      const exists = (id?: string) => Boolean(id && target.pcb.keepouts.some((k) => k.id === id));
+      const exists = Boolean(args.keepoutId && target.pcb.keepouts.some((k) => k.id === args.keepoutId));
       let payload: DesignerCommandEnvelope["command"];
-      if (args.action === "add") {
+      if (action === "add") {
         if (!args.layers?.length || !args.pointsMm || !restrictions) {
           return failed("Adding a keepout needs layers, pointsMm and forbid.", execCtx.limits);
         }
@@ -1332,8 +1408,8 @@ function makeKeepoutTool(
           ...(args.name !== undefined ? { name: args.name } : {}),
           ...(args.enabled !== undefined ? { enabled: args.enabled } : {}),
         };
-      } else if (args.action === "update") {
-        if (!exists(args.keepoutId)) return failed(`No keepout '${args.keepoutId ?? ""}'.`, execCtx.limits);
+      } else if (action === "update") {
+        if (!exists) return failed(`No keepout '${args.keepoutId ?? ""}'.`, execCtx.limits);
         payload = {
           type: "pcb_update_keepout",
           keepoutId: args.keepoutId!,
@@ -1344,22 +1420,22 @@ function makeKeepoutTool(
           ...(args.enabled !== undefined ? { enabled: args.enabled } : {}),
         };
       } else {
-        if (!exists(args.keepoutId)) return failed(`No keepout '${args.keepoutId ?? ""}'.`, execCtx.limits);
+        if (!exists) return failed(`No keepout '${args.keepoutId ?? ""}'.`, execCtx.limits);
         payload = { type: "pcb_delete_keepout", keepoutId: args.keepoutId! };
       }
-      const destructive = args.action === "delete";
+      const destructive = action === "delete";
       return propose({
         conversation,
         options,
         execCtx,
         target,
         kind: destructive ? "designer_pcb_deletions" : "designer_pcb_board_edits",
-        toolName: "pcb_manage_keepout",
-        title: `${args.action} keepout`,
-        summary: `${args.action} keepout`,
+        toolName,
+        title: `${action} keepout`,
+        summary: `${action} keepout`,
         riskLevel: destructive ? "destructive" : "medium",
         actionId: args.action_id,
-        operations: [{ title: `${args.action} keepout`, payload }],
+        operations: [{ title: `${action} keepout`, payload }],
       });
     },
   };
@@ -1616,8 +1692,10 @@ export function registerMcpPcbTools(
   registry.register(makeDeleteRoutingTool(ctx, contextResolver, conversation, options));
   registry.register(makeBoardOutlineTool(ctx, contextResolver, conversation, options));
   registry.register(makeDesignRulesTool(ctx, contextResolver, conversation, options));
-  registry.register(makeZoneTool(ctx, contextResolver, conversation, options));
-  registry.register(makeKeepoutTool(ctx, contextResolver, conversation, options));
+  for (const action of ["add", "update", "delete"] as const) {
+    registry.register(makeZoneTool(action, ctx, contextResolver, conversation, options));
+    registry.register(makeKeepoutTool(action, ctx, contextResolver, conversation, options));
+  }
   registry.register(makeWaiveViolationsTool(ctx, contextResolver, conversation, options));
   registry.register(makeRuleClassIgnoresTool(ctx, contextResolver, conversation, options));
 }
