@@ -222,47 +222,36 @@ Same module, out of the Phases 0–4 scope that landed 2026-06-02. Not blocking.
 
 ---
 
-## 3. MCP integration — in flight
+## 3. MCP integration — Claude Code parity, pending desktop verification
 
-The largest live workstream and the newest. Uncommitted WIP in the working tree as of the
-2026-07-28 verification pass; it is **not** unshipped and it is **not** finished.
+Implemented on `claude/focused-cori-s0xh0c` (draft PR to `master`): server correctness, resilient
+stdio bridge, approval round-trip, live UI sync, parity tools (build verifier, Docs pages), PCB /
+board / rules / design-management tools, stable launcher, one-click Claude Code connect, local
+plugin, and `mcp.server` graduated to `"all"` (both user settings still default off). Contract:
+`CLAUDE.md` → *MCP server*; review, tool surface and user guide: `docs/assistant/mcp-claude-code.md`.
+Automated coverage: the `assistant-mcp-*`, `mcp-shim-bridge`, `mcp-claude-code-setup` and
+`designer-live-events` Bun suites; Vitest for `McpSection`, the live-event controller and
+`useDesignerEvents`; plus a real Claude Code CLI run (`claude mcp list` connected, `plugin validate`,
+marketplace add → install → update) in a Linux container.
 
-OpenPCB exposes its assistant tool registry over MCP so external agents (Claude Code, Claude
-Desktop, Codex) can drive whatever design the user has open. It lives inside the assistant module,
-which already owns the registry, the `ContextResolver`, proposals and the write policy.
+Still open — none of this could be exercised without a desktop:
 
-**Shape as designed** (full description in `CLAUDE.md` — only the load-bearing constraints repeat here):
-
-- Streamable HTTP at `/api/modules/assistant/mcp`; sessions are backed by a real assistant chat,
-  one per client, keyed on `metadata.mcp.clientKey`. That key must be **header-stable and never the
-  display name** — it is what lets every existing designer tool resolve its design unchanged via
-  `contextResolver.getPrimaryDesign(chatId)`, and why MCP calls and proposals render in the panel.
-- The 15 in-app `AiTool`s projected 1:1, plus MCP-only extended reads and the session-scoped
-  `designer_use_design`. **Do not add the extended reads to the in-app registry** — its prompt and
-  DoD harness are tuned against the current 15.
-- Design targeting: explicit `designId` → session pin → UI-active design, pushed by the frontend to
-  `PUT /api/modules/designer/active-design`.
-- Two settings, both default off (`mcp_enabled`, `mcp_allow_writes`). Writes are forced off when the
-  server is off, and write tools are then not registered at all.
-- Bearer token plus loopback-only Origin check; discovery through a 0600 `mcp.json`. stdio clients
-  use the bundled shim on the app's own Electron binary. The app must be running — there is no
-  headless fallback, because there is one SQLite writer.
-
-**Working-tree surfaces:** `src/modules/assistant/backend/mcp/`, `electron/src/mcp-shim/`,
-`McpSection.tsx`, `0014_mcp_settings.sql`, `assistant-mcp-endpoint.test.ts`,
-`designer/backend/active-design.ts`, `useActiveDesignSync.ts`.
-
-- [ ] **Finish the WIP and commit it.** It is currently the only unversioned work in the repo.
-- [ ] **Test it.** `assistant-mcp-endpoint.test.ts` exists; establish what it covers and fill the
-      gaps — auth rejection paths, session/client-key stability, tool projection fidelity, the
-      write-policy matrix (server off, server on + writes off, server on + writes on), and the
-      active-design targeting precedence chain.
-- [ ] **Exercise the stdio shim end-to-end** from a real external client against a running app,
-      including the `mcp.json` discovery handoff.
-- [ ] **Decide `mcp.server` flag graduation.** It is a `dev` flag today. Graduating it means
-      flipping the registry entry to `"all"`, and carries the same release-notes obligation as the
-      route-tool flags.
-- [ ] Document the feature for users once the two settings are considered stable.
+- [ ] **Desktop smoke matrix on packaged builds** — macOS (from Applications *and* from the DMG, to
+      see the translocation warning), Windows installer, Windows portable, Linux AppImage, `.deb`:
+      Connect Claude Code → `claude mcp list` shows OpenPCB connected → build a circuit → place and
+      route → delete something and approve it in the panel → the canvas updates live → quit and
+      restart OpenPCB mid-session and confirm the session recovers.
+- [ ] **Confirm `ELECTRON_RUN_AS_NODE` passes through the AppImage runtime and the portable
+      wrapper.** The launcher falls back to a system `node` if it does not; if it fails, point the
+      launcher at the extracted binary instead.
+- [ ] **Pin the `RunAsNode` fuse on.** No fuse configuration exists today, so it is on by default;
+      if fuses are ever hardened, the MCP launcher must be redesigned in the same change.
+- [ ] **Release notes at the flag flip.** Draft in `.github/release-notes/next-mcp-claude-code.md`;
+      fold it into the next version's notes at tag time.
+- [ ] **Net-class assignments are keyed by ephemeral net id** (`pcb_set_design_rules`, and the
+      in-app editor alike). A rename or re-extraction can orphan an assignment; decide whether the
+      board-settings blob should key by net name.
+- [ ] Later, only on demand: export to disk over MCP, library authoring tools, cloud features.
 
 ---
 

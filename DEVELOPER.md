@@ -365,6 +365,9 @@ database at `/tmp/openpcb-e2e.sqlite*` through `OPENPCB_DB_PATH`.
 | `OPENPCB_ALLOWED_ORIGINS`    | localhost:1420, :3000            | Comma-separated CORS allowlist                                  |
 | `OPENPCB_DEBUG_DIAGNOSTICS`  | `false`                          | Enables `/api/diagnostics/debug/modules`                        |
 | `OPENPCB_MCP_TOKEN`          | generated per launch             | Bearer token for the MCP endpoint                               |
+| `OPENPCB_MCP_PORTFILE`       | `<APP_DATA_DIR>/mcp.json`        | stdio bridge: read this discovery file instead of the per-OS default (tests, multiple installs) |
+| `OPENPCB_MCP_CLIENT`         | client's `clientInfo.name`       | stdio bridge: override the client key (keys the MCP chats); must be stable |
+| `OPENPCB_MCP_POLL_MS`        | `3000`                           | stdio bridge: how often it re-checks the app's MCP state for `list_changed` |
 | `OPENPCB_E2E_NO_WEBSERVER`   | unset                            | Set to `1` to stop Playwright starting its own servers          |
 | `AUTO_LAYOUT_URL`            | dev `http://localhost:3002`, packaged `https://autolayout.cloud.openpcb.app` | Cloud Auto Layout / Route Board service base URL. Legacy `AUTO_ROUTER_URL` / `AUTO_PLACE_URL` still honoured (same merged service). Point it at `cloud-infra/devstack` for local work |
 | `NODE_ENV`                   | —                                | `development` / `test`; any non-prod value turns feature flags on |

@@ -170,8 +170,8 @@ async function readRpc(response: Response): Promise<Record<string, unknown>> {
 
 beforeEach(() => {
   process.env.OPENPCB_MCP_TOKEN = TOKEN;
-  // The route is gated on the mcp.server dev flag; NODE_ENV is not
-  // "production" under bun test, so it is on. Assert rather than assume.
+  // The route is gated on the mcp.server flag (availability "all" since the
+  // Claude Code hardening); make sure no stray override turns it off here.
   delete process.env.OPENPCB_FEATURE_MCP_SERVER;
 });
 
@@ -389,5 +389,22 @@ describe("assistant MCP endpoint", () => {
       .filter((chat) => Boolean((chat.metadata as { mcp?: unknown })?.mcp));
     expect(mcpChats).toHaveLength(1);
     expect(mcpChats[0]?.title).toBe("MCP · Test Client");
+  });
+});
+
+describe("release availability", () => {
+  test("the MCP route ships in production builds", async () => {
+    const { FEATURE_FLAGS } = await import("../../contracts/feature-flags/registry");
+    // Graduated so installed apps can use Claude Code; the user settings
+    // (both default off) stay the real gate.
+    expect(FEATURE_FLAGS["mcp.server"].availability).toBe("all");
+  });
+
+  test("a fresh install has MCP off and writes off", async () => {
+    const { bootMcpHarness } = await import("./helpers/mcp-harness");
+    await bootMcpHarness("assistant-mcp-fresh-install");
+    const settings = getAssistantService().getSettings();
+    expect(settings.mcpEnabled).toBe(false);
+    expect(settings.mcpAllowWrites).toBe(false);
   });
 });

@@ -21,6 +21,7 @@ import { useAuth } from "../../cloud/AuthProvider";
 import { cloudRequestHeaders } from "../../cloud/request-headers";
 import { cn } from "@/lib/utils";
 import { McpSection } from "./McpSection";
+import { useFeatureFlag } from "../../feature-flags";
 import { Pill } from "@shared/frontend/ui/pill";
 import { StackedCard } from "@shared/frontend/ui/stacked-card";
 import type {
@@ -97,6 +98,9 @@ async function readJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function AssistantPanel() {
   const { backendURL } = useRuntime();
+  // The MCP route only exists where the `mcp.server` flag is on; never offer
+  // controls and setup commands for an endpoint the backend does not serve.
+  const mcpServerAvailable = useFeatureFlag("mcp.server");
   const { session } = useAuth();
   const base = useMemo(
     () => (backendURL ? `${backendURL}/api/modules/assistant` : null),
@@ -428,11 +432,13 @@ export function AssistantPanel() {
         </label>
       </section>
 
-      <McpSection
-        settings={settings}
-        onSave={(patch) => void saveSettings(patch).catch(reportError)}
-        assistantBase={base}
-      />
+      {mcpServerAvailable ? (
+        <McpSection
+          settings={settings}
+          onSave={(patch) => void saveSettings(patch).catch(reportError)}
+          assistantBase={base}
+        />
+      ) : null}
 
       {/* Providers — stacked accordion */}
       <section>
