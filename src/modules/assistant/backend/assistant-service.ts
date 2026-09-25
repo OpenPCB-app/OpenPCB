@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { NotFoundError, ValidationError } from "../../../core/contracts/errors";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
 import {
@@ -71,6 +72,7 @@ import {
   type McpConnectionSummary,
 } from "./mcp/connections";
 import { McpCallRecorder } from "./mcp/call-recorder";
+import { annotationsFor, mcpDescription, metaFor } from "./mcp/tool-policy";
 import { AssistantEventBus } from "./events";
 import type { AiToolRegistry } from "@openpcb/ai-core";
 import {
@@ -90,13 +92,14 @@ import {
 let service: AssistantService | null = null;
 
 /** FNV-1a — a stable, dependency-free fingerprint (not a security hash). */
-function hashString(value: string): string {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < value.length; i += 1) {
-    hash ^= value.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
+/** JSON with object keys sorted at every level, so equal contracts hash equal. */
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
 }
 
 export class AssistantService {
@@ -114,6 +117,9 @@ export class AssistantService {
   private mcpConnections: McpConnectionRegistry | null = null;
   /** Keyed by `${allowWrites}:${allowRawToolData}` — both change the registry. */
   private readonly mcpRegistries = new Map<string, AiToolRegistry>();
+  private readonly mcpToolsetFingerprints = new Map<string, string>();
+  /** Identifies this backend boot to the stdio bridge (see mcpState). */
+  private readonly mcpGeneration = crypto.randomUUID();
 
   constructor(private readonly ctx: CoreBackendModuleContext) {
     this.providers = new ProviderStore(ctx);
@@ -832,21 +838,49 @@ export class AssistantService {
     allowWrites: boolean;
     toolset: string;
     appVersion: string;
+    generation: string;
   } {
     const settings = this.settings.getSettings();
-    const names = settings.mcpEnabled
-      ? this.mcpRegistry(settings.mcpAllowWrites)
-          .list()
-          .filter((t) => settings.mcpAllowWrites || t.definition.effect !== "write")
-          .map((t) => t.definition.name)
-          .sort()
-      : [];
     return {
       enabled: settings.mcpEnabled,
       allowWrites: settings.mcpAllowWrites,
-      toolset: `${names.length}:${hashString(names.join(","))}`,
+      toolset: settings.mcpEnabled ? this.mcpToolsetFingerprint(settings.mcpAllowWrites) : "0:",
       appVersion: this.ctx.manifest.version,
+      // New per backend boot: an app restart or update can keep every tool
+      // name and still change a schema, so the bridge re-lists on a new boot
+      // even when the hash below happens to match.
+      generation: this.mcpGeneration,
     };
+  }
+
+  /**
+   * Hash of the exact tool contracts a client would be served — name,
+   * version, description, input schema, annotations, `_meta` — not just the
+   * names: a same-named tool whose schema changed must reach clients as
+   * `list_changed`, or they keep calling it with the old arguments.
+   * Tool definitions do not change within a boot, so it is cached per mode.
+   */
+  private mcpToolsetFingerprint(allowWrites: boolean): string {
+    const allowRawToolData = this.settings.getSettings().allowRawToolData;
+    const key = `${allowWrites}:${allowRawToolData}`;
+    const cached = this.mcpToolsetFingerprints.get(key);
+    if (cached) return cached;
+    const descriptors = this.mcpRegistry(allowWrites)
+      .list()
+      .filter((t) => allowWrites || t.definition.effect !== "write")
+      .map((t) => ({
+        name: t.definition.name,
+        version: t.definition.version,
+        description: mcpDescription(t),
+        inputSchema: t.definition.inputSchema,
+        annotations: annotationsFor(t),
+        meta: metaFor(t) ?? null,
+      }))
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    const digest = createHash("sha256").update(canonicalJson(descriptors)).digest("hex");
+    const fingerprint = `${descriptors.length}:${digest.slice(0, 24)}`;
+    this.mcpToolsetFingerprints.set(key, fingerprint);
+    return fingerprint;
   }
 
   // ─── providers ────────────────────────────────────────────────────────

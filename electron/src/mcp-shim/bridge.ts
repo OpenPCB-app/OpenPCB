@@ -79,7 +79,11 @@ export class McpBridge {
   private initialized = false;
   private readonly inFlight = new Map<string, AbortController>();
   private pollTimer: ReturnType<typeof setInterval> | null = null;
-  private lastSeen: { up: boolean; state: string | null } = { up: false, state: null };
+  private lastSeen: { up: boolean; state: string | null; epoch: number } = {
+    up: false,
+    state: null,
+    epoch: 0,
+  };
   private toolsCache: unknown | null = null;
   private closed = false;
 
@@ -121,22 +125,29 @@ export class McpBridge {
   }
 
   /**
-   * One polling tick: track OpenPCB coming up / going down and the backend's
-   * tool-set fingerprint; tell the client to re-list when either changed.
+   * One polling tick: tell the client to re-list when OpenPCB came up or went
+   * down, when the endpoint changed (a restart: new port, token or pid —
+   * even one the poll did not see happen), or when the backend's state
+   * fingerprint changed: enabled / writes, the hash of the full tool
+   * contracts, the app version, or the boot generation. A restart into an
+   * update that keeps every tool name but changes a schema is caught by all
+   * three of the last.
    */
   async poll(): Promise<void> {
     if (this.closed) return;
     this.upstream.refresh();
     const up = this.upstream.portfile !== null;
+    const epoch = this.upstream.epoch;
     let state: McpState | null = null;
     if (up) state = await this.upstream.state();
     const fingerprint = state
-      ? `${state.enabled}:${state.allowWrites}:${state.toolset}`
+      ? [state.enabled, state.allowWrites, state.toolset, state.appVersion, state.generation ?? ""].join(":")
       : null;
     const changed =
       up !== this.lastSeen.up ||
+      epoch !== this.lastSeen.epoch ||
       (fingerprint !== null && fingerprint !== this.lastSeen.state);
-    this.lastSeen = { up, state: fingerprint ?? (up ? this.lastSeen.state : null) };
+    this.lastSeen = { up, epoch, state: fingerprint ?? (up ? this.lastSeen.state : null) };
     if (changed && this.initialized) this.notifyListsChanged();
   }
 
@@ -219,7 +230,7 @@ export class McpBridge {
         | undefined;
       if (result) {
         if (result.protocolVersion) this.protocolVersion = result.protocolVersion;
-        this.lastSeen = { up: true, state: this.lastSeen.state };
+        this.lastSeen = { ...this.lastSeen, up: true, epoch: this.upstream.epoch };
         return {
           jsonrpc: "2.0",
           id: message.id,
@@ -239,7 +250,7 @@ export class McpBridge {
         `initialize answered locally: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    this.lastSeen = { up: false, state: null };
+    this.lastSeen = { up: false, state: null, epoch: this.upstream.epoch };
     return {
       jsonrpc: "2.0",
       id: message.id,

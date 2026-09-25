@@ -18,7 +18,7 @@ import {
   processAlive,
   type DiscoveryEnv,
 } from "../../../../electron/src/mcp-shim/portfile";
-import type { JsonRpcMessage } from "../../../../electron/src/mcp-shim/upstream";
+import { readJsonRpcSse, type JsonRpcMessage } from "../../../../electron/src/mcp-shim/upstream";
 import { getAssistantService } from "../../../modules/assistant/backend/assistant-service";
 import { bootMcpHarness, MCP_TOKEN, type McpHarness } from "./helpers/mcp-harness";
 
@@ -235,6 +235,50 @@ describe("mcp bridge", () => {
     expect(sent.length).toBe(quiet);
   });
 
+  test("re-lists after a restart even when a call's retry already followed it", async () => {
+    h.enable();
+    const first = serve();
+    writePortfile(first.port, MCP_TOKEN);
+    const { bridge, sent, init, request } = makeBridge();
+    await init();
+    await bridge.poll();
+    await bridge.poll();
+    first.stop(true);
+    const rotated = `rotated-${crypto.randomUUID()}`;
+    process.env.OPENPCB_MCP_TOKEN = rotated;
+    const second = serve();
+    writePortfile(second.port, rotated);
+    // The call's own retry discovers the new endpoint first…
+    await request("tools/call", { name: "designer_list_designs", arguments: {} });
+    const before = sent.length;
+    // …and the next poll still tells the client the server changed under it.
+    await bridge.poll();
+    expect(sent.slice(before).some((m) => m.method === "notifications/tools/list_changed")).toBe(true);
+    process.env.OPENPCB_MCP_TOKEN = MCP_TOKEN;
+  });
+
+  test("re-lists when the tool contracts change but not their number", async () => {
+    h.enable({ writes: false });
+    const server = serve();
+    writePortfile(server.port, MCP_TOKEN);
+    let tamper = false;
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await fetch(input, init);
+      if (!tamper || !String(input).endsWith("/mcp-state")) return response;
+      const state = (await response.json()) as { toolset: string };
+      const [count] = state.toolset.split(":");
+      return Response.json({ ...state, toolset: `${count}:changed-schema-hash` });
+    }) as typeof fetch;
+    const { bridge, sent, init } = makeBridge(fetchImpl);
+    await init();
+    await bridge.poll();
+    await bridge.poll();
+    const before = sent.length;
+    tamper = true;
+    await bridge.poll();
+    expect(sent.slice(before).some((m) => m.method === "notifications/tools/list_changed")).toBe(true);
+  });
+
   test("notifications/cancelled aborts the in-flight request", async () => {
     writePortfile(1, MCP_TOKEN);
     const hanging: typeof fetch = ((_url: unknown, init?: RequestInit) =>
@@ -311,4 +355,86 @@ describe("bridge instance id", () => {
   test("without either, every process gets a fresh id", () => {
     expect(resolveInstanceId({}, () => "fresh")).toBe("fresh");
   });
+});
+
+describe("backend state fingerprint", () => {
+  test("hashes the tool contracts and names the boot", () => {
+    h.enable({ writes: true });
+    const state = getAssistantService().mcpState();
+    expect(state.toolset).toMatch(/^\d+:[0-9a-f]{24}$/);
+    expect(state.generation).toMatch(/^[0-9a-f-]{36}$/);
+    h.enable({ writes: false });
+    const readOnly = getAssistantService().mcpState();
+    expect(readOnly.toolset).not.toBe(state.toolset);
+    expect(readOnly.generation).toBe(state.generation);
+  });
+});
+
+describe("SSE framing (fuzzed chunk boundaries)", () => {
+  // Deterministic PRNG so a failure is reproducible.
+  function prng(seed: number) {
+    let x = seed >>> 0;
+    return () => {
+      x ^= x << 13;
+      x ^= x >>> 17;
+      x ^= x << 5;
+      return (x >>> 0) / 0x1_0000_0000;
+    };
+  }
+
+  const progress = { jsonrpc: "2.0", method: "notifications/progress", params: { progress: 1, message: "Zeichnung ✓ — ohm Ω 🔧" } };
+  const response = { jsonrpc: "2.0", id: 7, result: { content: [{ type: "text", text: "Ω µ 😀 done" }] } };
+
+  function stream(eol: string, trailingBlank: boolean): Uint8Array {
+    const pretty = JSON.stringify(response, null, 1).split("\n");
+    const events = [
+      `: keep-alive comment${eol}${eol}`,
+      `event: message${eol}data: ${JSON.stringify(progress)}${eol}${eol}`,
+      `data: {"this is": not json${eol}${eol}`,
+      // Multi-line data: the lines join with \n, which is valid inside JSON.
+      pretty.map((line) => `data: ${line}`).join(eol) + (trailingBlank ? `${eol}${eol}` : eol),
+    ];
+    return new TextEncoder().encode(events.join(""));
+  }
+
+  async function parse(bytes: Uint8Array, cuts: number[]) {
+    const chunks: Uint8Array[] = [];
+    let start = 0;
+    for (const cut of [...cuts, bytes.length]) {
+      chunks.push(bytes.slice(start, cut));
+      start = cut;
+    }
+    const notes: JsonRpcMessage[] = [];
+    let i = 0;
+    const final = await readJsonRpcSse(
+      {
+        read: async () =>
+          i < chunks.length ? { value: chunks[i++], done: false } : { value: undefined, done: true },
+        cancel: () => undefined,
+      },
+      7,
+      (n) => notes.push(n),
+    );
+    return { final, notes };
+  }
+
+  for (const [label, eol] of [["LF", "\n"], ["CRLF", "\r\n"], ["CR", "\r"]] as const) {
+    for (const trailingBlank of [true, false]) {
+      test(`${label} line ends, ${trailingBlank ? "with" : "without"} the final blank line`, async () => {
+        const bytes = stream(eol, trailingBlank);
+        const random = prng(label.length * 1000 + (trailingBlank ? 1 : 2));
+        for (let round = 0; round < 250; round += 1) {
+          const cuts = new Set<number>();
+          const count = 1 + Math.floor(random() * 12);
+          while (cuts.size < count) cuts.add(1 + Math.floor(random() * (bytes.length - 1)));
+          const { final, notes } = await parse(bytes, [...cuts].sort((a, b) => a - b));
+          expect(final).toEqual(response as unknown as JsonRpcMessage);
+          expect(notes).toEqual([progress as unknown as JsonRpcMessage]);
+        }
+        // Every single byte its own chunk: splits every CRLF and every UTF-8 sequence.
+        const everyByte = Array.from({ length: bytes.length - 1 }, (_, k) => k + 1);
+        expect((await parse(bytes, everyByte)).final).toEqual(response as unknown as JsonRpcMessage);
+      });
+    }
+  }
 });

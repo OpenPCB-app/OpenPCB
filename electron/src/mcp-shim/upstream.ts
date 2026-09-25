@@ -9,6 +9,7 @@
  * POST just goes to the new port with the new token.
  */
 
+import { createParser, type EventSourceMessage } from "eventsource-parser";
 import {
   discoverPortfile,
   type DiscoveryEnv,
@@ -47,8 +48,11 @@ export class UpstreamError extends Error {
 export interface McpState {
   enabled: boolean;
   allowWrites: boolean;
+  /** Hash of the full tool contracts (names, schemas, descriptions, annotations). */
   toolset: string;
   appVersion: string;
+  /** New on every backend boot; absent from older apps. */
+  generation?: string;
 }
 
 export interface UpstreamOptions {
@@ -90,6 +94,7 @@ export class Upstream {
   private currentPath: string | null = null;
   private lastDiscovery: DiscoveryResult | null = null;
   private readonly fetchImpl: typeof fetch;
+  private endpointEpoch = 0;
 
   constructor(private readonly options: UpstreamOptions) {
     this.fetchImpl = options.fetchImpl ?? fetch;
@@ -103,12 +108,22 @@ export class Upstream {
     return this.currentPath;
   }
 
+  /**
+   * Bumped whenever a refresh finds a different endpoint (url, token or pid),
+   * wherever the refresh happened — a POST retry included — so the bridge
+   * notices a restart it did not poll through.
+   */
+  get epoch(): number {
+    return this.endpointEpoch;
+  }
+
   /** Re-read the portfile. Returns whether the endpoint changed. */
   refresh(): boolean {
     const result = discoverPortfile(this.options.discovery);
     this.lastDiscovery = result;
     const next = result.ok ? result.portfile : null;
     const changed = !sameEndpoint(this.current, next) && !(this.current === null && next === null);
+    if (changed) this.endpointEpoch += 1;
     this.current = next;
     this.currentPath = result.ok ? result.path : null;
     return changed;
@@ -214,7 +229,14 @@ export class Upstream {
       }
       const text = await response.text();
       if (!text.trim()) return null;
-      return JSON.parse(text) as JsonRpcMessage;
+      try {
+        return JSON.parse(text) as JsonRpcMessage;
+      } catch {
+        throw new UpstreamError(
+          "protocol",
+          `OpenPCB sent a response that is not JSON: ${text.trim().slice(0, 120)}`,
+        );
+      }
     }
   }
 
@@ -225,51 +247,15 @@ export class Upstream {
   ): Promise<JsonRpcMessage | null> {
     const reader = response.body?.getReader();
     if (!reader) return null;
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let final: JsonRpcMessage | null = null;
-    const handleEvent = (block: string) => {
-      const data = block
-        .split("\n")
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trimStart())
-        .join("\n");
-      if (!data) return;
-      let parsed: JsonRpcMessage;
-      try {
-        parsed = JSON.parse(data) as JsonRpcMessage;
-      } catch {
-        return;
-      }
-      if ("result" in parsed || "error" in parsed) {
-        if (requestId === null || parsed.id === requestId) final = parsed;
-        return;
-      }
-      if (parsed.method && parsed.id === undefined) {
-        onNotification?.(parsed);
-      }
-      // Server→client requests (sampling, elicitation) cannot be answered on
-      // a stateless endpoint; OpenPCB never sends them.
-    };
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (value) {
-        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
-        let split = buffer.indexOf("\n\n");
-        while (split !== -1) {
-          handleEvent(buffer.slice(0, split));
-          buffer = buffer.slice(split + 2);
-          split = buffer.indexOf("\n\n");
-        }
-      }
-      if (done) break;
-      if (final) {
-        void reader.cancel().catch(() => undefined);
-        break;
-      }
-    }
-    if (!final && buffer.trim()) handleEvent(buffer);
-    return final;
+    return readJsonRpcSse(
+      {
+        read: () => reader.read(),
+        cancel: () => void reader.cancel().catch(() => undefined),
+      },
+      requestId,
+      onNotification,
+      (message) => this.options.log?.(message),
+    );
   }
 
   /**
@@ -290,4 +276,58 @@ export class Upstream {
       return null;
     }
   }
+}
+
+/**
+ * Read a Streamable HTTP SSE response until the JSON-RPC response for
+ * `requestId` arrives, handing notifications (progress) to `onNotification`
+ * on the way. Framing is `eventsource-parser`'s (the SSE spec: CR, LF and CRLF
+ * line ends — also when split across chunks — multi-line `data:`, comments),
+ * not a hand-rolled splitter; the decoder is flushed at the end so a UTF-8
+ * character split across the last chunk survives, and a final event without
+ * its blank line is still dispatched. A malformed event is logged and
+ * skipped; the stream goes on. Exported for fuzz tests.
+ */
+export async function readJsonRpcSse(
+  source: {
+    read: () => Promise<{ value?: Uint8Array; done: boolean }>;
+    cancel: () => void;
+  },
+  requestId: JsonRpcMessage["id"],
+  onNotification?: (notification: JsonRpcMessage) => void,
+  log?: (message: string) => void,
+): Promise<JsonRpcMessage | null> {
+  const decoder = new TextDecoder();
+  let final: JsonRpcMessage | null = null;
+  const parser = createParser({
+    onEvent(event: EventSourceMessage) {
+      if (final || !event.data) return;
+      let parsed: JsonRpcMessage;
+      try {
+        parsed = JSON.parse(event.data) as JsonRpcMessage;
+      } catch {
+        log?.(`skipped a malformed SSE event (${event.data.length} chars)`);
+        return;
+      }
+      if ("result" in parsed || "error" in parsed) {
+        if (requestId === null || parsed.id === requestId) final = parsed;
+        return;
+      }
+      if (parsed.method && parsed.id === undefined) onNotification?.(parsed);
+      // Server→client requests (sampling, elicitation) cannot be answered on
+      // a stateless endpoint; OpenPCB never sends them.
+    },
+  });
+  for (;;) {
+    const { value, done } = await source.read();
+    if (value) parser.feed(decoder.decode(value, { stream: true }));
+    if (final) {
+      source.cancel();
+      return final;
+    }
+    if (done) break;
+  }
+  // Flush a trailing partial character and a last event missing its blank line.
+  parser.feed(`${decoder.decode()}\n\n`);
+  return final;
 }
