@@ -13,6 +13,8 @@ import type {
 export type {
   LibraryComponent,
   LibraryComponentDetail,
+  LibraryComponentOrigin,
+  LibraryComponentPage,
   LibraryComponentPlacementDetail,
   LibraryFacets,
   LibraryFacetBucket,

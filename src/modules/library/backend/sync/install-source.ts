@@ -10,9 +10,10 @@
  *    `github.com,objects.githubusercontent.com,api.github.com`.
  */
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
-import { ValidationError } from "../../../../core/contracts/errors";
+import { AppError, ValidationError } from "../../../../core/contracts/errors";
 import { readOpclibFromBytes } from "./opclib-reader";
 import { importOpclib } from "./opclib-importer";
+import { isProtectedSourceId } from "./source-ids";
 import type { ImportResult, InstallOrigin } from "./types";
 
 const DEFAULT_ALLOWLIST = [
@@ -52,6 +53,19 @@ export async function installOpclibFromBytes(
     pkg = readOpclibFromBytes(input.bytes);
   } catch (err) {
     throw new ValidationError(`invalid .opclib: ${(err as Error).message}`);
+  }
+  // The core ships with the app (and updates through the core-library flow);
+  // the local library holds the user's own parts. An installed pack reusing
+  // either id would replace their rows and become unremovable.
+  const libraryId = pkg.manifest.library.id;
+  if (isProtectedSourceId(libraryId)) {
+    throw new AppError(
+      `library id "${libraryId}" is reserved and cannot be installed from a package`,
+      409,
+      "Reserved library id",
+      "https://openpcb.dev/problems/library-source-reserved",
+      { sourceId: libraryId },
+    );
   }
   return importOpclib(ctx, pkg, {
     installOrigin: input.installOrigin ?? "manual-import",

@@ -10,11 +10,18 @@
 
 export type TagBucket = "family" | "package" | "mount" | "system" | "other";
 
+// Includes the footprint `mountType` spellings (`through_hole`, …) so a filter
+// key taken from a footprint buckets as mount, not "other".
 export const MOUNT_TAGS: ReadonlySet<string> = new Set([
   "smd",
   "smt",
   "tht",
   "through-hole",
+  "through_hole",
+  "thru-hole",
+  "thru_hole",
+  "pth",
+  "mixed",
 ]);
 
 export const FAMILY_TAGS: ReadonlySet<string> = new Set([

@@ -29,7 +29,7 @@ import {
   getFootprintModelMetadata,
   getFootprintModelRecord,
   markFootprintModelConversionFailed,
-  searchComponents,
+  searchComponentsPage,
   toFootprintModelMetadata,
   updateComponent,
   upsertFootprintModelRecord,
@@ -1146,6 +1146,17 @@ function parseLimit(limitRaw: string | null): number | undefined {
   return parsed;
 }
 
+function parseOffset(offsetRaw: string | null): number | undefined {
+  if (!offsetRaw) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(offsetRaw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new ValidationError("offset must be a non-negative integer");
+  }
+  return parsed;
+}
+
 function parseTags(tagsRaw: string | null): string[] | undefined {
   if (!tagsRaw) {
     return undefined;
@@ -1268,9 +1279,15 @@ export function registerRoutes(
   router.get("/components", async (routeCtx) => {
     const query = routeCtx.query.get("q") ?? undefined;
     const limit = parseLimit(routeCtx.query.get("limit"));
+    const offset = parseOffset(routeCtx.query.get("offset"));
     const tags = parseTags(routeCtx.query.get("tags"));
-    const result = await searchComponents(ctx, { query, limit, tags });
-    return success({ components: result });
+    const page = await searchComponentsPage(ctx, {
+      query,
+      limit,
+      offset,
+      tags,
+    });
+    return success(page);
   });
 
   // ── Parametric component templates (F2) ─────────────────────────────

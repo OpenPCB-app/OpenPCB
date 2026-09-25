@@ -21,6 +21,12 @@ export interface LibraryComponent {
   datasheetUrl?: string | null;
   keywords?: string[];
   /**
+   * Where this component came from: for a "Duplicate to edit" copy, the source
+   * part (`origin.componentId !== id`); for a pack component, itself. Null for
+   * parts created locally (KiCad import, drawn, generated).
+   */
+  origin?: LibraryComponentOrigin | null;
+  /**
    * Mount style of the component's default footprint, normalised for display.
    * Populated by the component-list DTO only (the detail payload carries the
    * authoritative `footprint.mountType`). `null` when the component has no
@@ -32,6 +38,13 @@ export interface LibraryComponent {
    * `mountType`: list DTO only, `null` when unresolvable.
    */
   padCount?: number | null;
+}
+
+export interface LibraryComponentOrigin {
+  /** Source library id, e.g. `openpcb.core`. */
+  libraryId: string;
+  componentId: string;
+  componentVersion: string | null;
 }
 
 /** Display forms of a footprint mount style (list DTO). */
@@ -186,8 +199,24 @@ export interface LibraryComponentPlacementDetail {
 
 export interface LibrarySearchParams {
   query?: string;
+  /** Page size, clamped to [1, 200]; default 25. */
   limit?: number;
+  /** Rows to skip in the stable list order; default 0. */
+  offset?: number;
   tags?: string[];
+}
+
+/**
+ * One page of `GET /components`. `total` counts every match of the query +
+ * tag filters and equals `LibraryFacets.total` for the same parameters.
+ * Order is stable (exact name, name prefix, name contains, other; then name,
+ * then id), so `offset` paging never skips or repeats a row.
+ */
+export interface LibraryComponentPage {
+  components: LibraryComponent[];
+  total: number;
+  offset: number;
+  limit: number;
 }
 
 export interface LibraryTagStat {

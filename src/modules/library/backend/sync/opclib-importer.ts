@@ -13,6 +13,7 @@ import {
 } from "../schema";
 import { writeGlb, writeSourceStep } from "../services/footprint-model-store";
 import { readAssetBytes, readAssetJson, verifyManifest } from "./opclib-reader";
+import { trustedSourceKind } from "./source-ids";
 import { makeResolver } from "./trusted-keys";
 import type {
   ImportResult,
@@ -255,7 +256,8 @@ export async function importOpclib(
   const db = getDb(ctx);
   const now = new Date().toISOString();
   const lib = pkg.manifest.library;
-  const isReadOnly = (lib.kind ?? "core") === "core" ? 1 : 0;
+  const kind = trustedSourceKind(lib);
+  const isReadOnly = kind === "core" ? 1 : 0;
 
   const requireSignature =
     opts.requireSignature ?? process.env.OPENPCB_REQUIRE_SIGNED_OPCLIB === "1";
@@ -369,7 +371,7 @@ export async function importOpclib(
       .values({
         id: lib.id,
         name: lib.name,
-        kind: lib.kind ?? "core",
+        kind,
         license: lib.license,
         homepage: lib.homepage,
         isReadOnly,
@@ -379,7 +381,7 @@ export async function importOpclib(
         target: sources.id,
         set: {
           name: lib.name,
-          kind: lib.kind ?? "core",
+          kind,
           license: lib.license,
           homepage: lib.homepage,
           isReadOnly,

@@ -1,9 +1,10 @@
 /**
  * Thin shim around `@openpcb/kicad-import`.
  *
- * Translates the package's `KicadImportValidationError` (extends Error) into
- * OpenPCB's `ImportValidationError` (extends `ValidationError extends AppError`)
- * so the HTTP error middleware maps it to a 400 problem-details response.
+ * Translates the package's `KicadImportValidationError` (extends Error) and the
+ * parsers' plain `Error`s into OpenPCB's `ImportValidationError` (extends
+ * `ValidationError extends AppError`) so the HTTP error middleware maps them
+ * to a 400 problem-details response.
  */
 import {
   parseImportBundle as packageParseImportBundle,
@@ -22,8 +23,18 @@ export class ImportValidationError extends ValidationError {
   }
 }
 
+/**
+ * The KiCad parsers under the package reject malformed user files with a
+ * plain `Error` ("Not a valid KiCad symbol library file", "Unexpected end of
+ * input…"). Everything parsed here is the user's file content, so such an error
+ * is bad input (400), not a server fault (500). Error subclasses (TypeError,
+ * RangeError, …) are programming faults and still surface as 500.
+ */
 function translatePackageError(error: unknown): never {
-  if (error instanceof KicadImportValidationError) {
+  if (
+    error instanceof KicadImportValidationError ||
+    (error instanceof Error && error.constructor === Error)
+  ) {
     throw new ImportValidationError(error.message);
   }
   throw error;

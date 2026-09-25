@@ -1,9 +1,11 @@
-import { and, asc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
-import { ValidationError } from "../../../core/contracts/errors";
+import { AppError, ValidationError } from "../../../core/contracts/errors";
 import type {
   LibraryComponent,
   LibraryComponentFootprintVariant,
+  LibraryComponentOrigin,
+  LibraryComponentPage,
   LibraryComponentPlacementDetail,
   LibraryComponentDetail,
   LibraryFacetBucket,
@@ -27,7 +29,21 @@ import type {
   LibraryTagStat,
   LibraryUpdateComponentInput,
 } from "../../../sdks/library";
-import { bucketTag } from "./tag-bucketing";
+import {
+  canonicalMountKey,
+  compareForList,
+  matchesFacets,
+  matchesLibraryFilter,
+  matchesQuery,
+  parseLibraryFilter,
+  toFilterableComponent,
+  type FilterableComponent,
+} from "./component-filter";
+import {
+  CORE_SOURCE_ID,
+  USER_LOCAL_SOURCE_ID,
+  isProtectedSourceId,
+} from "./sync/source-ids";
 import type {
   BoundsMm,
   FootprintRenderModel,
@@ -667,16 +683,10 @@ function parseFootprintDataJson(
  * footprint) collapse to null so the UI shows "—" rather than a raw token.
  */
 function displayMountType(rawMount: string | null): LibraryMountType | null {
-  if (!rawMount) return null;
-  switch (rawMount.trim().toLowerCase().replace(/[\s_-]+/g, "")) {
+  switch (canonicalMountKey(rawMount)) {
     case "smd":
-    case "smt":
-    case "surfacemount":
       return "SMD";
     case "tht":
-    case "thruhole":
-    case "throughhole":
-    case "pth":
       return "THT";
     case "mixed":
       return "Mixed";
@@ -707,6 +717,21 @@ export function mapComponent(row: ComponentRow): LibraryComponent {
     subcategory: row.subcategory,
     datasheetUrl: row.datasheetUrl,
     keywords: row.keywordsJson ? parseJsonStringArray(row.keywordsJson) : [],
+    origin: parseComponentOrigin(row.originJson),
+  };
+}
+
+function parseComponentOrigin(
+  originJson: string | null,
+): LibraryComponentOrigin | null {
+  const record = asRecord(parseOptionalJson(originJson));
+  const libraryId = asString(record?.libraryId);
+  const componentId = asString(record?.componentId);
+  if (!libraryId || !componentId) return null;
+  return {
+    libraryId,
+    componentId,
+    componentVersion: asString(record?.componentVersion),
   };
 }
 
@@ -809,111 +834,82 @@ export function mapFootprintDetail(row: FootprintRow): LibraryFootprintDetail {
   };
 }
 
+/** Largest page `GET /components` serves; callers page with `offset`. */
+export const MAX_COMPONENT_PAGE_SIZE = 200;
+const DEFAULT_COMPONENT_PAGE_SIZE = 25;
+
+interface FilterableRow {
+  component: ComponentRow;
+  footprintDataJson: string | null;
+  filterable: FilterableComponent;
+}
+
+/**
+ * Every component with its default footprint blob and source name, normalised
+ * for the shared list/facet predicate (`component-filter.ts`).
+ */
+function loadFilterableRows(ctx: CoreBackendModuleContext): FilterableRow[] {
+  const rows = getDb(ctx)
+    .select({
+      component: components,
+      sourceName: sources.name,
+      footprintDataJson: footprints.dataJson,
+    })
+    .from(components)
+    .leftJoin(sources, eq(components.sourceId, sources.id))
+    .leftJoin(footprints, eq(components.footprintId, footprints.id))
+    .all();
+  return rows.map((row) => ({
+    component: row.component,
+    footprintDataJson: row.footprintDataJson,
+    filterable: toFilterableComponent({
+      id: row.component.id,
+      name: row.component.name,
+      description: row.component.description,
+      tags: parseJsonStringArray(row.component.tagsJson),
+      isBuiltin: row.component.isBuiltin === 1,
+      sourceId: row.component.sourceId,
+      sourceName: row.sourceName,
+      footprintMountType: extractMountType(row.footprintDataJson),
+    }),
+  }));
+}
+
+/**
+ * One page of the component list. `total` counts every match of the query +
+ * tag filters — the same set `computeFacets(...).total` counts.
+ */
+export async function searchComponentsPage(
+  ctx: CoreBackendModuleContext,
+  params: LibrarySearchParams,
+): Promise<LibraryComponentPage> {
+  const limit = Math.max(
+    1,
+    Math.min(
+      MAX_COMPONENT_PAGE_SIZE,
+      Math.floor(params.limit ?? DEFAULT_COMPONENT_PAGE_SIZE),
+    ),
+  );
+  const offset = Math.max(0, Math.floor(params.offset ?? 0));
+  const filter = parseLibraryFilter(params.query, params.tags);
+  const matched = loadFilterableRows(ctx)
+    .filter((row) => matchesLibraryFilter(row.filterable, filter))
+    .sort((a, b) => compareForList(a.filterable, b.filterable, filter));
+  return {
+    components: matched
+      .slice(offset, offset + limit)
+      .map((row) => mapComponentListRow(row.component, row.footprintDataJson)),
+    total: matched.length,
+    offset,
+    limit,
+  };
+}
+
 export async function searchComponents(
   ctx: CoreBackendModuleContext,
   params: LibrarySearchParams,
 ): Promise<LibraryComponent[]> {
-  const db = getDb(ctx);
-  const query = params.query?.trim().toLowerCase() ?? "";
-  const queryTokens = tokenizeSearchQuery(query);
-  const limit = Math.max(1, Math.min(100, params.limit ?? 25));
-  const allTags = (params.tags ?? [])
-    .map((tag) => tag.trim().toLowerCase())
-    .filter((tag, index, all) => tag.length > 0 && all.indexOf(tag) === index);
-  // Source filters (`source:<id>`) match component.sourceId / isBuiltin; the
-  // rest are matched against the freeform component.tags array.
-  const sourceFilters = new Set<string>();
-  const expectedTags = new Set<string>();
-  for (const t of allTags) {
-    if (t.startsWith(SOURCE_TAG_PREFIX)) {
-      sourceFilters.add(t.slice(SOURCE_TAG_PREFIX.length));
-    } else {
-      expectedTags.add(t);
-    }
-  }
-  const hasFilter = sourceFilters.size > 0 || expectedTags.size > 0;
-
-  // Each row carries its default footprint's blob (same left join computeFacets
-  // uses) so the list DTO can report mount type + pad count.
-  const listSelection = {
-    component: components,
-    footprintDataJson: footprints.dataJson,
-  };
-  let rows: Array<{
-    component: ComponentRow;
-    footprintDataJson: string | null;
-  }>;
-  if (query.length > 0) {
-    const phraseNeedle = `%${escapeLikeNeedle(query)}%`;
-    const tokenNeedles = queryTokens.map(
-      (token) => `%${escapeLikeNeedle(token)}%`,
-    );
-    const searchableText = sql<string>`lower(${components.name} || ' ' || ${components.description} || ' ' || ${components.tagsJson} || ' ' || coalesce(${components.sourceId}, ''))`;
-    const tokenPredicate =
-      tokenNeedles.length > 0
-        ? and(...tokenNeedles.map((needle) => like(searchableText, needle)))
-        : undefined;
-    const baseQuery = db
-      .select(listSelection)
-      .from(components)
-      .leftJoin(footprints, eq(components.footprintId, footprints.id))
-      .where(
-        or(
-          like(sql`lower(${components.name})`, phraseNeedle),
-          like(sql`lower(${components.description})`, phraseNeedle),
-          like(sql`lower(${components.tagsJson})`, phraseNeedle),
-          tokenPredicate,
-        ),
-      )
-      .orderBy(components.name);
-    rows = hasFilter ? await baseQuery.all() : await baseQuery.limit(limit);
-  } else {
-    const baseQuery = db
-      .select(listSelection)
-      .from(components)
-      .leftJoin(footprints, eq(components.footprintId, footprints.id))
-      .orderBy(components.name);
-    rows = hasFilter ? await baseQuery.all() : await baseQuery.limit(limit);
-  }
-
-  if (!hasFilter) {
-    return rows.map((row) =>
-      mapComponentListRow(row.component, row.footprintDataJson),
-    );
-  }
-  const filteredRows = rows.filter(({ component: row }) => {
-    if (sourceFilters.size > 0) {
-      const sourceKey = row.sourceId ?? (row.isBuiltin === 1 ? "core" : "user");
-      if (!sourceFilters.has(sourceKey)) return false;
-    }
-    if (expectedTags.size > 0) {
-      const tagSet = new Set(
-        parseJsonStringArray(row.tagsJson).map((t) => t.toLowerCase()),
-      );
-      for (const tag of expectedTags) {
-        if (!tagSet.has(tag)) return false;
-      }
-    }
-    return true;
-  });
-  return filteredRows
-    .slice(0, limit)
-    .map((row) => mapComponentListRow(row.component, row.footprintDataJson));
-}
-
-function tokenizeSearchQuery(query: string): string[] {
-  return query
-    .toLowerCase()
-    .replace(/[^a-z0-9.+-]+/g, " ")
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter(
-      (token, index, all) => token.length > 0 && all.indexOf(token) === index,
-    );
-}
-
-function escapeLikeNeedle(value: string): string {
-  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+  return (await searchComponentsPage(ctx, params)).components;
 }
 
 export async function resolveComponent(
@@ -1407,7 +1403,7 @@ export function assertNotBuiltinComponents(
   if (hits.length === 0) return;
   const names = hits.map((row) => row.name).join(", ");
   throw new ValidationError(
-    `Cannot ${action} built-in components (${names}). Use "Duplicate to my library" to create an editable copy.`,
+    `Cannot ${action} built-in components (${names}). Use "Duplicate to edit" to create an editable copy.`,
   );
 }
 
@@ -1442,10 +1438,13 @@ export interface CloneComponentResult {
 }
 
 /**
- * Clones a component into an editable user-owned copy. Reuses the source
- * symbol/footprint rows (clone-on-edit is deferred — the user can re-import or
- * use the symbol editor later to materialize an own copy). Strips the
- * `builtin`/`system` tags and adds `user`. Always sets `is_builtin = 0`.
+ * Clones a component into an editable user-owned copy in `user.local`: the
+ * metadata columns, every footprint option (variant label, default flag,
+ * order, pin map) and a private copy of each footprint row + its 3D model
+ * row, so the copy's footprints are its own and can take a STEP upload
+ * (`assertFootprintNotBuiltinComponent` guards footprints a built-in uses).
+ * The symbol stays shared. Strips the `builtin`/`system` tags and adds
+ * `user`. Always sets `is_builtin = 0`.
  */
 export function cloneComponent(
   ctx: CoreBackendModuleContext,
@@ -1461,48 +1460,174 @@ export function cloneComponent(
     return null;
   }
 
-  const sourceTags = parseJsonStringArray(source.tagsJson);
-  const cleanedTags = sourceTags
+  const now = new Date().toISOString();
+  const newComponentId = crypto.randomUUID();
+  const newComponentName = `${source.name} (Copy)`;
+  const originJson = source.sourceId
+    ? JSON.stringify({
+        libraryId: source.sourceId,
+        componentId: source.id,
+        componentVersion: source.version,
+      })
+    : null;
+
+  db.transaction((tx) => {
+    const txDb = tx as typeof db;
+    const variants = loadCloneVariants(txDb, source);
+    const footprintIdMap = copyFootprintsForClone(
+      txDb,
+      variants.map((variant) => variant.footprintId),
+      now,
+    );
+    const copiedId = (id: string): string => footprintIdMap.get(id) ?? id;
+
+    txDb
+      .insert(components)
+      .values({
+        id: newComponentId,
+        name: newComponentName,
+        description: source.description,
+        symbolId: source.symbolId,
+        footprintId: copiedId(source.footprintId),
+        tagsJson: JSON.stringify(cloneTags(source.tagsJson)),
+        createdAt: now,
+        isBuiltin: 0,
+        sourceId: USER_LOCAL_SOURCE_ID,
+        version: "1.0.0",
+        uuid: newComponentId,
+        contentSha256: null,
+        originJson,
+        manufacturer: source.manufacturer,
+        manufacturerPartNumber: source.manufacturerPartNumber,
+        lcscPartNumber: source.lcscPartNumber,
+        supplier: source.supplier,
+        subcategory: source.subcategory,
+        datasheetUrl: source.datasheetUrl,
+        keywordsJson: source.keywordsJson,
+      })
+      .run();
+
+    for (const variant of variants) {
+      txDb
+        .insert(componentFootprints)
+        .values({
+          ...variant,
+          componentId: newComponentId,
+          footprintId: copiedId(variant.footprintId),
+        })
+        .run();
+    }
+  });
+
+  return { componentId: newComponentId, componentName: newComponentName };
+}
+
+function cloneTags(tagsJson: string): string[] {
+  const cleaned = parseJsonStringArray(tagsJson)
     .map((tag) => tag.trim())
     .filter((tag) => {
       const lowered = tag.toLowerCase();
       return tag.length > 0 && lowered !== "builtin" && lowered !== "system";
     });
-  if (!cleanedTags.some((tag) => tag.toLowerCase() === "user")) {
-    cleanedTags.push("user");
+  if (!cleaned.some((tag) => tag.toLowerCase() === "user")) {
+    cleaned.push("user");
   }
+  return cleaned;
+}
 
-  const now = new Date().toISOString();
-  const newComponentId = crypto.randomUUID();
-  const newComponentName = `${source.name} (Copy)`;
-  const originJson =
-    source.sourceId && source.version
-      ? JSON.stringify({
-          libraryId: source.sourceId,
-          componentId: source.id,
-          componentVersion: source.version,
-        })
-      : null;
+type CloneVariant = Omit<
+  typeof componentFootprints.$inferInsert,
+  "componentId"
+>;
 
-  db.insert(components)
-    .values({
-      id: newComponentId,
-      name: newComponentName,
-      description: source.description,
-      symbolId: source.symbolId,
-      footprintId: source.footprintId,
-      tagsJson: JSON.stringify(cleanedTags),
-      createdAt: now,
-      isBuiltin: 0,
-      sourceId: "user.local",
-      version: "1.0.0",
-      uuid: newComponentId,
-      contentSha256: null,
-      originJson,
+/**
+ * The source's footprint-option rows in order. The cached default footprint is
+ * appended when no row carries it (components imported before the join table
+ * existed have none), labelled with the footprint name as the detail read does.
+ */
+function loadCloneVariants(
+  db: ReturnType<typeof getDb>,
+  source: ComponentRow,
+): CloneVariant[] {
+  const rows: CloneVariant[] = db
+    .select({
+      footprintId: componentFootprints.footprintId,
+      isDefault: componentFootprints.isDefault,
+      variantLabel: componentFootprints.variantLabel,
+      sortOrder: componentFootprints.sortOrder,
+      pinMapJson: componentFootprints.pinMapJson,
     })
-    .run();
+    .from(componentFootprints)
+    .where(eq(componentFootprints.componentId, source.id))
+    .orderBy(asc(componentFootprints.sortOrder))
+    .all();
+  if (rows.some((row) => row.footprintId === source.footprintId)) return rows;
+  const defaultFootprint = db
+    .select({ name: footprints.name })
+    .from(footprints)
+    .where(eq(footprints.id, source.footprintId))
+    .get();
+  return [
+    ...rows.map((row) => ({ ...row, isDefault: 0 })),
+    {
+      footprintId: source.footprintId,
+      isDefault: 1,
+      variantLabel: defaultFootprint?.name ?? source.footprintId,
+      sortOrder: rows.length,
+      pinMapJson: null,
+    },
+  ];
+}
 
-  return { componentId: newComponentId, componentName: newComponentName };
+/**
+ * Copies each footprint row (and its 3D model row, which points at the same
+ * content-addressed GLB/STEP files) under a fresh id in `user.local`.
+ * Returns original id → copy id; a missing footprint row is not copied.
+ */
+function copyFootprintsForClone(
+  db: ReturnType<typeof getDb>,
+  footprintIds: readonly string[],
+  now: string,
+): Map<string, string> {
+  const copies = new Map<string, string>();
+  for (const footprintId of new Set(footprintIds)) {
+    const row = db
+      .select()
+      .from(footprints)
+      .where(eq(footprints.id, footprintId))
+      .get();
+    if (!row) continue;
+    const copyId = crypto.randomUUID();
+    db.insert(footprints)
+      .values({
+        id: copyId,
+        name: row.name,
+        dataJson: row.dataJson,
+        createdAt: now,
+        sourceId: USER_LOCAL_SOURCE_ID,
+        version: null,
+        uuid: copyId,
+        contentSha256: null,
+      })
+      .run();
+    const model = db
+      .select()
+      .from(footprintModels)
+      .where(eq(footprintModels.footprintId, footprintId))
+      .get();
+    if (model) {
+      db.insert(footprintModels)
+        .values({
+          ...model,
+          footprintId: copyId,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+    }
+    copies.set(footprintId, copyId);
+  }
+  return copies;
 }
 
 export function deleteComponents(
@@ -1537,9 +1662,26 @@ export function deleteComponents(
       .all();
 
     const symbolIds = [...new Set(toDelete.map((r) => r.symbolId))];
-    const footprintIds = [...new Set(toDelete.map((r) => r.footprintId))];
+    // Every footprint option, not just the cached default: a duplicate owns a
+    // private copy of each option's footprint.
+    const optionFootprintIds = transactionalDb
+      .select({ footprintId: componentFootprints.footprintId })
+      .from(componentFootprints)
+      .where(inArray(componentFootprints.componentId, ids))
+      .all()
+      .map((r) => r.footprintId);
+    const footprintIds = [
+      ...new Set([
+        ...toDelete.map((r) => r.footprintId),
+        ...optionFootprintIds,
+      ]),
+    ];
 
     // Delete the components
+    transactionalDb
+      .delete(componentFootprints)
+      .where(inArray(componentFootprints.componentId, ids))
+      .run();
     transactionalDb.delete(components).where(inArray(components.id, ids)).run();
 
     // Delete orphaned symbols (not referenced by any remaining component)
@@ -1559,11 +1701,17 @@ export function deleteComponents(
     // Delete orphaned footprints
     let deletedFootprints = 0;
     for (const footprintId of footprintIds) {
-      const still = transactionalDb
-        .select({ id: components.id })
-        .from(components)
-        .where(eq(components.footprintId, footprintId))
-        .get();
+      const still =
+        transactionalDb
+          .select({ id: components.id })
+          .from(components)
+          .where(eq(components.footprintId, footprintId))
+          .get() ??
+        transactionalDb
+          .select({ id: componentFootprints.componentId })
+          .from(componentFootprints)
+          .where(eq(componentFootprints.footprintId, footprintId))
+          .get();
       if (!still) {
         transactionalDb
           .delete(footprints)
@@ -1641,25 +1789,6 @@ export async function listTags(
 }
 
 /**
- * Tag filters prefixed with `source:` target the Source facet (e.g.
- * `source:openpcb.core`). This keeps the wire format a single `tags` list
- * without proliferating bucket-specific query params.
- */
-const SOURCE_TAG_PREFIX = "source:";
-
-interface NormalizedComponentForFacets {
-  id: string;
-  nameLc: string;
-  descriptionLc: string;
-  family: Set<string>;
-  package: Set<string>;
-  mount: Set<string>;
-  other: Set<string>;
-  sourceKey: string;
-  sourceLabel: string;
-}
-
-/**
  * Extract `mountType` from a footprint's `dataJson` blob. The canonical
  * location is `normalized.mountType`; the legacy fallback is the top-level
  * `mountType` field. Returns null if neither path resolves to a recognised
@@ -1674,217 +1803,58 @@ function extractMountType(footprintDataJson: string | null): string | null {
   return lc.length > 0 ? lc : null;
 }
 
-function normalizeForFacets(
-  row: {
-    tagsJson: string;
-    name: string;
-    description: string;
-    isBuiltin: number;
-    sourceId: string | null;
-    id: string;
-  },
-  sourceName: string | null,
-  footprintMountType: string | null,
-): NormalizedComponentForFacets {
-  const family = new Set<string>();
-  const pkg = new Set<string>();
-  const mount = new Set<string>();
-  const other = new Set<string>();
-  for (const raw of parseJsonStringArray(row.tagsJson)) {
-    const tag = raw.trim().toLowerCase();
-    if (!tag) continue;
-    switch (bucketTag(tag)) {
-      case "family":
-        family.add(tag);
-        break;
-      case "package":
-        pkg.add(tag);
-        break;
-      case "mount":
-        mount.add(tag);
-        break;
-      case "other":
-        other.add(tag);
-        break;
-      // "system" tags ignored — they don't appear in facets.
-    }
-  }
-  // Default-footprint mountType is the canonical signal even when the
-  // component carries no explicit "smd"/"tht" tag.
-  if (footprintMountType) {
-    mount.add(footprintMountType);
-  }
-  const isBuiltin = row.isBuiltin === 1;
-  const sourceKey = row.sourceId ?? (isBuiltin ? "core" : "user");
-  const sourceLabel =
-    sourceName ?? (isBuiltin ? "Core" : (row.sourceId ?? "User"));
-  return {
-    id: row.id,
-    nameLc: row.name.toLowerCase(),
-    descriptionLc: row.description.toLowerCase(),
-    family,
-    package: pkg,
-    mount,
-    other,
-    sourceKey,
-    sourceLabel,
-  };
+type FacetCounts = Map<string, { label: string; count: number }>;
+
+function countFacet(counts: FacetCounts, key: string, label: string): void {
+  const cur = counts.get(key) ?? { label, count: 0 };
+  cur.count++;
+  counts.set(key, cur);
 }
 
+function toSortedFacetList(counts: FacetCounts): LibraryFacetOption[] {
+  return Array.from(counts.entries())
+    .map(([key, v]) => ({ key, label: v.label, count: v.count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+/**
+ * Facet counts over the same predicate `searchComponentsPage` filters with.
+ * Intersection-aware: counts within bucket B are computed against the
+ * candidate set filtered by every OTHER bucket's selections.
+ */
 export async function computeFacets(
   ctx: CoreBackendModuleContext,
   params: LibraryFacetParams = {},
 ): Promise<LibraryFacets> {
-  const db = getDb(ctx);
-  const rows = await db
-    .select({
-      id: components.id,
-      name: components.name,
-      description: components.description,
-      tagsJson: components.tagsJson,
-      isBuiltin: components.isBuiltin,
-      sourceId: components.sourceId,
-      footprintId: components.footprintId,
-      sourceName: sources.name,
-      footprintDataJson: footprints.dataJson,
-    })
-    .from(components)
-    .leftJoin(sources, eq(components.sourceId, sources.id))
-    .leftJoin(footprints, eq(components.footprintId, footprints.id))
-    .all();
-
-  const normalized = rows.map((row) =>
-    normalizeForFacets(
-      row,
-      row.sourceName,
-      extractMountType(row.footprintDataJson),
-    ),
-  );
-
-  const query = params.query?.trim().toLowerCase() ?? "";
-  const activeBySource = new Set<string>();
-  const activeByFamily = new Set<string>();
-  const activeByPackage = new Set<string>();
-  const activeByMount = new Set<string>();
-  const activeByOther = new Set<string>();
-  for (const raw of params.tags ?? []) {
-    const t = raw.trim().toLowerCase();
-    if (!t) continue;
-    if (t.startsWith(SOURCE_TAG_PREFIX)) {
-      activeBySource.add(t.slice(SOURCE_TAG_PREFIX.length));
-      continue;
-    }
-    switch (bucketTag(t)) {
-      case "family":
-        activeByFamily.add(t);
-        break;
-      case "package":
-        activeByPackage.add(t);
-        break;
-      case "mount":
-        activeByMount.add(t);
-        break;
-      case "other":
-        activeByOther.add(t);
-        break;
-    }
-  }
-
-  const matchesQuery = (c: NormalizedComponentForFacets): boolean =>
-    !query || c.nameLc.includes(query) || c.descriptionLc.includes(query);
-
-  // Intersection-aware: counts within bucket B are computed against the
-  // candidate set filtered by every OTHER bucket's selections.
-  const matchesOtherFacets = (
-    c: NormalizedComponentForFacets,
-    skip: LibraryFacetBucket | null,
-  ): boolean => {
-    if (
-      skip !== "source" &&
-      activeBySource.size > 0 &&
-      !activeBySource.has(c.sourceKey)
-    ) {
-      return false;
-    }
-    if (skip !== "family") {
-      for (const t of activeByFamily) if (!c.family.has(t)) return false;
-    }
-    if (skip !== "package") {
-      for (const t of activeByPackage) if (!c.package.has(t)) return false;
-    }
-    if (skip !== "mount") {
-      for (const t of activeByMount) if (!c.mount.has(t)) return false;
-    }
-    if (skip !== "other") {
-      for (const t of activeByOther) if (!c.other.has(t)) return false;
-    }
-    return true;
+  const filter = parseLibraryFilter(params.query, params.tags);
+  const tagBuckets = ["family", "package", "mount", "other"] as const;
+  const counts: Record<LibraryFacetBucket, FacetCounts> = {
+    source: new Map(),
+    family: new Map(),
+    package: new Map(),
+    mount: new Map(),
+    other: new Map(),
   };
-
-  const toSortedList = (
-    m: Map<string, { label: string; count: number }>,
-  ): LibraryFacetOption[] =>
-    Array.from(m.entries())
-      .map(([key, v]) => ({ key, label: v.label, count: v.count }))
-      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-
-  const bucketSource = new Map<string, { label: string; count: number }>();
-  const bucketFamily = new Map<string, { label: string; count: number }>();
-  const bucketPackage = new Map<string, { label: string; count: number }>();
-  const bucketMount = new Map<string, { label: string; count: number }>();
-  const bucketOther = new Map<string, { label: string; count: number }>();
   let total = 0;
 
-  for (const c of normalized) {
-    if (!matchesQuery(c)) continue;
-
-    if (matchesOtherFacets(c, "source")) {
-      const cur = bucketSource.get(c.sourceKey) ?? {
-        label: c.sourceLabel,
-        count: 0,
-      };
-      cur.count++;
-      bucketSource.set(c.sourceKey, cur);
+  for (const { filterable: c } of loadFilterableRows(ctx)) {
+    if (!matchesQuery(c, filter)) continue;
+    if (matchesFacets(c, filter, "source")) {
+      countFacet(counts.source, c.sourceKey, c.sourceLabel);
     }
-    if (matchesOtherFacets(c, "family")) {
-      for (const t of c.family) {
-        const cur = bucketFamily.get(t) ?? { label: t, count: 0 };
-        cur.count++;
-        bucketFamily.set(t, cur);
-      }
+    for (const bucket of tagBuckets) {
+      if (!matchesFacets(c, filter, bucket)) continue;
+      for (const tag of c[bucket]) countFacet(counts[bucket], tag, tag);
     }
-    if (matchesOtherFacets(c, "package")) {
-      for (const t of c.package) {
-        const cur = bucketPackage.get(t) ?? { label: t, count: 0 };
-        cur.count++;
-        bucketPackage.set(t, cur);
-      }
-    }
-    if (matchesOtherFacets(c, "mount")) {
-      for (const t of c.mount) {
-        const cur = bucketMount.get(t) ?? { label: t, count: 0 };
-        cur.count++;
-        bucketMount.set(t, cur);
-      }
-    }
-    if (matchesOtherFacets(c, "other")) {
-      for (const t of c.other) {
-        const cur = bucketOther.get(t) ?? { label: t, count: 0 };
-        cur.count++;
-        bucketOther.set(t, cur);
-      }
-    }
-    if (matchesOtherFacets(c, null)) {
-      total++;
-    }
+    if (matchesFacets(c, filter)) total++;
   }
 
   return {
-    source: toSortedList(bucketSource),
-    family: toSortedList(bucketFamily),
-    package: toSortedList(bucketPackage),
-    mount: toSortedList(bucketMount),
-    other: toSortedList(bucketOther),
+    source: toSortedFacetList(counts.source),
+    family: toSortedFacetList(counts.family),
+    package: toSortedFacetList(counts.package),
+    mount: toSortedFacetList(counts.mount),
+    other: toSortedFacetList(counts.other),
     total,
   };
 }
@@ -1903,7 +1873,7 @@ export async function updateComponent(
   if (!existing) return null;
   if (existing.isBuiltin) {
     throw new ValidationError(
-      `Cannot edit built-in component "${existing.name}". Use "Duplicate to my library" to create an editable copy.`,
+      `Cannot edit built-in component "${existing.name}". Use "Duplicate to edit" to create an editable copy.`,
     );
   }
 
@@ -1965,6 +1935,8 @@ export interface LibrarySourceSummary {
   latestSignatureValid: boolean;
   latestInstallOrigin: string | null;
   componentCount: number;
+  /** False for the bundled core and the local library; DELETE refuses them with 409. */
+  isRemovable: boolean;
 }
 
 export function listSourcesWithReleases(
@@ -2014,6 +1986,7 @@ export function listSourcesWithReleases(
       latestSignatureValid: latest?.signatureValid === 1,
       latestInstallOrigin: latest?.installOrigin ?? null,
       componentCount: countBySource.get(s.id) ?? 0,
+      isRemovable: !isProtectedSourceId(s.id),
     };
   });
 }
@@ -2031,9 +2004,15 @@ export function deleteSource(
   if (!source) {
     throw new ValidationError(`source not found: ${sourceId}`);
   }
-  if (source.kind === "core") {
-    throw new ValidationError(
-      `cannot delete core source ${sourceId}; ship a new bundled package to replace it`,
+  if (isProtectedSourceId(sourceId)) {
+    throw new AppError(
+      sourceId === CORE_SOURCE_ID
+        ? `cannot delete core source ${sourceId}; ship a new bundled package to replace it`
+        : `cannot delete the local library ${sourceId}; it holds your own parts`,
+      409,
+      "Library source is protected",
+      "https://openpcb.dev/problems/library-source-protected",
+      { sourceId },
     );
   }
 
