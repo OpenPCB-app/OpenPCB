@@ -85,6 +85,8 @@ export interface DesignerWorkspaceActions {
   undo(): Promise<void>;
   redo(): Promise<void>;
   notifyExternalRevisionBump(revision: number): void;
+  /** The revision the workspace currently shows (optimistic), or null. */
+  getKnownRevision(): number | null;
 }
 
 export interface DesignerWorkspaceDerived {
@@ -618,6 +620,11 @@ export function useDesignerWorkspace(params: {
     }
   }, []);
 
+  const getKnownRevision = useCallback(
+    () => projectionRef.current?.revision ?? null,
+    [],
+  );
+
   // Dev-only capture hooks (M0.2): expose command dispatch + the active design
   // on `window.__openpcbCapture`, gated on OPENPCB_CAPTURE=1. Merges into the
   // shared namespace and removes only its own keys on cleanup.
@@ -782,6 +789,7 @@ export function useDesignerWorkspace(params: {
       undo,
       redo,
       notifyExternalRevisionBump,
+      getKnownRevision,
     },
     derived: {
       selectedPart,

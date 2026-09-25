@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { createLiveEventController } from "../../../../shared/frontend/live-events/live-events";
 
 /**
  * Live change notifications from `GET /api/modules/assistant/events`.
@@ -33,88 +34,6 @@ export interface UseAssistantEventsOptions {
   enabled?: boolean;
 }
 
-const RECONNECT_MIN_MS = 1_000;
-const RECONNECT_MAX_MS = 30_000;
-
-interface EventSourceLike {
-  readyState: number;
-  addEventListener(type: string, listener: (event: MessageEvent<string>) => void): void;
-  close(): void;
-}
-
-type EventSourceCtor = new (url: string) => EventSourceLike;
-
-/**
- * The React-free half: opens the stream, coalesces bursts, reconnects with
- * backoff when the browser gives up. Returns a disposer. Exported for tests
- * (the frontend Vitest project has no DOM harness).
- */
-export function createAssistantEventsController(options: {
-  backendUrl: string;
-  onEvents: (events: AssistantLiveEvent[]) => void;
-  debounceMs?: number;
-  EventSourceImpl?: EventSourceCtor;
-}): () => void {
-  const EventSourceImpl =
-    options.EventSourceImpl ?? (EventSource as unknown as EventSourceCtor);
-  const debounceMs = options.debounceMs ?? 250;
-  const CLOSED = 2;
-
-  let disposed = false;
-  let source: EventSourceLike | null = null;
-  let pending: AssistantLiveEvent[] = [];
-  let flushTimer: ReturnType<typeof setTimeout> | null = null;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let backoff = RECONNECT_MIN_MS;
-
-  const flush = () => {
-    flushTimer = null;
-    if (disposed || pending.length === 0) return;
-    const batch = pending;
-    pending = [];
-    options.onEvents(batch);
-  };
-
-  const onMessage = (event: MessageEvent<string>) => {
-    try {
-      pending.push(JSON.parse(event.data) as AssistantLiveEvent);
-    } catch {
-      return;
-    }
-    if (!flushTimer) flushTimer = setTimeout(flush, debounceMs);
-  };
-
-  const connect = () => {
-    if (disposed) return;
-    const current = new EventSourceImpl(
-      `${options.backendUrl}/api/modules/assistant/events`,
-    );
-    source = current;
-    current.addEventListener("open", () => {
-      backoff = RECONNECT_MIN_MS;
-    });
-    current.addEventListener("chat.activity", onMessage);
-    current.addEventListener("proposal.updated", onMessage);
-    current.addEventListener("error", () => {
-      // EventSource retries network blips on its own but gives up for good
-      // on some failures (e.g. the backend restarted); reconnect ourselves
-      // with backoff so the panel does not silently go stale.
-      if (current.readyState !== CLOSED || disposed) return;
-      source = null;
-      reconnectTimer = setTimeout(connect, backoff);
-      backoff = Math.min(backoff * 2, RECONNECT_MAX_MS);
-    });
-  };
-
-  connect();
-  return () => {
-    disposed = true;
-    source?.close();
-    if (flushTimer) clearTimeout(flushTimer);
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-  };
-}
-
 export function useAssistantEvents({
   backendUrl,
   onEvents,
@@ -126,8 +45,9 @@ export function useAssistantEvents({
 
   useEffect(() => {
     if (!enabled || !backendUrl || typeof EventSource === "undefined") return;
-    return createAssistantEventsController({
-      backendUrl,
+    return createLiveEventController<AssistantLiveEvent>({
+      url: `${backendUrl}/api/modules/assistant/events`,
+      eventTypes: ["chat.activity", "proposal.updated"],
       debounceMs,
       onEvents: (events) => onEventsRef.current(events),
     });

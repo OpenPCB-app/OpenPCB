@@ -255,6 +255,17 @@ export interface DesignerSDK {
     designId: string,
     input: UpdateDesignerDesignInput,
   ): Promise<DesignerDesignSummary | null>;
+  /**
+   * Delete a design and every row keyed to it (same path as
+   * `DELETE /designs/:id`). Resolves `false` when the design did not exist.
+   */
+  deleteDesign(designId: string): Promise<boolean>;
+  /**
+   * Ask the designer UI to open and focus a design — for a caller outside the
+   * UI (an MCP client) that switched what it works on. `delivered` is false
+   * when no designer UI is currently subscribed to design events.
+   */
+  requestFocus(designId: string): { delivered: boolean };
   getSchematicProjection(
     designId: string,
   ): Promise<DesignerSchematicProjection | null>;

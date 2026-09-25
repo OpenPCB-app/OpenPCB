@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import {
-  createAssistantEventsController,
-  type AssistantLiveEvent,
-} from "./useAssistantEvents";
+import { createLiveEventController } from "./live-events";
+
+type AssistantLiveEvent = { type: string; chatId: string };
 
 type Listener = (event: { data: string }) => void;
 
@@ -48,11 +47,12 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("assistant live events", () => {
+describe("live event controller", () => {
   test("coalesces a burst into one callback", () => {
     const batches: AssistantLiveEvent[][] = [];
-    const dispose = createAssistantEventsController({
-      backendUrl: "http://127.0.0.1:3000",
+    const dispose = createLiveEventController<AssistantLiveEvent>({
+      url: "http://127.0.0.1:3000/api/modules/assistant/events",
+      eventTypes: ["chat.activity", "proposal.updated"],
       onEvents: (events) => batches.push(events),
       EventSourceImpl: Impl,
     });
@@ -75,8 +75,9 @@ describe("assistant live events", () => {
   });
 
   test("reconnects with backoff after the stream dies", () => {
-    const dispose = createAssistantEventsController({
-      backendUrl: "http://x",
+    const dispose = createLiveEventController({
+      url: "http://x/events",
+      eventTypes: ["chat.activity"],
       onEvents: () => undefined,
       EventSourceImpl: Impl,
     });
@@ -94,8 +95,9 @@ describe("assistant live events", () => {
 
   test("delivers nothing after dispose", () => {
     const batches: AssistantLiveEvent[][] = [];
-    const dispose = createAssistantEventsController({
-      backendUrl: "http://x",
+    const dispose = createLiveEventController<AssistantLiveEvent>({
+      url: "http://x/events",
+      eventTypes: ["chat.activity"],
       onEvents: (events) => batches.push(events),
       EventSourceImpl: Impl,
     });
