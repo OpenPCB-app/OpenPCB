@@ -227,7 +227,9 @@ Same module, out of the Phases 0–4 scope that landed 2026-06-02. Not blocking.
 Implemented on `claude/focused-cori-s0xh0c` (draft PR to `master`): server correctness, resilient
 stdio bridge, approval round-trip, live UI sync, parity tools (build verifier, Docs pages), PCB /
 board / rules / design-management tools, stable launcher, one-click Claude Code connect, local
-plugin, and `mcp.server` graduated to `"all"` (both user settings still default off). Contract:
+plugin, and `mcp.server` graduated to `"all"` (both user settings still default off). Review round 1
+is addressed on the same branch (session isolation, stale approvals, DRC suppression, idempotency,
+validation, Windows transport, setup ownership — `docs/assistant/mcp-claude-code.md` §5). Contract:
 `CLAUDE.md` → *MCP server*; review, tool surface and user guide: `docs/assistant/mcp-claude-code.md`.
 Automated coverage: the `assistant-mcp-*`, `mcp-shim-bridge`, `mcp-claude-code-setup` and
 `designer-live-events` Bun suites; Vitest for `McpSection`, the live-event controller and
@@ -236,11 +238,22 @@ marketplace add → install → update) in a Linux container.
 
 Still open — none of this could be exercised without a desktop:
 
-- [ ] **Desktop smoke matrix on packaged builds** — macOS (from Applications *and* from the DMG, to
-      see the translocation warning), Windows installer, Windows portable, Linux AppImage, `.deb`:
+- [ ] **Desktop smoke matrix on packaged builds** — the release gate for this PR. macOS (from
+      Applications, after moving the app, *and* from the DMG, to see the translocation warning),
+      Windows installer, Windows portable, Linux AppImage, `.deb`:
       Connect Claude Code → `claude mcp list` shows OpenPCB connected → build a circuit → place and
       route → delete something and approve it in the panel → the canvas updates live → quit and
-      restart OpenPCB mid-session and confirm the session recovers.
+      restart OpenPCB mid-session and confirm the session recovers → update the app and confirm
+      "Update plugin" + `/reload-plugins` → Disconnect.
+- [ ] **Windows specifics:** native `claude.exe` and npm `claude.cmd`; a user profile path with
+      spaces, `&`, `%`, `^`, parentheses and non-ASCII characters; the portable build (the exe path
+      is baked into the registration — confirm "Update connection" appears after moving it).
+- [ ] **Two concurrent Claude Code sessions** on one machine against one design: separate chats,
+      neither can await or undo the other's work, an "allow for session" in one does not affect
+      the other.
+- [ ] **CI:** `corelib:fetch` fails on `master` and this PR (the released `openpcb-core.pub` does not
+      match `resources/keys/openpcb-core-2026.pub`), so CI runs no tests. Fix the trust key / release
+      separately, then re-run this PR.
 - [ ] **Confirm `ELECTRON_RUN_AS_NODE` passes through the AppImage runtime and the portable
       wrapper.** The launcher falls back to a system `node` if it does not; if it fails, point the
       launcher at the extracted binary instead.

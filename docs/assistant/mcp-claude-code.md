@@ -98,8 +98,8 @@ is in `CLAUDE.md` → *MCP server*.
 
 ## 3. Tool surface
 
-43 tools with writes enabled, 22 with writes disabled (write tools are not registered at all when
-"Allow writes" is off). The authoritative list is `tools/list` against a running app; the
+48 tools with writes enabled, 23 with writes disabled (write tools are not registered at all when
+"Allow writes" is off; `designer_focus_design` changes only what the window shows, so it stays). The authoritative list is `tools/list` against a running app; the
 `assistant-mcp-parity.test.ts` and `mcp-claude-code-setup.test.ts` suites pin it down (every tool
 a plugin skill names must exist).
 
@@ -114,8 +114,12 @@ Conventions shared by every tool:
 - **Results.** Every result has `{ok, status, summary, warnings, error, proposal, data}` in
   `structuredContent` and the same information as text, because Claude Code forwards only the
   structured half and Claude Desktop only the text half.
-- **Idempotency.** Write tools take an optional `action_id`; a repeat with the same id returns the
-  original proposal instead of applying twice.
+- **Idempotency.** Write tools take an optional `action_id`, unique per Claude Code session and
+  design. A repeat returns the original proposal instead of applying twice (also under concurrent
+  calls — the database enforces it); after a rejection or failure the id is spent and a new one is
+  required.
+- **Ownership.** Proposals, undo rights and idempotency belong to the session that made them
+  (client + session id), not to a chat: another Claude Code session cannot await, see or undo them.
 
 ### 3.1 The in-app Assistant's 15 tools (parity, projected 1:1)
 
@@ -147,17 +151,20 @@ Conventions shared by every tool:
 |---|---|
 | `pcb_place_footprints` — move / rotate / flip by reference | auto-applies, undoable |
 | `pcb_route` — traces through waypoints + vias, per net, one atomic commit, refused if it breaks legality | auto-applies, undoable |
-| `pcb_set_board_outline` | auto-applies, undoable |
-| `pcb_set_drc_waivers` | auto-applies, undoable |
-| `pcb_manage_zone`, `pcb_manage_keepout` — add / update | auto-applies, undoable |
-| `pcb_manage_zone`, `pcb_manage_keepout` — delete; `pcb_delete_routing` | **waits for approval** |
+| `pcb_set_board_outline` — rect, roundrect (radius required), circle (diameter), oval, simple polygon | auto-applies, undoable |
+| `pcb_add_zone`, `pcb_update_zone`, `pcb_add_keepout`, `pcb_update_keepout` | auto-applies, undoable |
+| `pcb_delete_zone`, `pcb_delete_keepout`, `pcb_delete_routing` | **waits for approval** |
 | `pcb_set_design_rules` — clearances, net classes, net → class | **waits for approval** (not undoable) |
-| `designer_rename_design`, `designer_focus_design` | applies immediately |
-| `designer_delete_design` | **waits for approval** (irreversible) |
-| `designer_undo`, `designer_redo` | applies; refuses unless the entry on top of the stack was made by this client, and — when `expectedRevision` is given — unless the design is still at that revision |
+| `pcb_waive_drc_violations` — waive (with a reason) / un-waive by violation id | waiving **waits for approval**; un-waiving applies |
+| `pcb_set_drc_rule_class_ignores` — hide / restore whole rule classes | ignoring **waits for approval, every time** (never on a session allowance); restoring applies |
+| `designer_rename_design` | applies immediately |
+| `designer_focus_design` | UI only — available with writes off |
+| `designer_delete_design` | **waits for approval, every time** (irreversible; refused if the design changed since) |
+| `designer_undo`, `designer_redo` | applies; refuses unless the entry on top of the stack was made by this session, and — when `expectedRevision` is given — unless the design is still at that revision |
 
-Every applied PCB write reports the DRC violation count afterwards. New net classes must carry
-explicit values: the tool never invents manufacturing constants.
+Every applied PCB write reports the DRC counts afterwards — active, waived, hidden by ignored
+classes, and raw. Inputs are validated against the design (layers on the real stack, sizes > 0,
+drill < pad, unique net-class ids and names); nothing physical is defaulted.
 
 ### 3.4 Also exposed
 
@@ -195,7 +202,8 @@ rejecting a proposal is never an MCP operation.
 3. Click **Connect Claude Code**. OpenPCB finds your `claude` CLI and installs the **OpenPCB
    plugin** for every project: the MCP server plus workflow skills. **MCP server only**
    registers just the tools. **Details** under the result shows every `claude` command that ran.
-4. Restart open Claude Code sessions (or run `/mcp`). `claude mcp list` should show OpenPCB as
+4. In open Claude Code sessions run `/reload-plugins` (server only: `/mcp` → reconnect), or start a
+   new session. `claude mcp list` should show OpenPCB as
    connected.
 
 The plugin's skills (invoke with `/openpcb:<skill>` or let Claude pick them):
@@ -209,8 +217,11 @@ The plugin's skills (invoke with `/openpcb:<skill>` or let Claude pick them):
 | `openpcb-pcb-layout` | outline → placement → routing → pours → DRC |
 | `openpcb-connection-help` | troubleshoot a missing or failing connection |
 
-After an OpenPCB update the panel shows **Update plugin**; click it so Claude Code picks up the new
-tools and skills (Claude Code keeps its own copy of installed plugins).
+After an OpenPCB update — or when OpenPCB moved — the panel shows **Update plugin** (or **Update
+connection** for a server-only setup); click it, then run `/reload-plugins` (or `/mcp` → reconnect)
+in open Claude Code sessions. Claude Code keeps its own copy of installed plugins. OpenPCB records
+exactly what it registered (`<app data>/claude-code/registration.json`) and only ever updates or
+removes that — never another server that happens to be called `openpcb`.
 
 ### 4.3 Connect by hand
 
@@ -222,9 +233,10 @@ launcher OpenPCB rewrites on every start, so they stay valid when the app moves 
 claude plugin marketplace add "<app data>/claude-code/marketplace"
 claude plugin install openpcb@openpcb-desktop --scope user
 
-# or the MCP server only
-claude mcp add --scope user openpcb -- "<app data>/mcp/openpcb-mcp"          # macOS / Linux
-claude mcp add --scope user openpcb -- cmd /c "<app data>\mcp\openpcb-mcp.cmd" # Windows
+# or the MCP server only — macOS / Linux (terminal)
+claude mcp add --scope user openpcb -- "<app data>/mcp/openpcb-mcp"
+# Windows (PowerShell): the app itself runs the bridge; no cmd.exe involved
+claude mcp add --scope user openpcb -e ELECTRON_RUN_AS_NODE=1 -- '<install>\OpenPCB.exe' '<app data>\mcp\shim.js'
 ```
 
 `--scope user` matters: without it Claude Code registers the server for the current directory
@@ -236,13 +248,18 @@ launch, so prefer the launcher.
 
 - **Which design?** Claude works on the design focused in OpenPCB unless you name one, or it pins
   one with `designer_use_design`. Each Claude Code session keeps its own pin.
-- **Seeing the work.** The canvas refreshes as Claude edits. Each design gets an
-  "MCP · Claude Code" chat in the assistant dock that logs every call.
-- **Approvals.** Deletions, design-rule and net-class changes, and deleting a design stop at an
-  approval card in the assistant panel. Claude waits (`assistant_await_proposal`) and continues
-  after you approve or reject. "Allow this tool this session" on a card works as it does in-app.
+- **Seeing the work.** The canvas refreshes as Claude edits. Each Claude Code session gets its own
+  "MCP · Claude Code · <design> · <session start>" chat in the design's assistant dock that logs
+  every call.
+- **Approvals.** Deletions, design-rule and net-class changes, DRC waivers and rule-class ignores,
+  and deleting a design stop at an approval card in the assistant panel. Claude waits
+  (`assistant_await_proposal`) and continues after you approve or reject. "Allow this tool this
+  session" on a card applies to that Claude Code session only, and is not offered for deleting a
+  design or ignoring a rule class. A card approved after the design changed is refused ("the design
+  changed after this was proposed"): ask Claude to propose again.
 - **Undo.** Claude's edits land in the same undo history as yours: Ctrl+Z in OpenPCB undoes them.
-  Claude can undo only its own most recent change, never yours.
+  A Claude Code session can undo only its own most recent change — never yours, and never another
+  session's.
 - **Not supported over MCP:** see §3.5.
 
 ### 4.5 Troubleshooting
@@ -254,8 +271,10 @@ launch, so prefer the launcher.
 | Write tools missing | **Allow writes from MCP clients** is off. Clients are told the tool list changed; restart the session if yours does not refresh. |
 | "Connect" says Claude Code was not found | Install Claude Code, or run the **Set up by hand** commands in a terminal where `claude` works. |
 | A macOS warning about a temporary location | OpenPCB is running from the disk image or Downloads. Move it to Applications and reopen it. |
-| Tools listed twice | Both the plugin and a plain `openpcb` server are registered. **Connect Claude Code** removes the plain one, or run `claude mcp remove openpcb --scope user`. |
-| Stale skills after an update | Click **Update plugin**. |
+| Tools listed twice | Both the plugin and a plain `openpcb` server are registered. **Connect Claude Code** removes the plain one if OpenPCB registered it; otherwise run `claude mcp remove openpcb --scope user`. |
+| Stale skills or tools after an update | Click **Update plugin**, then `/reload-plugins`. |
+| "not made by this session" on undo / "No proposal … from this session" | That change or proposal belongs to another Claude Code session; only it (or you, in OpenPCB) can act on it. |
+| Connect says a server "OpenPCB did not register" exists | Someone else's `openpcb` server; OpenPCB will not touch it. Remove or rename it yourself. |
 
 Diagnostics: `claude mcp get openpcb`, the **Connected clients** list in Settings, and Claude
 Code's debug output (`claude --debug`) for MCP connection errors.
@@ -272,8 +291,38 @@ run as your user can use it. Destructive changes still need your approval in the
 - The launcher runs OpenPCB's own binary as Node (`ELECTRON_RUN_AS_NODE`), so no system Node is
   needed. That relies on Electron's `RunAsNode` fuse staying enabled; if it is ever turned off,
   the launcher falls back to a system `node`.
-- AppImage and the portable Windows build are handled by pointing the launcher at `$APPIMAGE` /
-  `%PORTABLE_EXECUTABLE_FILE%`. Whether those wrappers pass `ELECTRON_RUN_AS_NODE` through was
-  not verified on real builds at the time of writing; the `node` fallback covers a failure.
+- AppImage and the portable Windows build are handled by pointing the launcher (Windows: the
+  registration) at `$APPIMAGE` / `%PORTABLE_EXECUTABLE_FILE%`. Whether those wrappers pass
+  `ELECTRON_RUN_AS_NODE` through was not verified on real builds at the time of writing; on Linux the
+  launcher's `node` fallback covers a failure, on Windows use the installer build.
+- A Claude Code session is identified by Claude Code's own session id, so it keeps its proposals and
+  undo rights across `/mcp` reconnects. Other clients get a new identity per bridge process.
 - Very long operations are kept alive with progress heartbeats every 10 s; Claude Code's own
   per-call limits still apply.
+
+---
+
+## 5. Review round 1 (PR #7) — findings and fixes
+
+An external review of the draft PR kept the architecture and asked for hardening. Every finding was
+verified in code; two more surfaced while fixing them (marked ✱).
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | Ownership collapsed to the client key: two Claude Code sessions could undo each other's changes, see and await each other's proposals, share session allowances and idempotency. | Actor = client key + session id, persisted on proposals (migration 0015); every ownership check compares it. Chats per session, so chat-keyed allowances cannot cross. |
+| 2 | Approving an old "delete design" card ignored its revision and deleted newer work. | Revision check before delete; typed `STALE_PROPOSAL` for every stale apply, persisted and shown on the card and to the agent. No apply-anyway. |
+| 3 | A shared home chat could be bound twice by concurrent sessions. | Home chat per session; writes and binding tools serialized per session; `bindDesignIfUnbound` for every auto-bind. |
+| 4 | DRC waivers auto-applied and could ignore whole rule classes, making a board look clean. | Split tools; waiving needs approval and a reason; ignoring a class needs approval every time; `DrcReport.suppressed` + active / waived / hidden / raw counts in every summary. |
+| 5 | Flag graduated while desktop validation and CI were outstanding. | Kept at `all` by maintainer decision; the PR stays draft until the platform matrix passes (`TODO.md` §3). CI's CoreLibrary key mismatch is tracked separately. |
+| 6 | Windows relied on cmd.exe parsing (`cmd /c` launcher, `claude.cmd` + JSON argument). | Windows clients run the app exe + shim with `ELECTRON_RUN_AS_NODE`; `claude.cmd` resolved to node + cli.js; cross-spawn escaping only as a fallback; `mcp add -e` instead of `add-json`. |
+| 7 | Rule validation accepted zero sizes, drill ≥ pad, colliding net-class ids. | `rules-validation.ts`: positive sizes, drill < pad, unique ids/names, one patch per class, no inherited electrical metadata. |
+| 8 | The bridge fingerprint hashed tool names only, so a schema change after an update went unnoticed. | Hash of full contracts + per-boot generation; re-list on endpoint change too. |
+| 9 | Idempotency depended on the chat, so sessions could collide. ✱ Worse: a key conflict made the write path apply the new envelope anyway and then throw. | Scope-aware unique index (migration 0016) used by both lookup and backstop; a conflict never applies; rejected ids are spent. |
+| 10 | Results duplicated into text, structuredContent and SQLite. | 24k text cap, layout paging, audit digests for large results. |
+| 11 | The hand-written SSE parser mishandled CR/CRLF across chunks. | `eventsource-parser`; seeded fuzz tests over chunk boundaries. |
+| 12 | Setup ownership was a path regex. | Registration record + exact command/args match against real `claude mcp get` output. |
+| 13 | Skills invited assuming 5 V / 1 Hz / 0603 and "finish in one go". | Ask before any electrical or manufacturing-critical assumption; review skill separates ERC facts from heuristic observations. |
+| 14 | Outline defaults invented a 1 mm radius; "circle" accepted unequal sides. | Radius required; `circle` takes a diameter; `oval` explicit; polygons must be simple. |
+| 15 | Layers were not checked against the board's stack. | Checked for routes, zones and keepouts. |
+| 16 | Mixed-risk tools (`pcb_manage_*`). | Separate add / update / delete tools; `designer_focus_design` is a UI side effect. |
+| ✱ | `pcb_delete_routing` dropped unknown ids silently; operation failures surfaced only a code. | Skipped ids reported; the executor's detail is passed to the agent. |

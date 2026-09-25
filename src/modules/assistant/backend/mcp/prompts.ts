@@ -39,14 +39,14 @@ function registerBuildPrompt(server: McpServer): void {
     {
       title: "Build a circuit in OpenPCB",
       description:
-        "Resolve a BOM from the installed library, create/choose a design, place the parts and wire them — in one pass.",
+        "Settle the electrical requirements, resolve a BOM from the installed library, create/choose a design, then place, wire and verify the parts.",
       argsSchema: fromJsonSchema<{ spec: string }>({
         type: "object",
         properties: {
           spec: {
             type: "string",
             description:
-              "What to build, e.g. '5V blinking red LED indicator at ~1Hz'.",
+              "What to build, with the requirements you know, e.g. 'red LED indicator driven from a 3.3 V GPIO, 0805 parts'.",
           },
         },
         required: ["spec"],
@@ -61,7 +61,8 @@ function registerBuildPrompt(server: McpServer): void {
           CORE_TOOL_INSTRUCTIONS,
           WRITE_TOOL_INSTRUCTIONS,
           "",
-          "If no design is open, create one. Finish the build — placed AND wired — before summarising.",
+          "Before building, ask the user for anything electrical or manufacturing-critical the request leaves open (supply/logic voltage, currents and ratings, packages the assembly depends on, connector pinouts); choose only reversible layout details yourself and say what you chose.",
+          "If no design is open, create one. Once the requirements are settled, finish the build — placed, wired and verified with designer_verify_build — before summarising.",
         ].join("\n"),
       ),
   );
@@ -82,9 +83,9 @@ function registerReadPrompts(server: McpServer): void {
           "",
           "1. Call designer_get_design_summary, then designer_get_schematic_connectivity.",
           "2. Call designer_run_erc.",
-          "3. Report: unconnected or floating pins, missing decoupling, missing pull-ups on open-drain/reset lines, power rails that are not driven, and any part whose value looks wrong for its role.",
+          "3. Report two separate groups: ERC findings (exactly what designer_run_erc reported), and engineering observations (heuristics such as missing decoupling or pull-ups, or a value that seems wrong for its role) — each with its evidence, and saying when the component data is not enough to be sure.",
           "",
-          "Ground every claim in a tool result — cite the reference designators and net names you saw. Do not propose edits unless asked; this is a review.",
+          "Ground every claim in a tool result — cite the reference designators and net names you saw. Never present an observation as a rule violation. Do not propose edits unless asked; this is a review.",
           "",
           CORE_TOOL_INSTRUCTIONS,
         ].join("\n"),
@@ -108,6 +109,7 @@ function registerReadPrompts(server: McpServer): void {
           "3. Group violations by root cause rather than listing them one by one — e.g. 'clearance too tight for the default net class', 'unrouted power net', 'annular ring below fab minimum'. Order by severity.",
           "4. For each group, say what would fix it and whether the fix is a rule change or a layout change.",
           "",
+          "Report the active, waived and hidden counts from designer_run_drc; never call the board clean while anything is waived or hidden. Waiving or ignoring rules is the user's decision — only on their explicit request.",
           "OpenPCB is the authoritative DRC engine — never compute clearances yourself, and re-run designer_run_drc after any change.",
         ].join("\n"),
       ),

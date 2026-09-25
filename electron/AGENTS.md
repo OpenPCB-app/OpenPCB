@@ -20,6 +20,8 @@ electron/
 │   ├── mcp-launcher{,-content}.ts  # stable <APP_DATA_DIR>/mcp/openpcb-mcp{,.cmd} launcher + snippets
 │   ├── claude-plugin{,-content}.ts # local Claude Code plugin marketplace in <APP_DATA_DIR>/claude-code/
 │   ├── claude-code-cli.ts  # one-click connect: drives the user's `claude` CLI (execFile, fixed argv)
+│   ├── claude-registration.ts # what OpenPCB registered with Claude Code (exact ownership)
+│   ├── win-cmd.ts          # cmd-shim resolution + cmd.exe escaping (fallback only)
 │   ├── deep-link.ts        # openpcb:// scheme + single-instance lock
 │   ├── diagnostics-ipc.ts  # diagnostics:* / app:get-versions / mcp:config / mcp:claude-code:*
 │   ├── secure-storage.ts   # safeStorage-backed secure-store.json
@@ -69,7 +71,7 @@ electron/
 Operational contract in root `CLAUDE.md` (MCP section); user guide in
 `docs/assistant/mcp-claude-code.md`.
 
-- **Users register the stable launcher, never a bundle path.** On every launch, after the
+- **Users register a stable entry point, never a bundle path.** On every launch, after the
   portfile, `backend-server.ts` calls `installMcpLauncher` (copies `resources/mcp/shim.js` to
   `<APP_DATA_DIR>/mcp/` and rewrites `openpcb-mcp{,.cmd}` + `launcher.json` atomically) and
   `writeClaudePluginMarketplace` (stages, then swaps `<APP_DATA_DIR>/claude-code/marketplace`).
@@ -87,18 +89,33 @@ Operational contract in root `CLAUDE.md` (MCP section); user guide in
 - **Unverified on real builds:** whether the AppImage runtime and the portable wrapper pass
   `ELECTRON_RUN_AS_NODE` and the script argument through to Electron. Smoke-test before a release
   that changes packaging.
-- **Windows** cannot spawn a `.cmd` without a shell (Node refuses since CVE-2024-27980), so client
-  config is `cmd /c <launcher>` (`stdioServerConfig`).
-- **The plugin is baked with the launcher path only** — Claude Code copies installed plugins into
+- **Windows keeps cmd.exe out of the MCP transport** (`stdioServerConfig`): clients run the app
+  exe on `<APP_DATA_DIR>\mcp\shim.js` with `ELECTRON_RUN_AS_NODE=1` in their env. (Node cannot
+  spawn a `.cmd` without a shell since CVE-2024-27980, and `cmd /c` would put cmd's quoting rules
+  between every path and the client.) The exe path is baked into the registration, so a moved app
+  is detected against `claude-code/registration.json` and Settings offers "Update". The `.cmd`
+  launcher is still written as a manual fallback (`%` doubled, UTF-8 via `chcp 65001`).
+- **The plugin's `.mcp.json` holds `stdioServerConfig`** — Claude Code copies installed plugins into
   its cache, so anything version-specific must be refreshed through "Update plugin"
   (`marketplace update` + `plugin update`). `plugin.json` carries the app version for that check.
 - **`claude-code-cli.ts` security posture:** runs only on an explicit Settings click, `execFile`
-  with a fixed argv (no shell string, never user text), a timeout on every run, and it only
-  removes registrations that point at OpenPCB's own launcher. A macOS GUI app does not inherit the
-  shell PATH, hence the login-shell probe and known install paths.
-- The `*-content.ts` files and `src/mcp-shim/{bridge,upstream,portfile}.ts` must stay free of
-  `electron` imports: `mcp-claude-code-setup.test.ts` and `mcp-shim-bridge.test.ts` run them
-  under Bun.
+  with a fixed argv (never user text), a timeout on every run. A Windows npm `claude.cmd` is
+  resolved to the `node` + `cli.js` it wraps (`win-cmd.ts` `cmdShimTarget`) and spawned directly;
+  only an unreadable `.cmd` goes through `cmd.exe /d /s /c` with cross-spawn's escaping (ported,
+  tested against cross-spawn). Registration uses `claude mcp add … -e K=V -- cmd args` — no JSON
+  argument. A macOS GUI app does not inherit the shell PATH, hence the login-shell probe and known
+  install paths.
+- **Ownership is exact** (`claude-registration.ts`): `<APP_DATA_DIR>/claude-code/registration.json`
+  records mode, server entry, plugin, marketplace and a stable installation id. A registration is
+  OpenPCB's only when `claude mcp get` shows user scope and the same command + args (+ env) as the
+  record or as what the app would register now; a same-named marketplace must be at our path.
+  Nothing else is ever updated or removed.
+- The `*-content.ts` files, `win-cmd.ts`, `claude-code-cli.ts`, `claude-registration.ts` and
+  `src/mcp-shim/{bridge,upstream,portfile,instance}.ts` must stay free of `electron` imports:
+  `mcp-claude-code-setup.test.ts` and `mcp-shim-bridge.test.ts` run them under Bun.
+- **Bridge instance id** (`mcp-shim/instance.ts`): `OPENPCB_MCP_INSTANCE`, else a hash of Claude
+  Code's `CLAUDE_CODE_SESSION_ID` (Claude Code sets it on stdio MCP servers), else random. It is
+  the session half of the MCP actor — ownership of proposals, undo and idempotency.
 
 ## ANTI-PATTERNS
 

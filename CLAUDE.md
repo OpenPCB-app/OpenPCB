@@ -334,32 +334,58 @@ review, architecture and user guide: `docs/assistant/mcp-claude-code.md`.
   client survives inside the SDK. Code under `src/modules/assistant/backend/mcp/`.
 - **Identity comes from headers**, handed to the server factory as `authInfo`:
   `X-OpenPCB-MCP-Client` (client key — **header-stable, never the display name**; falls back to
-  User-Agent), `X-OpenPCB-MCP-Client-Name` (display), `X-OpenPCB-MCP-Instance` (one per bridge
-  process ≈ one Claude Code session; keys the design pin). `McpConnectionRegistry` holds pins and
-  last-used designs per client+instance, evicted after 30 min idle.
-- **Chats:** one unbound *home* chat per client plus **one chat per client per design, bound once and
-  never rebound** (metadata `{scope:"designer", designId, mcp}` — the shape `listChatsForDesign`
-  filters on, so the work shows in that design's dock). Designer tools resolve their design through
-  the chat binding, so they run unchanged. A tool that binds the home chat (create/resolve design)
-  turns it into that design's chat. Every call is recorded (`call-recorder.ts`) as a tool event on a
-  visible activity message — that is what renders proposal cards. **Never** write MCP calls through
-  the run-service path: its `role:"tool"` replay messages would corrupt in-app history.
+  User-Agent), `X-OpenPCB-MCP-Client-Name` (display), `X-OpenPCB-MCP-Instance` (the **session**: the
+  bridge sends a hash of Claude Code's `CLAUDE_CODE_SESSION_ID`, stable across `/mcp` reconnects;
+  `OPENPCB_MCP_INSTANCE` overrides; else random per process). **The actor is `clientKey +
+  instanceId`** — two Claude Code sessions of one client are two actors. `McpConnectionRegistry`
+  holds pins and last-used designs per actor, evicted after 30 min idle.
+- **Ownership is the actor, never the chat.** Proposals persist `actor_client_key` /
+  `actor_instance_id` (migration 0015); `assistant_{get,list_pending,await}_proposal` and
+  `designer_undo`/`redo` (`commandIdsAppliedByActor`) compare them. Chats are presentation:
+  **one unbound home chat per session plus one chat per session per design**, bound once and never
+  rebound (metadata `{scope:"designer", designId, mcp:{clientKey, instanceId, role}}` — the shape
+  `listChatsForDesign` filters on). Because chats are per session, chat-keyed session allowances
+  cannot cross sessions. A tool that binds the home chat (create/resolve design) turns it into that
+  design's chat; writes and binding tools are serialized per session (`serialize`), and every
+  auto-bind path uses `ContextResolver.bindDesignIfUnbound` (synchronous check+insert). Every call is
+  recorded (`call-recorder.ts`) as a tool event on a visible activity message — that is what renders
+  proposal cards. **Never** write MCP calls through the run-service path: its `role:"tool"` replay
+  messages would corrupt in-app history.
+- **Idempotency** (migration 0016): `UNIQUE(design_id, idempotency_scope, action_id)` where the scope
+  is `mcp:<client>:<instance>` or, in-app, `chat:<chatId>`; the lookup uses the same key. When the
+  store returns an existing proposal, callers must **not** apply (`finalizeAndMaybeApply` / the
+  placement tool check the returned id). A rejected or failed `action_id` is blocked on re-send.
+- **Staleness:** approving a proposal whose `baseRevision` is no longer the head throws
+  `ProposalStaleError` (`STALE_PROPOSAL`), persisted as the failed apply result. Design deletion
+  checks it too. There is no apply-anyway for stale proposals.
 - **Results** (`result-envelope.ts`): `structuredContent` = `{ok, status, summary, warnings, error,
-  proposal, data}` and the text block repeats it. Clients disagree on which half reaches the model
-  (Claude Code: structuredContent only; Claude Desktop: content only) — keep readable text in both.
+  proposal, data}` and the text block repeats it, data capped at 24k chars (cut on a code point).
+  Clients disagree on which half reaches the model (Claude Code: structuredContent only; Claude
+  Desktop: content only) — keep readable text in both. The recorder stores full results only where
+  `MessageCard` renders them (library search, BOM, placement) or when ≤ 8k chars; proposal results as
+  `{id, kind, designId, baseRevision}`; the rest as a digest. Big reads page
+  (`designer_get_pcb_layout` offset/limit).
 - **Tools:** the 15 in-app `AiTool`s projected 1:1, plus **MCP-only** tools — extended reads
   (`tools/read-tools.ts`), Docs pages (`tools/knowledge-tools.ts`, via the core `MentionRegistry`),
-  PCB/board/rules (`tools/mcp-pcb-tools.ts`), design management + history
-  (`tools/mcp-design-tools.ts`), and connection-scoped `designer_use_design`,
-  `designer_verify_build`, `assistant_{get,list_pending,await}_proposal`. **Do not add MCP-only tools
-  to the in-app registry** — its prompt and DoD harness are tuned against the current 15. Every
-  write tool needs an entry in `mcp/tool-policy.ts` (a test enforces it); descriptions and
-  `mcp/instructions.ts` must stay ≤ 2,000 chars (Claude Code truncates at 2,048).
+  PCB/board/rules (`tools/mcp-pcb-tools.ts`: one risk per tool — add/update and delete are separate
+  tools), design management + history (`tools/mcp-design-tools.ts`), and connection-scoped
+  `designer_use_design`, `designer_verify_build`, `assistant_{get,list_pending,await}_proposal`.
+  **Do not add MCP-only tools to the in-app registry** — its prompt and DoD harness are tuned against
+  the current 15. Every write tool needs an entry in `mcp/tool-policy.ts` (a test enforces it;
+  `uiSideEffect` marks read tools that change only what the UI shows); descriptions and
+  `mcp/instructions.ts` must stay ≤ 2,000 chars (Claude Code truncates at 2,048). MCP writes bypass
+  the HTTP route parsers, so the tools validate against the design themselves (layers vs the real
+  stack, sizes > 0, drill < pad, unique net-class ids/names — `tools/rules-validation.ts`).
 - **Writes** go through the proposal system (persisted, carded, `action_id` dedupe). Undoable edits
-  auto-apply; destructive ones and `APPROVAL_REQUIRED_KINDS` (non-undoable rule changes, design
-  deletion) wait for the user's approval in the panel; `assistant_await_proposal` lets the agent wait
-  for the decision. `designer_undo`/`redo` share the UI's `designer-ui-session` and only act on an
-  entry this client landed (apply results record `commandIds`; history exposes `nextUndo`).
+  auto-apply; destructive ones and `APPROVAL_REQUIRED_KINDS` (non-undoable rule changes, DRC waivers,
+  rule-class ignores, design deletion) wait for the user's approval in the panel;
+  `NEVER_SESSION_ALLOWED_KINDS` (rule-class ignores, design deletion) are never covered by "allow this
+  tool this session". `assistant_await_proposal` lets the agent wait for the decision.
+  `designer_undo`/`redo` share the UI's `designer-ui-session` and only act on an entry this actor
+  landed (apply results record `commandIds`; history exposes `nextUndo`).
+- **DRC suppression is always reported:** `DrcReport.suppressed` counts violations hidden by ignored
+  rule classes / "ignore" overrides (absent when none); MCP summaries give active, waived, hidden and
+  raw counts (`tools/drc-counts.ts`) and never call a board clean while anything is suppressed.
 - **Live UI:** `GET /api/modules/assistant/events` and `GET /api/modules/designer/events` (SSE, ids
   only) let the panel and canvas refresh on MCP activity. The designer's undo histories are shared
   per database across its two store instances (routes + SDK).
@@ -372,17 +398,23 @@ review, architecture and user guide: `docs/assistant/mcp-claude-code.md`.
 - **Security:** bearer token from `OPENPCB_MCP_TOKEN` (generated per launch by Electron main,
   compared by SHA-256 digest) plus a loopback-only Origin check. Discovery via
   `<APP_DATA_DIR>/mcp.json` at mode 0600, written atomically, never over a live instance's file.
-  `/mcp-state` (bearer) is the bridge's cheap state probe.
+  `/mcp-state` (bearer) is the bridge's cheap state probe: a SHA-256 of the full tool contracts plus a
+  per-boot `generation`.
 - **stdio bridge** (`electron/src/mcp-shim/`, Electron-free modules): answers `initialize`/`ping`
   itself (works while the app is closed), re-reads the portfile on failure (survives restarts),
-  synthesizes `list_changed`, aborts on `notifications/cancelled`, and answers `server/discover` with
+  synthesizes `list_changed` (state fingerprint or endpoint epoch changed), frames SSE with
+  `eventsource-parser`, aborts on `notifications/cancelled`, and answers `server/discover` with
   method-not-found so 2026-era clients fall back to the 2025 handshake it speaks. Electron main
-  installs it with a **stable launcher** at `<APP_DATA_DIR>/mcp/openpcb-mcp{,.cmd}` on every launch
-  (`ELECTRON_RUN_AS_NODE` on the current binary; AppImage / portable / translocation aware) and
-  generates a **local Claude Code plugin marketplace** at `<APP_DATA_DIR>/claude-code/marketplace`
-  (MCP server + skills from `electron/resources/claude-plugin/`). Settings → Assistant → MCP can
-  install it via the user's `claude` CLI. The app must be running for tool calls; there is no
-  headless fallback (one SQLite writer).
+  installs a **stable launcher** at `<APP_DATA_DIR>/mcp/openpcb-mcp{,.cmd}` on every launch
+  (`ELECTRON_RUN_AS_NODE` on the current binary; AppImage / portable / translocation aware). macOS /
+  Linux clients point at the launcher; **Windows clients point at the app exe + the copied shim with
+  `ELECTRON_RUN_AS_NODE` in their env** (no cmd.exe in the transport). Main also generates a **local
+  Claude Code plugin marketplace** at `<APP_DATA_DIR>/claude-code/marketplace` (MCP server + skills
+  from `electron/resources/claude-plugin/`). Settings → Assistant → MCP can install it via the user's
+  `claude` CLI; `<APP_DATA_DIR>/claude-code/registration.json` records exactly what was registered,
+  and only registrations matching it (or what the app would register now) are ever updated or
+  removed. The app must be running for tool calls; there is no headless fallback (one SQLite
+  writer).
 
 ## Commands — agent-relevant deltas
 
