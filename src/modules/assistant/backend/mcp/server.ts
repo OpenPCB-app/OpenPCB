@@ -11,6 +11,8 @@ import {
 import { registerResources } from "./resources";
 import { registerPrompts } from "./prompts";
 import { MCP_SERVER_INSTRUCTIONS } from "./instructions";
+import { registerProposalTools } from "./proposal-tools";
+import type { AssistantEventBus } from "../events";
 import { MODULE_SDK_TOKENS, type DesignerSDK } from "../../../../sdks";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 
@@ -22,6 +24,7 @@ export interface BuildMcpServerDeps {
   registry: AiToolRegistry;
   connections: McpConnectionRegistry;
   recorder: McpCallRecorder;
+  events: AssistantEventBus;
   contextResolver: ContextResolver;
   conversation: ConversationStore;
   allowWrites: boolean;
@@ -73,6 +76,11 @@ export function buildMcpServer(
       id: d.id,
       name: d.name,
     }));
+  });
+
+  registerProposalTools(server, connection, {
+    conversation: deps.conversation,
+    events: deps.events,
   });
 
   registerResources(server, deps.ctx);

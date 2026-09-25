@@ -132,7 +132,10 @@ export class McpConnectionRegistry {
     const clientKey = normalizeClientKey(identity.clientKey);
     const instanceId = identity.instanceId.trim() || clientKey;
     const now = this.now();
-    const existing = this.connections.get(instanceId);
+    // Keyed by client AND instance: an instance id is only unique within the
+    // client that minted it, and two clients must never share a pin.
+    const key = `${clientKey}|${instanceId}`;
+    const existing = this.connections.get(key);
     if (existing) {
       existing.lastSeen = now;
       if (identity.clientName && identity.clientName !== existing.clientKey) {
@@ -150,7 +153,7 @@ export class McpConnectionRegistry {
       lastSeen: now,
       callCount: 0,
     };
-    this.connections.set(instanceId, connection);
+    this.connections.set(key, connection);
     return connection;
   }
 

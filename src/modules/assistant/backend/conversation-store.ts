@@ -286,10 +286,32 @@ function messageCursor(row: Record<string, unknown>): string {
 export class ConversationStore {
   private readonly rawSql: RawSqlFn;
   readonly mentions: MentionRepository;
+  /**
+   * Called after a write proposal is created or changes status — from any
+   * path (panel apply/reject, auto-apply inside a tool, cloud mirroring). The
+   * service wires it to the assistant event bus.
+   */
+  private proposalListener: ((record: AssistantWriteProposalDto) => void) | null =
+    null;
 
   constructor(ctx: CoreBackendModuleContext) {
     this.rawSql = rawSqlFrom(ctx);
     this.mentions = new MentionRepository(ctx);
+  }
+
+  onWriteProposalChange(
+    listener: ((record: AssistantWriteProposalDto) => void) | null,
+  ): void {
+    this.proposalListener = listener;
+  }
+
+  private emitProposal(record: AssistantWriteProposalDto | null): void {
+    if (!record || !this.proposalListener) return;
+    try {
+      this.proposalListener(record);
+    } catch {
+      // Notification is best-effort; the write already happened.
+    }
   }
 
   // ---------- chats ----------
@@ -673,7 +695,22 @@ export class ConversationStore {
       if (existing) return existing;
       throw err;
     }
-    return this.getWriteProposal(input.chatId, proposalId)!;
+    const created = this.getWriteProposal(input.chatId, proposalId)!;
+    this.emitProposal(created);
+    return created;
+  }
+
+  /**
+   * A proposal by id alone. Used by MCP clients, which learn the id from a
+   * tool result but not the chat it lives in; callers must still check the
+   * chat belongs to them.
+   */
+  getWriteProposalById(proposalId: string): AssistantWriteProposalDto | null {
+    const row = this.rawSql(
+      "SELECT * FROM assistant_write_proposal WHERE id=? LIMIT 1",
+      [proposalId],
+    )[0];
+    return row ? rowToWriteProposal(row) : null;
   }
 
   /** S6: look up a mirrored proposal by its cloud identity (dedupes SSE redelivery). */
@@ -736,6 +773,7 @@ export class ConversationStore {
     );
     const next = this.getWriteProposal(chatId, proposalId);
     if (!next) throw new Error(`Write proposal not found: ${proposalId}`);
+    this.emitProposal(next);
     return next;
   }
 }

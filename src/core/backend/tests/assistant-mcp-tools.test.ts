@@ -325,3 +325,121 @@ describe("resolve_design", () => {
     expect(await summaryDesignId()).toBe(id);
   });
 });
+
+async function pendingDeletion(name: string): Promise<{
+  designId: string;
+  proposalId: string;
+  chatId: string;
+}> {
+  const designId = await createDesign(name);
+  await h.callTool("designer_place_components", {
+    designId,
+    components: [{ componentId: "openpcb.core.passive.resistor", quantity: 1 }],
+  });
+  const partId = (await h.designer.getSchematicProjection(designId))?.parts[0]?.id;
+  const result = await h.callTool("designer_propose_schematic_deletions", {
+    designId,
+    title: "Remove",
+    summary: "Remove the resistor.",
+    entities: [{ entityId: partId, entityKind: "part" }],
+  });
+  const proposalId = result.structuredContent.proposal!.id;
+  const chatId = mcpChats().find(
+    (c) => (c.metadata as { designId?: string }).designId === designId,
+  )!.id;
+  return { designId, proposalId, chatId };
+}
+
+describe("approval round-trip", () => {
+  test("pending proposals are listed and looked up; hint names the await tool", async () => {
+    h.enable({ writes: true });
+    const { designId, proposalId } = await pendingDeletion("Approve list");
+    const listed = await h.callTool("assistant_list_pending_proposals", { designId });
+    const proposals = (listed.structuredContent.data as {
+      proposals: Array<{ id: string }>;
+    }).proposals;
+    expect(proposals.map((p) => p.id)).toContain(proposalId);
+    const got = await h.callTool("assistant_get_proposal", { proposalId });
+    expect((got.structuredContent.data as { status: string }).status).toBe("pending");
+    // Another client cannot read it.
+    const foreign = await h.callTool(
+      "assistant_get_proposal",
+      { proposalId },
+      { "x-openpcb-mcp-client": "someone-else" },
+    );
+    expect(foreign.isError).toBe(true);
+  });
+
+  test("await resolves when the user approves in the panel", async () => {
+    h.enable({ writes: true });
+    const { designId, proposalId, chatId } = await pendingDeletion("Approve me");
+    const waiting = h.callTool("assistant_await_proposal", {
+      proposalId,
+      timeoutSeconds: 30,
+    });
+    await Bun.sleep(50);
+    const applied = await h.fetch(
+      `/api/modules/assistant/chats/${chatId}/write-proposals/${proposalId}/apply`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+    );
+    expect(applied.ok).toBe(true);
+    const result = await waiting;
+    expect((result.structuredContent.data as { status: string }).status).toBe("applied");
+    expect(result.structuredContent.summary).toContain("approved");
+    expect((await h.designer.getSchematicProjection(designId))?.parts.length).toBe(0);
+  });
+
+  test("await reports a rejection", async () => {
+    h.enable({ writes: true });
+    const { proposalId, chatId } = await pendingDeletion("Reject me");
+    const waiting = h.callTool("assistant_await_proposal", {
+      proposalId,
+      timeoutSeconds: 30,
+    });
+    await Bun.sleep(50);
+    await h.fetch(
+      `/api/modules/assistant/chats/${chatId}/write-proposals/${proposalId}/reject`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+    );
+    const result = await waiting;
+    expect((result.structuredContent.data as { status: string }).status).toBe("rejected");
+    expect(result.structuredContent.summary).toContain("Do not re-send");
+  });
+
+  test("await times out as pending", async () => {
+    h.enable({ writes: true });
+    const { proposalId } = await pendingDeletion("Nobody answers");
+    const result = await h.callTool("assistant_await_proposal", {
+      proposalId,
+      timeoutSeconds: 1,
+    });
+    expect((result.structuredContent.data as { status: string }).status).toBe("pending");
+  });
+});
+
+describe("assistant event stream", () => {
+  test("MCP activity and proposal changes are published", async () => {
+    h.enable({ writes: true });
+    const controller = new AbortController();
+    const response = await h.fetch("/api/modules/assistant/events", {
+      signal: controller.signal,
+    });
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    const collect = (async () => {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value);
+        if (text.includes("proposal.updated") && text.includes("chat.activity")) break;
+      }
+    })();
+    await pendingDeletion("Streamed");
+    await Promise.race([collect, Bun.sleep(3_000)]);
+    controller.abort();
+    expect(text).toContain("event: chat.activity");
+    expect(text).toContain("event: proposal.updated");
+  });
+});

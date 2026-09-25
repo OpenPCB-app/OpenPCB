@@ -13,6 +13,7 @@ import type {
 import { isFeatureEnabled } from "../../../core/contracts/feature-flags/backend";
 import { getAssistantService } from "./assistant-service";
 import { checkMcpAuth } from "./mcp/auth";
+import { assistantEventStream } from "./events";
 import { CopilotHttpError } from "./cloud/copilot-client";
 
 function json(data: unknown, status = 200): Response {
@@ -492,6 +493,13 @@ export function registerRoutes(
       json({ clients: getAssistantService().listMcpClients() }),
     );
   }
+
+  // Live change notifications (chat activity, proposal status) as SSE, so the
+  // panel refreshes for changes made outside its own runs — MCP clients above
+  // all. Ids only; the panel refetches through the routes above.
+  router.get("/events", ({ req }) =>
+    assistantEventStream(getAssistantService().events, req.signal),
+  );
 
   // Settings
   router.get("/settings", () => json(getAssistantService().getSettings()));

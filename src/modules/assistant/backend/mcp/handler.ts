@@ -12,6 +12,7 @@ import type { CoreBackendModuleContext } from "../../../../core/contracts/module
 import { checkMcpAuth } from "./auth";
 import { buildMcpServer } from "./server";
 import type { McpCallRecorder } from "./call-recorder";
+import type { AssistantEventBus } from "../events";
 import {
   normalizeClientKey,
   type McpClientIdentity,
@@ -90,6 +91,7 @@ export interface McpEndpointDeps {
   conversation: ConversationStore;
   connections: McpConnectionRegistry;
   recorder: McpCallRecorder;
+  events: AssistantEventBus;
   getSettings(): AssistantSettings;
   /**
    * Tool registry for this endpoint. `allowWrites` selects whether write tools
@@ -123,6 +125,7 @@ export class McpEndpoint {
         registry: this.deps.getRegistry(settings.mcpAllowWrites),
         connections: this.deps.connections,
         recorder: this.deps.recorder,
+        events: this.deps.events,
         contextResolver: this.deps.contextResolver,
         conversation: this.deps.conversation,
         allowWrites: settings.mcpAllowWrites,

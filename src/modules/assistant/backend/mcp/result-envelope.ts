@@ -15,7 +15,7 @@ import type { AiToolResult } from "@openpcb/ai-core";
 export interface McpProposalRef {
   id: string;
   kind: string;
-  /** Persisted proposal status after the call: pending, applied, partially_applied, rejected, failed. */
+  /** Persisted proposal status after the call: pending, applied, partial, rejected, failed. */
   status: string;
   riskLevel: string | null;
   designId: string | null;

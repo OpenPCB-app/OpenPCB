@@ -63,6 +63,7 @@ import {
   type McpConnectionSummary,
 } from "./mcp/connections";
 import { McpCallRecorder } from "./mcp/call-recorder";
+import { AssistantEventBus } from "./events";
 import type { AiToolRegistry } from "@openpcb/ai-core";
 import {
   applyAssistantWriteProposal,
@@ -98,6 +99,8 @@ export class AssistantService {
   readonly contextResolver: ContextResolver;
   readonly runService: RunService;
   readonly writeSessionPolicy = new AssistantWriteSessionPolicy();
+  /** Live change notifications for the panel (`GET /events`) and MCP awaits. */
+  readonly events = new AssistantEventBus();
   private readonly tasks: TasksSDK;
   private mcpEndpoint: McpEndpoint | null = null;
   private mcpConnections: McpConnectionRegistry | null = null;
@@ -108,6 +111,15 @@ export class AssistantService {
     this.providers = new ProviderStore(ctx);
     this.providers.ensureDefaults();
     this.conversation = new ConversationStore(ctx);
+    this.conversation.onWriteProposalChange((record) =>
+      this.events.publish({
+        type: "proposal.updated",
+        chatId: record.chatId,
+        proposalId: record.id,
+        status: record.status,
+        designId: record.designId ?? null,
+      }),
+    );
     this.settings = new SettingsStore(ctx, this.providers);
     this.settings.ensureDefaults();
     this.prompts = new PromptService();
@@ -671,14 +683,30 @@ export class AssistantService {
         contextResolver: this.contextResolver,
         conversation: this.conversation,
         connections: this.mcpConnectionRegistry(),
-        recorder: new McpCallRecorder({ conversation: this.conversation }),
+        recorder: new McpCallRecorder({
+          conversation: this.conversation,
+          onChatActivity: (chatId) => this.publishChatActivity(chatId),
+        }),
+        events: this.events,
         getSettings: () => this.settings.getSettings(),
         getRegistry: (allowWrites) => this.mcpRegistry(allowWrites),
         pendingProposalHint: (chatTitle) =>
-          `Waiting for the user to approve or reject it in OpenPCB's assistant panel (chat "${chatTitle}"). Tell the user; do not re-send it.`,
+          `Waiting for the user to approve or reject it in OpenPCB's assistant panel (chat "${chatTitle}"). Tell the user, then call assistant_await_proposal with this proposal id; do not re-send it.`,
       });
     }
     return this.mcpEndpoint;
+  }
+
+  private publishChatActivity(chatId: string): void {
+    const metadata = this.conversation.getChat(chatId)?.metadata as
+      | { designId?: unknown }
+      | null
+      | undefined;
+    this.events.publish({
+      type: "chat.activity",
+      chatId,
+      designId: typeof metadata?.designId === "string" ? metadata.designId : null,
+    });
   }
 
   /** Connected MCP clients, most recent first (for the Settings panel). */
