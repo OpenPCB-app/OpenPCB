@@ -7,13 +7,15 @@
  *
  *   .claude-plugin/marketplace.json        name "openpcb-desktop"
  *   openpcb/.claude-plugin/plugin.json     version = the app's version
- *   openpcb/.mcp.json                      the stable launcher (never the app binary)
+ *   openpcb/.mcp.json                      the MCP server entry (stdioServerConfig)
  *   openpcb/skills/<name>/SKILL.md         copied from the template shipped with the app
  *
- * Only the stable launcher path goes into `.mcp.json`: Claude Code copies an
- * installed plugin into its own cache, so anything version- or install-path
- * specific baked in here would go stale on the next app update. The launcher
- * is rewritten by the app on every launch instead.
+ * Claude Code copies an installed plugin into its own cache, so what
+ * `.mcp.json` names must stay valid across app updates. On macOS / Linux that
+ * is the stable launcher the app rewrites every launch. On Windows it is the
+ * app binary + ELECTRON_RUN_AS_NODE (no cmd.exe in the transport); when that
+ * binary moves, the app sees the drift against its registration record and
+ * Settings offers "Update plugin".
  */
 
 export const MARKETPLACE_NAME = "openpcb-desktop";
@@ -24,7 +26,7 @@ export interface PluginBuildInput {
   appVersion: string;
   /** Template files, relative to the template's plugin root (e.g. "skills/x/SKILL.md"). */
   templateFiles: Record<string, string>;
-  server: { command: string; args: string[] };
+  server: { command: string; args: string[]; env?: Record<string, string> };
 }
 
 /** Relative path → file contents for the whole marketplace directory. */
@@ -62,7 +64,11 @@ export function buildPluginMarketplace(input: PluginBuildInput): Record<string, 
   files[`${PLUGIN_NAME}/.mcp.json`] = `${JSON.stringify(
     {
       mcpServers: {
-        [MCP_SERVER_NAME]: { command: input.server.command, args: input.server.args },
+        [MCP_SERVER_NAME]: {
+          command: input.server.command,
+          args: input.server.args,
+          ...(input.server.env ? { env: input.server.env } : {}),
+        },
       },
     },
     null,

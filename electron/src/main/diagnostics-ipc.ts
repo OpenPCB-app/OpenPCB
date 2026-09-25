@@ -3,16 +3,23 @@ import { existsSync } from "node:fs";
 import { app, ipcMain, shell } from "electron";
 import { getCrashDumpsDir } from "./crash.js";
 import {
+  getAppDataDir,
   getBackendPayload,
   getClaudeMarketplaceDir,
   getMcpPortfilePath,
 } from "./backend-server.js";
+import {
+  clearRegistration,
+  readRegistration,
+  writeRegistration,
+} from "./claude-registration.js";
 import { ensureMcpToken } from "./mcp-portfile.js";
 import { getInstalledMcpLauncher } from "./mcp-launcher.js";
 import {
   mcpSnippets,
   stdioServerConfig,
   type LauncherPlatform,
+  type McpServerTarget,
 } from "./mcp-launcher-content.js";
 import {
   claudeCodeStatus,
@@ -30,6 +37,14 @@ function launcherPlatform(): LauncherPlatform {
 }
 
 let registered = false;
+
+/** The launcher this launch installed, as a server target (null if missing). */
+function serverTarget(): McpServerTarget | null {
+  const launcher = getInstalledMcpLauncher();
+  return launcher
+    ? { launcherPath: launcher.launcherPath, exec: launcher.exec.exec, shimPath: launcher.shimPath }
+    : null;
+}
 
 export function registerDiagnosticsIpc(): void {
   if (registered) return;
@@ -74,7 +89,7 @@ export function registerDiagnosticsIpc(): void {
       snippets: launcher
         ? mcpSnippets({
             platform: launcherPlatform(),
-            launcherPath: launcher.launcherPath,
+            target: serverTarget()!,
             marketplaceDir: hasMarketplace ? marketplaceDir : null,
           })
         : [],
@@ -87,37 +102,50 @@ export function registerDiagnosticsIpc(): void {
   });
 
   // One-click Claude Code setup (claude-code-cli.ts). Runs the user's own
-  // `claude` CLI with fixed arguments, only on an explicit click.
-  const cliInput = () => ({
-    appVersion: app.getVersion(),
-    launcherPath: getInstalledMcpLauncher()?.launcherPath ?? null,
-  });
+  // `claude` CLI with fixed arguments, only on an explicit click. The
+  // registration record (claude-registration.ts) is what makes ownership
+  // exact: only what this installation registered is updated or removed.
+  const statusInput = () => {
+    const target = serverTarget();
+    const marketplaceDir = getClaudeMarketplaceDir();
+    return {
+      appVersion: app.getVersion(),
+      expectedServer: target ? stdioServerConfig(launcherPlatform(), target) : null,
+      registration: readRegistration(getAppDataDir()),
+      marketplaceDir: existsSync(marketplaceDir) ? marketplaceDir : null,
+    };
+  };
   ipcMain.handle("mcp:claude-code:status", () =>
-    claudeCodeStatus(defaultCliEnv(), cliInput()),
+    claudeCodeStatus(defaultCliEnv(), statusInput()),
   );
   ipcMain.handle(
     "mcp:claude-code:connect",
-    (_event, mode: unknown) => {
-      const launcher = getInstalledMcpLauncher();
-      if (!launcher) {
+    async (_event, mode: unknown) => {
+      const target = serverTarget();
+      if (!target) {
         return {
           ok: false,
           message: "The OpenPCB MCP launcher is not installed; restart OpenPCB.",
           log: [],
         };
       }
-      const marketplaceDir = getClaudeMarketplaceDir();
-      return connectClaudeCode(defaultCliEnv(), {
-        ...cliInput(),
+      const input = statusInput();
+      const result = await connectClaudeCode(defaultCliEnv(), {
+        ...input,
         mode: mode === "server" ? "server" : "plugin",
-        marketplaceDir: existsSync(marketplaceDir) ? marketplaceDir : null,
-        serverConfig: stdioServerConfig(launcherPlatform(), launcher.launcherPath),
+        serverConfig: stdioServerConfig(launcherPlatform(), target),
       });
+      if (result.ok && result.registration) {
+        writeRegistration(getAppDataDir(), result.registration);
+      }
+      return { ok: result.ok, message: result.message, log: result.log };
     },
   );
-  ipcMain.handle("mcp:claude-code:disconnect", () =>
-    disconnectClaudeCode(defaultCliEnv(), cliInput()),
-  );
+  ipcMain.handle("mcp:claude-code:disconnect", async () => {
+    const result = await disconnectClaudeCode(defaultCliEnv(), statusInput());
+    if (result.ok && result.clearRegistration) clearRegistration(getAppDataDir());
+    return { ok: result.ok, message: result.message, log: result.log };
+  });
 
   ipcMain.handle("app:get-versions", () => ({
     app: app.getVersion(),

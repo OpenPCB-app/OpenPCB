@@ -44,7 +44,7 @@ let runtime: StartedBackendRuntime | null = null;
 let backendPayload: BackendReadyPayload | null = null;
 const REQUIRED_DESKTOP_MODULES = ["library", "designer", "assistant"] as const;
 
-function getAppDataDir(): string {
+export function getAppDataDir(): string {
   const base = app.getPath("userData");
   return app.isPackaged ? base : join(base, "dev");
 }
@@ -231,7 +231,11 @@ export async function startBackendServer(): Promise<BackendReadyPayload> {
     if (launcher) {
       writeClaudePluginMarketplace({
         appDataDir,
-        server: stdioServerConfig(launcherPlatform(), launcher.launcherPath),
+        server: stdioServerConfig(launcherPlatform(), {
+          launcherPath: launcher.launcherPath,
+          exec: launcher.exec.exec,
+          shimPath: launcher.shimPath,
+        }),
       });
     }
 

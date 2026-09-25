@@ -86,8 +86,9 @@ declare global {
     cliPath: string | null;
     cliVersion: string | null;
     plugin: { installed: boolean; version: string | null; enabled: boolean };
-    marketplace: { registered: boolean; path: string | null };
-    server: { registered: boolean; ownedByOpenPcb: boolean };
+    marketplace: { registered: boolean; path: string | null; ours: boolean };
+    server: { registered: boolean; ownedByOpenPcb: boolean; outdated: boolean };
+    registeredMode: "plugin" | "server" | null;
     updateAvailable: boolean;
   }
 

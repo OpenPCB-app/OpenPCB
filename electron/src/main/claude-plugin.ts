@@ -44,7 +44,7 @@ function readTree(root: string): Record<string, string> {
 
 export function writeClaudePluginMarketplace(input: {
   appDataDir: string;
-  server: { command: string; args: string[] };
+  server: { command: string; args: string[]; env?: Record<string, string> };
 }): string | null {
   const template = templateDir();
   if (!template) {

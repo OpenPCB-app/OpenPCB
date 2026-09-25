@@ -78,11 +78,18 @@ export function describeClaudeCodeStatus(status: ClaudeCodeStatus | null): strin
       : `Connected with the OpenPCB plugin ${status.plugin.version ?? ""}.`;
   }
   if (status.server.registered) {
-    return status.server.ownedByOpenPcb
-      ? "Connected (MCP server only, no skills)."
-      : "Claude Code has a different server named “openpcb”.";
+    if (!status.server.ownedByOpenPcb) return "Claude Code has a different server named “openpcb”.";
+    return status.server.outdated
+      ? "Connected (MCP server only), but Claude Code still points at an old OpenPCB location — update the connection."
+      : "Connected (MCP server only, no skills).";
   }
   return `Claude Code ${status.cliVersion ?? ""} found — not connected yet.`;
+}
+
+/** The primary button: connect, or update whatever this installation registered. */
+export function connectLabel(status: ClaudeCodeStatus | null): string {
+  if (!status?.updateAvailable) return "Connect Claude Code";
+  return status.registeredMode === "server" ? "Update connection" : "Update plugin";
 }
 
 export function McpSection({ settings, onSave, assistantBase }: Props) {
@@ -228,14 +235,16 @@ export function McpSection({ settings, onSave, assistantBase }: Props) {
               <button
                 type="button"
                 disabled={busy !== null || !status?.cliPath}
-                onClick={() => void run("plugin", () => claudeCode.connect("plugin"))}
+                onClick={() => {
+                  // An update refreshes whatever this installation registered.
+                  const mode = status?.updateAvailable && status.registeredMode === "server" ? "server" : "plugin";
+                  void run(mode, () => claudeCode.connect(mode));
+                }}
                 className="rounded-control border border-border bg-surface-panel px-2 py-1 text-[11px] font-medium text-text-primary hover:bg-surface-hover disabled:opacity-50"
               >
-                {busy === "plugin"
+                {busy === "plugin" || busy === "server"
                   ? "Connecting…"
-                  : status?.updateAvailable
-                    ? "Update plugin"
-                    : "Connect Claude Code"}
+                  : connectLabel(status)}
               </button>
             )}
             {!connected && (

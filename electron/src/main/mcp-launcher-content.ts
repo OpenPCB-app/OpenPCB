@@ -103,15 +103,30 @@ function cmdQuote(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
-/** Windows launcher (run as `cmd /c openpcb-mcp.cmd`). */
+/**
+ * A path as a literal inside a .cmd file. Percent expansion runs before
+ * quotes are parsed, so `%` must be doubled even inside `set "…"`; other
+ * metacharacters (`&`, `^`, `(`, `)`) are safe inside the quotes.
+ */
+function batchLiteral(value: string): string {
+  return value.replace(/%/g, "%%");
+}
+
+/**
+ * Windows launcher. MCP clients on Windows are registered with the app's
+ * binary directly (`stdioServerConfig`), so cmd.exe is not in the MCP
+ * transport path; this script stays as a manual fallback. `chcp 65001` makes
+ * cmd read the rest of this UTF-8 file as UTF-8 (non-ASCII user names).
+ */
 export function windowsLauncher(input: { exec: string; shimPath: string }): string {
   return [
     "@echo off",
+    "chcp 65001 >nul 2>&1",
     "rem openpcb-mcp - stdio MCP bridge into the running OpenPCB app.",
-    "rem Written by OpenPCB on every launch; do not edit. Point MCP clients here.",
+    "rem Written by OpenPCB on every launch; do not edit.",
     "setlocal",
-    `set "EXEC_PATH=${input.exec}"`,
-    `set "SHIM=${input.shimPath}"`,
+    `set "EXEC_PATH=${batchLiteral(input.exec)}"`,
+    `set "SHIM=${batchLiteral(input.shimPath)}"`,
     'if not exist "%SHIM%" (',
     "  echo openpcb-mcp: bridge missing - start OpenPCB once to reinstall it. 1>&2",
     "  exit /b 1",
@@ -126,7 +141,7 @@ export function windowsLauncher(input: { exec: string; shimPath: string }): stri
     `  node ${cmdQuote("%SHIM%")} %*`,
     "  exit /b %ERRORLEVEL%",
     ")",
-    "echo openpcb-mcp: OpenPCB is no longer at %EXEC_PATH% and no system node was found. Start OpenPCB once. 1>&2",
+    'echo openpcb-mcp: OpenPCB is no longer at "%EXEC_PATH%" and no system node was found. Start OpenPCB once. 1>&2',
     "exit /b 1",
     "",
   ].join("\r\n");
@@ -139,18 +154,46 @@ export function launcherScript(
   return platform === "win32" ? windowsLauncher(input) : posixLauncher(input);
 }
 
+export interface StdioServerConfig {
+  type: "stdio";
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+}
+
+/** What a client can be pointed at: the launcher, and what it would exec. */
+export interface McpServerTarget {
+  launcherPath: string;
+  /** The app binary (resolved per launch; see resolveLauncherExec). */
+  exec: string;
+  /** The bridge bundle copied into the user-data dir. */
+  shimPath: string;
+}
+
 /**
- * The stdio server entry an MCP client needs. Windows cannot spawn a `.cmd`
- * without a shell (Node's spawn refuses since CVE-2024-27980), so the
- * launcher runs through `cmd /c`.
+ * The stdio server entry an MCP client needs.
+ *
+ * - macOS / Linux: the stable POSIX launcher (it survives app moves and
+ *   AppImage re-mounts, and falls back to a system `node`).
+ * - Windows: the app binary itself on the copied bridge, with
+ *   ELECTRON_RUN_AS_NODE in the client's env. Node refuses to spawn a `.cmd`
+ *   without a shell (CVE-2024-27980), and routing through `cmd /c` would put
+ *   cmd.exe's quoting rules between every path and the client. The cost: the
+ *   exe path is baked in, so if the app moves (portable build, reinstall
+ *   elsewhere) OpenPCB detects the drift and Settings offers "Update".
  */
 export function stdioServerConfig(
   platform: LauncherPlatform,
-  launcherPath: string,
-): { type: "stdio"; command: string; args: string[] } {
+  target: McpServerTarget,
+): StdioServerConfig {
   return platform === "win32"
-    ? { type: "stdio", command: "cmd", args: ["/c", launcherPath] }
-    : { type: "stdio", command: launcherPath, args: [] };
+    ? {
+        type: "stdio",
+        command: target.exec,
+        args: [target.shimPath],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+      }
+    : { type: "stdio", command: target.launcherPath, args: [] };
 }
 
 export interface McpSnippet {
@@ -164,29 +207,37 @@ function posixArg(value: string): string {
   return /^[A-Za-z0-9_./:@%+=-]+$/.test(value) ? value : shQuote(value);
 }
 
-function winArg(value: string): string {
-  return /[\s"]/.test(value) ? `"${value.replace(/"/g, '\\"')}"` : value;
+/** PowerShell literal: single quotes take everything verbatim ('' escapes '). */
+function powershellArg(value: string): string {
+  return /^[A-Za-z0-9_.:\\/@+=-]+$/.test(value) ? value : `'${value.replace(/'/g, "''")}'`;
 }
 
 /**
  * Copy-paste setup for the Settings panel. `--scope user` registers the server
  * for every project; the default `local` scope would tie it to whichever
- * directory the user happened to run the command in.
+ * directory the user happened to run the command in. Windows snippets are for
+ * PowerShell (the default terminal), whose single-quoted strings take `&`,
+ * `%`, `^` and spaces literally.
  */
 export function mcpSnippets(input: {
   platform: LauncherPlatform;
-  launcherPath: string;
+  target: McpServerTarget;
   marketplaceDir: string | null;
 }): McpSnippet[] {
-  const config = stdioServerConfig(input.platform, input.launcherPath);
-  const quote = input.platform === "win32" ? winArg : posixArg;
+  const config = stdioServerConfig(input.platform, input.target);
+  const windows = input.platform === "win32";
+  const quote = windows ? powershellArg : posixArg;
+  const terminal = windows ? "Run in PowerShell." : "Run in a terminal.";
+  const envFlags = Object.entries(config.env ?? {})
+    .map(([key, value]) => ` -e ${key}=${value}`)
+    .join("");
   const command = [config.command, ...config.args].map(quote).join(" ");
   const snippets: McpSnippet[] = [];
   if (input.marketplaceDir) {
     snippets.push({
       id: "claude-code-plugin",
       label: "Claude Code — plugin (recommended)",
-      hint: "Adds the OpenPCB tools plus workflow skills (/openpcb:… ). Run in a terminal.",
+      hint: `Adds the OpenPCB tools plus workflow skills (/openpcb:… ). ${terminal}`,
       value: [
         `claude plugin marketplace add ${quote(input.marketplaceDir)}`,
         "claude plugin install openpcb@openpcb-desktop --scope user",
@@ -196,15 +247,23 @@ export function mcpSnippets(input: {
   snippets.push({
     id: "claude-code-server",
     label: "Claude Code — MCP server only",
-    hint: "Registers just the tools, for every project. Run in a terminal.",
-    value: `claude mcp add --scope user openpcb -- ${command}`,
+    hint: `Registers just the tools, for every project. ${terminal}`,
+    value: `claude mcp add --scope user openpcb${envFlags} -- ${command}`,
   });
   snippets.push({
     id: "claude-desktop",
     label: "Claude Desktop",
     hint: "Merge into claude_desktop_config.json, then restart Claude Desktop.",
     value: JSON.stringify(
-      { mcpServers: { openpcb: { command: config.command, args: config.args } } },
+      {
+        mcpServers: {
+          openpcb: {
+            command: config.command,
+            args: config.args,
+            ...(config.env ? { env: config.env } : {}),
+          },
+        },
+      },
       null,
       2,
     ),
