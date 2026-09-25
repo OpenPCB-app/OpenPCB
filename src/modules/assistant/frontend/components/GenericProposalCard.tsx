@@ -4,6 +4,11 @@ import type { AssistantWriteProposalDto } from "../../../../sdks/assistant";
 import { useNavigationStore } from "../../../../core/frontend/src/stores/navigation-store";
 import { useAuth } from "../../../../core/frontend/src/cloud/AuthProvider";
 import { readCloudConfig } from "../../../../core/frontend/src/cloud/config";
+import {
+  isStaleMessage,
+  NO_SESSION_ALLOW_KINDS,
+  proposalFailureNote,
+} from "./proposal-status";
 
 type GenericRiskLevel = "low" | "medium" | "high" | "destructive" | string;
 
@@ -97,6 +102,11 @@ export function GenericProposalCard({
   const toolName =
     proposal.toolName ?? proposal.envelope?.toolName ?? proposal.kind;
   const isActionable = localStatus === "pending" && Boolean(assistantBaseUrl);
+  const canAllowForSession = !NO_SESSION_ALLOW_KINDS.has(String(proposal.kind));
+  const failureNote =
+    localStatus === proposal.status
+      ? proposalFailureNote(localStatus, proposal.applyResult)
+      : null;
   const operationGroups = groupOperations(operations);
   const operationLimit = compact ? 5 : 8;
   const hiddenOperationCount = operationGroups.reduce(
@@ -123,8 +133,17 @@ export function GenericProposalCard({
           title?: string;
         };
         const message = problem.detail ?? problem.title ?? "Apply failed";
-        if (/confirm partial/i.test(message)) setConfirmPartial(true);
-        throw new Error(message);
+        if (/confirm partial/i.test(message)) {
+          setConfirmPartial(true);
+          throw new Error(message);
+        }
+        // Anything else was persisted as failed by the backend.
+        setLocalStatus("failed");
+        throw new Error(
+          isStaleMessage(message)
+            ? "Not applied: the design changed after this was proposed. Ask the agent to propose it again."
+            : message,
+        );
       }
       const result = (await response.json()) as {
         designId?: string;
@@ -263,6 +282,9 @@ export function GenericProposalCard({
       <div className="text-[10px] text-slate-500 dark:text-slate-400">
         {toolName} · {operations.length} operation(s) · {sources.length}{" "}
         source(s)
+        {proposal.baseRevision != null
+          ? ` · proposed at revision ${proposal.baseRevision}`
+          : ""}
       </div>
       {operations.length > 0 ? (
         <div className="space-y-2 text-[11px] text-slate-700 dark:text-slate-300">
@@ -337,15 +359,22 @@ export function GenericProposalCard({
         >
           Reject
         </button>
-        <button
-          type="button"
-          disabled={busy || !isActionable}
-          onClick={() => void allowToolForSession()}
-          className="rounded border border-sky-500/50 px-2 py-1 text-[11px] text-sky-800 hover:bg-sky-100 disabled:opacity-50 dark:text-sky-200 dark:hover:bg-sky-950/50"
-        >
-          Allow this tool this session
-        </button>
+        {canAllowForSession ? (
+          <button
+            type="button"
+            disabled={busy || !isActionable}
+            onClick={() => void allowToolForSession()}
+            className="rounded border border-sky-500/50 px-2 py-1 text-[11px] text-sky-800 hover:bg-sky-100 disabled:opacity-50 dark:text-sky-200 dark:hover:bg-sky-950/50"
+          >
+            Allow this tool this session
+          </button>
+        ) : null}
       </div>
+      {failureNote && !actionMessage ? (
+        <div className="rounded bg-red-50 p-2 text-[11px] text-red-800 dark:bg-red-950/30 dark:text-red-200">
+          {failureNote}
+        </div>
+      ) : null}
       {actionMessage ? (
         <div className="text-[11px] text-slate-500 dark:text-slate-400">
           {actionMessage}

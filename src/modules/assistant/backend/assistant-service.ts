@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { NotFoundError, ValidationError } from "../../../core/contracts/errors";
 import type { CoreBackendModuleContext } from "../../../core/contracts/modules/backend-module";
 import {
@@ -56,14 +57,29 @@ import { ContextResolver } from "./context-resolver";
 import { RunService } from "./run-service";
 import { buildOpenpcbToolRegistry } from "./tools/openpcb-tool-registry";
 import { registerExtendedReadTools } from "./tools/read-tools";
+import { registerKnowledgeTools } from "./tools/knowledge-tools";
+import {
+  APPROVAL_REQUIRED_KINDS,
+  NEVER_SESSION_ALLOWED_KINDS,
+  registerMcpPcbTools,
+} from "./tools/mcp-pcb-tools";
+import { registerMcpDesignTools } from "./tools/mcp-design-tools";
+import { BuildIntentStore } from "./verification/build-intent-store";
 import { McpEndpoint } from "./mcp/handler";
-import { McpSessionRegistry } from "./mcp/session";
+import {
+  McpConnectionRegistry,
+  type ChatDefaults,
+  type McpConnectionSummary,
+} from "./mcp/connections";
+import { McpCallRecorder } from "./mcp/call-recorder";
+import { annotationsFor, mcpDescription, metaFor } from "./mcp/tool-policy";
+import { AssistantEventBus } from "./events";
 import type { AiToolRegistry } from "@openpcb/ai-core";
 import {
   applyAssistantWriteProposal,
   applyFailureResult,
 } from "./proposals/proposal-apply-service";
-import type { SchematicApplyResult } from "./tools/designer-tools";
+import { isProposalStaleError, type SchematicApplyResult } from "./tools/designer-tools";
 import {
   AssistantWriteSessionPolicy,
   type AssistantSessionWriteAllowance,
@@ -75,6 +91,17 @@ import {
 
 let service: AssistantService | null = null;
 
+/** FNV-1a — a stable, dependency-free fingerprint (not a security hash). */
+/** JSON with object keys sorted at every level, so equal contracts hash equal. */
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
+}
+
 export class AssistantService {
   readonly conversation: ConversationStore;
   readonly providers: ProviderStore;
@@ -83,14 +110,30 @@ export class AssistantService {
   readonly contextResolver: ContextResolver;
   readonly runService: RunService;
   readonly writeSessionPolicy = new AssistantWriteSessionPolicy();
+  /** Live change notifications for the panel (`GET /events`) and MCP awaits. */
+  readonly events = new AssistantEventBus();
   private readonly tasks: TasksSDK;
   private mcpEndpoint: McpEndpoint | null = null;
-  private readonly mcpRegistries = new Map<boolean, AiToolRegistry>();
+  private mcpConnections: McpConnectionRegistry | null = null;
+  /** Keyed by `${allowWrites}:${allowRawToolData}` — both change the registry. */
+  private readonly mcpRegistries = new Map<string, AiToolRegistry>();
+  private readonly mcpToolsetFingerprints = new Map<string, string>();
+  /** Identifies this backend boot to the stdio bridge (see mcpState). */
+  private readonly mcpGeneration = crypto.randomUUID();
 
   constructor(private readonly ctx: CoreBackendModuleContext) {
     this.providers = new ProviderStore(ctx);
     this.providers.ensureDefaults();
     this.conversation = new ConversationStore(ctx);
+    this.conversation.onWriteProposalChange((record) =>
+      this.events.publish({
+        type: "proposal.updated",
+        chatId: record.chatId,
+        proposalId: record.id,
+        status: record.status,
+        designId: record.designId ?? null,
+      }),
+    );
     this.settings = new SettingsStore(ctx, this.providers);
     this.settings.ensureDefaults();
     this.prompts = new PromptService();
@@ -460,6 +503,18 @@ export class AssistantService {
       if (message.includes("Confirm partial apply")) {
         throw new ValidationError(message);
       }
+      if (isProposalStaleError(err)) {
+        // The design moved on since the proposal was made: nothing applied,
+        // and the record says why (the card and assistant_await_proposal
+        // read `code`), so it is never mistaken for a transient failure.
+        this.conversation.updateWriteProposalStatus(
+          chatId,
+          proposalId,
+          "failed",
+          err.toApplyResult(proposalId, record.designId),
+        );
+        throw new ValidationError(message);
+      }
       const failureResult = applyFailureResult(err);
       this.conversation.updateWriteProposalStatus(
         chatId,
@@ -626,13 +681,25 @@ export class AssistantService {
     return this.settings.getSettings();
   }
   updateSettings(input: Partial<AssistantSettings>): AssistantSettings {
-    return this.settings.updateSettings(input);
+    const before = this.settings.getSettings();
+    const after = this.settings.updateSettings(input);
+    if (
+      before.mcpEnabled !== after.mcpEnabled ||
+      before.mcpAllowWrites !== after.mcpAllowWrites ||
+      before.allowRawToolData !== after.allowRawToolData
+    ) {
+      // The MCP tool set (or its result shaping) changed: tell connected
+      // clients to re-list tools.
+      this.mcpEndpoint?.notifyToolsChanged();
+    }
+    return after;
   }
 
   // ─── MCP ──────────────────────────────────────────────────────────────
   /**
-   * Streamable HTTP MCP endpoint, built on first use. Held on the service so
-   * the SDK handler keeps its session state across requests.
+   * Streamable HTTP MCP endpoint, built on first use. The SDK handler itself
+   * is stateless per request; what persists across requests is held here —
+   * the connection registry (pins, backing chats) and the call recorder.
    */
   get mcp(): McpEndpoint {
     if (!this.mcpEndpoint) {
@@ -640,45 +707,180 @@ export class AssistantService {
         ctx: this.ctx,
         appVersion: this.ctx.manifest.version,
         contextResolver: this.contextResolver,
-        sessions: new McpSessionRegistry({
-          ctx: this.ctx,
+        conversation: this.conversation,
+        connections: this.mcpConnectionRegistry(),
+        recorder: new McpCallRecorder({
           conversation: this.conversation,
-          contextResolver: this.contextResolver,
-          createChat: (input) => this.createChat({ title: input.title }),
+          onChatActivity: (chatId) => this.publishChatActivity(chatId),
         }),
+        events: this.events,
+        buildIntents: new BuildIntentStore(this.ctx),
         getSettings: () => this.settings.getSettings(),
         getRegistry: (allowWrites) => this.mcpRegistry(allowWrites),
+        pendingProposalHint: (chatTitle) =>
+          `Waiting for the user to approve or reject it in OpenPCB's assistant panel (chat "${chatTitle}"). Tell the user, then call assistant_await_proposal with this proposal id; do not re-send it.`,
       });
     }
     return this.mcpEndpoint;
   }
 
+  private publishChatActivity(chatId: string): void {
+    const metadata = this.conversation.getChat(chatId)?.metadata as
+      | { designId?: unknown }
+      | null
+      | undefined;
+    this.events.publish({
+      type: "chat.activity",
+      chatId,
+      designId: typeof metadata?.designId === "string" ? metadata.designId : null,
+    });
+  }
+
+  /** Connected MCP clients, most recent first (for the Settings panel). */
+  listMcpClients(): McpConnectionSummary[] {
+    return this.mcpConnectionRegistry().list();
+  }
+
+  private mcpConnectionRegistry(): McpConnectionRegistry {
+    this.mcpConnections ??= new McpConnectionRegistry({
+      ctx: this.ctx,
+      conversation: this.conversation,
+      contextResolver: this.contextResolver,
+      chatDefaults: () => this.mcpChatDefaults(),
+    });
+    return this.mcpConnections;
+  }
+
   /**
-   * MCP tool registry, cached per write-mode so Ajv does not recompile every
-   * tool schema on each request. Separate from the in-app assistant registry:
-   * MCP additionally gets the extended read tools, and its auto-apply policy
-   * is gated on the `mcpAllowWrites` setting on top of the usual risk check.
+   * Provider stamped on chats created for MCP clients. The external agent
+   * never runs through this provider, so a missing default must not break
+   * MCP: fall back to any provider row, then to a sentinel id.
+   */
+  private mcpChatDefaults(): ChatDefaults {
+    const settings = this.settings.getSettings();
+    const provider =
+      this.providers.getProviderInternal(settings.defaultProviderId) ??
+      this.providers.listProviders()[0] ??
+      null;
+    return {
+      providerConfigId: provider?.id ?? "mcp-external",
+      model: provider?.defaultModel ?? "external",
+      promptPresetId: settings.defaultPromptPresetId,
+    };
+  }
+
+  /**
+   * MCP tool registry, cached per (write mode, raw-data setting) so Ajv does
+   * not recompile every tool schema on each request. Separate from the in-app
+   * assistant registry: MCP additionally gets the extended tools, and its
+   * auto-apply policy is gated on `mcpAllowWrites` on top of the usual risk
+   * check.
    */
   private mcpRegistry(allowWrites: boolean): AiToolRegistry {
-    const cached = this.mcpRegistries.get(allowWrites);
+    const allowRawToolData = this.settings.getSettings().allowRawToolData;
+    const key = `${allowWrites}:${allowRawToolData}`;
+    const cached = this.mcpRegistries.get(key);
     if (cached) return cached;
+    // Undoable edits auto-apply (the user can Ctrl+Z them); destructive ones
+    // and non-undoable rule changes wait for the user unless they allowed that
+    // tool for the session in the panel.
+    const mcpDesignerOptions = {
+      isSessionAutoApplyAllowed: (input: {
+        chatId: string;
+        toolName: string;
+        proposalKind: string;
+        riskLevel?: string | null;
+      }) =>
+        allowWrites &&
+        ((input.riskLevel !== "destructive" &&
+          !APPROVAL_REQUIRED_KINDS.has(input.proposalKind)) ||
+          // Irreversible and verification-suppressing kinds: never on a
+          // session allowance, every one is a fresh decision.
+          (!NEVER_SESSION_ALLOWED_KINDS.has(input.proposalKind) &&
+            this.writeSessionPolicy.isAllowed(input))),
+    };
     const registry = buildOpenpcbToolRegistry(
       this.ctx,
       this.contextResolver,
       this.conversation,
       {
-        allowRawToolData: this.settings.getSettings().allowRawToolData,
-        designerTools: {
-          isSessionAutoApplyAllowed: (input) =>
-            allowWrites &&
-            (input.riskLevel !== "destructive" ||
-              this.writeSessionPolicy.isAllowed(input)),
-        },
+        allowRawToolData,
+        designerTools: mcpDesignerOptions,
       },
     );
     registerExtendedReadTools(registry, this.ctx);
-    this.mcpRegistries.set(allowWrites, registry);
+    registerKnowledgeTools(registry);
+    registerMcpPcbTools(
+      registry,
+      this.ctx,
+      this.contextResolver,
+      this.conversation,
+      mcpDesignerOptions,
+    );
+    registerMcpDesignTools(
+      registry,
+      this.ctx,
+      this.contextResolver,
+      this.conversation,
+    );
+    this.mcpRegistries.set(key, registry);
     return registry;
+  }
+
+  /**
+   * Cheap state probe for the stdio shim: whether the server is on, whether
+   * writes are on, and a fingerprint of the advertised tool set. The shim
+   * polls it and synthesizes `notifications/tools/list_changed` for 2025-era
+   * clients, which the stateless endpoint cannot push to.
+   */
+  mcpState(): {
+    enabled: boolean;
+    allowWrites: boolean;
+    toolset: string;
+    appVersion: string;
+    generation: string;
+  } {
+    const settings = this.settings.getSettings();
+    return {
+      enabled: settings.mcpEnabled,
+      allowWrites: settings.mcpAllowWrites,
+      toolset: settings.mcpEnabled ? this.mcpToolsetFingerprint(settings.mcpAllowWrites) : "0:",
+      appVersion: this.ctx.manifest.version,
+      // New per backend boot: an app restart or update can keep every tool
+      // name and still change a schema, so the bridge re-lists on a new boot
+      // even when the hash below happens to match.
+      generation: this.mcpGeneration,
+    };
+  }
+
+  /**
+   * Hash of the exact tool contracts a client would be served — name,
+   * version, description, input schema, annotations, `_meta` — not just the
+   * names: a same-named tool whose schema changed must reach clients as
+   * `list_changed`, or they keep calling it with the old arguments.
+   * Tool definitions do not change within a boot, so it is cached per mode.
+   */
+  private mcpToolsetFingerprint(allowWrites: boolean): string {
+    const allowRawToolData = this.settings.getSettings().allowRawToolData;
+    const key = `${allowWrites}:${allowRawToolData}`;
+    const cached = this.mcpToolsetFingerprints.get(key);
+    if (cached) return cached;
+    const descriptors = this.mcpRegistry(allowWrites)
+      .list()
+      .filter((t) => allowWrites || t.definition.effect !== "write")
+      .map((t) => ({
+        name: t.definition.name,
+        version: t.definition.version,
+        description: mcpDescription(t),
+        inputSchema: t.definition.inputSchema,
+        annotations: annotationsFor(t),
+        meta: metaFor(t) ?? null,
+      }))
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    const digest = createHash("sha256").update(canonicalJson(descriptors)).digest("hex");
+    const fingerprint = `${descriptors.length}:${digest.slice(0, 24)}`;
+    this.mcpToolsetFingerprints.set(key, fingerprint);
+    return fingerprint;
   }
 
   // ─── providers ────────────────────────────────────────────────────────

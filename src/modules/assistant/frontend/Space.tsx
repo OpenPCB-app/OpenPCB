@@ -117,6 +117,7 @@ function linkedDesign(
   }
   return null;
 }
+import { useAssistantEvents } from "./hooks/useAssistantEvents";
 import { useAssistantStream } from "./hooks/useAssistantStream";
 import { useScrollAnchor, isNearBottom } from "./hooks/useScrollAnchor";
 import type {
@@ -375,6 +376,24 @@ export function AssistantSpace({
     },
     [base, scroll.scrollToBottom],
   );
+
+  // Live updates for chats changed outside this panel's own runs — MCP
+  // clients (Claude Code) record every tool call into their own chats, and
+  // proposals can be decided from the design dock.
+  useAssistantEvents({
+    backendUrl: backendURL,
+    onEvents: (events) => {
+      void refreshChats().catch(() => undefined);
+      const active = activeChatIdRef.current;
+      if (
+        active &&
+        !activeRunsByChat[active] &&
+        events.some((event) => event.chatId === active)
+      ) {
+        void refreshMessages(active).catch(() => undefined);
+      }
+    },
+  });
 
   const loadOlderMessages = useCallback(async () => {
     if (

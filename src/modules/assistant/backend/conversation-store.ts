@@ -15,6 +15,7 @@ import type {
   AiContextBindingStatus,
   AiToolStatus,
   AiSourceRef,
+  AssistantWriteProposalActor,
   AssistantWriteProposalDto,
   AssistantWriteProposalKind,
   AssistantWriteProposalStatus,
@@ -191,6 +192,14 @@ function rowToWriteProposal(
     origin: row.origin === "cloud" ? ("cloud" as const) : ("local" as const),
     cloudRunId: row.cloud_run_id ? String(row.cloud_run_id) : null,
     cloudProposalId: row.cloud_proposal_id ? String(row.cloud_proposal_id) : null,
+    actor:
+      row.actor_client_key && row.actor_instance_id
+        ? {
+            type: "mcp" as const,
+            clientKey: String(row.actor_client_key),
+            instanceId: String(row.actor_instance_id),
+          }
+        : null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -230,6 +239,18 @@ export interface UpsertToolEventInput {
   sources?: AiSourceRef[];
 }
 
+/**
+ * Who an `action_id` is unique for: the MCP session that issued the write, or
+ * (in-app) the chat. Retries dedupe within the scope; the same deterministic
+ * id from another session or chat is a different action.
+ */
+export function writeProposalIdempotencyScope(
+  chatId: string,
+  actor: AssistantWriteProposalActor | null | undefined,
+): string {
+  return actor ? `mcp:${actor.clientKey}:${actor.instanceId}` : `chat:${chatId}`;
+}
+
 export interface CreateWriteProposalInput {
   id?: string;
   chatId: string;
@@ -250,6 +271,8 @@ export interface CreateWriteProposalInput {
   origin?: "local" | "cloud";
   cloudRunId?: string | null;
   cloudProposalId?: string | null;
+  /** MCP client session that proposed it (ownership); null in-app. */
+  actor?: AssistantWriteProposalActor | null;
 }
 
 export interface ListMessagesOptions {
@@ -286,10 +309,32 @@ function messageCursor(row: Record<string, unknown>): string {
 export class ConversationStore {
   private readonly rawSql: RawSqlFn;
   readonly mentions: MentionRepository;
+  /**
+   * Called after a write proposal is created or changes status — from any
+   * path (panel apply/reject, auto-apply inside a tool, cloud mirroring). The
+   * service wires it to the assistant event bus.
+   */
+  private proposalListener: ((record: AssistantWriteProposalDto) => void) | null =
+    null;
 
   constructor(ctx: CoreBackendModuleContext) {
     this.rawSql = rawSqlFrom(ctx);
     this.mentions = new MentionRepository(ctx);
+  }
+
+  onWriteProposalChange(
+    listener: ((record: AssistantWriteProposalDto) => void) | null,
+  ): void {
+    this.proposalListener = listener;
+  }
+
+  private emitProposal(record: AssistantWriteProposalDto | null): void {
+    if (!record || !this.proposalListener) return;
+    try {
+      this.proposalListener(record);
+    } catch {
+      // Notification is best-effort; the write already happened.
+    }
   }
 
   // ---------- chats ----------
@@ -615,9 +660,23 @@ export class ConversationStore {
   }
 
   // ---------- write proposals ----------
+  /** Insert a proposal; on an idempotency conflict returns the existing one. */
   createWriteProposal(
     input: CreateWriteProposalInput,
   ): AssistantWriteProposalDto {
+    return this.createOrGetWriteProposal(input).record;
+  }
+
+  /**
+   * Insert a proposal, or — when one with the same idempotency key
+   * (design, scope, action_id) or cloud id already exists — return that one
+   * with `created: false`. Callers MUST NOT apply anything when `created` is
+   * false: the returned record is the action that already happened (or is
+   * pending), not the envelope they were about to persist.
+   */
+  createOrGetWriteProposal(
+    input: CreateWriteProposalInput,
+  ): { record: AssistantWriteProposalDto; created: boolean } {
     const timestamp = now();
     const proposalId = input.id ?? id();
     const envelope = input.envelope ?? null;
@@ -627,9 +686,10 @@ export class ConversationStore {
     const actionId =
       (envelope as { actionId?: string } | null)?.actionId ?? null;
     const cloudProposalId = input.cloudProposalId ?? null;
+    const scope = writeProposalIdempotencyScope(input.chatId, input.actor);
     try {
       this.rawSql(
-        "INSERT INTO assistant_write_proposal (id,chat_id,tool_event_id,kind,status,design_id,base_revision,proposal_json,apply_result_json,tool_name,title,summary,risk_level,operations_json,sources_json,warnings_json,envelope_json,action_id,origin,cloud_run_id,cloud_proposal_id,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO assistant_write_proposal (id,chat_id,tool_event_id,kind,status,design_id,base_revision,proposal_json,apply_result_json,tool_name,title,summary,risk_level,operations_json,sources_json,warnings_json,envelope_json,action_id,origin,cloud_run_id,cloud_proposal_id,actor_client_key,actor_instance_id,idempotency_scope,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           proposalId,
           input.chatId,
@@ -652,28 +712,45 @@ export class ConversationStore {
           input.origin ?? "local",
           input.cloudRunId ?? null,
           cloudProposalId,
+          input.actor?.clientKey ?? null,
+          input.actor?.instanceId ?? null,
+          scope,
           timestamp,
           timestamp,
         ],
       );
     } catch (err) {
-      // F6: a concurrent submit already inserted a proposal for the same
-      // (design_id, action_id) — the UNIQUE index rejects this one. Return the
-      // existing proposal so the caller reuses it instead of duplicating writes.
-      // Same story for a re-streamed cloud proposal (design_id, cloud_proposal_id).
+      // The idempotency index (design, scope, action_id) or the cloud index
+      // (design, cloud_proposal_id) already holds this action — a concurrent
+      // submit, a retry, or a re-streamed cloud proposal.
       const isUnique = /unique|constraint/i.test(String(err));
       const existing = isUnique
         ? (actionId
-            ? this.getWriteProposalByActionId(input.designId, actionId)
+            ? this.getWriteProposalByActionKey(input.designId, scope, actionId)
             : null) ??
           (cloudProposalId
             ? this.getWriteProposalByCloudId(input.designId, cloudProposalId)
             : null)
         : null;
-      if (existing) return existing;
+      if (existing) return { record: existing, created: false };
       throw err;
     }
-    return this.getWriteProposal(input.chatId, proposalId)!;
+    const created = this.getWriteProposal(input.chatId, proposalId)!;
+    this.emitProposal(created);
+    return { record: created, created: true };
+  }
+
+  /**
+   * A proposal by id alone. Used by MCP clients, which learn the id from a
+   * tool result but not the chat it lives in; callers must still check the
+   * chat belongs to them.
+   */
+  getWriteProposalById(proposalId: string): AssistantWriteProposalDto | null {
+    const row = this.rawSql(
+      "SELECT * FROM assistant_write_proposal WHERE id=? LIMIT 1",
+      [proposalId],
+    )[0];
+    return row ? rowToWriteProposal(row) : null;
   }
 
   /** S6: look up a mirrored proposal by its cloud identity (dedupes SSE redelivery). */
@@ -688,16 +765,61 @@ export class ConversationStore {
     return row ? rowToWriteProposal(row) : null;
   }
 
-  /** F6: look up a proposal by its idempotency key (design + action_id). */
-  getWriteProposalByActionId(
+  /** The proposal holding an idempotency key (design + scope + action_id), if any. */
+  getWriteProposalByActionKey(
     designId: string,
+    scope: string,
     actionId: string,
   ): AssistantWriteProposalDto | null {
     const row = this.rawSql(
-      "SELECT * FROM assistant_write_proposal WHERE design_id=? AND action_id=? LIMIT 1",
-      [designId, actionId],
+      "SELECT * FROM assistant_write_proposal WHERE design_id=? AND idempotency_scope=? AND action_id=? ORDER BY created_at DESC LIMIT 1",
+      [designId, scope, actionId],
     )[0];
     return row ? rowToWriteProposal(row) : null;
+  }
+
+  /** Proposals an MCP session made, newest first; optionally one status / design. */
+  listWriteProposalsByActor(
+    actor: { clientKey: string; instanceId: string },
+    filter: { status?: AssistantWriteProposalStatus; designId?: string } = {},
+  ): AssistantWriteProposalDto[] {
+    const clauses = ["actor_client_key=?", "actor_instance_id=?"];
+    const params: unknown[] = [actor.clientKey, actor.instanceId];
+    if (filter.status) {
+      clauses.push("status=?");
+      params.push(filter.status);
+    }
+    if (filter.designId) {
+      clauses.push("design_id=?");
+      params.push(filter.designId);
+    }
+    return this.rawSql(
+      `SELECT * FROM assistant_write_proposal WHERE ${clauses.join(" AND ")} ORDER BY created_at DESC`,
+      params,
+    ).map(rowToWriteProposal);
+  }
+
+  /**
+   * Designer command ids an MCP session landed on a design through its
+   * applied proposals — what `designer_undo` / `designer_redo` may touch.
+   */
+  commandIdsAppliedByActor(
+    actor: { clientKey: string; instanceId: string },
+    designId: string,
+  ): Set<string> {
+    const ids = new Set<string>();
+    const rows = this.rawSql(
+      "SELECT apply_result_json FROM assistant_write_proposal WHERE actor_client_key=? AND actor_instance_id=? AND design_id=? AND status IN ('applied','partial')",
+      [actor.clientKey, actor.instanceId, designId],
+    );
+    for (const row of rows) {
+      const applied = decodeJson<{ commandIds?: unknown } | null>(row.apply_result_json, null);
+      if (!Array.isArray(applied?.commandIds)) continue;
+      for (const commandId of applied.commandIds) {
+        if (typeof commandId === "string") ids.add(commandId);
+      }
+    }
+    return ids;
   }
 
   getWriteProposal(
@@ -736,6 +858,7 @@ export class ConversationStore {
     );
     const next = this.getWriteProposal(chatId, proposalId);
     if (!next) throw new Error(`Write proposal not found: ${proposalId}`);
+    this.emitProposal(next);
     return next;
   }
 }

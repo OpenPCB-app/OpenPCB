@@ -1,7 +1,6 @@
 import {
   fromJsonSchema,
   type McpServer,
-  type ToolAnnotations,
 } from "@modelcontextprotocol/server";
 import type {
   AiTool,
@@ -11,72 +10,327 @@ import type {
 } from "@openpcb/ai-core";
 import { resolveToolLimits } from "@openpcb/ai-core";
 import type { ContextResolver } from "../context-resolver";
-import type { McpSession, McpSessionRegistry } from "./session";
+import type { ConversationStore } from "../conversation-store";
+import type { McpCallRecorder } from "./call-recorder";
+import type { McpConnection, McpConnectionRegistry } from "./connections";
+import {
+  buildEnvelope,
+  extractProposalRef,
+  failureResult,
+  toCallToolResult,
+  type McpCallToolResult,
+  type McpProposalRef,
+} from "./result-envelope";
+import { annotationsFor, mcpDescription, metaFor } from "./tool-policy";
+import type { BuildIntentStore } from "../verification/build-intent-store";
+import {
+  intentFromBomResult,
+  intentFromCompileResult,
+} from "../verification/build-intent-capture";
+
+/** Task key the MCP path stores build intents under (see verify-tool.ts). */
+const MCP_INTENT_TASK_ID = "mcp";
 
 /**
  * Project the assistant's `AiToolRegistry` onto an MCP server.
  *
  * `AiToolDefinition` is already MCP-shaped — `{name, description, inputSchema}`
  * with a name pattern MCP accepts verbatim — so this is a projection, not a
- * reimplementation. The interesting parts are the two adaptations:
+ * reimplementation. What the projection adds around each call:
  *
- * 1. `designId` injection. In-app the design comes from the chat's bindings;
- *    an MCP client has no chat, so the session resolves one (explicit arg →
- *    session pin → UI-active) and it is written into the input before dispatch.
- * 2. Result mapping. `AiToolResult` already carries a model-facing slim view
- *    (`modelData`) and a one-line `summary`, built for the in-app LLM loop.
- *    Those are exactly the right payload for MCP, so reuse them rather than
- *    shipping the full `data` (which can be megabytes of projection).
+ * 1. **Targeting.** The design comes from explicit arg → session pin → the
+ *    UI-focused design → the connection's last design (`connections.ts`), and
+ *    the call runs in the chat bound to that design, so every in-app tool
+ *    resolves it through its chat binding unchanged.
+ * 2. **Recording.** Every call becomes a tool event on a visible activity
+ *    message (`call-recorder.ts`): the user sees what the agent did, and a
+ *    write proposal gets the event its approval card is rendered from.
+ * 3. **Result envelope** (`result-envelope.ts`) — readable in both halves of
+ *    the MCP result, because clients disagree on which half the model sees.
+ * 4. **Liveness.** A heartbeat progress notification while a call runs (when
+ *    the client asked for progress), so a slow DRC or ERC does not trip the
+ *    client's idle timeout; and the request's abort signal reaches the tool.
  */
-
-/** Tools that are destructive rather than merely mutating. */
-const DESTRUCTIVE_TOOLS = new Set([
-  "designer_propose_schematic_deletions",
-]);
 
 /**
- * Tools that operate on a design and therefore accept `designId`. Detected from
- * the schema rather than a hardcoded list so new tools are picked up for free.
+ * `createMcpHandler` builds a fresh server per request, which re-registers
+ * every tool; converting ~40 JSON Schemas each time is the dominant cost, so
+ * keep the converted schema per tool definition.
  */
-function acceptsDesignId(tool: AiTool): boolean {
+const schemaCache = new WeakMap<AiTool, ReturnType<typeof fromJsonSchema>>();
+
+function inputSchemaFor(tool: AiTool): ReturnType<typeof fromJsonSchema> {
+  let schema = schemaCache.get(tool);
+  if (!schema) {
+    schema = fromJsonSchema<Record<string, unknown>>(tool.definition.inputSchema);
+    schemaCache.set(tool, schema);
+  }
+  return schema;
+}
+
+/** Tools that act on a design accept `designId` — detected from the schema. */
+export function acceptsDesignId(tool: AiTool): boolean {
   const props = tool.definition.inputSchema.properties;
   return Boolean(props && "designId" in props);
 }
 
-function annotationsFor(tool: AiTool): ToolAnnotations {
-  const readOnly = tool.definition.effect === "read";
-  return {
-    readOnlyHint: readOnly,
-    destructiveHint: DESTRUCTIVE_TOOLS.has(tool.definition.name),
-    // Every write tool takes an `action_id` idempotency key and re-issuing an
-    // applied action is a no-op (`tools/action-id.ts`).
-    idempotentHint: !readOnly,
-    openWorldHint: false,
+/** Interval between heartbeat progress notifications. */
+export const HEARTBEAT_MS = 10_000;
+
+/** The slice of the SDK's request context the projection uses. */
+export interface McpRequestCtx {
+  mcpReq?: {
+    signal?: AbortSignal;
+    _meta?: { progressToken?: string | number } & Record<string, unknown>;
+    notify?: (notification: {
+      method: string;
+      params?: Record<string, unknown>;
+    }) => Promise<void>;
   };
 }
 
-function textOf(result: AiToolResult): string {
-  if (result.summary && result.summary.length > 0) return result.summary;
-  const payload = result.modelData ?? result.data;
+/**
+ * Run `work` while sending `notifications/progress` every HEARTBEAT_MS, if the
+ * client supplied a progress token. Progress resets Claude Code's idle timer
+ * (5 minutes for HTTP servers); it never extends the wall-clock limit.
+ */
+export async function withHeartbeat<T>(
+  ctx: McpRequestCtx | undefined,
+  label: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  const token = ctx?.mcpReq?._meta?.progressToken;
+  const notify = ctx?.mcpReq?.notify;
+  if (token === undefined || !notify) return work();
+  let ticks = 0;
+  const timer = setInterval(() => {
+    ticks += 1;
+    void notify({
+      method: "notifications/progress",
+      params: {
+        progressToken: token,
+        progress: ticks,
+        message: `${label}: still working (${(ticks * HEARTBEAT_MS) / 1000}s)`,
+      },
+    }).catch(() => undefined);
+  }, HEARTBEAT_MS);
   try {
-    return JSON.stringify(payload);
-  } catch {
-    return result.ok ? "ok" : "error";
+    return await work();
+  } finally {
+    clearInterval(timer);
   }
 }
 
 export interface ToolProjectionDeps {
   registry: AiToolRegistry;
-  sessions: McpSessionRegistry;
+  connections: McpConnectionRegistry;
+  recorder: McpCallRecorder;
   contextResolver: ContextResolver;
-  contextSizePreference: "small" | "medium" | "large";
+  conversation: ConversationStore;
+  buildIntents: BuildIntentStore;
   /** When false, `effect: "write"` tools are not registered at all. */
   allowWrites: boolean;
+  /** Next step the model should take while a proposal waits for the user. */
+  pendingProposalHint: (chatTitle: string) => string;
+}
+
+function proposalRefFor(
+  deps: ToolProjectionDeps,
+  chatId: string,
+  data: unknown,
+): McpProposalRef | null {
+  const ref = extractProposalRef(data);
+  if (!ref) return null;
+  // A dedup hit returns an earlier proposal, which may live in another of
+  // this session's chats.
+  const record =
+    deps.conversation.getWriteProposal(chatId, ref.id) ??
+    deps.conversation.getWriteProposalById(ref.id);
+  const status = record?.status ?? "pending";
+  const proposal: McpProposalRef = {
+    id: ref.id,
+    kind: record?.kind ?? ref.kind,
+    status,
+    riskLevel: record?.riskLevel ?? null,
+    designId: record?.designId ?? null,
+    operationCount: record?.operations?.length ?? 0,
+  };
+  if (status === "pending") {
+    const title = deps.conversation.getChat(chatId)?.title ?? "the MCP chat";
+    proposal.approvalHint = deps.pendingProposalHint(title);
+  }
+  return proposal;
+}
+
+function thrownResult(message: string): AiToolResult<null> {
+  return {
+    ok: false,
+    data: null,
+    summary: message,
+    sources: [],
+    warnings: [message],
+    truncated: false,
+    limits: resolveToolLimits({ preference: "large" }),
+  };
+}
+
+/**
+ * Read tools that may bind the session's home chat to a design. They run
+ * under the connection lock like writes, so two parallel calls cannot bind
+ * one chat twice (see `McpConnectionRegistry.serialize`).
+ */
+const BINDING_READ_TOOLS = new Set(["designer_resolve_design"]);
+
+/**
+ * One projected call: target → chat → record → execute → adopt/pin → envelope.
+ * Writes and chat-binding tools are serialized per session; reads run
+ * concurrently. Exported for tests.
+ */
+export async function runProjectedTool(
+  tool: AiTool,
+  connection: McpConnection,
+  deps: ToolProjectionDeps,
+  input: Record<string, unknown> | undefined,
+  requestCtx?: McpRequestCtx,
+): Promise<McpCallToolResult> {
+  const def = tool.definition;
+  if (def.effect === "write" || BINDING_READ_TOOLS.has(def.name)) {
+    return deps.connections.serialize(connection, () =>
+      runProjectedToolNow(tool, connection, deps, input, requestCtx),
+    );
+  }
+  return runProjectedToolNow(tool, connection, deps, input, requestCtx);
+}
+
+async function runProjectedToolNow(
+  tool: AiTool,
+  connection: McpConnection,
+  deps: ToolProjectionDeps,
+  input: Record<string, unknown> | undefined,
+  requestCtx?: McpRequestCtx,
+): Promise<McpCallToolResult> {
+  const def = tool.definition;
+  const args: Record<string, unknown> = { ...(input ?? {}) };
+  const extraWarnings: string[] = [];
+
+  let chatId: string | null = null;
+  let targetDesignId: string | null = null;
+  if (acceptsDesignId(tool)) {
+    const target = deps.connections.resolveDesign(
+      connection,
+      typeof args.designId === "string" && args.designId.trim()
+        ? args.designId.trim()
+        : null,
+    );
+    if (target) {
+      args.designId = target.designId;
+      targetDesignId = target.designId;
+      if (target.warning) extraWarnings.push(target.warning);
+      chatId = await deps.connections.designChat(connection, target.designId);
+    }
+  }
+  const ranInHomeChat = chatId === null;
+  if (chatId === null) chatId = deps.connections.homeChat(connection);
+
+  const call = deps.recorder.begin({
+    chatId,
+    connection,
+    toolName: def.name,
+    args,
+  });
+
+  const execCtx: AiToolExecutionContext = {
+    runId: deps.connections.nextRunId(connection),
+    chatId,
+    bindings: deps.contextResolver.listBindings(chatId),
+    // Claude-class models have large contexts; the in-app "small/medium"
+    // presets exist for local models and do not apply to an external agent.
+    limits: resolveToolLimits({ preference: "large" }),
+    signal: requestCtx?.mcpReq?.signal,
+    metadata: { mcp: { clientKey: connection.clientKey, instanceId: connection.instanceId } },
+  };
+
+  let result: AiToolResult;
+  let completed = true;
+  try {
+    result = await withHeartbeat(requestCtx, def.name, () =>
+      tool.execute(execCtx, args),
+    );
+  } catch (error) {
+    completed = false;
+    const message = error instanceof Error ? error.message : String(error);
+    result = thrownResult(`${def.name} failed: ${message}`);
+  }
+
+  if (ranInHomeChat) {
+    const adopted = deps.connections.adoptBoundHomeChat(connection, chatId);
+    if (adopted) targetDesignId = adopted;
+  }
+  if (targetDesignId && result.ok) connection.lastDesignId = targetDesignId;
+
+  if (extraWarnings.length > 0) {
+    result = { ...result, warnings: [...(result.warnings ?? []), ...extraWarnings] };
+  }
+
+  let resultJson: string | null = null;
+  try {
+    resultJson = result.data === undefined ? null : JSON.stringify(result.data);
+  } catch {
+    resultJson = null;
+  }
+
+  if (completed && result.ok && resultJson) {
+    captureBuildIntent(def.name, resultJson, connection, chatId, deps);
+  }
+
+  const proposal = proposalRefFor(deps, chatId, result.data);
+  const envelope = buildEnvelope(result, proposal);
+  deps.recorder.end(call, {
+    completed,
+    ok: result.ok,
+    summary: envelope.summary,
+    resultJson,
+    error: envelope.error?.message ?? null,
+    sources: result.sources,
+  });
+
+  return completed ? toCallToolResult(envelope) : failureResult(envelope.summary);
+}
+
+/**
+ * Parity with the in-app loop, which records what the user asked to build so
+ * the Definition-of-Done verifier can check the result (`run-service.ts`).
+ * A resolved BOM usually precedes the design, so it waits on the connection
+ * until `designer_verify_build` attaches it; a compile already runs in the
+ * design's chat, so it is stored there directly.
+ */
+function captureBuildIntent(
+  toolName: string,
+  resultJson: string,
+  connection: McpConnection,
+  chatId: string,
+  deps: ToolProjectionDeps,
+): void {
+  if (toolName === "library_resolve_bom") {
+    const intent = intentFromBomResult(resultJson);
+    if (intent) connection.buildIntent = intent;
+    return;
+  }
+  if (toolName === "compile_circuit") {
+    const intent = intentFromCompileResult(resultJson);
+    if (!intent) return;
+    try {
+      deps.buildIntents.save({ chatId, taskId: MCP_INTENT_TASK_ID, ...intent });
+      connection.buildIntent = null;
+    } catch {
+      // Best-effort, like the in-app capture.
+    }
+  }
 }
 
 export function registerProjectedTools(
   server: McpServer,
-  session: McpSession,
+  connection: McpConnection,
   deps: ToolProjectionDeps,
 ): void {
   for (const tool of deps.registry.list()) {
@@ -85,69 +339,45 @@ export function registerProjectedTools(
     // write tool gets a clean capability picture instead of a runtime denial.
     if (!deps.allowWrites && def.effect === "write") continue;
 
+    const meta = metaFor(tool);
     server.registerTool(
       def.name,
       {
-        description: def.description,
-        inputSchema: fromJsonSchema<Record<string, unknown>>(def.inputSchema),
+        description: mcpDescription(tool),
+        inputSchema: inputSchemaFor(tool),
         annotations: annotationsFor(tool),
+        ...(meta ? { _meta: meta } : {}),
       },
-      async (input) => {
-        const args: Record<string, unknown> = { ...(input ?? {}) };
-
-        if (acceptsDesignId(tool)) {
-          const designId = deps.sessions.resolveDesignId(
-            session,
-            typeof args.designId === "string" ? args.designId : null,
-          );
-          if (designId) {
-            args.designId = designId;
-            // Keep the chat's binding aligned with the design being acted on,
-            // so the tools that read the binding (rather than the argument)
-            // agree with the ones that read the argument.
-            await deps.sessions.bindSessionToDesign(session, designId);
-          }
-        }
-
-        const execCtx: AiToolExecutionContext = {
-          runId: deps.sessions.nextRunId(session),
-          chatId: session.chatId,
-          bindings: deps.contextResolver.listBindings(session.chatId),
-          limits: resolveToolLimits({
-            preference: deps.contextSizePreference,
-          }),
-        };
-
-        const result = await tool.execute(execCtx, args);
-
-        return {
-          content: [{ type: "text" as const, text: textOf(result) }],
-          structuredContent: asStructured(result),
-          isError: !result.ok,
-        };
-      },
+      (input: unknown, ctx: unknown) =>
+        runProjectedTool(
+          tool,
+          connection,
+          deps,
+          (input ?? {}) as Record<string, unknown>,
+          ctx as McpRequestCtx,
+        ),
     );
   }
 }
 
 /**
- * Pin the session to a design.
+ * Pin this connection to a design.
  *
- * Session-scoped, so it lives here rather than in the shared registry: it is
- * the only tool that writes to `McpSession`, and there is no session to write
- * to when the same registry backs the in-app assistant.
+ * Connection-scoped, so it lives here rather than in the shared registry: it
+ * is the only tool that writes connection state, and there is no connection
+ * when the same registry backs the in-app assistant. It changes nothing in the
+ * design or any chat, hence read-only.
  */
 export function registerUseDesignTool(
   server: McpServer,
-  session: McpSession,
-  deps: Pick<ToolProjectionDeps, "sessions">,
+  connection: McpConnection,
   listDesigns: () => Promise<Array<{ id: string; name: string }>>,
 ): void {
   server.registerTool(
     "designer_use_design",
     {
       description:
-        "Pin this MCP session to a design so later calls do not need designId. The pin beats the design the user has focused in the OpenPCB UI; pass null to drop it and follow the UI again. Call designer_list_designs first to get an id.",
+        "Pin this MCP session to a design so later calls do not need designId. The pin beats the design the user has focused in the OpenPCB UI and lasts until the session goes idle; pass null to drop it and follow the UI again. Call designer_list_designs first to get an id.",
       inputSchema: fromJsonSchema<{ designId?: string | null }>({
         type: "object",
         properties: {
@@ -164,54 +394,35 @@ export function registerUseDesignTool(
         openWorldHint: false,
       },
     },
-    async (input) => {
+    async (input: { designId?: string | null } | undefined) => {
       const requested = (input ?? {}).designId ?? null;
       if (requested === null) {
-        session.pinnedDesignId = null;
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "Pin cleared; following the design focused in OpenPCB.",
-            },
-          ],
-          structuredContent: { pinnedDesignId: null },
-        };
+        connection.pinnedDesignId = null;
+        return toCallToolResult({
+          ok: true,
+          status: "ok",
+          summary: "Pin cleared; following the design focused in OpenPCB.",
+          warnings: [],
+          truncated: false,
+          data: { pinnedDesignId: null },
+        });
       }
       const match = (await listDesigns()).find((d) => d.id === requested);
       if (!match) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `No design with id '${requested}'. Call designer_list_designs for valid ids.`,
-            },
-          ],
-          structuredContent: { pinnedDesignId: session.pinnedDesignId },
-          isError: true,
-        };
+        return failureResult(
+          `No design with id '${requested}'. Call designer_list_designs for valid ids.`,
+        );
       }
-      session.pinnedDesignId = match.id;
-      await deps.sessions.bindSessionToDesign(session, match.id);
-      return {
-        content: [
-          { type: "text" as const, text: `Pinned to "${match.name}".` },
-        ],
-        structuredContent: { pinnedDesignId: match.id, name: match.name },
-      };
+      connection.pinnedDesignId = match.id;
+      connection.lastDesignId = match.id;
+      return toCallToolResult({
+        ok: true,
+        status: "ok",
+        summary: `Pinned to "${match.name}".`,
+        warnings: [],
+        truncated: false,
+        data: { pinnedDesignId: match.id, name: match.name },
+      });
     },
   );
-}
-
-/**
- * MCP requires `structuredContent` to be a JSON object. Tool results are
- * usually objects already, but wrap anything else so a scalar or array result
- * does not make the whole call invalid.
- */
-function asStructured(result: AiToolResult): Record<string, unknown> {
-  const payload = result.modelData ?? result.data;
-  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-    return payload as Record<string, unknown>;
-  }
-  return { result: payload };
 }

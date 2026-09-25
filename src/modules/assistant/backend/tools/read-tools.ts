@@ -6,6 +6,7 @@ import type {
 } from "@openpcb/ai-core";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { MODULE_SDK_TOKENS, type DesignerSDK } from "../../../../sdks";
+import { drcCounts, drcCountsLine } from "./drc-counts";
 
 /**
  * Read tools that exist for MCP clients only.
@@ -24,10 +25,27 @@ import { MODULE_SDK_TOKENS, type DesignerSDK } from "../../../../sdks";
 const NO_DESIGNER: Omit<AiToolResult<null>, "limits"> = {
   ok: false,
   data: null,
+  summary: "Designer module is not available.",
   sources: [],
   warnings: ["Designer module is not available."],
   truncated: false,
 };
+
+/** A failed read whose one-line summary is the reason — never a bare `null`. */
+function failedRead(
+  message: string,
+  limits: AiToolResult["limits"],
+): AiToolResult<null> {
+  return {
+    ok: false,
+    data: null,
+    summary: message,
+    sources: [],
+    warnings: [message],
+    truncated: false,
+    limits,
+  };
+}
 
 function designerOf(ctx: CoreBackendModuleContext): DesignerSDK | undefined {
   return ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER) ?? undefined;
@@ -118,14 +136,7 @@ function makeGetPcbStateTool(ctx: CoreBackendModuleContext): AiTool {
       if (!designer) return { ...NO_DESIGNER, limits: execCtx.limits };
       const pcb = designId ? await designer.getPcbProjection(designId) : null;
       if (!pcb) {
-        return {
-          ok: false,
-          data: null,
-          sources: [],
-          warnings: [missingDesign(designId)],
-          truncated: false,
-          limits: execCtx.limits,
-        };
+        return failedRead(missingDesign(designId), execCtx.limits);
       }
       const board = pcb.board;
       const state = {
@@ -157,6 +168,12 @@ function makeGetPcbStateTool(ctx: CoreBackendModuleContext): AiTool {
           id: nc.id,
           name: nc.name,
         })),
+        // What DRC is told to look away from — surfaced so an agent can say
+        // so instead of presenting a filtered report as the whole truth.
+        drcSuppression: {
+          waivedViolations: board.viewState?.drcWaivedViolationIds?.length ?? 0,
+          ignoredRuleClasses: board.viewState?.drcIgnoredRuleClasses ?? [],
+        },
         warnings: pcb.warnings,
       };
       return {
@@ -190,14 +207,7 @@ function makeRunErcTool(ctx: CoreBackendModuleContext): AiTool {
       if (!designer) return { ...NO_DESIGNER, limits: execCtx.limits };
       const report = designId ? await designer.runErc(designId) : null;
       if (!report) {
-        return {
-          ok: false,
-          data: null,
-          sources: [],
-          warnings: [missingDesign(designId)],
-          truncated: false,
-          limits: execCtx.limits,
-        };
+        return failedRead(missingDesign(designId), execCtx.limits);
       }
       return {
         ok: true,
@@ -221,7 +231,7 @@ function makeRunDrcTool(ctx: CoreBackendModuleContext): AiTool {
       effect: "read",
       capability: "designer.read.drc",
       description:
-        "Run Design Rule Check over the PCB and return the violations (clearance, width, annular ring, unrouted nets). OpenPCB stays the authoritative DRC engine — always re-run this after applying layout changes rather than trusting an external calculation.",
+        "Run Design Rule Check over the PCB and return the violations (clearance, width, annular ring, unrouted nets). `counts` splits active, waived and hidden (ignored rule classes / severity overrides) violations — report all of them; the board is not clean while any are suppressed. OpenPCB stays the authoritative DRC engine — always re-run this after applying layout changes rather than trusting an external calculation.",
       inputSchema: DESIGN_INPUT_SCHEMA,
     },
     async execute(execCtx, input): Promise<AiToolResult<unknown>> {
@@ -230,20 +240,15 @@ function makeRunDrcTool(ctx: CoreBackendModuleContext): AiTool {
       if (!designer) return { ...NO_DESIGNER, limits: execCtx.limits };
       const report = designId ? await designer.runDrc(designId) : null;
       if (!report) {
-        return {
-          ok: false,
-          data: null,
-          sources: [],
-          warnings: [missingDesign(designId)],
-          truncated: false,
-          limits: execCtx.limits,
-        };
+        return failedRead(missingDesign(designId), execCtx.limits);
       }
+      const counts = drcCounts(report);
+      const data = { ...report, counts };
       return {
         ok: true,
-        data: report,
-        modelData: report,
-        summary: `DRC: ${report.violations.length} violation(s).`,
+        data,
+        modelData: data,
+        summary: drcCountsLine(counts),
         sources: [],
         warnings: [],
         truncated: false,
@@ -270,14 +275,7 @@ function makeGetBomTool(ctx: CoreBackendModuleContext): AiTool {
       if (!designer) return { ...NO_DESIGNER, limits: execCtx.limits };
       const bom = designId ? await designer.getBomProjection(designId) : null;
       if (!bom) {
-        return {
-          ok: false,
-          data: null,
-          sources: [],
-          warnings: [missingDesign(designId)],
-          truncated: false,
-          limits: execCtx.limits,
-        };
+        return failedRead(missingDesign(designId), execCtx.limits);
       }
       return {
         ok: true,
@@ -301,7 +299,7 @@ function makeExportManufacturingTool(ctx: CoreBackendModuleContext): AiTool {
       effect: "read",
       capability: "designer.read.export",
       description:
-        "Generate the manufacturing bundle (Gerbers, Excellon drills, optional BOM and pick-and-place) and return its manifest: bundle name, per-file names and byte sizes, and any preflight warnings. File contents are NOT returned — read the openpcb://design/{id}/export/gerber resource for the ZIP.",
+        "Generate the manufacturing bundle (Gerbers, Excellon drills, optional BOM and pick-and-place) and return its manifest: bundle name, per-file names and byte sizes, and any preflight warnings. File contents are NOT returned — this checks exportability and lists what the bundle would contain; the user exports the files from the PCB toolbar's 'Export manufacturing files' button.",
       inputSchema: {
         type: "object",
         properties: {
@@ -337,24 +335,10 @@ function makeExportManufacturingTool(ctx: CoreBackendModuleContext): AiTool {
         // about the design, not a tool failure.
         const refusal = exportRefusalMessage(error);
         if (refusal === null) throw error;
-        return {
-          ok: false,
-          data: null,
-          sources: [],
-          warnings: [refusal],
-          truncated: false,
-          limits: execCtx.limits,
-        };
+        return failedRead(refusal, execCtx.limits);
       }
       if (!summary) {
-        return {
-          ok: false,
-          data: null,
-          sources: [],
-          warnings: [missingDesign(args.designId)],
-          truncated: false,
-          limits: execCtx.limits,
-        };
+        return failedRead(missingDesign(args.designId), execCtx.limits);
       }
       return {
         ok: true,

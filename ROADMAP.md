@@ -91,9 +91,14 @@ renders and exports to Gerber region primitives today. Bounded zones exist only 
 from KiCad projects — there is no zone drawing tool, and keepout regions are not implemented. The
 work is a zone authoring tool plus keepout support, not a fill engine.
 
-**MCP server.** Exposing OpenPCB's assistant tool registry over the Model Context Protocol so an
-external agent — Claude Code, Claude Desktop, Codex — can drive the design you have open, with
-writes off by default and destructive operations held for approval. In development.
+**MCP server and Claude Code.** OpenPCB's tools over the Model Context Protocol, so an external
+agent — above all Claude Code on the user's own Claude subscription, also Claude Desktop and Codex —
+can do everything the in-app Assistant does, plus PCB placement, routing, board outline, rules,
+zones, keepouts, waivers, design management and undo. Setup is one click in Settings (a local
+Claude Code plugin with workflow skills, or the MCP server alone); the server and writes are both
+off until the user enables them, and deletions and rule changes wait for approval in the app.
+Implemented; awaiting a packaged-build smoke test on each desktop platform before release (see
+`TODO.md` §3).
 
 **Drill slot authoring**, project export and import for backup and portability, and mapping
 manufacturer part numbers from KiCad symbol fields on import.

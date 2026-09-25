@@ -1,5 +1,7 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/server";
 import { MODULE_SDK_TOKENS, type DesignerSDK } from "../../../../sdks";
+import { MentionRegistry } from "../../../../core/backend/mentions";
+import { MentionContentResolver } from "../mention-content-resolver";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 
 /**
@@ -123,6 +125,55 @@ export function registerResources(
             mimeType: "application/json",
             text: JSON.stringify(payload),
           },
+        ],
+      };
+    },
+  );
+}
+
+/**
+ * Docs (knowledge) pages as resources, so a client can attach a spec or a
+ * note as context the way the user @mentions it in-app. Same read path as the
+ * `knowledge_*` tools (core MentionRegistry → Tiptap-to-markdown).
+ */
+export function registerKnowledgeResources(server: McpServer): void {
+  if (!MentionRegistry.get().getProvider("knowledge-page")) return;
+  server.registerResource(
+    "openpcb-knowledge-page",
+    new ResourceTemplate(`${SCHEME}knowledge/{pageId}`, {
+      list: async () => {
+        const pages = await MentionRegistry.get().search(
+          { query: "", workspaceId: "default", limit: 100 },
+          ["knowledge-page"],
+        );
+        return {
+          resources: pages.map((page) => ({
+            uri: `${SCHEME}knowledge/${page.id}`,
+            name: page.displayText,
+            description: page.description ?? "OpenPCB Docs page",
+            mimeType: "text/markdown",
+          })),
+        };
+      },
+    }),
+    {
+      title: "OpenPCB Docs page",
+      description: "A page from the user's OpenPCB Docs, as markdown.",
+      mimeType: "text/markdown",
+    },
+    async (uri: URL) => {
+      const pageId = uri.href.slice(`${SCHEME}knowledge/`.length);
+      if (!/^[a-zA-Z0-9-]+$/.test(pageId)) {
+        throw new Error(`Unrecognised OpenPCB Docs resource: ${uri.href}`);
+      }
+      const [page] = await new MentionContentResolver(60_000, 60_000).resolveMessageMentions(
+        `@[knowledge-page:${pageId}|page]`,
+        "default",
+      );
+      if (!page || !page.exists) throw new Error(`No Docs page '${pageId}'.`);
+      return {
+        contents: [
+          { uri: uri.href, mimeType: "text/markdown", text: page.content },
         ],
       };
     },

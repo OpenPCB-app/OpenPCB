@@ -34,6 +34,7 @@ import {
 import { MODULE_SDK_TOKENS } from "../../../sdks";
 import { resolveCaptureRuntime } from "./capture";
 import type { DispatchCaptureMeta } from "./capture/types";
+import { designEventsFor } from "./design-events";
 import { executeDesignerCommand } from "./command-executor";
 import {
   linkDesignToCloud as linkToCloud,
@@ -210,6 +211,34 @@ export interface DesignerStore {
   ): Promise<DesignerHistoryActionResult>;
 }
 
+/**
+ * Undo/redo histories, shared by every store instance on the same database.
+ *
+ * The designer builds two stores — one behind its HTTP routes (the UI) and
+ * one behind its SDK (the in-app assistant and MCP clients) — and they share
+ * the `designer-ui-session` undo session on purpose, so the user can undo an
+ * agent's edit. With a cache per instance that never worked: each instance
+ * hydrated the session once and then only saw its own commands, so after an
+ * assistant edit the UI's Ctrl+Z skipped it and undid the user's older
+ * command instead. Keyed by the module's db client so separate databases (and
+ * test runtimes) never share histories.
+ */
+const sharedSessionHistories = new WeakMap<
+  object,
+  Map<string, CommandHistory<DesignerCommand, DesignerWorldComponent>>
+>();
+
+function sessionHistoriesFor(
+  dbKey: object,
+): Map<string, CommandHistory<DesignerCommand, DesignerWorldComponent>> {
+  let histories = sharedSessionHistories.get(dbKey);
+  if (!histories) {
+    histories = new Map();
+    sharedSessionHistories.set(dbKey, histories);
+  }
+  return histories;
+}
+
 export function createDesignerStore(
   ctx: CoreBackendModuleContext,
 ): DesignerStore {
@@ -217,10 +246,8 @@ export function createDesignerStore(
   // Process-wide singleton: both store instances (sdk.ts / routes.ts) feed one
   // capture log + registry. No-op when the dataset.capture flag is off.
   const capture = resolveCaptureRuntime(ctx);
-  const sessionHistories = new Map<
-    string,
-    CommandHistory<DesignerCommand, DesignerWorldComponent>
-  >();
+  const sessionHistories = sessionHistoriesFor(ctx.db as object);
+  const designEvents = designEventsFor(ctx.db as object);
 
   function resolveSessionHistory(
     designId: string,
@@ -378,6 +405,7 @@ export function createDesignerStore(
         ensurePcbBoardSettings(tx, id, timestamp);
       });
 
+      designEvents.publish({ type: "design.created", designId: id, name });
       return {
         id,
         name,
@@ -459,6 +487,11 @@ export function createDesignerStore(
       if (!updated) {
         return null;
       }
+      designEvents.publish({
+        type: "design.updated",
+        designId,
+        name: updated.name,
+      });
       return mapDesignSummary(updated);
     },
 
@@ -510,6 +543,14 @@ export function createDesignerStore(
         tx.delete(cloudLink).where(eq(cloudLink.designId, designId)).run();
         tx.delete(designHeads).where(eq(designHeads.id, designId)).run();
       });
+      // The persisted histories are gone; drop the cached ones too so a
+      // design re-created under the same id can never replay stale patches.
+      for (const key of [...sessionHistories.keys()]) {
+        if (key.startsWith(historySessionKey(designId, ""))) {
+          sessionHistories.delete(key);
+        }
+      }
+      designEvents.publish({ type: "design.deleted", designId });
     },
 
     async getSchematicProjection(designId) {
@@ -893,6 +934,18 @@ export function createDesignerStore(
           inversePatches: pendingHistory?.inversePatches ?? [],
         });
 
+        if (result.ok && !result.idempotent) {
+          designEvents.publish({
+            type: "design.changed",
+            designId,
+            revision: result.revision,
+            sessionId: envelope.sessionId,
+            actor: captureMeta?.actor ?? null,
+            source: "command",
+            commandType: envelope.command.type,
+          });
+        }
+
         // Cloud mirror — fire-and-forget; never blocks local writes.
         if (result.ok && cloud?.bearer && cloud?.apiUrl) {
           void mirrorCommand(db, ctx.logger, {
@@ -967,6 +1020,15 @@ export function createDesignerStore(
         forwardPatches: entry.forwardPatches,
         inversePatches: entry.inversePatches,
       });
+      designEvents.publish({
+        type: "design.changed",
+        designId,
+        revision,
+        sessionId,
+        actor: null,
+        source: "undo",
+        commandType: entry.envelope.command.type,
+      });
       return {
         ok: true,
         revision,
@@ -995,6 +1057,15 @@ export function createDesignerStore(
         revision,
         forwardPatches: entry.forwardPatches,
         inversePatches: entry.inversePatches,
+      });
+      designEvents.publish({
+        type: "design.changed",
+        designId,
+        revision,
+        sessionId,
+        actor: null,
+        source: "redo",
+        commandType: entry.envelope.command.type,
       });
       return {
         ok: true,

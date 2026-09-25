@@ -933,6 +933,40 @@ describe("S6 §8 — options default from the projection", () => {
       ),
     ).toContain("TRACE_TO_TRACE_CLEARANCE");
   });
+
+  test("hidden violations are counted, never silently dropped", () => {
+    const base = runDrc(clearancePair());
+    // Nothing hidden: the report keeps its exact pre-existing shape.
+    expect(base.suppressed).toBeUndefined();
+    const clearanceIds = new Set(
+      base.violations.filter((v) => v.ruleClass === "clearance").map((v) => v.id),
+    );
+    expect(clearanceIds.size).toBeGreaterThan(0);
+
+    const ignored = runDrc(
+      clearancePair({
+        viewState: { ...board().viewState!, drcIgnoredRuleClasses: ["clearance"] },
+      }),
+    );
+    expect(ignored.suppressed).toEqual({
+      byRuleClass: clearanceIds.size,
+      bySeverityOverride: 0,
+    });
+
+    const overridden = runDrc(
+      clearancePair({ drcSeverityOverrides: { TRACE_TO_TRACE_CLEARANCE: "ignore" } }),
+    );
+    expect(overridden.suppressed?.bySeverityOverride).toBeGreaterThan(0);
+
+    // A waiver keeps the violation listed (waived: true) — not "suppressed".
+    const id = [...clearanceIds][0]!;
+    const waived = runDrc(
+      clearancePair({
+        viewState: { ...board().viewState!, drcWaivedViolationIds: [id] },
+      }),
+    );
+    expect(waived.suppressed).toBeUndefined();
+  });
 });
 
 /** S6 §2.1 / §10 — every reason the resolver can refuse a rule for. */

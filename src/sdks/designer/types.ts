@@ -2168,6 +2168,20 @@ export interface DesignerHistorySnapshot {
   canRedo: boolean;
   undoDepth: number;
   redoDepth: number;
+  /**
+   * The command the next undo / redo would revert / re-apply. Optional and
+   * additive: lets a caller check WHOSE change it is before undoing on a
+   * session shared by the UI and agents (MCP `designer_undo` refuses to undo
+   * a change it did not make).
+   */
+  nextUndo?: DesignerHistoryEntryRef | null;
+  nextRedo?: DesignerHistoryEntryRef | null;
+}
+
+export interface DesignerHistoryEntryRef {
+  commandId: string;
+  commandType: string;
+  revision: number;
 }
 
 export interface DesignerHistoryActionOkResult {
@@ -2651,6 +2665,13 @@ export interface DrcReport {
   summary: { errors: number; warnings: number; infos: number };
   /** Per-code counts of all emitted violations (incl. waived) for grouping. */
   countsByCode: Partial<Record<DrcRuleCode, number>>;
+  /**
+   * Violations hidden from `violations` altogether: by an ignored rule class
+   * (`viewState.drcIgnoredRuleClasses`) or a per-code "ignore" severity
+   * override. Absent when nothing was hidden. Waived violations are NOT
+   * counted here — they stay in `violations` with `waived: true`.
+   */
+  suppressed?: { byRuleClass: number; bySeverityOverride: number };
 }
 
 /**

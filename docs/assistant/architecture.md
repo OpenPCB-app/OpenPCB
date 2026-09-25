@@ -118,29 +118,44 @@ The reason recorded at the time was defensive: "v1 decisions becoming permanent"
 a known risk, and the mitigation was to keep v1 constraints as adapter rules, never schema
 rules.
 
-That bet has now paid. The MCP integration currently in flight retargets the design **per
-session**: an explicit `designId` wins, otherwise a session pin set by `designer_use_design`,
-otherwise the UI-active design pushed from the focused designer tab. Every existing designer
-tool works unchanged under MCP because it resolves its design through the context resolver
-rather than through a hardcoded one-design assumption. That is exactly the flexibility the
+That bet has now paid. The MCP integration retargets the design **per connection**: an
+explicit `designId` wins, otherwise the connection's pin set by `designer_use_design`, otherwise
+the UI-active design pushed from the focused designer tab, otherwise the connection's last design
+(with a warning). Every existing designer tool works unchanged under MCP because it resolves its
+design through the context resolver rather than through a hardcoded one-design assumption. That is exactly the flexibility the
 generic binding bought, and it was bought years before there was a caller who needed it.
 
 **Rule going forward:** product-level scoping rules (one design per chat, one chat per panel,
 one active design per window) are adapter and UI concerns. They do not go into the schema.
 
-### 3.2 MCP sessions are real chats
+### 3.2 MCP connections are real chats
 
-The MCP server sits inside the assistant module rather than beside it, and each MCP client
-gets a real assistant chat, matched on a header-stable client key. This is a direct consequence
-of §3.1: because context binding is generic and design resolution goes through the resolver,
-projecting the in-app tool registry over MCP required no changes to the tools themselves. It
-also means MCP tool calls and pending proposals surface in the assistant panel like any other
-run, so there is one audit trail rather than two.
+The MCP server sits inside the assistant module rather than beside it. Each MCP client (keyed on
+a header-stable client key, never the display name) gets real assistant chats: one **home** chat
+that is never bound to a design, and one chat **per design**, bound once when it is created and
+never rebound. A tool that binds the home chat (`designer_create_design`,
+`designer_resolve_design`) turns it into that design's chat and a fresh home chat is created on
+the next call. This is a direct consequence of §3.1: because context binding is generic and
+design resolution goes through the resolver, projecting the in-app tool registry over MCP
+required no changes to the tools themselves.
 
-The MCP work is in flight and gated behind the dev-only `mcp.server` feature flag. Its
-operational detail — endpoint, auth, session keying, tool projection, discovery file, stdio
-shim — lives in `CLAUDE.md`; this document records only why the architecture accommodated it
-without a rewrite.
+Two further decisions follow from "one audit trail, not two":
+
+- **Every MCP call is recorded** as a visible assistant activity message plus a tool event on
+  the chat it ran in. Proposal cards render from tool events, so a pending deletion Claude Code
+  proposed shows an approval card in the panel exactly as an in-app one does. The recorder is
+  MCP-specific on purpose: the run service's `role: "tool"` replay messages would corrupt the
+  in-app model's history.
+- **Approval stays in the app.** Destructive writes, rule and net-class changes, and design
+  deletion wait for the user in the OpenPCB panel. The external agent can only observe the
+  decision (`assistant_await_proposal`), never make it.
+
+The transport is stateless per request (the MCP SDK serves 2025-era clients without an
+`Mcp-Session-Id`), so connection state lives in `McpConnectionRegistry`, keyed on
+client + per-process instance id, not in the transport. Operational detail — endpoint, auth,
+identity headers, tool inventory, approval tiers, the stdio bridge, launcher and plugin — lives
+in `CLAUDE.md` (MCP section); the review that produced this shape and the user guide are in
+`docs/assistant/mcp-claude-code.md`.
 
 ---
 
@@ -428,8 +443,9 @@ documented at the lowering step in the compiler, which is where the geometry is 
 - Phase plans, wave/track partitions, file-ownership tables and per-task checklists from the
   two superseded specs. They described how the work was scheduled, not how the system behaves.
   They are in git history.
-- MCP operational detail (endpoint, auth, session keying, discovery, stdio shim) — see
-  `CLAUDE.md`.
+- MCP operational detail (endpoint, auth, connection keying, discovery, stdio bridge,
+  launcher, plugin) — see `CLAUDE.md`; review, tool surface and user guide — see
+  `docs/assistant/mcp-claude-code.md`.
 - Chat and proposal presentation rules — see `docs/assistant/chat-ui-spec.md`.
 - Designer data-model facts the assistant depends on (net-ID ephemerality, placement identity,
   board-settings blob) — see `src/modules/designer/AGENTS.md`.
