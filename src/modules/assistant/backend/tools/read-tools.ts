@@ -6,6 +6,7 @@ import type {
 } from "@openpcb/ai-core";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { MODULE_SDK_TOKENS, type DesignerSDK } from "../../../../sdks";
+import { drcCounts, drcCountsLine } from "./drc-counts";
 
 /**
  * Read tools that exist for MCP clients only.
@@ -167,6 +168,12 @@ function makeGetPcbStateTool(ctx: CoreBackendModuleContext): AiTool {
           id: nc.id,
           name: nc.name,
         })),
+        // What DRC is told to look away from — surfaced so an agent can say
+        // so instead of presenting a filtered report as the whole truth.
+        drcSuppression: {
+          waivedViolations: board.viewState?.drcWaivedViolationIds?.length ?? 0,
+          ignoredRuleClasses: board.viewState?.drcIgnoredRuleClasses ?? [],
+        },
         warnings: pcb.warnings,
       };
       return {
@@ -224,7 +231,7 @@ function makeRunDrcTool(ctx: CoreBackendModuleContext): AiTool {
       effect: "read",
       capability: "designer.read.drc",
       description:
-        "Run Design Rule Check over the PCB and return the violations (clearance, width, annular ring, unrouted nets). OpenPCB stays the authoritative DRC engine — always re-run this after applying layout changes rather than trusting an external calculation.",
+        "Run Design Rule Check over the PCB and return the violations (clearance, width, annular ring, unrouted nets). `counts` splits active, waived and hidden (ignored rule classes / severity overrides) violations — report all of them; the board is not clean while any are suppressed. OpenPCB stays the authoritative DRC engine — always re-run this after applying layout changes rather than trusting an external calculation.",
       inputSchema: DESIGN_INPUT_SCHEMA,
     },
     async execute(execCtx, input): Promise<AiToolResult<unknown>> {
@@ -235,11 +242,13 @@ function makeRunDrcTool(ctx: CoreBackendModuleContext): AiTool {
       if (!report) {
         return failedRead(missingDesign(designId), execCtx.limits);
       }
+      const counts = drcCounts(report);
+      const data = { ...report, counts };
       return {
         ok: true,
-        data: report,
-        modelData: report,
-        summary: `DRC: ${report.violations.length} violation(s).`,
+        data,
+        modelData: data,
+        summary: drcCountsLine(counts),
         sources: [],
         warnings: [],
         truncated: false,

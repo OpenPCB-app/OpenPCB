@@ -59,6 +59,7 @@ import { registerExtendedReadTools } from "./tools/read-tools";
 import { registerKnowledgeTools } from "./tools/knowledge-tools";
 import {
   APPROVAL_REQUIRED_KINDS,
+  NEVER_SESSION_ALLOWED_KINDS,
   registerMcpPcbTools,
 } from "./tools/mcp-pcb-tools";
 import { registerMcpDesignTools } from "./tools/mcp-design-tools";
@@ -787,7 +788,10 @@ export class AssistantService {
         allowWrites &&
         ((input.riskLevel !== "destructive" &&
           !APPROVAL_REQUIRED_KINDS.has(input.proposalKind)) ||
-          this.writeSessionPolicy.isAllowed(input)),
+          // Irreversible and verification-suppressing kinds: never on a
+          // session allowance, every one is a fresh decision.
+          (!NEVER_SESSION_ALLOWED_KINDS.has(input.proposalKind) &&
+            this.writeSessionPolicy.isAllowed(input))),
     };
     const registry = buildOpenpcbToolRegistry(
       this.ctx,

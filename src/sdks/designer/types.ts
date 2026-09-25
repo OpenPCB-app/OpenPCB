@@ -2665,6 +2665,13 @@ export interface DrcReport {
   summary: { errors: number; warnings: number; infos: number };
   /** Per-code counts of all emitted violations (incl. waived) for grouping. */
   countsByCode: Partial<Record<DrcRuleCode, number>>;
+  /**
+   * Violations hidden from `violations` altogether: by an ignored rule class
+   * (`viewState.drcIgnoredRuleClasses`) or a per-code "ignore" severity
+   * override. Absent when nothing was hidden. Waived violations are NOT
+   * counted here — they stay in `violations` with `waived: true`.
+   */
+  suppressed?: { byRuleClass: number; bySeverityOverride: number };
 }
 
 /**

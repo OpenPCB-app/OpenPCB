@@ -8,8 +8,10 @@ import type {
 } from "@openpcb/ai-core";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import {
+  DRC_RULE_CLASSES,
   MODULE_SDK_TOKENS,
   type DesignerCommandEnvelope,
+  type DrcRuleClass,
   type DesignerPcbProjection,
   type DesignerSDK,
   type PcbBoardOutline,
@@ -25,6 +27,7 @@ import {
 } from "../../../../shared/pcb-geometry/pad-geometry";
 import { buildTracePathThroughAnchors } from "../../../../shared/pcb-geometry/pcb-trace-geometry";
 import { resolveNetClassId } from "../../../../shared/pcb-areas/net-class-resolver";
+import { NON_OVERRIDABLE } from "../../../../shared/drc/severity";
 import type { ContextResolver } from "../context-resolver";
 import type { ConversationStore } from "../conversation-store";
 import {
@@ -35,6 +38,7 @@ import {
   type DesignerToolOptions,
   type SchematicProposalEnvelope,
 } from "./designer-tools";
+import { drcCounts, drcCountsLine } from "./drc-counts";
 
 /**
  * PCB tools for MCP clients (Claude Code).
@@ -259,17 +263,14 @@ async function propose(input: ProposeInput): Promise<AiToolResult<unknown>> {
   if (applied && input.kind !== "designer_pcb_rules_edits") {
     const drc = await target.designer.runDrc(target.designId).catch(() => null);
     if (drc) {
-      const bySeverity: Record<string, number> = {};
-      for (const v of drc.violations) {
-        bySeverity[v.severity] = (bySeverity[v.severity] ?? 0) + 1;
-      }
+      const counts = drcCounts(drc);
       const after = await target.designer.getDesign(target.designId);
       result.modelData = {
         ...(result.modelData as Record<string, unknown>),
         revision: after?.head.revision ?? null,
-        drc: { violations: drc.violations.length, bySeverity },
+        drc: counts,
       };
-      result.summary = `${result.summary ?? ""} DRC now reports ${drc.violations.length} violation(s).`.trim();
+      result.summary = `${result.summary ?? ""} Now: ${drcCountsLine(counts)}`.trim();
     }
   }
   return result as AiToolResult<unknown>;
@@ -1364,7 +1365,24 @@ function makeKeepoutTool(
   };
 }
 
-function makeDrcWaiverTool(
+const REASON: AiJsonSchemaObject = {
+  type: "string",
+  minLength: 3,
+  maxLength: 500,
+  description:
+    "Why, in the user's words — shown on the approval card. Required when waiving or ignoring.",
+};
+
+/**
+ * Waive individual violations. A waiver acknowledges ONE known violation (it
+ * stays listed with `waived: true` and leaves the error counts), so it is a
+ * verification decision the user makes: waiving always waits for approval in
+ * the panel. Only ids from the current report can be waived, never a
+ * safety-critical code (NON_OVERRIDABLE — shorts, layer-invalid items…),
+ * which DRC would ignore anyway. Un-waiving only restores checking, so it
+ * applies at once.
+ */
+function makeWaiveViolationsTool(
   ctx: CoreBackendModuleContext,
   contextResolver: ContextResolver,
   conversation: ConversationStore,
@@ -1372,21 +1390,20 @@ function makeDrcWaiverTool(
 ): AiTool {
   return {
     definition: {
-      name: "pcb_set_drc_waivers",
+      name: "pcb_waive_drc_violations",
       version: "1",
       effect: "write",
       capability: "designer.write.pcb.drc",
       description:
-        "Waive (or un-waive) individual DRC violations by id from designer_run_drc, or ignore whole rule classes. Waived violations stay listed but drop out of the counts. Only waive what the user agreed is acceptable.",
+        "Waive (or un-waive) individual DRC violations by id from designer_run_drc. A waived violation stays listed but no longer counts. Waiving ALWAYS waits for the user's approval in OpenPCB (then assistant_await_proposal) and needs a reason; only do it when the user asked. Un-waiving applies at once. Safety-critical codes (shorts, layer-invalid items) cannot be waived.",
       inputSchema: {
         type: "object",
         properties: {
           designId: DESIGN_ID,
           action_id: ACTION_ID,
-          waive: { type: "array", items: { type: "string" }, maxItems: 500 },
+          waive: { type: "array", items: { type: "string" }, maxItems: 200 },
           unwaive: { type: "array", items: { type: "string" }, maxItems: 500 },
-          ignoreRuleClasses: { type: "array", items: { type: "string" } },
-          unignoreRuleClasses: { type: "array", items: { type: "string" } },
+          reason: REASON,
         },
       },
     },
@@ -1396,38 +1413,168 @@ function makeDrcWaiverTool(
         action_id?: string;
         waive?: string[];
         unwaive?: string[];
-        ignoreRuleClasses?: string[];
-        unignoreRuleClasses?: string[];
+        reason?: string;
       };
       const target = await loadTarget(ctx, contextResolver, execCtx, args.designId);
       if (typeof target === "string") return failed(target, execCtx.limits);
-      const view = (target.pcb.board as { viewState?: { drcWaivedViolationIds?: string[]; drcIgnoredRuleClasses?: string[] } }).viewState ?? {};
-      const waived = new Set(view.drcWaivedViolationIds ?? []);
-      for (const id of args.waive ?? []) waived.add(id);
-      for (const id of args.unwaive ?? []) waived.delete(id);
-      const ignored = new Set(view.drcIgnoredRuleClasses ?? []);
-      for (const c of args.ignoreRuleClasses ?? []) ignored.add(c);
-      for (const c of args.unignoreRuleClasses ?? []) ignored.delete(c);
+      const current = new Set(target.pcb.board.viewState?.drcWaivedViolationIds ?? []);
+      const toWaive = [...new Set(args.waive ?? [])].filter((id) => !current.has(id));
+      const toUnwaive = [...new Set(args.unwaive ?? [])].filter((id) => current.has(id));
+      if (toWaive.length === 0 && toUnwaive.length === 0) {
+        return failed(
+          "Nothing to change: every id to waive is already waived and every id to un-waive is not.",
+          execCtx.limits,
+        );
+      }
+      const reason = args.reason?.trim() ?? "";
+      const waiveTitles: string[] = [];
+      if (toWaive.length > 0) {
+        if (reason.length < 3) {
+          return failed("Waiving needs a reason (what the user accepted and why).", execCtx.limits);
+        }
+        const report = await target.designer.runDrc(target.designId);
+        const byId = new Map((report?.violations ?? []).map((v) => [v.id, v]));
+        const unknown = toWaive.filter((id) => !byId.has(id));
+        if (unknown.length > 0) {
+          return failed(
+            `Not in the current DRC report (re-run designer_run_drc; ids change when the geometry does): ${unknown.slice(0, 10).join(", ")}${unknown.length > 10 ? ", …" : ""}.`,
+            execCtx.limits,
+          );
+        }
+        const critical = toWaive.filter((id) => NON_OVERRIDABLE.has(byId.get(id)!.code));
+        if (critical.length > 0) {
+          return failed(
+            `These are safety-critical and can never be waived — fix them instead: ${critical
+              .map((id) => `${id} (${byId.get(id)!.code})`)
+              .join(", ")}.`,
+            execCtx.limits,
+          );
+        }
+        for (const id of toWaive) {
+          const v = byId.get(id)!;
+          waiveTitles.push(`Waive ${v.code}: ${v.message.slice(0, 120)}`);
+        }
+      }
+      const next = new Set(current);
+      for (const id of toWaive) next.add(id);
+      for (const id of toUnwaive) next.delete(id);
+      const waiving = toWaive.length > 0;
       return propose({
         conversation,
         options,
         execCtx,
         target,
-        kind: "designer_pcb_board_edits",
-        toolName: "pcb_set_drc_waivers",
-        title: "DRC waivers",
-        summary: `${waived.size} waived violation(s), ${ignored.size} ignored rule class(es)`,
-        riskLevel: "medium",
+        // Waiving suppresses verification: approval-tier. Un-waiving only.
+        kind: waiving ? "designer_pcb_drc_waivers" : "designer_pcb_board_edits",
+        toolName: "pcb_waive_drc_violations",
+        title: waiving
+          ? `Waive ${toWaive.length} DRC violation(s)`
+          : `Un-waive ${toUnwaive.length} DRC violation(s)`,
+        summary: waiving
+          ? `Waive ${toWaive.length} violation(s)${toUnwaive.length ? `, un-waive ${toUnwaive.length}` : ""}. Reason: ${reason}`
+          : `Restore checking of ${toUnwaive.length} waived violation(s).`,
+        riskLevel: waiving ? "high" : "medium",
         actionId: args.action_id,
         operations: [
           {
-            title: "Update DRC waivers",
+            title: waiving ? waiveTitles.join("; ").slice(0, 400) : "Un-waive DRC violations",
             payload: {
               type: "pcb_set_view_state",
-              patch: {
-                drcWaivedViolationIds: [...waived],
-                drcIgnoredRuleClasses: [...ignored] as never,
-              },
+              patch: { drcWaivedViolationIds: [...next] },
+            },
+          },
+        ],
+      });
+    },
+  };
+}
+
+/**
+ * Ignore whole DRC rule classes. Unlike a waiver this HIDES every current and
+ * future violation of the class from the report — it changes what "DRC
+ * passes" means — so ignoring always needs a fresh approval, never covered by
+ * a session allowance (NEVER_SESSION_ALLOWED_KINDS). Un-ignoring only
+ * restores checking and applies at once.
+ */
+function makeRuleClassIgnoresTool(
+  ctx: CoreBackendModuleContext,
+  contextResolver: ContextResolver,
+  conversation: ConversationStore,
+  options: DesignerToolOptions,
+): AiTool {
+  const classes = [...DRC_RULE_CLASSES];
+  return {
+    definition: {
+      name: "pcb_set_drc_rule_class_ignores",
+      version: "1",
+      effect: "write",
+      capability: "designer.write.pcb.drc",
+      description:
+        "Ignore (or stop ignoring) whole DRC rule classes. Ignored classes vanish from designer_run_drc (counted as hidden). Ignoring ALWAYS waits for the user's approval in OpenPCB (then assistant_await_proposal) and needs a reason; only do it when the user explicitly asked. Un-ignoring applies at once.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          designId: DESIGN_ID,
+          action_id: ACTION_ID,
+          ignore: { type: "array", items: { type: "string", enum: classes }, maxItems: classes.length },
+          unignore: { type: "array", items: { type: "string", enum: classes }, maxItems: classes.length },
+          reason: REASON,
+        },
+      },
+    },
+    async execute(execCtx, input): Promise<AiToolResult<unknown>> {
+      const args = (input ?? {}) as {
+        designId?: string;
+        action_id?: string;
+        ignore?: DrcRuleClass[];
+        unignore?: DrcRuleClass[];
+        reason?: string;
+      };
+      const target = await loadTarget(ctx, contextResolver, execCtx, args.designId);
+      if (typeof target === "string") return failed(target, execCtx.limits);
+      const current = new Set(target.pcb.board.viewState?.drcIgnoredRuleClasses ?? []);
+      const toIgnore = [...new Set(args.ignore ?? [])].filter((c) => !current.has(c));
+      const toUnignore = [...new Set(args.unignore ?? [])].filter((c) => current.has(c));
+      if (toIgnore.length === 0 && toUnignore.length === 0) {
+        return failed("Nothing to change.", execCtx.limits);
+      }
+      const reason = args.reason?.trim() ?? "";
+      let hides = "";
+      if (toIgnore.length > 0) {
+        if (reason.length < 3) {
+          return failed("Ignoring a rule class needs a reason (what the user accepted and why).", execCtx.limits);
+        }
+        const report = await target.designer.runDrc(target.designId);
+        const affected = (report?.violations ?? []).filter(
+          (v) => toIgnore.includes(v.ruleClass) && !NON_OVERRIDABLE.has(v.code),
+        ).length;
+        hides = ` It would hide ${affected} current violation(s) and every future one of these classes.`;
+      }
+      const next = new Set(current);
+      for (const c of toIgnore) next.add(c);
+      for (const c of toUnignore) next.delete(c);
+      const ignoring = toIgnore.length > 0;
+      return propose({
+        conversation,
+        options,
+        execCtx,
+        target,
+        kind: ignoring ? "designer_pcb_drc_rule_ignores" : "designer_pcb_board_edits",
+        toolName: "pcb_set_drc_rule_class_ignores",
+        title: ignoring
+          ? `Ignore DRC rule class(es): ${toIgnore.join(", ")}`
+          : `Check DRC rule class(es) again: ${toUnignore.join(", ")}`,
+        summary: ignoring
+          ? `Ignore ${toIgnore.join(", ")}.${hides} Reason: ${reason}`
+          : `Restore checking of ${toUnignore.join(", ")}.`,
+        riskLevel: ignoring ? "high" : "medium",
+        actionId: args.action_id,
+        operations: [
+          {
+            title: ignoring ? `Ignore ${toIgnore.join(", ")}` : `Un-ignore ${toUnignore.join(", ")}`,
+            payload: {
+              type: "pcb_set_view_state",
+              patch: { drcIgnoredRuleClasses: [...next] },
             },
           },
         ],
@@ -1441,6 +1588,18 @@ function makeDrcWaiverTool(
 /** Proposal kinds that always wait for the user, whatever their risk level. */
 export const APPROVAL_REQUIRED_KINDS: ReadonlySet<string> = new Set([
   "designer_pcb_rules_edits",
+  "designer_pcb_drc_waivers",
+  "designer_pcb_drc_rule_ignores",
+  "designer_design_delete",
+]);
+
+/**
+ * Approval kinds a session allowance ("allow this tool this session") never
+ * covers: every one is a fresh decision. Deleting a design is irreversible;
+ * ignoring a rule class changes what "DRC passes" means for the whole board.
+ */
+export const NEVER_SESSION_ALLOWED_KINDS: ReadonlySet<string> = new Set([
+  "designer_pcb_drc_rule_ignores",
   "designer_design_delete",
 ]);
 
@@ -1459,5 +1618,6 @@ export function registerMcpPcbTools(
   registry.register(makeDesignRulesTool(ctx, contextResolver, conversation, options));
   registry.register(makeZoneTool(ctx, contextResolver, conversation, options));
   registry.register(makeKeepoutTool(ctx, contextResolver, conversation, options));
-  registry.register(makeDrcWaiverTool(ctx, contextResolver, conversation, options));
+  registry.register(makeWaiveViolationsTool(ctx, contextResolver, conversation, options));
+  registry.register(makeRuleClassIgnoresTool(ctx, contextResolver, conversation, options));
 }

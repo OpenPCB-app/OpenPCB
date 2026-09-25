@@ -121,7 +121,7 @@ describe("placement and routing", () => {
     expect(before.unrouted.length).toBe(1);
     const result = await routeFirstUnrouted(designId);
     expect(result.structuredContent.ok).toBe(true);
-    expect(result.structuredContent.summary).toContain("DRC now reports");
+    expect(result.structuredContent.summary).toContain("Now: DRC:");
     expect(result.structuredContent.proposal?.status).toBe("applied");
     const after = await layout(designId);
     expect(after.unrouted.length).toBe(0);
@@ -377,5 +377,112 @@ describe("stale approvals never apply", () => {
     await approveExpectingRefusal(designId, rules);
     const pcb = await h.designer.getPcbProjection(designId);
     expect(pcb!.board.netClasses.find((c) => c.id === "default")!.traceWidthMm).not.toBe(0.35);
+  });
+});
+
+describe("DRC suppression needs the user and is always reported", () => {
+  interface DrcData {
+    violations: Array<{ id: string; code: string; ruleClass: string; waived?: boolean }>;
+    counts: {
+      active: number;
+      waived: number;
+      ignoredByRuleClass: number;
+      raw: number;
+    };
+  }
+
+  async function drc(designId: string): Promise<{ data: DrcData; summary: string }> {
+    const result = await h.callTool("designer_run_drc", { designId });
+    expect(result.structuredContent.ok).toBe(true);
+    return { data: result.structuredContent.data as DrcData, summary: result.structuredContent.summary };
+  }
+
+  test("waiving waits for approval, needs a reason and a real id, and stays visible in counts", async () => {
+    h.enable({ writes: true });
+    const designId = await twoResistorDesign("Waive me");
+    const before = await drc(designId);
+    const target = before.data.violations.find((v) => !v.waived)!;
+    expect(target).toBeTruthy();
+    expect(before.data.counts.raw).toBe(before.data.counts.active);
+
+    const noReason = await h.callTool("pcb_waive_drc_violations", { designId, waive: [target.id] });
+    expect(noReason.structuredContent.ok).toBe(false);
+    const unknown = await h.callTool("pcb_waive_drc_violations", {
+      designId,
+      waive: ["TRACE_WIDTH_MIN-v2-0000000000000000"],
+      reason: "user accepted",
+    });
+    expect(unknown.structuredContent.ok).toBe(false);
+    expect(unknown.structuredContent.summary).toContain("Not in the current DRC report");
+
+    const waive = await h.callTool("pcb_waive_drc_violations", {
+      designId,
+      waive: [target.id],
+      reason: "User accepts this for the prototype",
+    });
+    expect(waive.structuredContent.proposal?.status).toBe("pending");
+    expect(waive.structuredContent.proposal?.kind).toBe("designer_pcb_drc_waivers");
+    expect((await drc(designId)).data.counts.waived).toBe(0);
+
+    await approve(designId, waive);
+    const after = await drc(designId);
+    expect(after.data.counts.waived).toBe(1);
+    expect(after.data.counts.raw).toBe(before.data.counts.raw);
+    expect(after.summary).toContain("1 waived");
+    expect(after.summary).toContain("not describe the board as clean");
+
+    const unwaive = await h.callTool("pcb_waive_drc_violations", { designId, unwaive: [target.id] });
+    expect(unwaive.structuredContent.proposal?.status).toBe("applied");
+    expect((await drc(designId)).data.counts.waived).toBe(0);
+  });
+
+  test("ignoring a rule class is never covered by a session allowance; hidden violations are counted", async () => {
+    h.enable({ writes: true });
+    const designId = await twoResistorDesign("Ignore class");
+    const before = await drc(designId);
+    const ruleClass = before.data.violations[0]!.ruleClass;
+
+    const allow = await h.fetch(
+      `/api/modules/assistant/chats/${chatOf(designId).id}/write-policy/session-allow`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          toolName: "pcb_set_drc_rule_class_ignores",
+          proposalKind: "designer_pcb_drc_rule_ignores",
+          riskLevel: "high",
+        }),
+      },
+    );
+    expect(allow.status).toBe(201);
+
+    const ignore = await h.callTool("pcb_set_drc_rule_class_ignores", {
+      designId,
+      ignore: [ruleClass],
+      reason: "User reviews these by hand",
+    });
+    expect(ignore.structuredContent.proposal?.status).toBe("pending");
+    // The approval card says what the user is agreeing to.
+    const card = getAssistantService().conversation.getWriteProposalById(
+      ignore.structuredContent.proposal!.id,
+    )!;
+    expect(card.summary).toContain("would hide");
+    expect(card.summary).toContain("User reviews these by hand");
+
+    await approve(designId, ignore);
+    const after = await drc(designId);
+    expect(after.data.counts.ignoredByRuleClass).toBeGreaterThan(0);
+    expect(after.data.counts.raw).toBe(before.data.counts.raw);
+    expect(after.summary).toContain("hidden by ignored rule classes");
+
+    const state = await h.callTool("designer_get_pcb_state", { designId });
+    expect(
+      (state.structuredContent.data as { drcSuppression: { ignoredRuleClasses: string[] } })
+        .drcSuppression.ignoredRuleClasses,
+    ).toContain(ruleClass);
+
+    const restore = await h.callTool("pcb_set_drc_rule_class_ignores", { designId, unignore: [ruleClass] });
+    expect(restore.structuredContent.proposal?.status).toBe("applied");
+    expect((await drc(designId)).data.counts.ignoredByRuleClass).toBe(0);
   });
 });

@@ -101,6 +101,8 @@ export interface SchematicProposalEnvelope {
     | "designer_pcb_board_edits"
     | "designer_pcb_rules_edits"
     | "designer_pcb_deletions"
+    | "designer_pcb_drc_waivers"
+    | "designer_pcb_drc_rule_ignores"
     | "designer_design_delete";
   toolName:
     | "designer_propose_schematic_edits"
@@ -120,7 +122,8 @@ export interface SchematicProposalEnvelope {
     | "pcb_set_design_rules"
     | "pcb_manage_zone"
     | "pcb_manage_keepout"
-    | "pcb_set_drc_waivers"
+    | "pcb_waive_drc_violations"
+    | "pcb_set_drc_rule_class_ignores"
     | "designer_delete_design";
   /** Idempotency key from the model (Track D); dedup re-runs by design + key. */
   actionId?: string;

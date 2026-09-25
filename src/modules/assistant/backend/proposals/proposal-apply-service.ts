@@ -48,7 +48,9 @@ export async function applyAssistantWriteProposal(
     // MCP-only PCB tools: their operations are real DesignerCommands too.
     kind === "designer_pcb_board_edits" ||
     kind === "designer_pcb_rules_edits" ||
-    kind === "designer_pcb_deletions"
+    kind === "designer_pcb_deletions" ||
+    kind === "designer_pcb_drc_waivers" ||
+    kind === "designer_pcb_drc_rule_ignores"
   ) {
     return applyDesignerPcbBatchProposal(input);
   }

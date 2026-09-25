@@ -57,7 +57,10 @@ export const MCP_TOOL_POLICIES: Record<string, McpToolPolicy> = {
   // `action: "delete"` removes the zone/keepout — flag the tool conservatively.
   pcb_manage_zone: { destructive: true },
   pcb_manage_keepout: { destructive: true },
-  pcb_set_drc_waivers: { idempotent: true },
+  // Suppress verification: always approval-tier (APPROVAL_REQUIRED_KINDS);
+  // flagged destructive so clients treat them with the same care.
+  pcb_waive_drc_violations: { destructive: true },
+  pcb_set_drc_rule_class_ignores: { destructive: true },
   designer_rename_design: { idempotent: true },
   designer_delete_design: { destructive: true },
   designer_focus_design: { idempotent: true },
