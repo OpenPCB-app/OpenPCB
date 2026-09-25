@@ -140,6 +140,22 @@ function mockContextResolver(bound = false): ContextResolver {
         updatedAt: "updated",
       };
     },
+    bindDesignIfUnbound(_chatId: string, design: { id: string; name: string }) {
+      return {
+        created: true,
+        binding: {
+          id: "binding-2",
+          chatId: "chat-1",
+          kind: "design",
+          refId: design.id,
+          label: design.name,
+          role: "primary",
+          status: "active",
+          createdAt: "created",
+          updatedAt: "updated",
+        },
+      };
+    },
   } as unknown as ContextResolver;
 }
 

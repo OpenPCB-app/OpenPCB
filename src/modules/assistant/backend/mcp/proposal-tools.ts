@@ -18,7 +18,7 @@ import { withHeartbeat, type McpRequestCtx } from "./tool-projection";
  * not fire while the user reads the card).
  *
  * Connection-scoped (registered per request next to `designer_use_design`),
- * and limited to proposals in this client's own MCP chats.
+ * and limited to proposals this session proposed (the actor columns).
  */
 
 /** Upper bound for one await; Claude Code aborts idle HTTP calls at 5 min. */
@@ -30,14 +30,17 @@ export interface ProposalToolDeps {
   events: AssistantEventBus;
 }
 
-function ownedBy(
-  deps: ProposalToolDeps,
-  connection: McpConnection,
-  record: AssistantWriteProposalDto,
-): boolean {
-  const chat = deps.conversation.getChat(record.chatId);
-  const mcp = (chat?.metadata as { mcp?: { clientKey?: string } } | null)?.mcp;
-  return mcp?.clientKey === connection.clientKey;
+/**
+ * A proposal belongs to the session that proposed it — client key AND
+ * instance id from its actor columns. Another Claude Code session of the same
+ * client must not see, await or react to it; the chat it lives in is
+ * presentation only.
+ */
+function ownedBy(connection: McpConnection, record: AssistantWriteProposalDto): boolean {
+  return (
+    record.actor?.clientKey === connection.clientKey &&
+    record.actor.instanceId === connection.instanceId
+  );
 }
 
 function describe(record: AssistantWriteProposalDto): Record<string, unknown> {
@@ -92,7 +95,7 @@ function lookup(
   proposalId: string,
 ): AssistantWriteProposalDto | null {
   const record = deps.conversation.getWriteProposalById(proposalId);
-  if (!record || !ownedBy(deps, connection, record)) return null;
+  if (!record || !ownedBy(connection, record)) return null;
   return record;
 }
 
@@ -128,7 +131,7 @@ export function registerProposalTools(
     async (input: { proposalId: string }) => {
       const record = lookup(deps, connection, input.proposalId);
       if (!record) {
-        return failureResult(`No proposal '${input.proposalId}' from this client.`);
+        return failureResult(`No proposal '${input.proposalId}' from this session.`);
       }
       return toCallToolResult({
         ok: true,
@@ -145,7 +148,7 @@ export function registerProposalTools(
     "assistant_list_pending_proposals",
     {
       description:
-        "Write proposals from this client that are still waiting for the user's approval in OpenPCB, newest first. Optionally filter by designId.",
+        "Write proposals from this session that are still waiting for the user's approval in OpenPCB, newest first. Optionally filter by designId.",
       inputSchema: fromJsonSchema<{ designId?: string }>({
         type: "object",
         properties: { designId: { type: "string" } },
@@ -153,17 +156,10 @@ export function registerProposalTools(
       annotations: READ_ONLY,
     },
     async (input: { designId?: string } | undefined) => {
-      const pending: AssistantWriteProposalDto[] = [];
-      for (const chat of deps.conversation.listChats()) {
-        const mcp = (chat.metadata as { mcp?: { clientKey?: string } } | null)?.mcp;
-        if (mcp?.clientKey !== connection.clientKey) continue;
-        for (const record of deps.conversation.listWriteProposals(chat.id)) {
-          if (record.status !== "pending") continue;
-          if (input?.designId && record.designId !== input.designId) continue;
-          pending.push(record);
-        }
-      }
-      pending.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const pending = deps.conversation.listWriteProposalsByActor(connection, {
+        status: "pending",
+        designId: input?.designId || undefined,
+      });
       return toCallToolResult({
         ok: true,
         status: "ok",
@@ -203,7 +199,7 @@ export function registerProposalTools(
       const requestCtx = ctx as McpRequestCtx;
       let record = lookup(deps, connection, input.proposalId);
       if (!record) {
-        return failureResult(`No proposal '${input.proposalId}' from this client.`);
+        return failureResult(`No proposal '${input.proposalId}' from this session.`);
       }
       if (record.status === "pending") {
         const timeoutMs =

@@ -15,6 +15,7 @@ import type {
   AiContextBindingStatus,
   AiToolStatus,
   AiSourceRef,
+  AssistantWriteProposalActor,
   AssistantWriteProposalDto,
   AssistantWriteProposalKind,
   AssistantWriteProposalStatus,
@@ -191,6 +192,14 @@ function rowToWriteProposal(
     origin: row.origin === "cloud" ? ("cloud" as const) : ("local" as const),
     cloudRunId: row.cloud_run_id ? String(row.cloud_run_id) : null,
     cloudProposalId: row.cloud_proposal_id ? String(row.cloud_proposal_id) : null,
+    actor:
+      row.actor_client_key && row.actor_instance_id
+        ? {
+            type: "mcp" as const,
+            clientKey: String(row.actor_client_key),
+            instanceId: String(row.actor_instance_id),
+          }
+        : null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -250,6 +259,8 @@ export interface CreateWriteProposalInput {
   origin?: "local" | "cloud";
   cloudRunId?: string | null;
   cloudProposalId?: string | null;
+  /** MCP client session that proposed it (ownership); null in-app. */
+  actor?: AssistantWriteProposalActor | null;
 }
 
 export interface ListMessagesOptions {
@@ -651,7 +662,7 @@ export class ConversationStore {
     const cloudProposalId = input.cloudProposalId ?? null;
     try {
       this.rawSql(
-        "INSERT INTO assistant_write_proposal (id,chat_id,tool_event_id,kind,status,design_id,base_revision,proposal_json,apply_result_json,tool_name,title,summary,risk_level,operations_json,sources_json,warnings_json,envelope_json,action_id,origin,cloud_run_id,cloud_proposal_id,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO assistant_write_proposal (id,chat_id,tool_event_id,kind,status,design_id,base_revision,proposal_json,apply_result_json,tool_name,title,summary,risk_level,operations_json,sources_json,warnings_json,envelope_json,action_id,origin,cloud_run_id,cloud_proposal_id,actor_client_key,actor_instance_id,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           proposalId,
           input.chatId,
@@ -674,6 +685,8 @@ export class ConversationStore {
           input.origin ?? "local",
           input.cloudRunId ?? null,
           cloudProposalId,
+          input.actor?.clientKey ?? null,
+          input.actor?.instanceId ?? null,
           timestamp,
           timestamp,
         ],
@@ -735,6 +748,50 @@ export class ConversationStore {
       [designId, actionId],
     )[0];
     return row ? rowToWriteProposal(row) : null;
+  }
+
+  /** Proposals an MCP session made, newest first; optionally one status / design. */
+  listWriteProposalsByActor(
+    actor: { clientKey: string; instanceId: string },
+    filter: { status?: AssistantWriteProposalStatus; designId?: string } = {},
+  ): AssistantWriteProposalDto[] {
+    const clauses = ["actor_client_key=?", "actor_instance_id=?"];
+    const params: unknown[] = [actor.clientKey, actor.instanceId];
+    if (filter.status) {
+      clauses.push("status=?");
+      params.push(filter.status);
+    }
+    if (filter.designId) {
+      clauses.push("design_id=?");
+      params.push(filter.designId);
+    }
+    return this.rawSql(
+      `SELECT * FROM assistant_write_proposal WHERE ${clauses.join(" AND ")} ORDER BY created_at DESC`,
+      params,
+    ).map(rowToWriteProposal);
+  }
+
+  /**
+   * Designer command ids an MCP session landed on a design through its
+   * applied proposals — what `designer_undo` / `designer_redo` may touch.
+   */
+  commandIdsAppliedByActor(
+    actor: { clientKey: string; instanceId: string },
+    designId: string,
+  ): Set<string> {
+    const ids = new Set<string>();
+    const rows = this.rawSql(
+      "SELECT apply_result_json FROM assistant_write_proposal WHERE actor_client_key=? AND actor_instance_id=? AND design_id=? AND status IN ('applied','partial')",
+      [actor.clientKey, actor.instanceId, designId],
+    );
+    for (const row of rows) {
+      const applied = decodeJson<{ commandIds?: unknown } | null>(row.apply_result_json, null);
+      if (!Array.isArray(applied?.commandIds)) continue;
+      for (const commandId of applied.commandIds) {
+        if (typeof commandId === "string") ids.add(commandId);
+      }
+    }
+    return ids;
   }
 
   getWriteProposal(

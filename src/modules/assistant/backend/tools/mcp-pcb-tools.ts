@@ -30,6 +30,7 @@ import type { ConversationStore } from "../conversation-store";
 import {
   dedupByActionId,
   finalizeAndMaybeApply,
+  mcpActorOf,
   resolveDesignForTool,
   type DesignerToolOptions,
   type SchematicProposalEnvelope,
@@ -236,6 +237,7 @@ async function propose(input: ProposeInput): Promise<AiToolResult<unknown>> {
   const result = await finalizeAndMaybeApply({
     designer: target.designer,
     conversation: input.conversation,
+    actor: mcpActorOf(execCtx),
     chatId,
     designId: target.designId,
     baseRevision: design.head.revision,

@@ -19,20 +19,28 @@ import type { CapturedIntent } from "../verification/build-intent-capture";
  *   never steer each other. Direct HTTP clients without the header share
  *   state per `clientKey`.
  *
- * Chat model — the fix for the old "one chat, re-bound on every call" design:
+ * Chat model — per SESSION (`clientKey|instanceId`), never shared between two
+ * Claude Code sessions. Chats are the audit trail, not the ownership boundary:
+ * proposals carry an explicit actor (`actor_client_key`, `actor_instance_id`)
+ * and every ownership check (await/get proposal, undo/redo) compares that.
+ * Keeping chats per session on top means "allow this tool for the session" in
+ * the panel (keyed by chat) can never authorise another session, and no two
+ * sessions ever bind the same chat.
  *
- * - One **home** chat per client, never bound to a design. Calls that do not
+ * - One **home** chat per session, never bound to a design. Calls that do not
  *   target a design (library search, list/create/resolve design) run there.
- * - One **design** chat per client per design, bound exactly once. Designer
+ * - One **design** chat per session per design, bound exactly once. Designer
  *   tools resolve their design from the chat's primary binding
  *   (`ContextResolver.getPrimaryDesign`), so a chat that never changes design
- *   makes every in-app tool work unmodified, removes the rebinding race
- *   between concurrent sessions, and — because the metadata has the
- *   `{scope:"designer", designId}` shape `listChatsForDesign` filters on —
- *   puts Claude Code's activity and approval cards in that design's dock.
+ *   makes every in-app tool work unmodified — and because the metadata has the
+ *   `{scope:"designer", designId}` shape `listChatsForDesign` filters on, the
+ *   session's activity and approval cards show in that design's dock.
  * - When a tool binds the home chat (`designer_create_design`,
  *   `designer_resolve_design`), that chat becomes the design's chat and a new
- *   home chat is created lazily (`adoptBoundHomeChat`).
+ *   home chat is created lazily (`adoptBoundHomeChat`). Those tools run under
+ *   the connection's lock (`serialize`), so two parallel calls from one
+ *   session cannot bind the same home chat to two designs.
+ * - Chats from before per-session chats (no `mcp.instanceId`) are left alone.
  */
 
 export interface McpClientIdentity {
@@ -100,7 +108,23 @@ export const CONNECTION_IDLE_MS = 30 * 60 * 1000;
 interface McpChatMetadata {
   clientKey: string;
   clientName: string;
+  instanceId: string;
   role: "home" | "design";
+}
+
+/** `clientKey|instanceId` — the unit that owns chats, pins and proposals. */
+export function sessionKeyOf(connection: McpClientIdentity): string {
+  return `${connection.clientKey}|${connection.instanceId}`;
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+/** "2026-09-25 14:32" in the machine's local time — tells sessions apart in chat titles. */
+function sessionLabel(startedAt: number): string {
+  const d = new Date(startedAt);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
 function mcpMetaOf(
@@ -118,8 +142,14 @@ export function normalizeClientKey(raw: string): string {
 
 export class McpConnectionRegistry {
   private readonly connections = new Map<string, McpConnection>();
+  /** sessionKey → home chat id. */
   private readonly homeChats = new Map<string, string>();
+  /** `${sessionKey}|${designId}` → design chat id. */
   private readonly designChats = new Map<string, string>();
+  /** In-flight design-chat creations, so parallel calls share one chat. */
+  private readonly pendingDesignChats = new Map<string, Promise<string | null>>();
+  /** sessionKey → tail of the connection's serialized-call queue. */
+  private readonly locks = new Map<string, Promise<unknown>>();
   private readonly now: () => number;
 
   constructor(private readonly deps: McpConnectionDeps) {
@@ -187,6 +217,28 @@ export class McpConnectionRegistry {
     }
   }
 
+  /**
+   * Run `fn` after every earlier serialized call of this session finished.
+   * Used for writes and for the tools that bind the home chat: Claude Code
+   * issues tool calls in parallel, and two of those racing on one chat's
+   * binding or on one design's revision must not interleave. Reads are not
+   * serialized.
+   */
+  serialize<T>(connection: McpClientIdentity, fn: () => Promise<T>): Promise<T> {
+    const key = sessionKeyOf(connection);
+    const previous = this.locks.get(key) ?? Promise.resolve();
+    const run = previous.then(fn, fn);
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.locks.set(key, tail);
+    void tail.then(() => {
+      if (this.locks.get(key) === tail) this.locks.delete(key);
+    });
+    return run;
+  }
+
   nextRunId(connection: McpConnection): string {
     connection.callCount += 1;
     return `mcp:${connection.instanceId}:${crypto.randomUUID()}`;
@@ -243,45 +295,32 @@ export class McpConnectionRegistry {
     return Boolean(chatId && this.deps.conversation.getChat(chatId));
   }
 
-  /** The client's unbound home chat; created on first use. */
+  /** The session's unbound home chat; created on first use. */
   homeChat(connection: McpConnection): string {
-    const cached = this.homeChats.get(connection.clientKey);
+    const key = sessionKeyOf(connection);
+    const cached = this.homeChats.get(key);
     if (this.chatExists(cached) && !this.deps.contextResolver.getPrimaryDesign(cached)) {
       return cached;
     }
 
     for (const chat of this.deps.conversation.listChats()) {
       const meta = mcpMetaOf(chat.metadata);
-      if (!meta || meta.clientKey !== connection.clientKey) continue;
-      if (meta.role === "design") continue;
-      const primary = this.deps.contextResolver.getPrimaryDesign(chat.id);
-      if (primary) {
-        // A pre-hardening MCP chat that was bound (and re-bound) to designs:
-        // it is a design chat now.
-        this.markDesignChat(chat.id, connection, primary.refId, primary.label);
-        continue;
-      }
-      if (meta.role !== "home") {
-        this.deps.conversation.updateChat(chat.id, {
-          metadata: {
-            ...(chat.metadata ?? {}),
-            mcp: this.mcpMeta(connection, "home"),
-          },
-        });
-      }
-      this.homeChats.set(connection.clientKey, chat.id);
+      if (!this.isSessionChat(meta, connection) || meta?.role !== "home") continue;
+      if (this.deps.contextResolver.getPrimaryDesign(chat.id)) continue;
+      this.homeChats.set(key, chat.id);
       return chat.id;
     }
 
-    const chatId = this.createChat(`MCP · ${connection.clientName}`, {
-      mcp: this.mcpMeta(connection, "home"),
-    });
-    this.homeChats.set(connection.clientKey, chatId);
+    const chatId = this.createChat(
+      `MCP · ${connection.clientName} · ${sessionLabel(connection.firstSeen)}`,
+      { mcp: this.mcpMeta(connection, "home") },
+    );
+    this.homeChats.set(key, chatId);
     return chatId;
   }
 
   /**
-   * The client's chat for `designId`, bound to it; created (and bound) on
+   * The session's chat for `designId`, bound to it; created (and bound) on
    * first use. Returns null when the design does not exist — the caller then
    * runs the tool in the home chat, where it reports the missing design.
    */
@@ -289,44 +328,40 @@ export class McpConnectionRegistry {
     connection: McpConnection,
     designId: string,
   ): Promise<string | null> {
-    const cacheKey = `${connection.clientKey}|${designId}`;
-    const cached = this.designChats.get(cacheKey);
-    if (
-      this.chatExists(cached) &&
-      this.deps.contextResolver.getPrimaryDesign(cached)?.refId === designId
-    ) {
-      return cached;
-    }
+    const cacheKey = `${sessionKeyOf(connection)}|${designId}`;
+    const existing = this.findDesignChat(connection, designId);
+    if (existing) return existing;
+    const inFlight = this.pendingDesignChats.get(cacheKey);
+    if (inFlight) return inFlight;
 
-    for (const chat of this.deps.conversation.listChats()) {
-      const meta = mcpMetaOf(chat.metadata);
-      if (!meta || meta.clientKey !== connection.clientKey) continue;
-      const primary = this.deps.contextResolver.getPrimaryDesign(chat.id);
-      if (primary?.refId !== designId) continue;
-      if (meta.role !== "design") {
-        this.markDesignChat(chat.id, connection, designId, primary.label);
-      }
-      this.designChats.set(cacheKey, chat.id);
-      return chat.id;
+    const creation = (async () => {
+      const design = await this.designer()?.getDesign(designId);
+      if (!design) return null;
+      // Re-check after the await: another call may have created it.
+      const raced = this.findDesignChat(connection, designId);
+      if (raced) return raced;
+      const chatId = this.createChat(
+        `MCP · ${connection.clientName} · ${design.head.name} · ${sessionLabel(connection.firstSeen)}`,
+        {
+          scope: "designer",
+          designId: design.head.id,
+          designName: design.head.name,
+          mcp: this.mcpMeta(connection, "design"),
+        },
+      );
+      this.deps.contextResolver.bindDesignIfUnbound(chatId, {
+        id: design.head.id,
+        name: design.head.name,
+      });
+      this.designChats.set(cacheKey, chatId);
+      return chatId;
+    })();
+    this.pendingDesignChats.set(cacheKey, creation);
+    try {
+      return await creation;
+    } finally {
+      this.pendingDesignChats.delete(cacheKey);
     }
-
-    const design = await this.designer()?.getDesign(designId);
-    if (!design) return null;
-    const chatId = this.createChat(
-      `MCP · ${connection.clientName} · ${design.head.name}`,
-      {
-        scope: "designer",
-        designId: design.head.id,
-        designName: design.head.name,
-        mcp: this.mcpMeta(connection, "design"),
-      },
-    );
-    await this.deps.contextResolver.bindDesign(chatId, {
-      id: design.head.id,
-      name: design.head.name,
-    });
-    this.designChats.set(cacheKey, chatId);
-    return chatId;
   }
 
   /**
@@ -339,24 +374,36 @@ export class McpConnectionRegistry {
     if (!primary) return null;
     connection.pinnedDesignId = primary.refId;
     connection.lastDesignId = primary.refId;
-    if (this.findDesignChat(connection.clientKey, primary.refId, chatId)) {
-      // The design already has this client's chat (e.g. resolve_design on a
-      // design worked on before): keep one chat per design — undo the bind
-      // and leave this chat as the home chat.
+    if (this.findDesignChat(connection, primary.refId, chatId)) {
+      // The session already has a chat for this design (e.g. resolve_design
+      // on a design it worked on before): keep one chat per design — undo the
+      // bind and leave this chat as the home chat.
       this.deps.conversation.deleteBinding(chatId, primary.id);
       return primary.refId;
     }
     this.markDesignChat(chatId, connection, primary.refId, primary.label);
-    this.homeChats.delete(connection.clientKey);
+    this.homeChats.delete(sessionKeyOf(connection));
     return primary.refId;
   }
 
+  private isSessionChat(
+    meta: Partial<McpChatMetadata> | null,
+    connection: McpClientIdentity,
+  ): boolean {
+    return Boolean(
+      meta &&
+        meta.clientKey === connection.clientKey &&
+        meta.instanceId === connection.instanceId,
+    );
+  }
+
   private findDesignChat(
-    clientKey: string,
+    connection: McpConnection,
     designId: string,
     excludeChatId?: string,
   ): string | null {
-    const cached = this.designChats.get(`${clientKey}|${designId}`);
+    const cacheKey = `${sessionKeyOf(connection)}|${designId}`;
+    const cached = this.designChats.get(cacheKey);
     if (
       cached !== excludeChatId &&
       this.chatExists(cached) &&
@@ -367,8 +414,9 @@ export class McpConnectionRegistry {
     for (const chat of this.deps.conversation.listChats()) {
       if (chat.id === excludeChatId) continue;
       const meta = mcpMetaOf(chat.metadata);
-      if (!meta || meta.clientKey !== clientKey || meta.role !== "design") continue;
+      if (!this.isSessionChat(meta, connection) || meta?.role !== "design") continue;
       if (this.deps.contextResolver.getPrimaryDesign(chat.id)?.refId === designId) {
+        this.designChats.set(cacheKey, chat.id);
         return chat.id;
       }
     }
@@ -383,7 +431,7 @@ export class McpConnectionRegistry {
   ): void {
     const chat = this.deps.conversation.getChat(chatId);
     this.deps.conversation.updateChat(chatId, {
-      title: `MCP · ${connection.clientName} · ${designName}`,
+      title: `MCP · ${connection.clientName} · ${designName} · ${sessionLabel(connection.firstSeen)}`,
       metadata: {
         ...(chat?.metadata ?? {}),
         scope: "designer",
@@ -392,7 +440,7 @@ export class McpConnectionRegistry {
         mcp: this.mcpMeta(connection, "design"),
       },
     });
-    this.designChats.set(`${connection.clientKey}|${designId}`, chatId);
+    this.designChats.set(`${sessionKeyOf(connection)}|${designId}`, chatId);
   }
 
   private mcpMeta(
@@ -402,6 +450,7 @@ export class McpConnectionRegistry {
     return {
       clientKey: connection.clientKey,
       clientName: connection.clientName,
+      instanceId: connection.instanceId,
       role,
     };
   }

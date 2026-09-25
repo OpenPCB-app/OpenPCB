@@ -152,20 +152,26 @@ describe("design targeting and chats", () => {
     expect(await summaryDesignId(INSTANCE_B)).toBe(b);
   });
 
-  test("each design gets one bound chat that the design dock lists", async () => {
+  test("each session gets one bound chat per design that the design dock lists", async () => {
     h.enable({ writes: true });
     const id = await createDesign("Dock listed");
+    await h.callTool("designer_get_design_summary", { designId: id });
     await h.callTool("designer_get_design_summary", { designId: id });
     await h.callTool("designer_get_design_summary", { designId: id }, INSTANCE_B);
 
     const chats = mcpChats().filter(
       (chat) => (chat.metadata as { designId?: string }).designId === id,
     );
-    expect(chats).toHaveLength(1);
-    const primary = getAssistantService().contextResolver.getPrimaryDesign(
-      chats[0]!.id,
+    // One per session (instance-a created it via createDesign, instance-b on
+    // its first call) — never shared, never duplicated within a session.
+    expect(chats).toHaveLength(2);
+    const instances = chats.map(
+      (chat) => (chat.metadata as { mcp?: { instanceId?: string } }).mcp?.instanceId,
     );
-    expect(primary?.refId).toBe(id);
+    expect(new Set(instances).size).toBe(2);
+    for (const chat of chats) {
+      expect(getAssistantService().contextResolver.getPrimaryDesign(chat.id)?.refId).toBe(id);
+    }
 
     const response = await h.fetch(
       `/api/modules/assistant/design-chats?designId=${encodeURIComponent(id)}`,

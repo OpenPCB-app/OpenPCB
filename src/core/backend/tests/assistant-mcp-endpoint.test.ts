@@ -387,8 +387,10 @@ describe("assistant MCP endpoint", () => {
     const mcpChats = service.conversation
       .listChats()
       .filter((chat) => Boolean((chat.metadata as { mcp?: unknown })?.mcp));
+    // No instance header: the client key doubles as the session, so a
+    // reconnect lands in the same home chat.
     expect(mcpChats).toHaveLength(1);
-    expect(mcpChats[0]?.title).toBe("MCP · Test Client");
+    expect(mcpChats[0]?.title).toMatch(/^MCP · Test Client · \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
   });
 });
 

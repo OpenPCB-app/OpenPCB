@@ -13,6 +13,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { McpBridge } from "../../../../electron/src/mcp-shim/bridge";
+import { resolveInstanceId } from "../../../../electron/src/mcp-shim/instance";
 import {
   processAlive,
   type DiscoveryEnv,
@@ -289,4 +290,25 @@ describe("bundled shim process", () => {
       await client.close();
     }
   }, 30_000);
+});
+
+describe("bridge instance id", () => {
+  test("an explicit OPENPCB_MCP_INSTANCE wins when it is a safe token", () => {
+    expect(resolveInstanceId({ OPENPCB_MCP_INSTANCE: "ci-run-7" }, () => "random")).toBe("ci-run-7");
+    expect(resolveInstanceId({ OPENPCB_MCP_INSTANCE: "bad id; rm" }, () => "random")).toBe("random");
+  });
+
+  test("Claude Code's session id gives a stable, opaque id per session", () => {
+    const one = resolveInstanceId({ CLAUDE_CODE_SESSION_ID: "4bf27f6f-aaaa" }, () => "random");
+    const again = resolveInstanceId({ CLAUDE_CODE_SESSION_ID: "4bf27f6f-aaaa" }, () => "other");
+    const other = resolveInstanceId({ CLAUDE_CODE_SESSION_ID: "5c000000-bbbb" }, () => "random");
+    expect(one).toBe(again);
+    expect(one).not.toBe(other);
+    expect(one.startsWith("cc-")).toBe(true);
+    expect(one).not.toContain("4bf27f6f");
+  });
+
+  test("without either, every process gets a fresh id", () => {
+    expect(resolveInstanceId({}, () => "fresh")).toBe("fresh");
+  });
 });

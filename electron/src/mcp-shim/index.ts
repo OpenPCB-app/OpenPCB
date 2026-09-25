@@ -16,6 +16,7 @@
 
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { McpBridge } from "./bridge";
+import { resolveInstanceId } from "./instance";
 import { defaultDiscoveryEnv } from "./portfile";
 import type { JsonRpcMessage } from "./upstream";
 
@@ -29,7 +30,7 @@ async function main(): Promise<void> {
   const stdio = new StdioServerTransport();
   const bridge = new McpBridge({
     discovery: defaultDiscoveryEnv(),
-    instanceId: crypto.randomUUID(),
+    instanceId: resolveInstanceId(process.env),
     clientKeyOverride: process.env.OPENPCB_MCP_CLIENT?.trim() || undefined,
     pollMs: Number(process.env.OPENPCB_MCP_POLL_MS) || undefined,
     log,

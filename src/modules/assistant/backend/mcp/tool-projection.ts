@@ -171,10 +171,34 @@ function thrownResult(message: string): AiToolResult<null> {
 }
 
 /**
+ * Read tools that may bind the session's home chat to a design. They run
+ * under the connection lock like writes, so two parallel calls cannot bind
+ * one chat twice (see `McpConnectionRegistry.serialize`).
+ */
+const BINDING_READ_TOOLS = new Set(["designer_resolve_design"]);
+
+/**
  * One projected call: target → chat → record → execute → adopt/pin → envelope.
- * Exported for tests.
+ * Writes and chat-binding tools are serialized per session; reads run
+ * concurrently. Exported for tests.
  */
 export async function runProjectedTool(
+  tool: AiTool,
+  connection: McpConnection,
+  deps: ToolProjectionDeps,
+  input: Record<string, unknown> | undefined,
+  requestCtx?: McpRequestCtx,
+): Promise<McpCallToolResult> {
+  const def = tool.definition;
+  if (def.effect === "write" || BINDING_READ_TOOLS.has(def.name)) {
+    return deps.connections.serialize(connection, () =>
+      runProjectedToolNow(tool, connection, deps, input, requestCtx),
+    );
+  }
+  return runProjectedToolNow(tool, connection, deps, input, requestCtx);
+}
+
+async function runProjectedToolNow(
   tool: AiTool,
   connection: McpConnection,
   deps: ToolProjectionDeps,

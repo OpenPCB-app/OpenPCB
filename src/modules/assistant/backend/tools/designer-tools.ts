@@ -9,6 +9,7 @@ import type { CoreBackendModuleContext } from "../../../../core/contracts/module
 import {
   MODULE_SDK_TOKENS,
   type AssistantPlacementProposal,
+  type AssistantWriteProposalActor,
   type AssistantWriteProposalDto,
   type DesignerDesignSummary,
   type DesignerSDK,
@@ -28,6 +29,20 @@ import {
   type PinTarget,
   type WireEndpoint,
 } from "./schematic-targeting";
+
+/**
+ * The MCP session behind a tool call (set by the MCP projection in
+ * `execCtx.metadata.mcp`), recorded on every proposal it creates so ownership
+ * never depends on which chat the proposal happens to live in. Null in-app.
+ */
+export function mcpActorOf(
+  execCtx: { metadata?: unknown } | undefined,
+): AssistantWriteProposalActor | null {
+  const mcp = (execCtx?.metadata as { mcp?: { clientKey?: unknown; instanceId?: unknown } } | undefined)
+    ?.mcp;
+  if (typeof mcp?.clientKey !== "string" || typeof mcp.instanceId !== "string") return null;
+  return { type: "mcp", clientKey: mcp.clientKey, instanceId: mcp.instanceId };
+}
 
 export const AI_DESIGNER_SESSION_ID = "designer-ui-session";
 const SCHEMATIC_GRID_NM = 2_000_000;
@@ -1044,15 +1059,19 @@ export function makeDesignerCreateDesignTool(
 
       const name = normalizeDesignName(input.name);
       const created = await designer.createDesign({ name });
-      await contextResolver.bindDesign(chatId, {
+      // createDesign was awaited: bind only if the chat is still unbound.
+      const binding = contextResolver.bindDesignIfUnbound(chatId, {
         id: created.id,
         name: created.name,
       });
+      const bound = binding.binding.refId === created.id;
 
       const output: DesignerCreateDesignOutput = {
         design: summarizeCreatedDesign(created),
-        bound: true,
-        message: `Created and bound new design "${created.name}".`,
+        bound,
+        message: bound
+          ? `Created and bound new design "${created.name}".`
+          : `Created design "${created.name}", but this chat was bound to "${binding.binding.label}" meanwhile; start a new chat to work on it.`,
       };
       return {
         ok: true,
@@ -1381,6 +1400,7 @@ export function makeDesignerPlaceComponentsTool(
       conversation.createWriteProposal({
         id: proposalId,
         chatId,
+        actor: mcpActorOf(execCtx),
         kind: "designer_place_components",
         designId,
         baseRevision: designRecord.head.revision,
@@ -2262,6 +2282,7 @@ export function makeDesignerProposeSchematicEditsTool(
       return finalizeAndMaybeApply({
         designer,
         conversation,
+        actor: mcpActorOf(execCtx),
         chatId,
         designId,
         baseRevision: designRecord.head.revision,
@@ -2374,6 +2395,7 @@ export function makeDesignerArrangeSchematicTool(
       return finalizeAndMaybeApply({
         designer,
         conversation,
+        actor: mcpActorOf(execCtx),
         chatId,
         designId,
         baseRevision: designRecord.head.revision,
@@ -2704,6 +2726,7 @@ export function makeDesignerProposeSchematicWiresTool(
       return finalizeAndMaybeApply({
         designer,
         conversation,
+        actor: mcpActorOf(execCtx),
         chatId,
         designId,
         baseRevision: designRecord.head.revision,
@@ -3140,6 +3163,7 @@ export function makeDesignerProposeSchematicUpdatesTool(
       return finalizeAndMaybeApply({
         designer,
         conversation,
+        actor: mcpActorOf(execCtx),
         chatId,
         designId,
         baseRevision: designRecord.head.revision,
@@ -3343,6 +3367,7 @@ export function makeDesignerProposeSchematicDeletionsTool(
       return finalizeAndMaybeApply({
         designer,
         conversation,
+        actor: mcpActorOf(execCtx),
         chatId,
         designId,
         baseRevision: designRecord.head.revision,
@@ -3420,6 +3445,8 @@ export async function finalizeAndMaybeApply(params: {
   sources: AiSourceRef[];
   limits: AiToolResult["limits"];
   options: DesignerToolOptions;
+  /** The MCP session proposing (from `mcpActorOf(execCtx)`); null in-app. */
+  actor?: AssistantWriteProposalActor | null;
 }): Promise<AiToolResult<SchematicProposalEnvelope | null>> {
   const {
     designer,
@@ -3432,10 +3459,12 @@ export async function finalizeAndMaybeApply(params: {
     sources,
     limits,
     options,
+    actor,
   } = params;
   conversation.createWriteProposal({
     id: envelope.id,
     chatId,
+    actor: actor ?? null,
     kind: envelope.kind,
     designId,
     baseRevision,

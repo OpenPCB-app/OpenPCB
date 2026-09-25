@@ -24,6 +24,7 @@ function makeStore(): { store: ConversationStore; db: Database } {
     action_id TEXT,
     origin TEXT NOT NULL DEFAULT 'local',
     cloud_run_id TEXT, cloud_proposal_id TEXT,
+    actor_client_key TEXT, actor_instance_id TEXT,
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   )`);
   db.run(

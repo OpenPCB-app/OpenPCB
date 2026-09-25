@@ -12,6 +12,7 @@ import type { ConversationStore } from "../conversation-store";
 import {
   AI_DESIGNER_SESSION_ID,
   finalizeAndMaybeApply,
+  mcpActorOf,
   resolveDesignForTool,
   type SchematicProposalEnvelope,
 } from "./designer-tools";
@@ -24,9 +25,10 @@ import {
  * in-app assistant and MCP clients share — which is what lets the user
  * Ctrl+Z an agent's edit. The flip side is that an agent's undo could revert
  * the USER's last edit, so `designer_undo` / `designer_redo` only act when
- * the entry on top of the stack is a command this client applied (matched by
- * command id against its own applied proposals). Anything else is the user's
- * to undo in OpenPCB.
+ * the entry on top of the stack is a command this SESSION applied (matched by
+ * command id against the proposals whose actor is this client key + instance
+ * id). Anything else — the user's edit, or another session's — is not its to
+ * undo.
  */
 
 type Limits = AiToolResult["limits"];
@@ -70,27 +72,6 @@ function targetDesign(
     contextResolver,
   });
   return resolved.ok ? { designer, designId: resolved.designId } : resolved.warning;
-}
-
-/** The MCP client this call came from (set by the projection in execCtx.metadata). */
-function clientKeyOf(execCtx: AiToolExecutionContext): string | null {
-  const mcp = (execCtx.metadata as { mcp?: { clientKey?: unknown } } | undefined)?.mcp;
-  return typeof mcp?.clientKey === "string" ? mcp.clientKey : null;
-}
-
-/** Command ids this client landed through its applied proposals. */
-function commandsAppliedBy(conversation: ConversationStore, clientKey: string): Set<string> {
-  const ids = new Set<string>();
-  for (const chat of conversation.listChats()) {
-    const mcp = (chat.metadata as { mcp?: { clientKey?: string } } | null)?.mcp;
-    if (mcp?.clientKey !== clientKey) continue;
-    for (const record of conversation.listWriteProposals(chat.id)) {
-      const applied = record.applyResult as { commandIds?: unknown } | null;
-      if (!Array.isArray(applied?.commandIds)) continue;
-      for (const id of applied.commandIds) if (typeof id === "string") ids.add(id);
-    }
-  }
-  return ids;
 }
 
 function makeRenameTool(ctx: CoreBackendModuleContext, contextResolver: ContextResolver): AiTool {
@@ -185,6 +166,7 @@ function makeDeleteTool(
       return (await finalizeAndMaybeApply({
         designer,
         conversation,
+        actor: mcpActorOf(execCtx),
         chatId: execCtx.chatId,
         designId,
         baseRevision: design.head.revision,
@@ -303,8 +285,14 @@ function makeUndoRedoTool(
       const history = await target.designer.getHistory(target.designId, AI_DESIGNER_SESSION_ID);
       const next = direction === "undo" ? history.nextUndo : history.nextRedo;
       if (!next) return failed(`Nothing to ${direction}.`, execCtx.limits);
-      const clientKey = clientKeyOf(execCtx);
-      if (!clientKey || !commandsAppliedBy(conversation, clientKey).has(next.commandId)) {
+      // Ownership is the proposing session (actor columns on its applied
+      // proposals), not the chat: another Claude Code session of the same
+      // client is "another agent" here too.
+      const actor = mcpActorOf(execCtx);
+      if (
+        !actor ||
+        !conversation.commandIdsAppliedByActor(actor, target.designId).has(next.commandId)
+      ) {
         return failed(
           `The next ${direction} (${next.commandType}) was not made by this session — it is the user's or another agent's change. Ask the user to ${direction} it in OpenPCB if they want to.`,
           execCtx.limits,
