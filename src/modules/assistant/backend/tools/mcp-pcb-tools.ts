@@ -78,6 +78,10 @@ import { applyNetClassPatches, clearanceProblems } from "./rules-validation";
  */
 
 const NM_PER_MM = 1_000_000;
+/** Layout paging: keeps one read well inside a client's result budget. */
+const DEFAULT_LAYOUT_PAGE = 100;
+const MAX_LAYOUT_PAGE = 500;
+const MAX_LAYOUT_TRACES = 2_000;
 
 // ─── shared helpers ────────────────────────────────────────────────────
 
@@ -339,7 +343,7 @@ function makeGetLayoutTool(
       effect: "read",
       capability: "designer.read.pcb",
       description:
-        "PCB geometry for placement and routing: board outline and rules, net classes, footprints (ref, position, rotation, side) with pad positions and nets, per-net copper (traces, vias), unrouted connections as pad pairs (REF.PAD), zones and keepouts. All coordinates in mm. Filter with refs / nets; detail 'summary' omits pads and copper. Read this before pcb_place_footprints or pcb_route.",
+        "PCB geometry for placement and routing: board outline and rules, net classes, footprints (ref, position, rotation, side) with pad positions and nets, per-net copper (traces, vias), unrouted connections as pad pairs (REF.PAD), zones and keepouts. All coordinates in mm. Filter with refs / nets; detail 'summary' omits pads and copper. Footprints are paged (offset/limit; follow page.nextOffset) and traces are capped — filter by nets on big boards. Read this before pcb_place_footprints or pcb_route.",
       inputSchema: {
         type: "object",
         properties: {
@@ -347,6 +351,13 @@ function makeGetLayoutTool(
           detail: { type: "string", enum: ["summary", "full"] },
           refs: { type: "array", items: { type: "string" }, maxItems: 200 },
           nets: { type: "array", items: { type: "string" }, maxItems: 200 },
+          offset: { type: "integer", minimum: 0, description: "First footprint to return (default 0)." },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: MAX_LAYOUT_PAGE,
+            description: `Footprints per page (default ${DEFAULT_LAYOUT_PAGE}).`,
+          },
         },
       },
     },
@@ -356,6 +367,8 @@ function makeGetLayoutTool(
         detail?: "summary" | "full";
         refs?: string[];
         nets?: string[];
+        offset?: number;
+        limit?: number;
       };
       const target = await loadTarget(ctx, contextResolver, execCtx, args.designId);
       if (typeof target === "string") return failed(target, execCtx.limits);
@@ -373,8 +386,14 @@ function makeGetLayoutTool(
         return name !== null && netFilter.has(name.toUpperCase());
       };
 
-      const placements = pcb.placements
-        .filter((p) => !refFilter || refFilter.has(p.reference.toUpperCase()))
+      const matching = pcb.placements.filter(
+        (p) => !refFilter || refFilter.has(p.reference.toUpperCase()),
+      );
+      const offset = Math.max(0, Math.floor(args.offset ?? 0));
+      const limit = Math.min(MAX_LAYOUT_PAGE, Math.max(1, Math.floor(args.limit ?? DEFAULT_LAYOUT_PAGE)));
+      const nextOffset = offset + limit < matching.length ? offset + limit : null;
+      const placements = matching
+        .slice(offset, offset + limit)
         .map((p) => ({
           ref: p.reference,
           placementId: p.id,
@@ -456,6 +475,7 @@ function makeGetLayoutTool(
           netClasses: board.netClasses.map(netClassSummary),
         },
         placements,
+        page: { offset, limit, total: matching.length, nextOffset },
         nets,
         unrouted,
         zones: pcb.zones.map((z) => ({
@@ -471,9 +491,12 @@ function makeGetLayoutTool(
           layers: k.layers,
         })),
       };
+      let tracesCut = 0;
       if (full) {
-        data.traces = pcb.traces
-          .filter((t) => netWanted(t.netId))
+        const wantedTraces = pcb.traces.filter((t) => netWanted(t.netId));
+        tracesCut = Math.max(0, wantedTraces.length - MAX_LAYOUT_TRACES);
+        data.traces = wantedTraces
+          .slice(0, MAX_LAYOUT_TRACES)
           .map((t) => ({
             id: t.id,
             net: netNameOf(pcb, t.netId),
@@ -495,13 +518,20 @@ function makeGetLayoutTool(
             drillMm: v.drillMm,
           }));
       }
+      const notes: string[] = [];
+      if (nextOffset !== null) {
+        notes.push(`Footprints ${offset + 1}–${offset + placements.length} of ${matching.length}; call again with offset ${nextOffset} for more.`);
+      }
+      if (tracesCut > 0) {
+        notes.push(`${tracesCut} more trace(s) not listed — filter by nets.`);
+      }
       return {
         ok: true,
         data,
-        summary: `PCB rev ${pcb.revision}: ${pcb.placements.length} footprint(s), ${pcb.traces.length} trace(s), ${pcb.vias.length} via(s), ${pcb.ratsnest.length} unrouted connection(s).`,
+        summary: `PCB rev ${pcb.revision}: ${pcb.placements.length} footprint(s), ${pcb.traces.length} trace(s), ${pcb.vias.length} via(s), ${pcb.ratsnest.length} unrouted connection(s).${notes.length ? ` ${notes.join(" ")}` : ""}`,
         sources: sourceFor(pcb.designId, "PCB layout"),
         warnings: pcb.warnings.slice(0, 10),
-        truncated: false,
+        truncated: nextOffset !== null || tracesCut > 0,
         limits: execCtx.limits,
       };
     },

@@ -43,12 +43,21 @@ export interface McpCallToolResult {
 }
 
 /**
- * Text block budget. Claude Code caps MCP output at 25k tokens by default
- * (≈100k chars) and spills larger results to a file; keeping the text half
- * under that keeps the common case inline. `structuredContent` is not cut —
- * tools whose data can be large declare `anthropic/maxResultSizeChars`.
+ * Text block budget (≈6k tokens). The text repeats the structured result for
+ * clients that read only `content` (Claude Desktop), but every client that
+ * reads both pays for both — so the text keeps the summary, warnings and
+ * proposal lines in full and only a bounded slice of the data. The complete
+ * data is always in `structuredContent`; big reads page (e.g. the PCB layout)
+ * so the common case needs no cut at all.
  */
-export const MAX_TEXT_CHARS = 90_000;
+export const MAX_TEXT_CHARS = 24_000;
+
+/** Cut at `max` UTF-16 units without splitting a surrogate pair. */
+export function sliceCodePoints(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const code = text.charCodeAt(max - 1);
+  return text.slice(0, code >= 0xd800 && code <= 0xdbff ? max - 1 : max);
+}
 
 function failureMessage(result: AiToolResult): string {
   const fromWarnings = result.warnings.filter((w) => w.trim().length > 0);
@@ -127,7 +136,8 @@ function renderText(envelope: McpToolEnvelope): string {
   }
   const text = lines.join("\n");
   if (text.length <= MAX_TEXT_CHARS) return text;
-  return `${text.slice(0, MAX_TEXT_CHARS)}\n… [${text.length - MAX_TEXT_CHARS} chars cut from the text view; the full result is in structuredContent]`;
+  const kept = sliceCodePoints(text, MAX_TEXT_CHARS);
+  return `${kept}\n… [${text.length - kept.length} more chars not shown in text: the complete result is in structuredContent. Narrow the request (filters, paging) to read it as text.]`;
 }
 
 export function toCallToolResult(envelope: McpToolEnvelope): McpCallToolResult {
