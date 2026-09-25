@@ -57,7 +57,12 @@ import { RunService } from "./run-service";
 import { buildOpenpcbToolRegistry } from "./tools/openpcb-tool-registry";
 import { registerExtendedReadTools } from "./tools/read-tools";
 import { McpEndpoint } from "./mcp/handler";
-import { McpSessionRegistry } from "./mcp/session";
+import {
+  McpConnectionRegistry,
+  type ChatDefaults,
+  type McpConnectionSummary,
+} from "./mcp/connections";
+import { McpCallRecorder } from "./mcp/call-recorder";
 import type { AiToolRegistry } from "@openpcb/ai-core";
 import {
   applyAssistantWriteProposal,
@@ -75,6 +80,16 @@ import {
 
 let service: AssistantService | null = null;
 
+/** FNV-1a — a stable, dependency-free fingerprint (not a security hash). */
+function hashString(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
 export class AssistantService {
   readonly conversation: ConversationStore;
   readonly providers: ProviderStore;
@@ -85,7 +100,9 @@ export class AssistantService {
   readonly writeSessionPolicy = new AssistantWriteSessionPolicy();
   private readonly tasks: TasksSDK;
   private mcpEndpoint: McpEndpoint | null = null;
-  private readonly mcpRegistries = new Map<boolean, AiToolRegistry>();
+  private mcpConnections: McpConnectionRegistry | null = null;
+  /** Keyed by `${allowWrites}:${allowRawToolData}` — both change the registry. */
+  private readonly mcpRegistries = new Map<string, AiToolRegistry>();
 
   constructor(private readonly ctx: CoreBackendModuleContext) {
     this.providers = new ProviderStore(ctx);
@@ -626,13 +643,25 @@ export class AssistantService {
     return this.settings.getSettings();
   }
   updateSettings(input: Partial<AssistantSettings>): AssistantSettings {
-    return this.settings.updateSettings(input);
+    const before = this.settings.getSettings();
+    const after = this.settings.updateSettings(input);
+    if (
+      before.mcpEnabled !== after.mcpEnabled ||
+      before.mcpAllowWrites !== after.mcpAllowWrites ||
+      before.allowRawToolData !== after.allowRawToolData
+    ) {
+      // The MCP tool set (or its result shaping) changed: tell connected
+      // clients to re-list tools.
+      this.mcpEndpoint?.notifyToolsChanged();
+    }
+    return after;
   }
 
   // ─── MCP ──────────────────────────────────────────────────────────────
   /**
-   * Streamable HTTP MCP endpoint, built on first use. Held on the service so
-   * the SDK handler keeps its session state across requests.
+   * Streamable HTTP MCP endpoint, built on first use. The SDK handler itself
+   * is stateless per request; what persists across requests is held here —
+   * the connection registry (pins, backing chats) and the call recorder.
    */
   get mcp(): McpEndpoint {
     if (!this.mcpEndpoint) {
@@ -640,34 +669,69 @@ export class AssistantService {
         ctx: this.ctx,
         appVersion: this.ctx.manifest.version,
         contextResolver: this.contextResolver,
-        sessions: new McpSessionRegistry({
-          ctx: this.ctx,
-          conversation: this.conversation,
-          contextResolver: this.contextResolver,
-          createChat: (input) => this.createChat({ title: input.title }),
-        }),
+        conversation: this.conversation,
+        connections: this.mcpConnectionRegistry(),
+        recorder: new McpCallRecorder({ conversation: this.conversation }),
         getSettings: () => this.settings.getSettings(),
         getRegistry: (allowWrites) => this.mcpRegistry(allowWrites),
+        pendingProposalHint: (chatTitle) =>
+          `Waiting for the user to approve or reject it in OpenPCB's assistant panel (chat "${chatTitle}"). Tell the user; do not re-send it.`,
       });
     }
     return this.mcpEndpoint;
   }
 
+  /** Connected MCP clients, most recent first (for the Settings panel). */
+  listMcpClients(): McpConnectionSummary[] {
+    return this.mcpConnectionRegistry().list();
+  }
+
+  private mcpConnectionRegistry(): McpConnectionRegistry {
+    this.mcpConnections ??= new McpConnectionRegistry({
+      ctx: this.ctx,
+      conversation: this.conversation,
+      contextResolver: this.contextResolver,
+      chatDefaults: () => this.mcpChatDefaults(),
+    });
+    return this.mcpConnections;
+  }
+
   /**
-   * MCP tool registry, cached per write-mode so Ajv does not recompile every
-   * tool schema on each request. Separate from the in-app assistant registry:
-   * MCP additionally gets the extended read tools, and its auto-apply policy
-   * is gated on the `mcpAllowWrites` setting on top of the usual risk check.
+   * Provider stamped on chats created for MCP clients. The external agent
+   * never runs through this provider, so a missing default must not break
+   * MCP: fall back to any provider row, then to a sentinel id.
+   */
+  private mcpChatDefaults(): ChatDefaults {
+    const settings = this.settings.getSettings();
+    const provider =
+      this.providers.getProviderInternal(settings.defaultProviderId) ??
+      this.providers.listProviders()[0] ??
+      null;
+    return {
+      providerConfigId: provider?.id ?? "mcp-external",
+      model: provider?.defaultModel ?? "external",
+      promptPresetId: settings.defaultPromptPresetId,
+    };
+  }
+
+  /**
+   * MCP tool registry, cached per (write mode, raw-data setting) so Ajv does
+   * not recompile every tool schema on each request. Separate from the in-app
+   * assistant registry: MCP additionally gets the extended tools, and its
+   * auto-apply policy is gated on `mcpAllowWrites` on top of the usual risk
+   * check.
    */
   private mcpRegistry(allowWrites: boolean): AiToolRegistry {
-    const cached = this.mcpRegistries.get(allowWrites);
+    const allowRawToolData = this.settings.getSettings().allowRawToolData;
+    const key = `${allowWrites}:${allowRawToolData}`;
+    const cached = this.mcpRegistries.get(key);
     if (cached) return cached;
     const registry = buildOpenpcbToolRegistry(
       this.ctx,
       this.contextResolver,
       this.conversation,
       {
-        allowRawToolData: this.settings.getSettings().allowRawToolData,
+        allowRawToolData,
         designerTools: {
           isSessionAutoApplyAllowed: (input) =>
             allowWrites &&
@@ -677,8 +741,36 @@ export class AssistantService {
       },
     );
     registerExtendedReadTools(registry, this.ctx);
-    this.mcpRegistries.set(allowWrites, registry);
+    this.mcpRegistries.set(key, registry);
     return registry;
+  }
+
+  /**
+   * Cheap state probe for the stdio shim: whether the server is on, whether
+   * writes are on, and a fingerprint of the advertised tool set. The shim
+   * polls it and synthesizes `notifications/tools/list_changed` for 2025-era
+   * clients, which the stateless endpoint cannot push to.
+   */
+  mcpState(): {
+    enabled: boolean;
+    allowWrites: boolean;
+    toolset: string;
+    appVersion: string;
+  } {
+    const settings = this.settings.getSettings();
+    const names = settings.mcpEnabled
+      ? this.mcpRegistry(settings.mcpAllowWrites)
+          .list()
+          .filter((t) => settings.mcpAllowWrites || t.definition.effect !== "write")
+          .map((t) => t.definition.name)
+          .sort()
+      : [];
+    return {
+      enabled: settings.mcpEnabled,
+      allowWrites: settings.mcpAllowWrites,
+      toolset: `${names.length}:${hashString(names.join(","))}`,
+      appVersion: this.ctx.manifest.version,
+    };
   }
 
   // ─── providers ────────────────────────────────────────────────────────

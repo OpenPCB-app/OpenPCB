@@ -369,7 +369,8 @@ describe("assistant MCP endpoint", () => {
     const prompts = (
       promptsBody.result as { prompts: Array<{ name: string }> }
     ).prompts.map((p) => p.name);
-    expect(prompts).toContain("openpcb-build-circuit");
+    // The build workflow needs write tools, so it is only offered with writes on.
+    expect(prompts).not.toContain("openpcb-build-circuit");
     expect(prompts).toContain("openpcb-review-schematic");
     expect(prompts).toContain("openpcb-drc-triage");
     expect(prompts).toContain("openpcb-bom-check");

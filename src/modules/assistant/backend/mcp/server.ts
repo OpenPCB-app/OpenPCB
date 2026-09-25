@@ -1,13 +1,16 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import type { AiToolRegistry } from "@openpcb/ai-core";
 import type { ContextResolver } from "../context-resolver";
-import type { McpSessionRegistry } from "./session";
+import type { ConversationStore } from "../conversation-store";
+import type { McpCallRecorder } from "./call-recorder";
+import type { McpClientIdentity, McpConnectionRegistry } from "./connections";
 import {
   registerProjectedTools,
   registerUseDesignTool,
 } from "./tool-projection";
 import { registerResources } from "./resources";
 import { registerPrompts } from "./prompts";
+import { MCP_SERVER_INSTRUCTIONS } from "./instructions";
 import { MODULE_SDK_TOKENS, type DesignerSDK } from "../../../../sdks";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 
@@ -17,39 +20,53 @@ export interface BuildMcpServerDeps {
   ctx: CoreBackendModuleContext;
   appVersion: string;
   registry: AiToolRegistry;
-  sessions: McpSessionRegistry;
+  connections: McpConnectionRegistry;
+  recorder: McpCallRecorder;
   contextResolver: ContextResolver;
-  contextSizePreference: "small" | "medium" | "large";
+  conversation: ConversationStore;
   allowWrites: boolean;
+  pendingProposalHint: (chatTitle: string) => string;
 }
 
 /**
- * Build the MCP server for one client.
+ * Build the MCP server for one request.
  *
- * `createMcpHandler` calls this per request, so it must stay cheap: the session
- * (and its backing chat) is looked up, not recreated, and the tool registry is
- * built once by the caller.
+ * `createMcpHandler` calls this per HTTP request (the 2025-era path is
+ * stateless), so it must stay cheap: connection state and chats are looked
+ * up in `McpConnectionRegistry`, the tool registry is built once by the
+ * caller, and converted input schemas are cached per tool.
  */
 export function buildMcpServer(
-  identity: { key: string; name: string },
+  identity: McpClientIdentity,
   deps: BuildMcpServerDeps,
 ): McpServer {
-  const server = new McpServer({
-    name: MCP_SERVER_NAME,
-    version: deps.appVersion,
-  });
+  const server = new McpServer(
+    { name: MCP_SERVER_NAME, version: deps.appVersion },
+    {
+      instructions: MCP_SERVER_INSTRUCTIONS,
+      // Advertised so clients listen for list changes: the tool set changes
+      // when the user toggles "Allow writes" (see McpEndpoint.notifyToolsChanged).
+      capabilities: {
+        tools: { listChanged: true },
+        prompts: { listChanged: true },
+        resources: { listChanged: true },
+      },
+    },
+  );
 
-  const session = deps.sessions.acquire(identity);
+  const connection = deps.connections.touch(identity);
 
-  registerProjectedTools(server, session, {
+  registerProjectedTools(server, connection, {
     registry: deps.registry,
-    sessions: deps.sessions,
+    connections: deps.connections,
+    recorder: deps.recorder,
     contextResolver: deps.contextResolver,
-    contextSizePreference: deps.contextSizePreference,
+    conversation: deps.conversation,
     allowWrites: deps.allowWrites,
+    pendingProposalHint: deps.pendingProposalHint,
   });
 
-  registerUseDesignTool(server, session, { sessions: deps.sessions }, async () => {
+  registerUseDesignTool(server, connection, async () => {
     const designer = deps.ctx.sdk.get<DesignerSDK>(MODULE_SDK_TOKENS.DESIGNER);
     if (!designer) return [];
     return (await designer.listDesigns()).map((d) => ({
@@ -59,7 +76,7 @@ export function buildMcpServer(
   });
 
   registerResources(server, deps.ctx);
-  registerPrompts(server);
+  registerPrompts(server, { allowWrites: deps.allowWrites });
 
   return server;
 }

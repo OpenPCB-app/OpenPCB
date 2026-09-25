@@ -12,6 +12,7 @@ import type {
 } from "../../../sdks/assistant";
 import { isFeatureEnabled } from "../../../core/contracts/feature-flags/backend";
 import { getAssistantService } from "./assistant-service";
+import { checkMcpAuth } from "./mcp/auth";
 import { CopilotHttpError } from "./cloud/copilot-client";
 
 function json(data: unknown, status = 200): Response {
@@ -471,6 +472,25 @@ export function registerRoutes(
     router.post("/mcp", mcp);
     router.get("/mcp", mcp);
     router.delete("/mcp", mcp);
+
+    // Shim state probe (bearer-gated like the endpoint, but answered even
+    // while the server is switched off so the shim can say so).
+    router.get("/mcp-state", ({ req }) => {
+      const failure = checkMcpAuth(req);
+      if (failure) {
+        return json(
+          { error: failure.message },
+          failure.code === "unauthorized" ? 401 : 500,
+        );
+      }
+      return json(getAssistantService().mcpState());
+    });
+
+    // Connected clients for the Settings panel (loopback UI, like the rest of
+    // this module's routes).
+    router.get("/mcp/clients", () =>
+      json({ clients: getAssistantService().listMcpClients() }),
+    );
   }
 
   // Settings

@@ -23,7 +23,17 @@ function userText(text: string) {
   };
 }
 
-export function registerPrompts(server: McpServer): void {
+export function registerPrompts(
+  server: McpServer,
+  options: { allowWrites: boolean },
+): void {
+  // A build workflow the client cannot execute (no write tools listed) would
+  // only produce a transcript of refusals.
+  if (options.allowWrites) registerBuildPrompt(server);
+  registerReadPrompts(server);
+}
+
+function registerBuildPrompt(server: McpServer): void {
   server.registerPrompt(
     "openpcb-build-circuit",
     {
@@ -55,7 +65,9 @@ export function registerPrompts(server: McpServer): void {
         ].join("\n"),
       ),
   );
+}
 
+function registerReadPrompts(server: McpServer): void {
   server.registerPrompt(
     "openpcb-review-schematic",
     {

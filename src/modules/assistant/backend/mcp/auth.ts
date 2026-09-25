@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 
 /**
  * Bearer-token gate for the MCP endpoint.
@@ -15,20 +15,18 @@ export type McpAuthFailure =
   | { code: "server_misconfigured"; message: string }
   | { code: "unauthorized"; message: string };
 
+/**
+ * Compare SHA-256 digests rather than the raw strings: `timingSafeEqual`
+ * throws on a length mismatch, and branching on length first would leak it.
+ * Digests are always 32 bytes, so every comparison costs the same.
+ */
 function constantTimeEquals(a: string, b: string): boolean {
-  const left = Buffer.from(a, "utf8");
-  const right = Buffer.from(b, "utf8");
-  // timingSafeEqual throws on length mismatch, which would itself leak length.
-  // Compare a fixed-size digest-shaped pair instead: pad to the longer length.
-  if (left.length !== right.length) {
-    // Still burn a comparison so the failure path costs the same either way.
-    timingSafeEqual(left, left);
-    return false;
-  }
+  const left = createHash("sha256").update(a, "utf8").digest();
+  const right = createHash("sha256").update(b, "utf8").digest();
   return timingSafeEqual(left, right);
 }
 
-function readBearer(req: Request): string | null {
+function readBearer(req: Pick<Request, "headers">): string | null {
   const header = req.headers.get("authorization");
   if (!header) return null;
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());
@@ -41,7 +39,7 @@ function readBearer(req: Request): string | null {
  * nothing to check against, and serving unauthenticated would silently drop
  * the only gate this endpoint has.
  */
-export function checkMcpAuth(req: Request): McpAuthFailure | null {
+export function checkMcpAuth(req: Pick<Request, "headers">): McpAuthFailure | null {
   const expected = process.env.OPENPCB_MCP_TOKEN;
   if (!expected || expected.length === 0) {
     return {
