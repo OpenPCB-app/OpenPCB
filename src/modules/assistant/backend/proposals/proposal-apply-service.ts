@@ -8,6 +8,7 @@ import {
   applySchematicProposalOperations,
   applyDesignerPlaceComponentsProposal,
   isAssistantProposalApplyError,
+  ProposalStaleError,
   type SchematicApplyResult,
   type SchematicProposalEnvelope,
 } from "../tools/designer-tools";
@@ -79,7 +80,18 @@ async function applyDesignDeleteProposal(
   input: ApplyAssistantWriteProposalInput,
 ): Promise<SchematicApplyResult> {
   const designId = input.record.designId;
-  const deleted = await input.designer.deleteDesign(designId);
+  // Irreversible: refuse unless the design is exactly what the user saw when
+  // it was proposed. A newer edit (by the user or anyone) means the approval
+  // is for a design that no longer exists in that form — no apply-anyway.
+  const current = await input.designer.getDesign(designId);
+  if (
+    current &&
+    input.record.baseRevision !== null &&
+    current.head.revision !== input.record.baseRevision
+  ) {
+    throw new ProposalStaleError(input.record.baseRevision, current.head.revision);
+  }
+  const deleted = current ? await input.designer.deleteDesign(designId) : false;
   const operationId = input.record.operations?.[0]?.id ?? `${input.record.id}:delete`;
   return {
     proposalId: input.record.id,

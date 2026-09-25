@@ -43,16 +43,19 @@ function ownedBy(connection: McpConnection, record: AssistantWriteProposalDto): 
   );
 }
 
+interface ApplyResultView {
+  status?: string;
+  appliedCount?: number;
+  failedCount?: number;
+  skippedCount?: number;
+  message?: string;
+  code?: string;
+  expectedRevision?: number;
+  currentRevision?: number;
+}
+
 function describe(record: AssistantWriteProposalDto): Record<string, unknown> {
-  const apply = record.applyResult as
-    | {
-        status?: string;
-        appliedCount?: number;
-        failedCount?: number;
-        skippedCount?: number;
-        message?: string;
-      }
-    | null;
+  const apply = record.applyResult as ApplyResultView | null;
   return {
     id: record.id,
     kind: record.kind,
@@ -69,6 +72,13 @@ function describe(record: AssistantWriteProposalDto): Record<string, unknown> {
           failedCount: apply.failedCount ?? null,
           skippedCount: apply.skippedCount ?? null,
           message: apply.message ?? null,
+          code: apply.code ?? null,
+          ...(apply.code === "STALE_PROPOSAL"
+            ? {
+                expectedRevision: apply.expectedRevision ?? null,
+                currentRevision: apply.currentRevision ?? null,
+              }
+            : {}),
         }
       : null,
   };
@@ -84,6 +94,13 @@ function outcomeLine(record: AssistantWriteProposalDto): string {
       return `The user approved proposal ${record.id}; it was partially applied — re-read the design before continuing.`;
     case "rejected":
       return `The user rejected proposal ${record.id}. Do not re-send it; ask the user what they want instead.`;
+    case "failed": {
+      const apply = record.applyResult as ApplyResultView | null;
+      if (apply?.code === "STALE_PROPOSAL") {
+        return `Proposal ${record.id} was NOT applied: the design changed after it was proposed (revision ${apply.expectedRevision ?? "?"} → ${apply.currentRevision ?? "?"}). Re-read the design and, if it is still wanted, propose again with a new action_id.`;
+      }
+      return `Proposal ${record.id} failed${apply?.message ? `: ${apply.message}` : ""}. Re-read the design before trying again, with a new action_id.`;
+    }
     default:
       return `Proposal ${record.id} is ${record.status}.`;
   }

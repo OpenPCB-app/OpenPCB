@@ -76,7 +76,7 @@ import {
   applyAssistantWriteProposal,
   applyFailureResult,
 } from "./proposals/proposal-apply-service";
-import type { SchematicApplyResult } from "./tools/designer-tools";
+import { isProposalStaleError, type SchematicApplyResult } from "./tools/designer-tools";
 import {
   AssistantWriteSessionPolicy,
   type AssistantSessionWriteAllowance,
@@ -494,6 +494,18 @@ export class AssistantService {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("Confirm partial apply")) {
+        throw new ValidationError(message);
+      }
+      if (isProposalStaleError(err)) {
+        // The design moved on since the proposal was made: nothing applied,
+        // and the record says why (the card and assistant_await_proposal
+        // read `code`), so it is never mistaken for a transient failure.
+        this.conversation.updateWriteProposalStatus(
+          chatId,
+          proposalId,
+          "failed",
+          err.toApplyResult(proposalId, record.designId),
+        );
         throw new ValidationError(message);
       }
       const failureResult = applyFailureResult(err);

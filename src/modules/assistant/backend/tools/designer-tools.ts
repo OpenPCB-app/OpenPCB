@@ -1486,7 +1486,10 @@ export function makeDesignerPlaceComponentsTool(
             chatId,
             proposalId,
             writeProposalTerminalStatus(applyResult),
-            applyResult ?? { message },
+            applyResult ??
+              (isProposalStaleError(err)
+                ? err.toApplyResult(proposalId, designId)
+                : { message }),
           );
           const appliedCount = applyResult?.applied?.length ?? 0;
           modelData = {
@@ -3585,16 +3588,23 @@ export async function finalizeAndMaybeApply(params: {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      conversation.updateWriteProposalStatus(chatId, envelope.id, "failed", {
-        proposalId: envelope.id,
-        status: "failed",
-        designId,
-        appliedCount: 0,
-        skippedCount: 0,
-        failedCount: envelope.operations.length,
-        operations: [],
-        message,
-      });
+      conversation.updateWriteProposalStatus(
+        chatId,
+        envelope.id,
+        "failed",
+        isProposalStaleError(err)
+          ? err.toApplyResult(envelope.id, designId)
+          : {
+              proposalId: envelope.id,
+              status: "failed",
+              designId,
+              appliedCount: 0,
+              skippedCount: 0,
+              failedCount: envelope.operations.length,
+              operations: [],
+              message,
+            },
+      );
       finalWarnings.push(`Auto-apply failed: ${message}`);
       toolOk = false;
       toolStatus = "partial";
@@ -3632,9 +3642,7 @@ export async function applySchematicProposalOperations(input: {
     input.baseRevision !== null &&
     design.head.revision !== input.baseRevision
   ) {
-    throw new Error(
-      `Design changed since proposal was created (expected revision ${input.baseRevision}, current ${design.head.revision}). Regenerate the proposal.`,
-    );
+    throw new ProposalStaleError(input.baseRevision, design.head.revision);
   }
   if (
     (input.envelope.warnings?.length ?? 0) > 0 &&
@@ -3848,9 +3856,7 @@ export async function applyDesignerPlaceComponentsProposal(input: {
     input.baseRevision !== null &&
     design.head.revision !== input.baseRevision
   ) {
-    throw new Error(
-      `Design changed since proposal was created (expected revision ${input.baseRevision}, current ${design.head.revision}). Regenerate the proposal.`,
-    );
+    throw new ProposalStaleError(input.baseRevision, design.head.revision);
   }
 
   let baseRevision: number | null = input.baseRevision;
@@ -3972,6 +3978,46 @@ export async function applyDesignerPlaceComponentsProposal(input: {
     skipped: input.proposal.skipped,
     results,
   };
+}
+
+/**
+ * A proposal was approved after the design moved on: its `baseRevision` is no
+ * longer the head. Nothing was applied, and there is deliberately no
+ * "apply anyway" — the user or agent must propose again against the current
+ * design. Persisted as the proposal's failed apply result (`toApplyResult`),
+ * so the panel card and `assistant_await_proposal` can say why.
+ */
+export class ProposalStaleError extends Error {
+  readonly code = "STALE_PROPOSAL" as const;
+  constructor(
+    readonly expectedRevision: number,
+    readonly currentRevision: number,
+  ) {
+    super(
+      `Design changed since proposal was created (expected revision ${expectedRevision}, current ${currentRevision}). Regenerate the proposal.`,
+    );
+    this.name = "ProposalStaleError";
+  }
+
+  toApplyResult(proposalId: string, designId: string): Record<string, unknown> {
+    return {
+      proposalId,
+      status: "failed",
+      designId,
+      code: this.code,
+      expectedRevision: this.expectedRevision,
+      currentRevision: this.currentRevision,
+      appliedCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      operations: [],
+      message: this.message,
+    };
+  }
+}
+
+export function isProposalStaleError(err: unknown): err is ProposalStaleError {
+  return err instanceof ProposalStaleError;
 }
 
 export class AssistantProposalApplyError extends Error {

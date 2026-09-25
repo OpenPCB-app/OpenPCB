@@ -325,3 +325,57 @@ describe("design management", () => {
     expect(names).not.toContain("designer_delete_design");
   });
 });
+
+describe("stale approvals never apply", () => {
+  async function approveExpectingRefusal(designId: string, result: McpToolCallResult) {
+    const proposalId = result.structuredContent.proposal!.id;
+    const response = await h.fetch(
+      `/api/modules/assistant/chats/${chatOf(designId).id}/write-proposals/${proposalId}/apply`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+    );
+    expect(response.status).toBe(400);
+    return proposalId;
+  }
+
+  test("an old design-delete proposal cannot delete newer work", async () => {
+    h.enable({ writes: true });
+    const designId = await twoResistorDesign("Keep newer work");
+    const deletion = await h.callTool("designer_delete_design", { designId });
+    expect(deletion.structuredContent.proposal?.status).toBe("pending");
+
+    // The user keeps working after the agent proposed the deletion.
+    const moved = await h.callTool("pcb_place_footprints", {
+      designId,
+      placements: [{ ref: "R1", xMm: -8, yMm: 0 }],
+    });
+    expect(moved.structuredContent.ok).toBe(true);
+
+    const proposalId = await approveExpectingRefusal(designId, deletion);
+    expect(await h.designer.getDesign(designId)).not.toBeNull();
+
+    const record = getAssistantService().conversation.getWriteProposalById(proposalId)!;
+    expect(record.status).toBe("failed");
+    expect((record.applyResult as { code?: string }).code).toBe("STALE_PROPOSAL");
+
+    const got = await h.callTool("assistant_get_proposal", { proposalId });
+    expect(got.structuredContent.summary).toContain("NOT applied");
+    expect(got.structuredContent.summary).toContain("design changed");
+  });
+
+  test("an old rules proposal is refused the same way", async () => {
+    h.enable({ writes: true });
+    const designId = await twoResistorDesign("Rules then edit");
+    const rules = await h.callTool("pcb_set_design_rules", {
+      designId,
+      netClasses: [{ name: "Default", traceWidthMm: 0.35 }],
+    });
+    expect(rules.structuredContent.proposal?.status).toBe("pending");
+    await h.callTool("pcb_place_footprints", {
+      designId,
+      placements: [{ ref: "R2", xMm: 8, yMm: 0 }],
+    });
+    await approveExpectingRefusal(designId, rules);
+    const pcb = await h.designer.getPcbProjection(designId);
+    expect(pcb!.board.netClasses.find((c) => c.id === "default")!.traceWidthMm).not.toBe(0.35);
+  });
+});
