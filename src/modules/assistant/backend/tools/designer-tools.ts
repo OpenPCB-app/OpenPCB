@@ -29,7 +29,7 @@ import {
   type WireEndpoint,
 } from "./schematic-targeting";
 
-const AI_DESIGNER_SESSION_ID = "designer-ui-session";
+export const AI_DESIGNER_SESSION_ID = "designer-ui-session";
 const SCHEMATIC_GRID_NM = 2_000_000;
 const DEFAULT_GRID_SPACING_X_NM = 24_000_000;
 const DEFAULT_GRID_SPACING_Y_NM = 16_000_000;
@@ -78,7 +78,12 @@ export interface SchematicProposalEnvelope {
     | "designer_schematic_updates"
     | "designer_schematic_deletions"
     | "designer_pcb_place_batch"
-    | "designer_pcb_route_batch";
+    | "designer_pcb_route_batch"
+    // MCP-only PCB / design tools (tools/mcp-pcb-tools.ts, mcp-design-tools.ts)
+    | "designer_pcb_board_edits"
+    | "designer_pcb_rules_edits"
+    | "designer_pcb_deletions"
+    | "designer_design_delete";
   toolName:
     | "designer_propose_schematic_edits"
     | "designer_propose_schematic_wires"
@@ -88,7 +93,17 @@ export interface SchematicProposalEnvelope {
     // S8: cloud-copilot layout batches mirrored via the cloud proposal path
     | "cloud_copilot"
     | "copilot_run_placement"
-    | "copilot_run_routing";
+    | "copilot_run_routing"
+    // MCP-only tools
+    | "pcb_place_footprints"
+    | "pcb_route"
+    | "pcb_delete_routing"
+    | "pcb_set_board_outline"
+    | "pcb_set_design_rules"
+    | "pcb_manage_zone"
+    | "pcb_manage_keepout"
+    | "pcb_set_drc_waivers"
+    | "designer_delete_design";
   /** Idempotency key from the model (Track D); dedup re-runs by design + key. */
   actionId?: string;
   title: string;
@@ -139,6 +154,12 @@ export interface SchematicApplyResult {
     result?: unknown;
   }>;
   message: string;
+  /**
+   * Every designer commandId this apply dispatched (primaries and follow-ups),
+   * in order. Lets a caller recognise its own entries on the shared undo stack
+   * (MCP `designer_undo` only undoes what its own proposals landed).
+   */
+  commandIds?: string[];
 }
 
 // ─── idempotency + slim model-facing result helpers (Track D) ──────────
@@ -190,7 +211,7 @@ function findPriorByActionId(
  *                        and report so correction goes through a fresh action.
  *  - rejected          → user declined; allow a fresh attempt (returns null).
  */
-function dedupByActionId<T>(
+export function dedupByActionId<T>(
   conversation: ConversationStore,
   chatId: string,
   designId: string,
@@ -3388,7 +3409,7 @@ const PIN_TARGET_SCHEMA = {
  * session policy opts them in. Centralizes the create+apply boilerplate shared
  * by all four schematic-write tools.
  */
-async function finalizeAndMaybeApply(params: {
+export async function finalizeAndMaybeApply(params: {
   designer: DesignerSDK;
   conversation: ConversationStore;
   chatId: string;
@@ -3577,11 +3598,14 @@ export async function applySchematicProposalOperations(input: {
   const stopOnError = input.envelope.riskLevel === "destructive";
   let stoppedAtOperationId: string | undefined;
 
-  const dispatch = (command: DesignerCommandEnvelope["command"]) =>
-    input.designer.dispatchCommand(
+  const commandIds: string[] = [];
+  const dispatch = (command: DesignerCommandEnvelope["command"]) => {
+    const commandId = crypto.randomUUID();
+    commandIds.push(commandId);
+    return input.designer.dispatchCommand(
       input.designId,
       {
-        commandId: crypto.randomUUID(),
+        commandId,
         sessionId: AI_DESIGNER_SESSION_ID,
         aggregateId: input.designId,
         baseRevision,
@@ -3590,6 +3614,7 @@ export async function applySchematicProposalOperations(input: {
       },
       { actor: "assistant" },
     );
+  };
 
   for (const operation of input.envelope.operations) {
     const revisionBefore = baseRevision;
@@ -3730,6 +3755,7 @@ export async function applySchematicProposalOperations(input: {
     failedCount,
     ...(stoppedAtOperationId ? { stoppedAtOperationId } : {}),
     operations,
+    commandIds,
     message:
       status === "applied"
         ? `Applied ${appliedCount} schematic operation(s).`
@@ -3755,6 +3781,8 @@ export async function applyDesignerPlaceComponentsProposal(input: {
   }>;
   skipped: AssistantPlacementProposal["skipped"];
   results: Awaited<ReturnType<DesignerSDK["dispatchCommand"]>>[];
+  /** Every commandId dispatched, in order (see SchematicApplyResult.commandIds). */
+  commandIds: string[];
 }> {
   if (input.proposal.skipped.length > 0 && !input.allowPartial) {
     throw new Error(
@@ -3780,6 +3808,7 @@ export async function applyDesignerPlaceComponentsProposal(input: {
     revision: number;
   }> = [];
   const results: Awaited<ReturnType<DesignerSDK["dispatchCommand"]>>[] = [];
+  const commandIds: string[] = [];
   const failWithPartial = (message: string): never => {
     throw new AssistantProposalApplyError(message, {
       proposalId: input.proposal.proposalId,
@@ -3788,6 +3817,7 @@ export async function applyDesignerPlaceComponentsProposal(input: {
       applied,
       skipped: input.proposal.skipped,
       results,
+      commandIds,
       message,
     });
   };
@@ -3806,6 +3836,7 @@ export async function applyDesignerPlaceComponentsProposal(input: {
         mirrored: placement.mirrored,
       },
     };
+    commandIds.push(envelope.commandId);
     const result = await input.designer.dispatchCommand(
       input.designId,
       envelope,
@@ -3852,6 +3883,7 @@ export async function applyDesignerPlaceComponentsProposal(input: {
           ...(propertiesJson ? { propertiesJson } : {}),
         },
       };
+      commandIds.push(updateEnvelope.commandId);
       const updateResult = await input.designer.dispatchCommand(
         input.designId,
         updateEnvelope,
@@ -3882,6 +3914,7 @@ export async function applyDesignerPlaceComponentsProposal(input: {
     proposalId: input.proposal.proposalId,
     status: "applied",
     designId: input.designId,
+    commandIds,
     applied,
     skipped: input.proposal.skipped,
     results,

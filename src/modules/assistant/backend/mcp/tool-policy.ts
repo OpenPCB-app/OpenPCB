@@ -47,6 +47,22 @@ export const MCP_TOOL_POLICIES: Record<string, McpToolPolicy> = {
   designer_arrange_schematic: { idempotent: true },
   designer_propose_schematic_deletions: { destructive: true },
   compile_circuit: {},
+  // ── MCP-only writes (tools/mcp-pcb-tools.ts, tools/mcp-design-tools.ts) ─
+  pcb_place_footprints: {},
+  pcb_route: {},
+  pcb_delete_routing: { destructive: true },
+  pcb_set_board_outline: {},
+  // Not undoable; always waits for approval (APPROVAL_REQUIRED_KINDS).
+  pcb_set_design_rules: { destructive: true },
+  // `action: "delete"` removes the zone/keepout — flag the tool conservatively.
+  pcb_manage_zone: { destructive: true },
+  pcb_manage_keepout: { destructive: true },
+  pcb_set_drc_waivers: { idempotent: true },
+  designer_rename_design: { idempotent: true },
+  designer_delete_design: { destructive: true },
+  designer_focus_design: { idempotent: true },
+  designer_undo: {},
+  designer_redo: {},
 };
 
 export function policyFor(name: string): McpToolPolicy | undefined {

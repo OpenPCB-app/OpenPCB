@@ -58,6 +58,7 @@ export type {
   DesignerEntityRecord,
   DesignerHistoryActionOkResult,
   DesignerHistoryActionResult,
+  DesignerHistoryEntryRef,
   DesignerHistorySnapshot,
   DesignerJunction,
   DesignerLabel,

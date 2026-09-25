@@ -57,6 +57,11 @@ import { RunService } from "./run-service";
 import { buildOpenpcbToolRegistry } from "./tools/openpcb-tool-registry";
 import { registerExtendedReadTools } from "./tools/read-tools";
 import { registerKnowledgeTools } from "./tools/knowledge-tools";
+import {
+  APPROVAL_REQUIRED_KINDS,
+  registerMcpPcbTools,
+} from "./tools/mcp-pcb-tools";
+import { registerMcpDesignTools } from "./tools/mcp-design-tools";
 import { BuildIntentStore } from "./verification/build-intent-store";
 import { McpEndpoint } from "./mcp/handler";
 import {
@@ -757,22 +762,45 @@ export class AssistantService {
     const key = `${allowWrites}:${allowRawToolData}`;
     const cached = this.mcpRegistries.get(key);
     if (cached) return cached;
+    // Undoable edits auto-apply (the user can Ctrl+Z them); destructive ones
+    // and non-undoable rule changes wait for the user unless they allowed that
+    // tool for the session in the panel.
+    const mcpDesignerOptions = {
+      isSessionAutoApplyAllowed: (input: {
+        chatId: string;
+        toolName: string;
+        proposalKind: string;
+        riskLevel?: string | null;
+      }) =>
+        allowWrites &&
+        ((input.riskLevel !== "destructive" &&
+          !APPROVAL_REQUIRED_KINDS.has(input.proposalKind)) ||
+          this.writeSessionPolicy.isAllowed(input)),
+    };
     const registry = buildOpenpcbToolRegistry(
       this.ctx,
       this.contextResolver,
       this.conversation,
       {
         allowRawToolData,
-        designerTools: {
-          isSessionAutoApplyAllowed: (input) =>
-            allowWrites &&
-            (input.riskLevel !== "destructive" ||
-              this.writeSessionPolicy.isAllowed(input)),
-        },
+        designerTools: mcpDesignerOptions,
       },
     );
     registerExtendedReadTools(registry, this.ctx);
     registerKnowledgeTools(registry);
+    registerMcpPcbTools(
+      registry,
+      this.ctx,
+      this.contextResolver,
+      this.conversation,
+      mcpDesignerOptions,
+    );
+    registerMcpDesignTools(
+      registry,
+      this.ctx,
+      this.contextResolver,
+      this.conversation,
+    );
     this.mcpRegistries.set(key, registry);
     return registry;
   }

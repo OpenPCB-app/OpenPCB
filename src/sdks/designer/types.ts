@@ -2168,6 +2168,20 @@ export interface DesignerHistorySnapshot {
   canRedo: boolean;
   undoDepth: number;
   redoDepth: number;
+  /**
+   * The command the next undo / redo would revert / re-apply. Optional and
+   * additive: lets a caller check WHOSE change it is before undoing on a
+   * session shared by the UI and agents (MCP `designer_undo` refuses to undo
+   * a change it did not make).
+   */
+  nextUndo?: DesignerHistoryEntryRef | null;
+  nextRedo?: DesignerHistoryEntryRef | null;
+}
+
+export interface DesignerHistoryEntryRef {
+  commandId: string;
+  commandType: string;
+  revision: number;
 }
 
 export interface DesignerHistoryActionOkResult {
