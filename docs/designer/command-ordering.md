@@ -43,6 +43,12 @@ dispatcher, and acknowledgement of an older view edit cannot clear protection fo
 
 ## Regression coverage and limits
 
+Schematic history keys use this same dispatcher: `Mod+Z` undoes, `Mod+Shift+Z` and `Ctrl+Y`
+redo. `Mod` means Command on macOS and Control elsewhere. They require canvas focus, respect
+the shared text/modal/repeat guard and history availability, and do not act during an unfinished
+wire, marquee, drag, placement or comment gesture. Rejections remain visible through the normal
+history error path; no automatic retry is introduced. Toolbar tooltips show platform shortcuts.
+
 - `src/core/backend/tests/designer-command-ordering.test.ts`: HTTP/SDK history consistency,
   batch rollback, command ID/revision guards, forced history persistence failure and stale Undo/Redo.
 - `src/modules/designer/frontend/hooks/useDesignerWorkspace.test.tsx`: delayed writes, independent
@@ -52,6 +58,8 @@ dispatcher, and acknowledgement of an older view edit cannot clear protection fo
   overlapping field acknowledgements.
 - `tests/e2e/electron-designer-hardening.spec.ts`: real native frontend/backend ordering, exact PCB
   hole coordinates, toolbar history, confirmed conflict recovery and delayed history conflicts.
+- `tests/e2e/electron-designer-keyboard.spec.ts`: native schematic Undo/Redo, text-field isolation
+  and active-placement protection (T-094 / OPENPCB-79).
 
 Native results must identify the renderer dependency artifact. The published canvas dependency
 still requests remote fonts when offline; the isolated H05 candidate passed these tests. These

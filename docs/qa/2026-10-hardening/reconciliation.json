@@ -5352,13 +5352,22 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "9ef4a8763be319a8d309caf1d42d9e9df6c05f23",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "tests/e2e/electron-designer-keyboard.spec.ts",
+        "name": "Cmd+Z and Redo restore geometry while text fields and active placement keep their own keys",
+        "command": "OPENPCB_E2E_NO_WEBSERVER=1 OPENPCB_CAPTURE=1 OPENPCB_NATIVE_RENDERER_DIST=/private/tmp/openpcb-h05-consumer-E7nzVl/app/src/core/frontend/dist npx --no-install playwright test --project=electron-desktop tests/e2e/electron-designer-keyboard.spec.ts tests/e2e/electron-designer-anchors.spec.ts tests/e2e/electron-designer-hardening.spec.ts --workers=1",
+        "result": "passed",
+        "commit": "9ef4a8763be319a8d309caf1d42d9e9df6c05f23",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/designer-history-shortcuts.json",
+        "evidenceSha256": "1b71fbc883f4a854d48e9b6c9bd00be9c58d72839cfe5af86b163a2310a76224"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "shots/vq3/dark/016-back-to-designer.png"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "T-094 native verification is macOS only. Full platform/theme/viewport acceptance and main-dependency/packaged H05 qualification remain open."
     },
     {
       "tid": "T-095",
