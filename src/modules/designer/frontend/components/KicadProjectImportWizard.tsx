@@ -1,16 +1,4 @@
-/**
- * KiCad project import wizard.
- *
- * Three-step modal:
- *   1. Pick a .zip — calls /imports/kicad-project/inspect; renders report.
- *   2. Review (counts, warnings, components, board summary). Optional
- *      design-name override.
- *   3. Commit — calls /imports/kicad-project; on success opens the new design.
- *
- * v1 scope: design + board settings + outline + net classes are imported.
- * Schematic + PCB entities are surfaced as "deferred" in the warnings panel
- * until library ingestion of project-embedded symbols/footprints lands.
- */
+/** KiCad project inspection remains available while commit is quarantined. */
 
 import { AlertTriangle, FileUp, Loader2, X } from "lucide-react";
 import {
@@ -26,6 +14,7 @@ import type {
   KicadProjectInspectReport,
 } from "../../../../sdks/designer";
 import { createDesignerApi } from "../api";
+import { PROJECT_IMPORT_UNAVAILABLE } from "../../shared/capability-policy";
 
 interface KicadProjectImportWizardProps {
   backendURL: string | null;
@@ -34,23 +23,19 @@ interface KicadProjectImportWizardProps {
   onImported(result: KicadProjectCommitResult): void;
 }
 
-type WizardStage = "pick" | "review" | "committing" | "done";
+type WizardStage = "pick" | "review";
 
 export function KicadProjectImportWizard({
   backendURL,
   moduleId,
   onClose,
-  onImported,
 }: KicadProjectImportWizardProps): ReactElement {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [stage, setStage] = useState<WizardStage>("pick");
-  const [file, setFile] = useState<File | null>(null);
   const [report, setReport] = useState<KicadProjectInspectReport | null>(null);
   const [overrideName, setOverrideName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [commitResult, setCommitResult] =
-    useState<KicadProjectCommitResult | null>(null);
 
   const api = createDesignerApi({ backendURL, moduleId });
 
@@ -58,7 +43,6 @@ export function KicadProjectImportWizard({
     async (event: ChangeEvent<HTMLInputElement>) => {
       const chosen = event.target.files?.[0];
       if (!chosen) return;
-      setFile(chosen);
       setError(null);
       setBusy(true);
       try {
@@ -75,28 +59,6 @@ export function KicadProjectImportWizard({
     },
     [api],
   );
-
-  const handleCommit = useCallback(async () => {
-    if (!file) return;
-    setError(null);
-    setBusy(true);
-    setStage("committing");
-    try {
-      const trimmed = overrideName.trim();
-      const result = await api.commitKicadProject(
-        file,
-        trimmed.length > 0 ? trimmed : undefined,
-      );
-      setCommitResult(result);
-      setStage("done");
-      onImported(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setStage("review");
-    } finally {
-      setBusy(false);
-    }
-  }, [api, file, onImported, overrideName]);
 
   // Close on Escape.
   useEffect(() => {
@@ -132,6 +94,12 @@ export function KicadProjectImportWizard({
         </header>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 text-sm text-slate-200">
+          <p
+            role="status"
+            className="mb-3 rounded-md border border-status-warning bg-status-warning-soft px-3 py-2 text-xs text-status-warning"
+          >
+            {PROJECT_IMPORT_UNAVAILABLE}
+          </p>
           {stage === "pick" && (
             <PickStage
               busy={busy}
@@ -146,10 +114,6 @@ export function KicadProjectImportWizard({
               onNameChange={setOverrideName}
               error={error}
             />
-          )}
-          {stage === "committing" && <CommittingStage />}
-          {stage === "done" && commitResult && (
-            <DoneStage result={commitResult} />
           )}
         </div>
 
@@ -175,23 +139,14 @@ export function KicadProjectImportWizard({
               </button>
               <button
                 type="button"
-                onClick={() => void handleCommit()}
-                disabled={busy}
+                disabled
+                title={PROJECT_IMPORT_UNAVAILABLE}
                 className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-60"
               >
                 {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Import design
               </button>
             </>
-          )}
-          {stage === "done" && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500"
-            >
-              Done
-            </button>
           )}
         </footer>
 
@@ -246,8 +201,8 @@ function PickStage({
         </div>
       )}
       <p className="text-[11px] text-slate-500">
-        v1 imports the project name, layer count, board outline and net classes.
-        Schematic and PCB entity ingestion lands in the next iteration.
+        Inspection reports source counts, warnings and component references.
+        Import design remains disabled.
       </p>
     </div>
   );
@@ -299,7 +254,7 @@ function ReviewStage({
               ? `${Math.round(report.boardOutlineMm.maxXMm - report.boardOutlineMm.minXMm)} × ${Math.round(
                   report.boardOutlineMm.maxYMm - report.boardOutlineMm.minYMm,
                 )} mm`
-              : "default 50 × 30 mm"
+              : "No source outline detected"
           }
         />
         <Stat
@@ -375,46 +330,6 @@ function ReviewStage({
       {error && (
         <div className="rounded-md border border-red-800 bg-red-950/40 px-3 py-2 text-xs text-red-300">
           {error}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CommittingStage(): ReactElement {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 py-12 text-sm text-slate-300">
-      <Loader2 className="h-6 w-6 animate-spin text-violet-400" />
-      Importing project…
-    </div>
-  );
-}
-
-function DoneStage({
-  result,
-}: {
-  result: KicadProjectCommitResult;
-}): ReactElement {
-  return (
-    <div className="flex flex-col gap-3 py-4">
-      <p className="text-sm text-slate-200">
-        Imported <strong>{result.designName}</strong>.
-      </p>
-      <div className="grid grid-cols-2 gap-3">
-        <Stat label="Layers" value={String(result.applied.copperLayerCount)} />
-        <Stat
-          label="Net classes"
-          value={String(result.applied.netClassesIngested)}
-        />
-        <Stat
-          label="Board outline"
-          value={result.applied.boardOutline ? "imported" : "default"}
-        />
-        <Stat label="Warnings" value={String(result.warnings.length)} />
-      </div>
-      {result.applied.deferred.length > 0 && (
-        <div className="rounded-md border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-300">
-          Deferred for next iteration: {result.applied.deferred.join(", ")}.
         </div>
       )}
     </div>

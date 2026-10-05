@@ -1,3 +1,4 @@
+import { MANUFACTURING_UNAVAILABLE } from "../../shared/capability-policy";
 import { useGlobalShortcut } from "@shared/frontend/keyboard/use-global-shortcut";
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { Package } from "lucide-react";
@@ -860,8 +861,8 @@ function ExportMenu({
           JLC BOM
           <span className="text-2xs text-status-warning">experimental</span>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void onExport("pnp")}>
-          PnP
+        <DropdownMenuItem disabled title={MANUFACTURING_UNAVAILABLE}>
+          PnP unavailable: placement coordinates unqualified
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => void onExport("kicad")}>
           KiCad CSV

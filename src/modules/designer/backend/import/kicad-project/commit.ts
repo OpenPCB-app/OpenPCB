@@ -1,3 +1,4 @@
+import { assertQualifiedProjectImport } from "../../capability-quarantine";
 /**
  * KiCad project import — commit phase.
  *
@@ -74,6 +75,7 @@ export async function commitKicadProjectImport(
   ctx: CoreBackendModuleContext,
   options: CommitOptions,
 ): Promise<KicadProjectCommitResult> {
+  assertQualifiedProjectImport();
   const files = resolveProjectFiles(options.archiveBytes);
   const report = await buildInspectReport(
     files,
@@ -409,7 +411,8 @@ function applyKicadDesignRules(
     (nc) => nc.name.toLowerCase() === "default",
   )?.clearanceMm;
   const working =
-    typeof defaultClearanceMm === "number" && Number.isFinite(defaultClearanceMm)
+    typeof defaultClearanceMm === "number" &&
+    Number.isFinite(defaultClearanceMm)
       ? defaultClearanceMm
       : null;
   const clearance: PcbDesignRules["clearance"] = {

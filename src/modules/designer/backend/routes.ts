@@ -1,3 +1,7 @@
+import {
+  assertQualifiedManufacturing,
+  assertQualifiedProjectImport,
+} from "./capability-quarantine";
 import type {
   CoreBackendModuleContext,
   ModuleRouterHandle,
@@ -3379,6 +3383,7 @@ export function registerRoutes(
   });
 
   router.get("/designs/:designId/exports/pnp.csv", async ({ params }) => {
+    assertQualifiedManufacturing();
     const designId = params.getOrThrow("designId");
     const pcb = await store.getPcbProjection(designId);
     if (!pcb) throw new NotFoundError(`Design '${designId}' not found`);
@@ -3394,6 +3399,7 @@ export function registerRoutes(
   router.post(
     "/designs/:designId/exports/gerber",
     async ({ params, req, query }) => {
+      assertQualifiedManufacturing();
       const designId = params.getOrThrow("designId");
       const pcb = await store.getPcbProjection(designId);
       if (!pcb) throw new NotFoundError(`Design '${designId}' not found`);
@@ -4035,6 +4041,7 @@ export function registerRoutes(
   });
 
   router.post("/imports/kicad-project", async (routeCtx) => {
+    assertQualifiedProjectImport();
     const body = await parseZipUploadBody(routeCtx.req);
     const formData = body.formData;
     const overrideName =
