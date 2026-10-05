@@ -5,6 +5,7 @@
  * Footprint can be imported (KiCad) or generated (IPC preset).
  */
 
+import { rejectKicadFootprints } from "./unqualified-import";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { buildSymbolRenderModel } from "../../../../shared/rendering/symbol-preview-builder";
 import { buildFootprintRenderModel } from "../../../../shared/rendering/footprint-preview-builder";
@@ -73,6 +74,11 @@ export function commitDrawnImport(
   ctx: CoreBackendModuleContext,
   input: CommitDrawnRequest,
 ): CommitKicadResponse {
+  if (input.footprintMode === "import") {
+    rejectKicadFootprints("kicad_mod", [
+      input.footprintSelection?.footprintId ?? "unselected",
+    ]);
+  }
   const generated =
     input.footprintMode === "generated"
       ? resolveGeneratedFootprint(input.generatedFootprint)
