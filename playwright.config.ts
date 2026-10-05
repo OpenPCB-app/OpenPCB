@@ -32,8 +32,10 @@ loadEnvFile(".env.e2e");
 loadEnvFile(".env");
 
 const CLOUD_SYNC_ELECTRON_SPEC = /cloud-sync\.spec\.ts$/;
-const DESKTOP_ELECTRON_SPEC = /electron-desktop-smoke\.spec\.ts$/;
-const ELECTRON_SPECS = /(?:cloud-sync|electron-desktop-smoke)\.spec\.ts$/;
+const DESKTOP_ELECTRON_SPEC =
+  /(?:electron-desktop-smoke|electron-docs-hardening)\.spec\.ts$/;
+const ELECTRON_SPECS =
+  /(?:cloud-sync|electron-desktop-smoke|electron-docs-hardening)\.spec\.ts$/;
 
 export default defineConfig({
   testDir: "tests/e2e",
