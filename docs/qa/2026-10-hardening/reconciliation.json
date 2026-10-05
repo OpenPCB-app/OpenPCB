@@ -5441,15 +5441,24 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "5446a3101bc40c4dedadaa12a4f4a59db0d84621",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "tests/e2e/electron-designer-anchors.spec.ts",
+        "name": "rotated off-grid pins remain exact at two zoom levels and through Undo/reopen",
+        "command": "OPENPCB_E2E_NO_WEBSERVER=1 OPENPCB_CAPTURE=1 OPENPCB_NATIVE_RENDERER_DIST=/private/tmp/openpcb-h05-consumer-E7nzVl/app/src/core/frontend/dist npx --no-install playwright test --project=electron-desktop tests/e2e/electron-designer-anchors.spec.ts tests/e2e/electron-designer-hardening.spec.ts --workers=1",
+        "result": "passed",
+        "commit": "d25ceeca3dc966cddac79b61963f41734ea7517b",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/designer-grid-snapping.json",
+        "evidenceSha256": "883066164dafd36b637e7ebef3a5e8171643f2824302c8f8e570dcec8d4b2c50"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "shots/q3/dark/023-wires-done.png",
         "shots/vq3/dark/014-labels-placed.png",
         "shots/q3/dark/029-wire-seg-drag-live.png"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Full original T-095 multi-fixture matrix, PCB footprint rotation/drag and all imported-coordinate cases remain unqualified. Native proof uses an isolated unpublished H05 source artifact and startup proposal. The main published canvas still requires H05 release/pin/startup integration; packaged cold-offline behavior is not qualified. Resident font is bounded to one verified generation retained until explicit disposal. Dev CSP is native-tested; packaged CSP still needs packaged QA."
     },
     {
       "tid": "T-096",
@@ -11105,11 +11114,11 @@
         "kind": "behavioral",
         "path": "tests/e2e/electron-designer-hardening.spec.ts",
         "name": "rapid schematic actions use successive revisions and native Undo restores geometry",
-        "command": "OPENPCB_E2E_NO_WEBSERVER=1 OPENPCB_CAPTURE=1 npx --no-install playwright test --project=electron-desktop tests/e2e/electron-designer-hardening.spec.ts",
+        "command": "OPENPCB_E2E_NO_WEBSERVER=1 OPENPCB_CAPTURE=1 OPENPCB_NATIVE_RENDERER_DIST=/private/tmp/openpcb-h05-consumer-E7nzVl/app/src/core/frontend/dist npx --no-install playwright test --project=electron-desktop tests/e2e/electron-designer-anchors.spec.ts tests/e2e/electron-designer-hardening.spec.ts --workers=1",
         "result": "passed",
-        "commit": "f82f4a8344628bb83fea80312491d73a31c47867",
-        "evidencePath": "docs/qa/2026-10-hardening/evidence/designer-command-recovery.json",
-        "evidenceSha256": "a3a789481c36f9aa2d95b5561f9905350873202e38850b7e508f7738800c1e8e"
+        "commit": "d25ceeca3dc966cddac79b61963f41734ea7517b",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/designer-grid-snapping.json",
+        "evidenceSha256": "883066164dafd36b637e7ebef3a5e8171643f2824302c8f8e570dcec8d4b2c50"
       },
       "localEvidence": null,
       "historicalEvidence": [
