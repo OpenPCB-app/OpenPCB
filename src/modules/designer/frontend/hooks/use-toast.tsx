@@ -1,4 +1,16 @@
-import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useId,
+  useMemo,
+  type ReactNode,
+} from "react";
+import {
+  toast,
+  useToastStore,
+  type ToastTone,
+} from "@shared/frontend/ui/toast";
 
 export interface Toast {
   id: string;
@@ -9,96 +21,65 @@ export interface Toast {
 
 interface ToastContextValue {
   toasts: Toast[];
-  addToast(message: string, variant?: Toast["variant"], duration?: number): void;
+  addToast(
+    message: string,
+    variant?: Toast["variant"],
+    duration?: number,
+  ): void;
   removeToast(id: string): void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const timeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-
-  const removeToast = useCallback((id: string) => {
-    setToasts((current) => current.filter((t) => t.id !== id));
-    const timeout = timeoutsRef.current.get(id);
-    if (timeout) {
-      clearTimeout(timeout);
-      timeoutsRef.current.delete(id);
-    }
-  }, []);
-
+  const prefix = `designer-${useId()}-`;
+  const sharedToasts = useToastStore((state) => state.toasts);
+  const toasts = useMemo(
+    () =>
+      sharedToasts
+        .filter((item) => item.id.startsWith(prefix))
+        .map((item) => ({
+          id: item.id,
+          message: item.message,
+          variant: item.tone === "danger" ? ("error" as const) : item.tone,
+          duration: item.durationMs ?? undefined,
+        })),
+    [sharedToasts, prefix],
+  );
   const addToast = useCallback(
-    (message: string, variant: Toast["variant"] = "info", duration = 3000) => {
-      const id = crypto.randomUUID();
-      const toast: Toast = { id, message, variant, duration };
-      setToasts((current) => [...current, toast]);
-      const timeout = setTimeout(() => removeToast(id), duration);
-      timeoutsRef.current.set(id, timeout);
+    (
+      message: string,
+      variant: Toast["variant"] = "info",
+      duration?: number,
+    ) => {
+      const tone: ToastTone = variant === "error" ? "danger" : variant;
+      toast.show({
+        id: `${prefix}${crypto.randomUUID()}`,
+        tone,
+        message,
+        // Handled operation failures remain visible until explicitly dismissed.
+        durationMs: variant === "error" ? null : duration,
+      });
     },
-    [removeToast],
+    [prefix],
   );
-
-  useEffect(() => {
-    return () => {
-      for (const timeout of timeoutsRef.current.values()) {
-        clearTimeout(timeout);
-      }
-      timeoutsRef.current.clear();
-    };
-  }, []);
-
+  const removeToast = useCallback(
+    (id: string) => {
+      if (id.startsWith(prefix)) toast.dismiss(id);
+    },
+    [prefix],
+  );
+  const value = useMemo(
+    () => ({ toasts, addToast, removeToast }),
+    [toasts, addToast, removeToast],
+  );
   return (
-    <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
-      {children}
-      <ToastViewport toasts={toasts} onRemove={removeToast} />
-    </ToastContext.Provider>
+    <ToastContext.Provider value={value}>{children}</ToastContext.Provider>
   );
 }
 
-export function useToast() {
-  const ctx = useContext(ToastContext);
-  if (!ctx) {
-    throw new Error("useToast must be used within ToastProvider");
-  }
-  return ctx;
-}
-
-function ToastViewport({
-  toasts,
-  onRemove,
-}: {
-  toasts: Toast[];
-  onRemove: (id: string) => void;
-}) {
-  if (toasts.length === 0) return null;
-
-  return (
-    <div className="fixed right-3 top-3 z-50 flex flex-col gap-2">
-      {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          className={`flex max-w-xs items-center gap-2 rounded-md border px-3 py-2 text-xs shadow-sm backdrop-blur ${
-            toast.variant === "error"
-              ? "border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
-              : toast.variant === "success"
-                ? "border-green-300 bg-green-50 text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-300"
-                : toast.variant === "warning"
-                  ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
-                  : "border-slate-300 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-          }`}
-        >
-          <span className="flex-1">{toast.message}</span>
-          <button
-            type="button"
-            onClick={() => onRemove(toast.id)}
-            className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
-        </div>
-      ))}
-    </div>
-  );
+export function useToast(): ToastContextValue {
+  const context = useContext(ToastContext);
+  if (!context) throw new Error("useToast must be used within ToastProvider");
+  return context;
 }

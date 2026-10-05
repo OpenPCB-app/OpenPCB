@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState, type ComponentType } from "react";
 import type { FrontendModuleEntry } from "../../../contracts/modules/frontend-entry";
 import type { ModuleManifest } from "../../../contracts/modules/manifest";
 import type { ModuleRegistryItem } from "../../../contracts/modules/registry";
+import { ErrorBoundary } from "@shared/frontend/ui/error-boundary";
+import { Recovery } from "../shell/Recovery";
+import { reportRenderError } from "../shell/GlobalErrors";
 import { useBootstrap } from "../providers/BootstrapProvider";
 
 interface FrontendModuleEntryFile {
@@ -59,14 +62,6 @@ export function getFrontendModuleEntry(
   return manifest ? { manifest } : undefined;
 }
 
-function ModuleLoadError({ message }: { message: string }) {
-  return (
-    <div className="m-6 rounded-control border border-status-danger/40 bg-status-danger-soft p-5 text-sm text-status-danger">
-      {message}
-    </div>
-  );
-}
-
 function resolveModuleComponent(
   entry: FrontendModuleEntry,
 ): ComponentType<ModuleHostProps> | null {
@@ -88,6 +83,62 @@ function resolveModuleComponent(
   return Host;
 }
 
+function useModuleEntry(moduleId: string) {
+  const [loadedEntry, setLoadedEntry] = useState<{
+    moduleId: string;
+    entry: FrontendModuleEntry;
+  } | null>(null);
+  const [loadError, setLoadError] = useState<{
+    moduleId: string;
+    message: string;
+  } | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+
+  useEffect(() => {
+    let mounted = true;
+    const loader = moduleEntryLoadersById.get(moduleId);
+    setLoadedEntry(null);
+    setLoadError(null);
+
+    if (!loader) {
+      setLoadError({
+        moduleId: moduleId,
+        message: `Frontend entry missing for module '${moduleId}'`,
+      });
+      return () => {
+        mounted = false;
+      };
+    }
+
+    loader()
+      .then((file) => {
+        if (mounted) {
+          setLoadedEntry({ moduleId: moduleId, entry: file.default });
+        }
+      })
+      .catch((err: unknown) => {
+        if (!mounted) return;
+        setLoadError({
+          moduleId: moduleId,
+          message:
+            err instanceof Error
+              ? `Failed to load module '${moduleId}': ${err.message}`
+              : `Failed to load module '${moduleId}'`,
+        });
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [moduleId, loadAttempt]);
+
+  return {
+    currentEntry: loadedEntry?.moduleId === moduleId ? loadedEntry.entry : null,
+    loadError: loadError?.moduleId === moduleId ? loadError : null,
+    retry: () => setLoadAttempt((attempt) => attempt + 1),
+  };
+}
+
 export function ModuleSpaceHost({
   module,
   designId,
@@ -98,66 +149,46 @@ export function ModuleSpaceHost({
   params?: Record<string, string>;
 }) {
   const { backendURL } = useBootstrap();
-  const [loadedEntry, setLoadedEntry] = useState<{
-    moduleId: string;
-    entry: FrontendModuleEntry;
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    const loader = moduleEntryLoadersById.get(module.id);
-    setLoadedEntry(null);
-    setError(null);
-
-    if (!loader) {
-      setError(`Frontend entry missing for module '${module.id}'`);
-      return () => {
-        mounted = false;
-      };
-    }
-
-    loader()
-      .then((file) => {
-        if (mounted) {
-          setLoadedEntry({ moduleId: module.id, entry: file.default });
-        }
-      })
-      .catch((err: unknown) => {
-        if (!mounted) return;
-        setError(
-          err instanceof Error
-            ? `Failed to load module '${module.id}': ${err.message}`
-            : `Failed to load module '${module.id}'`,
-        );
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [module.id]);
-
-  const currentEntry =
-    loadedEntry?.moduleId === module.id ? loadedEntry.entry : null;
+  const { currentEntry, loadError, retry } = useModuleEntry(module.id);
   const Component = useMemo(
     () => (currentEntry ? resolveModuleComponent(currentEntry) : null),
     [currentEntry],
   );
 
-  if (error) {
-    return <ModuleLoadError message={error} />;
+  if (loadError) {
+    return (
+      <Recovery
+        error={new Error(loadError.message)}
+        title={`${module.sidebar.label} could not load`}
+        reset={retry}
+      />
+    );
   }
 
   if (!Component) {
-    return <div className="m-6 text-sm text-text-tertiary">Loading module…</div>;
+    return (
+      <div className="m-6 text-sm text-text-tertiary">Loading module…</div>
+    );
   }
 
   return (
-    <Component
-      module={module}
-      backendURL={backendURL}
-      designId={designId}
-      params={params}
-    />
+    <ErrorBoundary
+      scope={`module/${module.id}`}
+      resetKeys={[module.id, designId]}
+      onError={reportRenderError}
+      fallback={(props) => (
+        <Recovery
+          {...props}
+          title={`${module.sidebar?.label ?? module.id} stopped working`}
+        />
+      )}
+    >
+      <Component
+        module={module}
+        backendURL={backendURL}
+        designId={designId}
+        params={params}
+      />
+    </ErrorBoundary>
   );
 }

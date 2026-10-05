@@ -15,7 +15,9 @@ type ThemeContextValue = {
   setPreference: (preference: ThemePreference) => Promise<void>;
 };
 
-const ThemeContext = React.createContext<ThemeContextValue | undefined>(undefined);
+const ThemeContext = React.createContext<ThemeContextValue | undefined>(
+  undefined,
+);
 
 export function useTheme(): ThemeContextValue {
   const context = React.useContext(ThemeContext);
@@ -25,8 +27,13 @@ export function useTheme(): ThemeContextValue {
   return context;
 }
 
-export function ThemeProvider({ children }: { children: React.ReactNode }): React.ReactElement {
-  const [preference, setPreferenceState] = React.useState<ThemePreference>("system");
+export function ThemeProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.ReactElement {
+  const [preference, setPreferenceState] =
+    React.useState<ThemePreference>("system");
   const [mode, setMode] = React.useState<ThemeMode>("light");
   const [isReady, setIsReady] = React.useState(false);
 
@@ -47,6 +54,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }): Reac
       return;
     }
     return subscribeToSystemTheme((nextMode) => {
+      applyThemeClass(nextMode);
       setMode(nextMode);
     });
   }, [isReady, preference]);
@@ -65,5 +73,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }): Reac
     [preference, mode, isReady, setPreference],
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
 }

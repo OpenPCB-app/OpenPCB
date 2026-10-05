@@ -44,7 +44,7 @@ import {
 } from "./OutlinePanel/bounds";
 import { RENDER_ORDER } from "../../../../shared/frontend/canvas/layers";
 import { useCanvasTheme } from "../../../../shared/frontend/canvas/theme";
-import { useTheme } from "../../../../core/frontend/src/providers/ThemeProvider";
+import { useCanvasThemeMode } from "../../../../shared/frontend/canvas/use-canvas-theme-mode";
 import { Units } from "../../../../shared/frontend/canvas/coords";
 import {
   DEFAULT_SCHEMATIC_ZOOM,
@@ -937,7 +937,7 @@ export const SchematicCanvas = forwardRef<
 
   // Light-mode canvas background tracks the app surface (#f0f4fb) so the
   // schematic reads as part of the shell; dark mode keeps the canvas default.
-  const { mode } = useTheme();
+  const mode = useCanvasThemeMode();
   const canvasBackground = mode === "light" ? "#f0f4fb" : undefined;
 
   const snap = (pointNm: PointNm) => snapNm(pointNm, gridVisible);
@@ -3262,6 +3262,7 @@ export const SchematicCanvas = forwardRef<
       className="relative h-full w-full min-h-0 rounded-none"
     >
       <EdaCanvas
+        themeMode={mode}
         readOnly={false}
         interactionHandler={interactionHandler}
         className="h-full w-full"

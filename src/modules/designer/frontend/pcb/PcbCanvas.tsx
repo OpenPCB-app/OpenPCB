@@ -36,6 +36,7 @@ import type {
 import { nmToSceneMm } from "../../../../shared/frontend/canvas/coords";
 import type { OpenpcbCapturePcbApi } from "../capture-bridge";
 import { EdaCanvas } from "../../../../shared/frontend/canvas/interaction/EdaCanvas";
+import { useCanvasThemeMode } from "../../../../shared/frontend/canvas/use-canvas-theme-mode";
 import type {
   InteractionCoordinateTransform,
   InteractionEvent,
@@ -551,6 +552,7 @@ function violationCodeList(violations: readonly DrcViolation[]): string {
 }
 
 export function PcbCanvas(props: PcbCanvasProps): ReactElement {
+  const themeMode = useCanvasThemeMode();
   const gridEnabled = props.gridVisible ?? false;
   // Stable identities — several per-pointer-move memos (bundlePreview, …)
   // list these as deps; plain arrows would invalidate them on EVERY render.
@@ -5916,6 +5918,7 @@ export function PcbCanvas(props: PcbCanvasProps): ReactElement {
     >
       {workspace.projection ? (
         <EdaCanvas
+          themeMode={themeMode}
           key={props.designId}
           testId="designer-pcb-canvas"
           initialZoom={DEFAULT_PCB_ZOOM}

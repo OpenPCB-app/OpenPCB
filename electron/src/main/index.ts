@@ -20,6 +20,7 @@ import {
   setSecureItem,
   removeSecureItem,
 } from "./secure-storage.js";
+import { registerEditContextMenu } from "./edit-context-menu.js";
 import { getTelemetryOptIn, setTelemetryOptIn } from "./preferences.js";
 
 initLogger();
@@ -163,6 +164,8 @@ function createWindow(): void {
       ...(CAPTURE ? { backgroundThrottling: false } : {}),
     },
   });
+
+  registerEditContextMenu(mainWindow);
 
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();

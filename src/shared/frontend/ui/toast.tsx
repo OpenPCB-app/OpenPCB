@@ -1,5 +1,11 @@
 import * as React from "react";
-import { AlertTriangle, CheckCircle2, Info, OctagonAlert, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  OctagonAlert,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
 import { IconButton } from "./icon-button";
@@ -30,9 +36,18 @@ const MAX_VISIBLE = 3;
 
 const TONE: Record<ToastTone, { accent: string; Icon: typeof Info }> = {
   info: { accent: "border-l-status-info text-status-info", Icon: Info },
-  success: { accent: "border-l-status-success text-status-success", Icon: CheckCircle2 },
-  warning: { accent: "border-l-status-warning text-status-warning", Icon: AlertTriangle },
-  danger: { accent: "border-l-status-danger text-status-danger", Icon: OctagonAlert },
+  success: {
+    accent: "border-l-status-success text-status-success",
+    Icon: CheckCircle2,
+  },
+  warning: {
+    accent: "border-l-status-warning text-status-warning",
+    Icon: AlertTriangle,
+  },
+  danger: {
+    accent: "border-l-status-danger text-status-danger",
+    Icon: OctagonAlert,
+  },
 };
 
 function ToastCard({ item }: { item: ToastItem }) {
@@ -48,9 +63,15 @@ function ToastCard({ item }: { item: ToastItem }) {
         accent,
       )}
     >
-      <Icon aria-hidden="true" strokeWidth={1.5} className="mt-px h-3.5 w-3.5 shrink-0" />
+      <Icon
+        aria-hidden="true"
+        strokeWidth={1.5}
+        className="mt-px h-3.5 w-3.5 shrink-0"
+      />
       <div className="min-w-0 flex-1">
-        {item.title ? <div className="font-medium text-text-strong">{item.title}</div> : null}
+        {item.title ? (
+          <div className="font-medium text-text-strong">{item.title}</div>
+        ) : null}
         <div className="break-words text-text">{item.message}</div>
       </div>
       {item.action ? (
@@ -79,6 +100,47 @@ function ToastCard({ item }: { item: ToastItem }) {
   );
 }
 
+function useViewportPause(
+  viewportRef: React.RefObject<HTMLElement | null>,
+  visible: readonly ToastItem[],
+) {
+  const hovered = React.useRef(false);
+  const focused = React.useRef(false);
+  const sync = () => {
+    if (hovered.current || focused.current) pauseToasts();
+    else resumeToasts();
+  };
+  React.useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    hovered.current =
+      visible.length > 0 && Boolean(viewport?.matches(":hover"));
+    focused.current =
+      visible.length > 0 && Boolean(viewport?.contains(document.activeElement));
+    sync();
+  }, [viewportRef, visible]);
+  React.useEffect(() => () => resumeToasts(), []);
+  return {
+    onPointerEnter: () => {
+      hovered.current = true;
+      sync();
+    },
+    onPointerLeave: () => {
+      hovered.current = false;
+      sync();
+    },
+    onFocus: () => {
+      focused.current = true;
+      sync();
+    },
+    onBlur: (event: React.FocusEvent<HTMLElement>) => {
+      focused.current =
+        event.relatedTarget instanceof Node &&
+        event.currentTarget.contains(event.relatedTarget);
+      sync();
+    },
+  };
+}
+
 /**
  * Notification viewport: bottom-right, above the 22px status bar (never over
  * header controls), newest 3 visible, hover/focus pauses expiry. Mount ONCE
@@ -87,15 +149,13 @@ function ToastCard({ item }: { item: ToastItem }) {
 export function Toaster({ className }: { className?: string }) {
   const toasts = useToastStore((state) => state.toasts);
   const visible = toasts.slice(-MAX_VISIBLE);
+  const viewportRef = React.useRef<HTMLElement>(null);
+  const pauseEvents = useViewportPause(viewportRef, visible);
   return (
     <section
+      ref={viewportRef}
       aria-label="Notifications"
-      onPointerEnter={pauseToasts}
-      onPointerLeave={resumeToasts}
-      onFocus={pauseToasts}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) resumeToasts();
-      }}
+      {...pauseEvents}
       className={cn(
         "pointer-events-none fixed bottom-[30px] right-3 z-70 flex w-[360px] max-w-[calc(100vw-24px)] flex-col gap-2",
         className,

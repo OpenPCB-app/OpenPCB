@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useBootstrap } from "./providers/BootstrapProvider";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { TitleBar } from "./components/TitleBar";
@@ -7,6 +6,11 @@ import { AppContextMenu } from "./components/AppContextMenu";
 import { useNavigationStore } from "./stores/navigation-store";
 import { useSettingsHotkeys } from "./settings/hooks/useSettingsHotkeys";
 import { openContextMenu } from "@shared/frontend/context-menu";
+import { ErrorBoundary } from "@shared/frontend/ui/error-boundary";
+import { formatShortcut } from "@shared/frontend/ui/shortcut";
+import { Recovery } from "./shell/Recovery";
+import { reportRenderError } from "./shell/GlobalErrors";
+import { shouldOpenAppMenu } from "./shell/context-menu-policy";
 
 function LoadingScreen() {
   return (
@@ -28,23 +32,10 @@ function ErrorScreen({ message }: { message: string }) {
 
 export function AppShell() {
   const { status, error } = useBootstrap();
+  const currentRoute = useNavigationStore((state) => state.currentRoute);
   const openSettings = useNavigationStore((state) => state.openSettings);
 
   useSettingsHotkeys();
-
-  useEffect(() => {
-    const suppressNativeContextMenu = (event: MouseEvent) => {
-      event.preventDefault();
-    };
-
-    document.addEventListener("contextmenu", suppressNativeContextMenu, true);
-    return () =>
-      document.removeEventListener(
-        "contextmenu",
-        suppressNativeContextMenu,
-        true,
-      );
-  }, []);
 
   if (status === "loading" || status === "idle") {
     return <LoadingScreen />;
@@ -61,6 +52,7 @@ export function AppShell() {
         <div
           className="grid min-h-0 flex-1 grid-cols-[80px_1fr]"
           onContextMenu={(event) => {
+            if (!shouldOpenAppMenu(event)) return;
             event.preventDefault();
             openContextMenu({
               scope: "app",
@@ -74,7 +66,7 @@ export function AppShell() {
                       kind: "action",
                       id: "settings",
                       label: "Settings",
-                      shortcut: "Ctrl+,",
+                      shortcut: formatShortcut("Mod+,"),
                       onSelect: () => openSettings(),
                     },
                   ],
@@ -85,7 +77,17 @@ export function AppShell() {
         >
           <LeftSidebar onSettingsClick={() => openSettings()} />
           <main className="h-full min-h-0 min-w-0">
-            <AppRouter />
+            <ErrorBoundary
+              scope="route"
+              resetKeys={[
+                currentRoute.kind,
+                currentRoute.kind === "module" ? currentRoute.moduleId : null,
+              ]}
+              onError={reportRenderError}
+              fallback={(props) => <Recovery {...props} />}
+            >
+              <AppRouter />
+            </ErrorBoundary>
           </main>
         </div>
       </div>
