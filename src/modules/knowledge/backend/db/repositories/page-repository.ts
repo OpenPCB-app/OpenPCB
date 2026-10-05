@@ -13,9 +13,7 @@ import type {
 } from "../../../shared/types";
 
 export class PageRepository {
-  constructor(
-    private db: BetterSQLite3Database<Record<string, unknown>>,
-  ) {}
+  constructor(private db: BetterSQLite3Database<Record<string, unknown>>) {}
 
   async create(data: NewKnowledgePage): Promise<KnowledgePage> {
     const [page] = await this.db
@@ -126,17 +124,24 @@ export class PageRepository {
       icon?: string;
       properties_json?: PageProperties;
     },
-  ): Promise<KnowledgePage> {
+    expectedUpdatedAt?: Date,
+  ): Promise<KnowledgePage | null> {
+    const conditions = [
+      eq(knowledge_page.id, id),
+      isNull(knowledge_page.deleted_at),
+    ];
+    if (expectedUpdatedAt)
+      conditions.push(eq(knowledge_page.updated_at, expectedUpdatedAt));
     const [page] = await this.db
       .update(knowledge_page)
       .set({
         ...updates,
         revision: sql`${knowledge_page.revision} + 1`,
-        updated_at: new Date(),
+        updated_at: sql`max(${knowledge_page.updated_at} + 1, ${Date.now()})`,
       })
-      .where(eq(knowledge_page.id, id))
+      .where(and(...conditions))
       .returning();
-    return page!;
+    return page ?? null;
   }
 
   async updateContent(
@@ -160,7 +165,7 @@ export class PageRepository {
         content_engine: content.engine,
         content_version: content.version,
         revision: sql`${knowledge_page.revision} + 1`,
-        updated_at: new Date(),
+        updated_at: sql`max(${knowledge_page.updated_at} + 1, ${Date.now()})`,
       })
       .where(and(...conditions))
       .returning();

@@ -6,7 +6,7 @@ import type { EditorContent as EditorContentType } from "../../../shared/types";
 interface TiptapEditorProps {
   initialContent?: EditorContentType;
   onChange?: (content: EditorContentType) => void;
-  onReady?: (editor: Editor) => void;
+  onReady?: (editor: Editor | null) => void;
   readOnly?: boolean;
 }
 
@@ -31,6 +31,8 @@ export function TiptapEditor({
   readOnly = false,
 }: TiptapEditorProps) {
   const onChangeRef = useRef(onChange);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -49,10 +51,14 @@ export function TiptapEditor({
     immediatelyRender: false,
     shouldRerenderOnTransaction: false,
     onUpdate: ({ editor }) => {
-      onChangeRef.current?.({ engine: "tiptap", version: 1, data: editor.getJSON() });
+      onChangeRef.current?.({
+        engine: "tiptap",
+        version: 1,
+        data: editor.getJSON(),
+      });
     },
     onCreate: ({ editor }) => {
-      onReady?.(editor);
+      onReadyRef.current?.(editor);
     },
     editorProps: {
       attributes: {
@@ -63,35 +69,16 @@ export function TiptapEditor({
   });
 
   useEffect(() => {
-    if (!editor || editor.isDestroyed) return;
-    const newData = initialContent?.data;
-    const currentData = editor.getJSON();
-    if (JSON.stringify(newData) !== JSON.stringify(currentData)) {
-      queueMicrotask(() => {
-        if (!editor.isDestroyed) {
-          editor.commands.setContent(
-            (newData as object) || {
-              type: "doc",
-              content: [{ type: "paragraph" }],
-            },
-            { emitUpdate: false },
-          );
-        }
-      });
-    }
-  }, [initialContent, editor]);
-
-  useEffect(() => {
-    if (editor) {
-      editor.setEditable(!readOnly);
+    if (editor && !editor.isDestroyed && editor.isEditable !== !readOnly) {
+      editor.setEditable(!readOnly, false);
     }
   }, [editor, readOnly]);
 
   useEffect(() => {
     return () => {
-      editor?.destroy();
+      onReadyRef.current?.(null);
     };
-  }, [editor]);
+  }, []);
 
   if (!editor) {
     return null;

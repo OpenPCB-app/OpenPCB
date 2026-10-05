@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, Trash2, AlertCircle, FileText } from "lucide-react";
 import type { Editor } from "@tiptap/react";
 import { Button } from "@shared/frontend/ui/button";
-import { useKnowledgeApi, useAutosave } from "../../hooks";
+import { useKnowledgeApi } from "../../hooks";
+import { usePageDraft } from "../../hooks/usePageDraft";
 import { useTreeStore } from "../../stores/tree-store";
 import { TiptapEditor } from "./TiptapEditor";
 import { PdfViewer } from "./PdfViewer";
@@ -10,7 +11,7 @@ import { FixedToolbar } from "./FixedToolbar";
 import { LinkDialog } from "./LinkDialog";
 import { findParentNode } from "../Sidebar/PageTree";
 import { formatRelativeTime } from "../../lib/format";
-import type { EditorContent, Page, PageTreeNode } from "../../../shared/types";
+import type { Page, PageTreeNode } from "../../../shared/types";
 
 interface PageEditorProps {
   pageId: string | null;
@@ -40,131 +41,82 @@ function buildBreadcrumb(tree: PageTreeNode[], pageId: string): string[] {
   return crumbs;
 }
 
-function toIsoTimestamp(value: Date | string | null | undefined): string | null {
-  if (!value) return null;
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value.toISOString();
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString();
-}
-
 export function PageEditor({
   pageId,
   page,
   isLoading,
   error,
-  refreshPage,
-  onPageChange,
   onPageDeleted,
   designId,
   onSelectPage,
-  onSaveRequestId,
   onRefreshTree,
 }: PageEditorProps) {
   const api = useKnowledgeApi();
-  const [editor, setEditor] = useState<Editor | null>(null);
+  const { draft, coordinator } = usePageDraft(
+    page?.id === pageId ? page : null,
+  );
+  const [editorOwner, setEditorOwner] = useState<{
+    id: string;
+    editor: Editor;
+  } | null>(null);
+  const editor =
+    editorOwner?.id === pageId && !editorOwner.editor.isDestroyed
+      ? editorOwner.editor
+      : null;
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [icon, setIcon] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [wordCount, setWordCount] = useState(0);
+  const [, tick] = useState(0);
   const tree = useTreeStore((state) => state.tree);
-  const titleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const updatedAtRef = useRef(new Map<string, string>());
-  const pageIdRef = useRef(pageId);
-  const pageRef = useRef(page);
-
+  const title = draft?.title ?? page?.title ?? "";
+  const saveStatus = draft?.status ?? "idle";
+  const [countOwner, setCountOwner] = useState<{
+    editor: Editor;
+    count: number;
+  } | null>(null);
+  const wordCount =
+    editor && countOwner?.editor === editor ? countOwner.count : 0;
   useEffect(() => {
-    pageIdRef.current = pageId;
-  }, [pageId]);
-
-  useEffect(() => {
-    pageRef.current = page;
-  }, [page]);
-
-  useEffect(() => {
-    if (page) {
-      setTitle(page.title);
-      setIcon(page.icon);
-      const iso = toIsoTimestamp(page.updated_at);
-      if (iso) {
-        updatedAtRef.current.set(page.id, iso);
-      }
-    }
-  }, [page]);
-
-  useEffect(() => {
-    return () => {
-      if (titleTimerRef.current) {
-        clearTimeout(titleTimerRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     const update = () => {
+      if (editor.isDestroyed) return;
       const text = editor.getText().trim();
-      setWordCount(text ? text.split(/\s+/).length : 0);
+      setCountOwner({ editor, count: text ? text.split(/\s+/).length : 0 });
     };
     update();
-    editor.on("update", update);
+    editor.on("transaction", update);
     return () => {
-      editor.off("update", update);
+      editor.off("transaction", update);
     };
   }, [editor]);
 
-  const handleSaveContent = useCallback(
-    async (content: EditorContent) => {
-      const currentPageId = pageIdRef.current;
-      const currentPage = pageRef.current;
-      if (!currentPageId || !currentPage) return;
-      const requestId = crypto.randomUUID();
-      onSaveRequestId?.(requestId);
-      try {
-        const result = await api.updatePageContent(currentPageId, content, {
-          ifUnmodifiedSince: updatedAtRef.current.get(currentPageId) ?? undefined,
-          requestId,
-        });
-        if (result?.page) {
-          const iso = toIsoTimestamp(result.page.updated_at);
-          if (iso) updatedAtRef.current.set(result.page.id, iso);
-        }
-      } catch (err) {
-        console.error("Failed to save page content:", err);
-        throw err;
-      }
+  useEffect(() => {
+    setLinkDialogOpen(false);
+  }, [pageId]);
+  useEffect(() => {
+    const timer = setInterval(() => tick((value) => value + 1), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (onRefreshTree) return coordinator.subscribeTitleSaves(onRefreshTree);
+  }, [coordinator, onRefreshTree]);
+
+  const handleReady = useCallback(
+    (ready: Editor | null) => {
+      if (!pageId) return;
+      setEditorOwner((current) =>
+        ready
+          ? { id: pageId, editor: ready }
+          : current?.id === pageId
+            ? null
+            : current,
+      );
     },
-    [api, onSaveRequestId],
+    [pageId],
   );
 
-  const { status: saveStatus, triggerSave, resetPending } = useAutosave({
-    saveKey: pageId ?? "none",
-    debounceMs: 500,
-    onSave: handleSaveContent,
-  });
-
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTitle = e.target.value;
-    const currentPageId = pageId;
-    setTitle(newTitle);
-    if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
-    titleTimerRef.current = setTimeout(async () => {
-      if (!currentPageId) return;
-      try {
-        const updated = await api.updatePageMeta(currentPageId, { title: newTitle });
-        if (updated) {
-          const iso = toIsoTimestamp(updated.updated_at);
-          if (iso) updatedAtRef.current.set(updated.id, iso);
-          onPageChange?.(updated);
-          onRefreshTree?.();
-        }
-      } catch (err) {
-        console.error("Failed to update title:", err);
-      }
-    }, 1000);
+  const handleTitleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (pageId && draft) coordinator.setTitle(pageId, event.target.value);
   };
 
   const handleCreatePage = useCallback(async () => {
@@ -199,14 +151,6 @@ export function PageEditor({
     }
   }, [pageId, page, api, onPageDeleted, onRefreshTree]);
 
-  useEffect(() => {
-    resetPending();
-    if (titleTimerRef.current) {
-      clearTimeout(titleTimerRef.current);
-      titleTimerRef.current = null;
-    }
-  }, [pageId, resetPending]);
-
   if (!pageId) {
     return (
       <div className="flex h-full items-center justify-center p-6">
@@ -234,12 +178,14 @@ export function PageEditor({
     );
   }
 
-  const breadcrumb = pageId ? buildBreadcrumb(tree, pageId) : [];
-  const editedRelative = page ? formatRelativeTime(page.updated_at) : null;
+  const effectivePage = draft?.page ?? page;
+  const effectiveContent = draft?.content ?? effectivePage?.content_json;
+  const breadcrumb = buildBreadcrumb(tree, pageId);
+  const editedRelative = effectivePage
+    ? formatRelativeTime(effectivePage.updated_at)
+    : null;
   const pdfData =
-    page && page.content_engine === "pdf" && page.content_json.engine === "pdf"
-      ? page.content_json.data
-      : null;
+    effectiveContent?.engine === "pdf" ? effectiveContent.data : null;
 
   return (
     <div className="flex h-full flex-col">
@@ -248,13 +194,23 @@ export function PageEditor({
           <input
             type="text"
             value={title}
+            disabled={!draft}
             onChange={handleTitleChange}
+            aria-label="Page title"
             placeholder="Page title"
+            onBlur={() => coordinator.finishTitle(pageId)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              coordinator.finishTitle(pageId);
+              if (editor && !editor.isDestroyed) editor.commands.focus("start");
+            }}
             className="flex-1 bg-transparent text-lg font-semibold text-text-primary placeholder:text-text-tertiary focus:outline-none"
           />
           <div className="flex items-center gap-1">
             {saveStatus !== "idle" && (
               <span
+                role="status"
                 className={`rounded-pill bg-slate-100 px-2 py-0.5 text-[11px] dark:bg-slate-800 ${
                   saveStatus === "saved"
                     ? "text-status-success"
@@ -263,9 +219,10 @@ export function PageEditor({
                       : "text-text-tertiary"
                 }`}
               >
+                {saveStatus === "pending" && "Unsaved"}
                 {saveStatus === "saving" && "Saving…"}
                 {saveStatus === "saved" && "Saved"}
-                {saveStatus === "error" && "Error"}
+                {saveStatus === "error" && "Not saved"}
               </span>
             )}
             <Button
@@ -323,31 +280,76 @@ export function PageEditor({
         </div>
       </div>
 
+      {draft?.error && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-2 border-b border-border bg-status-danger-soft px-4 py-2 text-xs text-status-danger"
+        >
+          <span>{draft.error} Draft retained while this app stays open.</span>
+          {draft.conflict ? (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={saveStatus === "saving"}
+                onClick={() => void coordinator.reload(pageId, true)}
+              >
+                Keep draft and retry
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={saveStatus === "saving"}
+                onClick={() => void coordinator.reload(pageId, false)}
+              >
+                Discard draft and reload
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => coordinator.retry(pageId)}
+            >
+              Retry save
+            </Button>
+          )}
+        </div>
+      )}
+
       {editor && !pdfData && (
-        <FixedToolbar editor={editor} onLinkClick={() => setLinkDialogOpen(true)} />
+        <FixedToolbar
+          editor={editor}
+          onLinkClick={() => setLinkDialogOpen(true)}
+        />
       )}
 
       {pdfData ? (
         <div className="min-h-0 flex-1">
           <PdfViewer
-            pdfUrl={api.pdfUrl(page!.id)}
+            pdfUrl={api.pdfUrl(effectivePage!.id)}
             fileName={pdfData.fileName}
           />
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
           {isLoading && !page ? (
-            <div className="p-4 text-sm text-text-tertiary">Loading page...</div>
+            <div className="p-4 text-sm text-text-tertiary">
+              Loading page...
+            </div>
           ) : error ? (
             <div className="flex items-center gap-2 p-4 text-sm text-status-danger">
               <AlertCircle className="h-4 w-4" />
               {error}
             </div>
-          ) : page ? (
+          ) : effectivePage ? (
             <TiptapEditor
-              initialContent={page.content_json}
-              onChange={triggerSave}
-              onReady={setEditor}
+              key={`${effectivePage.id}:${effectiveContent?.engine}:${draft?.documentGeneration ?? 0}`}
+              initialContent={effectiveContent}
+              onChange={(content) =>
+                coordinator.setContent(effectivePage.id, content)
+              }
+              onReady={handleReady}
               readOnly={false}
             />
           ) : null}

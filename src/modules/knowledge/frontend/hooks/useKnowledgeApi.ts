@@ -37,6 +37,7 @@ interface ApiResponse<T> {
 }
 
 export interface KnowledgeApi {
+  readonly draftNamespace?: string;
   createPage: (params: CreatePageParams) => Promise<Page | null>;
   importPdf: (
     file: File,
@@ -48,10 +49,14 @@ export interface KnowledgeApi {
   ) => Promise<Page | null>;
   /** URL that streams the stored PDF for a pdf-engine page (empty if no backend). */
   pdfUrl: (pageId: string) => string;
-  getPage: (pageId: string, options?: { signal?: AbortSignal }) => Promise<Page | null>;
+  getPage: (
+    pageId: string,
+    options?: { signal?: AbortSignal },
+  ) => Promise<Page | null>;
   updatePageMeta: (
     pageId: string,
     updates: UpdatePageMetaParams,
+    options?: { requestId?: string; ifUnmodifiedSince?: string },
   ) => Promise<Page | null>;
   updatePageContent: (
     pageId: string,
@@ -66,7 +71,10 @@ export interface KnowledgeApi {
   deletePage: (pageId: string) => Promise<boolean>;
   restorePage: (pageId: string) => Promise<Page | null>;
   getWorkspaceTree: (workspaceId: string) => Promise<PageTreeNode[]>;
-  getProjectTree: (projectId: string, workspaceId: string) => Promise<PageTreeNode[]>;
+  getProjectTree: (
+    projectId: string,
+    workspaceId: string,
+  ) => Promise<PageTreeNode[]>;
   searchPages: (
     workspaceId: string,
     query: string,
@@ -107,11 +115,11 @@ export function createKnowledgeApi(
 
     try {
       const response = await fetch(`${base}${path}`, {
+        ...options,
         headers: {
           "Content-Type": "application/json",
           ...options?.headers,
         },
-        ...options,
       });
 
       if (!response.ok) {
@@ -228,9 +236,15 @@ export function createKnowledgeApi(
   const updatePageMeta = async (
     pageId: string,
     updates: UpdatePageMetaParams,
+    options?: { requestId?: string; ifUnmodifiedSince?: string },
   ) => {
+    const headers: Record<string, string> = {};
+    if (options?.requestId) headers["X-Request-Id"] = options.requestId;
+    if (options?.ifUnmodifiedSince)
+      headers["If-Unmodified-Since"] = options.ifUnmodifiedSince;
     const result = await fetchApi<{ page: Page }>(`/pages/${pageId}/meta`, {
       method: "PATCH",
+      headers,
       body: JSON.stringify(updates),
     });
     if (result.error) throw result.error;
@@ -338,7 +352,9 @@ export function createKnowledgeApi(
     return result.data?.page ?? null;
   };
 
-  const bulkDeletePages = async (pageIds: string[]): Promise<BulkDeleteResult> => {
+  const bulkDeletePages = async (
+    pageIds: string[],
+  ): Promise<BulkDeleteResult> => {
     const result = await fetchApi<BulkDeleteResult>("/pages/bulk-delete", {
       method: "POST",
       body: JSON.stringify({ page_ids: pageIds }),
@@ -363,6 +379,7 @@ export function createKnowledgeApi(
   };
 
   return {
+    draftNamespace: base ?? `unavailable:${moduleId}`,
     createPage,
     importPdf,
     pdfUrl,

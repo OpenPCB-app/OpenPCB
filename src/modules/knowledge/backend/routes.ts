@@ -288,15 +288,37 @@ export function registerRoutes(
   });
 
   router.patch("/pages/:pageId/meta", async ({ req, params }) => {
+    let requestId: string | undefined;
     try {
       const pageId = params.getOrThrow("pageId");
       const updates = (await req.json()) as UpdatePageMetaParams;
-      const page = await pageService.updatePageMeta(pageId, updates);
-      events.publish(toPageUpdateEvent("meta_updated", page));
-      return json({ page });
+      const ifUnmodifiedSince = req.headers.get("if-unmodified-since");
+      let expectedUpdatedAt: Date | undefined;
+      if (ifUnmodifiedSince) {
+        expectedUpdatedAt = new Date(ifUnmodifiedSince);
+        if (Number.isNaN(expectedUpdatedAt.getTime()))
+          return error("INVALID_IF_UNMODIFIED_SINCE", 400);
+      }
+      requestId = req.headers.get("x-request-id") ?? undefined;
+      const page = await pageService.updatePageMeta(
+        pageId,
+        updates,
+        expectedUpdatedAt,
+      );
+      events.publish(toPageUpdateEvent("meta_updated", page, requestId));
+      return json({ page, ...(requestId && { requestId }) });
     } catch (err) {
+      if (err instanceof PageContentConflictError) {
+        return Response.json(
+          { error: err.code, page: err.page, ...(requestId && { requestId }) },
+          { status: 409 },
+        );
+      }
       const message = err instanceof Error ? err.message : "Unknown error";
-      return error(message);
+      return error(
+        message,
+        message === "PAGE_NOT_FOUND" || message === "PAGE_DELETED" ? 404 : 400,
+      );
     }
   });
 
@@ -380,7 +402,11 @@ export function registerRoutes(
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       const status =
-        message === "ROOT_LOCKED" ? 403 : message === "PAGE_NOT_FOUND" ? 404 : 500;
+        message === "ROOT_LOCKED"
+          ? 403
+          : message === "PAGE_NOT_FOUND"
+            ? 404
+            : 500;
       return error(message, status);
     }
   });
@@ -424,16 +450,10 @@ export function registerRoutes(
     try {
       const q = query.get("q") ?? "";
       const scope = (query.get("scope") ?? "all") as
-        | "all"
-        | "workspace"
-        | "projects";
+        "all" | "workspace" | "projects";
       const workspaceId = query.get("workspace_id") ?? DEFAULT_WORKSPACE;
 
-      const results = await searchService.searchByTitle(
-        workspaceId,
-        q,
-        scope,
-      );
+      const results = await searchService.searchByTitle(workspaceId, q, scope);
       return json({ results });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
