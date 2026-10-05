@@ -10,7 +10,7 @@
  *  - coordinates are validated as safe integers by callers at the boundary.
  */
 
-import { SCHEMATIC_GRID_NM } from "@openpcb/rendering-core";
+import { SCHEMATIC_GRID_NM, snapPointNm } from "../domain/editor-grid";
 
 export type Point = { x: number; y: number };
 
@@ -84,11 +84,7 @@ export function snapToGrid(
   point: Point,
   gridNm: number = SCHEMATIC_GRID_NM,
 ): Point {
-  if (gridNm <= 0) return { x: point.x, y: point.y };
-  return {
-    x: Math.round(point.x / gridNm) * gridNm,
-    y: Math.round(point.y / gridNm) * gridNm,
-  };
+  return snapPointNm(point, gridNm);
 }
 
 /**

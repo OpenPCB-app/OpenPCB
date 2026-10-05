@@ -68,7 +68,7 @@ function pathDoublesBack(path: Point[]): boolean {
  *   dragged segment touches an endpoint a perpendicular stub is inserted instead
  *   (a straight pin-to-pin wire becomes a 4-point staple). Interior neighbours
  *   absorb the shift by stretching.
- * - The shift is grid-snapped.
+ * - The destination is grid-snapped; gridNm=0 preserves free placement.
  *
  * Returns the ORIGINAL `points` unchanged when the drag is a no-op or would
  * produce an invalid (self-overlapping / non-orthogonal) path.
@@ -86,10 +86,11 @@ export function dragWireSegment(
   const axis = wireSegmentAxis(a, b);
   if (!axis) return points;
 
+  const delta = axis === "h" ? deltaNm.y : deltaNm.x;
+  if (delta === 0) return points;
+  const target = snapToGrid({ x: a.x + deltaNm.x, y: a.y + deltaNm.y }, gridNm);
   const shift =
-    axis === "h"
-      ? snapToGrid({ x: 0, y: deltaNm.y }, gridNm)
-      : snapToGrid({ x: deltaNm.x, y: 0 }, gridNm);
+    axis === "h" ? { x: 0, y: target.y - a.y } : { x: target.x - a.x, y: 0 };
   if (shift.x === 0 && shift.y === 0) return points;
 
   const newA = { x: a.x + shift.x, y: a.y + shift.y };

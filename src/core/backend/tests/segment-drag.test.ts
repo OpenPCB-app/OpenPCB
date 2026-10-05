@@ -5,7 +5,7 @@ import {
   wireSegmentAxis,
 } from "../../../shared/schematic-routing/segment-drag";
 
-const G = SCHEMATIC_GRID_NM; // 2_000_000 nm grid
+const G = SCHEMATIC_GRID_NM;
 
 describe("wireSegmentAxis", () => {
   test("horizontal segment (shared y)", () => {
@@ -21,6 +21,25 @@ describe("wireSegmentAxis", () => {
 });
 
 describe("dragWireSegment", () => {
+  test("snaps the moved segment to the absolute grid while preserving off-grid endpoints", () => {
+    const path = [
+      { x: -11_160_000, y: -3_305_000 },
+      { x: -11_160_000, y: -2_900_000 },
+      { x: 18_760_000, y: -2_900_000 },
+      { x: 18_760_000, y: 1_100_000 },
+    ];
+    const moved = dragWireSegment(path, 1, { x: 0, y: -4_900_000 }, 1_270_000);
+    expect(moved).toEqual([
+      path[0]!,
+      { x: -11_160_000, y: -7_620_000 },
+      { x: 18_760_000, y: -7_620_000 },
+      path[3]!,
+    ]);
+    expect(dragWireSegment(path, 1, { x: 0, y: -4_900_000 }, 0)[1]!.y).toBe(
+      -7_800_000,
+    );
+    expect(dragWireSegment(path, 1, { x: 100, y: 0 }, 1_270_000)).toBe(path);
+  });
   // Z-shaped wire: source(0,0) → up → across → down → target.
   const zPath = [
     { x: 0, y: 0 },
