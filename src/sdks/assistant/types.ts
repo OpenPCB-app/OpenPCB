@@ -64,11 +64,24 @@ export type AssistantWriteProposalStatus =
   | "rejected"
   | "failed";
 
+/**
+ * Who proposed a write, when it came from an external MCP client: the client
+ * key plus the per-session instance id. Ownership checks (awaiting a proposal,
+ * undoing a change) compare this, never the chat the proposal lives in.
+ */
+export interface AssistantWriteProposalActor {
+  type: "mcp";
+  clientKey: string;
+  instanceId: string;
+}
+
 export type AssistantWriteProposalDto = Omit<
   ContractsAssistantWriteProposalDto,
   "status"
 > & {
   status: AssistantWriteProposalStatus;
+  /** Set for MCP proposals; null/absent for in-app and cloud ones. */
+  actor?: AssistantWriteProposalActor | null;
 };
 
 export type AssistantWriteRiskLevel =

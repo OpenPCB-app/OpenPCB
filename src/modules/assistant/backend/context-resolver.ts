@@ -147,12 +147,24 @@ export class ContextResolver {
       };
     }
 
-    await this.bindDesign(chatId, { id: top.id, name: top.name });
+    // listDesigns() was awaited above: another call may have bound the chat
+    // since the primary check. Bind only if still unbound (atomic — see
+    // bindDesignIfUnbound) and report the design that actually won.
+    const outcome = this.bindDesignIfUnbound(chatId, { id: top.id, name: top.name });
+    if (!outcome.created && outcome.binding.refId !== top.id) {
+      return {
+        status: "already-bound-to-other-design",
+        candidates: hits.slice(0, 5),
+        message: `This chat is bound to "${outcome.binding.label}". Start a new chat to work on "${top.name}".`,
+      };
+    }
     return {
       status: "resolved",
       resolved: top,
       candidates: hits.slice(0, 5),
-      message: `Bound chat to design "${top.name}".`,
+      message: outcome.created
+        ? `Bound chat to design "${top.name}".`
+        : `Already bound to ${top.name}.`,
     };
   }
 
@@ -172,6 +184,30 @@ export class ContextResolver {
   }
 
   /**
+   * Bind the chat to a design unless it already has a primary design. The
+   * check and the insert run back to back with no await in between, on the
+   * one synchronous SQLite writer, so two concurrent callers can never both
+   * see "unbound" and leave the chat with two primary designs. Returns the
+   * binding that is primary afterwards and whether this call created it.
+   */
+  bindDesignIfUnbound(
+    chatId: string,
+    design: { id: string; name: string },
+  ): { binding: AssistantContextBindingDto; created: boolean } {
+    const existing = this.getPrimaryDesign(chatId);
+    if (existing) return { binding: existing, created: false };
+    const binding: AiContextBinding = {
+      id: crypto.randomUUID(),
+      kind: "design",
+      refId: design.id,
+      label: design.name,
+      role: "primary",
+      status: "active",
+    };
+    return { binding: this.store.createBinding(chatId, binding), created: true };
+  }
+
+  /**
    * If the chat has no primary design and this designId resolves to a real design, auto-bind it.
    * Idempotent: no-op when already bound to this design. If bound to a different design, returns null.
    */
@@ -185,10 +221,11 @@ export class ContextResolver {
     if (!designer) return null;
     const design = await designer.getDesign(designId);
     if (!design) return null;
-    return this.bindDesign(chatId, {
+    const outcome = this.bindDesignIfUnbound(chatId, {
       id: design.head.id,
       name: design.head.name,
     });
+    return outcome.binding.refId === designId ? outcome.binding : null;
   }
 
   /**

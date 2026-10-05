@@ -136,6 +136,7 @@ import type { DesignerStore } from "./store";
 import { ulid } from "./capture/ulid";
 import { buildDesignerSdk } from "./sdk";
 import { createDesignerStore } from "./store";
+import { designEventStream, designEventsFor } from "./design-events";
 import { createCommentStore } from "./comments/comment-store";
 import {
   DrcRunCancelledError,
@@ -3178,6 +3179,15 @@ export function registerRoutes(
     clearActiveDesignIfMatches(designId);
     return new Response(null, { status: 204 });
   });
+
+  // Design change stream (SSE) — commits, undo/redo, create/rename/delete and
+  // focus requests, from ANY writer (UI, in-app assistant, MCP clients). The
+  // UI refetches the open design when a revision it has not seen arrives.
+  router.get("/events", ({ req, query }) =>
+    designEventStream(designEventsFor(ctx.db as object), req.signal, {
+      designId: query.get("designId"),
+    }),
+  );
 
   // Which design the designer UI currently has focused. Pushed by the frontend
   // tab store; read by external drivers (MCP) that have no tab state of their

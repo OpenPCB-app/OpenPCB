@@ -53,6 +53,7 @@ import type {
   ActiveRunState,
   ActiveRunStatus,
 } from "./components/AssistantRunStatusCard";
+import { useAssistantEvents } from "./hooks/useAssistantEvents";
 import { useAssistantStream } from "./hooks/useAssistantStream";
 import { isNearBottom, useScrollAnchor } from "./hooks/useScrollAnchor";
 
@@ -761,6 +762,49 @@ export function DesignerChatDock({
     [assistantBase, chats, refreshDesignChats, selectedChatId],
   );
 
+  // Live updates for changes made outside this dock's own runs — above all an
+  // MCP client (Claude Code) working on this design: its activity lands in an
+  // "MCP · …" chat bound to the design, and deletions it proposes wait there
+  // for approval. Refetch the chat list and the open chat; surface a pending
+  // approval in a chat the user is not looking at.
+  const [approvalChatId, setApprovalChatId] = useState<string | null>(null);
+  useAssistantEvents({
+    backendUrl: backendURL,
+    enabled: Boolean(designId),
+    onEvents: (events) => {
+      const relevant = events.filter(
+        (event) =>
+          event.designId === designId ||
+          chats.some((chat) => chat.id === event.chatId),
+      );
+      if (relevant.length === 0) return;
+      void refreshDesignChats().catch(() => undefined);
+      const active = activeChatIdRef.current;
+      if (
+        active &&
+        !activeRunsByChat[active] &&
+        relevant.some((event) => event.chatId === active)
+      ) {
+        void refreshMessages(active).catch(() => undefined);
+      }
+      const waiting = relevant.find(
+        (event) =>
+          event.type === "proposal.updated" &&
+          event.status === "pending" &&
+          event.chatId !== active,
+      );
+      if (waiting) setApprovalChatId(waiting.chatId);
+      const decided = relevant.find(
+        (event) =>
+          event.type === "proposal.updated" && event.status !== "pending",
+      );
+      if (decided && decided.chatId === approvalChatId) setApprovalChatId(null);
+    },
+  });
+  const approvalChat = approvalChatId
+    ? (chats.find((chat) => chat.id === approvalChatId) ?? null)
+    : null;
+
   if (!designId) {
     return (
       <EmptyDock
@@ -917,6 +961,26 @@ export function DesignerChatDock({
                 {cloudFailure.actionLabel}
               </a>
             ) : null}
+          </div>
+        ) : null}
+        {approvalChat && approvalChat.id !== selectedChatId ? (
+          <div
+            role="status"
+            className="m-3 flex items-center gap-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200"
+          >
+            <span className="min-w-0 flex-1">
+              A change is waiting for your approval in “{approvalChat.title}”.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedChatId(approvalChat.id);
+                setApprovalChatId(null);
+              }}
+              className="shrink-0 rounded-control border border-amber-400 px-2 py-0.5 font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40"
+            >
+              Review
+            </button>
           </div>
         ) : null}
         {error ? (

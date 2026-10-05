@@ -6,11 +6,19 @@ import {
 } from "@modelcontextprotocol/server";
 import type { AiToolRegistry } from "@openpcb/ai-core";
 import type { ContextResolver } from "../context-resolver";
+import type { ConversationStore } from "../conversation-store";
 import type { AssistantSettings } from "../../../../sdks/assistant";
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
 import { checkMcpAuth } from "./auth";
 import { buildMcpServer } from "./server";
-import type { McpSessionRegistry } from "./session";
+import type { McpCallRecorder } from "./call-recorder";
+import type { AssistantEventBus } from "../events";
+import type { BuildIntentStore } from "../verification/build-intent-store";
+import {
+  normalizeClientKey,
+  type McpClientIdentity,
+  type McpConnectionRegistry,
+} from "./connections";
 
 /**
  * HTTP face of the MCP server.
@@ -19,28 +27,38 @@ import type { McpSessionRegistry } from "./session";
  * OpenPCB routes only ever see a Web `Request` and must return a `Response`
  * (`core/contracts/modules/backend-module.ts`), which is exactly the shape
  * `createMcpHandler` produces. No Node req/res adapter is involved.
+ *
+ * `createMcpHandler` serves 2025-era clients statelessly (a fresh server per
+ * POST, GET/DELETE answer 405) and 2026-era clients per request. Nothing about
+ * a client survives between requests inside the SDK, so identity travels in
+ * headers and is handed to the server factory as `authInfo`.
  */
 
-const CLIENT_HEADER = "x-openpcb-mcp-client";
+export const MCP_CLIENT_HEADER = "x-openpcb-mcp-client";
+export const MCP_CLIENT_NAME_HEADER = "x-openpcb-mcp-client-name";
+export const MCP_INSTANCE_HEADER = "x-openpcb-mcp-instance";
 
 /**
- * Client identity, used to pick which assistant chat backs the session.
- *
- * Must be derived the same way on every request of a conversation — an
- * `initialize` that resolves to one chat and a `tools/call` that resolves to
- * another would split the transcript. So it comes only from headers, which are
- * stable across a client's requests: the bundled shim sets `CLIENT_HEADER`
- * explicitly, and direct HTTP clients fall back to their User-Agent.
+ * Client identity. `clientKey` must be derived the same way on every request
+ * of a conversation, so it comes only from headers: the bundled shim sets
+ * `X-OpenPCB-MCP-Client` explicitly (from the client's announced name), and
+ * direct HTTP clients fall back to their User-Agent. The display name comes
+ * from the shim's name header, else the `initialize` clientInfo, else the key.
  */
-function clientKeyFor(req: Request): string {
-  const explicit = req.headers.get(CLIENT_HEADER)?.trim();
-  if (explicit) return explicit;
+export function identityFor(req: Request, parsedBody: unknown): McpClientIdentity {
+  const explicit = req.headers.get(MCP_CLIENT_HEADER)?.trim();
   const ua = req.headers.get("user-agent")?.trim();
-  if (ua) return ua;
-  return "unknown-client";
+  const clientKey = normalizeClientKey(explicit || ua || "unknown-client");
+  const clientName =
+    req.headers.get(MCP_CLIENT_NAME_HEADER)?.trim() ||
+    announcedClientName(parsedBody) ||
+    explicit ||
+    clientKey;
+  const instanceId = req.headers.get(MCP_INSTANCE_HEADER)?.trim() || clientKey;
+  return { clientKey, clientName, instanceId };
 }
 
-/** Prefer the name the client announced at `initialize` for the chat title. */
+/** The name the client announced at `initialize`, if this request is one. */
 function announcedClientName(parsedBody: unknown): string | null {
   if (typeof parsedBody !== "object" || parsedBody === null) return null;
   const body = parsedBody as { method?: unknown; params?: unknown };
@@ -71,41 +89,50 @@ export interface McpEndpointDeps {
   ctx: CoreBackendModuleContext;
   appVersion: string;
   contextResolver: ContextResolver;
-  sessions: McpSessionRegistry;
+  conversation: ConversationStore;
+  connections: McpConnectionRegistry;
+  recorder: McpCallRecorder;
+  events: AssistantEventBus;
+  buildIntents: BuildIntentStore;
   getSettings(): AssistantSettings;
   /**
    * Tool registry for this endpoint. `allowWrites` selects whether write tools
-   * are present at all; the caller caches per value so Ajv does not recompile
-   * every schema on each request.
+   * are present at all; the caller caches it so Ajv does not recompile every
+   * schema on each request.
    */
   getRegistry(allowWrites: boolean): AiToolRegistry;
+  pendingProposalHint: (chatTitle: string) => string;
 }
 
 export class McpEndpoint {
   private handler: McpHttpHandler | null = null;
-  /** Per-request client identity, read back inside the server factory. */
-  private readonly requestClients = new WeakMap<
-    Request,
-    { key: string; name: string }
-  >();
 
   constructor(private readonly deps: McpEndpointDeps) {}
 
   private ensureHandler(): McpHttpHandler {
     if (this.handler) return this.handler;
     this.handler = createMcpHandler((ctx) => {
-      const identity = ctx.requestInfo
-        ? this.requestClients.get(ctx.requestInfo)
-        : undefined;
+      const extra = ctx.authInfo?.extra as
+        | { identity?: McpClientIdentity }
+        | undefined;
+      const identity = extra?.identity ?? {
+        clientKey: "unknown-client",
+        clientName: "unknown-client",
+        instanceId: "unknown-client",
+      };
       const settings = this.deps.getSettings();
-      return buildMcpServer(identity ?? { key: "unknown-client", name: "unknown-client" }, {
+      return buildMcpServer(identity, {
         ctx: this.deps.ctx,
         appVersion: this.deps.appVersion,
         registry: this.deps.getRegistry(settings.mcpAllowWrites),
-        sessions: this.deps.sessions,
+        connections: this.deps.connections,
+        recorder: this.deps.recorder,
+        events: this.deps.events,
         contextResolver: this.deps.contextResolver,
-        contextSizePreference: settings.contextSizePreference,
+        conversation: this.deps.conversation,
+        buildIntents: this.deps.buildIntents,
         allowWrites: settings.mcpAllowWrites,
+        pendingProposalHint: this.deps.pendingProposalHint,
       });
     });
     return this.handler;
@@ -118,7 +145,7 @@ export class McpEndpoint {
       return jsonRpcError(
         503,
         -32000,
-        "OpenPCB's MCP server is disabled. Enable it in Settings → Assistant → MCP.",
+        "OpenPCB's MCP server is disabled. Enable it in OpenPCB Settings → Assistant → MCP.",
       );
     }
 
@@ -148,16 +175,28 @@ export class McpEndpoint {
       }
     }
 
-    const key = clientKeyFor(req);
-    this.requestClients.set(req, {
-      key,
-      name: announcedClientName(parsedBody) ?? key,
+    const identity = identityFor(req, parsedBody);
+    return this.ensureHandler().fetch(req, {
+      ...(parsedBody === undefined ? {} : { parsedBody }),
+      authInfo: {
+        token: "",
+        clientId: identity.clientKey,
+        scopes: [],
+        extra: { identity },
+      },
     });
+  }
 
-    return this.ensureHandler().fetch(
-      req,
-      parsedBody === undefined ? undefined : { parsedBody },
-    );
+  /**
+   * Tell 2026-era clients with an open `subscriptions/listen` stream that the
+   * tool and prompt lists changed (the user toggled writes, or the server).
+   * 2025-era clients are served statelessly and cannot be pushed to — the
+   * bundled shim polls `/mcp-state` and synthesizes the notification for them.
+   */
+  notifyToolsChanged(): void {
+    if (!this.handler) return;
+    this.handler.notify.toolsChanged();
+    this.handler.notify.promptsChanged();
   }
 
   async close(): Promise<void> {

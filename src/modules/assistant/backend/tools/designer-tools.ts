@@ -9,6 +9,7 @@ import type { CoreBackendModuleContext } from "../../../../core/contracts/module
 import {
   MODULE_SDK_TOKENS,
   type AssistantPlacementProposal,
+  type AssistantWriteProposalActor,
   type AssistantWriteProposalDto,
   type DesignerDesignSummary,
   type DesignerSDK,
@@ -17,7 +18,10 @@ import {
   type DesignerPcbProjection,
 } from "../../../../sdks";
 import type { ContextResolver } from "../context-resolver";
-import type { ConversationStore } from "../conversation-store";
+import {
+  writeProposalIdempotencyScope,
+  type ConversationStore,
+} from "../conversation-store";
 import { ACTION_ID_DESC, isValidActionId } from "./action-id";
 import {
   buildProjectionIndex,
@@ -29,7 +33,21 @@ import {
   type WireEndpoint,
 } from "./schematic-targeting";
 
-const AI_DESIGNER_SESSION_ID = "designer-ui-session";
+/**
+ * The MCP session behind a tool call (set by the MCP projection in
+ * `execCtx.metadata.mcp`), recorded on every proposal it creates so ownership
+ * never depends on which chat the proposal happens to live in. Null in-app.
+ */
+export function mcpActorOf(
+  execCtx: { metadata?: unknown } | undefined,
+): AssistantWriteProposalActor | null {
+  const mcp = (execCtx?.metadata as { mcp?: { clientKey?: unknown; instanceId?: unknown } } | undefined)
+    ?.mcp;
+  if (typeof mcp?.clientKey !== "string" || typeof mcp.instanceId !== "string") return null;
+  return { type: "mcp", clientKey: mcp.clientKey, instanceId: mcp.instanceId };
+}
+
+export const AI_DESIGNER_SESSION_ID = "designer-ui-session";
 const SCHEMATIC_GRID_NM = 2_000_000;
 const DEFAULT_GRID_SPACING_X_NM = 24_000_000;
 const DEFAULT_GRID_SPACING_Y_NM = 16_000_000;
@@ -78,7 +96,14 @@ export interface SchematicProposalEnvelope {
     | "designer_schematic_updates"
     | "designer_schematic_deletions"
     | "designer_pcb_place_batch"
-    | "designer_pcb_route_batch";
+    | "designer_pcb_route_batch"
+    // MCP-only PCB / design tools (tools/mcp-pcb-tools.ts, mcp-design-tools.ts)
+    | "designer_pcb_board_edits"
+    | "designer_pcb_rules_edits"
+    | "designer_pcb_deletions"
+    | "designer_pcb_drc_waivers"
+    | "designer_pcb_drc_rule_ignores"
+    | "designer_design_delete";
   toolName:
     | "designer_propose_schematic_edits"
     | "designer_propose_schematic_wires"
@@ -88,7 +113,22 @@ export interface SchematicProposalEnvelope {
     // S8: cloud-copilot layout batches mirrored via the cloud proposal path
     | "cloud_copilot"
     | "copilot_run_placement"
-    | "copilot_run_routing";
+    | "copilot_run_routing"
+    // MCP-only tools
+    | "pcb_place_footprints"
+    | "pcb_route"
+    | "pcb_delete_routing"
+    | "pcb_set_board_outline"
+    | "pcb_set_design_rules"
+    | "pcb_add_zone"
+    | "pcb_update_zone"
+    | "pcb_delete_zone"
+    | "pcb_add_keepout"
+    | "pcb_update_keepout"
+    | "pcb_delete_keepout"
+    | "pcb_waive_drc_violations"
+    | "pcb_set_drc_rule_class_ignores"
+    | "designer_delete_design";
   /** Idempotency key from the model (Track D); dedup re-runs by design + key. */
   actionId?: string;
   title: string;
@@ -139,6 +179,12 @@ export interface SchematicApplyResult {
     result?: unknown;
   }>;
   message: string;
+  /**
+   * Every designer commandId this apply dispatched (primaries and follow-ups),
+   * in order. Lets a caller recognise its own entries on the shared undo stack
+   * (MCP `designer_undo` only undoes what its own proposals landed).
+   */
+  commandIds?: string[];
 }
 
 // ─── idempotency + slim model-facing result helpers (Track D) ──────────
@@ -151,62 +197,59 @@ interface WriteToolModelData {
 }
 
 /**
- * Look for a prior write proposal in this chat that carries the same
- * `actionId` for the same design — regardless of status. Used to make write
- * tools idempotent and to block duplicate in-flight dispatches: re-issuing the
- * same action_id must never duplicate placements/wires.
- *
- * Returns the most recent matching record (proposals are listed created-at
- * ASC) so the dedup decision reflects the latest known state of that action.
+ * The prior write proposal holding the same idempotency key — design +
+ * scope (the MCP session, or the chat in-app) + `actionId` — regardless of
+ * status. The same key the database enforces as UNIQUE, so the lookup and
+ * the race backstop can never disagree.
  */
 function findPriorByActionId(
   conversation: ConversationStore,
   chatId: string,
   designId: string,
   actionId: string,
+  actor: AssistantWriteProposalActor | null,
 ): AssistantWriteProposalDto | null {
-  let match: AssistantWriteProposalDto | null = null;
-  for (const record of conversation.listWriteProposals(chatId)) {
-    if (record.designId !== designId) continue;
-    const envelope = (record as { envelope?: unknown }).envelope as
-      | { actionId?: unknown }
-      | null
-      | undefined;
-    if (envelope && envelope.actionId === actionId) match = record;
-  }
-  return match;
+  return conversation.getWriteProposalByActionKey(
+    designId,
+    writeProposalIdempotencyScope(chatId, actor),
+    actionId,
+  );
 }
 
 /**
  * Idempotency / duplicate guard for write tools. Returns a terminal tool
- * result when a prior proposal for the same (designId + actionId) means we must
- * NOT dispatch again, or null when this action is fresh and may proceed:
- *  - applied / partial → already landed; replay its persisted apply result.
- *  - pending           → an earlier identical action is still in-flight (auto-
- *                        apply gated or concurrent); block to avoid a duplicate
- *                        write.
- *  - failed            → a prior identical action errored; a blind re-dispatch
- *                        could double-write whatever partially landed. Block
- *                        and report so correction goes through a fresh action.
- *  - rejected          → user declined; allow a fresh attempt (returns null).
+ * result when a prior proposal with the same key means we must NOT dispatch
+ * again, or null when this action is fresh and may proceed:
+ *  - applied / partial → already landed; replay its persisted result.
+ *  - pending           → still waiting (approval or in flight); block.
+ *  - failed / rejected → the action was tried and did not land, or the user
+ *                        declined it. Re-sending the same id must not act as
+ *                        a silent retry: block, and require a NEW action_id
+ *                        for a deliberate new attempt.
  */
-function dedupByActionId<T>(
+export function dedupByActionId<T>(
   conversation: ConversationStore,
   chatId: string,
   designId: string,
   actionId: string,
   limits: AiToolResult<T>["limits"],
+  actor: AssistantWriteProposalActor | null = null,
 ): AiToolResult<T | null> | null {
-  const prior = findPriorByActionId(conversation, chatId, designId, actionId);
+  const prior = findPriorByActionId(conversation, chatId, designId, actionId, actor);
   if (!prior) return null;
+  return priorActionResult<T>(prior, actionId, limits);
+}
+
+/** The terminal result for an action that already exists (see dedupByActionId). */
+function priorActionResult<T>(
+  prior: AssistantWriteProposalDto,
+  actionId: string,
+  limits: AiToolResult<T>["limits"],
+): AiToolResult<T | null> {
   if (prior.status === "applied" || prior.status === "partial") {
     return alreadyAppliedResult<T>(prior, actionId, limits);
   }
-  if (prior.status === "pending" || prior.status === "failed") {
-    return duplicateInFlightResult<T>(prior, actionId, limits);
-  }
-  // rejected (or any future non-blocking status): allow a fresh attempt.
-  return null;
+  return duplicateInFlightResult<T>(prior, actionId, limits);
 }
 
 /**
@@ -270,7 +313,9 @@ function duplicateInFlightResult<T>(
   const reason =
     record.status === "failed"
       ? `action_id "${actionId}" already attempted and failed; do not re-issue it. Inspect the design state and use a new action_id only for the parts that still need fixing.`
-      : `action_id "${actionId}" is already in-flight (pending). Wait for it to settle instead of re-issuing the same write.`;
+      : record.status === "rejected"
+        ? `action_id "${actionId}" was rejected by the user. Do not re-send it; if the user now wants a changed version, propose it with a new action_id.`
+        : `action_id "${actionId}" is already in-flight (pending). Wait for it to settle instead of re-issuing the same write.`;
   const modelData: WriteToolModelData = {
     appliedCount: 0,
     skipped: [{ id: actionId, reason }],
@@ -1023,15 +1068,19 @@ export function makeDesignerCreateDesignTool(
 
       const name = normalizeDesignName(input.name);
       const created = await designer.createDesign({ name });
-      await contextResolver.bindDesign(chatId, {
+      // createDesign was awaited: bind only if the chat is still unbound.
+      const binding = contextResolver.bindDesignIfUnbound(chatId, {
         id: created.id,
         name: created.name,
       });
+      const bound = binding.binding.refId === created.id;
 
       const output: DesignerCreateDesignOutput = {
         design: summarizeCreatedDesign(created),
-        bound: true,
-        message: `Created and bound new design "${created.name}".`,
+        bound,
+        message: bound
+          ? `Created and bound new design "${created.name}".`
+          : `Created design "${created.name}", but this chat was bound to "${binding.binding.label}" meanwhile; start a new chat to work on it.`,
       };
       return {
         ok: true,
@@ -1243,6 +1292,7 @@ export function makeDesignerPlaceComponentsTool(
           designId,
           actionId,
           execCtx.limits,
+          mcpActorOf(execCtx),
         );
         if (dedup) return dedup;
       }
@@ -1357,15 +1407,24 @@ export function makeDesignerPlaceComponentsTool(
         warnings: proposalWarnings,
         actionId,
       });
-      conversation.createWriteProposal({
+      const stored = conversation.createWriteProposal({
         id: proposalId,
         chatId,
+        actor: mcpActorOf(execCtx),
         kind: "designer_place_components",
         designId,
         baseRevision: designRecord.head.revision,
         proposal,
         envelope,
       });
+      if (actionId && stored && stored.id !== proposalId) {
+        // Same idempotency key already holds an action: never place twice.
+        return priorActionResult<AssistantPlacementProposal>(
+          stored,
+          actionId,
+          execCtx.limits,
+        );
+      }
       // Build-time skips (unresolved components, truncation). These never reach
       // the apply path, so they are reported as skipped regardless of apply.
       const buildSkipped: WriteToolModelData["skipped"] = skipped.map(
@@ -1434,7 +1493,10 @@ export function makeDesignerPlaceComponentsTool(
             chatId,
             proposalId,
             writeProposalTerminalStatus(applyResult),
-            applyResult ?? { message },
+            applyResult ??
+              (isProposalStaleError(err)
+                ? err.toApplyResult(proposalId, designId)
+                : { message }),
           );
           const appliedCount = applyResult?.applied?.length ?? 0;
           modelData = {
@@ -1915,6 +1977,7 @@ export function makeDesignerProposeSchematicEditsTool(
           designId,
           actionId,
           execCtx.limits,
+          mcpActorOf(execCtx),
         );
         if (dedup) return dedup;
       }
@@ -2241,6 +2304,7 @@ export function makeDesignerProposeSchematicEditsTool(
       return finalizeAndMaybeApply({
         designer,
         conversation,
+        actor: mcpActorOf(execCtx),
         chatId,
         designId,
         baseRevision: designRecord.head.revision,
@@ -2309,6 +2373,7 @@ export function makeDesignerArrangeSchematicTool(
           designId,
           actionId,
           execCtx.limits,
+          mcpActorOf(execCtx),
         );
         if (dedup) return dedup;
       }
@@ -2353,6 +2418,7 @@ export function makeDesignerArrangeSchematicTool(
       return finalizeAndMaybeApply({
         designer,
         conversation,
+        actor: mcpActorOf(execCtx),
         chatId,
         designId,
         baseRevision: designRecord.head.revision,
@@ -2490,6 +2556,7 @@ export function makeDesignerProposeSchematicWiresTool(
           designId,
           actionId,
           execCtx.limits,
+          mcpActorOf(execCtx),
         );
         if (dedup) return dedup;
       }
@@ -2683,6 +2750,7 @@ export function makeDesignerProposeSchematicWiresTool(
       return finalizeAndMaybeApply({
         designer,
         conversation,
+        actor: mcpActorOf(execCtx),
         chatId,
         designId,
         baseRevision: designRecord.head.revision,
@@ -2868,6 +2936,7 @@ export function makeDesignerProposeSchematicUpdatesTool(
           designId,
           actionId,
           execCtx.limits,
+          mcpActorOf(execCtx),
         );
         if (dedup) return dedup;
       }
@@ -3119,6 +3188,7 @@ export function makeDesignerProposeSchematicUpdatesTool(
       return finalizeAndMaybeApply({
         designer,
         conversation,
+        actor: mcpActorOf(execCtx),
         chatId,
         designId,
         baseRevision: designRecord.head.revision,
@@ -3242,6 +3312,7 @@ export function makeDesignerProposeSchematicDeletionsTool(
           designId,
           actionId,
           execCtx.limits,
+          mcpActorOf(execCtx),
         );
         if (dedup) return dedup;
       }
@@ -3322,6 +3393,7 @@ export function makeDesignerProposeSchematicDeletionsTool(
       return finalizeAndMaybeApply({
         designer,
         conversation,
+        actor: mcpActorOf(execCtx),
         chatId,
         designId,
         baseRevision: designRecord.head.revision,
@@ -3388,7 +3460,7 @@ const PIN_TARGET_SCHEMA = {
  * session policy opts them in. Centralizes the create+apply boilerplate shared
  * by all four schematic-write tools.
  */
-async function finalizeAndMaybeApply(params: {
+export async function finalizeAndMaybeApply(params: {
   designer: DesignerSDK;
   conversation: ConversationStore;
   chatId: string;
@@ -3399,6 +3471,8 @@ async function finalizeAndMaybeApply(params: {
   sources: AiSourceRef[];
   limits: AiToolResult["limits"];
   options: DesignerToolOptions;
+  /** The MCP session proposing (from `mcpActorOf(execCtx)`); null in-app. */
+  actor?: AssistantWriteProposalActor | null;
 }): Promise<AiToolResult<SchematicProposalEnvelope | null>> {
   const {
     designer,
@@ -3411,16 +3485,26 @@ async function finalizeAndMaybeApply(params: {
     sources,
     limits,
     options,
+    actor,
   } = params;
-  conversation.createWriteProposal({
+  const stored = conversation.createWriteProposal({
     id: envelope.id,
     chatId,
+    actor: actor ?? null,
     kind: envelope.kind,
     designId,
     baseRevision,
     proposal: envelope,
     envelope,
   });
+  const envelopeActionId = (envelope as { actionId?: string }).actionId;
+  if (envelopeActionId && stored && stored.id !== envelope.id) {
+    // The store returned an EXISTING proposal: the idempotency key (design +
+    // scope + action_id) already holds a concurrent or earlier identical
+    // action. Report that one and apply nothing. (Only an action_id can
+    // collide here, hence the guard.)
+    return priorActionResult<SchematicProposalEnvelope>(stored, envelopeActionId, limits);
+  }
   // Auto-apply is decided by the session policy callback. Production wiring
   // (assistant-service) allows non-destructive schematic proposals by default
   // and gates destructive ones behind an explicit allowance.
@@ -3482,7 +3566,7 @@ async function finalizeAndMaybeApply(params: {
             op.status === "failed" ||
             (op.status === "applied" && op.error != null),
         )
-        .map((op) => ({ id: op.operationId, reason: op.error ?? "failed" }));
+        .map((op) => ({ id: op.operationId, reason: operationFailureReason(op) }));
       const skipped = [...buildSkipped, ...failedSkips];
       // A failed/partial apply must surface ok:false/partial — never ok:true.
       if (applyResult.status === "applied") {
@@ -3511,16 +3595,23 @@ async function finalizeAndMaybeApply(params: {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      conversation.updateWriteProposalStatus(chatId, envelope.id, "failed", {
-        proposalId: envelope.id,
-        status: "failed",
-        designId,
-        appliedCount: 0,
-        skippedCount: 0,
-        failedCount: envelope.operations.length,
-        operations: [],
-        message,
-      });
+      conversation.updateWriteProposalStatus(
+        chatId,
+        envelope.id,
+        "failed",
+        isProposalStaleError(err)
+          ? err.toApplyResult(envelope.id, designId)
+          : {
+              proposalId: envelope.id,
+              status: "failed",
+              designId,
+              appliedCount: 0,
+              skippedCount: 0,
+              failedCount: envelope.operations.length,
+              operations: [],
+              message,
+            },
+      );
       finalWarnings.push(`Auto-apply failed: ${message}`);
       toolOk = false;
       toolStatus = "partial";
@@ -3558,9 +3649,7 @@ export async function applySchematicProposalOperations(input: {
     input.baseRevision !== null &&
     design.head.revision !== input.baseRevision
   ) {
-    throw new Error(
-      `Design changed since proposal was created (expected revision ${input.baseRevision}, current ${design.head.revision}). Regenerate the proposal.`,
-    );
+    throw new ProposalStaleError(input.baseRevision, design.head.revision);
   }
   if (
     (input.envelope.warnings?.length ?? 0) > 0 &&
@@ -3577,11 +3666,14 @@ export async function applySchematicProposalOperations(input: {
   const stopOnError = input.envelope.riskLevel === "destructive";
   let stoppedAtOperationId: string | undefined;
 
-  const dispatch = (command: DesignerCommandEnvelope["command"]) =>
-    input.designer.dispatchCommand(
+  const commandIds: string[] = [];
+  const dispatch = (command: DesignerCommandEnvelope["command"]) => {
+    const commandId = crypto.randomUUID();
+    commandIds.push(commandId);
+    return input.designer.dispatchCommand(
       input.designId,
       {
-        commandId: crypto.randomUUID(),
+        commandId,
         sessionId: AI_DESIGNER_SESSION_ID,
         aggregateId: input.designId,
         baseRevision,
@@ -3590,6 +3682,7 @@ export async function applySchematicProposalOperations(input: {
       },
       { actor: "assistant" },
     );
+  };
 
   for (const operation of input.envelope.operations) {
     const revisionBefore = baseRevision;
@@ -3730,6 +3823,7 @@ export async function applySchematicProposalOperations(input: {
     failedCount,
     ...(stoppedAtOperationId ? { stoppedAtOperationId } : {}),
     operations,
+    commandIds,
     message:
       status === "applied"
         ? `Applied ${appliedCount} schematic operation(s).`
@@ -3755,6 +3849,8 @@ export async function applyDesignerPlaceComponentsProposal(input: {
   }>;
   skipped: AssistantPlacementProposal["skipped"];
   results: Awaited<ReturnType<DesignerSDK["dispatchCommand"]>>[];
+  /** Every commandId dispatched, in order (see SchematicApplyResult.commandIds). */
+  commandIds: string[];
 }> {
   if (input.proposal.skipped.length > 0 && !input.allowPartial) {
     throw new Error(
@@ -3767,9 +3863,7 @@ export async function applyDesignerPlaceComponentsProposal(input: {
     input.baseRevision !== null &&
     design.head.revision !== input.baseRevision
   ) {
-    throw new Error(
-      `Design changed since proposal was created (expected revision ${input.baseRevision}, current ${design.head.revision}). Regenerate the proposal.`,
-    );
+    throw new ProposalStaleError(input.baseRevision, design.head.revision);
   }
 
   let baseRevision: number | null = input.baseRevision;
@@ -3780,6 +3874,7 @@ export async function applyDesignerPlaceComponentsProposal(input: {
     revision: number;
   }> = [];
   const results: Awaited<ReturnType<DesignerSDK["dispatchCommand"]>>[] = [];
+  const commandIds: string[] = [];
   const failWithPartial = (message: string): never => {
     throw new AssistantProposalApplyError(message, {
       proposalId: input.proposal.proposalId,
@@ -3788,6 +3883,7 @@ export async function applyDesignerPlaceComponentsProposal(input: {
       applied,
       skipped: input.proposal.skipped,
       results,
+      commandIds,
       message,
     });
   };
@@ -3806,6 +3902,7 @@ export async function applyDesignerPlaceComponentsProposal(input: {
         mirrored: placement.mirrored,
       },
     };
+    commandIds.push(envelope.commandId);
     const result = await input.designer.dispatchCommand(
       input.designId,
       envelope,
@@ -3852,6 +3949,7 @@ export async function applyDesignerPlaceComponentsProposal(input: {
           ...(propertiesJson ? { propertiesJson } : {}),
         },
       };
+      commandIds.push(updateEnvelope.commandId);
       const updateResult = await input.designer.dispatchCommand(
         input.designId,
         updateEnvelope,
@@ -3882,10 +3980,63 @@ export async function applyDesignerPlaceComponentsProposal(input: {
     proposalId: input.proposal.proposalId,
     status: "applied",
     designId: input.designId,
+    commandIds,
     applied,
     skipped: input.proposal.skipped,
     results,
   };
+}
+
+/**
+ * A proposal was approved after the design moved on: its `baseRevision` is no
+ * longer the head. Nothing was applied, and there is deliberately no
+ * "apply anyway" — the user or agent must propose again against the current
+ * design. Persisted as the proposal's failed apply result (`toApplyResult`),
+ * so the panel card and `assistant_await_proposal` can say why.
+ */
+/**
+ * Why an operation failed, for the agent: the dispatch code plus the
+ * executor's human detail when it gave one ("PCB_COPPER_ILLEGAL: trace on
+ * In1.Cu is not on the board stackup") — a bare code gives a model nothing
+ * to correct.
+ */
+function operationFailureReason(op: { error?: string | null; result?: unknown }): string {
+  const detail = (op.result as { detail?: unknown } | undefined)?.detail;
+  if (!op.error) return "failed";
+  return typeof detail === "string" && detail.trim() ? `${op.error}: ${detail.trim()}` : op.error;
+}
+
+export class ProposalStaleError extends Error {
+  readonly code = "STALE_PROPOSAL" as const;
+  constructor(
+    readonly expectedRevision: number,
+    readonly currentRevision: number,
+  ) {
+    super(
+      `Design changed since proposal was created (expected revision ${expectedRevision}, current ${currentRevision}). Regenerate the proposal.`,
+    );
+    this.name = "ProposalStaleError";
+  }
+
+  toApplyResult(proposalId: string, designId: string): Record<string, unknown> {
+    return {
+      proposalId,
+      status: "failed",
+      designId,
+      code: this.code,
+      expectedRevision: this.expectedRevision,
+      currentRevision: this.currentRevision,
+      appliedCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      operations: [],
+      message: this.message,
+    };
+  }
+}
+
+export function isProposalStaleError(err: unknown): err is ProposalStaleError {
+  return err instanceof ProposalStaleError;
 }
 
 export class AssistantProposalApplyError extends Error {

@@ -8,6 +8,7 @@ import {
   applySchematicProposalOperations,
   applyDesignerPlaceComponentsProposal,
   isAssistantProposalApplyError,
+  ProposalStaleError,
   type SchematicApplyResult,
   type SchematicProposalEnvelope,
 } from "../tools/designer-tools";
@@ -41,8 +42,20 @@ export async function applyAssistantWriteProposal(
   ) {
     return applyDesignerSchematicEditsProposal(input);
   }
-  if (kind === "designer_pcb_place_batch" || kind === "designer_pcb_route_batch") {
+  if (
+    kind === "designer_pcb_place_batch" ||
+    kind === "designer_pcb_route_batch" ||
+    // MCP-only PCB tools: their operations are real DesignerCommands too.
+    kind === "designer_pcb_board_edits" ||
+    kind === "designer_pcb_rules_edits" ||
+    kind === "designer_pcb_deletions" ||
+    kind === "designer_pcb_drc_waivers" ||
+    kind === "designer_pcb_drc_rule_ignores"
+  ) {
     return applyDesignerPcbBatchProposal(input);
+  }
+  if (kind === "designer_design_delete") {
+    return applyDesignDeleteProposal(input);
   }
   if (kind !== "designer_place_components") {
     throw new Error(`Unsupported proposal kind: ${kind}`);
@@ -58,6 +71,44 @@ export async function applyAssistantWriteProposal(
 
 export function applyFailureResult(err: unknown): unknown | null {
   return isAssistantProposalApplyError(err) ? err.applyResult : null;
+}
+
+/**
+ * MCP `designer_delete_design`: deleting a whole design is not a
+ * DesignerCommand (it has no revision to apply against, and no undo), so the
+ * proposal carries a descriptive operation only and approval calls the SDK.
+ */
+async function applyDesignDeleteProposal(
+  input: ApplyAssistantWriteProposalInput,
+): Promise<SchematicApplyResult> {
+  const designId = input.record.designId;
+  // Irreversible: refuse unless the design is exactly what the user saw when
+  // it was proposed. A newer edit (by the user or anyone) means the approval
+  // is for a design that no longer exists in that form — no apply-anyway.
+  const current = await input.designer.getDesign(designId);
+  if (
+    current &&
+    input.record.baseRevision !== null &&
+    current.head.revision !== input.record.baseRevision
+  ) {
+    throw new ProposalStaleError(input.record.baseRevision, current.head.revision);
+  }
+  const deleted = current ? await input.designer.deleteDesign(designId) : false;
+  const operationId = input.record.operations?.[0]?.id ?? `${input.record.id}:delete`;
+  return {
+    proposalId: input.record.id,
+    status: deleted ? "applied" : "failed",
+    designId,
+    appliedCount: deleted ? 1 : 0,
+    skippedCount: 0,
+    failedCount: deleted ? 0 : 1,
+    operations: [
+      deleted
+        ? { operationId, status: "applied" }
+        : { operationId, status: "failed", error: "Design not found" },
+    ],
+    message: deleted ? "Design deleted." : "The design no longer exists.",
+  };
 }
 
 /** S8: cloud auto-layout batches (pcb_move/rotate/flip, pcb_add_trace/via). The

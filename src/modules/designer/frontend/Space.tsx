@@ -61,6 +61,7 @@ import { PcbCanvas } from "./pcb/PcbCanvas";
 import { Board3DCanvas } from "./three-d/Board3DCanvas";
 import { DesignerChatDock } from "../../assistant/frontend";
 import { useDesignerTabsStore } from "./stores/designer-tabs-store";
+import { useDesignerEvents } from "./hooks/useDesignerEvents";
 import { useActiveDesignSync } from "./hooks/useActiveDesignSync";
 import type {
   DesignerPlacedPart,
@@ -1109,6 +1110,33 @@ function DesignerSpaceInner({
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
   };
+
+  // Changes from outside this workspace — Claude Code over MCP, the in-app
+  // assistant, another window's undo — stream in here (see useDesignerEvents).
+  useDesignerEvents({
+    backendUrl: backendURL,
+    selectedDesignId: state.selectedDesignId,
+    knownRevision: actions.getKnownRevision,
+    onReaction: (reaction) => {
+      if (reaction.focusDesignId) openTab(reaction.focusDesignId);
+      if (reaction.selectedRevision !== null) {
+        actions.notifyExternalRevisionBump(reaction.selectedRevision);
+      }
+      void (async () => {
+        // Deleted designs drop out of the list; the pruneMissing effect then
+        // closes their tabs.
+        if (reaction.refreshDesigns || reaction.closeDesignIds.length > 0) {
+          await actions.refreshDesigns();
+        }
+        if (reaction.refreshSelected) {
+          await Promise.all([
+            actions.refreshProjection(),
+            actions.refreshHistory(),
+          ]);
+        }
+      })().catch(() => undefined);
+    },
+  });
 
   const handleAssistantDesignChanged = useCallback(
     (change?: {

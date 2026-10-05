@@ -1,6 +1,12 @@
 import { app } from "electron";
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { log as electronLog } from "./logger.js";
 
@@ -53,6 +59,23 @@ function processAlive(pid: number): boolean {
   }
 }
 
+/** The pid recorded in an existing portfile, if a live process owns it. */
+function liveOwnerPid(filePath: string): number | null {
+  if (!existsSync(filePath)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as
+      | Partial<McpPortfile>
+      | null;
+    const pid = parsed?.pid;
+    if (typeof pid === "number" && pid !== process.pid && processAlive(pid)) {
+      return pid;
+    }
+  } catch {
+    // Unparseable file is stale by definition.
+  }
+  return null;
+}
+
 /**
  * Remove a portfile left behind by a crashed run. Only ever deletes a file
  * whose recorded pid is gone — a live second instance is not ours to clear
@@ -60,20 +83,10 @@ function processAlive(pid: number): boolean {
  */
 export function clearStaleMcpPortfile(appDataDir: string): void {
   const filePath = portfilePath(appDataDir);
-  if (!existsSync(filePath)) return;
-  try {
-    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as
-      | Partial<McpPortfile>
-      | null;
-    const pid = parsed?.pid;
-    if (typeof pid === "number" && pid !== process.pid && processAlive(pid)) {
-      log.warn(
-        `Leaving MCP portfile owned by live pid ${pid}; not overwriting.`,
-      );
-      return;
-    }
-  } catch {
-    // Unparseable file is stale by definition.
+  const owner = liveOwnerPid(filePath);
+  if (owner !== null) {
+    log.warn(`Leaving MCP portfile owned by live pid ${owner}; not overwriting.`);
+    return;
   }
   rmSync(filePath, { force: true });
 }
@@ -92,11 +105,22 @@ export function writeMcpPortfile(input: {
     appVersion: app.getVersion(),
   };
   const filePath = portfilePath(input.appDataDir);
+  const owner = liveOwnerPid(filePath);
+  if (owner !== null) {
+    // Another live instance serves MCP; overwriting its file would point its
+    // clients at us with a token they do not have.
+    log.warn(`MCP portfile belongs to live pid ${owner}; not writing ours.`);
+    return null;
+  }
   try {
-    writeFileSync(filePath, JSON.stringify(contents, null, 2), {
+    // Write-then-rename so a shim polling the file never reads it half
+    // written. The temp file is created 0600 and rename keeps the mode.
+    const tmpPath = `${filePath}.${process.pid}.tmp`;
+    writeFileSync(tmpPath, JSON.stringify(contents, null, 2), {
       encoding: "utf8",
       mode: 0o600,
     });
+    renameSync(tmpPath, filePath);
     log.info(`MCP portfile written: ${filePath}`);
     return contents;
   } catch (error) {

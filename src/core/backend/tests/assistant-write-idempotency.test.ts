@@ -24,7 +24,7 @@ interface DispatchRecord {
 
 /**
  * Minimal in-memory ConversationStore: the write tools only touch
- * listWriteProposals / createWriteProposal / updateWriteProposalStatus.
+ * getWriteProposalByActionKey / createWriteProposal / updateWriteProposalStatus.
  */
 function makeConversation(): ConversationStore {
   const rows = new Map<string, AssistantWriteProposalDto>();
@@ -58,6 +58,16 @@ function makeConversation(): ConversationStore {
     },
     listWriteProposals(chatId: string) {
       return [...rows.values()].filter((r) => r.chatId === chatId);
+    },
+    // In-app scope is the chat: "chat:<chatId>" (writeProposalIdempotencyScope).
+    getWriteProposalByActionKey(designId: string, scope: string, actionId: string) {
+      const matches = [...rows.values()].filter(
+        (r) =>
+          r.designId === designId &&
+          `chat:${r.chatId}` === scope &&
+          (r.envelope as { actionId?: string } | null)?.actionId === actionId,
+      );
+      return matches[matches.length - 1] ?? null;
     },
     updateWriteProposalStatus(
       _chatId: string,

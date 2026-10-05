@@ -4,7 +4,12 @@ import { NotFoundError } from "../../../core/contracts/errors";
 import { MODULE_SDK_TOKENS } from "../../../sdks";
 import type { DesignerSDK } from "../../../sdks/designer";
 import type { LibrarySDK } from "../../../sdks/library";
-import { getActiveDesignId } from "./active-design";
+import {
+  clearActiveDesignIfMatches,
+  getActiveDesignId,
+  setActiveDesignId,
+} from "./active-design";
+import { designEventsFor } from "./design-events";
 import { buildExportBundle } from "./export";
 import { pushCloudSnapshot, readLinkPublic } from "./cloud-sync";
 import { buildBoardSnapshot as buildBoardSnapshotFromProjection } from "./pcb/board-snapshot";
@@ -50,6 +55,18 @@ export function buildDesignerSdk(ctx: CoreBackendModuleContext): DesignerSDK {
     getActiveDesignId: () => getActiveDesignId(),
     getDesign: (designId) => store.getDesign(designId),
     updateDesign: (designId, input) => store.updateDesign(designId, input),
+    deleteDesign: async (designId) => {
+      if (!(await store.getDesign(designId))) return false;
+      await store.deleteDesign(designId);
+      clearActiveDesignIfMatches(designId);
+      return true;
+    },
+    requestFocus: (designId) => {
+      const bus = designEventsFor(ctx.db as object);
+      setActiveDesignId(designId);
+      bus.publish({ type: "design.focus", designId });
+      return { delivered: bus.listenerCount > 0 };
+    },
     getSchematicProjection: (designId) =>
       store.getSchematicProjection(designId),
     getPcbProjection: (designId) => store.getPcbProjection(designId),

@@ -114,9 +114,14 @@ export const FEATURE_FLAGS = {
       "Bundle routing: collect same-side pads, route one centerline, commit N parallel lanes atomically (diff pairs auto-detected by _P/_N and +/- net-name suffixes).",
   },
   "mcp.server": {
-    availability: "dev",
+    // Graduated: installed builds must serve MCP so Claude Code (the user's
+    // own subscription) can drive OpenPCB. The scripted write path stays
+    // behind two user settings, both default OFF (mcp_enabled,
+    // mcp_allow_writes), a per-launch bearer token, and in-panel approval for
+    // deletions and rule changes. Release notes: .github/release-notes/.
+    availability: "all",
     description:
-      "MCP server (Streamable HTTP at /api/modules/assistant/mcp + bundled stdio shim) exposing the assistant tool registry to external agents. Graduate to 'all' after a bake cycle — it opens a scripted write path into designs.",
+      "MCP server (Streamable HTTP at /api/modules/assistant/mcp + stdio bridge, launcher and Claude Code plugin) exposing OpenPCB's tools to external agents such as Claude Code.",
   },
   "dataset.capture": {
     availability: "prod",

@@ -241,6 +241,19 @@ export function finalizeReport(
   let errors = 0;
   let warnings = 0;
   let infos = 0;
+  // Violations the report hides entirely (unlike waivers, which stay listed
+  // with `waived: true`). Counted by id, like the report de-duplicates, so a
+  // caller can never present a board as clean without saying how much was
+  // suppressed.
+  const ignoredByClass = new Set<string>();
+  const ignoredBySeverity = new Set<string>();
+  const idOf = (draft: DrcViolationDraft) =>
+    computeViolationId({
+      code: draft.code,
+      anchors: draft.anchors,
+      layer: draft.layer,
+      locationMm: draft.locationMm,
+    });
 
   for (const draft of drafts) {
     // Safety-critical codes (dead shorts, layer-invalid items, refused zones,
@@ -250,7 +263,10 @@ export function finalizeReport(
     const safetyCritical = NON_OVERRIDABLE.has(draft.code);
     // The class is a per-CODE fact, not a per-draft one (contract 06 §6).
     const ruleClass = RULE_CLASS_BY_CODE[draft.code];
-    if (!safetyCritical && ignored.has(ruleClass)) continue;
+    if (!safetyCritical && ignored.has(ruleClass)) {
+      ignoredByClass.add(idOf(draft));
+      continue;
+    }
     // Per-code severity: override → the rule that set the value → default table.
     // "ignore" drops the violation entirely (except safety-critical codes).
     const resolvedSeverity = resolveSeverity(
@@ -258,7 +274,10 @@ export function finalizeReport(
       draft.ruleSeverity,
       overrides,
     );
-    if (resolvedSeverity === "ignore" && !safetyCritical) continue;
+    if (resolvedSeverity === "ignore" && !safetyCritical) {
+      ignoredBySeverity.add(idOf(draft));
+      continue;
+    }
     // Safety-critical codes are NON_OVERRIDABLE, so resolveSeverity always
     // returns their default (never "ignore"); this coercion is defensive.
     const severity: DrcSeverity =
@@ -267,12 +286,7 @@ export function finalizeReport(
         : resolvedSeverity;
 
     const { ruleSeverity: _ruleSeverity, ...rest } = draft;
-    const id = computeViolationId({
-      code: draft.code,
-      anchors: draft.anchors,
-      layer: draft.layer,
-      locationMm: draft.locationMm,
-    });
+    const id = idOf(draft);
     // Safety-critical codes can never be suppressed by a user waiver either —
     // audit B5-VIA-MASK / NET_SHORT_CIRCUIT.
     const isWaived = !safetyCritical && waived.has(id);
@@ -346,5 +360,15 @@ export function finalizeReport(
     violations: unique,
     summary: { errors, warnings, infos },
     countsByCode,
+    // Only when something was hidden, so unsuppressed reports keep their
+    // exact shape (golden reports, entry-point parity).
+    ...(ignoredByClass.size > 0 || ignoredBySeverity.size > 0
+      ? {
+          suppressed: {
+            byRuleClass: ignoredByClass.size,
+            bySeverityOverride: ignoredBySeverity.size,
+          },
+        }
+      : {}),
   };
 }

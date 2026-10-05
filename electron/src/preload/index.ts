@@ -31,9 +31,13 @@ interface AppVersions {
 }
 
 interface McpConfig {
-  /** Absolute path to the bundled stdio launcher; null when unpackaged. */
-  shimPath: string | null;
-  shimAvailable: boolean;
+  /** Stable launcher in the user-data dir; null if it could not be installed. */
+  launcherPath: string | null;
+  /** Set when the app runs from a temporary location (macOS translocation). */
+  launcherWarning: string | null;
+  /** Local Claude Code plugin marketplace; null if not written. */
+  marketplaceDir: string | null;
+  snippets: Array<{ id: string; label: string; hint: string; value: string }>;
   portfilePath: string;
   /** Streamable HTTP endpoint; null until the backend is listening. */
   url: string | null;
@@ -66,6 +70,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   getMcpConfig: (): Promise<McpConfig> => {
     return ipcRenderer.invoke("mcp:config");
+  },
+  claudeCode: {
+    status: (): Promise<unknown> => ipcRenderer.invoke("mcp:claude-code:status"),
+    connect: (mode: "plugin" | "server"): Promise<unknown> =>
+      ipcRenderer.invoke("mcp:claude-code:connect", mode),
+    disconnect: (): Promise<unknown> =>
+      ipcRenderer.invoke("mcp:claude-code:disconnect"),
   },
   openUserDataFolder: (): Promise<{ dir: string; error: string | null }> => {
     return ipcRenderer.invoke("diagnostics:open-user-data");
