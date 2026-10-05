@@ -13,101 +13,293 @@ defaults:
     shell: bash
 
 jobs:
-  typecheck-and-test:
-    name: typecheck + test
+  metadata:
+    name: dependency lock + CI script regressions
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Record environment
+        run: |
+          mkdir -p ci-artifacts
+          { node --version; npm --version; git rev-parse HEAD; } | tee ci-artifacts/environment.log
+      - name: Validate shared lock
+        if: always()
+        run: npm run shared:check-lock 2>&1 | tee ci-artifacts/shared-lock.log
+      - name: CI script regressions
+        if: always()
+        run: npm run test:ci-scripts 2>&1 | tee ci-artifacts/ci-scripts.log
+      - name: Upload metadata logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-metadata
+          path: ci-artifacts/
+          if-no-files-found: warn
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+  reconciliation:
+    name: QA reconciliation integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Record environment
+        run: |
+          mkdir -p ci-artifacts
+          { node --version; git rev-parse HEAD; } | tee ci-artifacts/environment.log
+      - name: Validate pinned portable reconciliation
+        if: always()
+        run: node scripts/qa-reconciliation.mjs 2>&1 | tee ci-artifacts/reconciliation.log
+      - name: Reconciliation regressions
+        if: always()
+        run: node --test scripts/qa-reconciliation.test.mjs 2>&1 | tee ci-artifacts/reconciliation-tests.log
+      - name: Upload reconciliation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-reconciliation
+          path: ci-artifacts/
+          if-no-files-found: warn
+
+  pure-gates:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: root typecheck
+            id: root-typecheck
+            command: npm run typecheck
+          - name: module typecheck
+            id: module-typecheck
+            command: npm run typecheck:modules
+          - name: frontend typecheck
+            id: frontend-typecheck
+            command: npm run typecheck:frontend
+          - name: generated SDK + command schemas
+            id: generation
+            command: npm run gen:check
+          - name: generated contracts
+            id: contracts
+            command: npm run gen:contracts:check
+          - name: CoreLibrary trust rejection regressions
+            id: core-library-policy
+            command: npm run test:corelib -- --reporter=junit --reporter-outfile="$GITHUB_WORKSPACE/ci-artifacts/core-library-junit.xml"
+          - name: frontend Vitest
+            id: frontend-tests
+            command: npm run test:react -- --reporter=default --reporter=junit --outputFile="$GITHUB_WORKSPACE/ci-artifacts/frontend-junit.xml"
+          - name: frontend production build
+            id: frontend-build
+            command: npm run build:frontend
+          - name: Electron bundle build
+            id: electron-build
+            command: npm run build --workspace electron
+          - name: built DRC worker parity
+            id: drc-worker
+            command: npm run test:drc-worker-smoke
+          - name: shell Chromium regressions
+            id: shell-browser
+            command: npm run test:e2e:shell -- --reporter=list,junit,html
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: package-lock.json
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.0
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build @openpcb/* dists
+      - name: Record environment
         run: |
-          set -euo pipefail
-          for pkg in kicad-parsers rendering-core kicad-import step-to-glb r3f-eda-canvas opclib-pack command-pattern contracts; do
-            dir="node_modules/@openpcb/$pkg"
-            if [ -d "$dir" ] && [ -f "$dir/tsconfig.build.json" ]; then
-              echo "::group::rebuild @openpcb/$pkg"
-              (cd "$dir" && npx --no-install tsc -p tsconfig.build.json) || (cd "$dir" && npx tsc -p tsconfig.build.json)
-              echo "::endgroup::"
-            fi
-          done
+          mkdir -p ci-artifacts
+          { node --version; npm --version; bun --version; git rev-parse HEAD; } | tee ci-artifacts/environment.log
+      - name: Install pinned dependencies
+        id: install
+        run: npm ci 2>&1 | tee ci-artifacts/install.log
+      - name: Build shared package distributions with the locked compiler
+        run: |
+          (
+            set -euo pipefail
+            for pkg in kicad-parsers rendering-core kicad-import step-to-glb r3f-eda-canvas opclib-pack command-pattern contracts; do
+              dir="node_modules/@openpcb/$pkg"
+              if [ -f "$dir/tsconfig.build.json" ]; then
+                echo "::group::rebuild @openpcb/$pkg"
+                (cd "$dir" && npx --no-install tsc -p tsconfig.build.json)
+                echo "::endgroup::"
+              fi
+            done
+          ) 2>&1 | tee ci-artifacts/shared-build.log
+      - name: Install Chromium for isolated shell regressions
+        if: ${{ always() && steps.install.outcome == 'success' && matrix.id == 'shell-browser' }}
+        run: npx --no-install playwright install --with-deps chromium 2>&1 | tee ci-artifacts/playwright-install.log
+      - name: Run required gate
+        if: ${{ always() && steps.install.outcome == 'success' }}
+        env:
+          PLAYWRIGHT_JUNIT_OUTPUT_FILE: ${{ github.workspace }}/ci-artifacts/shell-junit.xml
+          PLAYWRIGHT_HTML_OPEN: never
+        run: ${{ matrix.command }} 2>&1 | tee ci-artifacts/gate.log
+      - name: Upload gate logs and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-${{ matrix.id }}
+          path: |
+            ci-artifacts/
+            playwright-report/
+          if-no-files-found: warn
+      - name: Upload isolated shell browser traces
+        if: ${{ always() && matrix.id == 'shell-browser' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-shell-browser-traces
+          path: /tmp/openpcb-h04-results/
+          if-no-files-found: warn
 
-      - name: Fetch CoreLibrary (for backend tests that boot the library module)
+  core-library-trust:
+    name: trusted production CoreLibrary bootstrap
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.0
+      - name: Record environment
+        run: |
+          mkdir -p ci-artifacts
+          { node --version; npm --version; bun --version; git rev-parse HEAD; } | tee ci-artifacts/environment.log
+      - name: Install pinned dependencies
+        id: install
+        run: npm ci 2>&1 | tee ci-artifacts/install.log
+      - name: Fetch and verify pinned production release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bun scripts/fetch-core-library.ts
+        run: npm run corelib:fetch 2>&1 | tee ci-artifacts/core-library-trust.log
+      - name: Upload verified runtime fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-core-library
+          path: |
+            resources/core-library/
+            .build/core-library/
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: Upload bootstrap logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-core-library-trust
+          path: ci-artifacts/
+          if-no-files-found: warn
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Codegen drift check
-        run: npm run gen:check
-
-      - name: Contract codegen drift check
-        run: npm run gen:contracts -- --check
-
-      - name: Backend tests (Bun)
-        run: npm run test:backend
-
-      - name: Frontend tests (Vitest)
-        run: npm run test:react
-
-      # The DRC worker is a separate tsup bundle Electron spawns as a file; the
-      # smoke runs the BUILT bundle on Node and compares its report byte for
-      # byte with the in-thread engine (docs/pcb-hardening/09-execution-contract.md §8).
-      - name: DRC worker bundle smoke (Electron build)
-        run: npm run test:drc-worker-smoke
-
-  e2e:
-    name: playwright e2e
+  runtime-gates:
+    name: ${{ matrix.name }}
+    needs: core-library-trust
+    # A missing trusted release must stay red while runtime failures remain visible.
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: typecheck-and-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend Bun
+            id: backend-tests
+            command: npm run test:backend -- --reporter=junit --reporter-outfile="$GITHUB_WORKSPACE/ci-artifacts/backend-junit.xml"
+          - name: Chromium E2E
+            id: chromium-e2e
+            command: npm run test:e2e -- --reporter=line,junit,html
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: package-lock.json
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.0
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build @openpcb/* dists
+      - name: Record environment
         run: |
-          set -euo pipefail
-          for pkg in kicad-parsers rendering-core kicad-import step-to-glb r3f-eda-canvas opclib-pack command-pattern contracts; do
-            dir="node_modules/@openpcb/$pkg"
-            if [ -d "$dir" ] && [ -f "$dir/tsconfig.build.json" ]; then
-              (cd "$dir" && npx --no-install tsc -p tsconfig.build.json) || (cd "$dir" && npx tsc -p tsconfig.build.json)
-            fi
-          done
+          mkdir -p ci-artifacts
+          { node --version; npm --version; bun --version; git rev-parse HEAD; } | tee ci-artifacts/environment.log
+      - name: Install pinned dependencies
+        id: install
+        run: npm ci 2>&1 | tee ci-artifacts/install.log
+      - name: Build shared package distributions with the locked compiler
+        run: |
+          (
+            set -euo pipefail
+            for pkg in kicad-parsers rendering-core kicad-import step-to-glb r3f-eda-canvas opclib-pack command-pattern contracts; do
+              dir="node_modules/@openpcb/$pkg"
+              if [ -f "$dir/tsconfig.build.json" ]; then
+                (cd "$dir" && npx --no-install tsc -p tsconfig.build.json)
+              fi
+            done
+          ) 2>&1 | tee ci-artifacts/shared-build.log
+      - name: Download verified runtime fixture when available
+        id: fixture
+        if: ${{ always() && steps.install.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: verified-core-library
+          path: .
+      - name: Install Chromium runtime
+        if: ${{ always() && steps.install.outcome == 'success' && matrix.id == 'chromium-e2e' }}
+        run: npx --no-install playwright install --with-deps chromium 2>&1 | tee ci-artifacts/playwright-install.log
+      - name: Run runtime gate even if production fixture bootstrap failed
+        if: ${{ always() && steps.install.outcome == 'success' }}
+        env:
+          PLAYWRIGHT_JUNIT_OUTPUT_FILE: ${{ github.workspace }}/ci-artifacts/e2e-junit.xml
+          PLAYWRIGHT_HTML_OPEN: never
+        run: ${{ matrix.command }} 2>&1 | tee ci-artifacts/gate.log
+      - name: Require a verified runtime fixture
+        if: ${{ always() && steps.fixture.outcome != 'success' }}
+        run: |
+          echo "Required verified CoreLibrary fixture unavailable; runtime qualification failed." >&2
+          exit 1
+      - name: Upload runtime logs, results and failure traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-${{ matrix.id }}
+          path: |
+            ci-artifacts/
+            test-results/
+            playwright-report/
+          if-no-files-found: warn
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-
-      - name: Run E2E tests
-        run: npm run test:e2e
+  required-gates:
+    name: all required CI gates
+    needs: [metadata, reconciliation, pure-gates, core-library-trust, runtime-gates]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every gate to pass
+        env:
+          REQUIRED_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node <<'NODE'
+          const results = JSON.parse(process.env.REQUIRED_RESULTS);
+          const failed = Object.entries(results).filter(([, job]) => job.result !== 'success');
+          for (const [name, job] of Object.entries(results)) console.log(`${name}: ${job.result}`);
+          if (failed.length) process.exitCode = 1;
+          NODE
