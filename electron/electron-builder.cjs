@@ -55,14 +55,7 @@ module.exports = {
     },
   ],
 
-  // electron is hoisted to the repo-root node_modules by npm workspaces, so
-  // electron-builder can't infer the version from electron/node_modules.
-  // Read it from the hoisted install at config-load time.
-  electronVersion: require(require("node:path").resolve(
-    __dirname,
-    "..",
-    "node_modules/electron/package.json",
-  )).version,
+  electronVersion: require(require.resolve("electron/package.json")).version,
 
   directories: {
     buildResources: ".",

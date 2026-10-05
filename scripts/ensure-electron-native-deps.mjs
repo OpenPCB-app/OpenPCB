@@ -1,16 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import process from "node:process";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const electronRoot = path.join(repoRoot, "electron");
-const electronBin = path.join(
-  repoRoot,
-  "node_modules",
-  ".bin",
-  process.platform === "win32" ? "electron.cmd" : "electron",
-);
+const electronRequire = createRequire(path.join(electronRoot, "package.json"));
+const electronBin = electronRequire("electron");
 const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
 const rootBetterSqlite = path.join(repoRoot, "node_modules", "better-sqlite3");
 const electronBetterSqlite = path.join(
@@ -121,7 +118,9 @@ if (probe.status === 0) {
   );
 
   if (rebuild.status !== 0) {
-    throw new Error(`better-sqlite3 Electron rebuild failed (${rebuild.status}).`);
+    throw new Error(
+      `better-sqlite3 Electron rebuild failed (${rebuild.status}).`,
+    );
   }
 
   const verify = requireWithElectron();
@@ -137,13 +136,17 @@ if (probe.status === 0) {
 
 const hostProbe = requireWithHostNode();
 if (hostProbe.status !== 0) {
-  console.warn("[electron-native] Restoring root better-sqlite3 for host Node...");
-  const hostRebuild = run(
-    npmBin,
-    ["rebuild", "better-sqlite3", "--build-from-source"],
-    { cwd: repoRoot, stdio: "inherit" },
+  console.warn(
+    "[electron-native] Restoring root better-sqlite3 for host Node...",
   );
+  // A workspace-wide rebuild would also replace the private Electron binding.
+  const hostRebuild = run(npmBin, ["run", "build-release"], {
+    cwd: rootBetterSqlite,
+    stdio: "inherit",
+  });
   if (hostRebuild.status !== 0) {
-    throw new Error(`host better-sqlite3 rebuild failed (${hostRebuild.status}).`);
+    throw new Error(
+      `host better-sqlite3 rebuild failed (${hostRebuild.status}).`,
+    );
   }
 }
