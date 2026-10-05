@@ -90,11 +90,7 @@ import {
   replacePcbZones,
 } from "./pcb/pcb-store";
 import { loadPcbProjection, netNamesFromSchematic } from "./pcb/pcb-projection";
-import {
-  historyEmpty,
-  historySessionKey,
-  summarizeHistory,
-} from "./history-state";
+import { historyEmpty, summarizeHistory } from "./history-state";
 import {
   hydrateSessionHistory,
   persistSessionHistorySnapshot,
@@ -220,26 +216,16 @@ export function createDesignerStore(
   // Process-wide singleton: both store instances (sdk.ts / routes.ts) feed one
   // capture log + registry. No-op when the dataset.capture flag is off.
   const capture = resolveCaptureRuntime(ctx);
-  const sessionHistories = new Map<
-    string,
-    CommandHistory<DesignerCommand, DesignerWorldComponent>
-  >();
-
   function resolveSessionHistory(
     designId: string,
     sessionId: string,
   ): CommandHistory<DesignerCommand, DesignerWorldComponent> {
-    const key = historySessionKey(designId, sessionId);
-    const existing = sessionHistories.get(key);
-    if (existing) {
-      return existing;
-    }
-    const created = new CommandHistory<DesignerCommand, DesignerWorldComponent>(
+    // HTTP and SDK stores share SQLite, not object identity. Always load the committed history.
+    const history = new CommandHistory<DesignerCommand, DesignerWorldComponent>(
       200,
     );
-    hydrateSessionHistory(db, designId, sessionId, created);
-    sessionHistories.set(key, created);
-    return created;
+    hydrateSessionHistory(db, designId, sessionId, history);
+    return history;
   }
 
   /** Return the cached schematic preview for a design head, recomputing and
@@ -274,8 +260,11 @@ export function createDesignerStore(
     return preview;
   }
 
-  function persistSessionHistory(designId: string, sessionId: string): void {
-    const history = resolveSessionHistory(designId, sessionId);
+  function persistSessionHistory(
+    designId: string,
+    sessionId: string,
+    history: CommandHistory<DesignerCommand, DesignerWorldComponent>,
+  ): void {
     persistSessionHistorySnapshot({
       db,
       designId,
@@ -359,6 +348,52 @@ export function createDesignerStore(
       replacePcbKeepouts(tx, designId, next.keepouts, timestamp);
       return nextRevision;
     });
+  }
+
+  function replayHistory(
+    designId: string,
+    sessionId: string,
+    direction: "undo" | "redo",
+  ): DesignerHistoryActionResult {
+    const replay = ctx.db.transaction(() => {
+      const history = resolveSessionHistory(designId, sessionId);
+      const entry =
+        direction === "undo" ? history.consumeUndo() : history.consumeRedo();
+      if (!entry)
+        return {
+          result: historyEmpty(direction, summarizeHistory(history)),
+          entry: null,
+        };
+      const revision = applyHistoryPatches(
+        designId,
+        direction === "undo" ? entry.inversePatches : entry.forwardPatches,
+      );
+      if (revision === null)
+        return {
+          result: historyEmpty(direction, summarizeHistory(history)),
+          entry: null,
+        };
+      persistSessionHistory(designId, sessionId, history);
+      return {
+        result: {
+          ok: true as const,
+          revision,
+          history: summarizeHistory(history),
+        },
+        entry,
+      };
+    });
+    if (replay.entry && replay.result.ok)
+      capture.onHistoryReplay({
+        designId,
+        editorSessionId: sessionId,
+        direction,
+        commandId: replay.entry.envelope.commandId,
+        revision: replay.result.revision,
+        forwardPatches: replay.entry.forwardPatches,
+        inversePatches: replay.entry.inversePatches,
+      });
+    return replay.result;
   }
 
   return {
@@ -762,8 +797,14 @@ export function createDesignerStore(
           // The rows above, handed to the copper commit gate (contract 07 §6)
           // so it never loads a projection inside the transaction.
           const pcbBefore =
-            pcbBefore_ && placementsBefore && tracesBefore && viasBefore &&
-            freeHolesBefore && freePadsBefore && zonesBefore && keepoutsBefore
+            pcbBefore_ &&
+            placementsBefore &&
+            tracesBefore &&
+            viasBefore &&
+            freeHolesBefore &&
+            freePadsBefore &&
+            zonesBefore &&
+            keepoutsBefore
               ? {
                   board: pcbBefore_,
                   placements: placementsBefore,
@@ -877,22 +918,24 @@ export function createDesignerStore(
             })
             .run();
 
+          const pendingHistory = pendingHistoryRef.current;
+          if (pendingHistory) {
+            const history = resolveSessionHistory(designId, envelope.sessionId);
+            history.record({
+              envelope,
+              revision: pendingHistory.revision,
+              forwardPatches: pendingHistory.forwardPatches,
+              inversePatches: pendingHistory.inversePatches,
+              createdEntityId: pendingHistory.createdEntityId,
+              timestamp: envelope.issuedAt,
+            });
+            persistSessionHistory(designId, envelope.sessionId, history);
+          }
+
           return result;
         });
 
         const pendingHistory = pendingHistoryRef.current;
-        if (pendingHistory) {
-          const history = resolveSessionHistory(designId, envelope.sessionId);
-          history.record({
-            envelope,
-            revision: pendingHistory.revision,
-            forwardPatches: pendingHistory.forwardPatches,
-            inversePatches: pendingHistory.inversePatches,
-            createdEntityId: pendingHistory.createdEntityId,
-            timestamp: envelope.issuedAt,
-          });
-          persistSessionHistory(designId, envelope.sessionId);
-        }
 
         // Dataset capture (WP-D4): verbatim envelope + result + derived tags,
         // and AutoCopperRegistry maintenance. Fail-isolated inside the runtime.
@@ -958,61 +1001,11 @@ export function createDesignerStore(
     },
 
     async undo(designId, sessionId) {
-      const history = resolveSessionHistory(designId, sessionId);
-      const entry = history.consumeUndo();
-      if (!entry) {
-        return historyEmpty("undo", summarizeHistory(history));
-      }
-
-      const revision = applyHistoryPatches(designId, entry.inversePatches);
-      if (revision === null) {
-        return historyEmpty("undo", summarizeHistory(history));
-      }
-
-      persistSessionHistory(designId, sessionId);
-      capture.onHistoryReplay({
-        designId,
-        editorSessionId: sessionId,
-        direction: "undo",
-        commandId: entry.envelope.commandId,
-        revision,
-        forwardPatches: entry.forwardPatches,
-        inversePatches: entry.inversePatches,
-      });
-      return {
-        ok: true,
-        revision,
-        history: summarizeHistory(history),
-      };
+      return replayHistory(designId, sessionId, "undo");
     },
 
     async redo(designId, sessionId) {
-      const history = resolveSessionHistory(designId, sessionId);
-      const entry = history.consumeRedo();
-      if (!entry) {
-        return historyEmpty("redo", summarizeHistory(history));
-      }
-
-      const revision = applyHistoryPatches(designId, entry.forwardPatches);
-      if (revision === null) {
-        return historyEmpty("redo", summarizeHistory(history));
-      }
-
-      persistSessionHistory(designId, sessionId);
-      capture.onHistoryReplay({
-        designId,
-        editorSessionId: sessionId,
-        direction: "redo",
-        commandId: entry.envelope.commandId,
-        revision,
-        forwardPatches: entry.forwardPatches,
-        inversePatches: entry.inversePatches,
-      });
-      return {
-        ok: true,
-        revision,
-        history: summarizeHistory(history),
-      };
+      return replayHistory(designId, sessionId, "redo");
     },
 
     async linkDesignToCloud(designId, cloud) {
