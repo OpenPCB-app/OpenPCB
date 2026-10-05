@@ -7,7 +7,7 @@ import {
 } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
-import { useImportWizardStore } from "./useImportWizardStore";
+import { useImportWizardStore, hasCurrentPreset } from "./useImportWizardStore";
 import { WizardProgressBar } from "./WizardProgressBar";
 import { SymbolStep } from "./steps/SymbolStep";
 import { FootprintStep } from "./steps/FootprintStep";
@@ -130,18 +130,23 @@ export function ImportWizardPage({
 
   // Single derived selector — avoids 3 separate subscriptions for inspectStatus,
   // selectedSymbolId, componentName that only feed readyForAdvancedSteps / canProceed.
-  const { readyForAdvancedSteps, canProceedMetadata, loadingInspect } =
-    useImportWizardStore(
-      useShallow((s) => ({
-        readyForAdvancedSteps:
-          s.symbolSource === "draw" ||
-          (!!s.symbolFile &&
-            s.inspectStatus === "success" &&
-            s.selectedSymbolId.length > 0),
-        canProceedMetadata: s.componentName.trim().length > 0,
-        loadingInspect: s.inspectStatus === "loading",
-      })),
-    );
+  const {
+    readyForAdvancedSteps,
+    readyFootprint,
+    canProceedMetadata,
+    loadingInspect,
+  } = useImportWizardStore(
+    useShallow((s) => ({
+      readyForAdvancedSteps:
+        s.symbolSource === "draw" ||
+        (!!s.symbolFile &&
+          s.inspectStatus === "success" &&
+          s.selectedSymbolId.length > 0),
+      readyFootprint: s.footprintSource !== "preset" || hasCurrentPreset(s),
+      canProceedMetadata: s.componentName.trim().length > 0,
+      loadingInspect: s.inspectStatus === "loading",
+    })),
+  );
 
   const symbolSig = useMemo(() => fileSignature(symbolFile), [symbolFile]);
   const footprintSig = useMemo(
@@ -290,6 +295,12 @@ export function ImportWizardPage({
       return;
     }
 
+    if (store.footprintSource === "preset" && !hasCurrentPreset(store)) {
+      store.setCommitError(
+        "Generate an available footprint for the selected size and density before importing.",
+      );
+      return;
+    }
     commitAbortRef.current?.abort();
     const controller = new AbortController();
     commitAbortRef.current = controller;
@@ -307,8 +318,7 @@ export function ImportWizardPage({
 
         let footprintMode: "import" | "generated" | "drawn" | "none" = "none";
         let footprintFilesPayload:
-          | { fileName: string; content: string }[]
-          | undefined;
+          { fileName: string; content: string }[] | undefined;
         let footprintSelection: { footprintId: string } | undefined;
         let generatedFp;
         let drawnFp;
@@ -332,6 +342,7 @@ export function ImportWizardPage({
         ) {
           footprintMode = "generated";
           generatedFp = {
+            generator: store.generatedFootprint.generator,
             source: store.generatedFootprint.source,
             metadata: store.generatedFootprint.metadata,
           };
@@ -372,7 +383,7 @@ export function ImportWizardPage({
           controller.signal,
         );
       } else if (store.footprintSource === "draw") {
-        // Imported symbol + drawn footprint → use generated endpoint with provenance
+        // Editor geometry is a distinct payload, not a provenance flag.
         const symbolLibrary = {
           fileName: symbolFile!.name,
           content: await symbolFile!.text(),
@@ -385,7 +396,7 @@ export function ImportWizardPage({
           {
             symbolLibrary,
             selection: { symbolId: store.selectedSymbolId },
-            generatedFootprint: {
+            drawnFootprint: {
               source: fpSource,
               metadata: {
                 name: fpEditor.footprintName || "FP",
@@ -394,7 +405,6 @@ export function ImportWizardPage({
                 tags: ["drawn-footprint"],
               },
             },
-            footprintProvenance: "drawn",
             component: {
               name: store.componentName.trim(),
               description: store.description.trim(),
@@ -419,6 +429,7 @@ export function ImportWizardPage({
             symbolLibrary,
             selection: { symbolId: store.selectedSymbolId },
             generatedFootprint: {
+              generator: store.generatedFootprint.generator,
               source: store.generatedFootprint.source,
               metadata: store.generatedFootprint.metadata,
             },
@@ -597,27 +608,31 @@ export function ImportWizardPage({
       if (step === STEP_SYMBOL) {
         return true;
       }
-      return readyForAdvancedSteps;
+      return (
+        readyForAdvancedSteps && (step <= STEP_FOOTPRINT || readyFootprint)
+      );
     },
-    [currentStep, readyForAdvancedSteps],
+    [currentStep, readyForAdvancedSteps, readyFootprint],
   );
 
   const canProceed = useMemo(() => {
     switch (currentStep) {
       case STEP_SYMBOL:
-      case STEP_FOOTPRINT:
         return readyForAdvancedSteps;
+      case STEP_FOOTPRINT:
+        return readyForAdvancedSteps && readyFootprint;
       case STEP_MODEL:
         return (
           readyForAdvancedSteps &&
+          readyFootprint &&
           (!modelFile || !validateStepUploadFile(modelFile))
         );
       case STEP_METADATA:
-        return readyForAdvancedSteps && canProceedMetadata;
+        return readyForAdvancedSteps && readyFootprint && canProceedMetadata;
       default:
         return false;
     }
-  }, [canProceedMetadata, currentStep, readyForAdvancedSteps]);
+  }, [canProceedMetadata, currentStep, readyForAdvancedSteps, readyFootprint]);
 
   const isLastStep = currentStep === STEP_METADATA;
   const isCanvasStep =

@@ -26,6 +26,12 @@ import {
   validateSymbolPinsCoverFootprintPads,
 } from "./validate-pads";
 import { buildIdentityPinMapJson } from "./pinmap";
+import {
+  resolveGeneratedFootprint,
+  UnqualifiedGeneratorError,
+  type FootprintPayload,
+  type GeneratedFootprintInput,
+} from "./resolve-generated-footprint";
 
 export interface CommitDrawnRequest {
   drawnSymbol: {
@@ -36,26 +42,8 @@ export interface CommitDrawnRequest {
   // For import mode
   footprintFiles?: { fileName: string; content: string }[];
   footprintSelection?: { footprintId: string };
-  // For generated or drawn mode
-  generatedFootprint?: {
-    source: FootprintRenderSource;
-    metadata: {
-      name: string;
-      mountType: string;
-      packageCode: { imperial: string | null; metric: string | null };
-      tags: string[];
-    };
-  };
-  // For drawn mode (identical shape to generatedFootprint)
-  drawnFootprint?: {
-    source: FootprintRenderSource;
-    metadata: {
-      name: string;
-      mountType: string;
-      packageCode: { imperial: string | null; metric: string | null };
-      tags: string[];
-    };
-  };
+  generatedFootprint?: GeneratedFootprintInput;
+  drawnFootprint?: FootprintPayload;
   component: { name: string; description: string; tags?: string[] };
 }
 
@@ -85,6 +73,18 @@ export function commitDrawnImport(
   ctx: CoreBackendModuleContext,
   input: CommitDrawnRequest,
 ): CommitKicadResponse {
+  const generated =
+    input.footprintMode === "generated"
+      ? resolveGeneratedFootprint(input.generatedFootprint)
+      : null;
+  if (
+    input.footprintMode === "drawn" &&
+    (!input.drawnFootprint || input.generatedFootprint)
+  ) {
+    throw new UnqualifiedGeneratorError(
+      "Drawn mode requires a separate drawnFootprint payload; generated geometry must use explicit generator parameters.",
+    );
+  }
   const componentName = requireNonEmpty(input.component.name, "component.name");
   const componentDescription = input.component.description.trim();
   const userTags = dedupeTags(input.component.tags ?? []);
@@ -140,9 +140,9 @@ export function commitDrawnImport(
   let tags: string[];
   let pinMapJson: string | null = null;
 
-  if (input.footprintMode === "generated" && input.generatedFootprint) {
-    const fpSource = input.generatedFootprint.source;
-    const fpMeta = input.generatedFootprint.metadata;
+  if (generated) {
+    const fpSource = generated.source;
+    const fpMeta = generated.metadata;
     validateFootprintPads(fpSource);
     validateSymbolPinsCoverFootprintPads(symbolSource, fpSource);
     const fpModel = buildFootprintRenderModel(fpSource);
@@ -163,6 +163,7 @@ export function commitDrawnImport(
         fileName: null,
         importedAt: now,
         sourceHash: fpHash,
+        ...generated.provenance,
       },
       parser: { warnings: [] },
       normalized: {

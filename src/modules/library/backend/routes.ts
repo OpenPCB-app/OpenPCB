@@ -1060,18 +1060,19 @@ function parseCommitGeneratedBody(value: unknown): CommitGeneratedRequest {
   }
 
   const generatedRaw = value.generatedFootprint;
-  if (!isRecord(generatedRaw)) {
-    throw new ValidationError("generatedFootprint must be an object");
+  const drawnRaw = value.drawnFootprint;
+  if (!isRecord(generatedRaw) && !isRecord(drawnRaw)) {
+    throw new ValidationError(
+      "generatedFootprint or drawnFootprint must be an object",
+    );
   }
-
-  const sourceRaw = generatedRaw.source;
-  if (!isRecord(sourceRaw)) {
-    throw new ValidationError("generatedFootprint.source must be an object");
-  }
-
-  const metadataRaw = generatedRaw.metadata;
-  if (!isRecord(metadataRaw)) {
-    throw new ValidationError("generatedFootprint.metadata must be an object");
+  if (
+    isRecord(drawnRaw) &&
+    (!isRecord(drawnRaw.source) || !isRecord(drawnRaw.metadata))
+  ) {
+    throw new ValidationError(
+      "drawnFootprint requires source and metadata objects",
+    );
   }
 
   const componentRaw = value.component;
@@ -1095,12 +1096,13 @@ function parseCommitGeneratedBody(value: unknown): CommitGeneratedRequest {
     selection: {
       symbolId: readStringField(selectionRaw, "symbolId", "selection.symbolId"),
     },
-    generatedFootprint: {
-      source:
-        sourceRaw as unknown as CommitGeneratedRequest["generatedFootprint"]["source"],
-      metadata:
-        metadataRaw as unknown as CommitGeneratedRequest["generatedFootprint"]["metadata"],
-    },
+    generatedFootprint: isRecord(generatedRaw)
+      ? (generatedRaw as unknown as CommitGeneratedRequest["generatedFootprint"])
+      : undefined,
+    drawnFootprint: isRecord(drawnRaw)
+      ? (drawnRaw as unknown as CommitGeneratedRequest["drawnFootprint"])
+      : undefined,
+    footprintProvenance: value.footprintProvenance,
     component: {
       name: readStringField(componentRaw, "name", "component.name"),
       description: readStringField(

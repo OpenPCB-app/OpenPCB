@@ -7,6 +7,7 @@ import {
   type PackageFamily,
 } from "../../../../../shared/rendering/ipc7351b";
 import { useImportWizardStore } from "../useImportWizardStore";
+import { generatorUnavailableReason } from "../../../shared/generator-policy";
 
 const DENSITY_OPTIONS: { value: DensityLevel; label: string; desc: string }[] =
   [
@@ -42,14 +43,27 @@ export const FootprintPresetPicker = memo(
       : null;
 
     const handleGenerate = useCallback(() => {
-      if (!presetFamily || !presetSize) return;
+      if (
+        !presetFamily ||
+        !presetSize ||
+        generatorUnavailableReason(presetFamily)
+      )
+        return;
       try {
         const result = generateFootprint(
           presetFamily,
           presetSize,
           presetDensity,
         );
-        setGeneratedFootprint(result);
+        setGeneratedFootprint({
+          ...result,
+          generator: {
+            kind: "ipc7351b",
+            family: presetFamily,
+            size: presetSize,
+            density: presetDensity,
+          },
+        });
       } catch (err) {
         console.error("[FootprintPresetPicker] Generation failed:", err);
       }
@@ -65,11 +79,14 @@ export const FootprintPresetPicker = memo(
           <div className="grid grid-cols-2 gap-1.5">
             {ALL_FAMILIES.map((family) => {
               const active = presetFamily === family.id;
+              const unavailableReason = generatorUnavailableReason(family.id);
               return (
                 <button
                   key={family.id}
                   type="button"
                   aria-pressed={active}
+                  disabled={Boolean(unavailableReason)}
+                  title={unavailableReason ?? undefined}
                   onClick={() =>
                     setPresetFamily(
                       active ? null : (family.id as PackageFamily),
@@ -85,7 +102,7 @@ export const FootprintPresetPicker = memo(
                     {family.label}
                   </div>
                   <div className="mt-0.5 text-[10px] leading-4 text-slate-400 dark:text-slate-500">
-                    {family.subtitle}
+                    {unavailableReason ?? family.subtitle}
                   </div>
                 </button>
               );
@@ -161,6 +178,7 @@ export const FootprintPresetPicker = memo(
             <button
               type="button"
               onClick={handleGenerate}
+              disabled={Boolean(generatorUnavailableReason(presetFamily))}
               className="mt-1 h-9 w-full rounded-lg border border-violet-500 bg-violet-600 text-xs font-semibold text-white hover:bg-violet-700"
             >
               Generate footprint

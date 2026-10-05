@@ -1,8 +1,8 @@
 /**
  * Commit endpoint for generated (IPC preset) footprints.
  *
- * Accepts a pre-built FootprintRenderSource + metadata directly —
- * no KiCad file parsing needed. Symbol still comes from KiCad import.
+ * Resolves IPC parameters on the server; editor geometry uses a separate drawn payload.
+ * Symbol still comes from KiCad import.
  */
 
 import type { CoreBackendModuleContext } from "../../../../core/contracts/modules/backend-module";
@@ -23,21 +23,18 @@ import {
   validateSymbolPinsCoverFootprintPads,
 } from "./validate-pads";
 import { buildIdentityPinMapJson } from "./pinmap";
+import {
+  resolveImportedSymbolFootprint,
+  type FootprintPayload,
+  type GeneratedFootprintInput,
+} from "./resolve-generated-footprint";
 
 export interface CommitGeneratedRequest {
   symbolLibrary: { fileName: string; content: string };
   selection: { symbolId: string };
-  generatedFootprint: {
-    source: FootprintRenderSource;
-    metadata: {
-      name: string;
-      mountType: string;
-      packageCode: { imperial: string | null; metric: string | null };
-      tags: string[];
-    };
-  };
-  /** "generated" (default) for IPC presets; "drawn" for user-drawn footprints with imported symbol. */
-  footprintProvenance?: "generated" | "drawn";
+  generatedFootprint?: GeneratedFootprintInput;
+  drawnFootprint?: FootprintPayload;
+  footprintProvenance?: unknown;
   component: { name: string; description: string; tags?: string[] };
 }
 
@@ -78,6 +75,7 @@ export function commitGeneratedImport(
   ctx: CoreBackendModuleContext,
   input: CommitGeneratedRequest,
 ): CommitKicadResponse {
+  const resolved = resolveImportedSymbolFootprint(input);
   // Parse symbol from KiCad file (reuses existing pipeline)
   const parsed = parseImportBundle({
     symbolLibrary: input.symbolLibrary,
@@ -109,8 +107,8 @@ export function commitGeneratedImport(
   }
 
   // Build footprint model from source
-  const fpSource = input.generatedFootprint.source;
-  const fpMeta = input.generatedFootprint.metadata;
+  const fpSource = resolved.source;
+  const fpMeta = resolved.metadata;
   validateFootprintPads(fpSource);
   validateSymbolPinsCoverFootprintPads(selectedSymbol, fpSource);
   const fpModel = buildFootprintRenderModel(fpSource);
@@ -122,7 +120,7 @@ export function commitGeneratedImport(
   const footprintId = crypto.randomUUID();
   const componentId = crypto.randomUUID();
 
-  const isDrawn = input.footprintProvenance === "drawn";
+  const isDrawn = resolved.isDrawn;
   const tags = isDrawn
     ? dedupeTags([...userTags, ...fpMeta.tags, "drawn-footprint"])
     : dedupeTags([...userTags, ...fpMeta.tags, "generated", "ipc-7351b"]);
@@ -151,6 +149,7 @@ export function commitGeneratedImport(
       fileName: null,
       importedAt: now,
       sourceHash: sourceHash,
+      ...resolved.provenance,
     },
     parser: { warnings: [] },
     normalized: {

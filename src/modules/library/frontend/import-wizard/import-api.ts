@@ -2,6 +2,7 @@ import type {
   FootprintRenderSource,
   SymbolRenderSource,
 } from "../../../../shared/rendering/types";
+import type { IpcGeneratorIdentity } from "../../shared/generator-policy";
 import type { GeneratedFootprintMetadata } from "../../../../shared/rendering/ipc7351b";
 import type {
   CommitKicadRequest,
@@ -102,11 +103,15 @@ export async function commitKicadZipImportRequest(
 export interface CommitGeneratedBody {
   symbolLibrary: { fileName: string; content: string };
   selection: { symbolId: string };
-  generatedFootprint: {
+  generatedFootprint?: {
+    generator: IpcGeneratorIdentity;
     source: FootprintRenderSource;
     metadata: GeneratedFootprintMetadata;
   };
-  footprintProvenance?: "generated" | "drawn";
+  drawnFootprint?: {
+    source: FootprintRenderSource;
+    metadata: GeneratedFootprintMetadata;
+  };
   component: { name: string; description: string; tags?: string[] };
 }
 
@@ -145,6 +150,7 @@ export interface CommitDrawnBody {
   footprintFiles?: { fileName: string; content: string }[];
   footprintSelection?: { footprintId: string };
   generatedFootprint?: {
+    generator: IpcGeneratorIdentity;
     source: FootprintRenderSource;
     metadata: GeneratedFootprintMetadata;
   };
