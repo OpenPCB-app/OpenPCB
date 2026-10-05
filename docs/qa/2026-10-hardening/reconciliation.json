@@ -7578,15 +7578,24 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "9c4764799eb8af0ed491ed0154efc010e7139d5c",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "src/modules/designer/frontend/hooks/useDesignerWorkspace.test.tsx",
+        "name": "serializes rapid PCB edits with the acknowledged revision",
+        "command": "npx --no-install vitest run --config src/core/frontend/vitest.config.ts src/modules/designer/frontend/hooks/useDesignerWorkspace.test.tsx",
+        "result": "passed",
+        "commit": "9c4764799eb8af0ed491ed0154efc010e7139d5c",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/designer-command-recovery.json",
+        "evidenceSha256": "a3a789481c36f9aa2d95b5561f9905350873202e38850b7e508f7738800c1e8e"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "shots/f1a/dark/057-drag-race-after-first.png",
         "shots/vf1a/dark/031-drag-race-after-first.png",
         "shots/q4/dark/053-alt-solo.png"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Retained Designer edits survive module remount but are not crash-durable. Full physical PCB footprint drag, two-inspector, double-click and consumer matrix remains open. Expected history revision is optional for legacy SDK/HTTP consumers; selective undo across other sessions is not qualified. H05 packaged, all-consumer offline and font-failure qualification remains open."
     },
     {
       "tid": "T-135",
@@ -11091,14 +11100,23 @@
       "scopeExpansion": false,
       "resolution": "pending",
       "reproductionState": "unverified",
-      "implementationCommit": null,
-      "regressionTest": null,
+      "implementationCommit": "9c4764799eb8af0ed491ed0154efc010e7139d5c",
+      "regressionTest": {
+        "kind": "behavioral",
+        "path": "tests/e2e/electron-designer-hardening.spec.ts",
+        "name": "rapid schematic actions use successive revisions and native Undo restores geometry",
+        "command": "OPENPCB_E2E_NO_WEBSERVER=1 OPENPCB_CAPTURE=1 npx --no-install playwright test --project=electron-desktop tests/e2e/electron-designer-hardening.spec.ts",
+        "result": "passed",
+        "commit": "f82f4a8344628bb83fea80312491d73a31c47867",
+        "evidencePath": "docs/qa/2026-10-hardening/evidence/designer-command-recovery.json",
+        "evidenceSha256": "a3a789481c36f9aa2d95b5561f9905350873202e38850b7e508f7738800c1e8e"
+      },
       "localEvidence": null,
       "historicalEvidence": [
         "shots/f1a/dark/061-undo-race-inflight.png",
         "shots/vf1a/dark/040-undo-race-inflight.png"
       ],
-      "remainingBlocker": "Fresh isolated reproduction, implementation verification, behavioral regression and commit evidence outstanding."
+      "remainingBlocker": "Retained Designer edits survive module remount but are not crash-durable. Full physical PCB footprint drag, two-inspector, double-click and consumer matrix remains open. Expected history revision is optional for legacy SDK/HTTP consumers; selective undo across other sessions is not qualified. H05 packaged, all-consumer offline and font-failure qualification remains open."
     },
     {
       "tid": "T-201",
