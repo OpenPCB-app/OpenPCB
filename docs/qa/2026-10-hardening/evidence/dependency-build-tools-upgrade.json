@@ -1,0 +1,227 @@
+{
+  "scope": "H03 bounded build-tool dependency group; isolated qualification candidate for lead review. No main transfer or release acceptance is claimed.",
+  "environment": {
+    "platform": "macOS arm64",
+    "hostNode": "22.23.2",
+    "electronNode": "24.18.0",
+    "npm": "10.9.8"
+  },
+  "versions": {
+    "concurrently": {
+      "before": "9.2.1",
+      "after": "9.2.4"
+    },
+    "shell-quote": {
+      "before": "1.8.3",
+      "after": "1.9.0"
+    },
+    "tar": {
+      "before": "7.5.15",
+      "after": "7.5.22"
+    }
+  },
+  "resolution": {
+    "commands": [
+      "npm install --save-dev concurrently@^9.2.4",
+      "npm update tar"
+    ],
+    "policy": "Normal npm resolution; no overrides, new direct tar dependency, audit fix, forced upgrade or manual lock edits. The root concurrently range changes to ^9.2.4.",
+    "tarVersionReview": "Normal resolution selected 7.5.22 instead of the initially proposed minimum patched 7.5.21. The lead approved retaining 7.5.22. The primary upstream comparison contains only version bookkeeping and a transform return type broadened to permit falsey values.",
+    "tarPrimaryComparison": "https://github.com/isaacs/node-tar/compare/v7.5.21...v7.5.22",
+    "tarBehaviorCommit": "https://github.com/isaacs/node-tar/commit/df1cd8dc09cded47b00c4129698824b3986432ac"
+  },
+  "advisories": [
+    {
+      "package": "shell-quote",
+      "patchedThreshold": "1.8.4",
+      "url": "https://github.com/ljharb/shell-quote/security/advisories/GHSA-w7jw-789q-3m8p"
+    },
+    {
+      "package": "shell-quote",
+      "patchedThreshold": "1.9.0",
+      "url": "https://github.com/ljharb/shell-quote/security/advisories/GHSA-395f-4hp3-45gv"
+    },
+    {
+      "package": "tar",
+      "patchedThreshold": "7.5.19",
+      "url": "https://github.com/isaacs/node-tar/security/advisories/GHSA-23hp-3jrh-7fpw"
+    },
+    {
+      "package": "tar",
+      "patchedThreshold": "7.5.21",
+      "url": "https://github.com/isaacs/node-tar/security/advisories/GHSA-r292-9mhp-454m"
+    }
+  ],
+  "reachability": "Concurrently runs repository development commands. Its installed argument-expansion consumer calls shell-quote.quote, not parse; current npm commands use repository literals. Tar is used by Electron rebuild, node-gyp, builder and cacache, including native header and clang archive extraction. These source observations do not establish attacker control or justify an advisory exception.",
+  "lock": {
+    "file": "package-lock.json",
+    "beforeSha256": "5a245dd632906be6117689526891b30f0e849b3ee5244d83ef21400aeebd899c",
+    "sha256": "a14023d2654586a2a6c0375f06d387cd9b1f213b846d6341aaf7ffdcd84cd687",
+    "cleanInstallPreservedBytes": true,
+    "changedEntries": [
+      "",
+      "node_modules/concurrently",
+      "node_modules/shell-quote",
+      "node_modules/tar"
+    ],
+    "review": "The root entry changes only the concurrently development range. Concurrently changes version, registry URL, integrity and its exact shell-quote dependency. Shell-quote and tar change only version, registry URL and integrity. No package movement, other dependency metadata changes or unrelated lock churn occurred. All ten existing @openpcb records remain identical, including resolved commits and dependency fields.",
+    "heldVersions": {
+      "electron": "41.10.6",
+      "electron-builder": "26.15.0",
+      "electron-updater": "6.8.9",
+      "builder-util-runtime": "9.7.0",
+      "better-sqlite3": "12.10.0",
+      "@tiptap/core": "3.27.1",
+      "pdfjs-dist": "6.1.200",
+      "@openpcb/rendering-core": "0.1.3",
+      "@openpcb/opclib-pack": "0.3.0"
+    }
+  },
+  "execution": {
+    "checkout": "The prior isolated source snapshot with frozen H15 and H04 files, preserving the reviewed Electron changes from b798b99. Evolving main source was not recopied.",
+    "cachePolicy": "Writable external npm, Electron and native-header caches were used. Existing cached Prettier was executed directly; no formatter dependency was added.",
+    "localLogRoot": "/private/tmp/openpcb-h47-lock.zogbTJ",
+    "checks": [
+      {
+        "command": "npm install --save-dev concurrently@^9.2.4",
+        "exitCode": 0,
+        "localLog": "h03-group1-install-concurrently.log"
+      },
+      {
+        "command": "npm update tar",
+        "exitCode": 0,
+        "localLog": "h03-group1-update-tar.log"
+      },
+      {
+        "command": "npm ci",
+        "exitCode": 0,
+        "localLog": "h03-group1-npm-ci.log",
+        "installedPackages": 1114
+      },
+      {
+        "command": "node --test scripts/concurrent-process.test.mjs scripts/electron-package-resolution.test.mjs",
+        "exitCode": 0,
+        "localLog": "h03-group1-process-and-resolution-final.log",
+        "testsPassed": 8,
+        "result": "Three real child-process argument-placeholder tests and one failure/termination test; four existing hoisted/nested Electron resolver tests."
+      },
+      {
+        "command": "node --test scripts/archive-tools.test.mjs",
+        "exitCode": 0,
+        "localLog": "h03-group1-archive-tools.log",
+        "testsPassed": 3,
+        "result": "Deep PAX path with member selection; bounded compressed input rejected by the default ratio limit; filtered extraction with a falsey transform."
+      },
+      {
+        "command": "node scripts/ensure-electron-native-deps.mjs",
+        "exitCode": 0,
+        "localLog": "h03-group1-native-setup.log"
+      },
+      {
+        "command": "npm run build --workspace electron",
+        "exitCode": 0,
+        "localLog": "h03-group1-electron-bundle.log",
+        "bundleOutputs": [
+          "main/index",
+          "main/drc-worker",
+          "mcp/shim",
+          "preload/index"
+        ]
+      },
+      {
+        "command": "npm run shared:check-lock",
+        "exitCode": 0,
+        "localLog": "h03-group1-shared-lock.log"
+      },
+      {
+        "command": "npm ls --all --json",
+        "exitCode": 0,
+        "localLog": "h03-group1-dependency-tree.json"
+      },
+      {
+        "command": "node -e 'const c=require(\"./electron/electron-builder.cjs\"); if(c.electronVersion!==\"41.10.6\") throw Error(\"version drift\"); console.log(c.electronVersion)'",
+        "exitCode": 0,
+        "localLog": "h03-group1-builder-config.log",
+        "result": "Electron 41.10.6 resolved."
+      },
+      {
+        "command": "npx --no-install tsc -b --force",
+        "exitCode": 2,
+        "localLog": "h03-group1-root-typecheck-final.log",
+        "diagnosticOccurrences": 36,
+        "uniqueErrors": 22
+      },
+      {
+        "command": "npx --no-install tsc -p tsconfig.modules.json",
+        "exitCode": 2,
+        "localLog": "h03-group1-module-typecheck-final.log",
+        "uniqueErrors": 19
+      },
+      {
+        "command": "npx --no-install tsc -p src/core/frontend/tsconfig.json --noEmit",
+        "exitCode": 0,
+        "localLog": "h03-group1-frontend-typecheck-final.log"
+      }
+    ],
+    "typecheckAttribution": "Root errors remain nineteen Assistant source/shared API mismatches and three Assistant backend-test errors. Module errors are the same nineteen Assistant source errors. Frontend passes. Diagnostic sets match the earlier isolated qualification; they do not qualify evolving main source."
+  },
+  "reproductions": {
+    "archiveBaseline": "The same three archive fixtures were run against a normally npm-packed tar7.5.15 in a separate temporary fixture, without changing installed packages. Two failed: Maximum call stack size exceeded on deep member selection, and Missing expected rejection for the bounded compressed fixture. Falsey-transform extraction passed. Tar7.5.22 passes all three.",
+    "archiveBaselineLog": "h03-group1-archive-baseline-red.log",
+    "hostAbiTrap": "The normal root SQLite package build-release command deliberately produced Electron ABI145. The host probe then exited 1 with a 145 versus 127 ABI mismatch. The unchanged ensure script detected the mismatch and restored only the root package using its scoped host build.",
+    "hostAbiCommands": [
+      "npm run build-release -- --runtime=electron --target=41.10.6 --disturl=https://electronjs.org/headers (cwd: node_modules/better-sqlite3)",
+      "node h03-group1-sqlite-probe.cjs",
+      "node scripts/ensure-electron-native-deps.mjs"
+    ],
+    "finalDualAbi": "Concurrent in-memory CREATE, INSERT and SELECT probes both passed: host Node22.23.2 ABI127 loaded the root package, and Electron41.10.6 Node24.18.0 ABI145 loaded the Electron-local package. Both reported SQLite3.53.1 and selected their expected ABI value. No application window or persistent database was opened.",
+    "localLogs": [
+      "h03-group1-deliberate-host-mismatch-build.log",
+      "h03-group1-deliberate-host-mismatch-probe.log",
+      "h03-group1-host-restore.log",
+      "h03-group1-dual-host-final.log",
+      "h03-group1-dual-electron-final.log"
+    ]
+  },
+  "audit": {
+    "beforeAll": {
+      "total": 68,
+      "critical": 3,
+      "high": 15,
+      "moderate": 49,
+      "low": 1
+    },
+    "all": {
+      "total": 65,
+      "critical": 0,
+      "high": 15,
+      "moderate": 49,
+      "low": 1
+    },
+    "productionFilter": {
+      "total": 45,
+      "critical": 0,
+      "high": 5,
+      "moderate": 40,
+      "low": 0
+    },
+    "commands": ["npm audit --json", "npm audit --omit=dev --json"],
+    "commandExitCodes": [1, 1],
+    "targetedPackageAdvisoriesAbsent": true,
+    "localLogs": [
+      "h03-group1-audit-all-final.json",
+      "h03-group1-audit-production-final.json"
+    ],
+    "interpretation": "Counts describe npm package/metavulnerability entries, not independently exploitable defects. Three remaining critical package entries are removed. Production filtering and its five high entries are unchanged; it does not establish packaged artifact contents."
+  },
+  "remainingBlockingIssues": [
+    "The frozen snapshot still has Assistant/shared API type and contracts-schema distribution gaps.",
+    "PDF, Tiptap, js-yaml, fast-uri and brace-expansion production-filter highs remain outside this group. Other moderate and high development findings also remain.",
+    "Main transfer, coordinated native application and packaged release qualification, updater behavior and supported-platform checks remain pending. Linux AppImage was not built or launched on this Mac."
+  ],
+  "limitations": [
+    "No audit exception, exploitability exemption, artifact acceptance, release-wide green gate or H03 completion is claimed.",
+    "Only isolated manifests, lock, focused test sources, build outputs and evidence were changed. Main dependencies, build output, runtime and original database were untouched.",
+    "Temporary local logs support these sanitized results; this code-coupled record is not a project-management tracker."
+  ]
+}
